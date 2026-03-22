@@ -115,6 +115,8 @@ MonoBehaviour:
   _keyboardOverlay: {fileID: 4341488740020178222}
   _mouseUiOverlay: {fileID: 8059412677754260861}
   _mouseInputOverlay: {fileID: 5361510358904063101}
+  _replayInputOverlay: {fileID: 0}
+  _recordInputOverlayView: {fileID: 0}
 --- !u!1001 &828123329405598390
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -1,21 +1,16 @@
 {
-    "name": "uLoopMCP.Dev",
+    "name": "uLoopMCP.Dev.Runtime",
     "rootNamespace": "",
     "references": [
-        "GUID:214998e563c124e8a88199b2dd1f522d",
-        "GUID:290394860909340b7835eb7cc215ee75",
         "GUID:c956a21f824994ef087b6de566690b3d",
-        "GUID:75469ad4d38634e559750d17036d5f7c",
-        "GUID:2438bf72818fd46f381d3914e991eafe"
+        "GUID:75469ad4d38634e559750d17036d5f7c"
     ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
-    "autoReferenced": false,
+    "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
     "noEngineReferences": false

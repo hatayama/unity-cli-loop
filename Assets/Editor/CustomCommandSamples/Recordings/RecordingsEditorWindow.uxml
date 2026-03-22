@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:ScrollView name="main-scroll-view" class="rec-main-container">
+
+        <!-- Record Section -->
+        <ui:VisualElement name="record-section" class="rec-section rec-section--box">
+            <ui:Label text="Record" class="rec-section__header" />
+
+            <ui:VisualElement class="rec-row">
+                <ui:Label text="Delay (sec):" class="rec-row__label" />
+                <uie:IntegerField name="delay-field" value="3" class="rec-row__int-field" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rec-row">
+                <ui:Button name="record-button" text="Start Recording" class="rec-button rec-button--record" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rec-status-row">
+                <ui:VisualElement name="record-status-indicator" class="rec-status-indicator" />
+                <ui:Label name="record-status-label" text="Idle" class="rec-status-label" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Replay Section -->
+        <ui:VisualElement name="replay-section" class="rec-section rec-section--box">
+            <ui:Label text="Replay" class="rec-section__header" />
+
+            <ui:VisualElement class="rec-row">
+                <ui:Label text="File:" class="rec-row__label" />
+                <ui:DropdownField name="file-dropdown" class="rec-row__dropdown" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rec-row">
+                <ui:Button name="open-folder-button" text="Open Folder" class="rec-button" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rec-row">
+                <ui:Button name="replay-button" text="Start Replay" class="rec-button rec-button--replay" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="rec-status-row">
+                <ui:VisualElement name="replay-status-indicator" class="rec-status-indicator" />
+                <ui:Label name="replay-status-label" text="Idle" class="rec-status-label" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+    </ui:ScrollView>
+</ui:UXML>

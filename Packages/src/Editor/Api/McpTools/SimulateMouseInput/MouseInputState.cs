@@ -207,7 +207,7 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private static ButtonControl GetButtonControl(Mouse mouse, MouseButton button)
+        internal static ButtonControl GetButtonControl(Mouse mouse, MouseButton button)
         {
             switch (button)
             {

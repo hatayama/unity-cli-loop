@@ -3,8 +3,12 @@
     "rootNamespace": "",
     "references": [
         "uLoopMCP.Tests.Demo",
+        "uLoopMCP.Editor",
+        "uLoopMCP.Runtime",
         "GUID:75469ad4d38634e559750d17036d5f7c",
-        "GUID:4307f53044263cf4b835bd812fc161a4"
+        "GUID:4307f53044263cf4b835bd812fc161a4",
+        "GUID:2438bf72818fd46f381d3914e991eafe",
+        "GUID:b29b10dec3e804e2188c90158d317fd7"
     ],
     "includePlatforms": [
         "Editor"
