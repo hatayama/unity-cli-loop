@@ -114,8 +114,23 @@
 }
 
 /* ===========================================
-   Block: Target List
+   Block: Target
    =========================================== */
+.setup-target-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.setup-target-row__label {
+    min-width: 42px;
+    margin-right: 6px;
+}
+
+.setup-target-row__field {
+    flex-grow: 1;
+}
+
 .setup-target-list {
     margin-bottom: 6px;
 }

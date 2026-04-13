@@ -170,8 +170,6 @@ namespace io.github.hatayama.uLoopMCP
             {
                 SkillsTarget.Claude => data.IsClaudeSkillsInstalled,
                 SkillsTarget.Agents => data.IsAgentsSkillsInstalled,
-                SkillsTarget.Cursor => data.IsCursorSkillsInstalled,
-                SkillsTarget.Antigravity => data.IsAntigravitySkillsInstalled,
                 _ => false
             };
 

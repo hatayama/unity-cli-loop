@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ui:UXML xmlns:ui="UnityEngine.UIElements">
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
     <ui:ScrollView class="setup-main-container">
         <!-- Prerequisite: Node.js check -->
         <ui:VisualElement name="nodejs-warning" class="setup-prerequisite setup-prerequisite--warning">
@@ -27,6 +27,10 @@
         <ui:VisualElement name="step-2" class="setup-step">
             <ui:Label text="Step 2: Install Skills (Optional)" class="setup-step__title" />
             <ui:VisualElement class="setup-step__content">
+                <ui:VisualElement name="skills-target-row" class="setup-target-row">
+                    <ui:Label text="Target:" class="setup-target-row__label" />
+                    <uie:EnumField name="skills-target-field" class="setup-target-row__field" />
+                </ui:VisualElement>
                 <ui:VisualElement name="skills-target-list" class="setup-target-list" />
                 <ui:Label name="skills-status-label" text="" class="setup-step__status-label" />
                 <ui:VisualElement class="setup-step__button-row">
