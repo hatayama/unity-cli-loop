@@ -17,7 +17,7 @@ uloop launch [project-path] [options]
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `project-path` | string | Path to Unity project (optional, searches current directory if omitted) |
+| `project-path` | string | Optional. Use only when the target Unity project is not in the current directory. |
 | `-r, --restart` | boolean | Kill running Unity and restart |
 | `-p, --platform <P>` | string | Build target (e.g., StandaloneOSX, Android, iOS) |
 | `--max-depth <N>` | number | Search depth when project-path is omitted (default: 3, -1 for unlimited) |

@@ -21,7 +21,7 @@ None.
 
 | Option | Description |
 |--------|-------------|
-| `--project-path <path>` | Target a specific Unity project. Path resolution follows the same rules as `cd` — absolute paths are used as-is, relative paths are resolved from cwd. |
+| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
 
 ## Examples
 

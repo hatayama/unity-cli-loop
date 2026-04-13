@@ -28,7 +28,7 @@ uloop get-logs [options]
 
 | Option | Description |
 |--------|-------------|
-| `--project-path <path>` | Target a specific Unity project |
+| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
 
 ## Examples
 
