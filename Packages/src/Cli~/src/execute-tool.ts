@@ -142,6 +142,39 @@ export async function diagnoseRetryableProjectConnectionError(
   return new UnityServerNotRunningError(projectRoot);
 }
 
+export async function shouldRetryWhenUnityProcessIsRunning(
+  error: unknown,
+  projectRoot: string | null,
+  shouldDiagnoseProjectState: boolean,
+  dependencies: ConnectionFailureDiagnosisDependencies = defaultConnectionFailureDiagnosisDependencies,
+): Promise<boolean> {
+  if (!isRetryableError(error) || !shouldDiagnoseProjectState || projectRoot === null) {
+    return false;
+  }
+
+  const runningProcess = await dependencies.findRunningUnityProcessForProjectFn(projectRoot).catch(
+    () => undefined,
+  );
+  return runningProcess !== null && runningProcess !== undefined;
+}
+
+export async function resolveRecoveryPortOrKeepCurrent(
+  currentPort: number,
+  explicitPort: number | undefined,
+  projectPath: string | undefined,
+  resolveUnityPortFn: typeof resolveUnityPort = resolveUnityPort,
+): Promise<number> {
+  if (explicitPort !== undefined) {
+    return currentPort;
+  }
+
+  try {
+    return await resolveUnityPortFn(undefined, projectPath);
+  } catch {
+    return currentPort;
+  }
+}
+
 async function throwFinalToolError(
   error: unknown,
   projectRoot: string | null,
@@ -272,7 +305,7 @@ export async function executeToolCommand(
     portNumber = parsed;
   }
   checkUnityBusyStateBeforeProjectResolution(globalOptions);
-  const port = await resolveUnityPort(portNumber, globalOptions.projectPath);
+  let port = await resolveUnityPort(portNumber, globalOptions.projectPath);
   const compileOptions = getCompileExecutionOptions(toolName, params);
   const shouldWaitForDomainReload = compileOptions.waitForDomainReload;
   const compileRequestId = shouldWaitForDomainReload ? ensureCompileRequestId(params) : undefined;
@@ -353,6 +386,17 @@ export async function executeToolCommand(
         spinner.stop();
         restoreStdin();
         throw error instanceof Error ? error : new Error(String(error));
+      }
+
+      if (await shouldRetryWhenUnityProcessIsRunning(error, projectRoot, shouldValidateProject)) {
+        spinner.update('Unity Editor is running, waiting for CLI Loop server to recover...');
+        await sleep(RETRY_DELAY_MS);
+        port = await resolveRecoveryPortOrKeepCurrent(
+          port,
+          portNumber,
+          globalOptions.projectPath,
+        );
+        continue;
       }
 
       if (!isRetryableError(error) || attempt >= MAX_RETRIES) {

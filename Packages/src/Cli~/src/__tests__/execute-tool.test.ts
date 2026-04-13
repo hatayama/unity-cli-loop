@@ -1,6 +1,8 @@
 import {
   diagnoseRetryableProjectConnectionError,
   isTransportDisconnectError,
+  resolveRecoveryPortOrKeepCurrent,
+  shouldRetryWhenUnityProcessIsRunning,
 } from '../execute-tool.js';
 import { UnityNotRunningError, UnityServerNotRunningError } from '../port-resolver.js';
 import { ProjectMismatchError } from '../project-validator.js';
@@ -102,5 +104,52 @@ describe('diagnoseRetryableProjectConnectionError', () => {
     });
 
     expect(error).toBe(originalError);
+  });
+});
+
+describe('shouldRetryWhenUnityProcessIsRunning', () => {
+  it('returns true for retryable failures when Unity is still running', async () => {
+    await expect(
+      shouldRetryWhenUnityProcessIsRunning(
+        new Error('UNITY_NO_RESPONSE'),
+        '/project',
+        true,
+        {
+          findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+        },
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('returns false for non-retryable Unity errors even when Unity is still running', async () => {
+    await expect(
+      shouldRetryWhenUnityProcessIsRunning(
+        new Error('Unity error: compilation failed'),
+        '/project',
+        true,
+        {
+          findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+        },
+      ),
+    ).resolves.toBe(false);
+  });
+});
+
+describe('resolveRecoveryPortOrKeepCurrent', () => {
+  it('keeps the current port when recovery settings are temporarily unreadable', async () => {
+    await expect(
+      resolveRecoveryPortOrKeepCurrent(8711, undefined, '/project', jest.fn().mockRejectedValue(new Error('busy'))),
+    ).resolves.toBe(8711);
+  });
+
+  it('re-resolves the port when recovery settings are available', async () => {
+    await expect(
+      resolveRecoveryPortOrKeepCurrent(
+        8711,
+        undefined,
+        '/project',
+        jest.fn().mockResolvedValue(8712),
+      ),
+    ).resolves.toBe(8712);
   });
 });

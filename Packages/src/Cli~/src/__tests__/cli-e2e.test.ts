@@ -445,6 +445,7 @@ describe('CLI E2E Tests (requires running Unity)', () => {
 
       expect(exitCode).toBe(0);
       expect(stdout).toContain('--force-recompile');
+      expect(stdout).toContain('--wait-for-domain-reload');
     });
 
     it('should display grouped help with category headings', () => {
@@ -712,6 +713,16 @@ describe('CLI E2E Tests (requires running Unity)', () => {
 
       // Domain Reload causes connection to be lost, so we just verify the command runs
       // The exit code may be non-zero due to connection being dropped during reload
+      expect(typeof exitCode).toBe('number');
+    });
+  });
+
+  describe('compile --wait-for-domain-reload', () => {
+    it('should support --wait-for-domain-reload option', () => {
+      const { exitCode } = runCli('compile --wait-for-domain-reload');
+
+      // This option is intended to survive domain reload and return once the
+      // compile result is available again.
       expect(typeof exitCode).toBe('number');
     });
   });

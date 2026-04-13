@@ -155,6 +155,8 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
+            ClearStartupProtection();
+
             // Execute shutdown UseCase
             McpServerShutdownUseCase useCase = new(new McpServerStartupService());
             ServerShutdownSchema schema = new() { ForceShutdown = false };
@@ -182,6 +184,8 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         private static void OnBeforeAssemblyReload()
         {
+            ClearStartupProtection();
+
             // Create and execute DomainReloadRecoveryUseCase instance
             DomainReloadRecoveryUseCase useCase = new();
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(mcpServer);
@@ -361,6 +365,8 @@ namespace io.github.hatayama.uLoopMCP
             // OnServerLoopExited fires from thread pool — marshal to main thread for Unity API safety
             EditorApplication.delayCall += () =>
             {
+                ClearStartupProtection();
+
                 VibeLogger.LogWarning(
                     "server_loop_exit_detected",
                     "Detected unexpected server loop exit. Initiating automatic recovery.",
@@ -619,6 +625,14 @@ namespace io.github.hatayama.uLoopMCP
             long untilTicks = DateTime.UtcNow.AddMilliseconds(milliseconds).Ticks;
             System.Threading.Volatile.Write(ref startupProtectionUntilTicks, untilTicks);
             VibeLogger.LogInfo("startup_protection_active", $"window={milliseconds}ms");
+        }
+
+        /// <summary>
+        /// Clears startup protection so recovery paths can restart the server immediately.
+        /// </summary>
+        private static void ClearStartupProtection()
+        {
+            System.Threading.Volatile.Write(ref startupProtectionUntilTicks, 0L);
         }
 
         /// <summary>
