@@ -100,6 +100,30 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public void DetectTargets_WhenParentDirectoryExists_ReportsTargetAsNotOptedIn()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            {
+                Directory.CreateDirectory(Path.Combine(temporaryRoot, dir));
+            }
+
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
+                    temporaryRoot,
+                    requireSkillsDirectory: false)
+                .ToArray();
+
+            Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length);
+            foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
+            {
+                Assert.IsFalse(target.HasSkillsDirectory,
+                    $"Target '{target.DirName}' should not be opted in without a skills directory");
+                Assert.IsFalse(target.HasExistingSkills,
+                    $"Target '{target.DirName}' should not be treated as installed without a skills directory");
+            }
+        }
+
+        [Test]
         public void DetectTargets_IncludesTargetsWhenSkillsDirectoryExists()
         {
             // Arrange
@@ -119,6 +143,8 @@ namespace io.github.hatayama.uLoopMCP
 
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
             {
+                Assert.IsTrue(target.HasSkillsDirectory,
+                    $"Target '{target.DirName}' should report that its skills directory exists");
                 Assert.IsFalse(target.HasExistingSkills,
                     $"Target '{target.DirName}' should not be treated as already installed when skills directory is empty");
             }

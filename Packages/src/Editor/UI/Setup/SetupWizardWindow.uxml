@@ -42,6 +42,13 @@
                 <ui:Button name="open-settings-button" text="Open Settings" class="setup-button setup-button--primary" />
                 <ui:Button name="close-button" text="Close" class="setup-button" />
             </ui:VisualElement>
+            <ui:Toggle
+                name="suppress-auto-show-toggle"
+                text="Don't show this after updates"
+                class="setup-footer__toggle" />
+            <ui:Label
+                text="You can reopen this from Window &gt; Unity CLI Loop &gt; Setup Wizard."
+                class="setup-footer__hint-label" />
         </ui:VisualElement>
     </ui:ScrollView>
 </ui:UXML>

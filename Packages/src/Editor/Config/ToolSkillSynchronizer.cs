@@ -53,12 +53,18 @@ namespace io.github.hatayama.uLoopMCP
         {
             public readonly string DisplayName;
             public readonly string DirName;
+            public readonly bool HasSkillsDirectory;
             public readonly bool HasExistingSkills;
 
-            public SkillTargetInfo(string displayName, string dirName, bool hasExistingSkills)
+            public SkillTargetInfo(
+                string displayName,
+                string dirName,
+                bool hasSkillsDirectory,
+                bool hasExistingSkills)
             {
                 DisplayName = displayName;
                 DirName = dirName;
+                HasSkillsDirectory = hasSkillsDirectory;
                 HasExistingSkills = hasExistingSkills;
             }
         }
@@ -153,15 +159,20 @@ namespace io.github.hatayama.uLoopMCP
                 }
 
                 string skillsRoot = Path.Combine(targetRoot, SkillsDirName);
-                if (requireSkillsDirectory && !Directory.Exists(skillsRoot))
+                bool hasSkillsDirectory = Directory.Exists(skillsRoot);
+                if (requireSkillsDirectory && !hasSkillsDirectory)
                 {
                     continue;
                 }
 
-                bool hasULoopSkills = Directory.Exists(skillsRoot)
+                bool hasULoopSkills = hasSkillsDirectory
                     && Directory.EnumerateDirectories(skillsRoot, CliConstants.SKILL_DIR_GLOB)
                         .Any(skillDir => File.Exists(Path.Combine(skillDir, SkillFileName)));
-                targets.Add(new SkillTargetInfo(target.DisplayName, target.DirName, hasULoopSkills));
+                targets.Add(new SkillTargetInfo(
+                    target.DisplayName,
+                    target.DirName,
+                    hasSkillsDirectory,
+                    hasULoopSkills));
             }
 
             return targets;

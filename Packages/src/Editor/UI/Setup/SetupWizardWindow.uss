@@ -177,6 +177,18 @@
     border-top-color: var(--unity-colors-helpbox-border);
 }
 
+.setup-footer__toggle {
+    margin-top: 6px;
+}
+
+.setup-footer__hint-label {
+    font-size: 11px;
+    color: var(--setup-color-muted);
+    white-space: normal;
+    margin-top: 2px;
+    margin-left: 18px;
+}
+
 .setup-footer__button-row {
     flex-direction: row;
 }

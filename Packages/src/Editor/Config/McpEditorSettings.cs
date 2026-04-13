@@ -30,6 +30,7 @@ namespace io.github.hatayama.uLoopMCP
         public bool enableDevelopmentMode = false;
         public string lastUsedConfigPath = "";
         public string lastSeenSetupWizardVersion = "";
+        public bool suppressSetupWizardAutoShow = false;
 
         // UI State Settings
         public bool showSecuritySettings = true;
@@ -226,6 +227,18 @@ namespace io.github.hatayama.uLoopMCP
             string normalizedVersion = version ?? string.Empty;
             McpEditorSettingsData settings = GetSettings();
             McpEditorSettingsData updatedSettings = settings with { lastSeenSetupWizardVersion = normalizedVersion };
+            SaveSettings(updatedSettings);
+        }
+
+        public static bool GetSuppressSetupWizardAutoShow()
+        {
+            return GetSettings().suppressSetupWizardAutoShow;
+        }
+
+        public static void SetSuppressSetupWizardAutoShow(bool suppressAutoShow)
+        {
+            McpEditorSettingsData settings = GetSettings();
+            McpEditorSettingsData updatedSettings = settings with { suppressSetupWizardAutoShow = suppressAutoShow };
             SaveSettings(updatedSettings);
         }
 
