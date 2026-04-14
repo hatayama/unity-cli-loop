@@ -13,7 +13,9 @@ namespace io.github.hatayama.uLoopMCP
     {
         private const string UXML_RELATIVE_PATH = "Editor/UI/Setup/SetupWizardWindow.uxml";
         private const string USS_RELATIVE_PATH = "Editor/UI/Setup/SetupWizardWindow.uss";
+        private const string GITHUB_ICON_RELATIVE_PATH = "Editor/UI/Setup/GitHub_Invertocat_White.png";
         private const int PreferredWrappedTextLineCount = 2;
+        private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
 
         [InitializeOnLoadMethod]
         private static void InitializeOnLoad()
@@ -75,6 +77,7 @@ namespace io.github.hatayama.uLoopMCP
         private static void ShowWindowInternal(bool shouldRecordVersion)
         {
             SetupWizardWindow window = GetWindow<SetupWizardWindow>(true, "Unity CLI Loop Setup");
+            window.position = CreateCenteredRect(EditorGUIUtility.GetMainWindowPosition(), MinimumWindowSize);
             window.ShowUtility();
             window.ScheduleResizeToContent();
             MaybeRecordLastSeenVersion(shouldRecordVersion, McpConstants.PackageInfo.version);
@@ -82,8 +85,22 @@ namespace io.github.hatayama.uLoopMCP
 
         internal static Rect WithContentSize(Rect currentRect, Vector2 contentSize, Vector2 frameSize)
         {
-            currentRect.size = contentSize + frameSize;
-            return currentRect;
+            Vector2 measuredSize = contentSize + frameSize;
+            Vector2 targetSize = new(
+                Mathf.Max(measuredSize.x, MinimumWindowSize.x),
+                Mathf.Max(measuredSize.y, MinimumWindowSize.y));
+            return CreateCenteredRect(currentRect, targetSize);
+        }
+
+        internal static Rect CreateCenteredRect(Rect bounds, Vector2 size)
+        {
+            Vector2 centeredPosition = bounds.center - (size * 0.5f);
+            return new Rect(centeredPosition, size);
+        }
+
+        internal static string GetGitHubRepositoryUrl()
+        {
+            return McpUIConstants.PROJECT_REPOSITORY_URL;
         }
 
         // Prerequisite
@@ -107,6 +124,10 @@ namespace io.github.hatayama.uLoopMCP
         private Toggle _suppressAutoShowToggle;
         private Button _openSettingsButton;
         private Button _closeButton;
+        private VisualElement _githubLinkRow;
+        private Label _githubLinkLabel;
+        private Image _githubLinkIcon;
+        private ScrollView _mainScrollView;
 
         // State
         private bool _isInstallingCli;
@@ -167,6 +188,10 @@ namespace io.github.hatayama.uLoopMCP
             _suppressAutoShowToggle = rootVisualElement.Q<Toggle>("suppress-auto-show-toggle");
             _openSettingsButton = rootVisualElement.Q<Button>("open-settings-button");
             _closeButton = rootVisualElement.Q<Button>("close-button");
+            _githubLinkRow = rootVisualElement.Q<VisualElement>("github-link-row");
+            _githubLinkLabel = rootVisualElement.Q<Label>("github-link-label");
+            _githubLinkIcon = rootVisualElement.Q<Image>("github-link-icon");
+            _mainScrollView = rootVisualElement.Q<ScrollView>();
         }
 
         private void BindEvents()
@@ -178,6 +203,26 @@ namespace io.github.hatayama.uLoopMCP
             _suppressAutoShowToggle.RegisterValueChangedCallback(evt => HandleSuppressAutoShowChanged(evt.newValue));
             _openSettingsButton.clicked += HandleOpenSettings;
             _closeButton.clicked += HandleClose;
+            _githubLinkRow.RegisterCallback<ClickEvent>(_ => HandleOpenGitHub());
+            _githubLinkRow.RegisterCallback<MouseEnterEvent>(_ => HandleGitHubHoverChanged(true));
+            _githubLinkRow.RegisterCallback<MouseLeaveEvent>(_ => HandleGitHubHoverChanged(false));
+            ConfigureScrollView();
+            InitializeGitHubIcon();
+        }
+
+        private void ConfigureScrollView()
+        {
+            Debug.Assert(_mainScrollView != null, "mainScrollView must not be null");
+            _mainScrollView.verticalScrollerVisibility = ScrollerVisibility.Auto;
+            _mainScrollView.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+        }
+
+        private void InitializeGitHubIcon()
+        {
+            string iconPath = $"{McpConstants.PackageAssetPath}/{GITHUB_ICON_RELATIVE_PATH}";
+            Texture2D iconTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(iconPath);
+            Debug.Assert(iconTexture != null, $"GitHub icon not found at {iconPath}");
+            _githubLinkIcon.image = iconTexture;
         }
 
         private void InitializeSkillsTargetField()
@@ -476,6 +521,18 @@ namespace io.github.hatayama.uLoopMCP
         private void HandleClose()
         {
             Close();
+        }
+
+        private void HandleOpenGitHub()
+        {
+            Application.OpenURL(GetGitHubRepositoryUrl());
+        }
+
+        private void HandleGitHubHoverChanged(bool isHovered)
+        {
+            ViewDataBinder.ToggleClass(_githubLinkRow, "setup-footer__github-link--hover", isHovered);
+            ViewDataBinder.ToggleClass(_githubLinkLabel, "setup-footer__github-link-label--hover", isHovered);
+            ViewDataBinder.ToggleClass(_githubLinkIcon, "setup-footer__github-link-icon--hover", isHovered);
         }
 
         private void ScheduleResizeToContent()

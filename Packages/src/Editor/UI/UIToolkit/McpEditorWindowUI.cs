@@ -14,6 +14,7 @@ namespace io.github.hatayama.uLoopMCP
     {
         private const string UXML_RELATIVE_PATH = "Editor/UI/UIToolkit/McpEditorWindow.uxml";
         private const string USS_RELATIVE_PATH = "Editor/UI/UIToolkit/McpEditorWindow.uss";
+        private const string GITHUB_ICON_RELATIVE_PATH = "Editor/UI/Setup/GitHub_Invertocat_White.png";
 
         private readonly VisualElement _root;
 
@@ -25,6 +26,10 @@ namespace io.github.hatayama.uLoopMCP
 
         private VisualElement _cliContent;
         private VisualElement _mcpContent;
+        private ScrollView _mainScrollView;
+        private VisualElement _githubLinkRow;
+        private Label _githubLinkLabel;
+        private Image _githubLinkIcon;
 
         public event Action<ConnectionMode> OnConnectionModeChanged;
         public event Action OnRefreshCliVersion;
@@ -96,6 +101,9 @@ namespace io.github.hatayama.uLoopMCP
             _cliSetupSection.OnInstallSkills += () => OnInstallSkills?.Invoke();
             _cliSetupSection.OnSkillsTargetChanged += value => OnSkillsTargetChanged?.Invoke(value);
 
+            _mainScrollView = _root.Q<ScrollView>("main-scroll-view");
+            ConfigureScrollView();
+
             _cliContent = _root.Q<VisualElement>("cli-content");
             _mcpContent = _root.Q<VisualElement>("mcp-content");
 
@@ -114,6 +122,44 @@ namespace io.github.hatayama.uLoopMCP
             _toolSettingsSection.OnToolToggled += (toolName, enabled) => OnToolToggled?.Invoke(toolName, enabled);
             _toolSettingsSection.OnAllowThirdPartyChanged += value => OnAllowThirdPartyChanged?.Invoke(value);
             _toolSettingsSection.OnSecurityLevelChanged += value => OnSecurityLevelChanged?.Invoke(value);
+
+            _githubLinkRow = _root.Q<VisualElement>("github-link-row");
+            _githubLinkLabel = _root.Q<Label>("github-link-label");
+            _githubLinkIcon = _root.Q<Image>("github-link-icon");
+            Debug.Assert(_githubLinkRow != null, "github-link-row must not be null");
+            Debug.Assert(_githubLinkLabel != null, "github-link-label must not be null");
+            Debug.Assert(_githubLinkIcon != null, "github-link-icon must not be null");
+            _githubLinkRow.RegisterCallback<ClickEvent>(_ => HandleOpenGitHub());
+            _githubLinkRow.RegisterCallback<MouseEnterEvent>(_ => HandleGitHubHoverChanged(true));
+            _githubLinkRow.RegisterCallback<MouseLeaveEvent>(_ => HandleGitHubHoverChanged(false));
+            InitializeGitHubIcon();
+        }
+
+        private void ConfigureScrollView()
+        {
+            Debug.Assert(_mainScrollView != null, "mainScrollView must not be null");
+            _mainScrollView.verticalScrollerVisibility = ScrollerVisibility.Auto;
+            _mainScrollView.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+        }
+
+        private void InitializeGitHubIcon()
+        {
+            string iconPath = $"{McpConstants.PackageAssetPath}/{GITHUB_ICON_RELATIVE_PATH}";
+            Texture2D iconTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(iconPath);
+            Debug.Assert(iconTexture != null, $"GitHub icon not found at {iconPath}");
+            _githubLinkIcon.image = iconTexture;
+        }
+
+        private static void HandleOpenGitHub()
+        {
+            Application.OpenURL(McpUIConstants.PROJECT_REPOSITORY_URL);
+        }
+
+        private void HandleGitHubHoverChanged(bool isHovered)
+        {
+            ViewDataBinder.ToggleClass(_githubLinkRow, "mcp-github-link--hover", isHovered);
+            ViewDataBinder.ToggleClass(_githubLinkLabel, "mcp-github-link__label--hover", isHovered);
+            ViewDataBinder.ToggleClass(_githubLinkIcon, "mcp-github-link__icon--hover", isHovered);
         }
 
         public void UpdateConnectedTools(ConnectedToolsData data)

@@ -53,6 +53,10 @@
             <ui:Label
                 text="You can reopen this from Window &gt; Unity CLI Loop &gt; Setup Wizard."
                 class="setup-footer__hint-label" />
+            <ui:VisualElement name="github-link-row" class="setup-footer__github-link">
+                <ui:Label name="github-link-label" text="Star on GitHub" class="setup-footer__github-link-label" />
+                <ui:Image name="github-link-icon" class="setup-footer__github-link-icon" />
+            </ui:VisualElement>
         </ui:VisualElement>
     </ui:ScrollView>
 </ui:UXML>

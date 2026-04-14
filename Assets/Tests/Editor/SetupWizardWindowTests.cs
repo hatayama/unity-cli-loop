@@ -108,7 +108,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void WithContentSize_OverridesSizeAndPreservesPosition()
+        public void WithContentSize_OverridesSizeAndPreservesCenter()
         {
             Rect initialRect = new(123f, 456f, 789f, 321f);
             Vector2 contentSize = new(350f, 280f);
@@ -116,8 +116,41 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
 
             Rect resizedRect = SetupWizardWindow.WithContentSize(initialRect, contentSize, frameSize);
 
-            Assert.That(resizedRect.position, Is.EqualTo(initialRect.position));
-            Assert.That(resizedRect.size, Is.EqualTo(contentSize + frameSize));
+            Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
+            Assert.That(resizedRect.size, Is.EqualTo(new Vector2(368f, 380f)));
+        }
+
+        [Test]
+        public void WithContentSize_WhenMeasuredSizeIsTooSmall_ClampsToMinimumWindowSize()
+        {
+            Rect initialRect = new(123f, 456f, 520f, 480f);
+            Vector2 contentSize = new(120f, 140f);
+            Vector2 frameSize = new(18f, 28f);
+
+            Rect resizedRect = SetupWizardWindow.WithContentSize(initialRect, contentSize, frameSize);
+
+            Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
+            Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 380f)));
+        }
+
+        [Test]
+        public void CreateCenteredRect_CentersRectWithinBounds()
+        {
+            Rect bounds = new(100f, 200f, 900f, 700f);
+            Vector2 size = new(300f, 250f);
+
+            Rect centeredRect = SetupWizardWindow.CreateCenteredRect(bounds, size);
+
+            Assert.That(centeredRect.center, Is.EqualTo(bounds.center));
+            Assert.That(centeredRect.size, Is.EqualTo(size));
+        }
+
+        [Test]
+        public void GetGitHubRepositoryUrl_ReturnsProjectRepositoryUrl()
+        {
+            string repositoryUrl = SetupWizardWindow.GetGitHubRepositoryUrl();
+
+            Assert.That(repositoryUrl, Is.EqualTo("https://github.com/hatayama/unity-cli-loop"));
         }
 
         [Test]

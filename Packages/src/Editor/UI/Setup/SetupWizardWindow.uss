@@ -213,6 +213,39 @@
     flex-basis: 0;
 }
 
+.setup-footer__github-link {
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: 10px;
+    opacity: 0.78;
+}
+
+.setup-footer__github-link-label {
+    font-size: 11px;
+    color: #c3cad3;
+    margin-right: 5px;
+}
+
+.setup-footer__github-link-icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.78;
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.setup-footer__github-link--hover {
+    opacity: 1;
+}
+
+.setup-footer__github-link-label--hover {
+    color: #ffffff;
+}
+
+.setup-footer__github-link-icon--hover {
+    opacity: 1;
+}
+
 .setup-step__button-row {
     flex-direction: row;
 }
