@@ -236,7 +236,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
-        public async Task CompileAsync_ScriptMode_ShouldPopulateTimings()
+        public async Task CompileAsync_ScriptMode_ShouldPopulateCoreTimings()
         {
             DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
             CompilationRequest request = new CompilationRequest
@@ -249,10 +249,12 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
 
             Assert.IsTrue(result.Success, "Timing test should compile");
-            Assert.That(result.Timings, Has.Count.EqualTo(3));
-            Assert.That(result.Timings[0], Does.StartWith("[Perf] ReferenceResolution:"));
-            Assert.That(result.Timings[1], Does.StartWith("[Perf] Build:"));
-            Assert.That(result.Timings[2], Does.StartWith("[Perf] AssemblyLoad:"));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] ReferenceResolution:"));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] Build:"));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] AssemblyLoad:"));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] CompilePlan:"));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] CompileCacheCheck:"));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] CompilerTotal:"));
         }
     }
 }

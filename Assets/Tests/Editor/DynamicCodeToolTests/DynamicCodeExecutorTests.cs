@@ -30,7 +30,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
-        public async Task ExecuteCodeAsync_WhenCompileOnlyCompilationHasNullTimings_ShouldReturnEmptyTimingList()
+        public async Task ExecuteCodeAsync_WhenCompileOnlyCompilationHasNullTimings_ShouldReturnExecutorStageTimings()
         {
             NullTimingCompilationService compiler = NullTimingCompilationService.CreateSuccessful();
             CountingCompiledCommandInvoker invoker = new CountingCompiledCommandInvoker();
@@ -45,12 +45,14 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
                 compileOnly: true);
 
             Assert.That(result.Success, Is.True);
-            Assert.That(result.Timings, Is.Empty);
+            Assert.That(result.Timings, Has.Count.EqualTo(2));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] SourcePrepare: "));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] CompileTotal: "));
             Assert.That(invoker.ExecuteAsyncCallCount, Is.EqualTo(0));
         }
 
         [Test]
-        public async Task ExecuteCodeAsync_WhenCompilationFailureHasNullTimings_ShouldReturnEmptyTimingList()
+        public async Task ExecuteCodeAsync_WhenCompilationFailureHasNullTimings_ShouldReturnExecutorStageTimings()
         {
             NullTimingCompilationService compiler = NullTimingCompilationService.CreateFailed();
             CountingCompiledCommandInvoker invoker = new CountingCompiledCommandInvoker();
@@ -65,7 +67,9 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("Compilation error occurred"));
-            Assert.That(result.Timings, Is.Empty);
+            Assert.That(result.Timings, Has.Count.EqualTo(2));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] SourcePrepare: "));
+            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] CompileTotal: "));
             Assert.That(invoker.ExecuteAsyncCallCount, Is.EqualTo(0));
         }
 
