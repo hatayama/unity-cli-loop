@@ -15,7 +15,7 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         /// <param name="filter">Test execution filter</param>
         /// <returns>Test execution result</returns>
-        public async Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter)
+        public virtual async Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter)
         {
             return await PlayModeTestExecuter.ExecutePlayModeTest(filter);
         }
@@ -25,7 +25,7 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         /// <param name="filter">Test execution filter</param>
         /// <returns>Test execution result</returns>
-        public async Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter)
+        public virtual async Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter)
         {
             return await PlayModeTestExecuter.ExecuteEditModeTest(filter);
         }

@@ -30,7 +30,7 @@ namespace io.github.hatayama.uLoopMCP
                 {
                     success = true,
                     message = "PlayMode test execution completed (detailed results not available)",
-                    completedAt = DateTime.Now.ToString("o"),
+                    completedAt = DateTime.UtcNow.ToString("o"),
                     testCount = 1,
                     passedCount = 1,
                     failedCount = 0,
@@ -62,7 +62,7 @@ namespace io.github.hatayama.uLoopMCP
             {
                 success = success,
                 message = message,
-                completedAt = DateTime.Now.ToString("o"),
+                completedAt = DateTime.UtcNow.ToString("o"),
                 testCount = totalTests,
                 passedCount = passedTests,
                 failedCount = failedTests,

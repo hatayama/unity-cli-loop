@@ -1,6 +1,8 @@
+using System;
 using System.Threading.Tasks;
 using System.Threading;
 using UnityEditor.TestTools.TestRunner.Api;
+using UnityEngine;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -12,6 +14,31 @@ namespace io.github.hatayama.uLoopMCP
     /// </summary>
     public class RunTestsUseCase : AbstractUseCase<RunTestsSchema, RunTestsResponse>
     {
+        private readonly TestFilterCreationService _filterService;
+        private readonly TestExecutionService _executionService;
+        private readonly TestExecutionStateValidationService _validationService;
+
+        public RunTestsUseCase()
+            : this(
+                new TestFilterCreationService(),
+                new TestExecutionService(),
+                new TestExecutionStateValidationService())
+        {
+        }
+
+        public RunTestsUseCase(
+            TestFilterCreationService filterService,
+            TestExecutionService executionService,
+            TestExecutionStateValidationService validationService)
+        {
+            Debug.Assert(filterService != null, "filterService must not be null");
+            Debug.Assert(executionService != null, "executionService must not be null");
+            Debug.Assert(validationService != null, "validationService must not be null");
+            _filterService = filterService;
+            _executionService = executionService;
+            _validationService = validationService;
+        }
+
         /// <summary>
         /// Executes test execution processing
         /// </summary>
@@ -20,17 +47,21 @@ namespace io.github.hatayama.uLoopMCP
         /// <returns>Test execution result</returns>
         public override async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken cancellationToken)
         {
+            ValidationResult validation = _validationService.Validate(parameters.TestMode);
+            if (!validation.IsValid)
+            {
+                return CreateFailureResponse(validation.ErrorMessage);
+            }
+
             // 1. Test filter creation
             TestExecutionFilter filter = null;
             if (parameters.FilterType != TestFilterType.all)
             {
-                TestFilterCreationService filterService = new();
-                filter = filterService.CreateFilter(parameters.FilterType, parameters.FilterValue);
+                filter = _filterService.CreateFilter(parameters.FilterType, parameters.FilterValue);
             }
             
             // 2. Test execution
             cancellationToken.ThrowIfCancellationRequested();
-            TestExecutionService executionService = new();
             SerializableTestResult result;
             
             try
@@ -38,12 +69,12 @@ namespace io.github.hatayama.uLoopMCP
                 if (parameters.TestMode == TestMode.PlayMode)
                 {
                     // TODO: Add cancellationToken parameter when TestExecutionService supports it
-                    result = await executionService.ExecutePlayModeTestAsync(filter);
+                    result = await _executionService.ExecutePlayModeTestAsync(filter);
                 }
                 else
                 {
                     // TODO: Add cancellationToken parameter when TestExecutionService supports it
-                    result = await executionService.ExecuteEditModeTestAsync(filter);
+                    result = await _executionService.ExecuteEditModeTestAsync(filter);
                 }
             }
             catch (System.OperationCanceledException)
@@ -75,6 +106,20 @@ namespace io.github.hatayama.uLoopMCP
                 failedCount: result.failedCount,
                 skippedCount: result.skippedCount,
                 xmlPath: result.xmlPath
+            );
+        }
+
+        private static RunTestsResponse CreateFailureResponse(string message)
+        {
+            return new RunTestsResponse(
+                success: false,
+                message: message,
+                completedAt: DateTime.UtcNow.ToString("o"),
+                testCount: 0,
+                passedCount: 0,
+                failedCount: 0,
+                skippedCount: 0,
+                xmlPath: null
             );
         }
     }
