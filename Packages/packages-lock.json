@@ -197,6 +197,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
+        "com.unity.test-framework": "1.1.33",
         "com.unity.ugui": "1.0.0",
         "com.unity.nuget.newtonsoft-json": "3.2.1"
       }
