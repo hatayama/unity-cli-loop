@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import {
   resolvePortFromUnitySettings,
   validateProjectPath,
+  resolveUnityConnection,
   resolveUnityPort,
 } from '../port-resolver.js';
 
@@ -184,5 +185,78 @@ describe('resolveUnityPort with project settings', () => {
 
     const port = await resolveUnityPort(undefined, tempProjectRoot);
     expect(port).toBe(8726);
+  });
+});
+
+describe('resolveUnityConnection', () => {
+  let tempProjectRoot: string;
+
+  beforeEach(() => {
+    tempProjectRoot = mkdtempSync(join(tmpdir(), 'unity-connection-test-'));
+    mkdirSync(join(tempProjectRoot, 'Assets'));
+    mkdirSync(join(tempProjectRoot, 'ProjectSettings'));
+    mkdirSync(join(tempProjectRoot, 'UserSettings'));
+  });
+
+  afterEach(() => {
+    rmSync(tempProjectRoot, { recursive: true });
+  });
+
+  it('uses fast request metadata when settings identity matches the resolved project', async () => {
+    writeFileSync(
+      join(tempProjectRoot, 'UserSettings/UnityMcpSettings.json'),
+      JSON.stringify({
+        customPort: 8730,
+        projectRootPath: tempProjectRoot,
+        serverSessionId: 'session-123',
+      }),
+    );
+
+    const connection = await resolveUnityConnection(undefined, tempProjectRoot);
+
+    expect(connection).toEqual({
+      port: 8730,
+      projectRoot: tempProjectRoot,
+      requestMetadata: {
+        expectedProjectRoot: tempProjectRoot,
+        expectedServerSessionId: 'session-123',
+      },
+      shouldValidateProject: false,
+    });
+  });
+
+  it('falls back to legacy validation when server session identity is missing', async () => {
+    writeFileSync(
+      join(tempProjectRoot, 'UserSettings/UnityMcpSettings.json'),
+      JSON.stringify({
+        customPort: 8731,
+        projectRootPath: tempProjectRoot,
+      }),
+    );
+
+    const connection = await resolveUnityConnection(undefined, tempProjectRoot);
+
+    expect(connection.port).toBe(8731);
+    expect(connection.projectRoot).toBe(tempProjectRoot);
+    expect(connection.requestMetadata).toBeNull();
+    expect(connection.shouldValidateProject).toBe(true);
+  });
+
+  it('falls back to legacy validation when settings project root differs from the resolved project', async () => {
+    writeFileSync(
+      join(tempProjectRoot, 'UserSettings/UnityMcpSettings.json'),
+      JSON.stringify({
+        customPort: 8732,
+        projectRootPath: `${tempProjectRoot}-other`,
+        serverSessionId: 'session-456',
+      }),
+    );
+
+    const connection = await resolveUnityConnection(undefined, tempProjectRoot);
+
+    expect(connection.port).toBe(8732);
+    expect(connection.projectRoot).toBe(tempProjectRoot);
+    expect(connection.requestMetadata).toBeNull();
+    expect(connection.shouldValidateProject).toBe(true);
   });
 });

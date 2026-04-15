@@ -21,6 +21,18 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
+        public void Resolve_WhenUnresolvedType_ShouldReportAddedAssemblyReference()
+        {
+            string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
+            string wrappedSource = WrapperTemplate.Build(
+                new List<string>(), "TestNs", "TestClass", body);
+
+            PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
+
+            Assert.That(result.AddedAssemblyReferences, Has.Count.GreaterThan(0));
+        }
+
+        [Test]
         public void Resolve_WhenNoMissingUsings_ShouldReportEmptyAddedNamespaces()
         {
             string body = "int x = 42;\nreturn x;";
@@ -79,7 +91,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_MissingUsing_ShouldReportAutoInjectedNamespaces()
         {
-            AssemblyBuilderCompiler compiler = new AssemblyBuilderCompiler(DynamicCodeSecurityLevel.Restricted);
+            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
             CompilationRequest request = new CompilationRequest
             {
                 Code = @"
@@ -101,7 +113,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_NoMissingUsing_ShouldReportEmptyAutoInjectedNamespaces()
         {
-            AssemblyBuilderCompiler compiler = new AssemblyBuilderCompiler(DynamicCodeSecurityLevel.Restricted);
+            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
             CompilationRequest request = new CompilationRequest
             {
                 Code = "return 1 + 2;",
@@ -119,7 +131,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_WithExistingUsing_ShouldNotReportIt()
         {
-            AssemblyBuilderCompiler compiler = new AssemblyBuilderCompiler(DynamicCodeSecurityLevel.Restricted);
+            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
             CompilationRequest request = new CompilationRequest
             {
                 Code = @"
@@ -142,7 +154,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_MultipleMissing_ShouldReportAll()
         {
-            AssemblyBuilderCompiler compiler = new AssemblyBuilderCompiler(DynamicCodeSecurityLevel.Restricted);
+            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
             CompilationRequest request = new CompilationRequest
             {
                 Code = @"
@@ -165,7 +177,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_RawMode_MissingUsing_ShouldReportAutoInjectedNamespaces()
         {
-            AssemblyBuilderCompiler compiler = new AssemblyBuilderCompiler(DynamicCodeSecurityLevel.Restricted);
+            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
             CompilationRequest request = new CompilationRequest
             {
                 Code = @"
@@ -195,7 +207,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_RawMode_FullyQualifiedNames_ShouldReportEmptyAutoInjectedNamespaces()
         {
-            AssemblyBuilderCompiler compiler = new AssemblyBuilderCompiler(DynamicCodeSecurityLevel.Restricted);
+            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
             CompilationRequest request = new CompilationRequest
             {
                 Code = @"
@@ -221,6 +233,26 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
                 result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Raw mode should compile");
             // Raw mode uses fully-qualified names, so no auto-injection needed
             Assert.That(result.AutoInjectedNamespaces, Is.Empty);
+        }
+
+        [Test]
+        public async Task CompileAsync_ScriptMode_ShouldPopulateTimings()
+        {
+            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new CompilationRequest
+            {
+                Code = "return 1 + 2;",
+                ClassName = "TimingVisibilityCommand",
+                Namespace = "TestNamespace"
+            };
+
+            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
+
+            Assert.IsTrue(result.Success, "Timing test should compile");
+            Assert.That(result.Timings, Has.Count.EqualTo(3));
+            Assert.That(result.Timings[0], Does.StartWith("[Perf] ReferenceResolution:"));
+            Assert.That(result.Timings[1], Does.StartWith("[Perf] Build:"));
+            Assert.That(result.Timings[2], Does.StartWith("[Perf] AssemblyLoad:"));
         }
     }
 }

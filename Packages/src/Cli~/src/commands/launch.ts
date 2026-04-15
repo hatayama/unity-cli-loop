@@ -9,7 +9,8 @@
 import { Command } from 'commander';
 import { resolve } from 'path';
 
-import { orchestrateLaunch } from 'launch-unity';
+import { orchestrateLaunch, type OrchestrateResult } from 'launch-unity';
+import { waitForDynamicCodeReadyAfterLaunch } from '../launch-readiness.js';
 
 interface LaunchCommandOptions {
   restart?: boolean;
@@ -60,7 +61,7 @@ async function runLaunchCommand(
 ): Promise<void> {
   const maxDepth: number = parseMaxDepth(options.maxDepth);
 
-  await orchestrateLaunch({
+  const launchResult: OrchestrateResult = await orchestrateLaunch({
     projectPath: projectPath ? resolve(projectPath) : undefined,
     searchRoot: process.cwd(),
     searchMaxDepth: maxDepth,
@@ -72,4 +73,12 @@ async function runLaunchCommand(
     addUnityHub: options.addUnityHub === true,
     favoriteUnityHub: options.favorite === true,
   });
+
+  if (launchResult.action !== 'launched' && launchResult.action !== 'killed-and-launched') {
+    return;
+  }
+
+  console.log('Waiting for execute-dynamic-code warmup...');
+  await waitForDynamicCodeReadyAfterLaunch(launchResult.projectPath);
+  console.log('execute-dynamic-code is ready.');
 }

@@ -37,6 +37,13 @@ const SPAWN_OPTIONS: SpawnSyncOptionsWithStringEncoding = {
 const INTERVAL_MS = 1500;
 const DOMAIN_RELOAD_RETRY_MS = 3000;
 const DOMAIN_RELOAD_MAX_RETRIES = 3;
+const UNITY_READY_RETRY_MS = 2000;
+const UNITY_READY_MAX_RETRIES = 20;
+const TRANSIENT_EXECUTE_DYNAMIC_CODE_ERROR_MESSAGES = [
+  'Another execution is already in progress',
+  'Execution was cancelled or timed out',
+];
+const TRANSIENT_COMPILATION_PROVIDER_UNAVAILABLE_SUBSTRINGS = ['warming up'];
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,6 +58,18 @@ function sleepSync(ms: number): void {
 
 function isDomainReloadError(output: string): boolean {
   return output.includes('Unity is reloading') || output.includes('Domain Reload');
+}
+
+function isTransientUnityBusyOutput(output: string): boolean {
+  return (
+    output.includes('Unity is reloading') ||
+    output.includes('Domain Reload') ||
+    output.includes('Unity server is starting') ||
+    output.includes('Unity is busy') ||
+    output.includes('Unity is compiling scripts') ||
+    output.includes('Cannot connect to Unity') ||
+    output.includes('Unity Editor for this project is not running')
+  );
 }
 
 function runCli(args: string): { stdout: string; stderr: string; exitCode: number } {
@@ -121,6 +140,90 @@ function runCliJson<T>(args: string): T {
     throw new Error(`CLI failed with exit code ${exitCode}: ${stderr || stdout}`);
   }
 
+  const trimmedOutput = stdout.trim();
+  const jsonStartByLine = trimmedOutput.lastIndexOf('\n{');
+  const jsonStart = jsonStartByLine >= 0 ? jsonStartByLine + 1 : trimmedOutput.indexOf('{');
+  const jsonEnd = trimmedOutput.lastIndexOf('}');
+
+  if (jsonStart < 0 || jsonEnd < 0 || jsonEnd < jsonStart) {
+    throw new Error(`JSON payload not found in CLI output: ${trimmedOutput}`);
+  }
+
+  const jsonPayload = trimmedOutput.slice(jsonStart, jsonEnd + 1);
+  return JSON.parse(jsonPayload) as T;
+}
+
+async function runExecuteDynamicCodeUntilReady(
+  code: string,
+): Promise<{ Success: boolean; Result?: string; ErrorMessage?: string; Logs?: string[] }> {
+  for (let attempt = 0; attempt < UNITY_READY_MAX_RETRIES; attempt++) {
+    const result = runCliParts(['execute-dynamic-code', '--code', code]);
+    const output = result.stderr || result.stdout;
+
+    if (result.exitCode !== 0) {
+      if (isTransientUnityBusyOutput(output) && attempt < UNITY_READY_MAX_RETRIES - 1) {
+        await sleep(UNITY_READY_RETRY_MS);
+        continue;
+      }
+
+      throw new Error(`execute-dynamic-code failed: ${output}`);
+    }
+
+    const payload = parseLastJsonObject<{
+      Success: boolean;
+      Result?: string;
+      ErrorMessage?: string;
+      UnityVersion?: string;
+      Logs?: string[];
+    }>(result.stdout);
+
+    if (typeof payload.Success !== 'boolean') {
+      if (attempt < UNITY_READY_MAX_RETRIES - 1) {
+        await sleep(UNITY_READY_RETRY_MS);
+        continue;
+      }
+
+      throw new Error(`Unexpected execute-dynamic-code payload: ${result.stdout}`);
+    }
+
+    if (payload.Success || !isTransientExecuteDynamicCodeFailure(payload)) {
+      return payload;
+    }
+
+    if (attempt >= UNITY_READY_MAX_RETRIES - 1) {
+      return payload;
+    }
+
+    await sleep(UNITY_READY_RETRY_MS);
+  }
+
+  throw new Error('execute-dynamic-code did not become ready before retry budget was exhausted');
+}
+
+function isTransientExecuteDynamicCodeFailure(payload: {
+  Success: boolean;
+  ErrorMessage?: string;
+  Logs?: string[];
+}): boolean {
+  if (payload.Success) {
+    return false;
+  }
+
+  const errorMessage = payload.ErrorMessage ?? '';
+  if (TRANSIENT_EXECUTE_DYNAMIC_CODE_ERROR_MESSAGES.includes(errorMessage)) {
+    return true;
+  }
+
+  if (!errorMessage.startsWith('COMPILATION_PROVIDER_UNAVAILABLE:')) {
+    return false;
+  }
+
+  return TRANSIENT_COMPILATION_PROVIDER_UNAVAILABLE_SUBSTRINGS.some((substring) =>
+    errorMessage.toLowerCase().includes(substring),
+  );
+}
+
+function parseLastJsonObject<T>(stdout: string): T {
   const trimmedOutput = stdout.trim();
   const jsonStartByLine = trimmedOutput.lastIndexOf('\n{');
   const jsonStart = jsonStartByLine >= 0 ? jsonStartByLine + 1 : trimmedOutput.indexOf('{');
@@ -606,6 +709,53 @@ describe('CLI E2E Tests (requires running Unity)', () => {
 
       expect(result.Result).toBe('hello');
     });
+
+    it('should recover execute-dynamic-code after Unity restart', async () => {
+      const launchResult = runCli('launch -r');
+
+      expect(launchResult.exitCode).toBe(0);
+
+      const result = await runExecuteDynamicCodeUntilReady('return "after-restart";');
+
+      expect(result.Success).toBe(true);
+      expect(result.Result).toBe('after-restart');
+      expect(result.ErrorMessage ?? '').toBe('');
+    }, 60000);
+
+    it('should make the first execute-dynamic-code request succeed immediately after restart', () => {
+      const launchResult = runCli('launch -r');
+      expect(launchResult.exitCode).toBe(0);
+
+      const result = runCliParts(['execute-dynamic-code', '--code', 'return "immediate";']);
+      expect(result.exitCode).toBe(0);
+
+      const payload = parseLastJsonObject<{
+        Success: boolean;
+        Result?: string;
+        ErrorMessage?: string;
+      }>(result.stdout);
+
+      expect(payload.Success).toBe(true);
+      expect(payload.Result).toBe('immediate');
+      expect(payload.ErrorMessage ?? '').toBe('');
+    }, 90000);
+
+    it('should keep execute-dynamic-code available across consecutive restarts', async () => {
+      const firstLaunchResult = runCli('launch -r');
+      expect(firstLaunchResult.exitCode).toBe(0);
+
+      const firstResult = await runExecuteDynamicCodeUntilReady('return "restart-1";');
+      expect(firstResult.Success).toBe(true);
+      expect(firstResult.Result).toBe('restart-1');
+
+      const secondLaunchResult = runCli('launch -r');
+      expect(secondLaunchResult.exitCode).toBe(0);
+
+      const secondResult = await runExecuteDynamicCodeUntilReady('return "restart-2";');
+      expect(secondResult.Success).toBe(true);
+      expect(secondResult.Result).toBe('restart-2');
+      expect(secondResult.ErrorMessage ?? '').toBe('');
+    }, 90000);
   });
 
   describe('error handling', () => {

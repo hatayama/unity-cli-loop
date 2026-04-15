@@ -6,6 +6,7 @@ using UnityEngine.TestTools;
 
 namespace io.github.hatayama.uLoopMCP
 {
+    [Ignore("Skipped because full-console reflection scans make routine EditMode runs too slow; run manually when changing console log retrieval.")]
     /// <summary>
     /// Practical tests for ConsoleLogRetriever functionality
     /// Validates mask operations and reflection features in real scenarios

@@ -1,0 +1,22 @@
+using NUnit.Framework;
+
+namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+{
+    [TestFixture]
+    public class DynamicCodeApiSurfaceTests
+    {
+        [Test]
+        public void IDynamicCodeExecutor_ShouldExposeAsyncExecutionOnly()
+        {
+            Assert.That(typeof(IDynamicCodeExecutor).GetMethod("ExecuteCode"), Is.Null);
+            Assert.That(typeof(IDynamicCodeExecutor).GetMethod("ExecuteCodeAsync"), Is.Not.Null);
+        }
+
+        [Test]
+        public void IDynamicCompilationService_ShouldExposeAsyncCompilationOnly()
+        {
+            Assert.That(typeof(IDynamicCompilationService).GetMethod("Compile"), Is.Null);
+            Assert.That(typeof(IDynamicCompilationService).GetMethod("CompileAsync"), Is.Not.Null);
+        }
+    }
+}

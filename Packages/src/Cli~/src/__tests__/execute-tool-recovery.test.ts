@@ -2,10 +2,7 @@ const mockResolveUnityPort = jest.fn<Promise<number>, [number | undefined, strin
 const mockValidateProjectPath = jest.fn<string, [string]>();
 const mockFindUnityProjectRoot = jest.fn<string | null, []>();
 const mockExistsSync = jest.fn<boolean, [string]>();
-const mockFindRunningUnityProcessForProject = jest.fn<
-  Promise<{ pid: number } | null>,
-  [string]
->();
+const mockFindRunningUnityProcessForProject = jest.fn<Promise<{ pid: number } | null>, [string]>();
 const mockSleep = jest.fn<Promise<void>, [number]>();
 const mockSpinnerUpdate = jest.fn<void, [string]>();
 const mockSpinnerStop = jest.fn<void, []>();
@@ -21,19 +18,21 @@ class MockDirectUnityClient {
     constructedPorts.push(port);
   }
 
-  public async connect(): Promise<void> {
+  public connect(): Promise<void> {
     if (this.port === 8711) {
-      throw new Error('connect ECONNREFUSED 127.0.0.1:8711');
+      return Promise.reject(new Error('connect ECONNREFUSED 127.0.0.1:8711'));
     }
+
+    return Promise.resolve();
   }
 
   public disconnect(): void {}
 
-  public async sendRequest<T>(): Promise<T> {
-    return {
+  public sendRequest<T>(): Promise<T> {
+    return Promise.resolve({
       Logs: [],
       Ver: '1.7.3',
-    } as T;
+    } as T);
   }
 }
 
@@ -61,11 +60,13 @@ jest.mock('../unity-process.js', () => ({
 jest.mock('../compile-helpers.js', () => ({
   ensureCompileRequestId: (params: Record<string, unknown>): string =>
     (params['RequestId'] as string | undefined) ?? 'request-id',
-  resolveCompileExecutionOptions: (): { forceRecompile: boolean; waitForDomainReload: boolean } =>
-    ({
-      forceRecompile: false,
-      waitForDomainReload: false,
-    }),
+  resolveCompileExecutionOptions: (): {
+    forceRecompile: boolean;
+    waitForDomainReload: boolean;
+  } => ({
+    forceRecompile: false,
+    waitForDomainReload: false,
+  }),
   sleep: (delayMs: number): Promise<void> => mockSleep(delayMs),
   waitForCompileCompletion: jest.fn(),
 }));

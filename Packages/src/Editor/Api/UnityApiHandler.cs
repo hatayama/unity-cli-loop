@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -42,8 +43,36 @@ namespace io.github.hatayama.uLoopMCP
         /// <returns>Execution result</returns>
         public static async Task<BaseToolResponse> ExecuteCommandAsync(string commandName, JToken paramsToken)
         {
-            return await CustomToolManager.GetRegistry().ExecuteToolAsync(commandName, paramsToken);
+            Stopwatch registryAcquireStopwatch = Stopwatch.StartNew();
+            UnityToolRegistry registry = CustomToolManager.GetRegistry();
+            registryAcquireStopwatch.Stop();
+
+            Stopwatch registryExecuteStopwatch = Stopwatch.StartNew();
+            BaseToolResponse response = await registry.ExecuteToolAsync(commandName, paramsToken);
+            registryExecuteStopwatch.Stop();
+
+            AppendExecuteDynamicCodeTimingsIfSupported(
+                response,
+                $"[Perf] RegistryAcquire: {registryAcquireStopwatch.Elapsed.TotalMilliseconds:F1}ms",
+                $"[Perf] RegistryExecute: {registryExecuteStopwatch.Elapsed.TotalMilliseconds:F1}ms");
+            return response;
         }
 
+        private static void AppendExecuteDynamicCodeTimingsIfSupported(
+            BaseToolResponse response,
+            params string[] timingEntries)
+        {
+            if (response is not ExecuteDynamicCodeResponse executeDynamicCodeResponse)
+            {
+                return;
+            }
+
+            if (executeDynamicCodeResponse.Timings == null)
+            {
+                executeDynamicCodeResponse.Timings = new System.Collections.Generic.List<string>();
+            }
+
+            executeDynamicCodeResponse.Timings.AddRange(timingEntries);
+        }
     }
-} 
+}

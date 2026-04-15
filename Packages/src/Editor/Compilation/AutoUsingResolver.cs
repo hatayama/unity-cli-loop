@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,7 +21,7 @@ namespace io.github.hatayama.uLoopMCP
             string sourcePath,
             string dllPath,
             string originalSource,
-            List<string> additionalReferences,
+            List<string> currentReferences,
             System.Func<string, string, List<string>, CancellationToken, Task<CompilerMessage[]>> buildFunc,
             CancellationToken ct)
         {
@@ -29,21 +30,34 @@ namespace io.github.hatayama.uLoopMCP
             string currentSource = originalSource;
             Dictionary<string, List<string>> ambiguousCandidates = new();
             HashSet<string> addedNamespaces = new(System.StringComparer.Ordinal);
+            List<string> mutableReferences = currentReferences != null
+                ? new List<string>(currentReferences)
+                : new List<string>();
+            HashSet<string> addedAssemblyReferences = new(System.StringComparer.OrdinalIgnoreCase);
+            double referenceResolutionMilliseconds = 0;
 
             for (int attempt = 0; attempt < MaxRetries; attempt++)
             {
                 File.WriteAllText(sourcePath, currentSource);
                 // AssemblyBuilder retries must stay on Unity's main thread because the compiler API is not thread-safe.
-                CompilerMessage[] messages = await buildFunc(sourcePath, dllPath, additionalReferences, ct);
+                CompilerMessage[] messages = await buildFunc(sourcePath, dllPath, mutableReferences, ct);
 
                 List<string> unresolvedTypes = ExtractUnresolvedTypes(messages);
                 if (unresolvedTypes.Count == 0)
                 {
-                    return new AutoUsingResult(currentSource, messages, ambiguousCandidates, addedNamespaces);
+                    return new AutoUsingResult(
+                        currentSource,
+                        messages,
+                        ambiguousCandidates,
+                        addedNamespaces,
+                        addedAssemblyReferences.ToList(),
+                        referenceResolutionMilliseconds);
                 }
 
                 HashSet<string> namespacesToAdd = new(System.StringComparer.Ordinal);
+                List<string> assemblyReferencesToAdd = new List<string>();
                 AssemblyTypeIndex index = AssemblyTypeIndex.Instance;
+                Stopwatch resolutionStopwatch = Stopwatch.StartNew();
 
                 foreach (string typeName in unresolvedTypes)
                 {
@@ -59,17 +73,44 @@ namespace io.github.hatayama.uLoopMCP
                     {
                         ambiguousCandidates[typeName] = candidates;
                     }
+
+                    List<string> assemblyCandidates = index.FindAssemblyLocationsForIdentifier(typeName);
+                    if (assemblyCandidates.Count == 1)
+                    {
+                        AddAssemblyReferenceIfMissing(assemblyReferencesToAdd, mutableReferences, assemblyCandidates[0]);
+                    }
                 }
 
-                if (namespacesToAdd.Count == 0) break;
+                resolutionStopwatch.Stop();
+                referenceResolutionMilliseconds += resolutionStopwatch.Elapsed.TotalMilliseconds;
 
-                currentSource = InsertUsingDirectives(currentSource, namespacesToAdd);
+                if (namespacesToAdd.Count == 0 && assemblyReferencesToAdd.Count == 0)
+                {
+                    break;
+                }
+
+                if (namespacesToAdd.Count > 0)
+                {
+                    currentSource = InsertUsingDirectives(currentSource, namespacesToAdd);
+                }
+
+                foreach (string assemblyReference in assemblyReferencesToAdd)
+                {
+                    addedAssemblyReferences.Add(assemblyReference);
+                    mutableReferences.Add(assemblyReference);
+                }
             }
 
             // Final compilation with all added usings
             File.WriteAllText(sourcePath, currentSource);
-            CompilerMessage[] finalMessages = await buildFunc(sourcePath, dllPath, additionalReferences, ct);
-            return new AutoUsingResult(currentSource, finalMessages, ambiguousCandidates, addedNamespaces);
+            CompilerMessage[] finalMessages = await buildFunc(sourcePath, dllPath, mutableReferences, ct);
+            return new AutoUsingResult(
+                currentSource,
+                finalMessages,
+                ambiguousCandidates,
+                addedNamespaces,
+                addedAssemblyReferences.ToList(),
+                referenceResolutionMilliseconds);
         }
 
         private static List<string> ExtractUnresolvedTypes(CompilerMessage[] messages)
@@ -81,7 +122,12 @@ namespace io.github.hatayama.uLoopMCP
 
                 // CS0246: The type or namespace name 'X' could not be found
                 // CS0103: The name 'X' does not exist in the current context
-                if (!msg.message.Contains("CS0246") && !msg.message.Contains("CS0103")) continue;
+                if (!msg.message.Contains("CS0246")
+                    && !msg.message.Contains("CS0103")
+                    && !msg.message.Contains("CS1069"))
+                {
+                    continue;
+                }
 
                 string typeName = CompilationDiagnosticMessageParser.ExtractTypeNameFromMessage(msg.message);
                 if (!string.IsNullOrEmpty(typeName))
@@ -102,6 +148,62 @@ namespace io.github.hatayama.uLoopMCP
             sb.Append(source);
             return sb.ToString();
         }
+
+        internal static void AddAssemblyReferenceIfMissing(
+            List<string> assemblyReferencesToAdd,
+            List<string> currentReferences,
+            string assemblyReference)
+        {
+            if (string.IsNullOrEmpty(assemblyReference))
+            {
+                return;
+            }
+
+            if (ContainsAssemblyReference(currentReferences, assemblyReference))
+            {
+                return;
+            }
+
+            if (ContainsAssemblyReference(assemblyReferencesToAdd, assemblyReference))
+            {
+                return;
+            }
+
+            assemblyReferencesToAdd.Add(assemblyReference);
+        }
+
+        internal static bool ContainsAssemblyReference(List<string> references, string assemblyReference)
+        {
+            string assemblyIdentity = GetAssemblyIdentityKey(assemblyReference);
+            foreach (string existingReference in references)
+            {
+                if (string.Equals(
+                    GetAssemblyIdentityKey(existingReference),
+                    assemblyIdentity,
+                    System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string GetAssemblyIdentityKey(string assemblyReference)
+        {
+            if (string.IsNullOrEmpty(assemblyReference))
+            {
+                return string.Empty;
+            }
+
+            string fileName = Path.GetFileNameWithoutExtension(assemblyReference);
+            if (string.IsNullOrEmpty(fileName))
+            {
+                return assemblyReference;
+            }
+
+            return fileName;
+        }
     }
 
     internal sealed class AutoUsingResult
@@ -112,16 +214,24 @@ namespace io.github.hatayama.uLoopMCP
 
         public IReadOnlyCollection<string> AddedNamespaces { get; }
 
+        public IReadOnlyCollection<string> AddedAssemblyReferences { get; }
+
+        public double ReferenceResolutionMilliseconds { get; }
+
         public AutoUsingResult(
             string updatedSource,
             CompilerMessage[] messages,
             Dictionary<string, List<string>> ambiguousTypeCandidates,
-            IReadOnlyCollection<string> addedNamespaces)
+            IReadOnlyCollection<string> addedNamespaces,
+            IReadOnlyCollection<string> addedAssemblyReferences,
+            double referenceResolutionMilliseconds)
         {
             UpdatedSource = updatedSource;
             Messages = messages;
             AmbiguousTypeCandidates = ambiguousTypeCandidates;
             AddedNamespaces = addedNamespaces;
+            AddedAssemblyReferences = addedAssemblyReferences;
+            ReferenceResolutionMilliseconds = referenceResolutionMilliseconds;
         }
     }
 }

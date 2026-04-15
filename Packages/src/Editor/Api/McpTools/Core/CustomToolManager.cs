@@ -79,6 +79,11 @@ namespace io.github.hatayama.uLoopMCP
             return SharedRegistry;
         }
 
+        internal static void WarmupRegistry()
+        {
+            _ = SharedRegistry;
+        }
+
         /// <summary>
         /// Debug: Get detailed registry information
         /// </summary>
@@ -103,4 +108,4 @@ namespace io.github.hatayama.uLoopMCP
             UnityToolRegistry.TriggerToolsChangedNotification();
         }
     }
-} 
+}

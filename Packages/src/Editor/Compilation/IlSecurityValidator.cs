@@ -45,29 +45,59 @@ namespace io.github.hatayama.uLoopMCP
 
         private static void ValidateTypeHierarchy(Type type, SecurityValidationResult result)
         {
-            if (type.BaseType != null && DangerousApiCatalog.IsDangerousType(type.BaseType.FullName))
-            {
-                result.Violations.Add(new SecurityViolation
-                {
-                    Type = SecurityViolationType.DangerousApiCall,
-                    ApiName = type.BaseType.FullName,
-                    Message = $"Inheriting from dangerous type: {type.BaseType.FullName}",
-                    Description = $"Type '{type.FullName}' inherits from blocked type '{type.BaseType.FullName}'"
-                });
-            }
+            ValidateReferencedType(
+                type.BaseType,
+                result,
+                typeName => $"Inheriting from dangerous type: {typeName}",
+                typeName => $"Type '{type.FullName}' inherits from blocked type '{typeName}'");
 
             foreach (Type iface in type.GetInterfaces())
             {
-                if (DangerousApiCatalog.IsDangerousType(iface.FullName))
+                ValidateReferencedType(
+                    iface,
+                    result,
+                    typeName => $"Implementing dangerous interface: {typeName}",
+                    typeName => $"Type '{type.FullName}' implements blocked interface '{typeName}'");
+            }
+
+            BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic |
+                                 BindingFlags.Instance | BindingFlags.Static |
+                                 BindingFlags.DeclaredOnly;
+
+            foreach (FieldInfo field in type.GetFields(flags))
+            {
+                ValidateReferencedType(
+                    field.FieldType,
+                    result,
+                    typeName => $"Using dangerous type as field: {typeName}",
+                    typeName => $"Field '{field.Name}' of type '{typeName}' in {type.FullName}");
+            }
+
+            foreach (PropertyInfo property in type.GetProperties(flags))
+            {
+                ValidateReferencedType(
+                    property.PropertyType,
+                    result,
+                    typeName => $"Using dangerous type as property: {typeName}",
+                    typeName => $"Property '{property.Name}' of type '{typeName}' in {type.FullName}");
+
+                foreach (System.Reflection.ParameterInfo indexParameter in property.GetIndexParameters())
                 {
-                    result.Violations.Add(new SecurityViolation
-                    {
-                        Type = SecurityViolationType.DangerousApiCall,
-                        ApiName = iface.FullName,
-                        Message = $"Implementing dangerous interface: {iface.FullName}",
-                        Description = $"Type '{type.FullName}' implements blocked interface '{iface.FullName}'"
-                    });
+                    ValidateReferencedType(
+                        indexParameter.ParameterType,
+                        result,
+                        typeName => $"Using dangerous type as property index parameter: {typeName}",
+                        typeName => $"Property index parameter '{indexParameter.Name}' of type '{typeName}' in {type.FullName}.{property.Name}");
                 }
+            }
+
+            foreach (EventInfo eventInfo in type.GetEvents(flags))
+            {
+                ValidateReferencedType(
+                    eventInfo.EventHandlerType,
+                    result,
+                    typeName => $"Using dangerous type as event handler: {typeName}",
+                    typeName => $"Event '{eventInfo.Name}' of type '{typeName}' in {type.FullName}");
             }
         }
 
@@ -136,6 +166,66 @@ namespace io.github.hatayama.uLoopMCP
             if (il == null) return;
 
             ValidateIlCalls(method, il, result);
+        }
+
+        private static void ValidateReferencedType(
+            Type referencedType,
+            SecurityValidationResult result,
+            Func<string, string> createMessage,
+            Func<string, string> createDescription)
+        {
+            foreach (string typeName in ExpandReferencedTypes(referencedType))
+            {
+                if (!DangerousApiCatalog.IsDangerousType(typeName))
+                {
+                    continue;
+                }
+
+                result.Violations.Add(new SecurityViolation
+                {
+                    Type = SecurityViolationType.DangerousApiCall,
+                    ApiName = typeName,
+                    Message = createMessage(typeName),
+                    Description = createDescription(typeName)
+                });
+            }
+        }
+
+        private static IEnumerable<string> ExpandReferencedTypes(Type referencedType)
+        {
+            if (referencedType == null)
+            {
+                yield break;
+            }
+
+            if (referencedType.HasElementType)
+            {
+                foreach (string typeName in ExpandReferencedTypes(referencedType.GetElementType()))
+                {
+                    yield return typeName;
+                }
+
+                yield break;
+            }
+
+            string fullName = referencedType.FullName;
+            if (!string.IsNullOrEmpty(fullName))
+            {
+                yield return fullName;
+            }
+
+            if (!referencedType.IsGenericType)
+            {
+                yield break;
+            }
+
+            foreach (Type genericArgument in referencedType.GetGenericArguments())
+            {
+                foreach (string typeName in ExpandReferencedTypes(genericArgument))
+                {
+                    yield return typeName;
+                }
+            }
         }
 
         private static void ValidateIlCalls(MethodBase method, byte[] il, SecurityValidationResult result)

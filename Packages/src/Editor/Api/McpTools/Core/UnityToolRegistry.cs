@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -223,8 +224,36 @@ namespace io.github.hatayama.uLoopMCP
                 throw new McpSecurityException(toolName, "Tool is blocked by security settings");
             }
 
+            Stopwatch mainThreadHopStopwatch = Stopwatch.StartNew();
             await MainThreadSwitcher.SwitchToMainThread();
-            return await tool.ExecuteAsync(paramsToken);
+            mainThreadHopStopwatch.Stop();
+
+            Stopwatch toolBodyStopwatch = Stopwatch.StartNew();
+            BaseToolResponse response = await tool.ExecuteAsync(paramsToken);
+            toolBodyStopwatch.Stop();
+
+            AppendExecuteDynamicCodeTimingsIfSupported(
+                response,
+                $"[Perf] RegistryMainThreadHop: {mainThreadHopStopwatch.Elapsed.TotalMilliseconds:F1}ms",
+                $"[Perf] ToolBody: {toolBodyStopwatch.Elapsed.TotalMilliseconds:F1}ms");
+            return response;
+        }
+
+        private static void AppendExecuteDynamicCodeTimingsIfSupported(
+            BaseToolResponse response,
+            params string[] timingEntries)
+        {
+            if (response is not ExecuteDynamicCodeResponse executeDynamicCodeResponse)
+            {
+                return;
+            }
+
+            if (executeDynamicCodeResponse.Timings == null)
+            {
+                executeDynamicCodeResponse.Timings = new List<string>();
+            }
+
+            executeDynamicCodeResponse.Timings.AddRange(timingEntries);
         }
 
         /// <summary>

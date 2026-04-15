@@ -77,123 +77,10 @@ const BUILTIN_COMMANDS = [
   FOCUS_WINDOW_COMMAND,
 ] as const;
 
-const program = new Command();
-
-program
-  .name('uloop')
-  .description('Unity MCP CLI - Direct communication with Unity Editor')
-  .version(VERSION, '-v, --version', 'Output the version number')
-  .showHelpAfterError('(run with -h for available options)')
-  .configureHelp({
-    sortSubcommands: true,
-    // commander.js default groupItems determines group display order by registration order,
-    // but CLI commands are registered at module level (before tools), so the default order
-    // would be wrong. We re-implement to enforce HELP_GROUP_ORDER.
-    groupItems<T extends Command | Option>(
-      unsortedItems: T[],
-      visibleItems: T[],
-      getGroup: (item: T) => string,
-    ): Map<string, T[]> {
-      const groupMap = new Map<string, T[]>();
-      for (const item of unsortedItems) {
-        const group: string = getGroup(item);
-        if (!groupMap.has(group)) {
-          groupMap.set(group, []);
-        }
-      }
-      for (const item of visibleItems) {
-        const group: string = getGroup(item);
-        if (!groupMap.has(group)) {
-          groupMap.set(group, []);
-        }
-        groupMap.get(group)!.push(item);
-      }
-      const ordered = new Map<string, T[]>();
-      for (const key of HELP_GROUP_ORDER) {
-        const items: T[] | undefined = groupMap.get(key);
-        if (items !== undefined) {
-          ordered.set(key, items);
-          groupMap.delete(key);
-        }
-      }
-      for (const [key, value] of groupMap) {
-        ordered.set(key, value);
-      }
-      return ordered;
-    },
-  });
-
-// --list-commands: Output command names for shell completion
-program.option('--list-commands', 'List all command names (for shell completion)');
-
-// --list-options <cmd>: Output options for a specific command (for shell completion)
-program.option('--list-options <cmd>', 'List options for a command (for shell completion)');
-
-// Set default help group for CLI commands registered at module level
-program.commandsGroup(HELP_GROUP_CLI_COMMANDS);
-// Eagerly initialize the implicit help command so it inherits the CLI Commands group.
-// Without this, the lazy-created help command skips _initCommandGroup and falls into "Commands:" group.
-program.helpCommand(true);
-
-// Built-in commands (not from tools.json)
-program
-  .command('list')
-  .description('List all available tools from Unity')
-  .addOption(createHiddenPortOption())
-  .option('--project-path <path>', 'Unity project path')
-  .action(async (options: CliOptions) => {
-    await runWithErrorHandling(() => listAvailableTools(extractGlobalOptions(options)));
-  });
-
-program
-  .command('sync')
-  .description('Sync tool definitions from Unity to local cache')
-  .addOption(createHiddenPortOption())
-  .option('--project-path <path>', 'Unity project path')
-  .action(async (options: CliOptions) => {
-    await runWithErrorHandling(() => syncTools(extractGlobalOptions(options)));
-  });
-
-program
-  .command('completion')
-  .description('Setup shell completion')
-  .option('--install', 'Install completion to shell config file')
-  .option('--shell <type>', 'Shell type: bash, zsh, or powershell')
-  .action((options: { install?: boolean; shell?: string }) => {
-    handleCompletion(options.install ?? false, options.shell);
-  });
-
-program
-  .command('update')
-  .description('Update uloop CLI to the latest version')
-  .action(() => {
-    updateCli();
-  });
-
-program
-  .command('fix')
-  .description('Clean up stale lock files that may prevent CLI from connecting')
-  .option('--project-path <path>', 'Unity project path')
-  .action(async (options: { projectPath?: string }) => {
-    await runWithErrorHandling(() => {
-      cleanupLockFiles(options.projectPath);
-      return Promise.resolve();
-    });
-  });
-
-// Register skills subcommand
-registerSkillsCommand(program);
-
-// Register launch subcommand
-registerLaunchCommand(program);
-
-// focus-window is registered conditionally in main() based on tool settings,
-// since it corresponds to an MCP tool that can be disabled via Tool Settings UI
-
 /**
  * Register a tool as a CLI command dynamically.
  */
-function registerToolCommand(tool: ToolDefinition, helpGroup: string): void {
+function registerToolCommand(program: Command, tool: ToolDefinition, helpGroup: string): void {
   // Skip if already registered as a built-in command
   if (BUILTIN_COMMANDS.includes(tool.name as (typeof BUILTIN_COMMANDS)[number])) {
     return;
@@ -372,6 +259,246 @@ function getToolHelpGroup(toolName: string, defaultToolNames: ReadonlySet<string
 // Option instances are mutated by commander, so each command needs its own
 function createHiddenPortOption(): Option {
   return new Option('-p, --port <port>', 'Unity TCP port').hideHelp();
+}
+
+function createProgram(): Command {
+  const program = new Command();
+
+  program
+    .name('uloop')
+    .description('Unity MCP CLI - Direct communication with Unity Editor')
+    .version(VERSION, '-v, --version', 'Output the version number')
+    .showHelpAfterError('(run with -h for available options)')
+    .configureHelp({
+      sortSubcommands: true,
+      groupItems<T extends Command | Option>(
+        unsortedItems: T[],
+        visibleItems: T[],
+        getGroup: (item: T) => string,
+      ): Map<string, T[]> {
+        const groupMap = new Map<string, T[]>();
+        for (const item of unsortedItems) {
+          const group: string = getGroup(item);
+          if (!groupMap.has(group)) {
+            groupMap.set(group, []);
+          }
+        }
+        for (const item of visibleItems) {
+          const group: string = getGroup(item);
+          let groupedItems: T[] | undefined = groupMap.get(group);
+          if (groupedItems === undefined) {
+            groupedItems = [];
+            groupMap.set(group, groupedItems);
+          }
+
+          groupedItems.push(item);
+        }
+
+        const ordered = new Map<string, T[]>();
+        for (const key of HELP_GROUP_ORDER) {
+          const items: T[] | undefined = groupMap.get(key);
+          if (items !== undefined) {
+            ordered.set(key, items);
+            groupMap.delete(key);
+          }
+        }
+
+        for (const [key, value] of groupMap) {
+          ordered.set(key, value);
+        }
+
+        return ordered;
+      },
+    });
+
+  program.option('--list-commands', 'List all command names (for shell completion)');
+  program.option('--list-options <cmd>', 'List options for a command (for shell completion)');
+  program.commandsGroup(HELP_GROUP_CLI_COMMANDS);
+  program.helpCommand(true);
+
+  program
+    .command('list')
+    .description('List all available tools from Unity')
+    .addOption(createHiddenPortOption())
+    .option('--project-path <path>', 'Unity project path')
+    .action(async (options: CliOptions) => {
+      await runWithErrorHandling(() => listAvailableTools(extractGlobalOptions(options)));
+    });
+
+  program
+    .command('sync')
+    .description('Sync tool definitions from Unity to local cache')
+    .addOption(createHiddenPortOption())
+    .option('--project-path <path>', 'Unity project path')
+    .action(async (options: CliOptions) => {
+      await runWithErrorHandling(() => syncTools(extractGlobalOptions(options)));
+    });
+
+  program
+    .command('completion')
+    .description('Setup shell completion')
+    .option('--install', 'Install completion to shell config file')
+    .option('--shell <type>', 'Shell type: bash, zsh, or powershell')
+    .action((options: { install?: boolean; shell?: string }) => {
+      handleCompletion(options.install ?? false, options.shell);
+    });
+
+  program
+    .command('update')
+    .description('Update uloop CLI to the latest version')
+    .action(() => {
+      updateCli();
+    });
+
+  program
+    .command('fix')
+    .description('Clean up stale lock files that may prevent CLI from connecting')
+    .option('--project-path <path>', 'Unity project path')
+    .action(async (options: { projectPath?: string }) => {
+      await runWithErrorHandling(() => {
+        cleanupLockFiles(options.projectPath);
+        return Promise.resolve();
+      });
+    });
+
+  registerSkillsCommand(program);
+  registerLaunchCommand(program);
+  return program;
+}
+
+interface FastExecuteDynamicCodeCommand {
+  params: Record<string, unknown>;
+  globalOptions: GlobalOptions;
+}
+
+interface FastExecuteDynamicCodeDependencies {
+  executeToolCommandFn: typeof executeToolCommand;
+  isToolEnabledFn: typeof isToolEnabled;
+  runWithErrorHandlingFn: typeof runWithErrorHandling;
+  printToolDisabledErrorFn: typeof printToolDisabledError;
+  exitFn: (code: number) => never;
+}
+
+const defaultFastExecuteDynamicCodeDependencies: FastExecuteDynamicCodeDependencies = {
+  executeToolCommandFn: executeToolCommand,
+  isToolEnabledFn: isToolEnabled,
+  runWithErrorHandlingFn: runWithErrorHandling,
+  printToolDisabledErrorFn: printToolDisabledError,
+  exitFn: (code: number): never => process.exit(code),
+};
+
+const EXECUTE_DYNAMIC_CODE_PROPERTIES: Record<string, ToolProperty> =
+  getDefaultTools().tools.find((tool: ToolDefinition) => tool.name === 'execute-dynamic-code')
+    ?.inputSchema.properties ?? {};
+
+const FAST_EXECUTE_DYNAMIC_CODE_OPTIONS = new Map<string, string>([
+  ['--code', 'code'],
+  ['--parameters', 'parameters'],
+  ['--compile-only', 'compileOnly'],
+  ['--project-path', 'projectPath'],
+  ['--port', 'port'],
+  ['-p', 'port'],
+]);
+
+function parseFastOptionValue(arg: string): [string, string] | null {
+  const separatorIndex = arg.indexOf('=');
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const optionName = arg.slice(0, separatorIndex);
+  const optionValue = arg.slice(separatorIndex + 1);
+  if (!FAST_EXECUTE_DYNAMIC_CODE_OPTIONS.has(optionName)) {
+    return null;
+  }
+
+  return [optionName, optionValue];
+}
+
+export function tryParseFastExecuteDynamicCodeCommand(
+  args: readonly string[],
+): FastExecuteDynamicCodeCommand | null {
+  if (args[0] !== 'execute-dynamic-code') {
+    return null;
+  }
+
+  if (args.includes('-h') || args.includes('--help')) {
+    return null;
+  }
+
+  const options: Record<string, unknown> = {};
+
+  for (let i = 1; i < args.length; i++) {
+    const arg: string = args[i];
+    if (!arg.startsWith('-')) {
+      return null;
+    }
+
+    const inlineOption = parseFastOptionValue(arg);
+    if (inlineOption !== null) {
+      const [optionName, optionValue] = inlineOption;
+      const optionKey = FAST_EXECUTE_DYNAMIC_CODE_OPTIONS.get(optionName);
+      if (optionKey === undefined) {
+        return null;
+      }
+
+      options[optionKey] = optionValue;
+      continue;
+    }
+
+    const optionKey = FAST_EXECUTE_DYNAMIC_CODE_OPTIONS.get(arg);
+    if (optionKey === undefined) {
+      return null;
+    }
+
+    const optionValue = args[i + 1];
+    if (optionValue === undefined) {
+      return null;
+    }
+
+    options[optionKey] = optionValue;
+    i++;
+  }
+
+  if (typeof options['code'] !== 'string') {
+    return null;
+  }
+
+  const params = buildParams(options, EXECUTE_DYNAMIC_CODE_PROPERTIES);
+  const code = params['Code'];
+  if (typeof code === 'string') {
+    params['Code'] = code.replace(/\\!/g, '!');
+  }
+
+  return {
+    params,
+    globalOptions: extractGlobalOptions(options),
+  };
+}
+
+export async function tryHandleFastExecuteDynamicCodeCommand(
+  args: readonly string[],
+  dependencies: FastExecuteDynamicCodeDependencies = defaultFastExecuteDynamicCodeDependencies,
+): Promise<boolean> {
+  const command = tryParseFastExecuteDynamicCodeCommand(args);
+  if (command === null) {
+    return false;
+  }
+
+  if (!dependencies.isToolEnabledFn('execute-dynamic-code', command.globalOptions.projectPath)) {
+    dependencies.printToolDisabledErrorFn('execute-dynamic-code');
+    dependencies.exitFn(1);
+  }
+
+  await dependencies.runWithErrorHandlingFn(() =>
+    dependencies.executeToolCommandFn(
+      'execute-dynamic-code',
+      command.params,
+      command.globalOptions,
+    ),
+  );
+
+  return true;
 }
 
 function extractGlobalOptions(options: Record<string, unknown>): GlobalOptions {
@@ -933,6 +1060,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  const program = createProgram();
   const args = process.argv.slice(2);
   const syncGlobalOptions = extractSyncGlobalOptions(args);
   const cmdName = findCommandName(args);
@@ -960,7 +1088,7 @@ async function main(): Promise<void> {
       registerFocusWindowCommand(program, HELP_GROUP_BUILTIN_TOOLS);
     }
     for (const tool of tools) {
-      registerToolCommand(tool, getToolHelpGroup(tool.name, defaultToolNames));
+      registerToolCommand(program, tool, getToolHelpGroup(tool.name, defaultToolNames));
     }
     program.parse();
     return;
@@ -998,7 +1126,7 @@ async function main(): Promise<void> {
     registerFocusWindowCommand(program, HELP_GROUP_BUILTIN_TOOLS);
   }
   for (const tool of filterEnabledTools(toolsCache.tools, projectPath)) {
-    registerToolCommand(tool, getToolHelpGroup(tool.name, defaultToolNames));
+    registerToolCommand(program, tool, getToolHelpGroup(tool.name, defaultToolNames));
   }
 
   if (cmdName && !commandExists(cmdName, projectPath)) {
@@ -1013,7 +1141,7 @@ async function main(): Promise<void> {
       const newCache = loadToolsCache();
       const tool = filterEnabledTools(newCache.tools, projectPath).find((t) => t.name === cmdName);
       if (tool) {
-        registerToolCommand(tool, getToolHelpGroup(tool.name, defaultToolNames));
+        registerToolCommand(program, tool, getToolHelpGroup(tool.name, defaultToolNames));
         console.log(`\x1b[32m✓ Found '${cmdName}' after sync.\x1b[0m\n`);
       } else {
         console.error(`\x1b[31mError: Command '${cmdName}' not found even after sync.\x1b[0m`);
@@ -1034,5 +1162,12 @@ async function main(): Promise<void> {
 }
 
 if (process.env.JEST_WORKER_ID === undefined) {
-  void main();
+  const args = process.argv.slice(2);
+  void (async (): Promise<void> => {
+    if (await tryHandleFastExecuteDynamicCodeCommand(args)) {
+      return;
+    }
+
+    await main();
+  })();
 }

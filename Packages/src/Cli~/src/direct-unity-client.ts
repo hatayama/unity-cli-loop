@@ -8,6 +8,7 @@
 
 import * as net from 'net';
 import { createFrame, parseFrameFromBuffer, extractFrameFromBuffer } from './simple-framer.js';
+import type { UloopRequestMetadata } from './request-metadata.js';
 
 const JSONRPC_VERSION = '2.0';
 const DEFAULT_HOST = '127.0.0.1';
@@ -18,6 +19,7 @@ interface JsonRpcRequest {
   method: string;
   params?: Record<string, unknown>;
   id: number;
+  'x-uloop'?: UloopRequestMetadata;
 }
 
 interface JsonRpcResponse {
@@ -55,7 +57,11 @@ export class DirectUnityClient {
     });
   }
 
-  async sendRequest<T>(method: string, params?: Record<string, unknown>): Promise<T> {
+  async sendRequest<T>(
+    method: string,
+    params?: Record<string, unknown>,
+    options?: { requestMetadata?: UloopRequestMetadata },
+  ): Promise<T> {
     if (!this.socket) {
       throw new Error('Not connected to Unity');
     }
@@ -66,6 +72,9 @@ export class DirectUnityClient {
       params: params ?? {},
       id: ++this.requestId,
     };
+    if (options?.requestMetadata !== undefined) {
+      request['x-uloop'] = options.requestMetadata;
+    }
 
     const requestJson = JSON.stringify(request);
     const framedMessage = createFrame(requestJson);

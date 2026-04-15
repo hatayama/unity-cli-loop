@@ -54,5 +54,10 @@ namespace io.github.hatayama.uLoopMCP
         /// without this the tool layer cannot emit performance hints about missing usings.
         /// </summary>
         public List<string> AutoInjectedNamespaces { get; set; } = new();
+
+        /// <summary>
+        /// Captures internal phase timings without forcing normal users to parse verbose logs.
+        /// </summary>
+        public List<string> Timings { get; set; } = new();
     }
 }

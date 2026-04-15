@@ -7,6 +7,8 @@ on:
       - 'Packages/src/Editor/**/*.cs'
       - 'Packages/src/Runtime/**/*.cs'
       - 'Assets/**/*.cs'
+      - 'tests/**/*.cs'
+      - 'tests/**/*.csproj'
       - '.github/workflows/unity-compile-check-and-test-runner.yml'
   workflow_dispatch:
 
@@ -26,6 +28,14 @@ jobs:
         uses: actions/checkout@v6
         with:
           lfs: true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run concurrency unit tests
+        run: dotnet test tests/DynamicCodeExecutionScheduler.UnitTests/DynamicCodeExecutionScheduler.UnitTests.csproj --configuration Release
 
       - name: Cache Library folder
         if: env.HAS_UNITY_LICENSE == 'true'

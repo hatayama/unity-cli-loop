@@ -20,11 +20,18 @@ namespace io.github.hatayama.uLoopMCP
         /// Must be string, number, or null - same as received.
         /// </summary>
         public object Id { get; set; }
+        public JsonRpcRequestUloopMetadata UloopMetadata { get; set; }
         /// <summary>
         /// JSON-RPC 2.0 notification flag. True when id is null/missing.
         /// Notifications are fire-and-forget messages that don't expect a response.
         /// Regular requests (with id) expect a response, notifications do not.
         /// </summary>
         public bool IsNotification => Id == null;
+    }
+
+    internal class JsonRpcRequestUloopMetadata
+    {
+        public string ExpectedProjectRoot { get; set; }
+        public string ExpectedServerSessionId { get; set; }
     }
 }

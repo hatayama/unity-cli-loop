@@ -110,6 +110,8 @@ namespace io.github.hatayama.uLoopMCP
                 await StopServerWithUseCaseAsync();
             }
 
+            DynamicCodeStartupTelemetry.Reset();
+
             // Execute initialization UseCase
             McpServerInitializationUseCase useCase = new();
             ServerInitializationSchema schema = new() { Port = port };
@@ -125,8 +127,13 @@ namespace io.github.hatayama.uLoopMCP
 
                 // Sync session state with the running server to enable domain reload recovery
                 // even if mcpServer instance becomes null unexpectedly
-                McpEditorSettings.SetIsServerRunning(true);
-                McpEditorSettings.SetCustomPort(mcpServer.Port);
+                SaveRunningServerSession(mcpServer.Port);
+                DynamicCodeStartupTelemetry.MarkServerReady();
+                CustomToolManager.WarmupRegistry();
+                DynamicCodeServices.ResetServerScopedServices();
+                IPrewarmDynamicCodeUseCase prewarmDynamicCodeUseCase =
+                    await DynamicCodeServices.GetPrewarmDynamicCodeUseCaseAsync();
+                prewarmDynamicCodeUseCase.Request();
 
             }
             else
@@ -170,7 +177,9 @@ namespace io.github.hatayama.uLoopMCP
                 mcpServer = null;
 
                 // Clear session state to reflect server stopped
-                McpEditorSettings.SetIsServerRunning(false);
+                McpEditorSettings.ClearServerSession();
+                DynamicCodeStartupTelemetry.Reset();
+                DynamicCodeServices.ResetServerScopedServices();
             }
             else
             {
@@ -195,6 +204,9 @@ namespace io.github.hatayama.uLoopMCP
             {
                 mcpServer = null;
             }
+
+            DynamicCodeStartupTelemetry.Reset();
+            DynamicCodeServices.ResetServerScopedServices();
         }
 
         /// <summary>
@@ -352,6 +364,7 @@ namespace io.github.hatayama.uLoopMCP
                     mcpServer = null;
                 }
             }
+            DynamicCodeServices.ResetServerScopedServices();
             McpEditorSettings.ClearServerSession();
         }
 
@@ -395,7 +408,7 @@ namespace io.github.hatayama.uLoopMCP
                             "server_auto_recovery_failed",
                             $"Automatic recovery after unexpected exit failed: {task.Exception?.GetBaseException().Message}"
                         );
-                        McpEditorSettings.SetIsServerRunning(false);
+                        McpEditorSettings.ClearServerSession();
                     }
                 }, TaskScheduler.FromCurrentSynchronizationContext());
             };
@@ -732,15 +745,17 @@ namespace io.github.hatayama.uLoopMCP
                 }
 
                 // Mark running and update settings
-                McpEditorSettings.SetIsServerRunning(true);
-                if (McpEditorSettings.GetCustomPort() != chosenPort)
-                {
-                    McpEditorSettings.SetCustomPort(chosenPort);
-                }
+                SaveRunningServerSession(chosenPort);
 
                 // Clear reconnection-related flags on successful recovery
                 McpEditorSettings.ClearReconnectingFlags();
                 McpEditorSettings.ClearPostCompileReconnectingUI();
+                DynamicCodeStartupTelemetry.MarkServerReady();
+                CustomToolManager.WarmupRegistry();
+                DynamicCodeServices.ResetServerScopedServices();
+                IPrewarmDynamicCodeUseCase prewarmDynamicCodeUseCase =
+                    await DynamicCodeServices.GetPrewarmDynamicCodeUseCaseAsync();
+                prewarmDynamicCodeUseCase.Request();
 
                 ActivateStartupProtection(5000);
             }
@@ -813,6 +828,13 @@ namespace io.github.hatayama.uLoopMCP
                     remainingMs -= delay;
                 }
             }
+        }
+
+        private static void SaveRunningServerSession(int port)
+        {
+            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            string serverSessionId = Guid.NewGuid().ToString("N");
+            McpEditorSettings.SetRunningServerSession(port, projectRoot, serverSessionId);
         }
     }
 }

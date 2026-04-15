@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -106,7 +107,22 @@ namespace io.github.hatayama.uLoopMCP
             {
                 Method = request["method"]?.ToString(),
                 Params = request["params"],
-                Id = request["id"]?.ToObject<object>()
+                Id = request["id"]?.ToObject<object>(),
+                UloopMetadata = ParseUloopMetadata(request["x-uloop"])
+            };
+        }
+
+        private static JsonRpcRequestUloopMetadata ParseUloopMetadata(JToken metadataToken)
+        {
+            if (metadataToken == null || metadataToken.Type == JTokenType.Null)
+            {
+                return null;
+            }
+
+            return new JsonRpcRequestUloopMetadata
+            {
+                ExpectedProjectRoot = metadataToken["expectedProjectRoot"]?.ToString(),
+                ExpectedServerSessionId = metadataToken["expectedServerSessionId"]?.ToString()
             };
         }
 
@@ -150,10 +166,24 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         private static async Task<string> ProcessRpcRequest(JsonRpcRequest request, string originalJson)
         {
+            Stopwatch requestStopwatch = Stopwatch.StartNew();
             try
             {
+                ValidateClientIdentityIfNeeded(request);
+
+                Stopwatch mainThreadWaitStopwatch = Stopwatch.StartNew();
                 await MainThreadSwitcher.SwitchToMainThread();
+                mainThreadWaitStopwatch.Stop();
+
+                Stopwatch toolStopwatch = Stopwatch.StartNew();
                 BaseToolResponse result = await ExecuteMethod(request.Method, request.Params);
+                toolStopwatch.Stop();
+
+                AppendExecuteDynamicCodeTimingsIfSupported(
+                    result,
+                    mainThreadWaitStopwatch.Elapsed.TotalMilliseconds,
+                    toolStopwatch.Elapsed.TotalMilliseconds,
+                    requestStopwatch.Elapsed.TotalMilliseconds);
                 string response = CreateSuccessResponse(request.Id, result);
                 return response;
             }
@@ -172,6 +202,32 @@ namespace io.github.hatayama.uLoopMCP
                 UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
                 return CreateErrorResponse(request.Id, ex);
             }
+        }
+
+        private static void ValidateClientIdentityIfNeeded(JsonRpcRequest request)
+        {
+            JsonRpcRequestIdentityValidator.Validate(
+                request?.UloopMetadata,
+                McpEditorSettings.GetProjectRootPath(),
+                McpEditorSettings.GetServerSessionId());
+        }
+
+        private static void AppendExecuteDynamicCodeTimingsIfSupported(
+            BaseToolResponse result,
+            double mainThreadWaitMilliseconds,
+            double toolTotalMilliseconds,
+            double requestTotalMilliseconds)
+        {
+            if (result is not ExecuteDynamicCodeResponse executeDynamicCodeResponse)
+            {
+                return;
+            }
+
+            ExecuteDynamicCodeResponseTimingAugmenter.AppendTimingEntries(
+                executeDynamicCodeResponse,
+                mainThreadWaitMilliseconds,
+                toolTotalMilliseconds,
+                requestTotalMilliseconds);
         }
 
         /// <summary>

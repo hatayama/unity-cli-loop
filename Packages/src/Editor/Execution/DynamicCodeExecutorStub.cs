@@ -18,26 +18,15 @@ namespace io.github.hatayama.uLoopMCP
             _statistics = new ExecutionStatistics();
         }
 
-        /// <summary>Execute code (always returns a Roslyn required error)</summary>
-        public ExecutionResult ExecuteCode(
-            string code,
-            string className = DynamicCodeConstants.DEFAULT_CLASS_NAME,
-            object[] parameters = null,
-            CancellationToken cancellationToken = default,
-            bool compileOnly = false)
-        {
-            return CreateCompilationProviderUnavailableResult();
-        }
-
         /// <summary>Execute code asynchronously (always returns a Roslyn required error)</summary>
-        public async Task<ExecutionResult> ExecuteCodeAsync(
+        public Task<ExecutionResult> ExecuteCodeAsync(
             string code,
             string className = DynamicCodeConstants.DEFAULT_CLASS_NAME,
             object[] parameters = null,
             CancellationToken cancellationToken = default,
             bool compileOnly = false)
         {
-            return await Task.FromResult(CreateCompilationProviderUnavailableResult());
+            return Task.FromResult(CreateCompilationProviderUnavailableResult());
         }
 
         /// <summary>Retrieve execution statistics</summary>

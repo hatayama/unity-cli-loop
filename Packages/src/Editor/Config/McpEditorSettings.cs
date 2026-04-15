@@ -24,6 +24,8 @@ namespace io.github.hatayama.uLoopMCP
     public record McpEditorSettingsData
     {
         public int customPort = McpServerConfig.DEFAULT_PORT;
+        public string projectRootPath = "";
+        public string serverSessionId = "";
         public bool showDeveloperTools = false;
         public bool enableMcpLogs = false;
         public bool enableCommunicationLogs = false;
@@ -162,6 +164,16 @@ namespace io.github.hatayama.uLoopMCP
             return GetSettings().customPort;
         }
 
+        public static string GetProjectRootPath()
+        {
+            return GetSettings().projectRootPath ?? string.Empty;
+        }
+
+        public static string GetServerSessionId()
+        {
+            return GetSettings().serverSessionId ?? string.Empty;
+        }
+
         /// <summary>
         /// Saves the custom port number.
         /// </summary>
@@ -170,6 +182,22 @@ namespace io.github.hatayama.uLoopMCP
             McpEditorSettingsData settings = GetSettings();
             McpEditorSettingsData updatedSettings = settings with { customPort = port };
             SaveSettings(updatedSettings);
+        }
+
+        public static void SetRunningServerSession(int port, string projectRootPath, string serverSessionId)
+        {
+            Debug.Assert(port > 0, "port must be positive");
+            Debug.Assert(!string.IsNullOrWhiteSpace(projectRootPath), "projectRootPath must not be empty");
+            Debug.Assert(!string.IsNullOrWhiteSpace(serverSessionId), "serverSessionId must not be empty");
+
+            string normalizedProjectRootPath = NormalizeProjectRootPath(projectRootPath);
+            UpdateSettings(settings => settings with
+            {
+                isServerRunning = true,
+                customPort = port,
+                projectRootPath = normalizedProjectRootPath,
+                serverSessionId = serverSessionId
+            });
         }
 
         /// <summary>
@@ -533,7 +561,11 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public static void ClearServerSession()
         {
-            SetIsServerRunning(false);
+            UpdateSettings(settings => settings with
+            {
+                isServerRunning = false,
+                serverSessionId = string.Empty
+            });
         }
 
         /// <summary>
@@ -823,6 +855,12 @@ namespace io.github.hatayama.uLoopMCP
                 throw new InvalidOperationException(
                     $"Failed to load MCP Editor settings from: {SettingsFilePath}. Settings file may be corrupted.", ex);
             }
+        }
+
+        private static string NormalizeProjectRootPath(string projectRootPath)
+        {
+            string fullPath = Path.GetFullPath(projectRootPath);
+            return fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
         /// <summary>

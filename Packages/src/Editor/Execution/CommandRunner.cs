@@ -4,29 +4,28 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
-using UnityEngine;
-using io.github.hatayama.uLoopMCP;
 
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Controls the execution of compiled code.
-    /// 
-    /// Related Classes: ExecutionContext, ExecutionResult
+    /// Runs the prepared wrapper entry point while keeping Undo and cancellation handling consistent.
     /// </summary>
-    public class CommandRunner
+    public class CommandRunner : ICompiledCommandInvoker
     {
+        private readonly CompiledCommandEntryPointResolver _entryPointResolver;
         private bool _isRunning = false;
         private CancellationTokenSource _cancellationTokenSource;
 
         public bool IsRunning => _isRunning;
 
-        private static void LogExecutionStart(ExecutionContext context, string correlationId)
+        public CommandRunner()
+            : this(DynamicCodeServices.CommandEntryPointResolver)
         {
         }
 
-        private static void LogExecutionComplete(ExecutionResult result, string correlationId)
+        internal CommandRunner(CompiledCommandEntryPointResolver entryPointResolver)
         {
+            _entryPointResolver = entryPointResolver;
         }
 
         private static void LogExecutionError(Exception ex, string correlationId)
@@ -55,37 +54,19 @@ namespace io.github.hatayama.uLoopMCP
         public ExecutionResult Execute(ExecutionContext context)
         {
             string correlationId = McpConstants.GenerateCorrelationId();
-
-            if (_isRunning)
+            if (!TryBeginExecution(out int undoGroup))
             {
                 return CreateErrorResult(McpConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS);
             }
-            _isRunning = true;
-            _cancellationTokenSource = new CancellationTokenSource();
-
-            int undoGroup = Undo.GetCurrentGroup();
-            Undo.SetCurrentGroupName("ExecuteDynamicCode");
 
             try
             {
-                LogExecutionStart(context, correlationId);
-
-                // Configure timeout
                 using CancellationTokenSource combinedCts = CreateCombinedCancellationTokenSource(context);
-
-                // Execute
-                ExecutionResult result = ExecuteInternal(context, combinedCts.Token, correlationId);
-
-                LogExecutionComplete(result, correlationId);
-
-                return result;
+                return ExecuteInternal(context, combinedCts.Token);
             }
             catch (OperationCanceledException)
             {
-                ExecutionResult cancelResult = CreateErrorResult(
-                    McpConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
-                    new List<string> { "Execution cancelled due to timeout" });
-                return cancelResult;
+                return CreateCancelledResult();
             }
             catch (Exception ex)
             {
@@ -97,10 +78,7 @@ namespace io.github.hatayama.uLoopMCP
             }
             finally
             {
-                Undo.CollapseUndoOperations(undoGroup);
-                _isRunning = false;
-                _cancellationTokenSource?.Dispose();
-                _cancellationTokenSource = null;
+                EndExecution(undoGroup);
             }
         }
 
@@ -112,35 +90,19 @@ namespace io.github.hatayama.uLoopMCP
         public async Task<ExecutionResult> ExecuteAsync(ExecutionContext context)
         {
             string correlationId = McpConstants.GenerateCorrelationId();
-
-            if (_isRunning)
+            if (!TryBeginExecution(out int undoGroup))
             {
                 return CreateErrorResult(McpConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS);
             }
-            _isRunning = true;
-            _cancellationTokenSource = new CancellationTokenSource();
-
-            int undoGroup = Undo.GetCurrentGroup();
-            Undo.SetCurrentGroupName("ExecuteDynamicCode");
 
             try
             {
-                LogExecutionStart(context, correlationId);
-
                 using CancellationTokenSource combinedCts = CreateCombinedCancellationTokenSource(context);
-
-                ExecutionResult result = await ExecuteInternalAsync(context, combinedCts.Token, correlationId);
-
-                LogExecutionComplete(result, correlationId);
-
-                return result;
+                return await ExecuteInternalAsync(context, combinedCts.Token);
             }
             catch (OperationCanceledException)
             {
-                ExecutionResult cancelResult = CreateErrorResult(
-                    McpConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
-                    new List<string> { "Execution cancelled due to timeout" });
-                return cancelResult;
+                return CreateCancelledResult();
             }
             catch (Exception ex)
             {
@@ -152,11 +114,31 @@ namespace io.github.hatayama.uLoopMCP
             }
             finally
             {
-                Undo.CollapseUndoOperations(undoGroup);
-                _isRunning = false;
-                _cancellationTokenSource?.Dispose();
-                _cancellationTokenSource = null;
+                EndExecution(undoGroup);
             }
+        }
+
+        private bool TryBeginExecution(out int undoGroup)
+        {
+            undoGroup = -1;
+            if (_isRunning)
+            {
+                return false;
+            }
+
+            _isRunning = true;
+            _cancellationTokenSource = new CancellationTokenSource();
+            undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("ExecuteDynamicCode");
+            return true;
+        }
+
+        private void EndExecution(int undoGroup)
+        {
+            Undo.CollapseUndoOperations(undoGroup);
+            _isRunning = false;
+            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource = null;
         }
 
         private static ExecutionResult CreateErrorResult(string errorMessage, List<string> logs = null)
@@ -170,6 +152,13 @@ namespace io.github.hatayama.uLoopMCP
             };
         }
 
+        private static ExecutionResult CreateCancelledResult()
+        {
+            return CreateErrorResult(
+                McpConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
+                new List<string> { "Execution cancelled" });
+        }
+
         private static ExecutionResult CreateSuccessResult(string result, List<string> logs = null)
         {
             return new ExecutionResult
@@ -181,91 +170,22 @@ namespace io.github.hatayama.uLoopMCP
             };
         }
 
-        private static (Type targetType, MethodInfo executeMethod) FindExecuteMethod(Assembly assembly)
-        {
-            Type[] types = assembly.GetTypes();
-            
-            foreach (Type type in types)
-            {
-                MethodInfo method = type.GetMethod("Execute", BindingFlags.Public | BindingFlags.Instance);
-                if (method != null)
-                {
-                    return (type, method);
-                }
-            }
-            
-            return (null, null);
-        }
-
-        private static (Type targetType, MethodInfo executeAsyncMethod) FindExecuteAsyncMethod(Assembly assembly)
-        {
-            Type[] types = assembly.GetTypes();
-
-            foreach (Type type in types)
-            {
-                // Prefer parameter-rich overloads first
-                MethodInfo m1 = type.GetMethod(
-                    "ExecuteAsync",
-                    BindingFlags.Public | BindingFlags.Instance,
-                    null,
-                    new Type[] { typeof(Dictionary<string, object>), typeof(CancellationToken) },
-                    null);
-                if (m1 != null) return (type, m1);
-
-                MethodInfo m2 = type.GetMethod(
-                    "ExecuteAsync",
-                    BindingFlags.Public | BindingFlags.Instance,
-                    null,
-                    new Type[] { typeof(Dictionary<string, object>) },
-                    null);
-                if (m2 != null) return (type, m2);
-
-                MethodInfo m3 = type.GetMethod(
-                    "ExecuteAsync",
-                    BindingFlags.Public | BindingFlags.Instance,
-                    null,
-                    new Type[] { typeof(CancellationToken) },
-                    null);
-                if (m3 != null) return (type, m3);
-
-                MethodInfo m4 = type.GetMethod(
-                    "ExecuteAsync",
-                    BindingFlags.Public | BindingFlags.Instance,
-                    null,
-                    Type.EmptyTypes,
-                    null);
-                if (m4 != null) return (type, m4);
-            }
-
-            return (null, null);
-        }
-
         private static object CreateInstance(Type targetType)
         {
             return Activator.CreateInstance(targetType);
         }
 
-        private static object InvokeExecuteMethod(MethodInfo executeMethod, object instance, Dictionary<string, object> parameters)
+        private static object InvokeExecuteMethod(
+            MethodInfo executeMethod,
+            object instance,
+            Dictionary<string, object> parameters,
+            CancellationToken cancellationToken)
         {
-            System.Reflection.ParameterInfo[] methodParameters = executeMethod.GetParameters();
-            
-            if (methodParameters.Length == 0)
-            {
-                // No parameters
-                return executeMethod.Invoke(instance, null);
-            }
-            else if (methodParameters.Length == 1 && methodParameters[0].ParameterType == typeof(Dictionary<string, object>))
-            {
-                // Parameter dictionary available
-                return executeMethod.Invoke(instance, new object[] { parameters });
-            }
-            else
-            {
-                throw new NotSupportedException("Expected Execute() or Execute(Dictionary<string, object> parameters)");
-            }
+            object[] callArgs = BuildSupportedArguments(executeMethod, parameters, cancellationToken);
+            return executeMethod.Invoke(instance, callArgs);
         }
 
-        private ExecutionResult ExecuteInternal(ExecutionContext context, CancellationToken cancellationToken, string correlationId)
+        private ExecutionResult ExecuteInternal(ExecutionContext context, CancellationToken cancellationToken)
         {
             if (context.CompiledAssembly == null)
             {
@@ -275,7 +195,8 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 // Find executable type from assembly (sync only)
-                (Type targetType, MethodInfo executeMethod) = FindExecuteMethod(context.CompiledAssembly);
+                (Type targetType, MethodInfo executeMethod) = _entryPointResolver.TryFindExecuteMethod(
+                    context.CompiledAssembly);
                 
                 if (targetType == null || executeMethod == null)
                 {
@@ -292,12 +213,16 @@ namespace io.github.hatayama.uLoopMCP
                 }
 
                 // Check cancellation
-                cancellationToken.ThrowIfCancellationRequested();
+                    cancellationToken.ThrowIfCancellationRequested();
 
                 try
                 {
                     // Execute method
-                    object executionResult = InvokeExecuteMethod(executeMethod, instance, context.Parameters);
+                    object executionResult = InvokeExecuteMethod(
+                        executeMethod,
+                        instance,
+                        context.Parameters,
+                        cancellationToken);
                     
                     // Convert result to string
                     string resultString = executionResult?.ToString() ?? "";
@@ -311,10 +236,18 @@ namespace io.github.hatayama.uLoopMCP
                         new List<string> { ex.Message });
                 }
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (TargetInvocationException ex)
             {
                 // Retrieve actual exception
                 Exception innerException = ex.InnerException ?? ex;
+                if (innerException is OperationCanceledException)
+                {
+                    throw innerException;
+                }
                 
                 return CreateErrorResult(
                     innerException.Message,
@@ -336,7 +269,7 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private async Task<ExecutionResult> ExecuteInternalAsync(ExecutionContext context, CancellationToken cancellationToken, string correlationId)
+        private async Task<ExecutionResult> ExecuteInternalAsync(ExecutionContext context, CancellationToken cancellationToken)
         {
             if (context.CompiledAssembly == null)
             {
@@ -346,7 +279,8 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 // Prefer async ExecuteAsync; fallback to sync Execute
-                (Type asyncType, MethodInfo executeAsyncMethod) = FindExecuteAsyncMethod(context.CompiledAssembly);
+                (Type asyncType, MethodInfo executeAsyncMethod) = _entryPointResolver.TryFindExecuteAsyncMethod(
+                    context.CompiledAssembly);
                 if (asyncType != null && executeAsyncMethod != null)
                 {
                     object instance = CreateInstance(asyncType);
@@ -357,7 +291,10 @@ namespace io.github.hatayama.uLoopMCP
 
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    object[] callArgs = BuildArguments(executeAsyncMethod, context.Parameters, cancellationToken);
+                    object[] callArgs = BuildSupportedArguments(
+                        executeAsyncMethod,
+                        context.Parameters,
+                        cancellationToken);
                     object invoked = executeAsyncMethod.Invoke(instance, callArgs);
 
                     object awaitedResult = await io.github.hatayama.uLoopMCP.AwaitableHelper.AwaitIfNeeded(invoked);
@@ -367,12 +304,21 @@ namespace io.github.hatayama.uLoopMCP
                 }
 
                 // Fallback to sync path if no async method found
-                ExecutionResult syncResult = ExecuteInternal(context, cancellationToken, correlationId);
+                ExecutionResult syncResult = ExecuteInternal(context, cancellationToken);
                 return syncResult;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (TargetInvocationException ex)
             {
                 Exception innerException = ex.InnerException ?? ex;
+                if (innerException is OperationCanceledException)
+                {
+                    throw innerException;
+                }
+
                 return CreateErrorResult(
                     innerException.Message,
                     new List<string>
@@ -393,7 +339,10 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private static object[] BuildArguments(MethodInfo method, Dictionary<string, object> parameters, CancellationToken cancellationToken)
+        private static object[] BuildSupportedArguments(
+            MethodInfo method,
+            Dictionary<string, object> parameters,
+            CancellationToken cancellationToken)
         {
             System.Reflection.ParameterInfo[] methodParameters = method.GetParameters();
             if (methodParameters.Length == 0)
@@ -413,7 +362,8 @@ namespace io.github.hatayama.uLoopMCP
                 return new object[] { cancellationToken };
             }
 
-            throw new NotSupportedException("Expected ExecuteAsync() overloads with Dictionary<string,object> and/or CancellationToken");
+            throw new NotSupportedException(
+                "Expected Execute/ExecuteAsync overloads with Dictionary<string,object> and/or CancellationToken");
         }
     }
 }

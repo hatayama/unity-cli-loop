@@ -16,7 +16,8 @@ namespace io.github.hatayama.uLoopMCP
             IReadOnlyList<string> usingDirectives,
             string namespaceName,
             string className,
-            string body)
+            string body,
+            IReadOnlyList<string> preambleLines = null)
         {
             StringBuilder sb = new StringBuilder();
 
@@ -44,6 +45,15 @@ namespace io.github.hatayama.uLoopMCP
             sb.AppendLine("            System.Collections.Generic.Dictionary<string, object> parameters = null,");
             sb.AppendLine("            System.Threading.CancellationToken ct = default)");
             sb.AppendLine("        {");
+
+            if (preambleLines != null)
+            {
+                foreach (string preambleLine in preambleLines)
+                {
+                    sb.AppendLine($"            {preambleLine}");
+                }
+            }
+
             sb.AppendLine(UserCodeStartMarker);
 
             foreach (string line in body.Split('\n'))

@@ -61,7 +61,13 @@ namespace io.github.hatayama.uLoopMCP
         /// <returns>Success indicator</returns>
         public ServiceResult<bool> UpdateSessionState(bool isRunning, int port = -1)
         {
-            McpEditorSettings.SetIsServerRunning(isRunning);
+            if (!isRunning)
+            {
+                McpEditorSettings.ClearServerSession();
+                return ServiceResult<bool>.SuccessResult(true);
+            }
+
+            McpEditorSettings.SetIsServerRunning(true);
             if (isRunning && port > 0)
             {
                 McpEditorSettings.SetCustomPort(port);

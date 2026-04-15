@@ -31,7 +31,6 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             finally
             {
                 ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-                tool.Dispose();
             }
         }
     }

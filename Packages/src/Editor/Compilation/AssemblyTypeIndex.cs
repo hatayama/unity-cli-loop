@@ -13,6 +13,9 @@ namespace io.github.hatayama.uLoopMCP
     {
         private static AssemblyTypeIndex _instance;
         private readonly Dictionary<string, HashSet<string>> _typeToNamespaces = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HashSet<string>> _typeToAssemblyLocations = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HashSet<string>> _qualifiedTypeToAssemblyLocations = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HashSet<string>> _namespaceToAssemblyLocations = new(StringComparer.Ordinal);
 
         public static AssemblyTypeIndex Instance
         {
@@ -36,11 +39,15 @@ namespace io.github.hatayama.uLoopMCP
         private void Build()
         {
             _typeToNamespaces.Clear();
+            _typeToAssemblyLocations.Clear();
+            _qualifiedTypeToAssemblyLocations.Clear();
+            _namespaceToAssemblyLocations.Clear();
 
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 if (assembly.IsDynamic) continue;
 
+                string assemblyLocation = GetAssemblyLocation(assembly);
                 Type[] types;
                 try
                 {
@@ -71,6 +78,13 @@ namespace io.github.hatayama.uLoopMCP
                         _typeToNamespaces[typeName] = namespaces;
                     }
                     namespaces.Add(type.Namespace);
+
+                    if (!string.IsNullOrEmpty(assemblyLocation))
+                    {
+                        RegisterTypeAssemblyLocation(typeName, assemblyLocation);
+                        RegisterQualifiedTypeAssemblyLocation(type.Namespace, typeName, assemblyLocation);
+                        RegisterNamespaceAssemblyLocation(type.Namespace, assemblyLocation);
+                    }
                 }
             }
         }
@@ -84,6 +98,121 @@ namespace io.github.hatayama.uLoopMCP
                 return new List<string>(namespaces);
             }
             return new List<string>();
+        }
+
+        public List<string> FindAssemblyLocationsForType(string typeName)
+        {
+            if (string.IsNullOrEmpty(typeName))
+            {
+                return new List<string>();
+            }
+
+            if (_typeToAssemblyLocations.TryGetValue(typeName, out HashSet<string> assemblyLocations))
+            {
+                return new List<string>(assemblyLocations);
+            }
+
+            return new List<string>();
+        }
+
+        public List<string> FindAssemblyLocationsForIdentifier(string identifier)
+        {
+            if (string.IsNullOrEmpty(identifier))
+            {
+                return new List<string>();
+            }
+
+            int terminalSeparatorIndex = identifier.LastIndexOf('.');
+            string terminalTypeName = terminalSeparatorIndex >= 0
+                ? identifier.Substring(terminalSeparatorIndex + 1)
+                : identifier;
+            string currentIdentifier = identifier;
+            while (true)
+            {
+                if (_qualifiedTypeToAssemblyLocations.TryGetValue(currentIdentifier, out HashSet<string> qualifiedTypeAssemblyLocations))
+                {
+                    return new List<string>(qualifiedTypeAssemblyLocations);
+                }
+
+                if (_namespaceToAssemblyLocations.TryGetValue(currentIdentifier, out HashSet<string> namespaceAssemblyLocations))
+                {
+                    return new List<string>(namespaceAssemblyLocations);
+                }
+
+                int separatorIndex = currentIdentifier.LastIndexOf('.');
+                if (separatorIndex < 0)
+                {
+                    break;
+                }
+
+                currentIdentifier = currentIdentifier.Substring(0, separatorIndex);
+            }
+
+            if (_typeToAssemblyLocations.TryGetValue(terminalTypeName, out HashSet<string> typeAssemblyLocations))
+            {
+                return new List<string>(typeAssemblyLocations);
+            }
+
+            return new List<string>();
+        }
+
+        private static string GetAssemblyLocation(Assembly assembly)
+        {
+            try
+            {
+                return assembly.Location;
+            }
+            catch (NotSupportedException)
+            {
+                return string.Empty;
+            }
+        }
+
+        private void RegisterTypeAssemblyLocation(string typeName, string assemblyLocation)
+        {
+            if (!_typeToAssemblyLocations.TryGetValue(typeName, out HashSet<string> assemblyLocations))
+            {
+                assemblyLocations = new HashSet<string>(StringComparer.Ordinal);
+                _typeToAssemblyLocations[typeName] = assemblyLocations;
+            }
+
+            assemblyLocations.Add(assemblyLocation);
+        }
+
+        private void RegisterQualifiedTypeAssemblyLocation(
+            string namespaceName,
+            string typeName,
+            string assemblyLocation)
+        {
+            string qualifiedTypeName = $"{namespaceName}.{typeName}";
+            if (!_qualifiedTypeToAssemblyLocations.TryGetValue(qualifiedTypeName, out HashSet<string> assemblyLocations))
+            {
+                assemblyLocations = new HashSet<string>(StringComparer.Ordinal);
+                _qualifiedTypeToAssemblyLocations[qualifiedTypeName] = assemblyLocations;
+            }
+
+            assemblyLocations.Add(assemblyLocation);
+        }
+
+        private void RegisterNamespaceAssemblyLocation(string namespaceName, string assemblyLocation)
+        {
+            string[] namespaceParts = namespaceName.Split('.');
+            string currentNamespace = string.Empty;
+
+            foreach (string namespacePart in namespaceParts)
+            {
+                currentNamespace = currentNamespace.Length == 0
+                    ? namespacePart
+                    : $"{currentNamespace}.{namespacePart}";
+
+                if (!_namespaceToAssemblyLocations.TryGetValue(currentNamespace, out HashSet<string> assemblyLocations))
+                {
+                    assemblyLocations = new HashSet<string>(StringComparer.Ordinal);
+                    _namespaceToAssemblyLocations[currentNamespace] = assemblyLocations;
+                }
+
+                assemblyLocations.Add(assemblyLocation);
+            }
         }
     }
 }

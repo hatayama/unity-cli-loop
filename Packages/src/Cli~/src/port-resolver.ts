@@ -16,6 +16,7 @@ import {
   isUnityProject,
   hasUloopInstalled,
 } from './project-root.js';
+import type { UloopRequestMetadata } from './request-metadata.js';
 
 export class UnityNotRunningError extends Error {
   constructor(public readonly projectRoot: string) {
@@ -32,6 +33,15 @@ export class UnityServerNotRunningError extends Error {
 interface UnityMcpSettings {
   isServerRunning?: boolean;
   customPort?: number;
+  projectRootPath?: string;
+  serverSessionId?: string;
+}
+
+export interface ResolvedUnityConnection {
+  port: number;
+  projectRoot: string | null;
+  requestMetadata: UloopRequestMetadata | null;
+  shouldValidateProject: boolean;
 }
 
 function normalizePort(port: unknown): number | null {
@@ -80,29 +90,16 @@ export function validateProjectPath(projectPath: string): string {
   return resolved;
 }
 
+function normalizeProjectRootPath(projectRoot: string): string {
+  return projectRoot.replace(/\/+$/, '');
+}
+
 export async function resolveUnityPort(
   explicitPort?: number,
   projectPath?: string,
 ): Promise<number> {
-  if (explicitPort !== undefined && projectPath !== undefined) {
-    throw new Error('Cannot specify both --port and --project-path. Use one or the other.');
-  }
-
-  if (explicitPort !== undefined) {
-    return explicitPort;
-  }
-
-  if (projectPath !== undefined) {
-    const resolved = validateProjectPath(projectPath);
-    return await readPortFromSettingsOrThrow(resolved);
-  }
-
-  const projectRoot = findUnityProjectRoot();
-  if (projectRoot === null) {
-    throw new Error('Unity project not found. Use --project-path option to specify the target.');
-  }
-
-  return await readPortFromSettingsOrThrow(projectRoot);
+  const connection = await resolveUnityConnection(explicitPort, projectPath);
+  return connection.port;
 }
 
 function createSettingsReadError(projectRoot: string): Error {
@@ -114,8 +111,7 @@ function createSettingsReadError(projectRoot: string): Error {
   );
 }
 
-// File I/O and JSON parsing can fail for external reasons (permissions, corruption, concurrent writes)
-async function readPortFromSettingsOrThrow(projectRoot: string): Promise<number> {
+async function readUnitySettingsOrThrow(projectRoot: string): Promise<UnityMcpSettings> {
   for (const settingsPath of getUnitySettingsCandidatePaths(projectRoot)) {
     let content: string;
     try {
@@ -134,13 +130,82 @@ async function readPortFromSettingsOrThrow(projectRoot: string): Promise<number>
     if (typeof parsed !== 'object' || parsed === null) {
       continue;
     }
-    const settings = parsed as UnityMcpSettings;
 
-    const port = resolvePortFromUnitySettings(settings);
-    if (port !== null) {
-      return port;
-    }
+    return parsed as UnityMcpSettings;
   }
 
   throw createSettingsReadError(projectRoot);
+}
+
+function resolvePortFromSettingsOrThrow(settings: UnityMcpSettings, projectRoot: string): number {
+  const port = resolvePortFromUnitySettings(settings);
+  if (port !== null) {
+    return port;
+  }
+
+  throw createSettingsReadError(projectRoot);
+}
+
+function tryCreateRequestMetadata(
+  settings: UnityMcpSettings,
+  projectRoot: string,
+): UloopRequestMetadata | null {
+  if (
+    typeof settings.projectRootPath !== 'string' ||
+    settings.projectRootPath.length === 0 ||
+    typeof settings.serverSessionId !== 'string' ||
+    settings.serverSessionId.length === 0
+  ) {
+    return null;
+  }
+
+  const normalizedProjectRoot = normalizeProjectRootPath(projectRoot);
+  const normalizedSettingsProjectRoot = normalizeProjectRootPath(settings.projectRootPath);
+  if (normalizedProjectRoot !== normalizedSettingsProjectRoot) {
+    return null;
+  }
+
+  return {
+    expectedProjectRoot: normalizedProjectRoot,
+    expectedServerSessionId: settings.serverSessionId,
+  };
+}
+
+export async function resolveUnityConnection(
+  explicitPort?: number,
+  projectPath?: string,
+): Promise<ResolvedUnityConnection> {
+  if (explicitPort !== undefined && projectPath !== undefined) {
+    throw new Error('Cannot specify both --port and --project-path. Use one or the other.');
+  }
+
+  if (explicitPort !== undefined) {
+    return {
+      port: explicitPort,
+      projectRoot: null,
+      requestMetadata: null,
+      shouldValidateProject: false,
+    };
+  }
+
+  let projectRoot: string | null;
+  if (projectPath !== undefined) {
+    projectRoot = validateProjectPath(projectPath);
+  } else {
+    projectRoot = findUnityProjectRoot();
+    if (projectRoot === null) {
+      throw new Error('Unity project not found. Use --project-path option to specify the target.');
+    }
+  }
+
+  const settings = await readUnitySettingsOrThrow(projectRoot);
+  const port = resolvePortFromSettingsOrThrow(settings, projectRoot);
+  const requestMetadata = tryCreateRequestMetadata(settings, projectRoot);
+
+  return {
+    port,
+    projectRoot,
+    requestMetadata,
+    shouldValidateProject: requestMetadata === null,
+  };
 }

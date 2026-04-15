@@ -105,16 +105,33 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
-        public void ExecuteCode_WhenCalledSynchronously_ShouldThrowNotSupportedException()
+        public async Task ExecuteCodeAsync_WhenOnlyLiteralValuesDiffer_ShouldKeepExecutionValues()
         {
             IDynamicCodeExecutor executor = Factory.DynamicCodeExecutorFactory.Create(
                 DynamicCodeSecurityLevel.Restricted
             );
 
-            Assert.Throws<System.NotSupportedException>(() =>
-                executor.ExecuteCode("return 1 + 2;", "DynamicCommand", null, CancellationToken.None, false));
+            ExecutionResult first = await executor.ExecuteCodeAsync(
+                "int benchNonce = 100; return benchNonce;",
+                "DynamicCommand",
+                null,
+                CancellationToken.None,
+                false
+            );
+            ExecutionResult second = await executor.ExecuteCodeAsync(
+                "int benchNonce = 200; return benchNonce;",
+                "DynamicCommand",
+                null,
+                CancellationToken.None,
+                false
+            );
+
+            Assert.IsTrue(first.Success, first.ErrorMessage);
+            Assert.IsTrue(second.Success, second.ErrorMessage);
+            Assert.AreEqual("100", first.Result?.ToString());
+            Assert.AreEqual("200", second.Result?.ToString());
         }
+
     }
 }
 #endif
-
