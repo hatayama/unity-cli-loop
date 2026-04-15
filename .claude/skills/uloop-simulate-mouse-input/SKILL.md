@@ -52,6 +52,7 @@ uloop simulate-mouse-input --action <action> [options]
 |--------|-------------|
 | `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
 
+
 ## When to use this vs simulate-mouse-ui
 
 | Scenario | Tool |

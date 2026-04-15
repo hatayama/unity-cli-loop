@@ -59,6 +59,7 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 |--------|-------------|
 | `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
 
+
 ## Coordinate System
 
 - Origin is **top-left** (0, 0)
