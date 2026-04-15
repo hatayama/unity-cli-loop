@@ -10,8 +10,10 @@
 ![Antigravity](https://img.shields.io/badge/Antigravity-111?logo=google)
 ![GitHubCopilot](https://img.shields.io/badge/GitHub_Copilot-111?logo=githubcopilot)
 
-<img width="1000" alt="logo" align="center" src="https://github.com/user-attachments/assets/864aa12e-8fd0-4b3a-9794-15cecdf95f94" />
-<p align="right"><sub>(Logo inspired by Daft Punk's <i>Homework</i> album art)</sub></p>
+<p align="center">
+  <img width="600" alt="logo" src="https://github.com/user-attachments/assets/416c4452-e385-415b-bff0-9399bba3b1e0" /><br>
+  <sub>(Logo inspired by Daft Punk's <i>Discovery</i> album art)</sub>
+</p>
 
 CLIを通じて、AIエージェントがUnityプロジェクトのコンパイル・テスト・操作を各種LLMツールから実行できるようにします。
 
