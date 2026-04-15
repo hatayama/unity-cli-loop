@@ -197,7 +197,6 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.unity.inputsystem": "1.14.2",
         "com.unity.ugui": "1.0.0",
         "com.unity.nuget.newtonsoft-json": "3.2.1"
       }

@@ -245,7 +245,7 @@
   - `EndPositionY` (number): 終了Y座標（Dragアクション用）
 
 ### 13. simulate-mouse-input
-- **説明**: Input System経由でPlayMode中のマウス入力をシミュレーション。ボタンクリック、マウスデルタ、スクロールホイールを `Mouse.current` に直接注入。`wasPressedThisFrame`や`Mouse.current.delta`等を読むゲームロジック向け。Input Systemパッケージが必要で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要がある。IPointerClickHandler等のUI要素には `simulate-mouse-ui` を使用
+- **説明**: Input System経由でPlayMode中のマウス入力をシミュレーション。ボタンクリック、マウスデルタ、スクロールホイールを `Mouse.current` に直接注入。`wasPressedThisFrame`や`Mouse.current.delta`等を読むゲームロジック向け。Input Systemパッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要がある。IPointerClickHandler等のUI要素には `simulate-mouse-ui` を使用
 - **パラメータ**:
   - `Action` (enum): マウス入力アクション - "Click", "LongPress", "MoveDelta", "SmoothDelta", "Scroll"（デフォルト: "Click"）
     - `Click`: ボタンのpress+releaseを注入し、`wasPressedThisFrame`がtrueを返すようにする
@@ -270,7 +270,7 @@
   - `PositionY` (number, nullable): 使用されたY座標（位置を使わないアクションではnull）
 
 ### 14. simulate-keyboard
-- **説明**: Input System経由でPlayMode中のキーボード入力をシミュレーション。単発のキータップ、長押し、複数キーの同時押しに対応。Input Systemパッケージが必要で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要がある。ゲームコードがInput System API（例: `Keyboard.current[Key.W].isPressed`）で入力を読み取っている必要があり、レガシーの `Input.GetKey()` には非対応
+- **説明**: Input System経由でPlayMode中のキーボード入力をシミュレーション。単発のキータップ、長押し、複数キーの同時押しに対応。Input Systemパッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要がある。ゲームコードがInput System API（例: `Keyboard.current[Key.W].isPressed`）で入力を読み取っている必要があり、レガシーの `Input.GetKey()` には非対応
 - **パラメータ**:
   - `Action` (enum): キーボードアクション - "Press", "KeyDown", "KeyUp"（デフォルト: "Press"）
     - `Press`: ワンショットキータップ（KeyDown→KeyUp）。`Duration`で長押し時間を指定可能

@@ -1,3 +1,4 @@
+#if ULOOPMCP_HAS_INPUT_SYSTEM
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -378,3 +379,4 @@ namespace io.github.hatayama.uLoopMCP
         }
     }
 }
+#endif

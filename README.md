@@ -72,6 +72,9 @@ Scope(s): io.github.hatayama.uloopmcp
 
 3. Open Package Manager window and select OpenUPM in the My Registries section. Unity CLI Loop will be displayed.
 
+> [!NOTE]
+> `com.unity.inputsystem` is now an optional dependency. Install it only if you want Input System features such as `simulate-keyboard`, `simulate-mouse-input`, `record-input`, `replay-input`, and the Recordings window.
+
 # Quickstart
 
 ## Step 1: Install the CLI
@@ -468,7 +471,7 @@ Supports 6 actions: Click, LongPress, Drag (one-shot), DragStart/DragMove/DragEn
 https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
 
 ### 13. simulate-mouse-input - Simulate Mouse Input in PlayMode via Input System
-Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into `Mouse.current` for game logic that reads Input System. Unlike `simulate-mouse-ui` which fires EventSystem pointer events for uGUI, this tool targets game logic that reads `Mouse.current` directly. Requires the Input System package, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings.
+Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into `Mouse.current` for game logic that reads Input System. Unlike `simulate-mouse-ui` which fires EventSystem pointer events for uGUI, this tool targets game logic that reads `Mouse.current` directly. This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings.
 
 Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
 
@@ -482,7 +485,7 @@ Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
 ```
 
 ### 14. simulate-keyboard - Simulate Keyboard Input in PlayMode
-Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations (e.g. Shift+W for sprinting). Requires the Input System package, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`.
+Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations (e.g. Shift+W for sprinting). This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`.
 
 Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down), KeyUp (release held key).
 
@@ -497,7 +500,7 @@ Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down),
 ```
 
 ### 15. record-input - Record Input During PlayMode
-Record keyboard and mouse input during PlayMode frame-by-frame into a JSON file. Captures key presses, mouse movement, clicks, and scroll events via Input System device state diffing. Requires the Input System package.
+Record keyboard and mouse input during PlayMode frame-by-frame into a JSON file. Captures key presses, mouse movement, clicks, and scroll events via Input System device state diffing. This tool is available only when the Input System package is installed.
 
 ```text
 → record-input (Action: Start)
@@ -507,7 +510,7 @@ Record keyboard and mouse input during PlayMode frame-by-frame into a JSON file.
 ```
 
 ### 16. replay-input - Replay Recorded Input During PlayMode
-Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System. Supports looping and progress monitoring. Requires the Input System package.
+Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System. Supports looping and progress monitoring. This tool is available only when the Input System package is installed.
 
 ```text
 → replay-input (Action: Start)
