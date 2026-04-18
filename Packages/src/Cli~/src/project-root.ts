@@ -126,6 +126,14 @@ export function resetMultipleProjectsWarning(): void {
 }
 
 export function findUnityProjectRoot(startPath: string = process.cwd()): string | null {
+  // Why: most CLI invocations already run from the Unity project root, so checking children first
+  // burns an unnecessary recursive filesystem walk on the hottest execute-dynamic-code path.
+  // Why not keep child search ahead of the current directory: that only helps when the caller is
+  // outside the project, while the common in-project case pays the extra scan on every cold start.
+  if (isUnityProjectWithUloop(startPath)) {
+    return startPath;
+  }
+
   const childProjects = findUnityProjectsInChildren(startPath, CHILD_SEARCH_MAX_DEPTH);
 
   if (childProjects.length > 0) {

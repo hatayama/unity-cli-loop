@@ -111,7 +111,9 @@ namespace io.github.hatayama.uLoopMCP
                 }
 
                 // 4. Server startup - McpServerStartupService
-                var serverResult = _startupService.StartServer(availablePort);
+                var serverResult = _startupService.StartServer(
+                    availablePort,
+                    !parameters.PreserveStartupLockUntilExplicitRelease);
                 if (!serverResult.Success)
                 {
                     response.Success = false;

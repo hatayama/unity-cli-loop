@@ -2,8 +2,15 @@ import {
   appendCliTimingsToDynamicCodeResult,
   diagnoseRetryableProjectConnectionError,
   isTransportDisconnectError,
+  prewarmDynamicCodeAfterLaunch,
+  isSettingsReadError,
+  prewarmDynamicCodeAfterCompile,
   stripInternalFields,
   resolveRecoveryPortOrKeepCurrent,
+  resolveUnityConnectionWithStartupDiagnosis,
+  shouldPromoteToServerStartingError,
+  shouldReportServerStarting,
+  shouldPrewarmDynamicCodeAfterCompile,
   shouldRetryWhenUnityProcessIsRunning,
 } from '../execute-tool.js';
 import {
@@ -12,6 +19,12 @@ import {
   UnityServerNotRunningError,
 } from '../port-resolver.js';
 import { ProjectMismatchError } from '../project-validator.js';
+import type { Stats } from 'fs';
+import { resolve as resolvePath } from 'path';
+
+function createStatResult(mtimeMs: number): Stats {
+  return { mtimeMs } as unknown as Stats;
+}
 
 function createConnection(
   port: number,
@@ -97,6 +110,421 @@ describe('appendCliTimingsToDynamicCodeResult', () => {
       '[Perf] CliTotal: 180.0ms',
       '[Perf] CliProcessTotal: 260.0ms',
       '[Perf] CliBootstrap: 80.0ms',
+    ]);
+  });
+});
+
+describe('shouldPrewarmDynamicCodeAfterCompile', () => {
+  it('returns true when compile succeeded without errors', () => {
+    expect(
+      shouldPrewarmDynamicCodeAfterCompile({
+        Success: true,
+        ErrorCount: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it('returns true for force-recompile responses that stay indeterminate across domain reload', () => {
+    expect(
+      shouldPrewarmDynamicCodeAfterCompile({
+        Success: null,
+        ErrorCount: 0,
+        Message: 'Force compilation executed. Use get-logs tool to retrieve compilation messages.',
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false for indeterminate force-recompile responses with compiler errors', () => {
+    expect(
+      shouldPrewarmDynamicCodeAfterCompile({
+        Success: null,
+        ErrorCount: 2,
+        Message: 'Force compilation executed. Use get-logs tool to retrieve compilation messages.',
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false when compile failed or reported errors', () => {
+    expect(
+      shouldPrewarmDynamicCodeAfterCompile({
+        Success: false,
+        ErrorCount: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldPrewarmDynamicCodeAfterCompile({
+        Success: true,
+        ErrorCount: 2,
+      }),
+    ).toBe(false);
+    expect(
+      shouldPrewarmDynamicCodeAfterCompile({
+        Success: null,
+        ErrorCount: null,
+        Message: 'Compilation did not start.',
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('prewarmDynamicCodeAfterCompile', () => {
+  const stablePrewarmCode =
+    'UnityEngine.LogType previous = UnityEngine.Debug.unityLogger.filterLogType; UnityEngine.Debug.unityLogger.filterLogType = UnityEngine.LogType.Warning; try { UnityEngine.Debug.Log("Unity CLI Loop dynamic code prewarm"); return "Unity CLI Loop dynamic code prewarm"; } finally { UnityEngine.Debug.unityLogger.filterLogType = previous; }';
+  const userLikePrewarmCode =
+    'using UnityEngine; LogType previous = Debug.unityLogger.filterLogType; Debug.unityLogger.filterLogType = LogType.Warning; try { Debug.Log("Unity CLI Loop dynamic code prewarm"); return "Unity CLI Loop dynamic code prewarm"; } finally { Debug.unityLogger.filterLogType = previous; }';
+
+  it('spawns an isolated execute-dynamic-code process against the same project', async () => {
+    const spawnCliProcess = jest.fn().mockReturnValue({
+      status: 0,
+      stdout: JSON.stringify({ Success: true }),
+    });
+
+    await prewarmDynamicCodeAfterCompile(
+      { projectRoot: '/project' },
+      {
+        spawnCliProcess,
+      },
+    );
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(4);
+    expect(spawnCliProcess).toHaveBeenNthCalledWith(1, [
+      'execute-dynamic-code',
+      '--code',
+      stablePrewarmCode,
+      '--yield-to-foreground-requests',
+      'true',
+      '--project-path',
+      '/project',
+    ]);
+    expect(spawnCliProcess).toHaveBeenNthCalledWith(2, [
+      'execute-dynamic-code',
+      '--code',
+      stablePrewarmCode,
+      '--yield-to-foreground-requests',
+      'true',
+      '--project-path',
+      '/project',
+    ]);
+    expect(spawnCliProcess).toHaveBeenNthCalledWith(3, [
+      'execute-dynamic-code',
+      '--code',
+      stablePrewarmCode,
+      '--yield-to-foreground-requests',
+      'true',
+      '--project-path',
+      '/project',
+    ]);
+    expect(spawnCliProcess).toHaveBeenNthCalledWith(4, [
+      'execute-dynamic-code',
+      '--code',
+      userLikePrewarmCode,
+      '--yield-to-foreground-requests',
+      'true',
+      '--project-path',
+      '/project',
+    ]);
+  });
+
+  it('throws when the isolated CLI prewarm fails', async () => {
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess: jest.fn().mockReturnValue({ status: 1 }),
+        },
+      ),
+    ).rejects.toThrow('Post-compile dynamic code prewarm failed.');
+  });
+
+  it('throws when the isolated CLI prewarm returns Success=false with exit code 0', async () => {
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess: jest.fn().mockReturnValue({
+            status: 0,
+            stdout: JSON.stringify({
+              Success: false,
+              ErrorMessage: 'Another execution is already in progress',
+            }),
+          }),
+        },
+      ),
+    ).rejects.toThrow('Another execution is already in progress');
+  });
+
+  it('retries transient busy warmup failures until all passes complete successfully', async () => {
+    const spawnCliProcess = jest
+      .fn()
+      .mockReturnValueOnce({
+        status: 0,
+        stdout: JSON.stringify({
+          Success: false,
+          ErrorMessage: 'Another execution is already in progress',
+        }),
+      })
+      .mockReturnValue({
+        status: 0,
+        stdout: JSON.stringify({ Success: true }),
+      });
+
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess,
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(5);
+  });
+
+  it('throws when spawning the isolated CLI prewarm process fails', async () => {
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess: jest
+            .fn()
+            .mockReturnValue({ status: null, error: new Error('spawn failed') }),
+        },
+      ),
+    ).rejects.toThrow('spawn failed');
+  });
+
+  it('throws a generic warmup failure when the isolated CLI prints malformed stdout', async () => {
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess: jest.fn().mockReturnValue({
+            status: 0,
+            stdout: 'not-json',
+          }),
+        },
+      ),
+    ).rejects.toThrow('Post-compile dynamic code prewarm failed.');
+  });
+
+  it('retries when the isolated CLI reports that Unity is still starting', async () => {
+    const spawnCliProcess = jest
+      .fn()
+      .mockReturnValueOnce({
+        status: 1,
+        stderr: 'Unity server is starting',
+      })
+      .mockReturnValue({
+        status: 0,
+        stdout: JSON.stringify({ Success: true }),
+      });
+
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess,
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(5);
+  });
+
+  it('retries when the isolated CLI reports that domain reload is still in progress', async () => {
+    const spawnCliProcess = jest
+      .fn()
+      .mockReturnValueOnce({
+        status: 1,
+        stderr: '⏳ Unity is reloading (Domain Reload in progress).',
+      })
+      .mockReturnValue({
+        status: 0,
+        stdout: JSON.stringify({ Success: true }),
+      });
+
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess,
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(5);
+  });
+
+  it('retries when the isolated CLI process times out once during warmup', async () => {
+    const spawnCliProcess = jest
+      .fn()
+      .mockReturnValueOnce({
+        status: null,
+        error: new Error('spawnSync ETIMEDOUT'),
+      })
+      .mockReturnValue({
+        status: 0,
+        stdout: JSON.stringify({ Success: true }),
+      });
+
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess,
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(5);
+  });
+
+  it('retries when the isolated CLI loses its response once during warmup', async () => {
+    const spawnCliProcess = jest
+      .fn()
+      .mockReturnValueOnce({
+        status: 0,
+        stdout: JSON.stringify({
+          Success: false,
+          ErrorMessage: 'UNITY_NO_RESPONSE',
+        }),
+      })
+      .mockReturnValue({
+        status: 0,
+        stdout: JSON.stringify({ Success: true }),
+      });
+
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess,
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(5);
+  });
+
+  it('targets the explicit compile port when one was provided', async () => {
+    const spawnCliProcess = jest.fn().mockReturnValue({
+      status: 0,
+      stdout: JSON.stringify({ Success: true }),
+    });
+
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { port: 8901 },
+        {
+          spawnCliProcess,
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(spawnCliProcess).toHaveBeenNthCalledWith(1, [
+      'execute-dynamic-code',
+      '--code',
+      stablePrewarmCode,
+      '--yield-to-foreground-requests',
+      'true',
+      '--port',
+      '8901',
+    ]);
+  });
+
+  it('caps retryable warmup failures so compile cannot hang for minutes', async () => {
+    const spawnCliProcess = jest.fn().mockReturnValue({
+      status: null,
+      error: new Error('spawnSync ETIMEDOUT'),
+    });
+
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess,
+        },
+      ),
+    ).rejects.toThrow('spawnSync ETIMEDOUT');
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(10);
+  });
+
+  it('retries transient disconnect failures reported through ANSI-colored stderr', async () => {
+    const spawnCliProcess = jest
+      .fn()
+      .mockReturnValueOnce({
+        status: 1,
+        stderr: '\u001b[31mError: UNITY_NO_RESPONSE\u001b[39m',
+      })
+      .mockReturnValue({
+        status: 0,
+        stdout: JSON.stringify({ Success: true }),
+      });
+
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess,
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(5);
+  });
+
+  it('retries transient disconnect failures reported through non-SGR ANSI stderr', async () => {
+    const spawnCliProcess = jest
+      .fn()
+      .mockReturnValueOnce({
+        status: 1,
+        stderr: '\u001b[2K\u001b[1GError: UNITY_NO_RESPONSE',
+      })
+      .mockReturnValue({
+        status: 0,
+        stdout: JSON.stringify({ Success: true }),
+      });
+
+    await expect(
+      prewarmDynamicCodeAfterCompile(
+        { projectRoot: '/project' },
+        {
+          spawnCliProcess,
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('prewarmDynamicCodeAfterLaunch', () => {
+  const userLikePrewarmCode =
+    'using UnityEngine; LogType previous = Debug.unityLogger.filterLogType; Debug.unityLogger.filterLogType = LogType.Warning; try { Debug.Log("Unity CLI Loop dynamic code prewarm"); return "Unity CLI Loop dynamic code prewarm"; } finally { Debug.unityLogger.filterLogType = previous; }';
+
+  it('spawns one isolated user-like execute-dynamic-code pass against the same project', async () => {
+    const spawnCliProcess = jest.fn().mockReturnValue({
+      status: 0,
+      stdout: JSON.stringify({ Success: true }),
+    });
+
+    await prewarmDynamicCodeAfterLaunch(
+      { projectRoot: '/project' },
+      {
+        spawnCliProcess,
+      },
+    );
+
+    expect(spawnCliProcess).toHaveBeenCalledTimes(1);
+    expect(spawnCliProcess).toHaveBeenCalledWith([
+      'execute-dynamic-code',
+      '--code',
+      userLikePrewarmCode,
+      '--yield-to-foreground-requests',
+      'true',
+      '--project-path',
+      '/project',
     ]);
   });
 });
@@ -269,5 +697,175 @@ describe('resolveRecoveryPortOrKeepCurrent', () => {
         shouldValidateProject: false,
       }),
     );
+  });
+});
+
+describe('shouldReportServerStarting', () => {
+  it('returns true when startup lock exists and Unity is still running', async () => {
+    const dependencies = {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockReturnValue(createStatResult(Date.now())),
+    };
+
+    await expect(shouldReportServerStarting('/project', true, dependencies)).resolves.toBe(true);
+  });
+
+  it('returns false when the startup lock is stale even if Unity is still running', async () => {
+    const dependencies = {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockReturnValue(createStatResult(Date.now() - 60000)),
+    };
+
+    await expect(shouldReportServerStarting('/project', true, dependencies)).resolves.toBe(false);
+  });
+
+  it('returns false when startup lock exists but Unity is not running', async () => {
+    const dependencies = {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue(null),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockReturnValue(createStatResult(Date.now())),
+    };
+
+    await expect(shouldReportServerStarting('/project', true, dependencies)).resolves.toBe(false);
+  });
+
+  it('keeps reporting startup while the lock exists and Unity is still running', async () => {
+    const dependencies = {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockReturnValue(createStatResult(Date.now() - 5000)),
+    };
+
+    await expect(shouldReportServerStarting('/project', true, dependencies)).resolves.toBe(true);
+  });
+
+  it('returns false when the startup lock disappears before statSync', async () => {
+    const dependencies = {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockImplementation(() => {
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      }),
+    };
+
+    await expect(shouldReportServerStarting('/project', true, dependencies)).resolves.toBe(false);
+  });
+});
+
+describe('shouldPromoteToServerStartingError', () => {
+  it('returns false for non-retryable errors even when startup lock exists', async () => {
+    const dependencies = {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockReturnValue(createStatResult(Date.now())),
+    };
+
+    await expect(
+      shouldPromoteToServerStartingError(
+        new Error('Unexpected response from Unity: missing Tools array'),
+        'execute-dynamic-code',
+        '/project',
+        true,
+        dependencies,
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it('returns true for retryable startup errors when startup lock promotion should surface a retryable busy signal', async () => {
+    const dependencies = {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockReturnValue(createStatResult(Date.now())),
+    };
+
+    await expect(
+      shouldPromoteToServerStartingError(
+        new Error(
+          'Could not read Unity server port from settings.\n\n  Settings file: /project/UserSettings/UnityMcpSettings.json',
+        ),
+        'get-tool-details',
+        '/project',
+        true,
+        dependencies,
+      ),
+    ).resolves.toBe(true);
+  });
+});
+
+describe('isSettingsReadError', () => {
+  it('returns true for settings read failures', () => {
+    expect(
+      isSettingsReadError(
+        new Error(
+          'Could not read Unity server port from settings.\n\n  Settings file: /project/UserSettings/UnityMcpSettings.json',
+        ),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('resolveUnityConnectionWithStartupDiagnosis', () => {
+  it('promotes settings read failures to UNITY_SERVER_STARTING when startup lock is fresh', async () => {
+    const projectRoot = resolvePath(process.cwd(), '..', '..', '..');
+    const dependencies = {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockReturnValue(createStatResult(Date.now())),
+    };
+
+    await expect(
+      resolveUnityConnectionWithStartupDiagnosis(
+        'execute-dynamic-code',
+        undefined,
+        projectRoot,
+        dependencies,
+        jest
+          .fn()
+          .mockRejectedValue(
+            new Error(
+              `Could not read Unity server port from settings.\n\n  Settings file: ${projectRoot}/UserSettings/UnityMcpSettings.json`,
+            ),
+          ),
+      ),
+    ).rejects.toThrow('UNITY_SERVER_STARTING');
+  });
+
+  it('preserves the original usage error when both --port and --project-path are specified', async () => {
+    await expect(
+      resolveUnityConnectionWithStartupDiagnosis(
+        'execute-dynamic-code',
+        8711,
+        '/definitely/missing/project',
+        undefined,
+        jest.fn().mockRejectedValue(new Error('Cannot specify both --port and --project-path')),
+      ),
+    ).rejects.toThrow('Cannot specify both --port and --project-path');
+  });
+
+  it('promotes retryable settings-read failures for non-dynamic-code tools when startup lock is fresh', async () => {
+    const projectRoot = resolvePath(process.cwd(), '..', '..', '..');
+    const dependencies = {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockReturnValue(createStatResult(Date.now())),
+    };
+
+    await expect(
+      resolveUnityConnectionWithStartupDiagnosis(
+        'get-tool-details',
+        undefined,
+        projectRoot,
+        dependencies,
+        jest
+          .fn()
+          .mockRejectedValue(
+            new Error(
+              `Could not read Unity server port from settings.\n\n  Settings file: ${projectRoot}/UserSettings/UnityMcpSettings.json`,
+            ),
+          ),
+      ),
+    ).rejects.toThrow('UNITY_SERVER_STARTING');
   });
 });

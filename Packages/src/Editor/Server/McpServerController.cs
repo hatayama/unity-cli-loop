@@ -102,25 +102,38 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             // Signal server is starting for CLI detection
-            ServerStartingLockService.CreateLockFile();
+            string serverStartingLockToken = CreateOptionalServerStartingLock();
 
-            // Always stop the existing server first (to release the port)
-            if (mcpServer != null)
+            bool startupLockReleasedByPrewarm = false;
+            try
             {
-                await StopServerWithUseCaseAsync();
-            }
+                // Always stop the existing server first (to release the port)
+                if (mcpServer != null)
+                {
+                    await StopServerWithUseCaseAsync();
+                }
 
-            DynamicCodeStartupTelemetry.Reset();
+                DynamicCodeStartupTelemetry.Reset();
+                DynamicCodeForegroundWarmupState.Reset();
 
-            // Execute initialization UseCase
-            McpServerInitializationUseCase useCase = new();
-            ServerInitializationSchema schema = new() { Port = port };
-            System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
+                // Execute initialization UseCase
+                McpServerInitializationUseCase useCase = new();
+                ServerInitializationSchema schema = new()
+                {
+                    Port = port,
+                    PreserveStartupLockUntilExplicitRelease = true
+                };
+                System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
 
-            var result = await useCase.ExecuteAsync(schema, cancellationToken);
+                var result = await useCase.ExecuteAsync(schema, cancellationToken);
 
-            if (result.Success)
-            {
+                if (!result.Success)
+                {
+                    // Error message already handled by UseCase
+                    UnityEngine.Debug.LogError($"Server startup failed: {result.Message}");
+                    return;
+                }
+
                 // UseCase creates a new server instance, so we keep a reference here
                 // for compatibility with existing code
                 mcpServer = result.ServerInstance;
@@ -132,14 +145,16 @@ namespace io.github.hatayama.uLoopMCP
                 CustomToolManager.WarmupRegistry();
                 DynamicCodeServices.ResetServerScopedServices();
                 IPrewarmDynamicCodeUseCase prewarmDynamicCodeUseCase =
-                    await DynamicCodeServices.GetPrewarmDynamicCodeUseCaseAsync();
+                    await DynamicCodeServices.GetPrewarmDynamicCodeUseCaseAsync(serverStartingLockToken);
                 prewarmDynamicCodeUseCase.Request();
-
+                startupLockReleasedByPrewarm = true;
             }
-            else
+            finally
             {
-                // Error message already handled by UseCase
-                UnityEngine.Debug.LogError($"Server startup failed: {result.Message}");
+                if (!startupLockReleasedByPrewarm)
+                {
+                    ServerStartingLockService.DeleteOwnedLockFile(serverStartingLockToken);
+                }
             }
         }
 
@@ -179,6 +194,7 @@ namespace io.github.hatayama.uLoopMCP
                 // Clear session state to reflect server stopped
                 McpEditorSettings.ClearServerSession();
                 DynamicCodeStartupTelemetry.Reset();
+                DynamicCodeForegroundWarmupState.Reset();
                 DynamicCodeServices.ResetServerScopedServices();
             }
             else
@@ -206,6 +222,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             DynamicCodeStartupTelemetry.Reset();
+            DynamicCodeForegroundWarmupState.Reset();
             DynamicCodeServices.ResetServerScopedServices();
         }
 
@@ -343,7 +360,6 @@ namespace io.github.hatayama.uLoopMCP
         {
             CompilationLockService.DeleteLockFile();
             DomainReloadDetectionService.DeleteLockFile();
-            ServerStartingLockService.DeleteLockFile();
         }
 
         /// <summary>
@@ -364,6 +380,7 @@ namespace io.github.hatayama.uLoopMCP
                     mcpServer = null;
                 }
             }
+            DynamicCodeForegroundWarmupState.Reset();
             DynamicCodeServices.ResetServerScopedServices();
             McpEditorSettings.ClearServerSession();
         }
@@ -660,10 +677,11 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            // Ensure lock files are cleaned up on server startup (handles crash recovery)
+            // Ensure stale reload locks are cleaned up before recovery.
+            // Why not clear serverstarting.lock here: a previous generation may still be finishing
+            // and ownership is now tracked per startup token below.
             DomainReloadDetectionService.DeleteLockFile();
             CompilationLockService.DeleteLockFile();
-            ServerStartingLockService.DeleteLockFile();
 
             VibeLogger.LogInfo("startup_request", $"port={savedPort}");
 
@@ -674,6 +692,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             await StartupSemaphore.WaitAsync(cancellationToken);
+            string serverStartingLockToken = null;
             try
             {
                 // If any server is already running, ignore this request to prevent double-binding
@@ -682,6 +701,8 @@ namespace io.github.hatayama.uLoopMCP
                     VibeLogger.LogInfo("server_start_ignored", $"already_running port={mcpServer.Port}");
                     return;
                 }
+
+                serverStartingLockToken = CreateOptionalServerStartingLock();
 
                 // Ensure previous instance is fully disposed before trying to bind a new one
                 if (mcpServer != null)
@@ -709,7 +730,12 @@ namespace io.github.hatayama.uLoopMCP
                     LogRecoveryFallback(savedPort, chosenPort, "saved_port_in_use_before_bind");
                 }
 
-                bool started = await TryBindWithWaitAsync(chosenPort, 5000, 250, cancellationToken);
+                bool started = await TryBindWithWaitAsync(
+                    chosenPort,
+                    5000,
+                    250,
+                    cancellationToken,
+                    clearServerStartingLockWhenReady: false);
 
                 if (!started)
                 {
@@ -718,7 +744,12 @@ namespace io.github.hatayama.uLoopMCP
                         int previousAttemptPort = chosenPort;
                         chosenPort = fallbackPort;
                         LogRecoveryFallback(previousAttemptPort, chosenPort, "bind_retry_timeout");
-                        started = await TryBindWithWaitAsync(chosenPort, 5000, 250, cancellationToken);
+                        started = await TryBindWithWaitAsync(
+                            chosenPort,
+                            5000,
+                            250,
+                            cancellationToken,
+                            clearServerStartingLockWhenReady: false);
                     }
                 }
 
@@ -754,10 +785,15 @@ namespace io.github.hatayama.uLoopMCP
                 CustomToolManager.WarmupRegistry();
                 DynamicCodeServices.ResetServerScopedServices();
                 IPrewarmDynamicCodeUseCase prewarmDynamicCodeUseCase =
-                    await DynamicCodeServices.GetPrewarmDynamicCodeUseCaseAsync();
+                    await DynamicCodeServices.GetPrewarmDynamicCodeUseCaseAsync(serverStartingLockToken);
                 prewarmDynamicCodeUseCase.Request();
 
                 ActivateStartupProtection(5000);
+            }
+            catch
+            {
+                ServerStartingLockService.DeleteOwnedLockFile(serverStartingLockToken);
+                throw;
             }
             finally
             {
@@ -765,7 +801,12 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private static async Task<bool> TryBindWithWaitAsync(int port, int maxWaitMs, int stepMs, CancellationToken cancellationToken)
+        private static async Task<bool> TryBindWithWaitAsync(
+            int port,
+            int maxWaitMs,
+            int stepMs,
+            CancellationToken cancellationToken,
+            bool clearServerStartingLockWhenReady = true)
         {
             int remainingMs = maxWaitMs;
             while (true)
@@ -793,7 +834,7 @@ namespace io.github.hatayama.uLoopMCP
                     }
 
                     server = new McpBridgeServer();
-                    server.StartServer(port);
+                    server.StartServer(port, clearServerStartingLockWhenReady);
                     mcpServer = server;
                     VibeLogger.LogInfo("binding_success", $"port={port}");
                     return true;
@@ -835,6 +876,25 @@ namespace io.github.hatayama.uLoopMCP
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
             string serverSessionId = Guid.NewGuid().ToString("N");
             McpEditorSettings.SetRunningServerSession(port, projectRoot, serverSessionId);
+        }
+
+        internal static string CreateOptionalServerStartingLock(Func<string> createLockFile = null)
+        {
+            Func<string> createLockFileCore = createLockFile ?? ServerStartingLockService.CreateLockFile;
+            string serverStartingLockToken = createLockFileCore();
+            if (!string.IsNullOrEmpty(serverStartingLockToken))
+            {
+                return serverStartingLockToken;
+            }
+
+            // Why: serverstarting.lock only improves busy diagnostics for external callers; the
+            // listener itself can still start and recover safely without it.
+            // Why not fail fast here: a transient file lock would otherwise turn an optional
+            // readiness hint into a full startup outage for launch and recovery paths.
+            VibeLogger.LogWarning(
+                "server_starting_lock_optional",
+                "Proceeding without serverstarting.lock because the readiness hint could not be created.");
+            return null;
         }
     }
 }

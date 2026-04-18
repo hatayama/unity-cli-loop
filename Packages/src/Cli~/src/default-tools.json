@@ -297,6 +297,10 @@
           "CompileOnly": {
             "type": "boolean",
             "description": "Compile only without execution"
+          },
+          "YieldToForegroundRequests": {
+            "type": "boolean",
+            "description": "Allow foreground requests to preempt this execution"
           }
         }
       }

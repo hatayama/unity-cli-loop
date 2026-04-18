@@ -4,10 +4,25 @@ namespace io.github.hatayama.uLoopMCP
 {
     public static class DynamicCodeCompilationServiceRegistration
     {
+        private static readonly object SyncRoot = new object();
+
         [InitializeOnLoadMethod]
         private static void Register()
         {
-            DynamicCompilationServiceRegistry.RegisterFactory(new DynamicCodeCompilationServiceFactory());
+            EnsureRegistered();
+        }
+
+        internal static void EnsureRegistered()
+        {
+            lock (SyncRoot)
+            {
+                if (DynamicCompilationServiceRegistry.HasRegisteredFactory)
+                {
+                    return;
+                }
+
+                DynamicCompilationServiceRegistry.RegisterFactory(new DynamicCodeCompilationServiceFactory());
+            }
         }
     }
 }

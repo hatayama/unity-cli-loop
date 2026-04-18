@@ -31,7 +31,10 @@ namespace io.github.hatayama.uLoopMCP
                 // Server is running, clean up lock files
                 CompilationLockService.DeleteLockFile();
                 DomainReloadDetectionService.DeleteLockFile();
-                ServerStartingLockService.DeleteLockFile();
+                // Why: only the startup generation that created serverstarting.lock knows whether
+                // the canonical lock still belongs to it or has already been replaced by a newer
+                // generation. Why not delete it here: a stale domain-reload recovery path can race
+                // with an active startup/prewarm sequence and tear down another generation's lock.
 
                 if (isAfterCompile)
                 {

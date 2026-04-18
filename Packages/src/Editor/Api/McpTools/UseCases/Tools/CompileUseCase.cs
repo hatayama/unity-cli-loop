@@ -88,8 +88,8 @@ namespace io.github.hatayama.uLoopMCP
             {
                 CompileResponse response = new CompileResponse(
                     success: result.Success,
-                    errorCount: null,
-                    warningCount: null,
+                    errorCount: result.ErrorCount,
+                    warningCount: result.WarningCount,
                     errors: null,
                     warnings: null,
                     message: result.Message ?? "Compilation status is indeterminate. Use get-logs tool to check results."

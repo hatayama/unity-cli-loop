@@ -374,6 +374,7 @@ interface FastExecuteDynamicCodeCommand {
 interface FastExecuteDynamicCodeDependencies {
   executeToolCommandFn: typeof executeToolCommand;
   isToolEnabledFn: typeof isToolEnabled;
+  findUnityProjectRootFn: typeof findUnityProjectRoot;
   runWithErrorHandlingFn: typeof runWithErrorHandling;
   printToolDisabledErrorFn: typeof printToolDisabledError;
   exitFn: (code: number) => never;
@@ -382,6 +383,7 @@ interface FastExecuteDynamicCodeDependencies {
 const defaultFastExecuteDynamicCodeDependencies: FastExecuteDynamicCodeDependencies = {
   executeToolCommandFn: executeToolCommand,
   isToolEnabledFn: isToolEnabled,
+  findUnityProjectRootFn: findUnityProjectRoot,
   runWithErrorHandlingFn: runWithErrorHandling,
   printToolDisabledErrorFn: printToolDisabledError,
   exitFn: (code: number): never => process.exit(code),
@@ -395,6 +397,7 @@ const FAST_EXECUTE_DYNAMIC_CODE_OPTIONS = new Map<string, string>([
   ['--code', 'code'],
   ['--parameters', 'parameters'],
   ['--compile-only', 'compileOnly'],
+  ['--yield-to-foreground-requests', 'yieldToForegroundRequests'],
   ['--project-path', 'projectPath'],
   ['--port', 'port'],
   ['-p', 'port'],
@@ -485,7 +488,16 @@ export async function tryHandleFastExecuteDynamicCodeCommand(
     return false;
   }
 
-  if (!dependencies.isToolEnabledFn('execute-dynamic-code', command.globalOptions.projectPath)) {
+  const resolvedProjectPath: string | undefined =
+    command.globalOptions.projectPath !== undefined || command.globalOptions.port !== undefined
+      ? command.globalOptions.projectPath
+      : (dependencies.findUnityProjectRootFn() ?? undefined);
+  const resolvedGlobalOptions: GlobalOptions = {
+    ...command.globalOptions,
+    projectPath: resolvedProjectPath,
+  };
+
+  if (!dependencies.isToolEnabledFn('execute-dynamic-code', resolvedGlobalOptions.projectPath)) {
     dependencies.printToolDisabledErrorFn('execute-dynamic-code');
     dependencies.exitFn(1);
   }
@@ -494,7 +506,7 @@ export async function tryHandleFastExecuteDynamicCodeCommand(
     dependencies.executeToolCommandFn(
       'execute-dynamic-code',
       command.params,
-      command.globalOptions,
+      resolvedGlobalOptions,
     ),
   );
 

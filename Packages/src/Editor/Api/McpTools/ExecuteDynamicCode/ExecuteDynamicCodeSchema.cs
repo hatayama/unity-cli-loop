@@ -58,5 +58,8 @@ NG:   ""Parameters"": ""{}""")]
 - Uses Roslyn validation to surface diagnostics
 - For new MonoBehaviours: create .cs → compile (mcp__uLoopMCP__compile with ForceRecompile=false) → ensure ErrorCount=0 → AddComponent")]
         public bool CompileOnly { get; set; } = false;
+
+        [EditorBrowsable(EditorBrowsableState.Advanced)]
+        public bool YieldToForegroundRequests { get; set; } = false;
     }
 }

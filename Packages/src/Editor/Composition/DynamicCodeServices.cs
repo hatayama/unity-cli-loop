@@ -53,9 +53,10 @@ namespace io.github.hatayama.uLoopMCP
             return new ExecuteDynamicCodeUseCase(runtimeFacade);
         }
 
-        public static async Task<IPrewarmDynamicCodeUseCase> GetPrewarmDynamicCodeUseCaseAsync()
+        public static async Task<IPrewarmDynamicCodeUseCase> GetPrewarmDynamicCodeUseCaseAsync(
+            string serverStartingLockToken = null)
         {
-            await EnsureServerScopedServicesInitializedAsync();
+            await EnsureServerScopedServicesInitializedAsync(serverStartingLockToken);
 
             lock (ServerScopedServicesLock)
             {
@@ -94,14 +95,18 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private static async Task EnsureServerScopedServicesInitializedAsync()
+        private static async Task EnsureServerScopedServicesInitializedAsync(
+            string serverStartingLockToken = null)
         {
+            DynamicCodeCompilationServiceRegistration.EnsureRegistered();
+
             Task drainTask;
 
             lock (ServerScopedServicesLock)
             {
                 if (_runtimeFacade != null)
                 {
+                    AttachServerStartingLockTokenIfNeeded(serverStartingLockToken);
                     return;
                 }
 
@@ -114,6 +119,7 @@ namespace io.github.hatayama.uLoopMCP
             {
                 if (_runtimeFacade != null)
                 {
+                    AttachServerStartingLockTokenIfNeeded(serverStartingLockToken);
                     return;
                 }
 
@@ -124,7 +130,22 @@ namespace io.github.hatayama.uLoopMCP
                     _executorPool);
                 _prewarmDynamicCodeUseCase = new PrewarmDynamicCodeUseCase(
                     _runtimeFacade,
-                    _serverScopedLifetimeCancellationTokenSource.Token);
+                    _serverScopedLifetimeCancellationTokenSource.Token,
+                    null,
+                    serverStartingLockToken);
+            }
+        }
+
+        private static void AttachServerStartingLockTokenIfNeeded(string serverStartingLockToken)
+        {
+            if (string.IsNullOrEmpty(serverStartingLockToken))
+            {
+                return;
+            }
+
+            if (_prewarmDynamicCodeUseCase is PrewarmDynamicCodeUseCase prewarmDynamicCodeUseCase)
+            {
+                prewarmDynamicCodeUseCase.AttachServerStartingLockToken(serverStartingLockToken);
             }
         }
 

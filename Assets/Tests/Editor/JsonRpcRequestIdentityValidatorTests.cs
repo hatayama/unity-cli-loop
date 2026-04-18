@@ -114,5 +114,27 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.DoesNotThrow(() =>
                 JsonRpcRequestIdentityValidator.Validate(metadata, "/project", "session-1"));
         }
+
+        [Test]
+        public void IsExpectedRetryableFailure_WhenServerSessionChanges_ShouldReturnTrue()
+        {
+            ParameterValidationException exception =
+                new ParameterValidationException(JsonRpcRequestIdentityValidator.ServerSessionChangedMessage);
+
+            bool result = JsonRpcRequestIdentityValidator.IsExpectedRetryableFailure(exception);
+
+            Assert.That(result, Is.True);
+        }
+
+        [Test]
+        public void IsExpectedRetryableFailure_WhenValidationErrorIsUnexpected_ShouldReturnFalse()
+        {
+            ParameterValidationException exception =
+                new ParameterValidationException("Invalid x-uloop metadata: expectedProjectRoot is required.");
+
+            bool result = JsonRpcRequestIdentityValidator.IsExpectedRetryableFailure(exception);
+
+            Assert.That(result, Is.False);
+        }
     }
 }

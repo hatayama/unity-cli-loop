@@ -105,12 +105,7 @@ function isUnityBusyByLockFiles(projectRoot: string): boolean {
   }
 
   const domainReloadLockPath = join(projectRoot, 'Temp', 'domainreload.lock');
-  if (existsSync(domainReloadLockPath)) {
-    return true;
-  }
-
-  const serverStartingLockPath = join(projectRoot, 'Temp', 'serverstarting.lock');
-  return existsSync(serverStartingLockPath);
+  return existsSync(domainReloadLockPath);
 }
 
 function stripUtf8Bom(content: string): string {
@@ -139,7 +134,7 @@ function tryReadCompileResult<T>(projectRoot: string, requestId: string): T | un
 }
 
 /**
- * Wait until the compile result file exists AND all Unity lock files are gone.
+ * Wait until the compile result file exists AND the compile/domain-reload lock files are gone.
  * After the result file appears and locks disappear, waits an additional grace period
  * to catch the gap between compilationFinished and beforeAssemblyReload (~50ms measured).
  */

@@ -15,10 +15,17 @@ Do not add or keep Unity EditMode tests that can freeze the Editor.
 - Never run multiple `uloop run-tests` commands in parallel. Treat Unity Test Runner as single-flight only.
 - Do not add tests that rely on infinite waits, long-lived `TaskCompletionSource`, background fire-and-forget work, or cancellation handoff across domain reload boundaries.
 - Avoid tests that intentionally cancel linked `CancellationTokenSource` instances while Unity may still dispose them during reload or teardown.
+- Do not add Unity EditMode tests that use `Task.Run`, raw `Thread` work, or cross-thread coordination primitives such as `ManualResetEventSlim` unless the test is explicitly reviewed as unavoidable.
+- Do not block the main thread inside Unity EditMode tests with `.Wait()`, `.Result`, `Task.WaitAll`, `Thread.Sleep`, or similar synchronous waiting APIs.
+- Do not add Unity EditMode tests that execute real dynamic-code compile-and-run flows through `ExecuteDynamicCodeTool`, `DynamicCodeCompiler`, or similar end-to-end runtime paths when a pure unit test or compile-only test can cover the behavior.
+- Do not add Unity EditMode tests that start nested test execution flows or any other long-running editor orchestration from inside a test body.
 - Treat these patterns as high risk in Unity EditMode and avoid them by default:
   - Disposing runtime objects while an async execution is still in flight
   - Canceling an in-flight execution and then waiting for teardown on the same thread
   - Tests that require editor-thread continuations while the test body is synchronously waiting
+  - Scheduling work onto background threads and then waiting for Unity main-thread continuations to complete
+  - Cross-thread registration/cancellation tests that depend on exact frame timing or teardown order
+  - Dynamic-code execution tests that compile code and then await timers, continuations, or runtime callbacks inside Unity EditMode
   - Using `TaskCompletionSource` as a gate for execution/dispose races unless every completion path is guaranteed without Unity callbacks
   - Assuming `[Timeout]` makes a test safe even when the runner itself can deadlock first
 - Prefer pure unit tests for cancellation, dispose, and race-condition coverage. Only promote them to Unity EditMode after the logic is structured so the test completes without background leftovers or main-thread blocking.

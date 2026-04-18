@@ -1,4 +1,4 @@
-name: Unity Compile Check and Test Runner
+name: Unity Compile Check
 
 on:
   pull_request:
@@ -17,8 +17,8 @@ permissions:
   contents: read
 
 jobs:
-  compile-check-and-test:
-    name: Compile Check & Test Runner (Linux)
+  compile-check:
+    name: Compile Check (Linux)
     runs-on: ubuntu-latest
     # Dependabot PRs cannot access repository secrets (UNITY_LICENSE etc.)
     env:
@@ -42,7 +42,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: Library
-          key: Library-2022.3.62f1-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs') }}
+          key: Library-2022.3.62f1-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
           restore-keys: |
             Library-2022.3.62f1-
 
@@ -117,24 +117,3 @@ jobs:
               exit 1
             fi
           fi
-
-      - name: Run EditMode tests
-        if: env.HAS_UNITY_LICENSE == 'true'
-        uses: game-ci/unity-test-runner@v4
-        timeout-minutes: 30
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          unityVersion: 2022.3.62f1
-          testMode: EditMode
-          checkName: Unity Test Results
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v7
-        if: always() && env.HAS_UNITY_LICENSE == 'true'
-        with:
-          name: Unity test results
-          path: artifacts

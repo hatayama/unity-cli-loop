@@ -4,6 +4,8 @@ namespace io.github.hatayama.uLoopMCP
 {
     internal static class JsonRpcRequestIdentityValidator
     {
+        internal const string ServerSessionChangedMessage = "Unity CLI Loop server session changed. Retry the command.";
+
         public static void Validate(
             JsonRpcRequestUloopMetadata metadata,
             string actualProjectRoot,
@@ -31,7 +33,7 @@ namespace io.github.hatayama.uLoopMCP
 
             if (string.IsNullOrWhiteSpace(actualServerSessionId))
             {
-                throw new ParameterValidationException("Unity CLI Loop server session changed. Retry the command.");
+                throw new ParameterValidationException(ServerSessionChangedMessage);
             }
 
             if (!string.Equals(metadata.ExpectedProjectRoot, actualProjectRoot, StringComparison.Ordinal))
@@ -41,8 +43,21 @@ namespace io.github.hatayama.uLoopMCP
 
             if (!string.Equals(metadata.ExpectedServerSessionId, actualServerSessionId, StringComparison.Ordinal))
             {
-                throw new ParameterValidationException("Unity CLI Loop server session changed. Retry the command.");
+                throw new ParameterValidationException(ServerSessionChangedMessage);
             }
+        }
+
+        internal static bool IsExpectedRetryableFailure(ParameterValidationException exception)
+        {
+            if (exception == null)
+            {
+                return false;
+            }
+
+            return string.Equals(
+                exception.Message,
+                ServerSessionChangedMessage,
+                StringComparison.Ordinal);
         }
     }
 }

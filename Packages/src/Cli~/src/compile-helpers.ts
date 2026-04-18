@@ -132,12 +132,7 @@ function isUnityBusyByLockFiles(projectRoot: string): boolean {
   }
 
   const domainReloadLockPath = join(projectRoot, 'Temp', 'domainreload.lock');
-  if (existsSync(domainReloadLockPath)) {
-    return true;
-  }
-
-  const serverStartingLockPath = join(projectRoot, 'Temp', 'serverstarting.lock');
-  return existsSync(serverStartingLockPath);
+  return existsSync(domainReloadLockPath);
 }
 
 function stripUtf8Bom(content: string): string {

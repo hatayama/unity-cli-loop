@@ -7,6 +7,17 @@ namespace io.github.hatayama.uLoopMCP
         private static readonly object SyncRoot = new object();
         private static IDynamicCompilationServiceFactory _factory;
 
+        public static bool HasRegisteredFactory
+        {
+            get
+            {
+                lock (SyncRoot)
+                {
+                    return _factory != null;
+                }
+            }
+        }
+
         public static void RegisterFactory(IDynamicCompilationServiceFactory factory)
         {
             Debug.Assert(factory != null, "factory must not be null");

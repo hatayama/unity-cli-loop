@@ -240,14 +240,17 @@ namespace io.github.hatayama.uLoopMCP
         /// <returns>The compilation result.</returns>
         private CompileResult CreateCompileResult()
         {
+            int errorCount = _compileMessages.Count(m => m.type == CompilerMessageType.Error);
+            int warningCount = _compileMessages.Count(m => m.type == CompilerMessageType.Warning);
+
             // For force compile, don't include messages in response
             // User should use get-logs tool after domain reload completes
             if (_isForceCompile)
             {
                 return new CompileResult(
                     success: null, // Success status is indeterminate during force compile
-                    errorCount: 0,
-                    warningCount: 0,
+                    errorCount: errorCount,
+                    warningCount: warningCount,
                     completedAt: DateTime.Now,
                     messages: new CompilerMessage[0],
                     errors: new CompilerMessage[0],
@@ -256,9 +259,6 @@ namespace io.github.hatayama.uLoopMCP
                     message: "Force compilation executed. Use get-logs tool to retrieve compilation messages."
                 );
             }
-
-            int errorCount = _compileMessages.Count(m => m.type == CompilerMessageType.Error);
-            int warningCount = _compileMessages.Count(m => m.type == CompilerMessageType.Warning);
 
             CompilerMessage[] errors = _compileMessages.Where(m => m.type == CompilerMessageType.Error).ToArray();
             CompilerMessage[] warnings = _compileMessages.Where(m => m.type == CompilerMessageType.Warning).ToArray();

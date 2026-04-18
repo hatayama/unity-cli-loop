@@ -180,7 +180,7 @@ namespace io.github.hatayama.uLoopMCP
         /// The port number to bind to. Use -1 to fall back to the saved custom port
         /// from <see cref="McpEditorSettings.GetCustomPort"/>. Defaults to -1.
         /// </param>
-        public void StartServer(int port = -1)
+        public void StartServer(int port = -1, bool clearServerStartingLockWhenReady = true)
         {
             if (_isRunning)
             {
@@ -213,10 +213,13 @@ namespace io.github.hatayama.uLoopMCP
                     }
                 }, TaskScheduler.Default);
 
-                // Server is now ready to accept connections - clean up all lock files
+                // Server is now ready to accept connections - clean up compilation/reload locks.
                 CompilationLockService.DeleteLockFile();
                 DomainReloadDetectionService.DeleteLockFile();
-                ServerStartingLockService.DeleteLockFile();
+                if (clearServerStartingLockWhenReady)
+                {
+                    ServerStartingLockService.DeleteLockFile();
+                }
 
                 // Notify that server has started
                 OnServerStarted?.Invoke();

@@ -194,7 +194,7 @@ namespace io.github.hatayama.uLoopMCP
             }
             catch (ParameterValidationException ex)
             {
-                UnityEngine.Debug.LogError($"[JsonRpcProcessor] Parameter validation error: {ex.Message}\nStack trace: {ex.StackTrace}");
+                LogParameterValidationException(ex);
                 return CreateErrorResponse(request.Id, ex);
             }
             catch (Exception ex)
@@ -210,6 +210,21 @@ namespace io.github.hatayama.uLoopMCP
                 request?.UloopMetadata,
                 McpEditorSettings.GetProjectRootPath(),
                 McpEditorSettings.GetServerSessionId());
+        }
+
+        private static void LogParameterValidationException(ParameterValidationException exception)
+        {
+            if (JsonRpcRequestIdentityValidator.IsExpectedRetryableFailure(exception))
+            {
+#if ULOOPMCP_DEBUG
+                UnityEngine.Debug.LogWarning(
+                    $"[JsonRpcProcessor] Expected retryable parameter validation event: {exception.Message}");
+#endif
+                return;
+            }
+
+            UnityEngine.Debug.LogError(
+                $"[JsonRpcProcessor] Parameter validation error: {exception.Message}\nStack trace: {exception.StackTrace}");
         }
 
         private static void AppendExecuteDynamicCodeTimingsIfSupported(

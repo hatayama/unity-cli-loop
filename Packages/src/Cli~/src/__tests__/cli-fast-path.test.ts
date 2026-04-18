@@ -23,6 +23,8 @@ describe('tryParseFastExecuteDynamicCodeCommand', () => {
       '{}',
       '--compile-only',
       'true',
+      '--yield-to-foreground-requests',
+      'true',
       '--project-path',
       '/project',
     ]);
@@ -32,6 +34,7 @@ describe('tryParseFastExecuteDynamicCodeCommand', () => {
         Code: 'return "ok";',
         Parameters: {},
         CompileOnly: true,
+        YieldToForegroundRequests: true,
       },
       globalOptions: {
         projectPath: '/project',
@@ -92,6 +95,7 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
       {
         executeToolCommandFn,
         isToolEnabledFn: jest.fn().mockReturnValue(true),
+        findUnityProjectRootFn: jest.fn().mockReturnValue('/resolved-project'),
         runWithErrorHandlingFn,
         printToolDisabledErrorFn: jest.fn(),
         exitFn: ((code: number): never => {
@@ -109,11 +113,40 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
     );
   });
 
+  it('reuses one resolved project root when project-path is omitted', async () => {
+    const executeToolCommandFn = jest.fn<
+      Promise<void>,
+      [string, Record<string, unknown>, object]
+    >();
+    const isToolEnabledFn = jest.fn().mockReturnValue(true);
+    const findUnityProjectRootFn = jest.fn().mockReturnValue('/resolved-project');
+
+    await tryHandleFastExecuteDynamicCodeCommand(['execute-dynamic-code', '--code', 'return 1;'], {
+      executeToolCommandFn,
+      isToolEnabledFn,
+      findUnityProjectRootFn,
+      runWithErrorHandlingFn: jest.fn(async (fn: () => Promise<void>): Promise<void> => await fn()),
+      printToolDisabledErrorFn: jest.fn(),
+      exitFn: ((code: number): never => {
+        throw new Error(`unexpected exit ${code}`);
+      }) as (code: number) => never,
+    });
+
+    expect(findUnityProjectRootFn).toHaveBeenCalledTimes(1);
+    expect(isToolEnabledFn).toHaveBeenCalledWith('execute-dynamic-code', '/resolved-project');
+    expect(executeToolCommandFn).toHaveBeenCalledWith(
+      'execute-dynamic-code',
+      { Code: 'return 1;' },
+      { projectPath: '/resolved-project', port: undefined },
+    );
+  });
+
   it('stops early when execute-dynamic-code is disabled', async () => {
     await expect(
       tryHandleFastExecuteDynamicCodeCommand(['execute-dynamic-code', '--code', 'return 1;'], {
         executeToolCommandFn: jest.fn(),
         isToolEnabledFn: jest.fn().mockReturnValue(false),
+        findUnityProjectRootFn: jest.fn().mockReturnValue('/resolved-project'),
         runWithErrorHandlingFn: jest.fn(),
         printToolDisabledErrorFn: jest.fn(),
         exitFn: ((code: number): never => {
@@ -127,6 +160,7 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
     const handled = await tryHandleFastExecuteDynamicCodeCommand(['get-logs'], {
       executeToolCommandFn: jest.fn(),
       isToolEnabledFn: jest.fn(),
+      findUnityProjectRootFn: jest.fn(),
       runWithErrorHandlingFn: jest.fn(),
       printToolDisabledErrorFn: jest.fn(),
       exitFn: ((code: number): never => {

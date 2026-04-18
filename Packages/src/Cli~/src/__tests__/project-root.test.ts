@@ -48,6 +48,19 @@ describe('findUnityProjectRoot', () => {
     expect(console.error).not.toHaveBeenCalled();
   });
 
+  it('returns the current directory immediately when it is already the Unity project root', () => {
+    createUnityProject(testDir, 'ChildProject');
+    mkdirSync(join(testDir, 'Assets'), { recursive: true });
+    mkdirSync(join(testDir, 'ProjectSettings'), { recursive: true });
+    mkdirSync(join(testDir, 'UserSettings'), { recursive: true });
+    writeFileSync(join(testDir, 'UserSettings/UnityMcpSettings.json'), '{}');
+
+    const result = findUnityProjectRoot(testDir);
+
+    expect(result).toBe(testDir);
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
   it('warns once when multiple projects found', () => {
     createUnityProject(testDir, 'ProjectA');
     createUnityProject(testDir, 'ProjectB');

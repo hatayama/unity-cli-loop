@@ -1,0 +1,128 @@
+name: Unity EditMode Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * *'
+
+permissions:
+  checks: write
+  contents: read
+
+jobs:
+  editmode-tests:
+    name: EditMode Tests (Linux)
+    runs-on: ubuntu-latest
+    env:
+      HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run concurrency unit tests
+        run: dotnet test tests/DynamicCodeExecutionScheduler.UnitTests/DynamicCodeExecutionScheduler.UnitTests.csproj --configuration Release
+
+      - name: Cache Library folder
+        if: env.HAS_UNITY_LICENSE == 'true'
+        uses: actions/cache@v5
+        with:
+          path: Library
+          key: Library-2022.3.62f1-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
+          restore-keys: |
+            Library-2022.3.62f1-
+
+      - name: Compile Unity project
+        if: env.HAS_UNITY_LICENSE == 'true'
+        id: compile
+        uses: game-ci/unity-builder@v4
+        timeout-minutes: 30
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 2022.3.62f1
+          targetPlatform: StandaloneLinux64
+          buildMethod: ''
+          allowDirtyBuild: true
+        continue-on-error: true
+
+      - name: Check for compile errors and warnings
+        if: env.HAS_UNITY_LICENSE == 'true'
+        run: |
+          LOG_FILE=$(find . -name "*.log" -path "*/build/*" -o -name "Editor.log" 2>/dev/null | head -1)
+
+          if [ -z "$LOG_FILE" ]; then
+            echo "No Unity log file found, checking artifacts..."
+            LOG_FILE="artifacts/unity-build.log"
+          fi
+
+          echo "=== Checking Unity compilation output ==="
+
+          ERROR_COUNT=0
+          WARNING_COUNT=0
+
+          if [ -f "$LOG_FILE" ]; then
+            echo "Analyzing log file: $LOG_FILE"
+
+            ERROR_COUNT=$(grep -c "error CS[0-9]*:" "$LOG_FILE" 2>/dev/null || echo "0")
+            WARNING_COUNT=$(grep -c "warning CS[0-9]*:" "$LOG_FILE" 2>/dev/null || echo "0")
+
+            echo ""
+            echo "=== Compilation Results ==="
+            echo "Errors: $ERROR_COUNT"
+            echo "Warnings: $WARNING_COUNT"
+            echo ""
+
+            if [ "$ERROR_COUNT" -gt 0 ]; then
+              echo "::error::Found $ERROR_COUNT compile error(s)"
+              echo ""
+              echo "=== Errors ==="
+              grep "error CS[0-9]*:" "$LOG_FILE" | head -20
+              exit 1
+            fi
+
+            if [ "$WARNING_COUNT" -gt 0 ]; then
+              echo "::warning::Found $WARNING_COUNT compile warning(s)"
+              echo ""
+              echo "=== Warnings ==="
+              grep "warning CS[0-9]*:" "$LOG_FILE" | head -20
+              exit 1
+            fi
+
+            echo "✅ No compile errors or warnings found!"
+          else
+            echo "::warning::Could not find Unity log file for analysis"
+            if [ "${{ steps.compile.outcome }}" == "failure" ]; then
+              echo "::error::Unity compilation failed"
+              exit 1
+            fi
+          fi
+
+      - name: Run EditMode tests
+        if: env.HAS_UNITY_LICENSE == 'true'
+        uses: game-ci/unity-test-runner@v4
+        timeout-minutes: 30
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 2022.3.62f1
+          testMode: EditMode
+          checkName: Unity Test Results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: always() && env.HAS_UNITY_LICENSE == 'true'
+        with:
+          name: Unity test results
+          path: artifacts
