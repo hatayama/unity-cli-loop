@@ -126,6 +126,20 @@ if (rb == null) return "Rigidbody not found on TargetCube";
 return $"velocity={rb.velocity}, angularVelocity={rb.angularVelocity}, isKinematic={rb.isKinematic}, useGravity={rb.useGravity}, isSleeping={rb.IsSleeping()}";
 ```
 
+## Raycast from Camera Center
+
+```csharp
+Camera cam = Camera.main;
+if (cam == null) return "Main camera not found";
+
+Ray ray = cam.ScreenPointToRay(new Vector3(Screen.width / 2f, Screen.height / 2f, 0));
+if (Physics.Raycast(ray, out RaycastHit hit, 100f))
+{
+    return $"Hit: {hit.collider.gameObject.name} at {hit.point}";
+}
+return "No hit";
+```
+
 ## Find GameObjects by Tag
 
 ```csharp
@@ -135,4 +149,3 @@ string tag = "Enemy";
 GameObject[] enemies = GameObject.FindGameObjectsWithTag(tag);
 return $"Found {enemies.Length} objects with tag '{tag}': {string.Join(", ", enemies.Select(e => $"{e.name} at {e.transform.position}"))}";
 ```
-

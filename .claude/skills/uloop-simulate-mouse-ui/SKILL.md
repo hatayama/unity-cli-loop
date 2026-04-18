@@ -1,6 +1,6 @@
 ---
 name: uloop-simulate-mouse-ui
-description: "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates. Use when you need to: (1) Click buttons or interactive UI elements during PlayMode testing, (2) Drag UI elements from one position to another, (3) Hold a drag at a position for inspection before releasing, (4) Long-press UI elements that respond to sustained pointer-down. For game logic that reads Input System (e.g. WasPressedThisFrame), use simulate-mouse-input instead."
+description: "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates. Use when you need to: (1) Click buttons or interactive UI elements during PlayMode testing, (2) Drag UI elements from one position to another, (3) Hold a drag at a position for inspection before releasing, (4) Long-press UI elements that respond to sustained pointer-down. For game logic that reads Input System (e.g. WasPressedThisFrame), use simulate-mouse-input when the project uses the New Input System; otherwise prefer execute-dynamic-code."
 context: fork
 ---
 
@@ -95,3 +95,4 @@ uloop simulate-mouse-ui --action DragEnd --x 600 --y 300
 - Unity must be in **PlayMode**
 - Target scene must have an **EventSystem** GameObject
 - UI elements must have a **GraphicRaycaster** on their Canvas
+- If you need gameplay mouse input rather than UI pointer events, `simulate-mouse-input` assumes the project uses the New Input System; otherwise prefer `execute-dynamic-code`

@@ -1,6 +1,6 @@
 ---
 name: uloop-execute-dynamic-code
-description: "Execute C# code dynamically in Unity Editor. Use when you need to: (1) Wire prefab/material references and AddComponent operations, (2) Edit SerializedObject properties and reference wiring, (3) Perform scene/hierarchy edits and batch operations, (4) PlayMode automation (click buttons, raycast, invoke methods), (5) PlayMode UI controls (InputField, Slider, Toggle, Dropdown), (6) PlayMode inspection (scene info, reflection, physics state). NOT for file I/O or script authoring."
+description: "Execute C# code dynamically in Unity Editor. Use when you need to: (1) Wire prefab/material references and AddComponent operations, (2) Edit SerializedObject properties and reference wiring, (3) Perform scene/hierarchy edits and batch operations, (4) PlayMode automation (click buttons, invoke methods, tweak runtime state), (5) PlayMode UI controls (InputField, Slider, Toggle, Dropdown), (6) PlayMode inspection (scene info, reflection, physics state, raycast checks). NOT for file I/O or script authoring."
 context: fork
 ---
 
@@ -57,9 +57,11 @@ For detailed code examples, refer to these files:
   - Undo-aware operations: RecordObject, AddComponent, SetParent, grouping
 - **Selection operations**: See [references/selection-operations.md](references/selection-operations.md)
   - Get/set selection, multi-select, filter by type/editability
-- **PlayMode automation**: See [references/playmode-automation.md](references/playmode-automation.md)
-  - Click UI buttons, raycast interaction, invoke methods, set fields, tool combination workflows
+- **PlayMode automation (zsh)**: See [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md)
+  - Click UI buttons, invoke methods, set fields, tool combination workflows for zsh users
+- **PlayMode automation (PowerShell)**: See [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md)
+  - Click UI buttons, invoke methods, set fields, tool combination workflows for PowerShell users
 - **PlayMode UI controls**: See [references/playmode-ui-controls.md](references/playmode-ui-controls.md)
   - InputField, Slider, Toggle, Dropdown, drag & drop simulation, list all UI controls
 - **PlayMode inspection**: See [references/playmode-inspection.md](references/playmode-inspection.md)
-  - Scene info, game state via reflection, physics state, GameObject search, position/rotation
+  - Scene info, game state via reflection, physics state, raycast checks, GameObject search, position/rotation

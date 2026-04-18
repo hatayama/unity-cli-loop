@@ -1,6 +1,6 @@
 ---
 name: uloop-simulate-mouse-input
-description: "Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into Mouse.current. Use when you need to: (1) Click in games that read Mouse.current.leftButton.wasPressedThisFrame, (2) Right-click for actions like block placement, (3) Inject mouse delta for FPS camera control, (4) Inject scroll wheel for hotbar switching or zoom. For UI elements with IPointerClickHandler, use simulate-mouse-ui instead."
+description: "Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into Mouse.current. Use when you need to: (1) Click in games that read Mouse.current.leftButton.wasPressedThisFrame, (2) Right-click for actions like block placement, (3) Inject mouse delta for FPS camera control, (4) Inject scroll wheel for hotbar switching or zoom. Assumes the project uses the New Input System. If the project cannot use it, prefer execute-dynamic-code for a project-specific workaround. For UI elements with IPointerClickHandler, use simulate-mouse-ui instead."
 context: fork
 ---
 
@@ -58,11 +58,11 @@ uloop simulate-mouse-input --action <action> [options]
 | Scenario | Tool |
 |----------|------|
 | Click a Unity UI Button (IPointerClickHandler) | `simulate-mouse-ui` |
-| Destroy a block in Minecraft (reads `Mouse.current.leftButton`) | `simulate-mouse-input` |
-| Place a block with right-click | `simulate-mouse-input --button Right` |
+| Destroy a block in Minecraft (reads `Mouse.current.leftButton`) | `simulate-mouse-input` when the project uses the New Input System; otherwise prefer `execute-dynamic-code` for a project-specific workaround |
+| Place a block with right-click | `simulate-mouse-input --button Right` when the project uses the New Input System |
 | Drag a UI slider | `simulate-mouse-ui --action Drag` |
-| Look around with mouse (FPS camera) | `simulate-mouse-input --action MoveDelta` |
-| Scroll hotbar slots | `simulate-mouse-input --action Scroll` |
+| Look around with mouse (FPS camera) | `simulate-mouse-input --action MoveDelta` when the project uses the New Input System |
+| Scroll hotbar slots | `simulate-mouse-input --action Scroll` when the project uses the New Input System |
 
 ## Examples
 
@@ -93,5 +93,5 @@ uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --dura
 
 - Unity must be in **PlayMode**
 - **Input System package** must be installed (`com.unity.inputsystem`)
-- Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings
 - Game code must read input via Input System API (e.g. `Mouse.current.leftButton.wasPressedThisFrame`)
+- If the target project cannot use the New Input System, prefer `execute-dynamic-code` for a project-specific workaround instead of changing project settings just to use this tool

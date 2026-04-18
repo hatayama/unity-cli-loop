@@ -1,7 +1,54 @@
-# PlayMode Automation
+# PlayMode Automation (zsh)
 
 Code examples for runtime automation during Play mode using `execute-dynamic-code`.
 These examples manipulate live scene objects while the game is running.
+Shell command examples in this file target `zsh`-style usage.
+
+## When to use dedicated mouse simulation tools instead
+
+The examples in this file call UI handlers or runtime methods from C#.
+That remains the better choice when you want targeted automation, direct state control, or a quick diagnostic path.
+Use dedicated mouse tools only when the input route itself is part of what you need to verify.
+
+Choose the tool based on what you are trying to validate:
+
+| Scenario | Recommended tool | Why |
+|----------|------------------|-----|
+| Verify that a uGUI element responds through the real EventSystem pointer path | `simulate-mouse-ui` | Fires `PointerDown` / `PointerUp` / `PointerClick` / drag events through EventSystem raycasts instead of bypassing the UI input route. |
+| Test gameplay that reads `Mouse.current`, button state, delta, or scroll | `simulate-mouse-input` | Injects Input System mouse state into `Mouse.current`, so game code can observe `wasPressedThisFrame`, movement delta, and scroll like player input. This assumes the project uses the New Input System (`Input System Package (New)` or `Both`). If that is not available in the target project, prefer `execute-dynamic-code` for a project-specific workaround instead of changing project settings just to use this tool. |
+| Jump straight to a known button callback, invoke a method, inspect state, or set up a test precondition | `execute-dynamic-code` | Best when you intentionally want direct automation without reproducing the full input pipeline. |
+| Drive custom runtime behavior that does not map cleanly to the built-in mouse tools | `execute-dynamic-code` | Lets you call project-specific methods, inspect scene objects, and prototype one-off flows immediately. |
+
+In short: do not default everything to mouse simulation.
+Use `execute-dynamic-code` for direct automation and diagnostics, and switch to `simulate-mouse-ui` or `simulate-mouse-input` when reproducing the real input path is the thing you need to test.
+
+## zsh Quoting Notes
+
+Use these patterns when you need shell-safe inline code:
+
+### Double quotes inside C# strings
+
+Single-quote the whole snippet and keep C# string literals unchanged.
+
+```zsh
+uloop execute-dynamic-code --code 'return "Hello from zsh";'
+```
+
+### Single quotes inside inline C# code
+
+If the C# snippet itself contains a single quote, close and reopen the shell string with `'\''`.
+
+```zsh
+uloop execute-dynamic-code --code 'char initial = '\''A'\''; return initial.ToString();'
+```
+
+### JSON-like values passed via `--parameters`
+
+Wrap the whole expression in single quotes so the shell does not interpret double quotes.
+
+```zsh
+uloop execute-dynamic-code --code 'return parameters["param0"];' --parameters '{"param0":"Hello from zsh"}'
+```
 
 ## Click UI Button by Path
 
@@ -27,43 +74,6 @@ if (target == null) return $"PlayButton not found. Available: {string.Join(", ",
 
 target.onClick.Invoke();
 return $"Clicked {target.gameObject.name}";
-```
-
-## Raycast from Camera Center
-
-```csharp
-Camera cam = Camera.main;
-if (cam == null) return "Main camera not found";
-
-Ray ray = cam.ScreenPointToRay(new Vector3(Screen.width / 2f, Screen.height / 2f, 0));
-if (Physics.Raycast(ray, out RaycastHit hit, 100f))
-{
-    return $"Hit: {hit.collider.gameObject.name} at {hit.point}";
-}
-return "No hit";
-```
-
-## Raycast Click at Screen Position
-
-```csharp
-using UnityEngine.EventSystems;
-using System.Collections.Generic;
-
-if (EventSystem.current == null) return "EventSystem not found";
-
-PointerEventData pointerData = new PointerEventData(EventSystem.current)
-{
-    position = new Vector2(Screen.width / 2f, Screen.height / 2f)
-};
-
-List<RaycastResult> results = new List<RaycastResult>();
-EventSystem.current.RaycastAll(pointerData, results);
-
-if (results.Count == 0) return "No UI element at screen center";
-
-GameObject target = results[0].gameObject;
-ExecuteEvents.ExecuteHierarchy(target, pointerData, ExecuteEvents.pointerClickHandler);
-return $"Clicked UI element: {target.name}";
 ```
 
 ## Toggle GameObject Active State
@@ -135,7 +145,7 @@ Use `find-game-objects` to discover buttons with their hierarchy paths, then cli
 
 **Step 1**: Find all GameObjects with Button component
 
-```bash
+```zsh
 uloop find-game-objects --required-components UnityEngine.UI.Button --include-inactive false
 ```
 
@@ -161,7 +171,7 @@ Use `get-hierarchy` to explore the UI tree structure, then target the right elem
 
 **Step 1**: Get Canvas hierarchy to understand UI structure
 
-```bash
+```zsh
 uloop get-hierarchy --root-path "Canvas" --max-depth 3 --include-components true
 ```
 
@@ -201,7 +211,7 @@ return "Clicked PlayButton";
 
 **Step 2**: Capture Game View to verify the result
 
-```bash
+```zsh
 uloop screenshot --window-name Game
 ```
 
@@ -211,7 +221,7 @@ Run an action then inspect Unity Console logs to verify expected behavior.
 
 **Step 1**: Clear console before the action
 
-```bash
+```zsh
 uloop clear-console
 ```
 
@@ -235,7 +245,7 @@ return "Invoked TakeDamage(50)";
 
 **Step 3**: Check logs for expected output
 
-```bash
+```zsh
 uloop get-logs --log-type Log --search-text "damage"
 ```
 
@@ -245,13 +255,13 @@ End-to-end test flow: start Play mode, perform actions, capture evidence, stop.
 
 **Step 0**: Clear console to isolate this run
 
-```bash
+```zsh
 uloop clear-console
 ```
 
 **Step 1**: Start Play mode
 
-```bash
+```zsh
 uloop control-play-mode --action Play
 ```
 
@@ -272,18 +282,18 @@ return $"Clicked {startBtn.gameObject.name}";
 
 **Step 3**: Capture screenshot as evidence
 
-```bash
+```zsh
 uloop screenshot --window-name Game
 ```
 
 **Step 4**: Check logs for errors
 
-```bash
+```zsh
 uloop get-logs --log-type Error
 ```
 
 **Step 5**: Stop Play mode
 
-```bash
+```zsh
 uloop control-play-mode --action Stop
 ```
