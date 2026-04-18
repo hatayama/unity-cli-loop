@@ -46,7 +46,7 @@ uloop simulate-mouse-input --action <action> [options]
 | `SmoothDelta` | Mouse.current.delta (per-frame) | Inject mouse delta smoothly over `--duration` seconds (human-like camera pan) |
 | `Scroll` | Mouse.current.scroll | Inject scroll wheel input (e.g. for hotbar or zoom) |
 
-### Global Options (all optional, mutually exclusive)
+### Global Options (optional)
 
 | Option | Description |
 |--------|-------------|

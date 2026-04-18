@@ -76,7 +76,7 @@ uloop screenshot --window-name Scene --resolution-scale 0.5 --output-directory /
 Returns JSON with:
 - `ScreenshotCount`: Number of windows captured
 - `Screenshots`: Array of screenshot info, each containing:
-  - `ImagePath`: Absolute path to the saved PNG file
+  - `ImagePath`: Absolute path to the saved PNG file. Empty when `--elements-only` is used because no image file is written.
   - `FileSizeBytes`: Size of the saved file in bytes
   - `Width`: Captured image width in pixels
   - `Height`: Captured image height in pixels

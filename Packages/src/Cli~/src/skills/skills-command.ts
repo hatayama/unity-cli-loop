@@ -21,6 +21,7 @@ interface SkillsOptions {
   codex?: boolean;
   cursor?: boolean;
   gemini?: boolean;
+  agents?: boolean;
   windsurf?: boolean;
   antigravity?: boolean;
 }
@@ -38,6 +39,7 @@ export function registerSkillsCommand(program: Command): void {
     .option('--codex', 'Check Codex CLI installation')
     .option('--cursor', 'Check Cursor installation')
     .option('--gemini', 'Check Gemini CLI installation')
+    .option('--agents', 'Check generic .agents installation')
     .option('--windsurf', 'Check Windsurf installation')
     .option('--antigravity', 'Check Antigravity installation')
     .action((options: SkillsOptions) => {
@@ -54,6 +56,7 @@ export function registerSkillsCommand(program: Command): void {
     .option('--codex', 'Install to Codex CLI')
     .option('--cursor', 'Install to Cursor')
     .option('--gemini', 'Install to Gemini CLI')
+    .option('--agents', 'Install to generic .agents target')
     .option('--windsurf', 'Install to Windsurf')
     .option('--antigravity', 'Install to Antigravity')
     .action((options: SkillsOptions) => {
@@ -73,6 +76,7 @@ export function registerSkillsCommand(program: Command): void {
     .option('--codex', 'Uninstall from Codex CLI')
     .option('--cursor', 'Uninstall from Cursor')
     .option('--gemini', 'Uninstall from Gemini CLI')
+    .option('--agents', 'Uninstall from generic .agents target')
     .option('--windsurf', 'Uninstall from Windsurf')
     .option('--antigravity', 'Uninstall from Antigravity')
     .action((options: SkillsOptions) => {
@@ -99,6 +103,9 @@ function resolveTargets(options: SkillsOptions): TargetConfig[] {
   if (options.gemini) {
     targets.push(getTargetConfig('gemini'));
   }
+  if (options.agents) {
+    targets.push(getTargetConfig('agents'));
+  }
   if (options.windsurf) {
     targets.push(getTargetConfig('windsurf'));
   }
@@ -113,9 +120,10 @@ function showTargetGuidance(command: string): void {
   console.log('');
   console.log('Available targets:');
   console.log('  --claude        Claude Code (.claude/skills/)');
-  console.log('  --codex         Codex CLI (.agents/skills/)');
+  console.log('  --codex         Codex CLI (.codex/skills/)');
   console.log('  --cursor        Cursor (.cursor/skills/)');
-  console.log('  --gemini        Gemini CLI (.agents/skills/)');
+  console.log('  --gemini        Gemini CLI (.gemini/skills/)');
+  console.log('  --agents        Other (.agents) (.agents/skills/)');
   console.log('  --windsurf      Windsurf (.agents/skills/)');
   console.log('  --antigravity   Antigravity (.agent/skills/)');
   console.log('');
@@ -125,7 +133,7 @@ function showTargetGuidance(command: string): void {
   console.log('Examples:');
   console.log(`  uloop skills ${command} --claude`);
   console.log(`  uloop skills ${command} --cursor --global`);
-  console.log(`  uloop skills ${command} --claude --codex --cursor --gemini`);
+  console.log(`  uloop skills ${command} --claude --codex --cursor --gemini --agents`);
 }
 
 function listSkills(targets: TargetConfig[], global: boolean): void {

@@ -309,12 +309,8 @@ namespace io.github.hatayama.uLoopMCP
         internal static ToolSkillSynchronizer.SkillTargetInfo CreateFirstInstallSkillTarget(
             SkillsTarget target)
         {
-            return target switch
-            {
-                SkillsTarget.Claude => new("Claude Code", ".claude", false, false),
-                SkillsTarget.Agents => new("Codex CLI / Gemini CLI", ".agents", false, false),
-                _ => new("Claude Code", ".claude", false, false)
-            };
+            SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(target);
+            return new(selection.DisplayName, selection.DirectoryName, selection.InstallFlag, false, false);
         }
 
         private void UpdateCliStep(bool cliInstalled, string cliVersion, bool cliVersionMatched)
@@ -489,7 +485,11 @@ namespace io.github.hatayama.uLoopMCP
                 ToolSkillSynchronizer.SkillInstallResult result =
                     await ToolSkillSynchronizer.InstallSkillFiles(installableTargets);
 
-                if (!result.IsSuccessful)
+                if (result.IsSuccessful)
+                {
+                    EditorDialogHelper.ShowSkillsInstalledDialog();
+                }
+                else
                 {
                     EditorUtility.DisplayDialog(
                         "Installation Partially Failed",

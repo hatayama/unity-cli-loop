@@ -116,6 +116,8 @@ namespace io.github.hatayama.uLoopMCP
             Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length);
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
             {
+                Assert.IsNotEmpty(target.InstallFlag,
+                    $"Target '{target.DirName}' should keep its install flag when detected");
                 Assert.IsFalse(target.HasSkillsDirectory,
                     $"Target '{target.DirName}' should not be opted in without a skills directory");
                 Assert.IsFalse(target.HasExistingSkills,

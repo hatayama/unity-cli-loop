@@ -53,17 +53,20 @@ namespace io.github.hatayama.uLoopMCP
         {
             public readonly string DisplayName;
             public readonly string DirName;
+            public readonly string InstallFlag;
             public readonly bool HasSkillsDirectory;
             public readonly bool HasExistingSkills;
 
             public SkillTargetInfo(
                 string displayName,
                 string dirName,
+                string installFlag,
                 bool hasSkillsDirectory,
                 bool hasExistingSkills)
             {
                 DisplayName = displayName;
                 DirName = dirName;
+                InstallFlag = installFlag;
                 HasSkillsDirectory = hasSkillsDirectory;
                 HasExistingSkills = hasExistingSkills;
             }
@@ -72,8 +75,10 @@ namespace io.github.hatayama.uLoopMCP
         private static readonly SkillTargetDefinition[] SkillTargets =
         {
             new(".claude", "--claude", "Claude Code"),
-            new(".agents", "--codex", "Codex CLI / Gemini CLI"),
             new(".cursor", "--cursor", "Cursor"),
+            new(".gemini", "--gemini", "Gemini CLI"),
+            new(".codex", "--codex", "Codex CLI"),
+            new(".agents", "--agents", "Other (.agents)"),
             new(".agent", "--antigravity", "Antigravity")
         };
 
@@ -171,6 +176,7 @@ namespace io.github.hatayama.uLoopMCP
                 targets.Add(new SkillTargetInfo(
                     target.DisplayName,
                     target.DirName,
+                    target.Flag,
                     hasSkillsDirectory,
                     hasULoopSkills));
             }
@@ -197,21 +203,9 @@ namespace io.github.hatayama.uLoopMCP
 
             int succeeded = 0;
 
-            // Map DirName -> Flag for the targets we need to install
-            Dictionary<string, string> targetFlagLookup = new();
-            foreach (SkillTargetDefinition def in SkillTargets)
-            {
-                targetFlagLookup[def.DirName] = def.Flag;
-            }
-
             foreach (SkillTargetInfo target in targets)
             {
-                if (!targetFlagLookup.TryGetValue(target.DirName, out string flag))
-                {
-                    continue;
-                }
-
-                bool success = await RunSkillsInstall(flag, uloopFileName, nodePath);
+                bool success = await RunSkillsInstall(target.InstallFlag, uloopFileName, nodePath);
                 if (success)
                 {
                     succeeded++;

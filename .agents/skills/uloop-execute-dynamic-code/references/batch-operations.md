@@ -6,6 +6,7 @@ Code examples for batch processing using `execute-dynamic-code`.
 
 ```csharp
 using UnityEditor;
+using System.Collections.Generic;
 
 GameObject[] selected = Selection.gameObjects;
 if (selected.Length == 0)
@@ -91,24 +92,29 @@ if (guids.Length == 0)
 }
 
 AssetDatabase.StartAssetEditing();
-
-int modified = 0;
-foreach (string guid in guids)
+try
 {
-    string path = AssetDatabase.GUIDToAssetPath(guid);
-    Material mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-    if (mat != null)
+    int modified = 0;
+    foreach (string guid in guids)
     {
-        mat.color = Color.white;
-        EditorUtility.SetDirty(mat);
-        modified++;
+        string path = AssetDatabase.GUIDToAssetPath(guid);
+        Material mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (mat != null)
+        {
+            mat.color = Color.white;
+            EditorUtility.SetDirty(mat);
+            modified++;
+        }
     }
+
+    AssetDatabase.SaveAssets();
+    return $"Reset color of {modified} materials";
+}
+finally
+{
+    AssetDatabase.StopAssetEditing();
 }
 
-AssetDatabase.StopAssetEditing();
-AssetDatabase.SaveAssets();
-
-return $"Reset color of {modified} materials";
 ```
 
 ## Batch Rename GameObjects
@@ -391,4 +397,3 @@ foreach (GameObject obj in selected)
 Undo.CollapseUndoOperations(undoGroup);
 return $"Replaced material on {replaced} objects";
 ```
-

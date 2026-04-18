@@ -76,7 +76,7 @@ using (PrefabUtility.EditPrefabContentsScope scope = new PrefabUtility.EditPrefa
     MeshRenderer renderer = root.GetComponent<MeshRenderer>();
     if (renderer != null)
     {
-        renderer.sharedMaterial.color = Color.red;
+        renderer.receiveShadows = false;
     }
 }
 return "Modified prefab properties";
@@ -210,6 +210,12 @@ if (!PrefabUtility.IsPartOfPrefabInstance(selected))
     return "Selected object is not a prefab instance";
 }
 
-PrefabUtility.ApplyPrefabInstance(selected, InteractionMode.UserAction);
-return $"Applied overrides from {selected.name} to prefab";
+GameObject instanceRoot = PrefabUtility.GetOutermostPrefabInstanceRoot(selected);
+if (instanceRoot == null)
+{
+    return "Could not resolve prefab instance root";
+}
+
+PrefabUtility.ApplyPrefabInstance(instanceRoot, InteractionMode.UserAction);
+return $"Applied overrides from {instanceRoot.name} to prefab";
 ```

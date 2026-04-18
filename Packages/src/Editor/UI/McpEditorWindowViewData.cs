@@ -152,6 +152,8 @@ namespace io.github.hatayama.uLoopMCP
         public readonly bool IsClaudeSkillsInstalled;
         public readonly bool IsAgentsSkillsInstalled;
         public readonly bool IsCursorSkillsInstalled;
+        public readonly bool IsGeminiSkillsInstalled;
+        public readonly bool IsCodexSkillsInstalled;
         public readonly bool IsAntigravitySkillsInstalled;
         public readonly SkillsTarget SelectedTarget;
         public readonly bool IsInstallingSkills;
@@ -167,6 +169,8 @@ namespace io.github.hatayama.uLoopMCP
             bool isClaudeSkillsInstalled,
             bool isAgentsSkillsInstalled,
             bool isCursorSkillsInstalled,
+            bool isGeminiSkillsInstalled,
+            bool isCodexSkillsInstalled,
             bool isAntigravitySkillsInstalled,
             SkillsTarget selectedTarget,
             bool isInstallingSkills)
@@ -181,6 +185,8 @@ namespace io.github.hatayama.uLoopMCP
             IsClaudeSkillsInstalled = isClaudeSkillsInstalled;
             IsAgentsSkillsInstalled = isAgentsSkillsInstalled;
             IsCursorSkillsInstalled = isCursorSkillsInstalled;
+            IsGeminiSkillsInstalled = isGeminiSkillsInstalled;
+            IsCodexSkillsInstalled = isCodexSkillsInstalled;
             IsAntigravitySkillsInstalled = isAntigravitySkillsInstalled;
             SelectedTarget = selectedTarget;
             IsInstallingSkills = isInstallingSkills;

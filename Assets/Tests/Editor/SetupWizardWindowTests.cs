@@ -158,8 +158,8 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         {
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
             {
-                new("Claude Code", ".claude", true, true),
-                new("Cursor", ".cursor", false, false)
+                new("Claude Code", ".claude", "--claude", true, true),
+                new("Cursor", ".cursor", "--cursor", false, false)
             };
 
             List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
@@ -193,6 +193,27 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
 
             Assert.That(target.DisplayName, Is.EqualTo("Claude Code"));
             Assert.That(target.DirName, Is.EqualTo(".claude"));
+            Assert.That(target.InstallFlag, Is.EqualTo("--claude"));
+            Assert.That(target.HasSkillsDirectory, Is.False);
+            Assert.That(target.HasExistingSkills, Is.False);
+        }
+
+        [TestCase(SkillsTarget.Cursor, "Cursor", ".cursor", "--cursor")]
+        [TestCase(SkillsTarget.Gemini, "Gemini CLI", ".gemini", "--gemini")]
+        [TestCase(SkillsTarget.Codex, "Codex CLI", ".codex", "--codex")]
+        [TestCase(SkillsTarget.Agents, "Other (.agents)", ".agents", "--agents")]
+        public void CreateFirstInstallSkillTarget_ReturnsMappedTarget(
+            SkillsTarget targetType,
+            string expectedDisplayName,
+            string expectedDirName,
+            string expectedInstallFlag)
+        {
+            ToolSkillSynchronizer.SkillTargetInfo target =
+                SetupWizardWindow.CreateFirstInstallSkillTarget(targetType);
+
+            Assert.That(target.DisplayName, Is.EqualTo(expectedDisplayName));
+            Assert.That(target.DirName, Is.EqualTo(expectedDirName));
+            Assert.That(target.InstallFlag, Is.EqualTo(expectedInstallFlag));
             Assert.That(target.HasSkillsDirectory, Is.False);
             Assert.That(target.HasExistingSkills, Is.False);
         }

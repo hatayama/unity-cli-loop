@@ -3,7 +3,14 @@
  * Supports Claude Code and Codex CLI, with extensibility for future targets.
  */
 
-export type TargetId = 'claude' | 'codex' | 'cursor' | 'gemini' | 'windsurf' | 'antigravity';
+export type TargetId =
+  | 'claude'
+  | 'codex'
+  | 'cursor'
+  | 'gemini'
+  | 'agents'
+  | 'windsurf'
+  | 'antigravity';
 
 export interface TargetConfig {
   id: TargetId;
@@ -22,7 +29,7 @@ const TARGET_CONFIGS: Record<TargetId, TargetConfig> = {
   codex: {
     id: 'codex',
     displayName: 'Codex CLI',
-    projectDir: '.agents',
+    projectDir: '.codex',
     skillFileName: 'SKILL.md',
   },
   cursor: {
@@ -34,6 +41,12 @@ const TARGET_CONFIGS: Record<TargetId, TargetConfig> = {
   gemini: {
     id: 'gemini',
     displayName: 'Gemini CLI',
+    projectDir: '.gemini',
+    skillFileName: 'SKILL.md',
+  },
+  agents: {
+    id: 'agents',
+    displayName: 'Other (.agents)',
     projectDir: '.agents',
     skillFileName: 'SKILL.md',
   },
@@ -56,7 +69,7 @@ export const ALL_TARGET_IDS: TargetId[] = [
   'codex',
   'cursor',
   'gemini',
-  'windsurf',
+  'agents',
   'antigravity',
 ];
 

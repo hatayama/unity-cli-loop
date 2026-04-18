@@ -23,6 +23,11 @@ using UnityEditor;
 
 string matPath = "Assets/Materials/MyMaterial.mat";
 Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+if (mat == null)
+{
+    return $"Material not found at {matPath}";
+}
+
 mat.SetColor("_Color", new Color(1f, 0.5f, 0f, 1f));
 EditorUtility.SetDirty(mat);
 AssetDatabase.SaveAssets();
@@ -56,6 +61,14 @@ string texPath = "Assets/Textures/MyTexture.png";
 
 Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
 Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
+if (mat == null)
+{
+    return $"Material not found at {matPath}";
+}
+if (tex == null)
+{
+    return $"Texture not found at {texPath}";
+}
 
 mat.SetTexture("_MainTex", tex);
 EditorUtility.SetDirty(mat);
@@ -108,6 +121,7 @@ return "Emission enabled on material";
 
 ```csharp
 using UnityEditor;
+using System.Collections.Generic;
 
 string shaderName = "Standard";
 string[] guids = AssetDatabase.FindAssets("t:Material");
@@ -134,6 +148,11 @@ string sourcePath = "Assets/Materials/MyMaterial.mat";
 string destPath = "Assets/Materials/MyMaterial_Copy.mat";
 
 Material source = AssetDatabase.LoadAssetAtPath<Material>(sourcePath);
+if (source == null)
+{
+    return $"Material not found at {sourcePath}";
+}
+
 Material copy = new Material(source);
 AssetDatabase.CreateAsset(copy, destPath);
 AssetDatabase.SaveAssets();

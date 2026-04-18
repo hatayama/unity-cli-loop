@@ -247,6 +247,11 @@ using UnityEditor;
 using System.Collections.Generic;
 
 int layer = LayerMask.NameToLayer("UI");
+if (layer == -1)
+{
+    return "Layer 'UI' not found";
+}
+
 GameObject[] allObjects = Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
 List<GameObject> layerObjects = new List<GameObject>();
 
@@ -295,4 +300,3 @@ if (Selection.activeGameObject == null)
 SceneView.FrameLastActiveSceneView();
 return "Focused on selected object";
 ```
-

@@ -166,12 +166,7 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            bool hasSkills = data.SelectedTarget switch
-            {
-                SkillsTarget.Claude => data.IsClaudeSkillsInstalled,
-                SkillsTarget.Agents => data.IsAgentsSkillsInstalled,
-                _ => false
-            };
+            bool hasSkills = SkillsTargetSelectionResolver.IsInstalled(data, data.SelectedTarget);
 
             string label = hasSkills ? "Update Skills" : "Install Skills";
             SetSkillsButton(label, true);
