@@ -32,6 +32,12 @@
 
                     <!-- MCP Content -->
                     <ui:VisualElement name="mcp-content">
+                        <ui:VisualElement class="mcp-warning-container mcp-warning-container--visible">
+                            <ui:Label
+                                text="This MCP configuration is already deprecated. Please use the CLI instead. The MCP feature will be removed in a future release."
+                                class="mcp-warning-label" />
+                        </ui:VisualElement>
+
                         <ui:VisualElement class="mcp-target-row">
                             <ui:Label text="Target:" class="mcp-target-row__label" />
                             <uie:EnumField name="editor-type-field" class="mcp-target-row__field" />
