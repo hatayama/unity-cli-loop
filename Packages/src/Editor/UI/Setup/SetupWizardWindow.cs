@@ -531,6 +531,10 @@ namespace io.github.hatayama.uLoopMCP
             {
                 UpdateSkillsStatusLabel(string.Empty);
                 _installSkillsButton.SetEnabled(false);
+                _installSkillsButton.text = GetSkillsButtonTextForSetupWizard(
+                    cliInstalled: false,
+                    _isInstallingSkills,
+                    hasOutdatedSkills: false);
                 _groupSkillsToggle.SetEnabled(false);
                 ViewDataBinder.SetVisible(_skillsTargetRow, false);
                 ViewDataBinder.SetVisible(_skillsTargetList, false);
@@ -620,10 +624,21 @@ namespace io.github.hatayama.uLoopMCP
                     t => t.InstallState == SkillInstallState.Outdated);
                 UpdateSkillsStatusLabel(string.Empty);
                 _installSkillsButton.SetEnabled(!_isInstallingSkills);
-                _installSkillsButton.text = GetInstallSkillsButtonText(
+                _installSkillsButton.text = GetSkillsButtonTextForSetupWizard(
+                    cliInstalled: true,
                     _isInstallingSkills,
                     hasOutdatedSkills);
             }
+        }
+
+        internal static string GetSkillsButtonTextForSetupWizard(
+            bool cliInstalled,
+            bool isInstallingSkills,
+            bool hasOutdatedSkills)
+        {
+            return !cliInstalled
+                ? "Install Skills"
+                : GetInstallSkillsButtonText(isInstallingSkills, hasOutdatedSkills);
         }
 
         internal static string GetInstallSkillsButtonText(

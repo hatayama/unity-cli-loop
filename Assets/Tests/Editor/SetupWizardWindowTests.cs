@@ -325,6 +325,24 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
+        [TestCase(false, false, false, "Install Skills")]
+        [TestCase(true, true, false, "Installing...")]
+        [TestCase(true, false, true, "Update Skills")]
+        [TestCase(true, false, false, "Install Skills")]
+        public void GetSkillsButtonTextForSetupWizard_ReturnsExpectedLabel(
+            bool cliInstalled,
+            bool isInstallingSkills,
+            bool hasOutdatedSkills,
+            string expectedLabel)
+        {
+            string label = SetupWizardWindow.GetSkillsButtonTextForSetupWizard(
+                cliInstalled,
+                isInstallingSkills,
+                hasOutdatedSkills);
+
+            Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
         [TestCase(SkillInstallState.Installed, false, true, "setup-target-item__status--installed")]
         [TestCase(SkillInstallState.Checking, false, true, "setup-target-item__status--checking")]
         [TestCase(SkillInstallState.Outdated, false, true, "setup-target-item__status--outdated")]
