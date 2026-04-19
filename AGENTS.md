@@ -8,6 +8,20 @@ The C# namespace is `io.github.hatayama.uLoopMCP` for historical reasons, but th
 
 Comments in the code, commit messages, PR titles, and PR descriptions must all be written in English.
 
+## Git Autonomy
+
+After implementing a requested change, treat `commit` as part of completing the task.
+
+- When code changes are complete and the required verification for the touched language has passed, create commit(s) without asking the user for additional permission
+- Split commits by concern and keep unrelated changes out of the same commit
+- Do not include unrelated pre-existing working tree changes in those commits
+- Report created commit hash(es) and message(s) in the final response
+- Only `push` when the user explicitly asks for it
+- Do not auto-commit when:
+  - the user explicitly says not to commit
+  - required verification is still failing or blocked
+  - commit boundaries are ambiguous enough that the wrong split would create review risk
+
 ## Unity Freeze Prevention
 
 Do not add or keep Unity EditMode tests that can freeze the Editor.

@@ -27,16 +27,24 @@
         <ui:VisualElement name="step-2" class="setup-step">
             <ui:Label text="Step 2: Install Skills (Optional)" class="setup-step__title" />
             <ui:VisualElement class="setup-step__content">
+                <ui:VisualElement name="group-skills-row" class="setup-toggle-row">
+                    <ui:Toggle name="group-skills-toggle" class="setup-toggle-row__toggle" />
+                    <ui:Label
+                        name="group-skills-label"
+                        text="Group in subfolder"
+                        class="setup-toggle-row__label" />
+                </ui:VisualElement>
                 <ui:VisualElement name="skills-target-row" class="setup-target-row">
                     <ui:Label text="Target:" class="setup-target-row__label" />
                     <uie:EnumField name="skills-target-field" class="setup-target-row__field" />
                 </ui:VisualElement>
                 <ui:VisualElement name="skills-target-list" class="setup-target-list" />
+                <ui:VisualElement name="skills-status-divider" class="setup-step__divider" />
                 <ui:Label name="skills-status-label" text="" class="setup-step__status-label" />
                 <ui:VisualElement class="setup-step__button-row">
                     <ui:Button name="install-skills-button" text="Install Skills" class="setup-button" />
                 </ui:VisualElement>
-                <ui:Label name="skills-hint-label" text="You can install skills later from Window &gt; Unity CLI Loop &gt; Settings." class="setup-step__hint-label" />
+                <ui:Label name="skills-hint-label" text="Install skills later from&#10;Window &gt; Unity CLI Loop &gt; Settings." class="setup-step__hint-label" />
             </ui:VisualElement>
         </ui:VisualElement>
 
@@ -51,7 +59,7 @@
                 text="Don't show this after updates"
                 class="setup-footer__toggle" />
             <ui:Label
-                text="You can reopen this from Window &gt; Unity CLI Loop &gt; Setup Wizard."
+                text="Reopen this from&#10;Window &gt; Unity CLI Loop &gt; Setup Wizard."
                 class="setup-footer__hint-label" />
             <ui:VisualElement name="github-link-row" class="setup-footer__github-link">
                 <ui:Label name="github-link-label" text="Star on GitHub" class="setup-footer__github-link-label" />

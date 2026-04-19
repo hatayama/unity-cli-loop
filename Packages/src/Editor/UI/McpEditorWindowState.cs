@@ -22,9 +22,9 @@ namespace io.github.hatayama.uLoopMCP
     public enum SkillsTarget
     {
         Claude = 0,
+        Codex = 4,
         Cursor = 2,
         Gemini = 3,
-        Codex = 4,
         [InspectorName("Other (.agents)")]
         Agents = 1
     }

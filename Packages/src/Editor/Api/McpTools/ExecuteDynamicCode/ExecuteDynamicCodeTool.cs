@@ -29,7 +29,7 @@ Don't:
 
 Need files/dirs? Run terminal commands.
 
-See examples at {project_root}/.claude/skills/uloop-execute-dynamic-code/examples/")]
+See examples at {project_root}/.claude/skills/unity-cli-loop/uloop-execute-dynamic-code/examples/")]
     public class ExecuteDynamicCodeTool : AbstractUnityTool<ExecuteDynamicCodeSchema, ExecuteDynamicCodeResponse>
     {
         public override string ToolName => "execute-dynamic-code";

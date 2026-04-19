@@ -120,30 +120,78 @@
     flex-direction: row;
     align-items: center;
     margin-bottom: 6px;
+    overflow: hidden;
 }
 
 .setup-target-row__label {
-    min-width: 42px;
+    width: 50px;
+    flex-shrink: 0;
     margin-right: 6px;
 }
 
 .setup-target-row__field {
     flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .setup-target-list {
     margin-bottom: 6px;
 }
 
+.setup-toggle-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.setup-toggle-row__toggle {
+    width: 20px;
+    margin-right: 4px;
+}
+
+.setup-toggle-row__label {
+    flex-grow: 1;
+    white-space: normal;
+}
+
 .setup-target-item {
     flex-direction: row;
     align-items: center;
+    justify-content: space-between;
     margin-bottom: 2px;
     margin-left: 4px;
 }
 
 .setup-target-item__label {
-    margin-left: 4px;
+    flex-grow: 1;
+    margin-right: 8px;
+}
+
+.setup-target-item__status {
+    flex-shrink: 0;
+    -unity-font-style: bold;
+}
+
+.setup-target-item__status--installed {
+    color: var(--setup-color-success);
+}
+
+.setup-target-item__status--checking {
+    color: var(--setup-color-muted);
+}
+
+.setup-target-item__status--outdated {
+    color: var(--setup-color-warning);
+}
+
+.setup-target-item__status--missing {
+    color: var(--setup-color-muted);
+}
+
+.setup-target-item__status--different-layout {
+    color: var(--setup-color-warning);
 }
 
 /* ===========================================
@@ -182,16 +230,16 @@
     margin-top: 4px;
 }
 
+.setup-step__divider {
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.12);
+    margin-top: 6px;
+    margin-bottom: 12px;
+}
+
 /* ===========================================
    Block: Footer
    =========================================== */
-.setup-footer {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top-width: 1px;
-    border-top-color: var(--unity-colors-helpbox-border);
-}
-
 .setup-footer__toggle {
     margin-top: 6px;
 }
@@ -217,6 +265,9 @@
     flex-direction: row;
     justify-content: flex-end;
     align-items: center;
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.12);
+    padding-top: 8px;
     margin-top: 10px;
     opacity: 0.78;
 }
@@ -248,6 +299,7 @@
 
 .setup-step__button-row {
     flex-direction: row;
+    margin-top: 4px;
 }
 
 .setup-step__button-row .setup-button {

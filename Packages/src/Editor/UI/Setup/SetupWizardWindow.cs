@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
+using RuntimePlatform = UnityEngine.RuntimePlatform;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -114,9 +116,13 @@ namespace io.github.hatayama.uLoopMCP
         private Button _installCliButton;
 
         // Step 2
+        private VisualElement _groupSkillsRow;
         private VisualElement _skillsTargetRow;
         private EnumField _skillsTargetField;
+        private Toggle _groupSkillsToggle;
+        private Label _groupSkillsLabel;
         private VisualElement _skillsTargetList;
+        private VisualElement _skillsStatusDivider;
         private Label _skillsStatusLabel;
         private Button _installSkillsButton;
 
@@ -135,7 +141,10 @@ namespace io.github.hatayama.uLoopMCP
         private bool _isApplyingContentSize;
         private bool _isSkillsTargetFieldInitialized;
         private bool _shouldUseFirstInstallSkillsUi;
+        private bool _installSkillsFlat;
+        private IVisualElementScheduledItem _initialRefreshScheduledItem;
         private IVisualElementScheduledItem _resizeScheduledItem;
+        private CancellationTokenSource _skillInstallStateRefreshCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
 
         private void CreateGUI()
@@ -145,7 +154,8 @@ namespace io.github.hatayama.uLoopMCP
             BindElements();
             BindEvents();
             BindSizeUpdates();
-            RefreshUI();
+            ApplyInitialCheckingState();
+            ScheduleInitialRefresh();
             ScheduleResizeToContent();
         }
 
@@ -154,6 +164,12 @@ namespace io.github.hatayama.uLoopMCP
             _shouldUseFirstInstallSkillsUi = ShouldUseFirstInstallSkillsUi(
                 McpEditorSettings.GetHasShownSetupWizardSkillsSelection());
             McpEditorSettings.SetHasShownSetupWizardSkillsSelection(true);
+        }
+
+        private void OnDisable()
+        {
+            _initialRefreshScheduledItem?.Pause();
+            CancelSkillInstallStateRefresh();
         }
 
         private void LoadLayout()
@@ -179,9 +195,13 @@ namespace io.github.hatayama.uLoopMCP
             _cliStatusLabel = rootVisualElement.Q<Label>("cli-status-label");
             _installCliButton = rootVisualElement.Q<Button>("install-cli-button");
 
+            _groupSkillsRow = rootVisualElement.Q<VisualElement>("group-skills-row");
             _skillsTargetRow = rootVisualElement.Q<VisualElement>("skills-target-row");
             _skillsTargetField = rootVisualElement.Q<EnumField>("skills-target-field");
+            _groupSkillsToggle = rootVisualElement.Q<Toggle>("group-skills-toggle");
+            _groupSkillsLabel = rootVisualElement.Q<Label>("group-skills-label");
             _skillsTargetList = rootVisualElement.Q<VisualElement>("skills-target-list");
+            _skillsStatusDivider = rootVisualElement.Q<VisualElement>("skills-status-divider");
             _skillsStatusLabel = rootVisualElement.Q<Label>("skills-status-label");
             _installSkillsButton = rootVisualElement.Q<Button>("install-skills-button");
 
@@ -200,6 +220,7 @@ namespace io.github.hatayama.uLoopMCP
             _installCliButton.clicked += HandleInstallCli;
             _installSkillsButton.clicked += HandleInstallSkills;
             InitializeSkillsTargetField();
+            InitializeGroupSkillsToggle();
             _suppressAutoShowToggle.RegisterValueChangedCallback(evt => HandleSuppressAutoShowChanged(evt.newValue));
             _openSettingsButton.clicked += HandleOpenSettings;
             _closeButton.clicked += HandleClose;
@@ -235,9 +256,24 @@ namespace io.github.hatayama.uLoopMCP
                 if (evt.newValue is SkillsTarget newTarget)
                 {
                     _skillsTarget = newTarget;
+                    RefreshSkillsSection();
                 }
             });
             _isSkillsTargetFieldInitialized = true;
+        }
+
+        private void InitializeGroupSkillsToggle()
+        {
+            _installSkillsFlat = McpEditorSettings.GetInstallSkillsFlat();
+            _groupSkillsToggle.SetValueWithoutNotify(!_installSkillsFlat);
+            _groupSkillsToggle.RegisterValueChangedCallback(evt =>
+            {
+                evt.StopPropagation();
+                _installSkillsFlat = !evt.newValue;
+                McpEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
+                RefreshSkillsSection();
+            });
+            _groupSkillsLabel.RegisterCallback<ClickEvent>(HandleGroupSkillsRowClicked);
         }
 
         private void BindSizeUpdates()
@@ -254,11 +290,58 @@ namespace io.github.hatayama.uLoopMCP
             _suppressAutoShowToggle.SetValueWithoutNotify(McpEditorSettings.GetSuppressSetupWizardAutoShow());
         }
 
-        private async void RefreshUI()
+        private void ApplyInitialCheckingState()
         {
             RefreshAutoShowToggle();
+            ViewDataBinder.SetVisible(_nodejsWarning, false);
+            ViewDataBinder.SetVisible(_nodejsOk, false);
+            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", false);
+            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", true);
+            _cliStatusLabel.text = "Checking...";
+            _installCliButton.SetEnabled(false);
+            _installCliButton.text = "Checking...";
+            _groupSkillsToggle.SetEnabled(false);
+            UpdateSkillsStatusLabel("Checking installed skills...");
+            _installSkillsButton.SetEnabled(false);
+            _installSkillsButton.text = "Checking...";
+            ViewDataBinder.SetVisible(_skillsTargetRow, _shouldUseFirstInstallSkillsUi);
+            ViewDataBinder.SetVisible(_skillsTargetList, !_shouldUseFirstInstallSkillsUi);
+            _skillsTargetList.Clear();
+        }
 
-            string nodePath = NodeEnvironmentResolver.FindNodePath();
+        private void UpdateSkillsStatusLabel(string text)
+        {
+            _skillsStatusLabel.text = text;
+            bool isVisible = !string.IsNullOrEmpty(text);
+            ViewDataBinder.SetVisible(_skillsStatusDivider, isVisible);
+            ViewDataBinder.SetVisible(_skillsStatusLabel, isVisible);
+        }
+
+        private void ScheduleInitialRefresh()
+        {
+            _initialRefreshScheduledItem?.Pause();
+            _initialRefreshScheduledItem = rootVisualElement.schedule.Execute(RefreshUI).StartingIn(0);
+        }
+
+        private void RefreshSkillsSection()
+        {
+            string cachedCliVersion = CliInstallationDetector.GetCachedCliVersion();
+            bool cliVersionMatched = IsCliVersionMatched(cachedCliVersion);
+            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            List<ToolSkillSynchronizer.SkillTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
+            UpdateSkillsStep(cliVersionMatched, targets);
+            BeginRefreshDisplayedSkillTargets(cliVersionMatched);
+            ScheduleResizeToContent();
+        }
+
+        private async void RefreshUI()
+        {
+            CancelSkillInstallStateRefresh();
+            ApplyInitialCheckingState();
+            await Task.Yield();
+
+            RuntimePlatform platform = Application.platform;
+            string nodePath = await Task.Run(() => NodeEnvironmentResolver.FindNodePathAtPlatform(platform));
             bool nodeDetected = !string.IsNullOrEmpty(nodePath);
 
             ViewDataBinder.SetVisible(_nodejsWarning, !nodeDetected);
@@ -271,7 +354,8 @@ namespace io.github.hatayama.uLoopMCP
                 ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", true);
                 _installCliButton.SetEnabled(false);
                 _installSkillsButton.SetEnabled(false);
-                _skillsStatusLabel.text = "";
+                _groupSkillsToggle.SetEnabled(false);
+                UpdateSkillsStatusLabel(string.Empty);
                 _skillsTargetList.Clear();
                 ScheduleResizeToContent();
                 return;
@@ -284,21 +368,67 @@ namespace io.github.hatayama.uLoopMCP
 
             UpdateCliStep(cliInstalled, cliVersion, cliVersionMatched);
 
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = DetectDisplayedSkillTargets();
+            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            List<ToolSkillSynchronizer.SkillTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
             UpdateSkillsStep(cliVersionMatched, targets);
+            BeginRefreshDisplayedSkillTargets(cliVersionMatched);
             ScheduleResizeToContent();
         }
 
-        private static List<ToolSkillSynchronizer.SkillTargetInfo> DetectDisplayedSkillTargets()
+        private List<ToolSkillSynchronizer.SkillTargetInfo> DetectDisplayedSkillTargets(string projectRoot)
         {
-            return ToolSkillSynchronizer.DetectTargets();
+            return ToolSkillSynchronizer.DetectTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat);
+        }
+
+        private List<ToolSkillSynchronizer.SkillTargetInfo> DetectDisplayedSkillTargetsFast(string projectRoot)
+        {
+            return ToolSkillSynchronizer.DetectTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
+        }
+
+        private void BeginRefreshDisplayedSkillTargets(bool cliVersionMatched)
+        {
+            CancelSkillInstallStateRefresh();
+            if (!cliVersionMatched || _isInstallingSkills)
+            {
+                return;
+            }
+
+            CancellationTokenSource cts = new();
+            _skillInstallStateRefreshCts = cts;
+            RefreshDisplayedSkillTargetsAsync(cts.Token);
+        }
+
+        private async void RefreshDisplayedSkillTargetsAsync(CancellationToken ct)
+        {
+            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            List<ToolSkillSynchronizer.SkillTargetInfo> targets =
+                await Task.Run(() => DetectDisplayedSkillTargets(projectRoot));
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            UpdateSkillsStep(cliInstalled: true, targets);
+            ScheduleResizeToContent();
+        }
+
+        private void CancelSkillInstallStateRefresh()
+        {
+            if (_skillInstallStateRefreshCts == null)
+            {
+                return;
+            }
+
+            _skillInstallStateRefreshCts.Cancel();
+            _skillInstallStateRefreshCts.Dispose();
+            _skillInstallStateRefreshCts = null;
         }
 
         internal static List<ToolSkillSynchronizer.SkillTargetInfo> FilterInstallableSkillTargets(
             IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets)
         {
             Debug.Assert(targets != null, "targets must not be null");
-            return targets.Where(target => target.HasSkillsDirectory).ToList();
+            return targets.ToList();
         }
 
         internal static bool ShouldUseFirstInstallSkillsUi(bool hasShownSetupWizardSkillsSelection)
@@ -307,10 +437,50 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         internal static ToolSkillSynchronizer.SkillTargetInfo CreateFirstInstallSkillTarget(
-            SkillsTarget target)
+            SkillsTarget target,
+            bool groupSkillsUnderUnityCliLoop)
         {
-            SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(target);
-            return new(selection.DisplayName, selection.DirectoryName, selection.InstallFlag, false, false);
+            SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
+                target,
+                groupSkillsUnderUnityCliLoop);
+            return new(
+                selection.DisplayName,
+                selection.DirectoryName,
+                selection.InstallFlag,
+                hasSkillsDirectory: false,
+                hasExistingSkills: false);
+        }
+
+        internal static ToolSkillSynchronizer.SkillTargetInfo GetSelectedSkillTargetInfo(
+            IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets,
+            SkillsTarget target,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            Debug.Assert(targets != null, "targets must not be null");
+
+            SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
+                target,
+                groupSkillsUnderUnityCliLoop);
+            ToolSkillSynchronizer.SkillTargetInfo selectedTargetInfo = targets
+                .FirstOrDefault(info => info.DirName == selection.DirectoryName);
+            return string.IsNullOrEmpty(selectedTargetInfo.DirName)
+                ? CreateFirstInstallSkillTarget(target, groupSkillsUnderUnityCliLoop)
+                : selectedTargetInfo;
+        }
+
+        internal static List<ToolSkillSynchronizer.SkillTargetInfo> GetFirstInstallableSkillTargets(
+            IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets,
+            SkillsTarget target,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            ToolSkillSynchronizer.SkillTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
+                targets,
+                target,
+                groupSkillsUnderUnityCliLoop);
+            return selectedTargetInfo.InstallState == SkillInstallState.Installed
+                   || selectedTargetInfo.InstallState == SkillInstallState.Checking
+                ? new List<ToolSkillSynchronizer.SkillTargetInfo>()
+                : new List<ToolSkillSynchronizer.SkillTargetInfo> { selectedTargetInfo };
         }
 
         private void UpdateCliStep(bool cliInstalled, string cliVersion, bool cliVersionMatched)
@@ -359,12 +529,15 @@ namespace io.github.hatayama.uLoopMCP
 
             if (!cliInstalled)
             {
-                _skillsStatusLabel.text = "";
+                UpdateSkillsStatusLabel(string.Empty);
                 _installSkillsButton.SetEnabled(false);
+                _groupSkillsToggle.SetEnabled(false);
                 ViewDataBinder.SetVisible(_skillsTargetRow, false);
                 ViewDataBinder.SetVisible(_skillsTargetList, false);
                 return;
             }
+
+            _groupSkillsToggle.SetEnabled(!_isInstallingSkills);
 
             bool useFirstInstallSkillsUi = _shouldUseFirstInstallSkillsUi;
             ViewDataBinder.SetVisible(_skillsTargetRow, useFirstInstallSkillsUi);
@@ -372,9 +545,20 @@ namespace io.github.hatayama.uLoopMCP
 
             if (useFirstInstallSkillsUi)
             {
-                _skillsStatusLabel.text = "";
-                _installSkillsButton.SetEnabled(!_isInstallingSkills);
-                _installSkillsButton.text = _isInstallingSkills ? "Installing..." : "Install Skills";
+                ToolSkillSynchronizer.SkillTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
+                    targets,
+                    _skillsTarget,
+                    !_installSkillsFlat);
+                UpdateSkillsStatusLabel(string.Empty);
+                _installSkillsButton.text = CliSetupSection.GetInstallSkillsButtonText(
+                    isCliInstalled: true,
+                    _isInstallingSkills,
+                    selectedTargetInfo.InstallState);
+                _installSkillsButton.SetEnabled(CliSetupSection.IsInstallSkillsButtonEnabled(
+                    isCliInstalled: true,
+                    _isInstallingSkills,
+                    isChecking: false,
+                    selectedTargetInfo.InstallState));
                 return;
             }
 
@@ -385,37 +569,131 @@ namespace io.github.hatayama.uLoopMCP
                 VisualElement item = new VisualElement();
                 item.AddToClassList("setup-target-item");
 
-                string prefix = target.HasExistingSkills ? "✓" : "○";
-                Label label = new Label($"  {prefix} {target.DisplayName} ({target.DirName}/)");
-                label.AddToClassList("setup-target-item__label");
-                item.Add(label);
+                Label nameLabel = new Label($"{target.DisplayName} ({target.DirName}/)");
+                nameLabel.AddToClassList("setup-target-item__label");
+                item.Add(nameLabel);
+
+                Label statusLabel = new Label(GetSkillInstallStatusText(
+                    target.InstallState,
+                    target.HasDifferentLayoutSkills,
+                    !_installSkillsFlat));
+                statusLabel.AddToClassList("setup-target-item__status");
+                statusLabel.AddToClassList(GetSkillInstallStatusClass(
+                    target.InstallState,
+                    target.HasDifferentLayoutSkills,
+                    !_installSkillsFlat));
+                item.Add(statusLabel);
 
                 _skillsTargetList.Add(item);
             }
 
             if (installableTargets.Count == 0)
             {
-                _skillsStatusLabel.text = "Create a skills directory to opt in (.claude/skills/, .agents/skills/, etc.)";
+                UpdateSkillsStatusLabel(
+                    "Create a tool folder to enable skill installation (.claude/, .agents/, etc.)");
                 _installSkillsButton.SetEnabled(false);
                 _installSkillsButton.text = "Install Skills";
                 return;
             }
 
-            bool allSkillsInstalled = installableTargets.All(t => t.HasExistingSkills);
+            bool isCheckingSkills = installableTargets.Any(
+                t => t.InstallState == SkillInstallState.Checking);
+            if (isCheckingSkills)
+            {
+                UpdateSkillsStatusLabel("Checking installed skills...");
+                _installSkillsButton.SetEnabled(false);
+                _installSkillsButton.text = "Checking...";
+                return;
+            }
+
+            bool allSkillsInstalled = installableTargets.All(
+                t => t.InstallState == SkillInstallState.Installed);
             if (allSkillsInstalled)
             {
-                _skillsStatusLabel.text = $"Installed for {installableTargets.Count} opted-in targets";
+                UpdateSkillsStatusLabel($"Installed for {installableTargets.Count} targets");
                 _installSkillsButton.SetEnabled(false);
                 _installSkillsButton.text = "Installed";
             }
             else
             {
-                _skillsStatusLabel.text = installableTargets.Count == targets.Count
-                    ? ""
-                    : "Only opted-in targets will be installed.";
+                bool hasOutdatedSkills = installableTargets.Any(
+                    t => t.InstallState == SkillInstallState.Outdated);
+                UpdateSkillsStatusLabel(string.Empty);
                 _installSkillsButton.SetEnabled(!_isInstallingSkills);
-                _installSkillsButton.text = _isInstallingSkills ? "Installing..." : "Install Skills";
+                _installSkillsButton.text = GetInstallSkillsButtonText(
+                    _isInstallingSkills,
+                    hasOutdatedSkills);
             }
+        }
+
+        internal static string GetInstallSkillsButtonText(
+            bool isInstallingSkills,
+            bool hasOutdatedSkills)
+        {
+            if (isInstallingSkills)
+            {
+                return "Installing...";
+            }
+
+            return hasOutdatedSkills ? "Update Skills" : "Install Skills";
+        }
+
+        internal static string GetSkillInstallStatusText(
+            SkillInstallState installState,
+            bool hasDifferentLayoutSkills,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            if (installState == SkillInstallState.Checking)
+            {
+                return "Checking...";
+            }
+
+            if (installState == SkillInstallState.Installed)
+            {
+                return "Installed";
+            }
+
+            if (installState == SkillInstallState.Outdated)
+            {
+                return "Outdated";
+            }
+
+            if (!hasDifferentLayoutSkills)
+            {
+                return "Missing";
+            }
+
+            return groupSkillsUnderUnityCliLoop ? "Not grouped" : "Grouped";
+        }
+
+        internal static string GetSkillInstallStatusClass(
+            SkillInstallState installState,
+            bool hasDifferentLayoutSkills,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            if (installState == SkillInstallState.Checking)
+            {
+                return "setup-target-item__status--checking";
+            }
+
+            if (installState == SkillInstallState.Installed)
+            {
+                return "setup-target-item__status--installed";
+            }
+
+            if (installState == SkillInstallState.Outdated)
+            {
+                return "setup-target-item__status--outdated";
+            }
+
+            if (!hasDifferentLayoutSkills)
+            {
+                return "setup-target-item__status--missing";
+            }
+
+            return groupSkillsUnderUnityCliLoop
+                ? "setup-target-item__status--different-layout"
+                : "setup-target-item__status--different-layout";
         }
 
         private async void HandleInstallCli()
@@ -471,9 +749,11 @@ namespace io.github.hatayama.uLoopMCP
 
         private async void HandleInstallSkills()
         {
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = DetectDisplayedSkillTargets();
+            CancelSkillInstallStateRefresh();
+            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            List<ToolSkillSynchronizer.SkillTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
             List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets = _shouldUseFirstInstallSkillsUi
-                ? new List<ToolSkillSynchronizer.SkillTargetInfo> { CreateFirstInstallSkillTarget(_skillsTarget) }
+                ? GetFirstInstallableSkillTargets(targets, _skillsTarget, !_installSkillsFlat)
                 : FilterInstallableSkillTargets(targets);
             if (installableTargets.Count == 0) return;
 
@@ -482,33 +762,21 @@ namespace io.github.hatayama.uLoopMCP
 
             try
             {
-                ToolSkillSynchronizer.SkillInstallResult result =
-                    await ToolSkillSynchronizer.InstallSkillFiles(installableTargets);
-
-                if (result.IsSuccessful)
-                {
-                    EditorDialogHelper.ShowSkillsInstalledDialog();
-                }
-                else
-                {
-                    EditorUtility.DisplayDialog(
-                        "Installation Partially Failed",
-                        $"{result.SucceededTargets}/{result.AttemptedTargets} targets succeeded.\n"
-                        + "Run 'uloop skills install' to retry failed targets.",
-                        "OK");
-                }
+                await ToolSkillSynchronizer.InstallSkillFiles(
+                    installableTargets,
+                    !_installSkillsFlat);
+                EditorDialogHelper.ShowSkillsInstalledDialog();
             }
             finally
             {
                 _isInstallingSkills = false;
-                RefreshUI();
+                RefreshSkillsSection();
             }
         }
 
         private void HandleOpenSettings()
         {
             McpEditorWindow.ShowWindow();
-            Close();
         }
 
         private void HandleSuppressAutoShowChanged(bool suppressAutoShow)
@@ -533,6 +801,26 @@ namespace io.github.hatayama.uLoopMCP
             ViewDataBinder.ToggleClass(_githubLinkRow, "setup-footer__github-link--hover", isHovered);
             ViewDataBinder.ToggleClass(_githubLinkLabel, "setup-footer__github-link-label--hover", isHovered);
             ViewDataBinder.ToggleClass(_githubLinkIcon, "setup-footer__github-link-icon--hover", isHovered);
+        }
+
+        private void HandleGroupSkillsRowClicked(ClickEvent evt)
+        {
+            evt.StopPropagation();
+            if (!_groupSkillsToggle.enabledSelf)
+            {
+                return;
+            }
+
+            if (evt.target is VisualElement targetElement && _groupSkillsToggle.Contains(targetElement))
+            {
+                return;
+            }
+
+            bool newValue = !_groupSkillsToggle.value;
+            _groupSkillsToggle.SetValueWithoutNotify(newValue);
+            _installSkillsFlat = !newValue;
+            McpEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
+            RefreshSkillsSection();
         }
 
         private void ScheduleResizeToContent()
@@ -643,7 +931,7 @@ namespace io.github.hatayama.uLoopMCP
             WhiteSpace whiteSpace)
         {
             if (whiteSpace != WhiteSpace.Normal) return measuredWidth;
-            if (lineCount <= PreferredWrappedTextLineCount) return laidOutWidth;
+            if (lineCount <= PreferredWrappedTextLineCount) return Mathf.Min(laidOutWidth, measuredWidth);
 
             return Mathf.Max(laidOutWidth, measuredWidth / PreferredWrappedTextLineCount);
         }

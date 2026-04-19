@@ -154,7 +154,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void FilterInstallableSkillTargets_ReturnsOnlyOptedInTargets()
+        public void FilterInstallableSkillTargets_ReturnsAllDetectedTargets()
         {
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
             {
@@ -165,8 +165,9 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
                 SetupWizardWindow.FilterInstallableSkillTargets(targets);
 
-            Assert.That(installableTargets.Count, Is.EqualTo(1));
+            Assert.That(installableTargets.Count, Is.EqualTo(2));
             Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
+            Assert.That(installableTargets[1].DirName, Is.EqualTo(".cursor"));
         }
 
         [Test]
@@ -189,7 +190,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         public void CreateFirstInstallSkillTarget_WhenClaudeSelected_ReturnsClaudeProjectTarget()
         {
             ToolSkillSynchronizer.SkillTargetInfo target =
-                SetupWizardWindow.CreateFirstInstallSkillTarget(SkillsTarget.Claude);
+                SetupWizardWindow.CreateFirstInstallSkillTarget(SkillsTarget.Claude, true);
 
             Assert.That(target.DisplayName, Is.EqualTo("Claude Code"));
             Assert.That(target.DirName, Is.EqualTo(".claude"));
@@ -209,13 +210,138 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             string expectedInstallFlag)
         {
             ToolSkillSynchronizer.SkillTargetInfo target =
-                SetupWizardWindow.CreateFirstInstallSkillTarget(targetType);
+                SetupWizardWindow.CreateFirstInstallSkillTarget(targetType, true);
 
             Assert.That(target.DisplayName, Is.EqualTo(expectedDisplayName));
             Assert.That(target.DirName, Is.EqualTo(expectedDirName));
             Assert.That(target.InstallFlag, Is.EqualTo(expectedInstallFlag));
             Assert.That(target.HasSkillsDirectory, Is.False);
             Assert.That(target.HasExistingSkills, Is.False);
+        }
+
+        [Test]
+        public void CreateFirstInstallSkillTarget_WhenGroupingDisabled_KeepsTargetMetadata()
+        {
+            ToolSkillSynchronizer.SkillTargetInfo target =
+                SetupWizardWindow.CreateFirstInstallSkillTarget(SkillsTarget.Claude, false);
+
+            Assert.That(target.DisplayName, Is.EqualTo("Claude Code"));
+            Assert.That(target.DirName, Is.EqualTo(".claude"));
+            Assert.That(target.InstallFlag, Is.EqualTo("--claude"));
+        }
+
+        [Test]
+        public void GetSelectedSkillTargetInfo_WhenDetectedTargetExists_ReturnsDetectedState()
+        {
+            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
+            {
+                new(
+                    "Claude Code",
+                    ".claude",
+                    "--claude",
+                    hasSkillsDirectory: true,
+                    hasExistingSkills: true,
+                    installState: SkillInstallState.Installed)
+            };
+
+            ToolSkillSynchronizer.SkillTargetInfo target = SetupWizardWindow.GetSelectedSkillTargetInfo(
+                targets,
+                SkillsTarget.Claude,
+                groupSkillsUnderUnityCliLoop: true);
+
+            Assert.That(target.DirName, Is.EqualTo(".claude"));
+            Assert.That(target.InstallState, Is.EqualTo(SkillInstallState.Installed));
+        }
+
+        [Test]
+        public void GetFirstInstallableSkillTargets_WhenSelectedTargetIsInstalled_ReturnsEmpty()
+        {
+            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
+            {
+                new(
+                    "Claude Code",
+                    ".claude",
+                    "--claude",
+                    hasSkillsDirectory: true,
+                    hasExistingSkills: true,
+                    installState: SkillInstallState.Installed)
+            };
+
+            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
+                SetupWizardWindow.GetFirstInstallableSkillTargets(
+                    targets,
+                    SkillsTarget.Claude,
+                    groupSkillsUnderUnityCliLoop: true);
+
+            Assert.That(installableTargets, Is.Empty);
+        }
+
+        [Test]
+        public void GetFirstInstallableSkillTargets_WhenSelectedTargetIsMissing_ReturnsMappedTarget()
+        {
+            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
+                SetupWizardWindow.GetFirstInstallableSkillTargets(
+                    new List<ToolSkillSynchronizer.SkillTargetInfo>(),
+                    SkillsTarget.Claude,
+                    groupSkillsUnderUnityCliLoop: true);
+
+            Assert.That(installableTargets.Count, Is.EqualTo(1));
+            Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
+            Assert.That(installableTargets[0].InstallState, Is.EqualTo(SkillInstallState.Missing));
+        }
+
+        [TestCase(SkillInstallState.Installed, false, true, "Installed")]
+        [TestCase(SkillInstallState.Checking, false, true, "Checking...")]
+        [TestCase(SkillInstallState.Outdated, false, true, "Outdated")]
+        [TestCase(SkillInstallState.Missing, false, true, "Missing")]
+        [TestCase(SkillInstallState.Missing, true, true, "Not grouped")]
+        [TestCase(SkillInstallState.Missing, true, false, "Grouped")]
+        public void GetSkillInstallStatusText_ReturnsExpectedLabel(
+            SkillInstallState installState,
+            bool hasDifferentLayoutSkills,
+            bool groupSkillsUnderUnityCliLoop,
+            string expectedLabel)
+        {
+            string label = SetupWizardWindow.GetSkillInstallStatusText(
+                installState,
+                hasDifferentLayoutSkills,
+                groupSkillsUnderUnityCliLoop);
+
+            Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
+        [TestCase(true, false, "Installing...")]
+        [TestCase(false, true, "Update Skills")]
+        [TestCase(false, false, "Install Skills")]
+        public void GetInstallSkillsButtonText_ReturnsExpectedLabel(
+            bool isInstallingSkills,
+            bool hasOutdatedSkills,
+            string expectedLabel)
+        {
+            string label = SetupWizardWindow.GetInstallSkillsButtonText(
+                isInstallingSkills,
+                hasOutdatedSkills);
+
+            Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
+        [TestCase(SkillInstallState.Installed, false, true, "setup-target-item__status--installed")]
+        [TestCase(SkillInstallState.Checking, false, true, "setup-target-item__status--checking")]
+        [TestCase(SkillInstallState.Outdated, false, true, "setup-target-item__status--outdated")]
+        [TestCase(SkillInstallState.Missing, false, true, "setup-target-item__status--missing")]
+        [TestCase(SkillInstallState.Missing, true, true, "setup-target-item__status--different-layout")]
+        public void GetSkillInstallStatusClass_ReturnsExpectedClass(
+            SkillInstallState installState,
+            bool hasDifferentLayoutSkills,
+            bool groupSkillsUnderUnityCliLoop,
+            string expectedClass)
+        {
+            string className = SetupWizardWindow.GetSkillInstallStatusClass(
+                installState,
+                hasDifferentLayoutSkills,
+                groupSkillsUnderUnityCliLoop);
+
+            Assert.That(className, Is.EqualTo(expectedClass));
         }
 
         [Test]
@@ -238,6 +364,14 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         public void SelectPreferredTextWidth_WhenWrappedAcrossTwoLines_KeepsLaidOutWidth()
         {
             float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(180f, 320f, 2, WhiteSpace.Normal);
+
+            Assert.That(preferredWidth, Is.EqualTo(180f));
+        }
+
+        [Test]
+        public void SelectPreferredTextWidth_WhenShorterTextFitsWithinCurrentWidth_ShrinksToMeasuredWidth()
+        {
+            float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(420f, 180f, 1, WhiteSpace.Normal);
 
             Assert.That(preferredWidth, Is.EqualTo(180f));
         }

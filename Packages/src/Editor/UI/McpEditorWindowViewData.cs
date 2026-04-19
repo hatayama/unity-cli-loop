@@ -155,7 +155,9 @@ namespace io.github.hatayama.uLoopMCP
         public readonly bool IsGeminiSkillsInstalled;
         public readonly bool IsCodexSkillsInstalled;
         public readonly bool IsAntigravitySkillsInstalled;
+        public readonly SkillInstallState SelectedTargetInstallState;
         public readonly SkillsTarget SelectedTarget;
+        public readonly bool GroupSkillsUnderUnityCliLoop;
         public readonly bool IsInstallingSkills;
 
         public CliSetupData(
@@ -172,7 +174,9 @@ namespace io.github.hatayama.uLoopMCP
             bool isGeminiSkillsInstalled,
             bool isCodexSkillsInstalled,
             bool isAntigravitySkillsInstalled,
+            SkillInstallState selectedTargetInstallState,
             SkillsTarget selectedTarget,
+            bool groupSkillsUnderUnityCliLoop,
             bool isInstallingSkills)
         {
             IsCliInstalled = isCliInstalled;
@@ -188,7 +192,9 @@ namespace io.github.hatayama.uLoopMCP
             IsGeminiSkillsInstalled = isGeminiSkillsInstalled;
             IsCodexSkillsInstalled = isCodexSkillsInstalled;
             IsAntigravitySkillsInstalled = isAntigravitySkillsInstalled;
+            SelectedTargetInstallState = selectedTargetInstallState;
             SelectedTarget = selectedTarget;
+            GroupSkillsUnderUnityCliLoop = groupSkillsUnderUnityCliLoop;
             IsInstallingSkills = isInstallingSkills;
         }
     }

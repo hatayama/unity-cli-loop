@@ -82,9 +82,7 @@ crashlytics-build.properties
 *.DS_Store
 
 # AI
-.cursor
 .claude/settings.local.json
-.gemini
 .kiro
 .mcp.json
 .inspector.mcp.json

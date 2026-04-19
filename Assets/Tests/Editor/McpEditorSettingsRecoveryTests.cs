@@ -105,6 +105,28 @@ namespace io.github.hatayama.uLoopMCP
             Assert.AreEqual(primaryData.customPort, restored.customPort);
         }
 
+        [Test]
+        public void GetInstallSkillsFlat_WhenMissingFromSettings_DefaultsToFalse()
+        {
+            File.WriteAllText(SettingsFilePath, "{\"customPort\":18446}");
+            McpEditorSettings.InvalidateCache();
+
+            bool installSkillsFlat = McpEditorSettings.GetInstallSkillsFlat();
+
+            Assert.IsFalse(installSkillsFlat);
+        }
+
+        [Test]
+        public void SetInstallSkillsFlat_PersistsValue()
+        {
+            McpEditorSettings.SetInstallSkillsFlat(true);
+            McpEditorSettings.InvalidateCache();
+
+            bool installSkillsFlat = McpEditorSettings.GetInstallSkillsFlat();
+
+            Assert.IsTrue(installSkillsFlat);
+        }
+
         private static void RestoreFile(string path, bool existed, string content)
         {
             if (existed)

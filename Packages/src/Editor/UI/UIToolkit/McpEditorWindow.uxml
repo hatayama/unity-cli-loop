@@ -22,9 +22,17 @@
 
                         <ui:VisualElement name="skills-subsection">
                             <ui:Label text="Skills" class="mcp-cli-subsection-header" />
+                            <ui:VisualElement name="group-skills-row" class="mcp-toggle-row">
+                                <ui:Toggle name="group-skills-toggle" class="mcp-toggle-row__toggle" />
+                                <ui:Label
+                                    name="group-skills-label"
+                                    text="Group in subfolder"
+                                    class="mcp-toggle-row__label" />
+                            </ui:VisualElement>
                             <ui:VisualElement class="mcp-target-row">
                                 <ui:Label text="Target:" class="mcp-target-row__label" />
                                 <uie:EnumField name="skills-target-field" class="mcp-target-row__field" />
+                                <ui:Button name="refresh-skills-state-button" text="↻" class="mcp-button--refresh" />
                             </ui:VisualElement>
                             <ui:Button name="install-skills-button" text="Install Skills" class="mcp-button mcp-button--configure" />
                         </ui:VisualElement>

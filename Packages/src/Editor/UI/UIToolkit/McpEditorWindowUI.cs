@@ -35,7 +35,9 @@ namespace io.github.hatayama.uLoopMCP
         public event Action OnRefreshCliVersion;
         public event Action OnInstallCli;
         public event Action OnInstallSkills;
+        public event Action OnRefreshSkillsState;
         public event Action<SkillsTarget> OnSkillsTargetChanged;
+        public event Action<bool> OnGroupSkillsChanged;
         public event Action<bool> OnConfigurationFoldoutChanged;
         public event Action<bool> OnConnectedToolsFoldoutChanged;
         public event Action<McpEditorType> OnEditorTypeChanged;
@@ -99,7 +101,9 @@ namespace io.github.hatayama.uLoopMCP
             _cliSetupSection.OnRefreshCliVersion += () => OnRefreshCliVersion?.Invoke();
             _cliSetupSection.OnInstallCli += () => OnInstallCli?.Invoke();
             _cliSetupSection.OnInstallSkills += () => OnInstallSkills?.Invoke();
+            _cliSetupSection.OnRefreshSkillsState += () => OnRefreshSkillsState?.Invoke();
             _cliSetupSection.OnSkillsTargetChanged += value => OnSkillsTargetChanged?.Invoke(value);
+            _cliSetupSection.OnGroupSkillsChanged += value => OnGroupSkillsChanged?.Invoke(value);
 
             _mainScrollView = _root.Q<ScrollView>("main-scroll-view");
             ConfigureScrollView();

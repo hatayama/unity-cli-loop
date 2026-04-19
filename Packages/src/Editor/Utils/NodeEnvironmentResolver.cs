@@ -15,22 +15,12 @@ namespace io.github.hatayama.uLoopMCP
 
         public static string FindNodePath()
         {
-            if (Application.platform == RuntimePlatform.WindowsEditor)
-            {
-                return FindExecutableWindows("node");
-            }
-
-            return FindExecutableUnix("node");
+            return FindNodePathAtPlatform(Application.platform);
         }
 
         public static IEnumerable<string> FindAllNodePaths()
         {
-            if (Application.platform == RuntimePlatform.WindowsEditor)
-            {
-                return FindAllExecutablePathsWindows("node");
-            }
-
-            return FindAllExecutablePathsUnix("node");
+            return FindAllNodePathsAtPlatform(Application.platform);
         }
 
         /// <summary>
@@ -40,22 +30,12 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public static string FindExecutablePath(string executableName)
         {
-            if (Application.platform == RuntimePlatform.WindowsEditor)
-            {
-                return FindExecutableWindows(executableName);
-            }
-
-            return FindExecutableUnix(executableName);
+            return FindExecutablePathAtPlatform(executableName, Application.platform);
         }
 
         public static string FindNpmPath()
         {
-            if (Application.platform == RuntimePlatform.WindowsEditor)
-            {
-                return FindExecutableWindows("npm");
-            }
-
-            return FindExecutableUnix("npm");
+            return FindExecutablePathAtPlatform("npm", Application.platform);
         }
 
         /// <summary>
@@ -64,18 +44,51 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public static void SetupEnvironmentPath(ProcessStartInfo startInfo, string executablePath)
         {
+            SetupEnvironmentPathAtPlatform(startInfo, executablePath, Application.platform);
+        }
+
+        internal static string FindNodePathAtPlatform(RuntimePlatform platform)
+        {
+            return FindExecutablePathAtPlatform("node", platform);
+        }
+
+        internal static IEnumerable<string> FindAllNodePathsAtPlatform(RuntimePlatform platform)
+        {
+            if (IsWindowsEditor(platform))
+            {
+                return FindAllExecutablePathsWindows("node");
+            }
+
+            return FindAllExecutablePathsUnix("node");
+        }
+
+        internal static string FindExecutablePathAtPlatform(string executableName, RuntimePlatform platform)
+        {
+            if (IsWindowsEditor(platform))
+            {
+                return FindExecutableWindows(executableName);
+            }
+
+            return FindExecutableUnix(executableName);
+        }
+
+        internal static void SetupEnvironmentPathAtPlatform(
+            ProcessStartInfo startInfo,
+            string executablePath,
+            RuntimePlatform platform)
+        {
             if (string.IsNullOrEmpty(executablePath))
             {
                 return;
             }
 
             string executableDir = Path.GetDirectoryName(executablePath);
-            string loginShellPath = GetLoginShellPath();
+            string loginShellPath = GetLoginShellPathAtPlatform(platform);
             string basePath = !string.IsNullOrEmpty(loginShellPath)
                 ? loginShellPath
                 : (System.Environment.GetEnvironmentVariable("PATH") ?? "");
 
-            string separator = Application.platform == RuntimePlatform.WindowsEditor ? ";" : ":";
+            string separator = IsWindowsEditor(platform) ? ";" : ":";
 
             if (!string.IsNullOrEmpty(executableDir))
             {
@@ -266,7 +279,12 @@ namespace io.github.hatayama.uLoopMCP
         // Uses markers to extract PATH value, ignoring any banner/echo output from shell startup files
         private static string GetLoginShellPath()
         {
-            if (Application.platform == RuntimePlatform.WindowsEditor)
+            return GetLoginShellPathAtPlatform(Application.platform);
+        }
+
+        private static string GetLoginShellPathAtPlatform(RuntimePlatform platform)
+        {
+            if (IsWindowsEditor(platform))
             {
                 return null;
             }
@@ -343,6 +361,11 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             return "/bin/sh";
+        }
+
+        private static bool IsWindowsEditor(RuntimePlatform platform)
+        {
+            return platform == RuntimePlatform.WindowsEditor;
         }
     }
 }

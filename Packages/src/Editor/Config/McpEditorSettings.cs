@@ -41,6 +41,7 @@ namespace io.github.hatayama.uLoopMCP
 
         // Repository Root Toggle
         public bool addRepositoryRoot = false;
+        public bool installSkillsFlat = false;
         
         // Session State Settings (moved from McpSessionManager)
         // Default to true so the server starts automatically on fresh install
@@ -338,6 +339,18 @@ namespace io.github.hatayama.uLoopMCP
         {
             McpEditorSettingsData settings = GetSettings();
             McpEditorSettingsData newSettings = settings with { addRepositoryRoot = addRepositoryRoot };
+            SaveSettings(newSettings);
+        }
+
+        public static bool GetInstallSkillsFlat()
+        {
+            return GetSettings().installSkillsFlat;
+        }
+
+        public static void SetInstallSkillsFlat(bool installSkillsFlat)
+        {
+            McpEditorSettingsData settings = GetSettings();
+            McpEditorSettingsData newSettings = settings with { installSkillsFlat = installSkillsFlat };
             SaveSettings(newSettings);
         }
 

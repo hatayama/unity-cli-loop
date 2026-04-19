@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -55,24 +56,36 @@ namespace io.github.hatayama.uLoopMCP
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
-            string skillsDir = Path.Combine(projectRoot, targetDir, "skills");
+            return AreSkillsInstalled(projectRoot, targetDir);
+        }
 
-            if (!Directory.Exists(skillsDir))
-            {
-                return false;
-            }
+        public static bool AreSkillsInstalled(string targetDir, bool groupSkillsUnderUnityCliLoop)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
-            string[] dirs = Directory.GetDirectories(skillsDir, CliConstants.SKILL_DIR_GLOB);
-            foreach (string dir in dirs)
-            {
-                string skillFile = Path.Combine(dir, "SKILL.md");
-                if (File.Exists(skillFile))
-                {
-                    return true;
-                }
-            }
+            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            return AreSkillsInstalled(projectRoot, targetDir, groupSkillsUnderUnityCliLoop);
+        }
 
-            return false;
+        internal static bool AreSkillsInstalled(string projectRoot, string targetDir)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
+
+            string targetRoot = Path.Combine(projectRoot, targetDir);
+            return SkillInstallLayout.HasInstalledSkills(targetRoot);
+        }
+
+        internal static bool AreSkillsInstalled(
+            string projectRoot,
+            string targetDir,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
+
+            string targetRoot = Path.Combine(projectRoot, targetDir);
+            return SkillInstallLayout.HasInstalledSkills(targetRoot, groupSkillsUnderUnityCliLoop);
         }
 
         public static async Task ForceRefreshCliVersionAsync(CancellationToken ct)
@@ -91,9 +104,15 @@ namespace io.github.hatayama.uLoopMCP
 
         private static Task<string> DetectCliVersionAsync(CancellationToken ct)
         {
-            TaskCompletionSource<string> tcs = new TaskCompletionSource<string>();
+            RuntimePlatform platform = Application.platform;
+            return Task.Run(() => DetectCliVersionBlocking(platform, ct), ct);
+        }
 
-            string executablePath = NodeEnvironmentResolver.FindExecutablePath(CliConstants.EXECUTABLE_NAME);
+        internal static string DetectCliVersionBlocking(RuntimePlatform platform, CancellationToken ct)
+        {
+            string executablePath = NodeEnvironmentResolver.FindExecutablePathAtPlatform(
+                CliConstants.EXECUTABLE_NAME,
+                platform);
             // FindExecutablePath resolves .cmd shims on Windows via 'where' command
             string fileName = executablePath ?? CliConstants.EXECUTABLE_NAME;
 
@@ -107,13 +126,13 @@ namespace io.github.hatayama.uLoopMCP
                 CreateNoWindow = true
             };
 
-            NodeEnvironmentResolver.SetupEnvironmentPath(startInfo, NodeEnvironmentResolver.FindNodePath());
+            string nodePath = NodeEnvironmentResolver.FindNodePathAtPlatform(platform);
+            NodeEnvironmentResolver.SetupEnvironmentPathAtPlatform(startInfo, nodePath, platform);
 
             Process process = ProcessStartHelper.TryStart(startInfo);
             if (process == null)
             {
-                tcs.SetResult(null);
-                return tcs.Task;
+                return null;
             }
 
             StringBuilder outputBuilder = new StringBuilder();
@@ -130,43 +149,40 @@ namespace io.github.hatayama.uLoopMCP
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            ct.Register(() =>
+            using CancellationTokenRegistration registration = ct.Register(() =>
             {
-                tcs.TrySetResult(null);
                 try { process.Kill(); } catch (System.InvalidOperationException) { }
             });
 
-            _ = Task.Run(() =>
+            try
             {
-                try
+                bool exited = process.WaitForExit(PROCESS_TIMEOUT_MS);
+
+                if (!exited)
                 {
-                    bool exited = process.WaitForExit(PROCESS_TIMEOUT_MS);
-
-                    if (!exited)
-                    {
-                        try { process.Kill(); } catch (System.InvalidOperationException) { }
-                        process.Dispose();
-                        tcs.TrySetResult(null);
-                        return;
-                    }
-
-                    // Parameterless WaitForExit flushes async output buffers
-                    process.WaitForExit();
-
-                    string output = outputBuilder.ToString().Trim();
-                    bool failed = process.ExitCode != 0 || string.IsNullOrEmpty(output);
+                    try { process.Kill(); } catch (System.InvalidOperationException) { }
                     process.Dispose();
-
-                    tcs.TrySetResult(failed ? null : output);
+                    return null;
                 }
-                catch
+
+                // Parameterless WaitForExit flushes async output buffers
+                process.WaitForExit();
+
+                string output = outputBuilder.ToString().Trim();
+                bool failed = process.ExitCode != 0 || string.IsNullOrEmpty(output);
+                process.Dispose();
+
+                return failed ? null : output;
+            }
+            catch (Exception ex)
+            {
+                process.Dispose();
+                if (!ct.IsCancellationRequested)
                 {
-                    process.Dispose();
-                    tcs.TrySetResult(null);
+                    UnityEngine.Debug.LogWarning($"[uLoopMCP] Failed to detect CLI version: {ex.Message}");
                 }
-            });
-
-            return tcs.Task;
+                return null;
+            }
         }
     }
 
