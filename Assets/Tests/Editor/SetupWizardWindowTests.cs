@@ -187,6 +187,22 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
+        public void CanManageSkills_WhenCliIsMissing_ReturnsFalse()
+        {
+            bool canManageSkills = SetupWizardWindow.CanManageSkills(cliInstalled: false);
+
+            Assert.That(canManageSkills, Is.False);
+        }
+
+        [Test]
+        public void CanManageSkills_WhenCliIsInstalled_ReturnsTrue()
+        {
+            bool canManageSkills = SetupWizardWindow.CanManageSkills(cliInstalled: true);
+
+            Assert.That(canManageSkills, Is.True);
+        }
+
+        [Test]
         public void CreateFirstInstallSkillTarget_WhenClaudeSelected_ReturnsClaudeProjectTarget()
         {
             ToolSkillSynchronizer.SkillTargetInfo target =

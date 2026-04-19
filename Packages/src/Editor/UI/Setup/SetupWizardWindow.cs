@@ -326,11 +326,12 @@ namespace io.github.hatayama.uLoopMCP
         private void RefreshSkillsSection()
         {
             string cachedCliVersion = CliInstallationDetector.GetCachedCliVersion();
-            bool cliVersionMatched = IsCliVersionMatched(cachedCliVersion);
+            bool cliInstalled = !string.IsNullOrEmpty(cachedCliVersion);
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
-            UpdateSkillsStep(cliVersionMatched, targets);
-            BeginRefreshDisplayedSkillTargets(cliVersionMatched);
+            bool canManageSkills = CanManageSkills(cliInstalled);
+            UpdateSkillsStep(canManageSkills, targets);
+            BeginRefreshDisplayedSkillTargets(canManageSkills);
             ScheduleResizeToContent();
         }
 
@@ -370,8 +371,9 @@ namespace io.github.hatayama.uLoopMCP
 
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
-            UpdateSkillsStep(cliVersionMatched, targets);
-            BeginRefreshDisplayedSkillTargets(cliVersionMatched);
+            bool canManageSkills = CanManageSkills(cliInstalled);
+            UpdateSkillsStep(canManageSkills, targets);
+            BeginRefreshDisplayedSkillTargets(canManageSkills);
             ScheduleResizeToContent();
         }
 
@@ -385,10 +387,10 @@ namespace io.github.hatayama.uLoopMCP
             return ToolSkillSynchronizer.DetectTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
         }
 
-        private void BeginRefreshDisplayedSkillTargets(bool cliVersionMatched)
+        private void BeginRefreshDisplayedSkillTargets(bool canManageSkills)
         {
             CancelSkillInstallStateRefresh();
-            if (!cliVersionMatched || _isInstallingSkills)
+            if (!canManageSkills || _isInstallingSkills)
             {
                 return;
             }
@@ -408,7 +410,7 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            UpdateSkillsStep(cliInstalled: true, targets);
+            UpdateSkillsStep(canManageSkills: true, targets);
             ScheduleResizeToContent();
         }
 
@@ -434,6 +436,11 @@ namespace io.github.hatayama.uLoopMCP
         internal static bool ShouldUseFirstInstallSkillsUi(bool hasShownSetupWizardSkillsSelection)
         {
             return !hasShownSetupWizardSkillsSelection;
+        }
+
+        internal static bool CanManageSkills(bool cliInstalled)
+        {
+            return cliInstalled;
         }
 
         internal static ToolSkillSynchronizer.SkillTargetInfo CreateFirstInstallSkillTarget(
@@ -522,12 +529,12 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         private void UpdateSkillsStep(
-            bool cliInstalled,
+            bool canManageSkills,
             List<ToolSkillSynchronizer.SkillTargetInfo> targets)
         {
             _skillsTargetList.Clear();
 
-            if (!cliInstalled)
+            if (!canManageSkills)
             {
                 UpdateSkillsStatusLabel(string.Empty);
                 _installSkillsButton.SetEnabled(false);
