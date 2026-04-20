@@ -430,7 +430,9 @@ namespace io.github.hatayama.uLoopMCP
             IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets)
         {
             Debug.Assert(targets != null, "targets must not be null");
-            return targets.ToList();
+            return targets
+                .Where(target => target.HasSkillsDirectory)
+                .ToList();
         }
 
         internal static bool ShouldUseFirstInstallSkillsUi(bool hasShownSetupWizardSkillsSelection)
@@ -575,7 +577,7 @@ namespace io.github.hatayama.uLoopMCP
 
             List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets = FilterInstallableSkillTargets(targets);
 
-            foreach (ToolSkillSynchronizer.SkillTargetInfo target in targets)
+            foreach (ToolSkillSynchronizer.SkillTargetInfo target in installableTargets)
             {
                 VisualElement item = new VisualElement();
                 item.AddToClassList("setup-target-item");

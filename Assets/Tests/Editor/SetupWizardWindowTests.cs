@@ -154,12 +154,13 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void FilterInstallableSkillTargets_ReturnsAllDetectedTargets()
+        public void FilterInstallableSkillTargets_ExcludesTargetsWithoutSkillsDirectory()
         {
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
             {
                 new("Claude Code", ".claude", "--claude", true, true),
-                new("Cursor", ".cursor", "--cursor", false, false)
+                new("Cursor", ".cursor", "--cursor", false, false),
+                new("Codex CLI", ".codex", "--codex", true, false, hasDifferentLayoutSkills: true)
             };
 
             List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
@@ -167,7 +168,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
 
             Assert.That(installableTargets.Count, Is.EqualTo(2));
             Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
-            Assert.That(installableTargets[1].DirName, Is.EqualTo(".cursor"));
+            Assert.That(installableTargets[1].DirName, Is.EqualTo(".codex"));
         }
 
         [Test]
