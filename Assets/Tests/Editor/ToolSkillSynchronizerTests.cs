@@ -279,6 +279,26 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public void DetectTargets_WhenGroupedLayoutRequested_DetectsEmptyFlatManagedDirectories()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            string targetRoot = Path.Combine(temporaryRoot, ".cursor");
+            Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
+
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
+                    temporaryRoot,
+                    requireSkillsDirectory: true,
+                    groupSkillsUnderUnityCliLoop: true)
+                .ToArray();
+
+            Assert.That(detectedTargets.Length, Is.EqualTo(1));
+            Assert.IsFalse(detectedTargets[0].HasExistingSkills,
+                "Grouped layout should still treat empty flat directories as not installed");
+            Assert.IsTrue(detectedTargets[0].HasDifferentLayoutSkills,
+                "Empty flat managed directories should still be surfaced as a different layout");
+        }
+
+        [Test]
         public void DetectTargets_WhenFlatLayoutRequested_IgnoresGroupedInstalledSkills()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
@@ -445,6 +465,17 @@ namespace io.github.hatayama.uLoopMCP
                 "uloop-compile"));
             Assert.IsTrue(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".codex", true));
             Assert.IsFalse(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".codex", false));
+        }
+
+        [Test]
+        public void AreSkillsInstalled_WhenLegacyManagedDirectoryIsEmpty_StillDetectsFlatLayout()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            string targetRoot = Path.Combine(temporaryRoot, ".cursor");
+            Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
+
+            Assert.IsTrue(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".cursor", false));
+            Assert.IsFalse(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".cursor", true));
         }
 
         [Test]

@@ -90,8 +90,7 @@ namespace io.github.hatayama.uLoopMCP
 
         internal static bool HasInstalledSkills(string targetRoot)
         {
-            return EnumerateInstalledSkillDirectories(targetRoot)
-                .Any(skillDir => File.Exists(Path.Combine(skillDir, SkillFileName)));
+            return EnumerateInstalledSkillDirectories(targetRoot).Any();
         }
 
         internal static bool HasInstalledSkills(string targetRoot, bool groupSkillsUnderUnityCliLoop)
@@ -99,7 +98,7 @@ namespace io.github.hatayama.uLoopMCP
             IEnumerable<string> skillDirs = groupSkillsUnderUnityCliLoop
                 ? EnumerateManagedSkillDirectories(targetRoot)
                 : EnumerateLegacyManagedSkillDirectories(targetRoot);
-            return skillDirs.Any(skillDir => File.Exists(Path.Combine(skillDir, SkillFileName)));
+            return skillDirs.Any();
         }
 
         internal static SkillInstallState GetInstalledState(
@@ -223,6 +222,12 @@ namespace io.github.hatayama.uLoopMCP
 
         private static bool IsLegacyManagedSkillDirectory(string skillDir)
         {
+            string dirName = Path.GetFileName(skillDir);
+            if (dirName.StartsWith(CliConstants.SKILL_DIR_PREFIX, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
             string skillMdPath = Path.Combine(skillDir, SkillFileName);
             if (!File.Exists(skillMdPath))
             {
@@ -235,8 +240,7 @@ namespace io.github.hatayama.uLoopMCP
                 return true;
             }
 
-            string dirName = Path.GetFileName(skillDir);
-            return dirName.StartsWith(CliConstants.SKILL_DIR_PREFIX);
+            return false;
         }
 
         private static string GetInstalledSkillDirectoryPath(
