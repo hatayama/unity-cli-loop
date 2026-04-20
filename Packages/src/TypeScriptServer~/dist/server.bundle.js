@@ -26719,22 +26719,18 @@ function unsafeStringify(arr, offset = 0) {
 }
 
 // node_modules/uuid/dist-node/rng.js
-import { randomFillSync } from "node:crypto";
-var rnds8Pool = new Uint8Array(256);
-var poolPtr = rnds8Pool.length;
+var rnds8 = new Uint8Array(16);
 function rng() {
-  if (poolPtr > rnds8Pool.length - 16) {
-    randomFillSync(rnds8Pool);
-    poolPtr = 0;
-  }
-  return rnds8Pool.slice(poolPtr, poolPtr += 16);
+  return crypto.getRandomValues(rnds8);
 }
 
-// node_modules/uuid/dist-node/native.js
-import { randomUUID } from "node:crypto";
-var native_default = { randomUUID };
-
 // node_modules/uuid/dist-node/v4.js
+function v4(options, buf, offset) {
+  if (!buf && !options && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return _v4(options, buf, offset);
+}
 function _v4(options, buf, offset) {
   options = options || {};
   const rnds = options.random ?? options.rng?.() ?? rng();
@@ -26754,12 +26750,6 @@ function _v4(options, buf, offset) {
     return buf;
   }
   return unsafeStringify(rnds);
-}
-function v4(options, buf, offset) {
-  if (native_default.randomUUID && !buf && !options) {
-    return native_default.randomUUID();
-  }
-  return _v4(options, buf, offset);
 }
 var v4_default = v4;
 
