@@ -15,6 +15,18 @@ jest.mock('../execute-tool.js', () => ({
   prewarmDynamicCodeAfterLaunch: jest.fn(),
 }));
 
+const mockSpinnerUpdate = jest.fn<void, [string]>();
+const mockSpinnerStop = jest.fn<void, []>();
+const mockCreateSpinner = jest.fn<
+  { update: (message: string) => void; stop: () => void },
+  [string]
+>();
+
+jest.mock('../spinner.js', () => ({
+  createSpinner: (message: string): { update: (message: string) => void; stop: () => void } =>
+    mockCreateSpinner(message),
+}));
+
 jest.mock('../tool-settings-loader.js', () => ({
   isToolEnabled: jest.fn(),
 }));
@@ -40,6 +52,13 @@ describe('launch command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    mockCreateSpinner.mockReset();
+    mockCreateSpinner.mockReturnValue({
+      update: (message: string): void => mockSpinnerUpdate(message),
+      stop: (): void => mockSpinnerStop(),
+    });
+    mockSpinnerUpdate.mockReset();
+    mockSpinnerStop.mockReset();
   });
 
   afterEach(() => {
@@ -59,6 +78,9 @@ describe('launch command', () => {
 
     await program.parseAsync(['node', 'uloop', 'launch', '/project']);
 
+    expect(mockCreateSpinner).toHaveBeenCalledWith('Launching Unity...');
+    expect(mockSpinnerUpdate).toHaveBeenCalledWith('Waiting for Unity to finish starting...');
+    expect(mockSpinnerStop).toHaveBeenCalledTimes(1);
     expect(waitForLaunchReadyAfterLaunchMock).toHaveBeenCalledWith('/project');
     expect(waitForDynamicCodeReadyAfterLaunchMock).not.toHaveBeenCalled();
     expect(prewarmDynamicCodeAfterLaunchMock).not.toHaveBeenCalled();
@@ -77,9 +99,33 @@ describe('launch command', () => {
 
     await program.parseAsync(['node', 'uloop', 'launch', '/project']);
 
+    expect(mockCreateSpinner).toHaveBeenCalledWith('Launching Unity...');
+    expect(mockSpinnerUpdate).toHaveBeenCalledTimes(1);
+    expect(mockSpinnerUpdate).toHaveBeenCalledWith('Waiting for Unity to finish starting...');
+    expect(mockSpinnerStop).toHaveBeenCalledTimes(1);
     expect(waitForDynamicCodeReadyAfterLaunchMock).toHaveBeenCalledWith('/project');
     expect(prewarmDynamicCodeAfterLaunchMock).toHaveBeenCalledWith({ projectRoot: '/project' });
     expect(consoleLogSpy).not.toHaveBeenCalledWith('Waiting for execute-dynamic-code warmup...');
     expect(consoleLogSpy).not.toHaveBeenCalledWith('execute-dynamic-code is ready.');
+  });
+
+  it('stops spinner without readiness waits when Unity is already running', async () => {
+    orchestrateLaunchMock.mockResolvedValue({
+      action: 'focused',
+      projectPath: '/project',
+      pid: 4321,
+    });
+
+    const program = new Command();
+    registerLaunchCommand(program);
+
+    await program.parseAsync(['node', 'uloop', 'launch', '/project']);
+
+    expect(mockCreateSpinner).toHaveBeenCalledWith('Launching Unity...');
+    expect(mockSpinnerUpdate).not.toHaveBeenCalled();
+    expect(mockSpinnerStop).toHaveBeenCalledTimes(1);
+    expect(waitForLaunchReadyAfterLaunchMock).not.toHaveBeenCalled();
+    expect(waitForDynamicCodeReadyAfterLaunchMock).not.toHaveBeenCalled();
+    expect(prewarmDynamicCodeAfterLaunchMock).not.toHaveBeenCalled();
   });
 });
