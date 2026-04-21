@@ -72,6 +72,15 @@ describe('launch command', () => {
       unityVersion: '2022.3.0f1',
     });
     isToolEnabledMock.mockReturnValue(false);
+    waitForLaunchReadyAfterLaunchMock.mockResolvedValue({
+      port: 8711,
+      projectRoot: '/project',
+      requestMetadata: {
+        expectedProjectRoot: '/project',
+        expectedServerSessionId: 'session-1',
+      },
+      shouldValidateProject: false,
+    });
 
     const program = new Command();
     registerLaunchCommand(program);
@@ -93,6 +102,15 @@ describe('launch command', () => {
       unityVersion: '2022.3.0f1',
     });
     isToolEnabledMock.mockReturnValue(true);
+    waitForDynamicCodeReadyAfterLaunchMock.mockResolvedValue({
+      port: 8711,
+      projectRoot: '/project',
+      requestMetadata: {
+        expectedProjectRoot: '/project',
+        expectedServerSessionId: 'session-1',
+      },
+      shouldValidateProject: false,
+    });
 
     const program = new Command();
     registerLaunchCommand(program);
@@ -103,7 +121,7 @@ describe('launch command', () => {
     expect(mockSpinnerUpdate).not.toHaveBeenCalled();
     expect(mockSpinnerStop).toHaveBeenCalledTimes(1);
     expect(waitForDynamicCodeReadyAfterLaunchMock).toHaveBeenCalledWith('/project');
-    expect(prewarmDynamicCodeAfterLaunchMock).toHaveBeenCalledWith({ projectRoot: '/project' });
+    expect(prewarmDynamicCodeAfterLaunchMock).toHaveBeenCalledWith({ port: 8711 });
     expect(consoleLogSpy).not.toHaveBeenCalledWith('Waiting for execute-dynamic-code warmup...');
     expect(consoleLogSpy).not.toHaveBeenCalledWith('execute-dynamic-code is ready.');
   });

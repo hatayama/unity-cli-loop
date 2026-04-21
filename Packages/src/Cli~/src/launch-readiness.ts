@@ -7,7 +7,6 @@ import {
   resolveUnityConnection,
   UnityNotRunningError,
 } from './port-resolver.js';
-import { ProjectMismatchError, validateConnectedProject } from './project-validator.js';
 import { isRetryableFastProjectValidationErrorMessage } from './request-metadata.js';
 
 // Launch readiness lock paths are built from the resolved project root selected by launch.
@@ -128,10 +127,6 @@ function isTransientCompilationProviderUnavailable(errorMessage: string): boolea
 }
 
 function isRetryableLaunchReadinessError(error: unknown): boolean {
-  if (error instanceof ProjectMismatchError) {
-    return true;
-  }
-
   if (error instanceof UnityNotRunningError) {
     return true;
   }
@@ -200,26 +195,25 @@ function isLaunchReadinessStable(payload: ExecuteDynamicCodeReadinessResponse): 
   return requestTotalMilliseconds <= LAUNCH_READINESS_REQUEST_TOTAL_THRESHOLD_MS;
 }
 
+function hasFastSessionMetadata(connection: ResolvedUnityConnection): boolean {
+  // Why: launch already waits for the target Unity instance to publish its session identity.
+  // Why not fall back to get-version here: startup can answer that probe before project identity
+  // is stable, which produces spurious warnings and undermines the readiness contract.
+  return connection.requestMetadata !== null;
+}
+
 export async function waitForDynamicCodeReadyAfterLaunch(
   projectPath: string,
   dependencies: DynamicCodeLaunchReadinessDependencies = defaultDependencies,
-): Promise<void> {
+): Promise<ResolvedUnityConnection> {
   const startTime: number = dependencies.nowFn();
   const totalProbeStageCount = LAUNCH_READINESS_REQUIRED_STABLE_PROBE_COUNT + 1;
   const isProjectBusyFn = dependencies.isProjectBusyFn ?? isProjectBusyByLockFiles;
   let currentProbeStage = 0;
   let firstSuccessfulProbeTime: number | null = null;
+  let probeSessionId: string | null = null;
 
   while (dependencies.nowFn() - startTime < LAUNCH_READINESS_TIMEOUT_MS) {
-    if (currentProbeStage >= totalProbeStageCount) {
-      if (!isProjectBusyFn(projectPath)) {
-        return;
-      }
-
-      await dependencies.sleepFn(LAUNCH_READINESS_RETRY_MS);
-      continue;
-    }
-
     let client: DirectUnityClient | null = null;
 
     try {
@@ -227,10 +221,31 @@ export async function waitForDynamicCodeReadyAfterLaunch(
         undefined,
         projectPath,
       );
+      if (!hasFastSessionMetadata(connection)) {
+        currentProbeStage = 0;
+        firstSuccessfulProbeTime = null;
+        probeSessionId = null;
+        await dependencies.sleepFn(LAUNCH_READINESS_RETRY_MS);
+        continue;
+      }
+
+      const resolvedSessionId = connection.requestMetadata?.expectedServerSessionId ?? null;
+      if (probeSessionId !== null && probeSessionId !== resolvedSessionId) {
+        currentProbeStage = 0;
+        firstSuccessfulProbeTime = null;
+      }
+      probeSessionId = resolvedSessionId;
+
       client = dependencies.createClient(connection.port);
       await client.connect();
-      if (connection.shouldValidateProject && connection.projectRoot !== null) {
-        await validateConnectedProject(client, connection.projectRoot);
+
+      if (currentProbeStage >= totalProbeStageCount) {
+        if (!isProjectBusyFn(projectPath)) {
+          return connection;
+        }
+
+        await dependencies.sleepFn(LAUNCH_READINESS_RETRY_MS);
+        continue;
       }
 
       const payload = await client.sendRequest<ExecuteDynamicCodeReadinessResponse>(
@@ -256,7 +271,7 @@ export async function waitForDynamicCodeReadyAfterLaunch(
             currentProbeStage++;
             firstSuccessfulProbeTime = null;
             if (currentProbeStage >= totalProbeStageCount && !isProjectBusyFn(projectPath)) {
-              return;
+              return connection;
             }
           } else {
             if (firstSuccessfulProbeTime === null) {
@@ -268,7 +283,7 @@ export async function waitForDynamicCodeReadyAfterLaunch(
               currentProbeStage++;
               firstSuccessfulProbeTime = null;
               if (currentProbeStage >= totalProbeStageCount && !isProjectBusyFn(projectPath)) {
-                return;
+                return connection;
               }
             }
           }
@@ -305,7 +320,7 @@ export async function waitForDynamicCodeReadyAfterLaunch(
 export async function waitForLaunchReadyAfterLaunch(
   projectPath: string,
   dependencies: DynamicCodeLaunchReadinessDependencies = defaultDependencies,
-): Promise<void> {
+): Promise<ResolvedUnityConnection> {
   const startTime: number = dependencies.nowFn();
   const isProjectBusyFn = dependencies.isProjectBusyFn ?? isProjectBusyByLockFiles;
 
@@ -317,14 +332,16 @@ export async function waitForLaunchReadyAfterLaunch(
         undefined,
         projectPath,
       );
-      client = dependencies.createClient(connection.port);
-      await client.connect();
-      if (connection.projectRoot !== null) {
-        await validateConnectedProject(client, connection.projectRoot);
+      if (!hasFastSessionMetadata(connection)) {
+        await dependencies.sleepFn(LAUNCH_READINESS_RETRY_MS);
+        continue;
       }
 
+      client = dependencies.createClient(connection.port);
+      await client.connect();
+
       if (!isProjectBusyFn(projectPath)) {
-        return;
+        return connection;
       }
     } catch (error) {
       if (!isRetryableLaunchReadinessError(error)) {

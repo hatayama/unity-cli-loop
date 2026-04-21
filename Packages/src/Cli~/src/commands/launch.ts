@@ -15,6 +15,7 @@ import {
   waitForDynamicCodeReadyAfterLaunch,
   waitForLaunchReadyAfterLaunch,
 } from '../launch-readiness.js';
+import { type ResolvedUnityConnection } from '../port-resolver.js';
 import { createSpinner } from '../spinner.js';
 import { isToolEnabled } from '../tool-settings-loader.js';
 
@@ -95,8 +96,10 @@ async function runLaunchCommand(
       return;
     }
 
-    await waitForDynamicCodeReadyAfterLaunch(launchResult.projectPath);
-    await prewarmDynamicCodeAfterLaunch({ projectRoot: launchResult.projectPath });
+    const readinessConnection: ResolvedUnityConnection = await waitForDynamicCodeReadyAfterLaunch(
+      launchResult.projectPath,
+    );
+    await prewarmDynamicCodeAfterLaunch({ port: readinessConnection.port });
   } finally {
     spinner.stop();
   }
