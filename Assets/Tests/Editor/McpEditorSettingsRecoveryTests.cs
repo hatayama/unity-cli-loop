@@ -127,6 +127,27 @@ namespace io.github.hatayama.uLoopMCP
             Assert.IsTrue(installSkillsFlat);
         }
 
+        [Test]
+        public void UpdateSessionState_WhenStartingServerWithProjectRoot_ShouldPersistFullSessionIdentity()
+        {
+            McpServerStartupService service = new();
+            string projectRootPath = Path.Combine(Path.GetTempPath(), "project-root");
+            string expectedProjectRootPath = Path.GetFullPath(projectRootPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            ServiceResult<bool> result = service.UpdateSessionState(
+                true,
+                18447,
+                projectRootPath);
+
+            Assert.IsTrue(result.Success, "Session update should succeed");
+            Assert.AreEqual(18447, McpEditorSettings.GetCustomPort(), "customPort should be updated");
+            Assert.AreEqual(expectedProjectRootPath, McpEditorSettings.GetProjectRootPath(),
+                "projectRootPath should be persisted for fast project validation");
+            Assert.IsFalse(string.IsNullOrWhiteSpace(McpEditorSettings.GetServerSessionId()),
+                "serverSessionId should be generated during startup state persistence");
+        }
+
         private static void RestoreFile(string path, bool existed, string content)
         {
             if (existed)

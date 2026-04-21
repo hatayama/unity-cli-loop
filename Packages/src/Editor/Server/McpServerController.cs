@@ -138,9 +138,6 @@ namespace io.github.hatayama.uLoopMCP
                 // for compatibility with existing code
                 mcpServer = result.ServerInstance;
 
-                // Sync session state with the running server to enable domain reload recovery
-                // even if mcpServer instance becomes null unexpectedly
-                SaveRunningServerSession(mcpServer.Port);
                 DynamicCodeStartupTelemetry.MarkServerReady();
                 CustomToolManager.WarmupRegistry();
                 DynamicCodeServices.ResetServerScopedServices();

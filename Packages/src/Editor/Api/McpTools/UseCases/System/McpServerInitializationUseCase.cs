@@ -123,7 +123,9 @@ namespace io.github.hatayama.uLoopMCP
                 McpBridgeServer serverInstance = serverResult.Data;
 
                 // 5. Session state update
-                var sessionUpdateResult = _startupService.UpdateSessionState(true, availablePort);
+                string projectRootPath = UnityMcpPathResolver.GetProjectRoot();
+                var sessionUpdateResult =
+                    _startupService.UpdateSessionState(true, availablePort, projectRootPath);
                 if (!sessionUpdateResult.Success)
                 {
                     response.Success = false;

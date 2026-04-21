@@ -129,7 +129,7 @@ function isTransientCompilationProviderUnavailable(errorMessage: string): boolea
 
 function isRetryableLaunchReadinessError(error: unknown): boolean {
   if (error instanceof ProjectMismatchError) {
-    return false;
+    return true;
   }
 
   if (error instanceof UnityNotRunningError) {
@@ -319,7 +319,7 @@ export async function waitForLaunchReadyAfterLaunch(
       );
       client = dependencies.createClient(connection.port);
       await client.connect();
-      if (connection.shouldValidateProject && connection.projectRoot !== null) {
+      if (connection.projectRoot !== null) {
         await validateConnectedProject(client, connection.projectRoot);
       }
 

@@ -60,8 +60,12 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         /// <param name="isRunning">Whether the server is running</param>
         /// <param name="port">Server port number (only written when isRunning=true)</param>
+        /// <param name="projectRootPath">Project root for fast project validation during startup</param>
         /// <returns>Success indicator</returns>
-        public ServiceResult<bool> UpdateSessionState(bool isRunning, int port = -1)
+        public ServiceResult<bool> UpdateSessionState(
+            bool isRunning,
+            int port = -1,
+            string projectRootPath = null)
         {
             if (!isRunning)
             {
@@ -69,11 +73,19 @@ namespace io.github.hatayama.uLoopMCP
                 return ServiceResult<bool>.SuccessResult(true);
             }
 
+            if (port > 0 && !string.IsNullOrWhiteSpace(projectRootPath))
+            {
+                string serverSessionId = System.Guid.NewGuid().ToString("N");
+                McpEditorSettings.SetRunningServerSession(port, projectRootPath, serverSessionId);
+                return ServiceResult<bool>.SuccessResult(true);
+            }
+
             McpEditorSettings.SetIsServerRunning(true);
-            if (isRunning && port > 0)
+            if (port > 0)
             {
                 McpEditorSettings.SetCustomPort(port);
             }
+
             return ServiceResult<bool>.SuccessResult(true);
         }
     }
