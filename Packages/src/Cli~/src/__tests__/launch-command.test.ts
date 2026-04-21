@@ -78,8 +78,8 @@ describe('launch command', () => {
 
     await program.parseAsync(['node', 'uloop', 'launch', '/project']);
 
-    expect(mockCreateSpinner).toHaveBeenCalledWith('Launching Unity...');
-    expect(mockSpinnerUpdate).toHaveBeenCalledWith('Waiting for Unity to finish starting...');
+    expect(mockCreateSpinner).toHaveBeenCalledWith('Waiting for Unity to finish starting...');
+    expect(mockSpinnerUpdate).not.toHaveBeenCalled();
     expect(mockSpinnerStop).toHaveBeenCalledTimes(1);
     expect(waitForLaunchReadyAfterLaunchMock).toHaveBeenCalledWith('/project');
     expect(waitForDynamicCodeReadyAfterLaunchMock).not.toHaveBeenCalled();
@@ -99,9 +99,8 @@ describe('launch command', () => {
 
     await program.parseAsync(['node', 'uloop', 'launch', '/project']);
 
-    expect(mockCreateSpinner).toHaveBeenCalledWith('Launching Unity...');
-    expect(mockSpinnerUpdate).toHaveBeenCalledTimes(1);
-    expect(mockSpinnerUpdate).toHaveBeenCalledWith('Waiting for Unity to finish starting...');
+    expect(mockCreateSpinner).toHaveBeenCalledWith('Waiting for Unity to finish starting...');
+    expect(mockSpinnerUpdate).not.toHaveBeenCalled();
     expect(mockSpinnerStop).toHaveBeenCalledTimes(1);
     expect(waitForDynamicCodeReadyAfterLaunchMock).toHaveBeenCalledWith('/project');
     expect(prewarmDynamicCodeAfterLaunchMock).toHaveBeenCalledWith({ projectRoot: '/project' });
@@ -121,9 +120,9 @@ describe('launch command', () => {
 
     await program.parseAsync(['node', 'uloop', 'launch', '/project']);
 
-    expect(mockCreateSpinner).toHaveBeenCalledWith('Launching Unity...');
+    expect(mockCreateSpinner).not.toHaveBeenCalled();
     expect(mockSpinnerUpdate).not.toHaveBeenCalled();
-    expect(mockSpinnerStop).toHaveBeenCalledTimes(1);
+    expect(mockSpinnerStop).not.toHaveBeenCalled();
     expect(waitForLaunchReadyAfterLaunchMock).not.toHaveBeenCalled();
     expect(waitForDynamicCodeReadyAfterLaunchMock).not.toHaveBeenCalled();
     expect(prewarmDynamicCodeAfterLaunchMock).not.toHaveBeenCalled();
