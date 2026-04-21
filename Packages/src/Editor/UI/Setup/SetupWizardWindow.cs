@@ -13,6 +13,7 @@ namespace io.github.hatayama.uLoopMCP
 {
     public class SetupWizardWindow : EditorWindow
     {
+        private const string WindowTitle = "Unity CLI Loop Setup";
         private const string UXML_RELATIVE_PATH = "Editor/UI/Setup/SetupWizardWindow.uxml";
         private const string USS_RELATIVE_PATH = "Editor/UI/Setup/SetupWizardWindow.uss";
         private const string GITHUB_ICON_RELATIVE_PATH = "Editor/UI/Setup/GitHub_Invertocat_White.png";
@@ -78,13 +79,23 @@ namespace io.github.hatayama.uLoopMCP
 
         private static void ShowWindowInternal(bool shouldRecordVersion)
         {
+            string currentVersion = McpConstants.PackageInfo.version;
+            if (TryReuseOpenWindow(
+                HasOpenInstances<SetupWizardWindow>(),
+                shouldRecordVersion,
+                currentVersion,
+                FocusExistingWindow))
+            {
+                return;
+            }
+
             string lastSeenSetupWizardVersionBeforeOpen = McpEditorSettings.GetLastSeenSetupWizardVersion();
-            SetupWizardWindow window = GetWindow<SetupWizardWindow>(true, "Unity CLI Loop Setup");
-            window._lastSeenSetupWizardVersionBeforeOpen = lastSeenSetupWizardVersionBeforeOpen;
-            window.position = CreateCenteredRect(EditorGUIUtility.GetMainWindowPosition(), MinimumWindowSize);
+            Rect windowPosition = CreateCenteredRect(EditorGUIUtility.GetMainWindowPosition(), MinimumWindowSize);
+            SetupWizardWindow window = CreateInstance<SetupWizardWindow>();
+            PrepareForOpen(window, WindowTitle, windowPosition, lastSeenSetupWizardVersionBeforeOpen);
             window.ShowUtility();
             window.ScheduleResizeToContent();
-            MaybeRecordLastSeenVersion(shouldRecordVersion, McpConstants.PackageInfo.version);
+            MaybeRecordLastSeenVersion(shouldRecordVersion, currentVersion);
         }
 
         internal static Rect WithContentSize(Rect currentRect, Vector2 contentSize, Vector2 frameSize)
@@ -105,6 +116,41 @@ namespace io.github.hatayama.uLoopMCP
         internal static string GetGitHubRepositoryUrl()
         {
             return McpUIConstants.PROJECT_REPOSITORY_URL;
+        }
+
+        internal static bool TryReuseOpenWindow(
+            bool hasOpenWindow,
+            bool shouldRecordVersion,
+            string currentVersion,
+            System.Action focusExistingWindow)
+        {
+            if (!hasOpenWindow) return false;
+
+            Debug.Assert(focusExistingWindow != null, "focusExistingWindow must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(currentVersion), "currentVersion must not be null or empty");
+            focusExistingWindow();
+            MaybeRecordLastSeenVersion(shouldRecordVersion, currentVersion);
+            return true;
+        }
+
+        internal static void PrepareForOpen(
+            SetupWizardWindow window,
+            string title,
+            Rect position,
+            string lastSeenSetupWizardVersionBeforeOpen)
+        {
+            Debug.Assert(window != null, "window must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(title), "title must not be null or empty");
+
+            window.titleContent = new GUIContent(title);
+            window.position = position;
+            window._lastSeenSetupWizardVersionBeforeOpen =
+                lastSeenSetupWizardVersionBeforeOpen ?? string.Empty;
+        }
+
+        private static void FocusExistingWindow()
+        {
+            FocusWindowIfItsOpen<SetupWizardWindow>();
         }
 
         // Prerequisite
@@ -144,6 +190,7 @@ namespace io.github.hatayama.uLoopMCP
         private bool _isSkillsTargetFieldInitialized;
         private bool _shouldUseFirstInstallSkillsUi;
         private bool _installSkillsFlat;
+        [SerializeField]
         private string _lastSeenSetupWizardVersionBeforeOpen = string.Empty;
         private IVisualElementScheduledItem _initialRefreshScheduledItem;
         private IVisualElementScheduledItem _resizeScheduledItem;

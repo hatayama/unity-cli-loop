@@ -2,6 +2,7 @@ using System.IO;
 using System.Collections.Generic;
 
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -108,6 +109,66 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
+        public void TryReuseOpenWindow_WhenExistingWindowAndAutoShow_FocusesWindowAndRecordsVersion()
+        {
+            bool focusedExistingWindow = false;
+            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "1.7.2"
+            });
+
+            bool reused = SetupWizardWindow.TryReuseOpenWindow(
+                hasOpenWindow: true,
+                shouldRecordVersion: true,
+                currentVersion: "1.7.3",
+                focusExistingWindow: () => focusedExistingWindow = true);
+
+            Assert.That(reused, Is.True);
+            Assert.That(focusedExistingWindow, Is.True);
+            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+        }
+
+        [Test]
+        public void TryReuseOpenWindow_WhenExistingWindowAndManualShow_FocusesWindowWithoutRecordingVersion()
+        {
+            bool focusedExistingWindow = false;
+            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "1.7.2"
+            });
+
+            bool reused = SetupWizardWindow.TryReuseOpenWindow(
+                hasOpenWindow: true,
+                shouldRecordVersion: false,
+                currentVersion: "1.7.3",
+                focusExistingWindow: () => focusedExistingWindow = true);
+
+            Assert.That(reused, Is.True);
+            Assert.That(focusedExistingWindow, Is.True);
+            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+        }
+
+        [Test]
+        public void TryReuseOpenWindow_WhenNoExistingWindow_DoesNotFocusOrRecordVersion()
+        {
+            bool focusedExistingWindow = false;
+            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "1.7.2"
+            });
+
+            bool reused = SetupWizardWindow.TryReuseOpenWindow(
+                hasOpenWindow: false,
+                shouldRecordVersion: true,
+                currentVersion: "1.7.3",
+                focusExistingWindow: () => focusedExistingWindow = true);
+
+            Assert.That(reused, Is.False);
+            Assert.That(focusedExistingWindow, Is.False);
+            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+        }
+
+        [Test]
         public void WithContentSize_OverridesSizeAndPreservesCenter()
         {
             Rect initialRect = new(123f, 456f, 789f, 321f);
@@ -151,6 +212,31 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             string repositoryUrl = SetupWizardWindow.GetGitHubRepositoryUrl();
 
             Assert.That(repositoryUrl, Is.EqualTo("https://github.com/hatayama/unity-cli-loop"));
+        }
+
+        [Test]
+        public void PrepareForOpen_PopulatesWindowStateBeforeShowing()
+        {
+            SetupWizardWindow window = ScriptableObject.CreateInstance<SetupWizardWindow>();
+            try
+            {
+                Rect position = new(12f, 34f, 360f, 380f);
+
+                SetupWizardWindow.PrepareForOpen(window, "Unity CLI Loop Setup", position, "1.9.0");
+
+                SerializedObject serializedWindow = new(window);
+                SerializedProperty lastSeenVersionProperty =
+                    serializedWindow.FindProperty("_lastSeenSetupWizardVersionBeforeOpen");
+
+                Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Setup"));
+                Assert.That(window.position, Is.EqualTo(position));
+                Assert.That(lastSeenVersionProperty, Is.Not.Null);
+                Assert.That(lastSeenVersionProperty.stringValue, Is.EqualTo("1.9.0"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(window);
+            }
         }
 
         [Test]

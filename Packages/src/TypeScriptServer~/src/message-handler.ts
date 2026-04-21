@@ -135,7 +135,7 @@ export class MessageHandler {
           this.handleResponse(message);
         } else if (hasValidId(message)) {
           // Fallback for other messages with valid id
-          this.handleResponse(message as JsonRpcResponse);
+          this.handleResponse(message);
         }
       } catch (parseError) {
         VibeLogger.logError(
