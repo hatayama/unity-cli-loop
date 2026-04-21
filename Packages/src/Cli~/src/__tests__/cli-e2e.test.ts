@@ -718,7 +718,6 @@ describe('CLI E2E Tests (requires running Unity)', () => {
       // Should mention project skills were installed
       expect(stdout).toMatch(/project|installed/i);
     });
-
   });
 
   describe('execute-dynamic-code', () => {

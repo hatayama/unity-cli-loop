@@ -907,9 +907,7 @@ describe('waitForLaunchReadyAfterLaunch', () => {
     await waitForLaunchReadyAfterLaunch('/project', {
       resolveUnityConnectionFn: jest
         .fn()
-        .mockResolvedValue(
-          createConnection(8711, { shouldValidateProject: false, projectRoot }),
-        ),
+        .mockResolvedValue(createConnection(8711, { shouldValidateProject: false, projectRoot })),
       createClient: () =>
         createMockClient(
           [

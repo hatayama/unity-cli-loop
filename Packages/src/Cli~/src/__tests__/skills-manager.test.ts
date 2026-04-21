@@ -269,7 +269,9 @@ describe('skill install layout', () => {
     expect(searchRoots).toContain(join(projectRoot, 'Assets'));
     expect(searchRoots).toContain(join(projectRoot, 'Packages', 'src'));
     expect(searchRoots).toContain(join(projectRoot, 'Packages', 'com.example.embedded'));
-    expect(searchRoots).toContain(join(projectRoot, 'Library', 'PackageCache', 'com.example.cached@1.0.0'));
+    expect(searchRoots).toContain(
+      join(projectRoot, 'Library', 'PackageCache', 'com.example.cached@1.0.0'),
+    );
     expect(searchRoots).toContain(localPackageRoot);
     expect(searchRoots).not.toContain(
       join(projectRoot, 'Library', 'PackageCache', 'com.example.unused@1.0.0'),

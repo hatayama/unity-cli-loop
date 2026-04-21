@@ -241,7 +241,10 @@ function isSkillOutdated(
 
   const installedFiles = collectSkillFolderFiles(skillDir);
   const expectedFileCount =
-    1 + ('additionalFiles' in skill && skill.additionalFiles ? Object.keys(skill.additionalFiles).length : 0);
+    1 +
+    ('additionalFiles' in skill && skill.additionalFiles
+      ? Object.keys(skill.additionalFiles).length
+      : 0);
   const installedFileCount = 1 + (installedFiles ? Object.keys(installedFiles).length : 0);
   if (installedFileCount !== expectedFileCount) {
     return true;
@@ -718,7 +721,11 @@ function uninstallSkill(
   return removed;
 }
 
-function uninstallSkillFromAllLayouts(skill: SkillDefinition, target: TargetConfig, global: boolean): boolean {
+function uninstallSkillFromAllLayouts(
+  skill: SkillDefinition,
+  target: TargetConfig,
+  global: boolean,
+): boolean {
   const baseDir = getSkillsBaseDir(target, global);
   const candidateDirs = [
     getManagedSkillDir(baseDir, skill.dirName),
