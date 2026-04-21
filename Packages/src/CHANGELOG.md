@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.0.0](https://github.com/hatayama/unity-cli-loop/compare/v1.7.3...v2.0.0) (2026-04-20)
+
+
+### Features
+
+* execute-dynamic-code now runs more than 6x faster ([#901](https://github.com/hatayama/unity-cli-loop/issues/901)) ([f48cdaa](https://github.com/hatayama/unity-cli-loop/commit/f48cdaaee5e3df0f4035a8281a6b7fe8511df04c))
+* Setup Wizard now handles first-time skill installation, grouping skills into a subfolder, target detection, status reporting, and startup behavior more clearly and reliably ([#927](https://github.com/hatayama/unity-cli-loop/issues/927), [#950](https://github.com/hatayama/unity-cli-loop/issues/950), [#951](https://github.com/hatayama/unity-cli-loop/issues/951), [#952](https://github.com/hatayama/unity-cli-loop/issues/952), [#953](https://github.com/hatayama/unity-cli-loop/issues/953), [#954](https://github.com/hatayama/unity-cli-loop/issues/954), [#963](https://github.com/hatayama/unity-cli-loop/issues/963), [#922](https://github.com/hatayama/unity-cli-loop/issues/922))
+* Windows users can follow PowerShell-specific PlayMode automation examples ([#947](https://github.com/hatayama/unity-cli-loop/issues/947)) ([59e50b4](https://github.com/hatayama/unity-cli-loop/commit/59e50b4e26f4e49c08761108737ae5a702a22788))
+
+
+### Bug Fixes
+
+* allow installation without the new Input System package ([#938](https://github.com/hatayama/unity-cli-loop/issues/938)) ([b08d899](https://github.com/hatayama/unity-cli-loop/commit/b08d899856d8c760aae7856b33f6a5bb3cc06d7f))
+* compile commands stay more reliable while the Unity server recovers ([#925](https://github.com/hatayama/unity-cli-loop/issues/925)) ([0f63ed5](https://github.com/hatayama/unity-cli-loop/commit/0f63ed5fdd9dc20ddc6b005dc1c7a4d9d1900090))
+* Dynamic code commands recover more cleanly after Unity restarts ([#944](https://github.com/hatayama/unity-cli-loop/issues/944)) ([bdbe286](https://github.com/hatayama/unity-cli-loop/commit/bdbe286d710bb2c7415b4f401d3b65e8c98f9e13))
+* invalid EditMode test requests now return a clear error during play mode ([#940](https://github.com/hatayama/unity-cli-loop/issues/940)) ([ed0c7ea](https://github.com/hatayama/unity-cli-loop/commit/ed0c7eaebfa5430fbdf95bfbd77f36e3fa500f2c))
+* make MCP deprecation easier to notice in the settings window ([#948](https://github.com/hatayama/unity-cli-loop/issues/948)) ([0ace70d](https://github.com/hatayama/unity-cli-loop/commit/0ace70d944fca67172ce24d3bca84b91a76c36a0))
+* make the setup and settings windows easier to use ([#932](https://github.com/hatayama/unity-cli-loop/issues/932)) ([6d61a7d](https://github.com/hatayama/unity-cli-loop/commit/6d61a7dccc418b2c8a41cab4132accf27780afd9))
+* prevent installation errors when the Unity Test Framework package is missing ([#939](https://github.com/hatayama/unity-cli-loop/issues/939)) ([958e4b5](https://github.com/hatayama/unity-cli-loop/commit/958e4b5050f64a47dff00575c670ebf5a9ad3196))
+* `uloop launch` now waits for Unity to finish starting ([#955](https://github.com/hatayama/unity-cli-loop/issues/955)) ([9514cc9](https://github.com/hatayama/unity-cli-loop/commit/9514cc90dc1427452ff3f998bb5b1e956901e86d))
+
 ## [1.7.3](https://github.com/hatayama/unity-cli-loop/compare/v1.7.2...v1.7.3) (2026-04-10)
 
 

@@ -4,4 +4,4 @@
  * This file exists to avoid bundling the entire package.json into the CLI bundle.
  * This version is automatically updated by release-please.
  */
-export const VERSION = '1.7.3'; // x-release-please-version
+export const VERSION = '2.0.0'; // x-release-please-version
