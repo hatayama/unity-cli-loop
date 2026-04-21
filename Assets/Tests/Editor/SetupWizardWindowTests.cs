@@ -172,17 +172,17 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void ShouldUseFirstInstallSkillsUi_WhenSelectionHasNotBeenShown_ReturnsTrue()
+        public void ShouldUseFirstInstallSkillsUi_WhenVersionWasNeverSeen_ReturnsTrue()
         {
-            bool shouldUseFirstInstallUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi(false);
+            bool shouldUseFirstInstallUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi("");
 
             Assert.That(shouldUseFirstInstallUi, Is.True);
         }
 
         [Test]
-        public void ShouldUseFirstInstallSkillsUi_WhenSelectionHasAlreadyBeenShown_ReturnsFalse()
+        public void ShouldUseFirstInstallSkillsUi_WhenVersionWasSeen_ReturnsFalse()
         {
-            bool shouldUseFirstInstallUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi(true);
+            bool shouldUseFirstInstallUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi("1.9.0");
 
             Assert.That(shouldUseFirstInstallUi, Is.False);
         }

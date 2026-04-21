@@ -33,7 +33,6 @@ namespace io.github.hatayama.uLoopMCP
         public string lastUsedConfigPath = "";
         public string lastSeenSetupWizardVersion = "";
         public bool suppressSetupWizardAutoShow = false;
-        public bool hasShownSetupWizardSkillsSelection = false;
 
         // UI State Settings
         public bool showSecuritySettings = true;
@@ -269,18 +268,6 @@ namespace io.github.hatayama.uLoopMCP
         {
             McpEditorSettingsData settings = GetSettings();
             McpEditorSettingsData updatedSettings = settings with { suppressSetupWizardAutoShow = suppressAutoShow };
-            SaveSettings(updatedSettings);
-        }
-
-        public static bool GetHasShownSetupWizardSkillsSelection()
-        {
-            return GetSettings().hasShownSetupWizardSkillsSelection;
-        }
-
-        public static void SetHasShownSetupWizardSkillsSelection(bool hasShown)
-        {
-            McpEditorSettingsData settings = GetSettings();
-            McpEditorSettingsData updatedSettings = settings with { hasShownSetupWizardSkillsSelection = hasShown };
             SaveSettings(updatedSettings);
         }
 
