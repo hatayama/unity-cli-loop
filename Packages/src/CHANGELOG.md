@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.2](https://github.com/hatayama/unity-cli-loop/compare/v2.0.1...v2.0.2) (2026-04-22)
+
+
+### Bug Fixes
+
+* Setup and Settings now clean up grouped skill folders and avoid rerunning skill checks after CLI updates ([#978](https://github.com/hatayama/unity-cli-loop/issues/978)) ([51fe1f5](https://github.com/hatayama/unity-cli-loop/commit/51fe1f5384a7596823fceaaa1c583e788a352196))
+
 ## [2.0.1](https://github.com/hatayama/unity-cli-loop/compare/v2.0.0...v2.0.1) (2026-04-22)
 
 
