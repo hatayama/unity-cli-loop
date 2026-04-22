@@ -42,6 +42,17 @@ describe('createSpinner', () => {
     spinner.stop();
   });
 
+  it('uses stdout when stdout is preferred', () => {
+    setTTYState(true, true);
+
+    const spinner = createSpinner('Launching Unity...', 'stdout');
+
+    expect(stdoutWriteSpy).toHaveBeenCalledWith('\r\x1b[K⠋ Launching Unity...');
+    expect(stderrWriteSpy).not.toHaveBeenCalled();
+
+    spinner.stop();
+  });
+
   it('re-renders immediately when the message changes', () => {
     setTTYState(true, true);
 

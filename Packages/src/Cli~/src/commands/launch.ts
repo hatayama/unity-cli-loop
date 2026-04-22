@@ -67,26 +67,25 @@ async function runLaunchCommand(
   options: LaunchCommandOptions,
 ): Promise<void> {
   const maxDepth: number = parseMaxDepth(options.maxDepth);
-  const launchResult: OrchestrateResult = await orchestrateLaunch({
-    projectPath: projectPath ? resolve(projectPath) : undefined,
-    searchRoot: process.cwd(),
-    searchMaxDepth: maxDepth,
-    platform: options.platform,
-    unityArgs: [],
-    restart: options.restart === true,
-    quit: options.quit === true,
-    deleteRecovery: options.deleteRecovery === true,
-    addUnityHub: options.addUnityHub === true,
-    favoriteUnityHub: options.favorite === true,
-  });
-
-  if (launchResult.action !== 'launched' && launchResult.action !== 'killed-and-launched') {
-    return;
-  }
-
-  const spinner = createSpinner('Waiting for Unity to finish starting...');
-
+  const spinner = createSpinner('Waiting for Unity to finish starting...', 'stdout');
   try {
+    const launchResult: OrchestrateResult = await orchestrateLaunch({
+      projectPath: projectPath ? resolve(projectPath) : undefined,
+      searchRoot: process.cwd(),
+      searchMaxDepth: maxDepth,
+      platform: options.platform,
+      unityArgs: [],
+      restart: options.restart === true,
+      quit: options.quit === true,
+      deleteRecovery: options.deleteRecovery === true,
+      addUnityHub: options.addUnityHub === true,
+      favoriteUnityHub: options.favorite === true,
+    });
+
+    if (launchResult.action !== 'launched' && launchResult.action !== 'killed-and-launched') {
+      return;
+    }
+
     const isDynamicCodeEnabled: boolean = isToolEnabled(
       'execute-dynamic-code',
       launchResult.projectPath,

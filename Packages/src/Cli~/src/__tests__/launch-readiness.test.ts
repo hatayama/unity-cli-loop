@@ -9,6 +9,8 @@ interface MockReadinessResponse {
   Success?: boolean;
   ErrorMessage?: string;
   Timings?: string[];
+  DataPath?: string;
+  Message?: string;
 }
 
 const EXPECTED_STABLE_LAUNCH_READINESS_CODE =
@@ -241,8 +243,9 @@ describe('waitForDynamicCodeReadyAfterLaunch', () => {
     expect(sleepCount).toBe(4);
   });
 
-  it('waits for fast session metadata before probing dynamic code readiness', async () => {
+  it('falls back to legacy project validation when fast session metadata is missing', async () => {
     const recordedMethods: string[] = [];
+    const projectRoot = process.cwd();
     let sleepCount = 0;
 
     await waitForDynamicCodeReadyAfterLaunch('/project', {
@@ -252,10 +255,30 @@ describe('waitForDynamicCodeReadyAfterLaunch', () => {
           createConnection(8711, {
             requestMetadata: null,
             shouldValidateProject: true,
+            projectRoot,
           }),
         )
-        .mockResolvedValue(createConnection(8711)),
-      createClient: () => createMockClient([{ Success: true }], recordedMethods).client,
+        .mockResolvedValue(
+          createConnection(8711, {
+            requestMetadata: null,
+            shouldValidateProject: true,
+            projectRoot,
+          }),
+        ),
+      createClient: () =>
+        createMockClient(
+          [
+            { DataPath: `${projectRoot}/Assets` },
+            { Success: true },
+            { DataPath: `${projectRoot}/Assets` },
+            { Success: true },
+            { DataPath: `${projectRoot}/Assets` },
+            { Success: true },
+            { DataPath: `${projectRoot}/Assets` },
+            { Success: true },
+          ],
+          recordedMethods,
+        ).client,
       sleepFn: jest.fn().mockImplementation((): Promise<void> => {
         sleepCount++;
         return Promise.resolve();
@@ -270,9 +293,75 @@ describe('waitForDynamicCodeReadyAfterLaunch', () => {
     });
 
     expect(recordedMethods).toEqual([
+      'get-version',
       'execute-dynamic-code',
+      'get-version',
       'execute-dynamic-code',
+      'get-version',
       'execute-dynamic-code',
+      'get-version',
+      'execute-dynamic-code',
+    ]);
+    expect(sleepCount).toBe(3);
+  });
+
+  it('retries legacy project mismatches until the launched project is selected', async () => {
+    const recordedMethods: string[] = [];
+    const projectRoot = process.cwd();
+    const mismatchedProjectRoot = `${projectRoot}/..`;
+    const responses: Array<MockReadinessResponse | Error> = [
+      { DataPath: `${mismatchedProjectRoot}/Assets` },
+      { DataPath: `${projectRoot}/Assets` },
+      { Success: true },
+      { DataPath: `${projectRoot}/Assets` },
+      { Success: true },
+      { DataPath: `${projectRoot}/Assets` },
+      { Success: true },
+      { DataPath: `${projectRoot}/Assets` },
+      { Success: true },
+    ];
+    let sleepCount = 0;
+
+    await waitForDynamicCodeReadyAfterLaunch('/project', {
+      resolveUnityConnectionFn: jest
+        .fn()
+        .mockResolvedValueOnce(
+          createConnection(8711, {
+            requestMetadata: null,
+            shouldValidateProject: true,
+            projectRoot,
+          }),
+        )
+        .mockResolvedValue(
+          createConnection(8711, {
+            requestMetadata: null,
+            shouldValidateProject: true,
+            projectRoot,
+          }),
+        ),
+      createClient: () => createMockClient(responses, recordedMethods).client,
+      sleepFn: jest.fn().mockImplementation((): Promise<void> => {
+        sleepCount++;
+        return Promise.resolve();
+      }),
+      nowFn: (() => {
+        let now = 0;
+        return (): number => {
+          now += 100;
+          return now;
+        };
+      })(),
+    });
+
+    expect(recordedMethods).toEqual([
+      'get-version',
+      'get-version',
+      'execute-dynamic-code',
+      'get-version',
+      'execute-dynamic-code',
+      'get-version',
+      'execute-dynamic-code',
+      'get-version',
       'execute-dynamic-code',
     ]);
     expect(sleepCount).toBe(4);
@@ -330,6 +419,68 @@ describe('waitForDynamicCodeReadyAfterLaunch', () => {
     expect(recordedParams[0]['Code']).toBe(EXPECTED_STABLE_LAUNCH_READINESS_CODE);
     expect(recordedParams[1]['Code']).toBe(EXPECTED_STABLE_LAUNCH_READINESS_CODE);
     expect(recordedParams[4]['Code']).toBe(EXPECTED_USER_LIKE_LAUNCH_READINESS_CODE);
+    expect(sleepCount).toBe(4);
+  });
+
+  it('restarts probe progress when fast session metadata disappears', async () => {
+    const recordedMethods: string[] = [];
+    const recordedParams: Array<Record<string, unknown>> = [];
+    const projectRoot = process.cwd();
+    let sleepCount = 0;
+
+    await waitForDynamicCodeReadyAfterLaunch('/project', {
+      resolveUnityConnectionFn: jest
+        .fn()
+        .mockResolvedValueOnce(createConnection(8711))
+        .mockResolvedValueOnce(
+          createConnection(8711, {
+            requestMetadata: null,
+            shouldValidateProject: true,
+            projectRoot,
+          }),
+        )
+        .mockResolvedValue(
+          createConnection(8711, {
+            requestMetadata: null,
+            shouldValidateProject: true,
+            projectRoot,
+          }),
+        ),
+      createClient: () => {
+        const legacyValidationResponse =
+          recordedMethods.length >= 1 && recordedMethods.length % 2 === 1
+            ? [{ DataPath: `${projectRoot}/Assets` }, { Success: true }]
+            : [{ Success: true }];
+        return createMockClient(legacyValidationResponse, recordedMethods, recordedParams).client;
+      },
+      sleepFn: jest.fn().mockImplementation((): Promise<void> => {
+        sleepCount++;
+        return Promise.resolve();
+      }),
+      nowFn: (() => {
+        let now = 0;
+        return (): number => {
+          now += 100;
+          return now;
+        };
+      })(),
+    });
+
+    expect(recordedMethods).toEqual([
+      'execute-dynamic-code',
+      'get-version',
+      'execute-dynamic-code',
+      'get-version',
+      'execute-dynamic-code',
+      'get-version',
+      'execute-dynamic-code',
+      'get-version',
+      'execute-dynamic-code',
+    ]);
+    expect(recordedParams[0]['Code']).toBe(EXPECTED_STABLE_LAUNCH_READINESS_CODE);
+    expect(recordedParams[1]).toEqual({});
+    expect(recordedParams[2]['Code']).toBe(EXPECTED_STABLE_LAUNCH_READINESS_CODE);
+    expect(recordedParams[8]['Code']).toBe(EXPECTED_USER_LIKE_LAUNCH_READINESS_CODE);
     expect(sleepCount).toBe(4);
   });
 
@@ -903,7 +1054,8 @@ describe('waitForLaunchReadyAfterLaunch', () => {
 
     await waitForLaunchReadyAfterLaunch('/project', {
       resolveUnityConnectionFn: jest.fn().mockResolvedValue(createConnection(8711)),
-      createClient: () => createMockClient([], recordedMethods).client,
+      createClient: () =>
+        createMockClient([{ Message: 'ok' }, { Message: 'ok' }], recordedMethods).client,
       sleepFn: jest.fn().mockImplementation((): Promise<void> => {
         sleepCount++;
         return Promise.resolve();
@@ -918,12 +1070,56 @@ describe('waitForLaunchReadyAfterLaunch', () => {
       isProjectBusyFn,
     });
 
-    expect(recordedMethods).toEqual([]);
+    expect(recordedMethods).toEqual(['ping', 'ping']);
     expect(isProjectBusyFn).toHaveBeenCalledTimes(2);
     expect(sleepCount).toBe(1);
   });
 
-  it('waits for fast session metadata before treating launch as ready', async () => {
+  it('falls back to legacy project validation when launch readiness metadata is missing', async () => {
+    const recordedMethods: string[] = [];
+    const projectRoot = process.cwd();
+
+    await waitForLaunchReadyAfterLaunch('/project', {
+      resolveUnityConnectionFn: jest
+        .fn()
+        .mockResolvedValueOnce(
+          createConnection(8711, {
+            requestMetadata: null,
+            shouldValidateProject: true,
+            projectRoot,
+          }),
+        )
+        .mockResolvedValue(
+          createConnection(8711, {
+            requestMetadata: null,
+            shouldValidateProject: true,
+            projectRoot,
+          }),
+        ),
+      createClient: () =>
+        createMockClient([{ DataPath: `${projectRoot}/Assets` }], recordedMethods).client,
+      sleepFn: jest.fn(),
+      nowFn: (() => {
+        let now = 0;
+        return (): number => {
+          now += 100;
+          return now;
+        };
+      })(),
+      isProjectBusyFn: jest.fn().mockReturnValue(false),
+    });
+
+    expect(recordedMethods).toEqual(['get-version']);
+  });
+
+  it('retries legacy project mismatches until launch readiness finds the launched project', async () => {
+    const recordedMethods: string[] = [];
+    const projectRoot = process.cwd();
+    const mismatchedProjectRoot = `${projectRoot}/..`;
+    const responses: Array<MockReadinessResponse | Error> = [
+      { DataPath: `${mismatchedProjectRoot}/Assets` },
+      { DataPath: `${projectRoot}/Assets` },
+    ];
     let sleepCount = 0;
 
     await waitForLaunchReadyAfterLaunch('/project', {
@@ -933,10 +1129,17 @@ describe('waitForLaunchReadyAfterLaunch', () => {
           createConnection(8711, {
             requestMetadata: null,
             shouldValidateProject: true,
+            projectRoot,
           }),
         )
-        .mockResolvedValue(createConnection(8711, { projectRoot: process.cwd() })),
-      createClient: () => createMockClient([], []).client,
+        .mockResolvedValue(
+          createConnection(8711, {
+            requestMetadata: null,
+            shouldValidateProject: true,
+            projectRoot,
+          }),
+        ),
+      createClient: () => createMockClient(responses, recordedMethods).client,
       sleepFn: jest.fn().mockImplementation((): Promise<void> => {
         sleepCount++;
         return Promise.resolve();
@@ -951,20 +1154,21 @@ describe('waitForLaunchReadyAfterLaunch', () => {
       isProjectBusyFn: jest.fn().mockReturnValue(false),
     });
 
+    expect(recordedMethods).toEqual(['get-version', 'get-version']);
     expect(sleepCount).toBe(1);
   });
 
-  it('does not run legacy project validation during launch readiness', async () => {
+  it('validates launch identity with ping when fast session metadata is available', async () => {
     const recordedMethods: string[] = [];
 
     await waitForLaunchReadyAfterLaunch('/project', {
       resolveUnityConnectionFn: jest.fn().mockResolvedValue(createConnection(8711)),
-      createClient: () => createMockClient([], recordedMethods).client,
+      createClient: () => createMockClient([{ Message: 'ok' }], recordedMethods).client,
       sleepFn: jest.fn(),
       nowFn: () => 0,
       isProjectBusyFn: jest.fn().mockReturnValue(false),
     });
 
-    expect(recordedMethods).toEqual([]);
+    expect(recordedMethods).toEqual(['ping']);
   });
 });

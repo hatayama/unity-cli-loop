@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "commander": "14.0.3",
-    "launch-unity": "0.16.0",
+    "launch-unity": "^0.17.1",
     "semver": "7.7.4"
   },
   "devDependencies": {

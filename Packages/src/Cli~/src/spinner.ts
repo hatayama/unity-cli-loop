@@ -13,7 +13,29 @@ interface Spinner {
   stop(): void;
 }
 
-function resolveSpinnerStream(): NodeJS.WriteStream | null {
+type SpinnerStreamPreference = 'auto' | 'stdout' | 'stderr';
+
+function resolveSpinnerStream(preference: SpinnerStreamPreference): NodeJS.WriteStream | null {
+  if (preference === 'stdout') {
+    if (process.stdout.isTTY) {
+      return process.stdout;
+    }
+    if (process.stderr.isTTY) {
+      return process.stderr;
+    }
+    return null;
+  }
+
+  if (preference === 'stderr') {
+    if (process.stderr.isTTY) {
+      return process.stderr;
+    }
+    if (process.stdout.isTTY) {
+      return process.stdout;
+    }
+    return null;
+  }
+
   if (process.stderr.isTTY) {
     return process.stderr;
   }
@@ -29,8 +51,11 @@ function resolveSpinnerStream(): NodeJS.WriteStream | null {
  * Create a terminal spinner that displays a rotating animation with a message.
  * Returns a Spinner object with update() and stop() methods.
  */
-export function createSpinner(initialMessage: string): Spinner {
-  const outputStream = resolveSpinnerStream();
+export function createSpinner(
+  initialMessage: string,
+  preference: SpinnerStreamPreference = 'auto',
+): Spinner {
+  const outputStream = resolveSpinnerStream(preference);
   if (outputStream === null) {
     return {
       update: (): void => {},

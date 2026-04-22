@@ -7,6 +7,7 @@ import {
   resolveUnityConnection,
   UnityNotRunningError,
 } from './port-resolver.js';
+import { ProjectMismatchError, validateConnectedProject } from './project-validator.js';
 import { isRetryableFastProjectValidationErrorMessage } from './request-metadata.js';
 
 // Launch readiness lock paths are built from the resolved project root selected by launch.
@@ -45,6 +46,10 @@ interface ExecuteDynamicCodeReadinessResponse {
   Success?: boolean;
   ErrorMessage?: string;
   Timings?: string[];
+}
+
+interface LaunchIdentityPingResponse {
+  Message?: string;
 }
 
 interface DynamicCodeLaunchReadinessDependencies {
@@ -127,6 +132,10 @@ function isTransientCompilationProviderUnavailable(errorMessage: string): boolea
 }
 
 function isRetryableLaunchReadinessError(error: unknown): boolean {
+  if (error instanceof ProjectMismatchError) {
+    return true;
+  }
+
   if (error instanceof UnityNotRunningError) {
     return true;
   }
@@ -196,10 +205,34 @@ function isLaunchReadinessStable(payload: ExecuteDynamicCodeReadinessResponse): 
 }
 
 function hasFastSessionMetadata(connection: ResolvedUnityConnection): boolean {
-  // Why: launch already waits for the target Unity instance to publish its session identity.
-  // Why not fall back to get-version here: startup can answer that probe before project identity
-  // is stable, which produces spurious warnings and undermines the readiness contract.
+  // Why: dynamic-code readiness can only track session continuity when the target Unity instance
+  // has published its fast request metadata.
+  // Why not overload this helper with the fallback decision: the launch paths still need a legacy
+  // identity check when older settings files cannot publish metadata yet.
   return connection.requestMetadata !== null;
+}
+
+async function validateLaunchConnectionIdentity(
+  client: DirectUnityClient,
+  connection: ResolvedUnityConnection,
+): Promise<void> {
+  if (connection.requestMetadata !== null) {
+    const response = await client.sendRequest<LaunchIdentityPingResponse>(
+      'ping',
+      { Message: 'launch-readiness' },
+      { requestMetadata: connection.requestMetadata },
+    );
+
+    if (typeof response?.Message !== 'string') {
+      throw new Error('Unexpected response from Unity: missing ping message');
+    }
+
+    return;
+  }
+
+  if (connection.projectRoot !== null) {
+    await validateConnectedProject(client, connection.projectRoot);
+  }
 }
 
 export async function waitForDynamicCodeReadyAfterLaunch(
@@ -222,22 +255,28 @@ export async function waitForDynamicCodeReadyAfterLaunch(
         projectPath,
       );
       if (!hasFastSessionMetadata(connection)) {
-        currentProbeStage = 0;
-        firstSuccessfulProbeTime = null;
+        if (probeSessionId !== null) {
+          currentProbeStage = 0;
+          firstSuccessfulProbeTime = null;
+        }
         probeSessionId = null;
-        await dependencies.sleepFn(LAUNCH_READINESS_RETRY_MS);
-        continue;
+      } else {
+        const resolvedSessionId = connection.requestMetadata?.expectedServerSessionId ?? null;
+        if (probeSessionId !== null && probeSessionId !== resolvedSessionId) {
+          currentProbeStage = 0;
+          firstSuccessfulProbeTime = null;
+        }
+        probeSessionId = resolvedSessionId;
       }
-
-      const resolvedSessionId = connection.requestMetadata?.expectedServerSessionId ?? null;
-      if (probeSessionId !== null && probeSessionId !== resolvedSessionId) {
-        currentProbeStage = 0;
-        firstSuccessfulProbeTime = null;
-      }
-      probeSessionId = resolvedSessionId;
 
       client = dependencies.createClient(connection.port);
       await client.connect();
+
+      if (!hasFastSessionMetadata(connection) && connection.projectRoot !== null) {
+        await validateConnectedProject(client, connection.projectRoot);
+      } else {
+        probeSessionId = connection.requestMetadata?.expectedServerSessionId ?? null;
+      }
 
       if (currentProbeStage >= totalProbeStageCount) {
         if (!isProjectBusyFn(projectPath)) {
@@ -332,13 +371,9 @@ export async function waitForLaunchReadyAfterLaunch(
         undefined,
         projectPath,
       );
-      if (!hasFastSessionMetadata(connection)) {
-        await dependencies.sleepFn(LAUNCH_READINESS_RETRY_MS);
-        continue;
-      }
-
       client = dependencies.createClient(connection.port);
       await client.connect();
+      await validateLaunchConnectionIdentity(client, connection);
 
       if (!isProjectBusyFn(projectPath)) {
         return connection;
