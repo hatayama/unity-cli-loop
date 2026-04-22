@@ -373,7 +373,7 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public static async Task<SkillInstallResult> InstallSkillFiles()
         {
-            return await InstallSkillFiles(groupSkillsUnderUnityCliLoop: true);
+            return await InstallSkillFiles(groupSkillsUnderUnityCliLoop: false);
         }
 
         public static async Task<SkillInstallResult> InstallSkillFiles(bool groupSkillsUnderUnityCliLoop)
@@ -384,7 +384,7 @@ namespace io.github.hatayama.uLoopMCP
 
         public static async Task<SkillInstallResult> InstallSkillFiles(List<SkillTargetInfo> targets)
         {
-            return await InstallSkillFiles(targets, groupSkillsUnderUnityCliLoop: true);
+            return await InstallSkillFiles(targets, groupSkillsUnderUnityCliLoop: false);
         }
 
         public static async Task<SkillInstallResult> InstallSkillFiles(

@@ -40,7 +40,8 @@ namespace io.github.hatayama.uLoopMCP
 
         // Repository Root Toggle
         public bool addRepositoryRoot = false;
-        public bool installSkillsFlat = false;
+        // Default to flat installation so first-time setup does not add an extra grouping layer unless requested.
+        public bool installSkillsFlat = true;
         
         // Session State Settings (moved from McpSessionManager)
         // Default to true so the server starts automatically on fresh install

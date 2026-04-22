@@ -18,6 +18,7 @@ namespace io.github.hatayama.uLoopMCP
         private const string USS_RELATIVE_PATH = "Editor/UI/Setup/SetupWizardWindow.uss";
         private const string GITHUB_ICON_RELATIVE_PATH = "Editor/UI/Setup/GitHub_Invertocat_White.png";
         private const int PreferredWrappedTextLineCount = 2;
+        private const bool ForceFlatSkillInstall = true;
         private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
 
         [InitializeOnLoadMethod]
@@ -313,13 +314,13 @@ namespace io.github.hatayama.uLoopMCP
 
         private void InitializeGroupSkillsToggle()
         {
-            _installSkillsFlat = McpEditorSettings.GetInstallSkillsFlat();
+            ApplyFlatSkillInstallPreference();
+            ViewDataBinder.SetVisible(_groupSkillsRow, false);
             _groupSkillsToggle.SetValueWithoutNotify(!_installSkillsFlat);
             _groupSkillsToggle.RegisterValueChangedCallback(evt =>
             {
                 evt.StopPropagation();
-                _installSkillsFlat = !evt.newValue;
-                McpEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
+                ApplyFlatSkillInstallPreference();
                 RefreshSkillsSection();
             });
             _groupSkillsLabel.RegisterCallback<ClickEvent>(HandleGroupSkillsRowClicked);
@@ -349,6 +350,7 @@ namespace io.github.hatayama.uLoopMCP
             _cliStatusLabel.text = "Checking...";
             _installCliButton.SetEnabled(false);
             _installCliButton.text = "Checking...";
+            ViewDataBinder.SetVisible(_groupSkillsRow, false);
             _groupSkillsToggle.SetEnabled(false);
             UpdateSkillsStatusLabel("Checking installed skills...");
             _installSkillsButton.SetEnabled(false);
@@ -891,9 +893,15 @@ namespace io.github.hatayama.uLoopMCP
 
             bool newValue = !_groupSkillsToggle.value;
             _groupSkillsToggle.SetValueWithoutNotify(newValue);
-            _installSkillsFlat = !newValue;
-            McpEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
+            ApplyFlatSkillInstallPreference();
             RefreshSkillsSection();
+        }
+
+        private void ApplyFlatSkillInstallPreference()
+        {
+            // Claude Code does not resolve nested skill folders, so setup keeps every editor target on the flat layout.
+            _installSkillsFlat = ForceFlatSkillInstall;
+            McpEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
         }
 
         private void ScheduleResizeToContent()

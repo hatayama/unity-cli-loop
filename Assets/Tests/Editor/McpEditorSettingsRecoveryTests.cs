@@ -106,14 +106,14 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public void GetInstallSkillsFlat_WhenMissingFromSettings_DefaultsToFalse()
+        public void GetInstallSkillsFlat_WhenMissingFromSettings_DefaultsToTrue()
         {
             File.WriteAllText(SettingsFilePath, "{\"customPort\":18446}");
             McpEditorSettings.InvalidateCache();
 
             bool installSkillsFlat = McpEditorSettings.GetInstallSkillsFlat();
 
-            Assert.IsFalse(installSkillsFlat);
+            Assert.IsTrue(installSkillsFlat);
         }
 
         [Test]

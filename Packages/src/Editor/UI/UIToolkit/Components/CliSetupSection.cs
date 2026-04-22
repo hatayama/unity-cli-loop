@@ -174,6 +174,7 @@ namespace io.github.hatayama.uLoopMCP
 
         private void UpdateGroupSkillsToggle(CliSetupData data)
         {
+            ViewDataBinder.SetVisible(_groupSkillsRow, false);
             ViewDataBinder.UpdateToggle(_groupSkillsToggle, data.GroupSkillsUnderUnityCliLoop);
             _groupSkillsToggle.SetEnabled(data.IsCliInstalled && !data.IsChecking && !data.IsInstallingSkills);
         }

@@ -117,6 +117,54 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenFlatLayoutRequested_InstallsUnderSkillsRoot()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-fake-skill",
+                "FakeTool",
+                "reference.md",
+                "reference");
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName));
+            WriteSkillFile(Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-fake-skill"));
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            string installedSkillDir = Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                "uloop-fake-skill");
+            string groupedSkillDir = Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-fake-skill");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
+            Assert.That(File.ReadAllText(Path.Combine(installedSkillDir, "reference.md")), Is.EqualTo("reference"));
+            Assert.That(Directory.Exists(groupedSkillDir), Is.False);
+        }
+
+        [Test]
         public void DetectTargets_DoesNotIncludeTargetsWithOnlyParentDirectory()
         {
             // Arrange

@@ -10,6 +10,8 @@ namespace io.github.hatayama.uLoopMCP
 {
     public class McpEditorWindow : EditorWindow
     {
+        private const bool ForceFlatSkillInstall = true;
+
         private McpConfigServiceFactory _configServiceFactory;
         private McpEditorWindowUI _view;
         private McpEditorModel _model;
@@ -114,7 +116,7 @@ namespace io.github.hatayama.uLoopMCP
         private void LoadSavedSettings()
         {
             _model.LoadFromSettings();
-            _installSkillsFlat = McpEditorSettings.GetInstallSkillsFlat();
+            ApplyFlatSkillInstallPreference();
 
             bool gitRootDiffers = UnityMcpPathResolver.GitRootDiffersFromProjectRoot();
             _model.UpdateSupportsRepositoryRootToggle(gitRootDiffers);
@@ -786,10 +788,16 @@ namespace io.github.hatayama.uLoopMCP
 
         private void HandleGroupSkillsChanged(bool groupSkillsUnderUnityCliLoop)
         {
-            _installSkillsFlat = !groupSkillsUnderUnityCliLoop;
-            McpEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
+            ApplyFlatSkillInstallPreference();
             RefreshSelectedTargetInstallStateFast();
             RefreshSelectedTargetInstallStateInBackground();
+        }
+
+        private void ApplyFlatSkillInstallPreference()
+        {
+            // Claude Code does not resolve nested skill folders, so editor-driven installs stay flat for every target.
+            _installSkillsFlat = ForceFlatSkillInstall;
+            McpEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
         }
 
         private void HandleRefreshSkillsState()
