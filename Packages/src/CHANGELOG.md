@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.3](https://github.com/hatayama/unity-cli-loop/compare/v2.0.2...v2.0.3) (2026-04-22)
+
+
+### Bug Fixes
+
+* Setup now keeps third-party skills when switching folder layouts ([#980](https://github.com/hatayama/unity-cli-loop/issues/980)) ([adfc628](https://github.com/hatayama/unity-cli-loop/commit/adfc62852b8f79b46ca02c6ed6f0fc64c1d000db))
+
 ## [2.0.2](https://github.com/hatayama/unity-cli-loop/compare/v2.0.1...v2.0.2) (2026-04-22)
 
 
