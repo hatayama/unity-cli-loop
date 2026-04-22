@@ -73,7 +73,7 @@ namespace io.github.hatayama.uLoopMCP
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
             string targetRoot = Path.Combine(projectRoot, targetDir);
-            return SkillInstallLayout.HasInstalledSkills(targetRoot);
+            return SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot);
         }
 
         internal static bool AreSkillsInstalled(
@@ -85,7 +85,7 @@ namespace io.github.hatayama.uLoopMCP
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
             string targetRoot = Path.Combine(projectRoot, targetDir);
-            return SkillInstallLayout.HasInstalledSkills(targetRoot, groupSkillsUnderUnityCliLoop);
+            return SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
         }
 
         public static async Task ForceRefreshCliVersionAsync(CancellationToken ct)

@@ -90,15 +90,46 @@ namespace io.github.hatayama.uLoopMCP
 
         internal static bool HasInstalledSkills(string targetRoot)
         {
-            return EnumerateInstalledSkillDirectories(targetRoot).Any();
+            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            return HasInstalledSkills(projectRoot, targetRoot);
         }
 
         internal static bool HasInstalledSkills(string targetRoot, bool groupSkillsUnderUnityCliLoop)
         {
-            IEnumerable<string> skillDirs = groupSkillsUnderUnityCliLoop
-                ? EnumerateManagedSkillDirectories(targetRoot)
-                : EnumerateLegacyManagedSkillDirectories(targetRoot);
-            return skillDirs.Any();
+            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            return HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
+        }
+
+        internal static bool HasInstalledSkills(string projectRoot, string targetRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(targetRoot), "targetRoot must not be null or empty");
+
+            return HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop: false)
+                || HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop: true);
+        }
+
+        internal static bool HasInstalledSkills(
+            string projectRoot,
+            string targetRoot,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(targetRoot), "targetRoot must not be null or empty");
+
+            if (!groupSkillsUnderUnityCliLoop && EnumerateLegacyManagedSkillDirectories(targetRoot).Any())
+            {
+                return true;
+            }
+
+            Dictionary<string, SkillSourceDefinition> expectedSkills = GetSkillSources(projectRoot);
+            if (expectedSkills.Count == 0)
+            {
+                return false;
+            }
+
+            return expectedSkills.Keys.Any(skillName =>
+                Directory.Exists(GetInstalledSkillDirectoryPath(targetRoot, skillName, groupSkillsUnderUnityCliLoop)));
         }
 
         internal static SkillInstallState GetInstalledState(
@@ -107,7 +138,7 @@ namespace io.github.hatayama.uLoopMCP
             bool groupSkillsUnderUnityCliLoop)
         {
             Dictionary<string, SkillSourceDefinition> expectedSkills = GetSkillSources(projectRoot);
-            bool hasLayoutSkills = HasInstalledSkills(targetRoot, groupSkillsUnderUnityCliLoop);
+            bool hasLayoutSkills = HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
             if (expectedSkills.Count == 0)
             {
                 return hasLayoutSkills ? SkillInstallState.Installed : SkillInstallState.Missing;
@@ -133,14 +164,6 @@ namespace io.github.hatayama.uLoopMCP
                 {
                     return SkillInstallState.Outdated;
                 }
-            }
-
-            if (HasUnexpectedInstalledSkillDirectories(
-                targetRoot,
-                expectedSkills.Keys,
-                groupSkillsUnderUnityCliLoop))
-            {
-                return SkillInstallState.Outdated;
             }
 
             if (!hasInstalledExpectedSkill)
@@ -256,38 +279,11 @@ namespace io.github.hatayama.uLoopMCP
             return Path.Combine(skillsRoot, skillName);
         }
 
-        private static bool HasUnexpectedInstalledSkillDirectories(
-            string targetRoot,
-            IEnumerable<string> expectedSkillNames,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            HashSet<string> expectedSkillNameSet = new(expectedSkillNames, StringComparer.Ordinal);
-            IEnumerable<string> installedSkillDirectories = groupSkillsUnderUnityCliLoop
-                ? EnumerateManagedSkillDirectories(targetRoot)
-                : EnumerateLegacyManagedSkillDirectories(targetRoot);
-
-            foreach (string installedSkillDirectory in installedSkillDirectories)
-            {
-                string installedSkillName = Path.GetFileName(installedSkillDirectory);
-                if (string.IsNullOrEmpty(installedSkillName))
-                {
-                    continue;
-                }
-
-                if (!expectedSkillNameSet.Contains(installedSkillName))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private static bool IsSkillDirectoryOutdated(
             Dictionary<string, byte[]> sourceFiles,
             string installedSkillDirectory)
         {
-            Dictionary<string, byte[]> installedFiles = CollectSkillFiles(installedSkillDirectory);
+            Dictionary<string, byte[]> installedFiles = CollectInstalledSkillFiles(installedSkillDirectory);
             if (sourceFiles.Count != installedFiles.Count)
             {
                 return true;
@@ -309,7 +305,7 @@ namespace io.github.hatayama.uLoopMCP
             return false;
         }
 
-        private static Dictionary<string, byte[]> CollectSkillFiles(string skillDirectory)
+        private static Dictionary<string, byte[]> CollectInstalledSkillFiles(string skillDirectory)
         {
             Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
             foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
@@ -325,6 +321,24 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             return files;
+        }
+
+        private static Dictionary<string, byte[]> CollectSourceSkillFiles(
+            string skillDirectory,
+            string skillFilePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(skillDirectory), "skillDirectory must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(skillFilePath), "skillFilePath must not be null or empty");
+
+            if (string.Equals(Path.GetFileName(skillDirectory), "Skill", StringComparison.Ordinal))
+            {
+                return CollectInstalledSkillFiles(skillDirectory);
+            }
+
+            return new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            {
+                [SkillFileName] = File.ReadAllBytes(skillFilePath)
+            };
         }
 
         private static Dictionary<string, SkillSourceDefinition> GetSkillSources(string projectRoot)
@@ -344,7 +358,7 @@ namespace io.github.hatayama.uLoopMCP
                 foreach (string skillFilePath in skillFilePaths)
                 {
                     string skillDirectory = Path.GetDirectoryName(skillFilePath);
-                    if (skillDirectory == null || Path.GetFileName(skillDirectory) != "Skill")
+                    if (skillDirectory == null)
                     {
                         continue;
                     }
@@ -367,7 +381,7 @@ namespace io.github.hatayama.uLoopMCP
                         skillName,
                         ParseToolNameFromFrontmatter(skillContent),
                         skillDirectory,
-                        CollectSkillFiles(skillDirectory));
+                        CollectSourceSkillFiles(skillDirectory, skillFilePath));
                 }
             }
 

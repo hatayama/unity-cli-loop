@@ -208,7 +208,7 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public async Task InstallSkillFilesAtProjectRoot_WhenFlatLayoutRequested_RemovesUnexpectedManagedSkillDirectories()
+        public async Task InstallSkillFilesAtProjectRoot_WhenFlatLayoutRequested_RemovesDeprecatedManagedSkillDirectories()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
             CreateFakeSourceSkill(
@@ -225,7 +225,7 @@ namespace io.github.hatayama.uLoopMCP
                 SkillInstallLayout.ManagedSkillsDirName);
             Directory.CreateDirectory(skillsRoot);
             WriteSkillFile(Path.Combine(managedSkillsRoot, "uloop-fake-skill"));
-            WriteSkillFile(Path.Combine(managedSkillsRoot, "uloop-stale-skill"));
+            WriteSkillFile(Path.Combine(managedSkillsRoot, "uloop-capture-window"));
 
             ToolSkillSynchronizer.SkillTargetInfo target = new(
                 "Claude Code",
@@ -247,6 +247,99 @@ namespace io.github.hatayama.uLoopMCP
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
             Assert.That(Directory.Exists(managedSkillsRoot), Is.False);
+        }
+
+        [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenFlatLayoutRequested_InstallsProjectLocalCustomSkills()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            string projectLocalToolDir = CreateFakeProjectLocalSkill(
+                temporaryRoot,
+                "uloop-get-unitask-tracker",
+                "GetUniTaskTracker");
+            File.WriteAllText(
+                Path.Combine(projectLocalToolDir, "GetUniTaskTrackerTool.cs"),
+                "internal sealed class GetUniTaskTrackerTool {}");
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            string managedSkillsRoot = Path.Combine(
+                skillsRoot,
+                SkillInstallLayout.ManagedSkillsDirName);
+            Directory.CreateDirectory(skillsRoot);
+            WriteSkillFile(Path.Combine(managedSkillsRoot, "uloop-get-unitask-tracker"));
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            string installedSkillDir = Path.Combine(
+                skillsRoot,
+                "uloop-get-unitask-tracker");
+            string groupedSkillDir = Path.Combine(
+                managedSkillsRoot,
+                "uloop-get-unitask-tracker");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
+            Assert.That(File.Exists(Path.Combine(installedSkillDir, "GetUniTaskTrackerTool.cs")), Is.False);
+            Assert.That(Directory.Exists(groupedSkillDir), Is.False);
+        }
+
+        [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenFlatLayoutRequested_PreservesThirdPartyManagedSkillDirectories()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-fake-skill",
+                "FakeTool",
+                "reference.md",
+                "reference");
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            string managedSkillsRoot = Path.Combine(
+                skillsRoot,
+                SkillInstallLayout.ManagedSkillsDirName);
+            Directory.CreateDirectory(skillsRoot);
+            WriteSkillFile(Path.Combine(managedSkillsRoot, "uloop-fake-skill"));
+            WriteSkillFile(
+                Path.Combine(managedSkillsRoot, "acme-third-party"),
+                "---\nname: acme-third-party\ntoolName: acme-third-party\n---\n");
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            string installedSkillDir = Path.Combine(
+                skillsRoot,
+                "uloop-fake-skill");
+            string thirdPartySkillDir = Path.Combine(
+                managedSkillsRoot,
+                "acme-third-party");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
+            Assert.That(Directory.Exists(thirdPartySkillDir), Is.True);
         }
 
         [Test]
@@ -400,6 +493,7 @@ namespace io.github.hatayama.uLoopMCP
         public void DetectTargets_WhenManagedSkillsDirectoryContainsSkills_ReportsInstalled()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(temporaryRoot, "uloop-compile", "CompileTool", "reference.md", "reference");
             foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(temporaryRoot, dir);
@@ -472,6 +566,7 @@ namespace io.github.hatayama.uLoopMCP
         public void DetectTargets_WhenFlatLayoutRequested_IgnoresGroupedInstalledSkills()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(temporaryRoot, "uloop-compile", "CompileTool", "reference.md", "reference");
             foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(temporaryRoot, dir);
@@ -519,6 +614,36 @@ namespace io.github.hatayama.uLoopMCP
             {
                 Assert.IsTrue(target.HasExistingSkills,
                     $"Target '{target.DirName}' should treat legacy third-party skills as installed");
+            }
+        }
+
+        [Test]
+        public void DetectTargets_WhenOnlyGroupedThirdPartySkillsExist_DoesNotReportInstalled()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            {
+                string targetRoot = Path.Combine(temporaryRoot, dir);
+                WriteSkillFile(
+                    Path.Combine(
+                        targetRoot,
+                        SkillInstallLayout.SkillsDirName,
+                        SkillInstallLayout.ManagedSkillsDirName,
+                        "acme-third-party"),
+                    "---\nname: acme-third-party\ntoolName: acme-third-party\n---\n");
+            }
+
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
+                    temporaryRoot,
+                    requireSkillsDirectory: true,
+                    groupSkillsUnderUnityCliLoop: true)
+                .ToArray();
+
+            Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length);
+            foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
+            {
+                Assert.IsFalse(target.HasExistingSkills,
+                    $"Target '{target.DirName}' should ignore grouped third-party skills outside uLoop management");
             }
         }
 
@@ -592,6 +717,7 @@ namespace io.github.hatayama.uLoopMCP
         public void AreSkillsInstalled_ReturnsTrueForManagedLegacyAndNamespacedSkillsOnly()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(temporaryRoot, "uloop-compile", "CompileTool", "reference.md", "reference");
 
             string manualTargetRoot = Path.Combine(temporaryRoot, ".claude");
             WriteSkillFile(
@@ -621,6 +747,7 @@ namespace io.github.hatayama.uLoopMCP
         public void AreSkillsInstalled_WhenLayoutSpecified_MatchesOnlySelectedLayout()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(temporaryRoot, "uloop-compile", "CompileTool", "reference.md", "reference");
 
             string flatTargetRoot = Path.Combine(temporaryRoot, ".claude");
             WriteSkillFile(Path.Combine(flatTargetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
@@ -804,7 +931,7 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public void DetectTargets_WhenUnexpectedManagedSkillDirectoryExists_ReportsOutdated()
+        public void DetectTargets_WhenDeprecatedManagedSkillDirectoryExists_DoesNotReportOutdated()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
             CreateFakeSourceSkill(
@@ -823,12 +950,12 @@ namespace io.github.hatayama.uLoopMCP
             WriteSkillFile(installedSkillDir, "---\nname: uloop-public-skill\n---\n");
             File.WriteAllText(Path.Combine(installedSkillDir, "reference.md"), "reference");
 
-            string staleSkillDir = Path.Combine(
+            string deprecatedSkillDir = Path.Combine(
                 targetRoot,
                 SkillInstallLayout.SkillsDirName,
                 SkillInstallLayout.ManagedSkillsDirName,
-                "uloop-stale-skill");
-            WriteSkillFile(staleSkillDir, "---\nname: uloop-stale-skill\n---\n");
+                "uloop-capture-window");
+            WriteSkillFile(deprecatedSkillDir, "---\nname: uloop-capture-window\n---\n");
 
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
@@ -837,11 +964,11 @@ namespace io.github.hatayama.uLoopMCP
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
-            Assert.That(detectedTargets[0].InstallState, Is.EqualTo(SkillInstallState.Outdated));
+            Assert.That(detectedTargets[0].InstallState, Is.EqualTo(SkillInstallState.Installed));
         }
 
         [Test]
-        public async Task InstallSkillFilesAtProjectRoot_WhenUnexpectedManagedSkillDirectoryExists_RemovesIt()
+        public async Task InstallSkillFilesAtProjectRoot_WhenDeprecatedManagedSkillDirectoryExists_RemovesIt()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
             CreateFakeSourceSkill(
@@ -854,12 +981,12 @@ namespace io.github.hatayama.uLoopMCP
             string targetRoot = Path.Combine(temporaryRoot, ".claude");
             Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName));
 
-            string staleSkillDir = Path.Combine(
+            string deprecatedSkillDir = Path.Combine(
                 targetRoot,
                 SkillInstallLayout.SkillsDirName,
                 SkillInstallLayout.ManagedSkillsDirName,
-                "uloop-stale-skill");
-            WriteSkillFile(staleSkillDir, "---\nname: uloop-stale-skill\n---\n");
+                "uloop-capture-window");
+            WriteSkillFile(deprecatedSkillDir, "---\nname: uloop-capture-window\n---\n");
 
             ToolSkillSynchronizer.SkillTargetInfo target = new(
                 "Claude Code",
@@ -882,7 +1009,7 @@ namespace io.github.hatayama.uLoopMCP
                 "uloop-public-skill");
 
             Assert.That(result.IsSuccessful, Is.True);
-            Assert.That(Directory.Exists(staleSkillDir), Is.False);
+            Assert.That(Directory.Exists(deprecatedSkillDir), Is.False);
             Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
             Assert.That(File.ReadAllText(Path.Combine(installedSkillDir, "reference.md")), Is.EqualTo("reference"));
         }
@@ -982,6 +1109,25 @@ namespace io.github.hatayama.uLoopMCP
             {
                 File.WriteAllText(Path.Combine(skillDir, sourceMetaFileRelativePath), "meta");
             }
+        }
+
+        private static string CreateFakeProjectLocalSkill(
+            string projectRoot,
+            string skillName,
+            string toolDirectoryName)
+        {
+            string skillDir = Path.Combine(
+                projectRoot,
+                "Assets",
+                "SampleFeature",
+                "Editor",
+                "McpExtensions",
+                toolDirectoryName);
+            Directory.CreateDirectory(skillDir);
+            File.WriteAllText(
+                Path.Combine(skillDir, SkillInstallLayout.SkillFileName),
+                $"---\nname: {skillName}\n---\n");
+            return skillDir;
         }
 
         private static void WriteManifestDependencies(string projectRoot, string dependenciesContent)

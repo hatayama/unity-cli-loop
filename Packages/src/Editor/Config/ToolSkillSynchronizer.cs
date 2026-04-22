@@ -271,7 +271,8 @@ namespace io.github.hatayama.uLoopMCP
                     continue;
                 }
 
-                bool hasULoopSkills = hasSkillsDirectory && SkillInstallLayout.HasInstalledSkills(targetRoot);
+                bool hasULoopSkills = hasSkillsDirectory
+                    && SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot);
                 targets.Add(new SkillTargetInfo(
                     target.DisplayName,
                     target.DirName,
@@ -332,7 +333,7 @@ namespace io.github.hatayama.uLoopMCP
                     || installState == SkillInstallState.Checking
                     || installState == SkillInstallState.Outdated;
                 bool hasDifferentLayoutSkills = hasSkillsDirectory
-                    && SkillInstallLayout.HasInstalledSkills(targetRoot, !groupSkillsUnderUnityCliLoop);
+                    && SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, !groupSkillsUnderUnityCliLoop);
                 targets.Add(new SkillTargetInfo(
                     target.DisplayName,
                     target.DirName,
@@ -360,7 +361,7 @@ namespace io.github.hatayama.uLoopMCP
 
             if (!includeFreshnessCheck)
             {
-                return SkillInstallLayout.HasInstalledSkills(targetRoot, groupSkillsUnderUnityCliLoop)
+                return SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop)
                     ? SkillInstallState.Checking
                     : SkillInstallState.Missing;
             }
@@ -443,6 +444,11 @@ namespace io.github.hatayama.uLoopMCP
         {
             string targetRoot = Path.Combine(projectRoot, target.DirName);
             string skillsRoot = SkillInstallLayout.GetSkillsRoot(targetRoot);
+            HashSet<string> managedSkillNames = new(
+                enabledSkills.Select(skill => skill.Name),
+                StringComparer.Ordinal);
+            managedSkillNames.UnionWith(disabledSkills.Select(skill => skill.Name));
+            managedSkillNames.UnionWith(DeprecatedSkillNames);
             Directory.CreateDirectory(skillsRoot);
 
             if (groupSkillsUnderUnityCliLoop)
@@ -475,6 +481,7 @@ namespace io.github.hatayama.uLoopMCP
             DeleteUnexpectedInstalledSkillDirectories(
                 targetRoot,
                 enabledSkills.Select(skill => skill.Name),
+                managedSkillNames,
                 groupSkillsUnderUnityCliLoop);
 
             if (!groupSkillsUnderUnityCliLoop)
@@ -482,6 +489,7 @@ namespace io.github.hatayama.uLoopMCP
                 DeleteUnexpectedInstalledSkillDirectories(
                     targetRoot,
                     enabledSkills.Select(skill => skill.Name),
+                    managedSkillNames,
                     groupSkillsUnderUnityCliLoop: true);
                 DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
                     targetRoot,
@@ -515,14 +523,21 @@ namespace io.github.hatayama.uLoopMCP
         private static void DeleteUnexpectedInstalledSkillDirectories(
             string targetRoot,
             IEnumerable<string> expectedSkillNames,
+            IEnumerable<string> removableSkillNames,
             bool groupSkillsUnderUnityCliLoop)
         {
             HashSet<string> expectedSkillNameSet = new(expectedSkillNames, StringComparer.Ordinal);
+            HashSet<string> removableSkillNameSet = new(removableSkillNames, StringComparer.Ordinal);
             foreach (string installedSkillName in SkillInstallLayout.EnumerateInstalledSkillDirectoryNamesForLayout(
                          targetRoot,
                          groupSkillsUnderUnityCliLoop))
             {
                 if (expectedSkillNameSet.Contains(installedSkillName))
+                {
+                    continue;
+                }
+
+                if (!removableSkillNameSet.Contains(installedSkillName))
                 {
                     continue;
                 }

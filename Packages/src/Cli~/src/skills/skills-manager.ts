@@ -349,38 +349,39 @@ export function parseFrontmatter(content: string): Record<string, string | boole
   return Object.fromEntries(frontmatterMap);
 }
 
-const warnedLegacyPaths = new Set<string>();
+interface SkillSourcePath {
+  skillDirectory: string;
+  skillMdPath: string;
+  includeSiblingFiles: boolean;
+}
 
-function warnLegacySkillStructure(toolPath: string, legacySkillMdPath: string): void {
-  if (warnedLegacyPaths.has(legacySkillMdPath)) {
-    return;
+function resolveSkillSourcePath(toolPath: string): SkillSourcePath | null {
+  const nestedSkillDirectory = join(toolPath, SkillsPathConstants.SKILL_DIR);
+  const nestedSkillMdPath = join(nestedSkillDirectory, SkillsPathConstants.SKILL_FILE);
+  if (existsSync(nestedSkillMdPath)) {
+    return {
+      skillDirectory: nestedSkillDirectory,
+      skillMdPath: nestedSkillMdPath,
+      includeSiblingFiles: true,
+    };
   }
-  warnedLegacyPaths.add(legacySkillMdPath);
 
-  /* eslint-disable no-console -- CLI user-facing warning output */
-  console.error('\x1b[33m' + '='.repeat(70) + '\x1b[0m');
-  console.error('\x1b[33mWarning: Legacy skill structure detected\x1b[0m');
-  console.error(`  Path: ${legacySkillMdPath}`);
-  console.error('');
-  console.error('  The skill structure has changed. Please migrate to the new format:');
-  console.error('    1. Create a "Skill" folder in the tool directory');
-  console.error('    2. Move SKILL.md and any additional files/folders into Skill/');
-  console.error('');
-  console.error('  Expected structure:');
-  console.error('    ToolName/');
-  console.error('      └── Skill/');
-  console.error('            ├── SKILL.md');
-  console.error('            └── (any additional files or directories)');
-  console.error('\x1b[33m' + '='.repeat(70) + '\x1b[0m');
-  console.error('');
-  /* eslint-enable no-console */
+  const directSkillMdPath = join(toolPath, SkillsPathConstants.SKILL_FILE);
+  if (existsSync(directSkillMdPath)) {
+    return {
+      skillDirectory: toolPath,
+      skillMdPath: directSkillMdPath,
+      includeSiblingFiles: false,
+    };
+  }
+
+  return null;
 }
 
 function scanEditorFolderForSkills(
   editorPath: string,
   skills: SkillDefinition[],
   sourceType: SkillDefinition['sourceType'],
-  warnLegacy: boolean = true,
 ): void {
   if (!existsSync(editorPath)) {
     return;
@@ -396,15 +397,10 @@ function scanEditorFolderForSkills(
     const fullPath = join(editorPath, entry.name);
 
     if (entry.isDirectory()) {
-      const skillDir = join(fullPath, SkillsPathConstants.SKILL_DIR);
-      const skillMdPath = join(skillDir, SkillsPathConstants.SKILL_FILE);
-
-      const legacySkillMdPath = join(fullPath, SkillsPathConstants.SKILL_FILE);
-      if (warnLegacy && !existsSync(skillMdPath) && existsSync(legacySkillMdPath)) {
-        warnLegacySkillStructure(fullPath, legacySkillMdPath);
-      }
-
-      if (existsSync(skillMdPath)) {
+      const skillSource: SkillSourcePath | null = resolveSkillSourcePath(fullPath);
+      if (skillSource !== null) {
+        const skillDir = skillSource.skillDirectory;
+        const skillMdPath = skillSource.skillMdPath;
         const content = readFileSync(skillMdPath, 'utf-8');
         const frontmatter = parseFrontmatter(content);
 
@@ -419,7 +415,9 @@ function scanEditorFolderForSkills(
 
         const toolName =
           typeof frontmatter.toolName === 'string' ? frontmatter.toolName : undefined;
-        const additionalFiles = collectSkillFolderFiles(skillDir);
+        const additionalFiles = skillSource.includeSiblingFiles
+          ? collectSkillFolderFiles(skillDir)
+          : undefined;
 
         skills.push({
           name,
@@ -432,7 +430,7 @@ function scanEditorFolderForSkills(
         });
       }
 
-      scanEditorFolderForSkills(fullPath, skills, sourceType, warnLegacy);
+      scanEditorFolderForSkills(fullPath, skills, sourceType);
     }
   }
 }
@@ -898,7 +896,7 @@ function collectCliOnlySkills(): SkillDefinition[] {
     return [];
   }
   const skills: SkillDefinition[] = [];
-  scanEditorFolderForSkills(cliOnlyRoot, skills, 'cli-only', false);
+  scanEditorFolderForSkills(cliOnlyRoot, skills, 'cli-only');
   return skills;
 }
 

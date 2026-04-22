@@ -9,6 +9,7 @@ import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 
 import {
+  getAllSkillStatuses,
   getPreferredSkillDir,
   getInstallDir,
   getManagedSkillsDir,
@@ -173,8 +174,10 @@ name: minimal-skill
 
 describe('skill install layout', () => {
   const temporaryRoots: string[] = [];
+  const originalCwd = process.cwd();
 
   afterEach(() => {
+    process.chdir(originalCwd);
     while (temporaryRoots.length > 0) {
       const temporaryRoot = temporaryRoots.pop();
       if (temporaryRoot) {
@@ -195,6 +198,18 @@ describe('skill install layout', () => {
   function writeSkill(skillDir: string, content: string = '---\nname: test-skill\n---\n'): void {
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, 'SKILL.md'), content, 'utf-8');
+  }
+
+  function createUnityProjectRoot(): string {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'uloop-skill-project-'));
+    temporaryRoots.push(projectRoot);
+
+    mkdirSync(join(projectRoot, 'Assets'), { recursive: true });
+    mkdirSync(join(projectRoot, 'ProjectSettings'), { recursive: true });
+    mkdirSync(join(projectRoot, 'UserSettings'), { recursive: true });
+    writeFileSync(join(projectRoot, 'UserSettings', 'UnityMcpSettings.json'), '{}', 'utf-8');
+
+    return projectRoot;
   }
 
   it('should resolve managed skills under the unity-cli-loop namespace', () => {
@@ -276,6 +291,68 @@ describe('skill install layout', () => {
     expect(searchRoots).not.toContain(
       join(projectRoot, 'Library', 'PackageCache', 'com.example.unused@1.0.0'),
     );
+  });
+
+  it('should discover project skills from a direct SKILL.md in the tool folder', () => {
+    const projectRoot = createUnityProjectRoot();
+    const toolDir = join(projectRoot, 'Assets', 'SampleFeature', 'Editor', 'McpExtensions', 'ReplayTool');
+    mkdirSync(toolDir, { recursive: true });
+    writeFileSync(
+      join(toolDir, 'SKILL.md'),
+      [
+        '---',
+        'name: uloop-replay-tool',
+        'description: Replay tool',
+        '---',
+        '',
+        '# Replay Tool',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    process.chdir(projectRoot);
+
+    const skills = getAllSkillStatuses(getTargetConfig('claude'), false, true);
+
+    expect(
+      skills.find((skill) => skill.name === 'uloop-replay-tool' && skill.source === 'project'),
+    ).toBeDefined();
+  });
+
+  it('should ignore sibling implementation files beside a direct SKILL.md in the tool folder', () => {
+    const projectRoot = createUnityProjectRoot();
+    const toolDir = join(projectRoot, 'Assets', 'SampleFeature', 'Editor', 'McpExtensions', 'CaptureTool');
+    mkdirSync(toolDir, { recursive: true });
+    const skillContent = [
+      '---',
+      'name: uloop-capture-tool',
+      'description: Capture tool',
+      '---',
+      '',
+      '# Capture Tool',
+      '',
+    ].join('\n');
+    writeFileSync(join(toolDir, 'SKILL.md'), skillContent, 'utf-8');
+    writeFileSync(
+      join(toolDir, 'CaptureTool.cs'),
+      'internal sealed class CaptureTool { }',
+      'utf-8',
+    );
+
+    process.chdir(projectRoot);
+
+    const skillsRoot = getInstallDir(getTargetConfig('claude'), false);
+    syncInstalledSkillDirectory(
+      join(skillsRoot, 'uloop-capture-tool'),
+      'SKILL.md',
+      skillContent,
+      undefined,
+    );
+
+    const result = getAllSkillStatuses(getTargetConfig('claude'), false, true);
+
+    expect(result.find((skill) => skill.name === 'uloop-capture-tool')?.status).toBe('installed');
   });
 
   it('should migrate only managed legacy skills into the unity-cli-loop namespace', () => {
