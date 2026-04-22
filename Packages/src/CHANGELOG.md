@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1](https://github.com/hatayama/unity-cli-loop/compare/v2.0.0...v2.0.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* improve `uloop launch` startup behavior by keeping launch progress visible and waiting for the correct Unity project without false warnings ([#965](https://github.com/hatayama/unity-cli-loop/issues/965), [#973](https://github.com/hatayama/unity-cli-loop/issues/973), [#974](https://github.com/hatayama/unity-cli-loop/issues/974), [#975](https://github.com/hatayama/unity-cli-loop/issues/975))
+* remove the skill grouping option in Setup and Settings so skills install directly under `skills/`, and stop showing first-run setup screens during updates ([#964](https://github.com/hatayama/unity-cli-loop/issues/964), [#968](https://github.com/hatayama/unity-cli-loop/issues/968), [#977](https://github.com/hatayama/unity-cli-loop/issues/977))
+
 ## [2.0.0](https://github.com/hatayama/unity-cli-loop/compare/v1.7.3...v2.0.0) (2026-04-20)
 
 
