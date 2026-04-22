@@ -371,7 +371,7 @@ namespace io.github.hatayama.uLoopMCP
         private void ScheduleInitialRefresh()
         {
             _initialRefreshScheduledItem?.Pause();
-            _initialRefreshScheduledItem = rootVisualElement.schedule.Execute(RefreshUI).StartingIn(0);
+            _initialRefreshScheduledItem = rootVisualElement.schedule.Execute(() => RefreshUI()).StartingIn(0);
         }
 
         private void RefreshSkillsSection()
@@ -386,10 +386,29 @@ namespace io.github.hatayama.uLoopMCP
             ScheduleResizeToContent();
         }
 
-        private async void RefreshUI()
+        private async void RefreshUI(bool refreshSkillsSection = true)
         {
             CancelSkillInstallStateRefresh();
-            ApplyInitialCheckingState();
+            RefreshAutoShowToggle();
+            ViewDataBinder.SetVisible(_nodejsWarning, false);
+            ViewDataBinder.SetVisible(_nodejsOk, false);
+            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", false);
+            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", true);
+            _cliStatusLabel.text = "Checking...";
+            _installCliButton.SetEnabled(false);
+            _installCliButton.text = "Checking...";
+            if (refreshSkillsSection)
+            {
+                ViewDataBinder.SetVisible(_groupSkillsRow, false);
+                _groupSkillsToggle.SetEnabled(false);
+                UpdateSkillsStatusLabel("Checking installed skills...");
+                _installSkillsButton.SetEnabled(false);
+                _installSkillsButton.text = "Checking...";
+                ViewDataBinder.SetVisible(_skillsTargetRow, _shouldUseFirstInstallSkillsUi);
+                ViewDataBinder.SetVisible(_skillsTargetList, !_shouldUseFirstInstallSkillsUi);
+                _skillsTargetList.Clear();
+            }
+
             await Task.Yield();
 
             RuntimePlatform platform = Application.platform;
@@ -419,6 +438,12 @@ namespace io.github.hatayama.uLoopMCP
             bool cliVersionMatched = IsCliVersionMatched(cliVersion);
 
             UpdateCliStep(cliInstalled, cliVersion, cliVersionMatched);
+
+            if (!refreshSkillsSection)
+            {
+                ScheduleResizeToContent();
+                return;
+            }
 
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
@@ -773,6 +798,7 @@ namespace io.github.hatayama.uLoopMCP
 
         private async void HandleInstallCli()
         {
+            bool wasCliInstalledBeforeInstall = CliInstallationDetector.IsCliInstalled();
             string npmPath = NodeEnvironmentResolver.FindNpmPath();
             if (string.IsNullOrEmpty(npmPath))
             {
@@ -818,7 +844,8 @@ namespace io.github.hatayama.uLoopMCP
             finally
             {
                 _isInstallingCli = false;
-                RefreshUI();
+                RefreshUI(CliInstallRefreshPolicy.ShouldRefreshSkillsAfterCliInstall(
+                    wasCliInstalledBeforeInstall));
             }
         }
 

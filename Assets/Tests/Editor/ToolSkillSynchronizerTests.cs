@@ -165,6 +165,128 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenFlatLayoutRequested_RemovesEmptyManagedSkillsParentDirectory()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-fake-skill",
+                "FakeTool",
+                "reference.md",
+                "reference");
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            string managedSkillsRoot = Path.Combine(
+                skillsRoot,
+                SkillInstallLayout.ManagedSkillsDirName);
+            Directory.CreateDirectory(skillsRoot);
+            WriteSkillFile(Path.Combine(
+                managedSkillsRoot,
+                "uloop-fake-skill"));
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            string installedSkillDir = Path.Combine(
+                skillsRoot,
+                "uloop-fake-skill");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
+            Assert.That(Directory.Exists(managedSkillsRoot), Is.False);
+        }
+
+        [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenFlatLayoutRequested_RemovesUnexpectedManagedSkillDirectories()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-fake-skill",
+                "FakeTool",
+                "reference.md",
+                "reference");
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            string managedSkillsRoot = Path.Combine(
+                skillsRoot,
+                SkillInstallLayout.ManagedSkillsDirName);
+            Directory.CreateDirectory(skillsRoot);
+            WriteSkillFile(Path.Combine(managedSkillsRoot, "uloop-fake-skill"));
+            WriteSkillFile(Path.Combine(managedSkillsRoot, "uloop-stale-skill"));
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            string installedSkillDir = Path.Combine(
+                skillsRoot,
+                "uloop-fake-skill");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
+            Assert.That(Directory.Exists(managedSkillsRoot), Is.False);
+        }
+
+        [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenManagedSkillsParentOnlyHasExcludedFiles_RemovesParentDirectory()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-fake-skill",
+                "FakeTool",
+                "reference.md",
+                "reference");
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            string managedSkillsRoot = Path.Combine(
+                skillsRoot,
+                SkillInstallLayout.ManagedSkillsDirName);
+            Directory.CreateDirectory(skillsRoot);
+            WriteSkillFile(Path.Combine(managedSkillsRoot, "uloop-fake-skill"));
+            File.WriteAllText(Path.Combine(managedSkillsRoot, ".DS_Store"), "ignored");
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(Directory.Exists(managedSkillsRoot), Is.False);
+        }
+
+        [Test]
         public void DetectTargets_DoesNotIncludeTargetsWithOnlyParentDirectory()
         {
             // Arrange

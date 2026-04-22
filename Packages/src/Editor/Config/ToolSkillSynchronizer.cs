@@ -476,6 +476,17 @@ namespace io.github.hatayama.uLoopMCP
                 targetRoot,
                 enabledSkills.Select(skill => skill.Name),
                 groupSkillsUnderUnityCliLoop);
+
+            if (!groupSkillsUnderUnityCliLoop)
+            {
+                DeleteUnexpectedInstalledSkillDirectories(
+                    targetRoot,
+                    enabledSkills.Select(skill => skill.Name),
+                    groupSkillsUnderUnityCliLoop: true);
+                DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
+                    targetRoot,
+                    groupSkillsUnderUnityCliLoop: true);
+            }
         }
 
         private static bool IsSkillDisabled(
@@ -712,6 +723,60 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             Directory.Delete(installedSkillDirectory, true);
+            DeleteEmptyManagedSkillsParentDirectoryIfNeeded(targetRoot, groupSkillsUnderUnityCliLoop);
+        }
+
+        private static void DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
+            string targetRoot,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            if (!groupSkillsUnderUnityCliLoop)
+            {
+                return;
+            }
+
+            string managedSkillsRoot = SkillInstallLayout.GetManagedSkillsRoot(targetRoot);
+            if (!Directory.Exists(managedSkillsRoot))
+            {
+                return;
+            }
+
+            DeleteExcludedFilesAtRoot(managedSkillsRoot);
+            DeleteEmptyDirectoriesAtRoot(managedSkillsRoot);
+            if (Directory.EnumerateFileSystemEntries(managedSkillsRoot).Any())
+            {
+                return;
+            }
+
+            Directory.Delete(managedSkillsRoot);
+        }
+
+        private static void DeleteExcludedFilesAtRoot(string directoryPath)
+        {
+            foreach (string filePath in Directory.EnumerateFiles(directoryPath))
+            {
+                string fileName = Path.GetFileName(filePath);
+                if (!IsExcludedSkillFile(fileName))
+                {
+                    continue;
+                }
+
+                File.Delete(filePath);
+            }
+        }
+
+        private static void DeleteEmptyDirectoriesAtRoot(string directoryPath)
+        {
+            foreach (string childDirectoryPath in Directory.EnumerateDirectories(directoryPath))
+            {
+                DeleteEmptyDirectories(childDirectoryPath);
+                if (Directory.EnumerateFileSystemEntries(childDirectoryPath).Any())
+                {
+                    continue;
+                }
+
+                Directory.Delete(childDirectoryPath);
+            }
         }
     }
 }

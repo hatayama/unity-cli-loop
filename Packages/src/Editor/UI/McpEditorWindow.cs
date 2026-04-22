@@ -682,6 +682,7 @@ namespace io.github.hatayama.uLoopMCP
 
         private async void HandleInstallCli()
         {
+            bool wasCliInstalledBeforeInstall = CliInstallationDetector.IsCliInstalled();
             string npmPath = NodeEnvironmentResolver.FindNpmPath();
             if (string.IsNullOrEmpty(npmPath))
             {
@@ -742,7 +743,9 @@ namespace io.github.hatayama.uLoopMCP
             finally
             {
                 _isInstallingCli = false;
-                RefreshAllSections(refreshSkillInstallState: true);
+                RefreshAllSections(
+                    refreshSkillInstallState:
+                    CliInstallRefreshPolicy.ShouldRefreshSkillsAfterCliInstall(wasCliInstalledBeforeInstall));
             }
         }
 
