@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.4](https://github.com/hatayama/unity-cli-loop/compare/v2.0.3...v2.0.4) (2026-04-24)
+
+
+### Bug Fixes
+
+* Dynamic code execution stays fast with system .NET 6 installed ([#988](https://github.com/hatayama/unity-cli-loop/issues/988)) ([81d4d02](https://github.com/hatayama/unity-cli-loop/commit/81d4d02ebf36f6bbbcea6a01dd9aba845426f13f))
+
 ## [2.0.3](https://github.com/hatayama/unity-cli-loop/compare/v2.0.2...v2.0.3) (2026-04-22)
 
 
