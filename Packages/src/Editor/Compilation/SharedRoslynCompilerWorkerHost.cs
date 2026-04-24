@@ -21,6 +21,8 @@ namespace io.github.hatayama.uLoopMCP
         private const string RoslynWorkerCompileResponseFileName = "RoslynCompilerWorker.rsp";
         private const int SharedCompilerWorkerResponseTimeoutMilliseconds = 30000;
         private const int WorkerAssemblyBuildTimeoutMilliseconds = 30000;
+        internal const string DotnetMultilevelLookupEnvironmentVariableName = "DOTNET_MULTILEVEL_LOOKUP";
+        internal const string DotnetMultilevelLookupDisabledValue = "0";
 
         private static readonly object SharedCompilerWorkerLock = new();
         private static Action<string> s_deleteWorkerDirectory = path => Directory.Delete(path, true);
@@ -486,7 +488,7 @@ namespace io.github.hatayama.uLoopMCP
             ExternalCompilerPaths externalCompilerPaths,
             WorkerPaths workerPaths)
         {
-            return new ProcessStartInfo
+            ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = externalCompilerPaths.DotnetHostPath,
                 Arguments = "exec"
@@ -500,6 +502,19 @@ namespace io.github.hatayama.uLoopMCP
                 RedirectStandardError = false,
                 CreateNoWindow = true
             };
+
+            ConfigureWorkerDotnetRuntimeEnvironment(startInfo);
+            return startInfo;
+        }
+
+        internal static void ConfigureWorkerDotnetRuntimeEnvironment(ProcessStartInfo startInfo)
+        {
+            Debug.Assert(startInfo != null, "startInfo must not be null");
+
+            // Why: global probing can select a system .NET 6 runtime while Unity 6000.4 worker
+            // references come from the bundled .NET 8 runtime, which breaks assembly binding.
+            startInfo.EnvironmentVariables[DotnetMultilevelLookupEnvironmentVariableName] =
+                DotnetMultilevelLookupDisabledValue;
         }
 
         private static WorkerAssemblyBuildResult CompileWorkerAssembly(
@@ -534,6 +549,7 @@ namespace io.github.hatayama.uLoopMCP
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            ConfigureWorkerDotnetRuntimeEnvironment(startInfo);
 
             using Process process = ProcessStartHelper.TryStart(startInfo);
             if (process == null)
