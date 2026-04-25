@@ -70,6 +70,7 @@ namespace io.github.hatayama.uLoopMCP
             McpBridgeServer.OnServerStarted += OnServerStateChanged;
             McpBridgeServer.OnServerStopping += OnServerStateChanged;
             ConnectedToolsMonitoringService.OnConnectedToolsChanged += OnConnectedToolsChanged;
+            CustomToolManager.OnToolsChanged += OnToolsChanged;
 
             McpBridgeServer currentServer = McpServerController.CurrentServer;
             if (currentServer != null)
@@ -84,6 +85,7 @@ namespace io.github.hatayama.uLoopMCP
             McpBridgeServer.OnServerStarted -= OnServerStateChanged;
             McpBridgeServer.OnServerStopping -= OnServerStateChanged;
             ConnectedToolsMonitoringService.OnConnectedToolsChanged -= OnConnectedToolsChanged;
+            CustomToolManager.OnToolsChanged -= OnToolsChanged;
 
             McpBridgeServer currentServer = McpServerController.CurrentServer;
             if (currentServer != null)
@@ -95,11 +97,18 @@ namespace io.github.hatayama.uLoopMCP
 
         private void OnServerStateChanged()
         {
+            _window.InvalidateToolSettingsCatalog();
             _model.RequestRepaint();
         }
 
         private void OnConnectedToolsChanged()
         {
+            _model.RequestRepaint();
+        }
+
+        private void OnToolsChanged()
+        {
+            _window.InvalidateToolSettingsCatalog();
             _model.RequestRepaint();
         }
 
@@ -173,5 +182,59 @@ namespace io.github.hatayama.uLoopMCP
 
             return runtimeState.NeedsRepaint;
         }
+
+        public static bool ShouldRunExpensiveChecks(McpEditorWindowRefreshMode refreshMode)
+        {
+            return refreshMode == McpEditorWindowRefreshMode.Full;
+        }
+
+        public static bool ShouldRefreshSkillInstallState(
+            McpEditorWindowRefreshMode refreshMode,
+            bool refreshRequested)
+        {
+            return refreshRequested && ShouldRunExpensiveChecks(refreshMode);
+        }
+
+        public static bool ShouldKeepToolSettingsCatalogDirty(ToolSettingsSectionData toolSettingsData)
+        {
+            Debug.Assert(toolSettingsData != null, "toolSettingsData must not be null");
+
+            return toolSettingsData.ShowToolSettings && !toolSettingsData.IsRegistryAvailable;
+        }
+
+        public static bool ShouldStartToolSettingsRegistryWarmup(
+            bool isAlreadyScheduled,
+            int attemptCount,
+            int maxAttempts)
+        {
+            Debug.Assert(attemptCount >= 0, "attemptCount must not be negative");
+            Debug.Assert(maxAttempts > 0, "maxAttempts must be positive");
+
+            return !isAlreadyScheduled && attemptCount < maxAttempts;
+        }
+
+        public static double CalculateToolSettingsRegistryWarmupDelaySeconds(
+            double initialDelaySeconds,
+            double maxDelaySeconds,
+            int attemptCount)
+        {
+            Debug.Assert(initialDelaySeconds > 0.0, "initialDelaySeconds must be positive");
+            Debug.Assert(maxDelaySeconds >= initialDelaySeconds, "maxDelaySeconds must not be smaller than initialDelaySeconds");
+            Debug.Assert(attemptCount >= 0, "attemptCount must not be negative");
+
+            double delaySeconds = initialDelaySeconds;
+            for (int i = 0; i < attemptCount; i++)
+            {
+                delaySeconds *= 2.0;
+            }
+
+            return System.Math.Min(delaySeconds, maxDelaySeconds);
+        }
+    }
+
+    internal enum McpEditorWindowRefreshMode
+    {
+        InitialPaint,
+        Full
     }
 }

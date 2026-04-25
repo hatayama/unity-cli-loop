@@ -523,6 +523,31 @@
     flex-grow: 1;
 }
 
+.mcp-tool-list-container {
+    padding-left: 0;
+}
+
+.mcp-tool-list-view {
+    margin-top: 4px;
+    margin-left: 0;
+    margin-right: 0;
+    border-width: 0;
+    background-color: transparent;
+}
+
+.mcp-tool-list-row {
+    min-height: 24px;
+}
+
+.mcp-tool-list-row--header {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.mcp-tool-list-row--disabled {
+    opacity: 0.45;
+}
+
 .mcp-tool-registry-unavailable {
     color: #888888;
     -unity-font-style: italic;

@@ -11,6 +11,10 @@ namespace io.github.hatayama.uLoopMCP
     public class McpEditorWindow : EditorWindow
     {
         private const bool ForceFlatSkillInstall = true;
+        private const double DeferredInitialRefreshDelaySeconds = 0.05;
+        private const double ToolSettingsRegistryWarmupInitialDelaySeconds = 0.05;
+        private const double ToolSettingsRegistryWarmupMaxDelaySeconds = 0.8;
+        private const int ToolSettingsRegistryWarmupMaxAttempts = 5;
 
         private McpConfigServiceFactory _configServiceFactory;
         private McpEditorWindowUI _view;
@@ -22,6 +26,13 @@ namespace io.github.hatayama.uLoopMCP
         private bool _isInstallingCli;
         private bool _isInstallingSkills;
         private bool _isRefreshingVersion;
+        private bool _isToolSettingsCatalogDirty = true;
+        private bool _isDeferredInitialRefreshScheduled;
+        private bool _hasCompletedDeferredInitialRefresh;
+        private double _deferredInitialRefreshDueTime;
+        private bool _isToolSettingsRegistryWarmupScheduled;
+        private double _toolSettingsRegistryWarmupDueTime;
+        private int _toolSettingsRegistryWarmupAttemptCount;
         private SkillInstallState _selectedTargetInstallState = SkillInstallState.Missing;
         private CancellationTokenSource _skillInstallStateRefreshCts;
 
@@ -39,14 +50,19 @@ namespace io.github.hatayama.uLoopMCP
 
         private void OnDestroy()
         {
+            CancelDeferredInitialRefresh();
+            CancelToolSettingsRegistryWarmup();
+            ResetToolSettingsRegistryWarmupAttemptCount();
             CancelSkillInstallStateRefresh();
             _view?.Dispose();
+            _view = null;
         }
 
         private void CreateGUI()
         {
             InitializeView();
-            RefreshAllSections(refreshSkillInstallState: true);
+            RefreshAllSections(refreshMode: McpEditorWindowRefreshMode.InitialPaint);
+            ScheduleDeferredInitialRefresh();
         }
 
         private void InitializeAll()
@@ -116,16 +132,7 @@ namespace io.github.hatayama.uLoopMCP
         private void LoadSavedSettings()
         {
             _model.LoadFromSettings();
-            ApplyFlatSkillInstallPreference();
-
-            bool gitRootDiffers = UnityMcpPathResolver.GitRootDiffersFromProjectRoot();
-            _model.UpdateSupportsRepositoryRootToggle(gitRootDiffers);
-            _model.UpdateShowRepositoryRootToggle(gitRootDiffers);
-
-            if (!gitRootDiffers && _model.UI.AddRepositoryRoot)
-            {
-                _model.UpdateAddRepositoryRoot(false);
-            }
+            _installSkillsFlat = ForceFlatSkillInstall;
         }
 
         private void RestoreSessionState()
@@ -166,10 +173,14 @@ namespace io.github.hatayama.uLoopMCP
 
         private void OnDisable()
         {
+            CancelDeferredInitialRefresh();
+            CancelToolSettingsRegistryWarmup();
+            ResetToolSettingsRegistryWarmupAttemptCount();
             CancelSkillInstallStateRefresh();
             CleanupEventHandler();
             SaveSessionState();
             _view?.Dispose();
+            _view = null;
         }
 
         private void CleanupEventHandler()
@@ -182,43 +193,105 @@ namespace io.github.hatayama.uLoopMCP
             _model.SaveToSessionState();
         }
 
-        private void OnFocus()
+        private void ScheduleDeferredInitialRefresh()
         {
-            RefreshAllSections();
+            if (_isDeferredInitialRefreshScheduled)
+            {
+                return;
+            }
+
+            _isDeferredInitialRefreshScheduled = true;
+            _deferredInitialRefreshDueTime = EditorApplication.timeSinceStartup + DeferredInitialRefreshDelaySeconds;
+            EditorApplication.update += RunDeferredInitialRefreshWhenDue;
         }
 
-        public void RefreshAllSections(bool refreshSkillInstallState = false)
+        private void RunDeferredInitialRefreshWhenDue()
+        {
+            if (EditorApplication.timeSinceStartup < _deferredInitialRefreshDueTime)
+            {
+                return;
+            }
+
+            CancelDeferredInitialRefresh();
+            if (_view == null)
+            {
+                return;
+            }
+
+            _hasCompletedDeferredInitialRefresh = true;
+            _selectedTargetInstallState = SkillInstallState.Checking;
+            RefreshRepositoryRootSupport();
+            RefreshAllSections(
+                refreshSkillInstallState: false,
+                refreshMode: McpEditorWindowRefreshMode.Full);
+            RefreshSelectedTargetInstallStateInBackground();
+        }
+
+        private void CancelDeferredInitialRefresh()
+        {
+            if (!_isDeferredInitialRefreshScheduled)
+            {
+                return;
+            }
+
+            EditorApplication.update -= RunDeferredInitialRefreshWhenDue;
+            _isDeferredInitialRefreshScheduled = false;
+        }
+
+        private void OnFocus()
+        {
+            if (!_hasCompletedDeferredInitialRefresh)
+            {
+                RefreshAllSections(refreshMode: McpEditorWindowRefreshMode.InitialPaint);
+            }
+
+            ScheduleDeferredInitialRefresh();
+        }
+
+        internal void RefreshAllSections(
+            bool refreshSkillInstallState = false,
+            McpEditorWindowRefreshMode refreshMode = McpEditorWindowRefreshMode.Full)
         {
             if (_view == null)
             {
                 return;
             }
 
+            bool runExpensiveChecks = McpEditorWindowRefreshPolicy.ShouldRunExpensiveChecks(refreshMode);
+
             ConnectionModeData modeData = new ConnectionModeData(_model.UI.ConnectionMode);
             _view.UpdateConnectionMode(modeData);
             _view.UpdateConfigurationFoldout(_model.UI.ShowConfiguration);
             _view.UpdateSectionVisibility(_model.UI.ConnectionMode);
 
-            if (refreshSkillInstallState)
+            if (McpEditorWindowRefreshPolicy.ShouldRefreshSkillInstallState(refreshMode, refreshSkillInstallState))
             {
                 RefreshSelectedTargetInstallStateFast();
             }
 
-            RefreshCliVersionInBackground();
-            if (refreshSkillInstallState)
+            if (runExpensiveChecks)
             {
-                RefreshSelectedTargetInstallStateInBackground();
+                RefreshCliVersionInBackground();
+                if (refreshSkillInstallState)
+                {
+                    RefreshSelectedTargetInstallStateInBackground();
+                }
             }
-            RefreshCliSetupSection();
+            RefreshCliSetupSection(runExpensiveChecks);
 
             ConnectedToolsData toolsData = CreateConnectedToolsData();
             _view.UpdateConnectedTools(toolsData);
 
-            EditorConfigData configData = CreateEditorConfigData();
+            EditorConfigData configData = runExpensiveChecks
+                ? CreateEditorConfigData()
+                : CreateEditorConfigPlaceholderData();
             _view.UpdateEditorConfig(configData);
 
-            ToolSettingsSectionData toolSettingsData = CreateToolSettingsData();
-            _view.UpdateToolSettings(toolSettingsData);
+            RefreshToolSettingsHeader();
+            if (runExpensiveChecks)
+            {
+                RefreshToolSettingsCatalogIfNeeded();
+            }
         }
 
         private async void RefreshCliVersionInBackground()
@@ -330,9 +403,85 @@ namespace io.github.hatayama.uLoopMCP
                 _model.UI.ShowRepositoryRootToggle);
         }
 
+        private EditorConfigData CreateEditorConfigPlaceholderData()
+        {
+            return new EditorConfigData(
+                _model.UI.SelectedEditorType,
+                McpServerController.IsServerRunning,
+                McpServerController.ServerPort,
+                isConfigured: false,
+                hasPortMismatch: false,
+                configurationError: null,
+                isUpdateNeeded: true,
+                addRepositoryRoot: _model.UI.AddRepositoryRoot,
+                supportsRepositoryRootToggle: _model.UI.SupportsRepositoryRootToggle,
+                showRepositoryRootToggle: _model.UI.ShowRepositoryRootToggle,
+                isChecking: true);
+        }
+
+        public void InvalidateToolSettingsCatalog()
+        {
+            _isToolSettingsCatalogDirty = true;
+        }
+
+        private void RefreshToolSettingsHeader()
+        {
+            ToolSettingsSectionData toolSettingsData = CreateToolSettingsHeaderData();
+            _view.UpdateToolSettings(toolSettingsData);
+        }
+
+        private void RefreshToolSettingsCatalog()
+        {
+            ToolSettingsSectionData toolSettingsData = CreateToolSettingsData();
+            _view.UpdateToolSettings(toolSettingsData);
+
+            if (McpEditorWindowRefreshPolicy.ShouldKeepToolSettingsCatalogDirty(toolSettingsData))
+            {
+                if (ScheduleToolSettingsRegistryWarmup())
+                {
+                    _isToolSettingsCatalogDirty = true;
+                    return;
+                }
+
+                _isToolSettingsCatalogDirty = false;
+                return;
+            }
+
+            CancelToolSettingsRegistryWarmup();
+            ResetToolSettingsRegistryWarmupAttemptCount();
+            _isToolSettingsCatalogDirty = false;
+        }
+
+        private void RefreshToolSettingsCatalogIfNeeded()
+        {
+            if (!_model.UI.ShowToolSettings || !_isToolSettingsCatalogDirty)
+            {
+                return;
+            }
+
+            if (_view == null)
+            {
+                return;
+            }
+
+            RefreshToolSettingsCatalog();
+        }
+
+        private ToolSettingsSectionData CreateToolSettingsHeaderData()
+        {
+            return new ToolSettingsSectionData(
+                _model.UI.ShowToolSettings,
+                ULoopSettings.GetAllowThirdPartyTools(),
+                ULoopSettings.GetDynamicCodeSecurityLevel(),
+                System.Array.Empty<ToolToggleItem>(),
+                System.Array.Empty<ToolToggleItem>(),
+                true,
+                false);
+        }
+
         private ToolSettingsSectionData CreateToolSettingsData()
         {
-            UnityToolRegistry registry = CustomToolManager.GetRegistry();
+            UnityToolRegistry registry = CustomToolManager.TryGetRegistry();
             if (registry == null)
             {
                 return new ToolSettingsSectionData(
@@ -341,24 +490,24 @@ namespace io.github.hatayama.uLoopMCP
                     ULoopSettings.GetDynamicCodeSecurityLevel(),
                     System.Array.Empty<ToolToggleItem>(),
                     System.Array.Empty<ToolToggleItem>(),
-                    false);
+                    false,
+                    true);
             }
 
-            ToolInfo[] allTools = registry.GetAllRegisteredToolInfos();
+            ToolSettingsCatalogItem[] allTools = registry.GetToolSettingsCatalog();
 
             System.Collections.Generic.List<ToolToggleItem> builtIn = new();
             System.Collections.Generic.List<ToolToggleItem> thirdParty = new();
 
-            foreach (ToolInfo tool in allTools)
+            foreach (ToolSettingsCatalogItem tool in allTools)
             {
-                // Internal tools are always enabled and hidden from UI
                 if (tool.DisplayDevelopmentOnly)
                 {
                     continue;
                 }
 
                 bool isEnabled = ToolSettings.IsToolEnabled(tool.Name);
-                bool isThirdPartyTool = registry.IsThirdPartyTool(tool.Name);
+                bool isThirdPartyTool = tool.IsThirdParty;
 
                 ToolToggleItem item = new ToolToggleItem(tool.Name, tool.Description, isEnabled, isThirdPartyTool);
                 if (isThirdPartyTool)
@@ -381,12 +530,82 @@ namespace io.github.hatayama.uLoopMCP
                 ULoopSettings.GetDynamicCodeSecurityLevel(),
                 builtIn.ToArray(),
                 thirdParty.ToArray(),
+                true,
                 true);
         }
 
         private void UpdateShowToolSettings(bool show)
         {
             _model.UpdateShowToolSettings(show);
+            RefreshToolSettingsHeader();
+
+            if (!show)
+            {
+                _isToolSettingsCatalogDirty = true;
+                CancelToolSettingsRegistryWarmup();
+                ResetToolSettingsRegistryWarmupAttemptCount();
+                return;
+            }
+
+            RefreshToolSettingsCatalogIfNeeded();
+        }
+
+        private bool ScheduleToolSettingsRegistryWarmup()
+        {
+            if (McpEditorWindowRefreshPolicy.ShouldStartToolSettingsRegistryWarmup(
+                    _isToolSettingsRegistryWarmupScheduled,
+                    _toolSettingsRegistryWarmupAttemptCount,
+                    ToolSettingsRegistryWarmupMaxAttempts))
+            {
+                double delaySeconds = McpEditorWindowRefreshPolicy.CalculateToolSettingsRegistryWarmupDelaySeconds(
+                    ToolSettingsRegistryWarmupInitialDelaySeconds,
+                    ToolSettingsRegistryWarmupMaxDelaySeconds,
+                    _toolSettingsRegistryWarmupAttemptCount);
+
+                _isToolSettingsRegistryWarmupScheduled = true;
+                _toolSettingsRegistryWarmupDueTime = EditorApplication.timeSinceStartup + delaySeconds;
+                _toolSettingsRegistryWarmupAttemptCount++;
+                EditorApplication.update += RunToolSettingsRegistryWarmupWhenDue;
+                return true;
+            }
+
+            return _isToolSettingsRegistryWarmupScheduled;
+        }
+
+        private void RunToolSettingsRegistryWarmupWhenDue()
+        {
+            if (EditorApplication.timeSinceStartup < _toolSettingsRegistryWarmupDueTime)
+            {
+                return;
+            }
+
+            CancelToolSettingsRegistryWarmup();
+
+            if (_view == null || !_model.UI.ShowToolSettings)
+            {
+                ResetToolSettingsRegistryWarmupAttemptCount();
+                return;
+            }
+
+            CustomToolManager.WarmupRegistry();
+            InvalidateToolSettingsCatalog();
+            RefreshToolSettingsCatalogIfNeeded();
+        }
+
+        private void CancelToolSettingsRegistryWarmup()
+        {
+            if (!_isToolSettingsRegistryWarmupScheduled)
+            {
+                return;
+            }
+
+            EditorApplication.update -= RunToolSettingsRegistryWarmupWhenDue;
+            _isToolSettingsRegistryWarmupScheduled = false;
+        }
+
+        private void ResetToolSettingsRegistryWarmupAttemptCount()
+        {
+            _toolSettingsRegistryWarmupAttemptCount = 0;
         }
 
         private void HandleToolToggled(string toolName, bool enabled)
@@ -408,7 +627,7 @@ namespace io.github.hatayama.uLoopMCP
             }
             else
             {
-                await ToolSkillSynchronizer.InstallSkillFiles(!_installSkillsFlat);
+                await ToolSkillSynchronizer.InstallSkillFilesForTool(toolName, !_installSkillsFlat);
 
                 if (!ToolSkillSynchronizer.IsSkillInstalled(toolName))
                 {
@@ -516,7 +735,7 @@ namespace io.github.hatayama.uLoopMCP
         private void UpdateAllowThirdPartyTools(bool allow)
         {
             _model.UpdateAllowThirdPartyTools(allow);
-            RefreshAllSections();
+            RefreshToolSettingsHeader();
         }
 
         private void UpdateAddRepositoryRoot(bool addRepositoryRoot)
@@ -538,22 +757,24 @@ namespace io.github.hatayama.uLoopMCP
             RefreshCliSetupSection();
         }
 
-        private void RefreshCliSetupSection()
+        private void RefreshCliSetupSection(bool includeSkillDirectoryChecks = true)
         {
             if (_view == null)
             {
                 return;
             }
 
-            CliSetupData cliData = CreateCliSetupData();
+            CliSetupData cliData = CreateCliSetupData(includeSkillDirectoryChecks);
             _view.UpdateCliSetup(cliData);
         }
 
-        private CliSetupData CreateCliSetupData()
+        private CliSetupData CreateCliSetupData(bool includeSkillDirectoryChecks = true)
         {
             string cliVersion = CliInstallationDetector.GetCachedCliVersion();
             bool isCliInstalled = cliVersion != null;
-            bool isChecking = !CliInstallationDetector.IsCheckCompleted() || _isRefreshingVersion;
+            bool isChecking = !CliInstallationDetector.IsCheckCompleted()
+                || _isRefreshingVersion
+                || !includeSkillDirectoryChecks;
             string packageVersion = McpConstants.PackageInfo.version;
             bool needsUpdate = false;
             bool needsDowngrade = false;
@@ -565,24 +786,9 @@ namespace io.github.hatayama.uLoopMCP
                 needsDowngrade = cliVer > pkgVer;
             }
             bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
-            bool isClaudeInstalled = CliInstallationDetector.AreSkillsInstalled(
-                ".claude",
-                groupSkillsUnderUnityCliLoop);
-            bool isAgentsInstalled = CliInstallationDetector.AreSkillsInstalled(
-                ".agents",
-                groupSkillsUnderUnityCliLoop);
-            bool isCursorInstalled = CliInstallationDetector.AreSkillsInstalled(
-                ".cursor",
-                groupSkillsUnderUnityCliLoop);
-            bool isGeminiInstalled = CliInstallationDetector.AreSkillsInstalled(
-                ".gemini",
-                groupSkillsUnderUnityCliLoop);
-            bool isCodexInstalled = CliInstallationDetector.AreSkillsInstalled(
-                ".codex",
-                groupSkillsUnderUnityCliLoop);
-            bool isAntigravityInstalled = CliInstallationDetector.AreSkillsInstalled(
-                ".agent",
-                groupSkillsUnderUnityCliLoop);
+            SkillInstallState selectedTargetInstallState = includeSkillDirectoryChecks
+                ? _selectedTargetInstallState
+                : SkillInstallState.Checking;
 
             return new CliSetupData(
                 isCliInstalled,
@@ -592,13 +798,13 @@ namespace io.github.hatayama.uLoopMCP
                 needsDowngrade,
                 _isInstallingCli,
                 isChecking,
-                isClaudeInstalled,
-                isAgentsInstalled,
-                isCursorInstalled,
-                isGeminiInstalled,
-                isCodexInstalled,
-                isAntigravityInstalled,
-                _selectedTargetInstallState,
+                isClaudeSkillsInstalled: false,
+                isAgentsSkillsInstalled: false,
+                isCursorSkillsInstalled: false,
+                isGeminiSkillsInstalled: false,
+                isCodexSkillsInstalled: false,
+                isAntigravitySkillsInstalled: false,
+                selectedTargetInstallState,
                 _skillsTarget,
                 groupSkillsUnderUnityCliLoop,
                 _isInstallingSkills);
@@ -794,6 +1000,20 @@ namespace io.github.hatayama.uLoopMCP
             ApplyFlatSkillInstallPreference();
             RefreshSelectedTargetInstallStateFast();
             RefreshSelectedTargetInstallStateInBackground();
+        }
+
+        private void RefreshRepositoryRootSupport()
+        {
+            ApplyFlatSkillInstallPreference();
+
+            bool gitRootDiffers = UnityMcpPathResolver.GitRootDiffersFromProjectRoot();
+            _model.UpdateSupportsRepositoryRootToggle(gitRootDiffers);
+            _model.UpdateShowRepositoryRootToggle(gitRootDiffers);
+
+            if (!gitRootDiffers && _model.UI.AddRepositoryRoot)
+            {
+                _model.UpdateAddRepositoryRoot(false);
+            }
         }
 
         private void ApplyFlatSkillInstallPreference()

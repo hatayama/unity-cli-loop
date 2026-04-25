@@ -8,14 +8,22 @@ namespace io.github.hatayama.uLoopMCP
     [TestFixture]
     public class ToolSkillSynchronizerTests
     {
+        private static readonly string ToolSettingsFilePath =
+            Path.Combine(McpConstants.ULOOP_DIR, McpConstants.ULOOP_TOOL_SETTINGS_FILE_NAME);
+
         private string _projectRoot;
         private string[] _nonExistentDirsBefore;
         private string[] _temporaryRoots;
+        private bool _toolSettingsFileExisted;
+        private string _toolSettingsFileContent;
 
         [SetUp]
         public void SetUp()
         {
             _projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            _toolSettingsFileExisted = File.Exists(ToolSettingsFilePath);
+            _toolSettingsFileContent = _toolSettingsFileExisted ? File.ReadAllText(ToolSettingsFilePath) : null;
+            ToolSettings.InvalidateCache();
 
             _nonExistentDirsBefore = ToolSkillSynchronizer.SkillTargetDirs
                 .Where(dir => !Directory.Exists(Path.Combine(_projectRoot, dir)))
@@ -53,6 +61,9 @@ namespace io.github.hatayama.uLoopMCP
                     Directory.Delete(temporaryRoot, true);
                 }
             }
+
+            RestoreToolSettingsFile();
+            ToolSettings.InvalidateCache();
         }
 
         [Test]
@@ -293,6 +304,152 @@ namespace io.github.hatayama.uLoopMCP
             Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
             Assert.That(File.Exists(Path.Combine(installedSkillDir, "GetUniTaskTrackerTool.cs")), Is.False);
             Assert.That(Directory.Exists(groupedSkillDir), Is.False);
+        }
+
+        [Test]
+        public async Task InstallSkillFilesForToolAtProjectRoot_DoesNotUpdateUnrelatedSkills()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-enabled-skill",
+                "EnabledTool",
+                "reference.md",
+                "enabled-reference");
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-unrelated-skill",
+                "UnrelatedTool",
+                "reference.md",
+                "new-unrelated-reference");
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            Directory.CreateDirectory(skillsRoot);
+            string unrelatedSkillDir = Path.Combine(skillsRoot, "uloop-unrelated-skill");
+            WriteSkillFile(unrelatedSkillDir, "---\nname: uloop-unrelated-skill\n---\n");
+            File.WriteAllText(Path.Combine(unrelatedSkillDir, "reference.md"), "old-unrelated-reference");
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesForToolAtProjectRoot(
+                    temporaryRoot,
+                    "enabled-skill",
+                    groupSkillsUnderUnityCliLoop: false);
+
+            string enabledSkillDir = Path.Combine(skillsRoot, "uloop-enabled-skill");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(result.AttemptedTargets, Is.EqualTo(1));
+            Assert.That(File.ReadAllText(Path.Combine(enabledSkillDir, "reference.md")), Is.EqualTo("enabled-reference"));
+            Assert.That(
+                File.ReadAllText(Path.Combine(unrelatedSkillDir, "reference.md")),
+                Is.EqualTo("old-unrelated-reference"));
+        }
+
+        [Test]
+        public async Task InstallSkillFilesForToolAtProjectRoot_RemovesDisabledAndDeprecatedSkillsWithoutUpdatingUnrelatedSkills()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-enabled-skill",
+                "EnabledTool",
+                "reference.md",
+                "enabled-reference");
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-disabled-skill",
+                "DisabledTool",
+                "reference.md",
+                "disabled-reference");
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-unrelated-skill",
+                "UnrelatedTool",
+                "reference.md",
+                "new-unrelated-reference");
+            ToolSettings.SaveSettings(new ToolSettingsData
+            {
+                disabledTools = new[] { "disabled-skill" }
+            });
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            Directory.CreateDirectory(skillsRoot);
+            string disabledSkillDir = Path.Combine(skillsRoot, "uloop-disabled-skill");
+            string deprecatedSkillDir = Path.Combine(skillsRoot, "uloop-capture-window");
+            string unrelatedSkillDir = Path.Combine(skillsRoot, "uloop-unrelated-skill");
+            string thirdPartySkillDir = Path.Combine(skillsRoot, "acme-third-party");
+            WriteSkillFile(disabledSkillDir, "---\nname: uloop-disabled-skill\n---\n");
+            WriteSkillFile(deprecatedSkillDir, "---\nname: uloop-capture-window\n---\n");
+            WriteSkillFile(unrelatedSkillDir, "---\nname: uloop-unrelated-skill\n---\n");
+            File.WriteAllText(Path.Combine(unrelatedSkillDir, "reference.md"), "old-unrelated-reference");
+            WriteSkillFile(
+                thirdPartySkillDir,
+                "---\nname: acme-third-party\ntoolName: acme-third-party\n---\n");
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesForToolAtProjectRoot(
+                    temporaryRoot,
+                    "enabled-skill",
+                    groupSkillsUnderUnityCliLoop: false);
+
+            string enabledSkillDir = Path.Combine(skillsRoot, "uloop-enabled-skill");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(File.ReadAllText(Path.Combine(enabledSkillDir, "reference.md")), Is.EqualTo("enabled-reference"));
+            Assert.That(Directory.Exists(disabledSkillDir), Is.False);
+            Assert.That(Directory.Exists(deprecatedSkillDir), Is.False);
+            Assert.That(
+                File.ReadAllText(Path.Combine(unrelatedSkillDir, "reference.md")),
+                Is.EqualTo("old-unrelated-reference"));
+            Assert.That(Directory.Exists(thirdPartySkillDir), Is.True);
+        }
+
+        [Test]
+        public async Task InstallSkillFilesForToolAtProjectRoot_WhenFlatLayoutRequested_PreservesDisabledAndDeprecatedGroupedSkills()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-enabled-skill",
+                "EnabledTool",
+                "reference.md",
+                "enabled-reference");
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-disabled-skill",
+                "DisabledTool",
+                "reference.md",
+                "disabled-reference");
+            ToolSettings.SaveSettings(new ToolSettingsData
+            {
+                disabledTools = new[] { "disabled-skill" }
+            });
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            string managedSkillsRoot = Path.Combine(skillsRoot, SkillInstallLayout.ManagedSkillsDirName);
+            string flatDisabledSkillDir = Path.Combine(skillsRoot, "uloop-disabled-skill");
+            string flatDeprecatedSkillDir = Path.Combine(skillsRoot, "uloop-capture-window");
+            string groupedDisabledSkillDir = Path.Combine(managedSkillsRoot, "uloop-disabled-skill");
+            string groupedDeprecatedSkillDir = Path.Combine(managedSkillsRoot, "uloop-capture-window");
+            WriteSkillFile(flatDisabledSkillDir, "---\nname: uloop-disabled-skill\n---\n");
+            WriteSkillFile(flatDeprecatedSkillDir, "---\nname: uloop-capture-window\n---\n");
+            WriteSkillFile(groupedDisabledSkillDir, "---\nname: uloop-disabled-skill\n---\n");
+            WriteSkillFile(groupedDeprecatedSkillDir, "---\nname: uloop-capture-window\n---\n");
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesForToolAtProjectRoot(
+                    temporaryRoot,
+                    "enabled-skill",
+                    groupSkillsUnderUnityCliLoop: false);
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(Directory.Exists(flatDisabledSkillDir), Is.False);
+            Assert.That(Directory.Exists(flatDeprecatedSkillDir), Is.False);
+            Assert.That(Directory.Exists(groupedDisabledSkillDir), Is.True);
+            Assert.That(Directory.Exists(groupedDeprecatedSkillDir), Is.True);
         }
 
         [Test]
@@ -1081,6 +1238,20 @@ namespace io.github.hatayama.uLoopMCP
         {
             Directory.CreateDirectory(skillDir);
             File.WriteAllText(Path.Combine(skillDir, SkillInstallLayout.SkillFileName), content);
+        }
+
+        private void RestoreToolSettingsFile()
+        {
+            if (_toolSettingsFileExisted)
+            {
+                File.WriteAllText(ToolSettingsFilePath, _toolSettingsFileContent);
+                return;
+            }
+
+            if (File.Exists(ToolSettingsFilePath))
+            {
+                File.Delete(ToolSettingsFilePath);
+            }
         }
 
         private static void CreateFakeSourceSkill(

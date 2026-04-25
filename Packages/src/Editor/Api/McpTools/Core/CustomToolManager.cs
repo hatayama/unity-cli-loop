@@ -11,6 +11,8 @@ namespace io.github.hatayama.uLoopMCP
     {
         private static UnityToolRegistry _sharedRegistry;
 
+        internal static event Action OnToolsChanged;
+
         /// <summary>
         /// Get shared registry (lazy initialization)
         /// </summary>
@@ -79,6 +81,11 @@ namespace io.github.hatayama.uLoopMCP
             return SharedRegistry;
         }
 
+        internal static UnityToolRegistry TryGetRegistry()
+        {
+            return _sharedRegistry;
+        }
+
         internal static void WarmupRegistry()
         {
             _ = SharedRegistry;
@@ -106,6 +113,7 @@ namespace io.github.hatayama.uLoopMCP
         public static void NotifyToolChanges()
         {
             UnityToolRegistry.TriggerToolsChangedNotification();
+            OnToolsChanged?.Invoke();
         }
     }
 }

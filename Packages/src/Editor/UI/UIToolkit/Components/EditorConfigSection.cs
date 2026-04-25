@@ -124,7 +124,12 @@ namespace io.github.hatayama.uLoopMCP
             string buttonText;
             bool buttonEnabled = true;
 
-            if (data.IsConfigured)
+            if (data.IsChecking)
+            {
+                buttonText = $"Checking {editorName} Settings...";
+                buttonEnabled = false;
+            }
+            else if (data.IsConfigured)
             {
                 if (data.IsUpdateNeeded)
                 {

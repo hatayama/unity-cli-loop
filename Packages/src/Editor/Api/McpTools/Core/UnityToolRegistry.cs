@@ -304,6 +304,24 @@ namespace io.github.hatayama.uLoopMCP
             }).ToArray();
         }
 
+        public ToolSettingsCatalogItem[] GetToolSettingsCatalog()
+        {
+            return _tools.Values.Select(tool =>
+            {
+                Type toolType = tool.GetType();
+                McpToolAttribute attribute = toolType.GetCustomAttribute<McpToolAttribute>();
+                string description = attribute?.Description ?? "";
+                bool displayDevelopmentOnly = attribute?.DisplayDevelopmentOnly ?? false;
+                bool isThirdParty = IsThirdPartyAssembly(toolType.Assembly.GetName().Name);
+
+                return new ToolSettingsCatalogItem(
+                    tool.ToolName,
+                    description,
+                    displayDevelopmentOnly,
+                    isThirdParty);
+            }).ToArray();
+        }
+
         /// <summary>
         /// Check if a tool belongs to a third-party assembly.
         /// </summary>
@@ -314,6 +332,11 @@ namespace io.github.hatayama.uLoopMCP
                 return true;
             }
             string assemblyName = tool.GetType().Assembly.GetName().Name;
+            return IsThirdPartyAssembly(assemblyName);
+        }
+
+        private static bool IsThirdPartyAssembly(string assemblyName)
+        {
             return assemblyName != "uLoopMCP.Editor";
         }
 
@@ -372,6 +395,29 @@ namespace io.github.hatayama.uLoopMCP
             Description = description;
             ParameterSchema = parameterSchema;
             DisplayDevelopmentOnly = displayDevelopmentOnly;
+        }
+    }
+
+    /// <summary>
+    /// Lightweight registry metadata used by Tool Settings UI without generating parameter schemas.
+    /// </summary>
+    public class ToolSettingsCatalogItem
+    {
+        public readonly string Name;
+        public readonly string Description;
+        public readonly bool DisplayDevelopmentOnly;
+        public readonly bool IsThirdParty;
+
+        public ToolSettingsCatalogItem(
+            string name,
+            string description,
+            bool displayDevelopmentOnly,
+            bool isThirdParty)
+        {
+            Name = name;
+            Description = description;
+            DisplayDevelopmentOnly = displayDevelopmentOnly;
+            IsThirdParty = isThirdParty;
         }
     }
 }

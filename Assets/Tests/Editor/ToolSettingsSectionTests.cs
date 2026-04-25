@@ -1,3 +1,4 @@
+using System.Collections;
 using NUnit.Framework;
 using UnityEngine.UIElements;
 
@@ -6,88 +7,117 @@ namespace io.github.hatayama.uLoopMCP
     [TestFixture]
     public class ToolSettingsSectionTests
     {
-        [Test]
-        public void Update_SameLayout_DoesNotReplaceToggleElements()
-        {
-            VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
-            ToolSettingsSectionData data = CreateData(compileEnabled: true, includeGetLogs: false);
-            VisualElement container = root.Q<VisualElement>("tool-list-container");
-
-            section.Update(data);
-            Toggle beforeToggle = FindToggleByToolName(container, "compile");
-
-            section.Update(data);
-            Toggle afterToggle = FindToggleByToolName(container, "compile");
-
-            Assert.IsNotNull(beforeToggle);
-            Assert.AreSame(beforeToggle, afterToggle);
-        }
+        private const int ToolListRowHeight = 24;
 
         [Test]
-        public void Update_SameLayout_UpdatesToggleStateWithoutRebuild()
-        {
-            VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
-            ToolSettingsSectionData enabledData = CreateData(compileEnabled: true, includeGetLogs: false);
-            ToolSettingsSectionData disabledData = CreateData(compileEnabled: false, includeGetLogs: false);
-            VisualElement container = root.Q<VisualElement>("tool-list-container");
-
-            section.Update(enabledData);
-            Toggle beforeToggle = FindToggleByToolName(container, "compile");
-            Assert.IsNotNull(beforeToggle);
-            Assert.IsTrue(beforeToggle.value);
-
-            section.Update(disabledData);
-            Toggle afterToggle = FindToggleByToolName(container, "compile");
-
-            Assert.AreSame(beforeToggle, afterToggle);
-            Assert.IsFalse(afterToggle.value);
-        }
-
-        [Test]
-        public void Update_LayoutChanged_RebuildsToggleElements()
-        {
-            VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
-            ToolSettingsSectionData initialData = CreateData(compileEnabled: true, includeGetLogs: false);
-            ToolSettingsSectionData changedLayoutData = CreateData(compileEnabled: true, includeGetLogs: true);
-            VisualElement container = root.Q<VisualElement>("tool-list-container");
-
-            section.Update(initialData);
-            Toggle beforeToggle = FindToggleByToolName(container, "compile");
-
-            section.Update(changedLayoutData);
-            Toggle afterToggle = FindToggleByToolName(container, "compile");
-            Toggle getLogsToggle = FindToggleByToolName(container, "get-logs");
-
-            Assert.IsNotNull(beforeToggle);
-            Assert.IsNotNull(afterToggle);
-            Assert.AreNotSame(beforeToggle, afterToggle);
-            Assert.IsNotNull(getLogsToggle);
-        }
-
-        [Test]
-        public void Update_ThirdPartyToolsDisabled_GraysOutThirdPartyGroupOnly()
+        public void Update_ClosedWithoutToolListData_DoesNotCreateToolRows()
         {
             VisualElement root = CreateRootElement();
             ToolSettingsSection section = new ToolSettingsSection(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
-                includeGetLogs: false,
-                allowThirdPartyTools: false,
-                includeThirdPartyTool: true);
-            VisualElement container = root.Q<VisualElement>("tool-list-container");
+                includeGetLogs: true,
+                showToolSettings: false,
+                hasToolListData: false);
 
             section.Update(data);
 
-            VisualElement builtInGroup = FindGroupByHeader(container, "Built-in Tools");
-            VisualElement thirdPartyGroup = FindGroupByHeader(container, "Third Party Tools");
+            IList items = GetToolListItems(root);
+            ListView listView = GetToolListView(root);
+            Assert.AreEqual(0, items.Count);
+            Assert.AreEqual(DisplayStyle.None, listView.style.display.value);
+        }
 
-            Assert.IsNotNull(builtInGroup);
-            Assert.IsNotNull(thirdPartyGroup);
-            Assert.IsTrue(builtInGroup.enabledSelf);
-            Assert.IsFalse(thirdPartyGroup.enabledSelf);
+        [Test]
+        public void Update_OpenWithoutToolListData_ShowsLoadingWithoutToolRows()
+        {
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSectionData data = CreateData(
+                compileEnabled: true,
+                includeGetLogs: true,
+                showToolSettings: true,
+                hasToolListData: false);
+
+            section.Update(data);
+
+            IList items = GetToolListItems(root);
+            Label statusLabel = root.Q<Label>("tool-list-status-label");
+            ListView listView = GetToolListView(root);
+            Assert.AreEqual(0, items.Count);
+            Assert.AreEqual("Loading tools...", statusLabel.text);
+            Assert.AreEqual(DisplayStyle.Flex, statusLabel.style.display.value);
+            Assert.AreEqual(DisplayStyle.None, listView.style.display.value);
+        }
+
+        [Test]
+        public void Update_LoadedData_PopulatesVirtualizedRows()
+        {
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSectionData data = CreateData(
+                compileEnabled: true,
+                includeGetLogs: true,
+                includeThirdPartyTool: true);
+
+            section.Update(data);
+
+            IList items = GetToolListItems(root);
+            ListView listView = GetToolListView(root);
+            Label statusLabel = root.Q<Label>("tool-list-status-label");
+            Assert.AreEqual(5, items.Count);
+            Assert.AreEqual(DisplayStyle.Flex, listView.style.display.value);
+            Assert.AreEqual(DisplayStyle.None, statusLabel.style.display.value);
+            Assert.AreEqual((5 * ToolListRowHeight) + 2, listView.style.height.value.value);
+        }
+
+        [Test]
+        public void Update_HeaderOnlyRefreshAfterLoad_PreservesLoadedRows()
+        {
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSectionData loadedData = CreateData(
+                compileEnabled: true,
+                includeGetLogs: false,
+                includeThirdPartyTool: true);
+            ToolSettingsSectionData headerOnlyData = CreateData(
+                compileEnabled: false,
+                includeGetLogs: false,
+                allowThirdPartyTools: false,
+                includeThirdPartyTool: true,
+                hasToolListData: false);
+
+            section.Update(loadedData);
+            section.Update(headerOnlyData);
+
+            IList items = GetToolListItems(root);
+            ListView listView = GetToolListView(root);
+            Assert.AreEqual(4, items.Count);
+            Assert.AreEqual(DisplayStyle.Flex, listView.style.display.value);
+        }
+
+        [Test]
+        public void Update_ClosedAfterLoad_ReleasesLoadedRows()
+        {
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSectionData loadedData = CreateData(
+                compileEnabled: true,
+                includeGetLogs: false,
+                includeThirdPartyTool: true);
+            ToolSettingsSectionData closedData = CreateData(
+                compileEnabled: true,
+                includeGetLogs: false,
+                showToolSettings: false,
+                hasToolListData: false);
+
+            section.Update(loadedData);
+            section.Update(closedData);
+
+            IList items = GetToolListItems(root);
+            ListView listView = GetToolListView(root);
+            Assert.AreEqual(0, items.Count);
+            Assert.AreEqual(DisplayStyle.None, listView.style.display.value);
         }
 
         [Test]
@@ -167,12 +197,17 @@ namespace io.github.hatayama.uLoopMCP
             {
                 name = "security-level-description"
             };
+            VisualElement toolSettingsInfoContainer = new VisualElement
+            {
+                name = "tool-settings-info-container"
+            };
 
             foldout.Add(allowThirdPartyToggle);
             foldout.Add(allowThirdPartyLabel);
             foldout.Add(securityLevelRestrictedButton);
             foldout.Add(securityLevelFullAccessButton);
             foldout.Add(securityLevelDescription);
+            foldout.Add(toolSettingsInfoContainer);
             foldout.Add(container);
             root.Add(foldout);
             root.Add(cliReferenceLink);
@@ -182,8 +217,10 @@ namespace io.github.hatayama.uLoopMCP
         private static ToolSettingsSectionData CreateData(
             bool compileEnabled,
             bool includeGetLogs,
+            bool showToolSettings = true,
             bool allowThirdPartyTools = true,
             bool includeThirdPartyTool = false,
+            bool hasToolListData = true,
             DynamicCodeSecurityLevel dynamicCodeSecurityLevel = DynamicCodeSecurityLevel.Restricted)
         {
             ToolToggleItem compile = new ToolToggleItem(
@@ -202,77 +239,43 @@ namespace io.github.hatayama.uLoopMCP
                 }
                 : System.Array.Empty<ToolToggleItem>();
 
-            if (!includeGetLogs)
+            ToolToggleItem[] builtInTools;
+            if (includeGetLogs)
             {
-                return new ToolSettingsSectionData(
-                    showToolSettings: true,
-                    allowThirdPartyTools: allowThirdPartyTools,
-                    dynamicCodeSecurityLevel: dynamicCodeSecurityLevel,
-                    builtInTools: new[] { compile },
-                    thirdPartyTools: thirdPartyTools,
-                    isRegistryAvailable: true);
+                ToolToggleItem getLogs = new ToolToggleItem(
+                    toolName: "get-logs",
+                    description: "Read Unity logs",
+                    isEnabled: true,
+                    isThirdParty: false);
+                builtInTools = new[] { compile, getLogs };
             }
-
-            ToolToggleItem getLogs = new ToolToggleItem(
-                toolName: "get-logs",
-                description: "Read Unity logs",
-                isEnabled: true,
-                isThirdParty: false);
+            else
+            {
+                builtInTools = new[] { compile };
+            }
 
             return new ToolSettingsSectionData(
-                showToolSettings: true,
+                showToolSettings: showToolSettings,
                 allowThirdPartyTools: allowThirdPartyTools,
                 dynamicCodeSecurityLevel: dynamicCodeSecurityLevel,
-                builtInTools: new[] { compile, getLogs },
+                builtInTools: builtInTools,
                 thirdPartyTools: thirdPartyTools,
-                isRegistryAvailable: true);
+                isRegistryAvailable: true,
+                hasToolListData: hasToolListData);
         }
 
-        private static VisualElement FindGroupByHeader(VisualElement container, string headerText)
+        private static IList GetToolListItems(VisualElement root)
         {
-            for (int i = 0; i < container.childCount; i++)
-            {
-                VisualElement group = container[i];
-                if (!group.ClassListContains("mcp-tool-group") || group.childCount == 0)
-                {
-                    continue;
-                }
-
-                if (group[0] is Label header && header.text == headerText)
-                {
-                    return group;
-                }
-            }
-
-            return null;
+            ListView listView = GetToolListView(root);
+            Assert.IsNotNull(listView.itemsSource);
+            return listView.itemsSource;
         }
 
-        private static Toggle FindToggleByToolName(VisualElement container, string toolName)
+        private static ListView GetToolListView(VisualElement root)
         {
-            for (int i = 0; i < container.childCount; i++)
-            {
-                VisualElement group = container[i];
-                for (int j = 0; j < group.childCount; j++)
-                {
-                    VisualElement row = group[j];
-                    bool isToggleRow = row.ClassListContains("mcp-tool-toggle-row");
-                    if (!isToggleRow || row.childCount < 2)
-                    {
-                        continue;
-                    }
-
-                    Toggle toggle = row[0] as Toggle;
-                    Label label = row[1] as Label;
-                    bool isTargetRow = label != null && label.text == toolName;
-
-                    if (isTargetRow)
-                    {
-                        return toggle;
-                    }
-                }
-            }
-
-            return null;
+            ListView listView = root.Q<ListView>("tool-list-view");
+            Assert.IsNotNull(listView);
+            return listView;
         }
     }
 }

@@ -72,8 +72,9 @@ namespace io.github.hatayama.uLoopMCP
         public readonly bool AddRepositoryRoot;
         public readonly bool SupportsRepositoryRootToggle;
         public readonly bool ShowRepositoryRootToggle;
+        public readonly bool IsChecking;
 
-        public EditorConfigData(McpEditorType selectedEditor, bool isServerRunning, int currentPort, bool isConfigured = false, bool hasPortMismatch = false, string configurationError = null, bool isUpdateNeeded = true, bool addRepositoryRoot = false, bool supportsRepositoryRootToggle = false, bool showRepositoryRootToggle = false)
+        public EditorConfigData(McpEditorType selectedEditor, bool isServerRunning, int currentPort, bool isConfigured = false, bool hasPortMismatch = false, string configurationError = null, bool isUpdateNeeded = true, bool addRepositoryRoot = false, bool supportsRepositoryRootToggle = false, bool showRepositoryRootToggle = false, bool isChecking = false)
         {
             SelectedEditor = selectedEditor;
             IsServerRunning = isServerRunning;
@@ -85,6 +86,7 @@ namespace io.github.hatayama.uLoopMCP
             AddRepositoryRoot = addRepositoryRoot;
             SupportsRepositoryRootToggle = supportsRepositoryRootToggle;
             ShowRepositoryRootToggle = showRepositoryRootToggle;
+            IsChecking = isChecking;
         }
     }
 
@@ -122,6 +124,7 @@ namespace io.github.hatayama.uLoopMCP
         public readonly ToolToggleItem[] BuiltInTools;
         public readonly ToolToggleItem[] ThirdPartyTools;
         public readonly bool IsRegistryAvailable;
+        public readonly bool HasToolListData;
 
         public ToolSettingsSectionData(
             bool showToolSettings,
@@ -129,7 +132,8 @@ namespace io.github.hatayama.uLoopMCP
             DynamicCodeSecurityLevel dynamicCodeSecurityLevel,
             ToolToggleItem[] builtInTools,
             ToolToggleItem[] thirdPartyTools,
-            bool isRegistryAvailable)
+            bool isRegistryAvailable,
+            bool hasToolListData = true)
         {
             ShowToolSettings = showToolSettings;
             AllowThirdPartyTools = allowThirdPartyTools;
@@ -137,6 +141,7 @@ namespace io.github.hatayama.uLoopMCP
             BuiltInTools = builtInTools;
             ThirdPartyTools = thirdPartyTools;
             IsRegistryAvailable = isRegistryAvailable;
+            HasToolListData = hasToolListData;
         }
     }
 
