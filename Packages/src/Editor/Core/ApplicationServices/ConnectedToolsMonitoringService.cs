@@ -322,7 +322,10 @@ namespace io.github.hatayama.uLoopMCP
             ConnectedLLMToolData[] toolsArray = _connectedTools
                 .Where(tool => tool != null && !string.IsNullOrEmpty(tool.Name))
                 .ToArray();
-            McpEditorSettings.SetConnectedLLMTools(toolsArray);
+            SaveConnectedToolsWhenChanged(
+                toolsArray,
+                McpEditorSettings.GetConnectedLLMTools,
+                McpEditorSettings.SetConnectedLLMTools);
 
             OnConnectedToolsChanged?.Invoke();
         }
@@ -348,7 +351,70 @@ namespace io.github.hatayama.uLoopMCP
             ConnectedLLMToolData[] toolsArray = _connectedTools
                 .Where(tool => tool != null && !string.IsNullOrEmpty(tool.Name) && tool.Name != McpConstants.UNKNOWN_CLIENT_NAME)
                 .ToArray();
-            McpEditorSettings.SetConnectedLLMTools(toolsArray);
+            SaveConnectedToolsWhenChanged(
+                toolsArray,
+                McpEditorSettings.GetConnectedLLMTools,
+                McpEditorSettings.SetConnectedLLMTools);
+        }
+
+        internal static bool SaveConnectedToolsWhenChanged(
+            ConnectedLLMToolData[] toolsArray,
+            Func<ConnectedLLMToolData[]> loadPersistedTools,
+            Action<ConnectedLLMToolData[]> savePersistedTools)
+        {
+            Debug.Assert(toolsArray != null, "toolsArray must not be null");
+            Debug.Assert(loadPersistedTools != null, "loadPersistedTools must not be null");
+            Debug.Assert(savePersistedTools != null, "savePersistedTools must not be null");
+
+            ConnectedLLMToolData[] persistedTools = loadPersistedTools() ?? Array.Empty<ConnectedLLMToolData>();
+            if (AreConnectedToolSnapshotsEquivalent(toolsArray, persistedTools))
+            {
+                return false;
+            }
+
+            savePersistedTools(toolsArray);
+            return true;
+        }
+
+        private static bool AreConnectedToolSnapshotsEquivalent(
+            IReadOnlyList<ConnectedLLMToolData> first,
+            IReadOnlyList<ConnectedLLMToolData> second)
+        {
+            if (first == null || second == null)
+            {
+                return first == second;
+            }
+
+            if (first.Count != second.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < first.Count; i++)
+            {
+                ConnectedLLMToolData firstTool = first[i];
+                ConnectedLLMToolData secondTool = second[i];
+                if (!AreConnectedToolsEquivalent(firstTool, secondTool))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool AreConnectedToolsEquivalent(
+            ConnectedLLMToolData first,
+            ConnectedLLMToolData second)
+        {
+            if (first == null || second == null)
+            {
+                return first == second;
+            }
+
+            return string.Equals(first.Name, second.Name, StringComparison.Ordinal)
+                && string.Equals(first.Endpoint, second.Endpoint, StringComparison.Ordinal)
+                && first.Port == second.Port;
         }
 
         internal static void ReplaceConnectedToolsForTests(IReadOnlyCollection<ConnectedClient> connectedClients)

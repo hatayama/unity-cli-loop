@@ -51,6 +51,11 @@ namespace io.github.hatayama.uLoopMCP
 
         static McpServerController()
         {
+            InitializeOnLoad();
+        }
+
+        private static void InitializeOnLoad()
+        {
             if (IsBackgroundUnityProcess())
             {
                 VibeLogger.LogInfo("server_controller_background_skip", "Skipping MCP server controller initialization in background Unity process.");
@@ -74,8 +79,75 @@ namespace io.github.hatayama.uLoopMCP
             // Note: ConnectedToolsMonitoringService has [InitializeOnLoad] so it's automatically initialized
             // This comment ensures the service initialization order is documented
 
-            // Restore server state on initialization.
-            RestoreServerStateIfNeeded();
+            // Recovery binds a TCP listener and may touch config files, so keep it off the
+            // synchronous InitializeOnLoad path while preserving automatic startup.
+            ScheduleStartupRecovery(
+                action => EditorApplication.delayCall += () => action(),
+                RestoreServerStateIfNeeded);
+        }
+
+        internal static Task ScheduleStartupRecovery(
+            Action<Action> scheduleDelayCall,
+            Func<Task> restoreServerState)
+        {
+            Debug.Assert(scheduleDelayCall != null, "scheduleDelayCall must not be null");
+            Debug.Assert(restoreServerState != null, "restoreServerState must not be null");
+
+            TaskCompletionSource<bool> scheduledRecoveryCompletionSource = new TaskCompletionSource<bool>();
+            _currentRecoveryTask = scheduledRecoveryCompletionSource.Task;
+
+            scheduleDelayCall(() =>
+            {
+                Task restoreTask;
+                try
+                {
+                    restoreTask = restoreServerState();
+                }
+                catch (Exception ex)
+                {
+                    CompleteScheduledStartupRecovery(Task.FromException(ex), scheduledRecoveryCompletionSource);
+                    return;
+                }
+
+                if (restoreTask.IsCompleted)
+                {
+                    CompleteScheduledStartupRecovery(restoreTask, scheduledRecoveryCompletionSource);
+                    return;
+                }
+
+                _ = restoreTask.ContinueWith(task =>
+                {
+                    CompleteScheduledStartupRecovery(task, scheduledRecoveryCompletionSource);
+                }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.FromCurrentSynchronizationContext());
+            });
+
+            return scheduledRecoveryCompletionSource.Task;
+        }
+
+        private static void CompleteScheduledStartupRecovery(
+            Task restoreTask,
+            TaskCompletionSource<bool> scheduledRecoveryCompletionSource)
+        {
+            if (ReferenceEquals(_currentRecoveryTask, scheduledRecoveryCompletionSource.Task))
+            {
+                _currentRecoveryTask = null;
+            }
+
+            if (restoreTask.IsCanceled)
+            {
+                scheduledRecoveryCompletionSource.SetCanceled();
+                return;
+            }
+
+            if (restoreTask.IsFaulted)
+            {
+                VibeLogger.LogError("server_startup_restore_failed",
+                    $"Failed to restore server: {restoreTask.Exception?.GetBaseException().Message}");
+                scheduledRecoveryCompletionSource.SetException(restoreTask.Exception.GetBaseException());
+                return;
+            }
+
+            scheduledRecoveryCompletionSource.SetResult(true);
         }
 
         /// <summary>
@@ -256,12 +328,12 @@ namespace io.github.hatayama.uLoopMCP
         /// <summary>
         /// Restores the server state if necessary.
         /// </summary>
-        private static void RestoreServerStateIfNeeded()
+        private static Task RestoreServerStateIfNeeded()
         {
             if (IsBackgroundUnityProcess())
             {
                 VibeLogger.LogInfo("server_restore_skipped", "background_process");
-                return;
+                return Task.CompletedTask;
             }
 
             int savedPort = McpEditorSettings.GetCustomPort();
@@ -274,7 +346,7 @@ namespace io.github.hatayama.uLoopMCP
                     McpEditorSettings.ClearAfterCompileFlag();
                 }
 
-                return;
+                return Task.CompletedTask;
             }
 
             if (isAfterCompile)
@@ -286,19 +358,7 @@ namespace io.github.hatayama.uLoopMCP
 
             // Centralized, coalesced startup request
             // Store the task so McpEditorWindow can await it to prevent race conditions
-            _currentRecoveryTask = StartRecoveryIfNeededAsync(portToUse, isAfterCompile, CancellationToken.None);
-            _ = _currentRecoveryTask.ContinueWith(task =>
-            {
-                if (ReferenceEquals(_currentRecoveryTask, task))
-                {
-                    _currentRecoveryTask = null;
-                }
-                if (task.IsFaulted)
-                {
-                    VibeLogger.LogError("server_startup_restore_failed",
-                        $"Failed to restore server: {task.Exception?.GetBaseException().Message}");
-                }
-            }, TaskScheduler.FromCurrentSynchronizationContext());
+            return StartRecoveryIfNeededAsync(portToUse, isAfterCompile, CancellationToken.None);
         }
 
         /// <summary>

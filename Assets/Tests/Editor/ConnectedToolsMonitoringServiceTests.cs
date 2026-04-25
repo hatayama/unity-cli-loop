@@ -98,6 +98,72 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.That(displayedTools[0].Endpoint, Is.EqualTo("127.0.0.1:58784"));
         }
 
+        [Test]
+        public void SaveConnectedToolsWhenChanged_WhenSnapshotMatches_SkipsPersistedWrite()
+        {
+            ConnectedLLMToolData[] incomingTools =
+            {
+                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+            };
+            ConnectedLLMToolData[] persistedTools =
+            {
+                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+            };
+            int saveCount = 0;
+
+            bool saved = ConnectedToolsMonitoringService.SaveConnectedToolsWhenChanged(
+                incomingTools,
+                () => persistedTools,
+                _ => saveCount++);
+
+            Assert.That(saved, Is.False);
+            Assert.That(saveCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void SaveConnectedToolsWhenChanged_WhenOnlyConnectedAtDiffers_SkipsPersistedWrite()
+        {
+            ConnectedLLMToolData[] incomingTools =
+            {
+                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 4, 5, 6))
+            };
+            ConnectedLLMToolData[] persistedTools =
+            {
+                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+            };
+            int saveCount = 0;
+
+            bool saved = ConnectedToolsMonitoringService.SaveConnectedToolsWhenChanged(
+                incomingTools,
+                () => persistedTools,
+                _ => saveCount++);
+
+            Assert.That(saved, Is.False);
+            Assert.That(saveCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void SaveConnectedToolsWhenChanged_WhenSnapshotDiffers_PersistsTools()
+        {
+            ConnectedLLMToolData[] incomingTools =
+            {
+                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+            };
+            ConnectedLLMToolData[] persistedTools =
+            {
+                new ConnectedLLMToolData("cursor", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+            };
+            int saveCount = 0;
+
+            bool saved = ConnectedToolsMonitoringService.SaveConnectedToolsWhenChanged(
+                incomingTools,
+                () => persistedTools,
+                _ => saveCount++);
+
+            Assert.That(saved, Is.True);
+            Assert.That(saveCount, Is.EqualTo(1));
+        }
+
         private static McpEditorSettingsData CloneSettings(McpEditorSettingsData settings)
         {
             string json = UnityEngine.JsonUtility.ToJson(settings);

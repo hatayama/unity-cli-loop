@@ -1,5 +1,6 @@
 using Unity.Profiling;
 using UnityEditor;
+using UnityEngine;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -140,22 +141,15 @@ namespace io.github.hatayama.uLoopMCP
         {
             using (s_onEditorUpdateMarker.Auto())
             {
-                if (_model.Runtime.IsPostCompileMode)
+                if (!McpEditorWindowRefreshPolicy.ShouldRefreshOnEditorUpdate(_model.Runtime))
                 {
-                    using (s_refreshUiMarker.Auto())
-                    {
-                        _window.RefreshAllSections();
-                    }
                     return;
                 }
 
-                if (_model.Runtime.NeedsRepaint)
+                _model.ClearRepaintRequest();
+                using (s_refreshUiMarker.Auto())
                 {
-                    _model.ClearRepaintRequest();
-                    using (s_refreshUiMarker.Auto())
-                    {
-                        _window.RefreshAllSections();
-                    }
+                    _window.RefreshAllSections();
                 }
             }
         }
@@ -168,4 +162,16 @@ namespace io.github.hatayama.uLoopMCP
             SubscribeToServerEvents();
         }
     }
-} 
+
+    // Post-compile recovery can stay active while UI data is unchanged, so explicit repaint
+    // requests gate expensive full-section refreshes.
+    internal static class McpEditorWindowRefreshPolicy
+    {
+        public static bool ShouldRefreshOnEditorUpdate(RuntimeState runtimeState)
+        {
+            Debug.Assert(runtimeState != null, "runtimeState must not be null");
+
+            return runtimeState.NeedsRepaint;
+        }
+    }
+}

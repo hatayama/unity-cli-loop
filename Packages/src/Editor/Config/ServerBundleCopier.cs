@@ -29,14 +29,24 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             string destPath = GetFixedServerBundlePath();
-            string destDir = Path.GetDirectoryName(destPath);
+            CopyServerBundleWhenChanged(sourcePath, destPath);
+        }
 
-            if (!Directory.Exists(destDir))
+        internal static bool CopyServerBundleWhenChanged(string sourcePath, string destinationPath)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(sourcePath), "sourcePath must not be empty");
+            Debug.Assert(!string.IsNullOrWhiteSpace(destinationPath), "destinationPath must not be empty");
+            Debug.Assert(File.Exists(sourcePath), "sourcePath must exist");
+
+            string destDir = Path.GetDirectoryName(destinationPath);
+
+            if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
             {
                 Directory.CreateDirectory(destDir);
             }
 
-            File.Copy(sourcePath, destPath, overwrite: true);
+            File.Copy(sourcePath, destinationPath, overwrite: true);
+            return true;
         }
 
         /// <summary>
