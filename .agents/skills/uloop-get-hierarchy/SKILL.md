@@ -1,6 +1,6 @@
 ---
 name: uloop-get-hierarchy
-description: "Get Unity scene hierarchy as a structured tree. Use when you need to: (1) Inspect scene structure and parent-child relationships, (2) Explore GameObjects and their components, (3) Get hierarchy from a specific root path or selected objects. Returns the scene's GameObject tree."
+description: "Get Unity scene hierarchy as a structured tree. Use when you need to: (1) Inspect scene structure and parent-child relationships, (2) Explore GameObjects and their components, (3) Get hierarchy from a specific root path or selected objects. Hierarchy data is written to a JSON file on disk and the response returns the file path (not the tree inline) — open the file to read the structure."
 ---
 
 # uloop get-hierarchy
@@ -52,4 +52,8 @@ uloop get-hierarchy --use-selection
 
 ## Output
 
-Returns JSON with hierarchical structure of GameObjects and their components.
+Returns JSON with:
+- `message` (string): Human-readable guidance pointing at the saved file
+- `hierarchyFilePath` (string): Filesystem path to the JSON file that contains the actual hierarchy data
+
+The hierarchy itself is **not** in the response — it is written to the file at `hierarchyFilePath`. Open that file to read the `Context` and `Hierarchy` payload (GameObject tree, components, etc.).

@@ -1,6 +1,6 @@
 ---
 name: uloop-simulate-keyboard
-description: "Simulate keyboard key input in PlayMode via Input System. Use when you need to: (1) Press game control keys like WASD, Space, or Shift during PlayMode, (2) Hold keys down for continuous movement or actions, (3) Combine multiple held keys for complex input like Shift+W for sprint."
+description: "Simulate keyboard key input in PlayMode via Input System. Use when you need to: (1) Press game control keys like WASD, Space, or Shift during PlayMode, (2) Hold keys down for continuous movement or actions, (3) Combine multiple held keys for complex input like Shift+W for sprint. Injects into Unity Input System (`Keyboard.current`); requires PlayMode and the New Input System."
 context: fork
 ---
 
@@ -43,6 +43,7 @@ uloop simulate-keyboard --action <action> --key <key> [options]
 - `KeyUp` fails if the key is not currently held
 - Multiple keys can be held simultaneously (e.g. W + LeftShift for sprint)
 - All held keys are automatically released when PlayMode exits
+- To hold a key for a fixed duration, prefer `--action Press --duration <seconds>` (one-shot, blocks until release). For multi-key holds (e.g. Shift+W), issue separate `KeyDown` calls, then `sleep <seconds>` between them and the `KeyUp` calls.
 
 ### Global Options
 
@@ -69,6 +70,14 @@ uloop screenshot --capture-mode rendering
 uloop simulate-keyboard --action KeyUp --key W
 uloop simulate-keyboard --action KeyUp --key LeftShift
 ```
+
+## Output
+
+Returns JSON with:
+- `Success` (boolean): Whether the action succeeded (e.g. `KeyDown` on a not-yet-held key, `KeyUp` on a currently-held key, or `Press` round-trip)
+- `Message` (string): Description of what happened or why it failed
+- `Action` (string): The `--action` value that was applied (`Press`, `KeyDown`, or `KeyUp`)
+- `KeyName` (string, nullable): The key that was acted on; may be `null` when the action could not resolve a key
 
 ## Prerequisites
 

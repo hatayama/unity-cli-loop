@@ -32,7 +32,11 @@ uloop focus-window
 
 ## Output
 
-Returns JSON confirming the window was focused.
+Returns JSON with:
+- `Success`: Whether the focus operation succeeded
+- `Message`: Status message (e.g. `Unity Editor window focused (PID: 12345)`, or the failure reason such as `Unity project not found` / `No running Unity process found for this project` / `Failed to focus Unity window: <reason>`)
+
+These are the only two fields. There is no PID, window-handle, or platform field returned to the caller.
 
 ## Notes
 

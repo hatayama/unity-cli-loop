@@ -51,3 +51,5 @@ Returns JSON with the current play mode state:
 - Stop action exits play mode and returns to edit mode
 - Pause action pauses the game while remaining in play mode
 - Useful for automated testing workflows
+
+- PlayMode entry may complete on the next editor frame. If a PlayMode-dependent command reports "PlayMode is not active" immediately after `--action Play`, wait briefly and retry.

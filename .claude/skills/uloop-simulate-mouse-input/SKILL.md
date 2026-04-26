@@ -1,6 +1,6 @@
 ---
 name: uloop-simulate-mouse-input
-description: "Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into Mouse.current. Use when you need to: (1) Click in games that read Mouse.current.leftButton.wasPressedThisFrame, (2) Right-click for actions like block placement, (3) Inject mouse delta for FPS camera control, (4) Inject scroll wheel for hotbar switching or zoom. Assumes the project uses the New Input System. If the project cannot use it, prefer execute-dynamic-code for a project-specific workaround. For UI elements with IPointerClickHandler, use simulate-mouse-ui instead."
+description: "Simulate mouse input in PlayMode for gameplay code that reads Unity Input System Mouse.current. Use when you need to: (1) Click or right-click in games that read Mouse.current button state, (2) Inject mouse delta for FPS camera control, (3) Inject scroll wheel for hotbar switching or zoom. Requires PlayMode and the New Input System; for EventSystem UI elements, use simulate-mouse-ui instead."
 context: fork
 ---
 
@@ -95,3 +95,15 @@ uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --dura
 - **Input System package** must be installed (`com.unity.inputsystem`)
 - Game code must read input via Input System API (e.g. `Mouse.current.leftButton.wasPressedThisFrame`)
 - If the target project cannot use the New Input System, prefer `execute-dynamic-code` for a project-specific workaround instead of changing project settings just to use this tool
+
+## Output
+
+Returns JSON with:
+- `Success`: Whether the operation succeeded
+- `Message`: Status message
+- `Action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`)
+- `Button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
+- `PositionX`: Target X coordinate (nullable float; populated for `Click` / `LongPress`)
+- `PositionY`: Target Y coordinate (nullable float; populated for `Click` / `LongPress`)
+
+These are the only six fields. There is no `DeltaX`, `DeltaY`, `ScrollX`, `ScrollY`, `Duration`, or hit-element field in the response — only the issued action, button, and target position are echoed back. Verify visual outcome with a follow-up screenshot.
