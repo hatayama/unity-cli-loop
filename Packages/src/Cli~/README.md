@@ -150,11 +150,13 @@ Execute Unity Test Runner.
 | `--test-mode` | enum | `EditMode` | Test mode: `EditMode`, `PlayMode` |
 | `--filter-type` | enum | `all` | Filter type: `all`, `exact`, `regex`, `assembly` |
 | `--filter-value` | string | | Filter value (used when filter-type is not `all`) |
+| `--save-before-run` | boolean | `false` | Save unsaved loaded Scene changes and current Prefab Stage changes before running tests |
 
 ```bash
 uloop run-tests
 uloop run-tests --test-mode EditMode --filter-type regex --filter-value "MyTests"
 uloop run-tests --filter-type assembly --filter-value "MyApp.Tests.Editor"
+uloop run-tests --save-before-run true
 ```
 
 **Output:**

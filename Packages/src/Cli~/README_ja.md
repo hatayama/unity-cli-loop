@@ -150,11 +150,13 @@ Unity Test Runner を実行します。
 | `--test-mode` | enum | `EditMode` | テストモード: `EditMode`, `PlayMode` |
 | `--filter-type` | enum | `all` | フィルタタイプ: `all`, `exact`, `regex`, `assembly` |
 | `--filter-value` | string | | フィルタ値（filter-type が `all` 以外の場合に使用） |
+| `--save-before-run` | boolean | `false` | 未保存のロード済み Scene 変更と現在の Prefab Stage 変更を保存してからテストを実行 |
 
 ```bash
 uloop run-tests
 uloop run-tests --test-mode EditMode --filter-type regex --filter-value "MyTests"
 uloop run-tests --filter-type assembly --filter-value "MyApp.Tests.Editor"
+uloop run-tests --save-before-run true
 ```
 
 **Output:**

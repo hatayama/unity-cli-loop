@@ -41,5 +41,8 @@ namespace io.github.hatayama.uLoopMCP
         [Description("Filter value (specify when filterType is not all)\n• exact: Individual test method name (e.g.: io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs)\n• regex: Class name or namespace (e.g.: io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests, io.github.hatayama.uLoopMCP)\n• assembly: Assembly name (e.g.: uLoopMCP.Tests.Editor)")]
         public string FilterValue { get; set; } = "";
 
+        [Description("Save unsaved loaded Scene changes and current Prefab Stage changes before running tests")]
+        public bool SaveBeforeRun { get; set; } = false;
+
     }
 } 

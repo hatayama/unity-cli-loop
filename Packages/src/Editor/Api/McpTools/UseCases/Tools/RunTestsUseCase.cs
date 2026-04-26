@@ -47,7 +47,7 @@ namespace io.github.hatayama.uLoopMCP
         /// <returns>Test execution result</returns>
         public override async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken cancellationToken)
         {
-            ValidationResult validation = _validationService.Validate(parameters.TestMode);
+            ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
             if (!validation.IsValid)
             {
                 return CreateFailureResponse(validation.ErrorMessage);

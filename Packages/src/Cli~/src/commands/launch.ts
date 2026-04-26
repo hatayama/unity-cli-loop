@@ -15,7 +15,9 @@ import {
   waitForDynamicCodeReadyAfterLaunch,
   waitForLaunchReadyAfterLaunch,
 } from '../launch-readiness.js';
+import { beginUnityRestartAttempt } from '../launch-restart-guard.js';
 import { type ResolvedUnityConnection } from '../port-resolver.js';
+import { findUnityProjectRoot, isUnityProject } from '../project-root.js';
 import { createSpinner } from '../spinner.js';
 import { isToolEnabled } from '../tool-settings-loader.js';
 
@@ -67,10 +69,19 @@ async function runLaunchCommand(
   options: LaunchCommandOptions,
 ): Promise<void> {
   const maxDepth: number = parseMaxDepth(options.maxDepth);
+  const resolvedProjectPath: string | undefined = projectPath ? resolve(projectPath) : undefined;
+  if (options.restart === true) {
+    const restartGuardProjectPath: string | null =
+      resolveRestartGuardProjectPath(resolvedProjectPath);
+    if (restartGuardProjectPath !== null) {
+      beginUnityRestartAttempt(restartGuardProjectPath);
+    }
+  }
+
   const spinner = createSpinner('Waiting for Unity to finish starting...', 'stdout');
   try {
     const launchResult: OrchestrateResult = await orchestrateLaunch({
-      projectPath: projectPath ? resolve(projectPath) : undefined,
+      projectPath: resolvedProjectPath,
       searchRoot: process.cwd(),
       searchMaxDepth: maxDepth,
       platform: options.platform,
@@ -102,4 +113,16 @@ async function runLaunchCommand(
   } finally {
     spinner.stop();
   }
+}
+
+function resolveRestartGuardProjectPath(resolvedProjectPath: string | undefined): string | null {
+  if (resolvedProjectPath === undefined) {
+    return findUnityProjectRoot(process.cwd());
+  }
+
+  if (!isUnityProject(resolvedProjectPath)) {
+    return null;
+  }
+
+  return resolvedProjectPath;
 }

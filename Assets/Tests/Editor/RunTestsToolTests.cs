@@ -61,6 +61,7 @@ namespace io.github.hatayama.uLoopMCP
             // Assert - Schema should have default values
             Assert.That(schema.FilterType, Is.EqualTo(TestFilterType.all));
             Assert.That(schema.FilterValue ?? string.Empty, Is.EqualTo(string.Empty));
+            Assert.That(schema.SaveBeforeRun, Is.False);
         }
 
         /// <summary>

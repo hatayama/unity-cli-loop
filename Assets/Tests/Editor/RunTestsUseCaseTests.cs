@@ -11,14 +11,17 @@ namespace io.github.hatayama.uLoopMCP
         public async Task ExecuteAsync_WithInvalidExecutionState_ShouldFailFastWithoutRunningTests()
         {
             StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(
+                ValidationResult.Failure("EditMode tests cannot run during play mode"));
             RunTestsUseCase useCase = new(
                 new TestFilterCreationService(),
                 executionService,
-                new StubTestExecutionStateValidationService(ValidationResult.Failure("EditMode tests cannot run during play mode"))
+                validationService
             );
             RunTestsSchema parameters = new()
             {
-                TestMode = TestMode.EditMode
+                TestMode = TestMode.EditMode,
+                SaveBeforeRun = true
             };
 
             RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
@@ -31,19 +34,23 @@ namespace io.github.hatayama.uLoopMCP
             Assert.That(response.FailedCount, Is.EqualTo(0));
             Assert.That(response.SkippedCount, Is.EqualTo(0));
             Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.SaveBeforeRun, Is.True);
         }
 
         private sealed class StubTestExecutionStateValidationService : TestExecutionStateValidationService
         {
             private readonly ValidationResult _result;
 
+            public bool SaveBeforeRun { get; private set; }
+
             public StubTestExecutionStateValidationService(ValidationResult result)
             {
                 _result = result;
             }
 
-            public override ValidationResult Validate(TestMode testMode)
+            public override ValidationResult Validate(TestMode testMode, bool saveBeforeRun)
             {
+                SaveBeforeRun = saveBeforeRun;
                 return _result;
             }
         }

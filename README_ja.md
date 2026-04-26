@@ -326,10 +326,12 @@ LogTypeや検索対象の文字列で絞り込む事ができます。また、s
 Unity Test Runnerを実行し、テスト結果を取得します。FilterTypeとFilterValueで条件を設定できます。
 - FilterType: all（全テスト）、exact（個別テストメソッド名）、regex（クラス名や名前空間）、assembly（アセンブリ名）
 - FilterValue: フィルタータイプに応じた値（クラス名、名前空間など）
+- SaveBeforeRun: 明示的に有効化した場合、未保存のロード済みScene変更と現在のPrefab Stage変更を保存してからテストを実行
 テスト結果をxmlで出力する事が可能です。出力pathを返すので、それをAIに読み取ってもらう事ができます。
 これもコンテキストを圧迫しないための工夫です。
 ```text
 → run-tests (FilterType: exact, FilterValue: "PlayerControllerTests.TestJump")
+→ run-tests (SaveBeforeRun: true)
 → 失敗したテストを確認、実装を修正してテストをパス
 ```
 > [!WARNING]

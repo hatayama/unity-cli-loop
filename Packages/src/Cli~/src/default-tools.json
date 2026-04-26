@@ -89,6 +89,11 @@
           "FilterValue": {
             "type": "string",
             "description": "Filter value"
+          },
+          "SaveBeforeRun": {
+            "type": "boolean",
+            "description": "Save unsaved loaded Scene changes and current Prefab Stage changes before running tests",
+            "default": false
           }
         }
       }

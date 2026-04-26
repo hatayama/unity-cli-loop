@@ -67,6 +67,7 @@
     - `assembly`: アセンブリ名（例：uLoopMCP.Tests.Editor）
   - `TestMode` (enum): テストモード - "EditMode"(0), "PlayMode"(1)（デフォルト: "EditMode"）
     - **PlayMode注意**: PlayModeテスト実行時は、一時的にdomain reloadが無効化されます
+  - `SaveBeforeRun` (boolean): 未保存のロード済みScene変更と現在のPrefab Stage変更を保存してからテストを実行（デフォルト: false）
 - **レスポンス**:
   - `Success` (boolean): テスト実行が成功したかどうか
   - `Message` (string): テスト実行メッセージ

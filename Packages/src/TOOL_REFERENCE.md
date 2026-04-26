@@ -67,6 +67,7 @@ All tools automatically include the following property:
     - `assembly`: Assembly name (e.g.: uLoopMCP.Tests.Editor)
   - `TestMode` (enum): Test mode - "EditMode"(0), "PlayMode"(1) (default: "EditMode")
     - **PlayMode Warning**: During PlayMode test execution, domain reload is temporarily disabled
+  - `SaveBeforeRun` (boolean): Save unsaved loaded Scene changes and current Prefab Stage changes before running tests (default: false)
 - **Response**:
   - `Success` (boolean): Whether test execution was successful
   - `Message` (string): Test execution message

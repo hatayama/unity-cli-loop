@@ -8,6 +8,11 @@ The C# namespace is `io.github.hatayama.uLoopMCP` for historical reasons, but th
 
 Comments in the code, commit messages, PR titles, and PR descriptions must all be written in English.
 
+## Generated Skill Files
+
+Do not directly edit skill files under the project-root `.agents/` or `.claude/` directories.
+These files are generated copies. Update the source skill definitions instead, then regenerate the copies through the normal workflow.
+
 ## Unity Freeze Prevention
 
 Do not add or keep Unity EditMode tests that can freeze the Editor.

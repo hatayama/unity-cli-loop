@@ -34,6 +34,21 @@ jest.mock('../tool-settings-loader.js', () => ({
   isToolEnabled: jest.fn(),
 }));
 
+const mockBeginUnityRestartAttempt = jest.fn<void, [string]>();
+
+jest.mock('../launch-restart-guard.js', () => ({
+  beginUnityRestartAttempt: (projectPath: string): void =>
+    mockBeginUnityRestartAttempt(projectPath),
+}));
+
+const mockFindUnityProjectRoot = jest.fn<string | null, []>();
+const mockIsUnityProject = jest.fn<boolean, [string]>();
+
+jest.mock('../project-root.js', () => ({
+  findUnityProjectRoot: (): string | null => mockFindUnityProjectRoot(),
+  isUnityProject: (projectPath: string): boolean => mockIsUnityProject(projectPath),
+}));
+
 import { Command } from 'commander';
 import { orchestrateLaunch } from 'launch-unity';
 import {
@@ -62,6 +77,11 @@ describe('launch command', () => {
     });
     mockSpinnerUpdate.mockReset();
     mockSpinnerStop.mockReset();
+    mockBeginUnityRestartAttempt.mockReset();
+    mockFindUnityProjectRoot.mockReset();
+    mockFindUnityProjectRoot.mockReturnValue('/project');
+    mockIsUnityProject.mockReset();
+    mockIsUnityProject.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -191,5 +211,72 @@ describe('launch command', () => {
     expect(waitForLaunchReadyAfterLaunchMock).not.toHaveBeenCalled();
     expect(waitForDynamicCodeReadyAfterLaunchMock).not.toHaveBeenCalled();
     expect(prewarmDynamicCodeAfterLaunchMock).not.toHaveBeenCalled();
+  });
+
+  it('records a restart guard before restart orchestration touches Unity', async () => {
+    const observedCalls: string[] = [];
+    mockBeginUnityRestartAttempt.mockImplementation((projectPath: string): void => {
+      observedCalls.push(`guard:${projectPath}`);
+    });
+    orchestrateLaunchMock.mockImplementation(() => {
+      observedCalls.push('orchestrate');
+      return Promise.resolve({
+        action: 'focused',
+        projectPath: '/project',
+        pid: 4321,
+      });
+    });
+
+    const program = new Command();
+    registerLaunchCommand(program);
+
+    await program.parseAsync(['node', 'uloop', 'launch', '/project', '--restart']);
+
+    expect(observedCalls).toEqual(['guard:/project', 'orchestrate']);
+    expect(mockBeginUnityRestartAttempt).toHaveBeenCalledWith('/project');
+    expect(orchestrateLaunchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectPath: '/project',
+        restart: true,
+      }),
+    );
+  });
+
+  it('stops before restart orchestration when the restart guard blocks', async () => {
+    mockBeginUnityRestartAttempt.mockImplementation((): void => {
+      throw new Error('restart blocked');
+    });
+
+    const program = new Command();
+    registerLaunchCommand(program);
+
+    await expect(
+      program.parseAsync(['node', 'uloop', 'launch', '/project', '--restart']),
+    ).rejects.toThrow('restart blocked');
+
+    expect(orchestrateLaunchMock).not.toHaveBeenCalled();
+    expect(mockCreateSpinner).not.toHaveBeenCalled();
+  });
+
+  it('skips the restart guard for invalid explicit project paths', async () => {
+    mockIsUnityProject.mockReturnValue(false);
+    orchestrateLaunchMock.mockResolvedValue({
+      action: 'focused',
+      projectPath: '/not-a-project',
+      pid: 4321,
+    });
+
+    const program = new Command();
+    registerLaunchCommand(program);
+
+    await program.parseAsync(['node', 'uloop', 'launch', '/not-a-project', '--restart']);
+
+    expect(mockBeginUnityRestartAttempt).not.toHaveBeenCalled();
+    expect(orchestrateLaunchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectPath: '/not-a-project',
+        restart: true,
+      }),
+    );
   });
 });
