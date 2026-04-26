@@ -131,7 +131,7 @@ async function readUnitySettingsOrThrow(projectRoot: string): Promise<UnityMcpSe
       continue;
     }
 
-    return parsed as UnityMcpSettings;
+    return parsed;
   }
 
   throw createSettingsReadError(projectRoot);

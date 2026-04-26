@@ -1,6 +1,6 @@
 ---
 name: uloop-get-logs
-description: "Retrieve logs from Unity Console with filtering and search. Use when you need to: (1) Check for errors or warnings after compilation or play mode, (2) Debug issues by searching log messages, (3) Investigate failures with stack traces. Supports filtering by log type, text search, and regex."
+description: "Retrieve current Unity Console entries via uloop CLI. Use when you need to: (1) inspect errors, warnings, or logs after compile, tests, PlayMode, or dynamic code execution, (2) search current Console messages or stack traces, (3) confirm whether a recent Unity operation emitted logs. Prefer this over reading Editor.log or Unity log files for normal Console contents; use log files only for startup, crash, freeze, or uloop connection failures."
 ---
 
 # uloop get-logs
@@ -48,4 +48,14 @@ uloop get-logs --search-text "Missing.*Component" --use-regex
 
 ## Output
 
-Returns JSON array of log entries with message, type, and optional stack trace.
+Returns JSON with:
+- `TotalCount` (number): Total logs available before max-count clipping
+- `DisplayedCount` (number): Logs returned in this response (≤ `--max-count`)
+- `LogType` (string): The `--log-type` filter that was applied
+- `MaxCount` (number): The `--max-count` cap that was applied
+- `SearchText` (string): The `--search-text` filter that was applied (empty when omitted)
+- `IncludeStackTrace` (boolean): Whether stack traces are included in `Logs[]`
+- `Logs` (array): Each entry has:
+  - `Type` (string): `"Error"`, `"Warning"`, or `"Log"`
+  - `Message` (string): Log message body
+  - `StackTrace` (string): Stack trace text. Empty when `--include-stack-trace` is `false`.

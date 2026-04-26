@@ -8,20 +8,6 @@ The C# namespace is `io.github.hatayama.uLoopMCP` for historical reasons, but th
 
 Comments in the code, commit messages, PR titles, and PR descriptions must all be written in English.
 
-## Git Autonomy
-
-After implementing a requested change, treat `commit` as part of completing the task.
-
-- When code changes are complete and the required verification for the touched language has passed, create commit(s) without asking the user for additional permission
-- Split commits by concern and keep unrelated changes out of the same commit
-- Do not include unrelated pre-existing working tree changes in those commits
-- Report created commit hash(es) and message(s) in the final response
-- Only `push` when the user explicitly asks for it
-- Do not auto-commit when:
-  - the user explicitly says not to commit
-  - required verification is still failing or blocked
-  - commit boundaries are ambiguous enough that the wrong split would create review risk
-
 ## Unity Freeze Prevention
 
 Do not add or keep Unity EditMode tests that can freeze the Editor.
@@ -46,13 +32,3 @@ Do not add or keep Unity EditMode tests that can freeze the Editor.
 - If a new test causes `uloop run-tests` to stall, immediately remove or disable that test instead of retrying the same suite repeatedly.
 - If `Editor.log` shows messages such as `Attempted to call .Dispose on an already disposed CancellationTokenSource`, treat the latest cancellation-focused test changes as suspect first.
 - If Unity freezes or stops responding to `uloop`, restart the Editor with `uloop launch -r` before attempting any further compile, test, or log commands.
-
-## Skill Description Guidelines
-
-When writing or updating skill descriptions in `.claude/skills/*/SKILL.md`, follow the **"What → When → How"** structure:
-
-1. **What** (first): What capability does the skill provide? (e.g., "Automate Unity Editor operations")
-2. **When** (middle): When should the AI use it? Use the pattern "Use when you need to: (1) ..., (2) ..., (3) ..."
-3. **How** (last): Technical implementation details (e.g., "Executes C# code dynamically via uloop CLI")
-
-This structure follows the "inverted pyramid" principle - the most important information comes first, enabling both AI and users to quickly assess skill relevance for a given task.

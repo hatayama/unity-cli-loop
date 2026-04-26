@@ -1,6 +1,6 @@
 ---
 name: uloop-run-tests
-description: "Execute Unity Test Runner and get detailed results. Use when you need to: (1) Run EditMode or PlayMode unit tests, (2) Verify code changes pass all tests, (3) Diagnose test failures with error messages and stack traces. Auto-saves NUnit XML results on failure."
+description: "Execute Unity Test Runner and get detailed results. Use when you need to: (1) Run EditMode or PlayMode unit tests, (2) Verify code changes pass all tests, (3) Diagnose test failures with error messages and stack traces. Single-flight only — never run multiple `uloop run-tests` in parallel."
 ---
 
 # uloop run-tests
@@ -48,11 +48,12 @@ uloop run-tests --filter-type regex --filter-value ".*Integration.*"
 Returns JSON with:
 - `Success` (boolean): Whether all tests passed
 - `Message` (string): Summary message
+- `CompletedAt` (string): ISO timestamp when the run finished
 - `TestCount` (number): Total tests executed
 - `PassedCount` (number): Passed tests
 - `FailedCount` (number): Failed tests
 - `SkippedCount` (number): Skipped tests
-- `XmlPath` (string): Path to NUnit XML result file (auto-saved when tests fail)
+- `XmlPath` (string): Path to NUnit XML result file. Empty string when no XML was saved (typically on `Success: true`); populated only when tests failed and the XML file exists on disk.
 
 ### XML Result File
 

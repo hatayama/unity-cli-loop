@@ -35,6 +35,22 @@ return x;
 
 **Forbidden** — these will be rejected at compile time: `System.IO.*`, `AssetDatabase.CreateFolder`, creating/editing `.cs`/`.asmdef` files. Use terminal commands for file operations instead.
 
+## Output
+
+Returns JSON:
+- `Success`: boolean — overall execution success
+- `Result`: string — value of the snippet's `return` statement (empty when omitted)
+- `Logs`: string[] — `Debug.Log` / `Debug.LogWarning` / `Debug.LogError` messages emitted during the run
+- `CompilationErrors`: object[] — Roslyn diagnostics with `Message`, `Line`, `Column`, `ErrorCode`, optional `Hint` and `Suggestions`
+- `ErrorMessage`: string — top-level failure summary (empty on success)
+- `Error`: string — alias of `ErrorMessage`
+- `SecurityLevel`: string — dynamic-code security level active for the request
+- `UpdatedCode`: string|null — the wrapped form actually compiled (handy when debugging using-statement reordering)
+- `DiagnosticsSummary`: string|null — compact summary when diagnostics are available
+- `Diagnostics`: object[] — structured diagnostics; same shape as `CompilationErrors`, usually populated together with it
+
+On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, security violation, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
+
 ## Code Examples by Category
 
 For detailed code examples, refer to these files:

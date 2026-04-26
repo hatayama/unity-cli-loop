@@ -1,6 +1,6 @@
 ---
 name: uloop-simulate-mouse-ui
-description: "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates. Use when you need to: (1) Click buttons or interactive UI elements during PlayMode testing, (2) Drag UI elements from one position to another, (3) Hold a drag at a position for inspection before releasing, (4) Long-press UI elements that respond to sustained pointer-down. For game logic that reads Input System (e.g. WasPressedThisFrame), use simulate-mouse-input when the project uses the New Input System; otherwise prefer execute-dynamic-code."
+description: "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates from annotated screenshots. Use when you need to: (1) Click buttons or interactive UI elements during PlayMode testing, (2) Drag UI elements between annotated screen positions, (3) Long-press or hold a drag for sustained pointer interactions. First get target coordinates with `uloop screenshot --capture-mode rendering --annotate-elements --elements-only` and use `AnnotatedElements[].SimX` / `SimY`; for gameplay code that reads Mouse.current, use simulate-mouse-input instead."
 context: fork
 ---
 
@@ -97,3 +97,19 @@ uloop simulate-mouse-ui --action DragEnd --x 600 --y 300
 - Target scene must have an **EventSystem** GameObject
 - UI elements must have a **GraphicRaycaster** on their Canvas
 - If you need gameplay mouse input rather than UI pointer events, `simulate-mouse-input` assumes the project uses the New Input System; otherwise prefer `execute-dynamic-code`
+
+## Output
+
+Returns JSON with:
+- `Success`: Whether the operation succeeded
+- `Message`: Status message (e.g. "Hit element: ButtonStart" or "No UI element under (x, y)")
+- `Action`: Echoes which action was executed (`Click`, `Drag`, `DragStart`, `DragMove`, `DragEnd`, or `LongPress`)
+- `HitGameObjectName`: Name of the topmost UI element under the pointer (nullable string; null if nothing was hit)
+- `PositionX`: Target X coordinate that was used
+- `PositionY`: Target Y coordinate that was used
+- `EndPositionX`: Drag end X coordinate (nullable float; populated for drag actions only)
+- `EndPositionY`: Drag end Y coordinate (nullable float; populated for drag actions only)
+
+These are the only eight fields. There is no `Button`, `Duration`, `DragSpeed`, raycast list, or pointer-event log in the response — verify the visual outcome with a follow-up `uloop screenshot --capture-mode rendering --annotate-elements`.
+
+Note: Click and LongPress on empty space (no UI element) still return `Success = true` with `HitGameObjectName = null`. Drag actions on empty space return `Success = false`.

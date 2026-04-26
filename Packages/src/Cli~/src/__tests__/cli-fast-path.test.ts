@@ -98,9 +98,9 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
         findUnityProjectRootFn: jest.fn().mockReturnValue('/resolved-project'),
         runWithErrorHandlingFn,
         printToolDisabledErrorFn: jest.fn(),
-        exitFn: ((code: number): never => {
+        exitFn: (code: number): never => {
           throw new Error(`unexpected exit ${code}`);
-        }) as (code: number) => never,
+        },
       },
     );
 
@@ -127,9 +127,9 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
       findUnityProjectRootFn,
       runWithErrorHandlingFn: jest.fn(async (fn: () => Promise<void>): Promise<void> => await fn()),
       printToolDisabledErrorFn: jest.fn(),
-      exitFn: ((code: number): never => {
+      exitFn: (code: number): never => {
         throw new Error(`unexpected exit ${code}`);
-      }) as (code: number) => never,
+      },
     });
 
     expect(findUnityProjectRootFn).toHaveBeenCalledTimes(1);
@@ -149,9 +149,9 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
         findUnityProjectRootFn: jest.fn().mockReturnValue('/resolved-project'),
         runWithErrorHandlingFn: jest.fn(),
         printToolDisabledErrorFn: jest.fn(),
-        exitFn: ((code: number): never => {
+        exitFn: (code: number): never => {
           throw new Error(`exit:${code}`);
-        }) as (code: number) => never,
+        },
       }),
     ).rejects.toThrow('exit:1');
   });
@@ -163,9 +163,9 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
       findUnityProjectRootFn: jest.fn(),
       runWithErrorHandlingFn: jest.fn(),
       printToolDisabledErrorFn: jest.fn(),
-      exitFn: ((code: number): never => {
+      exitFn: (code: number): never => {
         throw new Error(`unexpected exit ${code}`);
-      }) as (code: number) => never,
+      },
     });
 
     expect(handled).toBe(false);

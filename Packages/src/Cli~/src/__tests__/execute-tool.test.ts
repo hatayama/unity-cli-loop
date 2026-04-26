@@ -540,6 +540,32 @@ describe('stripInternalFields', () => {
       Success: true,
     });
   });
+
+  it('removes server version from displayed tool outputs', () => {
+    const cleaned = stripInternalFields({
+      Ver: '2.0.4',
+      Success: true,
+    });
+
+    expect(cleaned).toEqual({
+      Success: true,
+    });
+  });
+
+  it('keeps server version when the output contract exposes it', () => {
+    const cleaned = stripInternalFields(
+      {
+        Ver: '2.0.4',
+        UnityVersion: '2022.3.0f1',
+      },
+      { exposeServerVersion: true },
+    );
+
+    expect(cleaned).toEqual({
+      Ver: '2.0.4',
+      UnityVersion: '2022.3.0f1',
+    });
+  });
 });
 
 describe('diagnoseRetryableProjectConnectionError', () => {

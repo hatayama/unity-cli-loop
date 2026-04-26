@@ -68,6 +68,25 @@ jest.mock('../direct-unity-client.js', () => ({
 
 import { executeToolCommand } from '../execute-tool.js';
 
+function parsePrintedJson(): Record<string, unknown> {
+  const firstCall = mockConsoleLog.mock.calls[0];
+  if (firstCall === undefined) {
+    throw new Error('Expected CLI JSON output');
+  }
+
+  const firstArgument: unknown = firstCall[0];
+  if (typeof firstArgument !== 'string') {
+    throw new Error('Expected CLI output to be a JSON string');
+  }
+
+  const parsed: unknown = JSON.parse(firstArgument);
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Expected CLI output to be a JSON object');
+  }
+
+  return parsed as Record<string, unknown>;
+}
+
 describe('executeToolCommand interactive feedback', () => {
   beforeEach(() => {
     mockResolveUnityConnection.mockReset();
@@ -117,5 +136,27 @@ describe('executeToolCommand interactive feedback', () => {
     );
 
     expect(mockCreateSpinner).toHaveBeenCalledWith('Connecting to Unity...');
+  });
+
+  it('hides server version from regular tool output', async () => {
+    await expect(executeToolCommand('get-logs', {}, { projectPath: '/project' })).resolves.toBe(
+      undefined,
+    );
+
+    const output = parsePrintedJson();
+
+    expect(output['Success']).toBe(true);
+    expect(output).not.toHaveProperty('Ver');
+  });
+
+  it('keeps server version in get-version output', async () => {
+    await expect(executeToolCommand('get-version', {}, { projectPath: '/project' })).resolves.toBe(
+      undefined,
+    );
+
+    const output = parsePrintedJson();
+
+    expect(output['Success']).toBe(true);
+    expect(output['Ver']).toBe('1.7.3');
   });
 });

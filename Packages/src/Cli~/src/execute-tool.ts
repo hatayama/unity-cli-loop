@@ -95,9 +95,19 @@ function parseExplicitPort(portText?: string): number | undefined {
   return parsed;
 }
 
-export function stripInternalFields(result: Record<string, unknown>): Record<string, unknown> {
+interface OutputSanitizerOptions {
+  exposeServerVersion?: boolean;
+}
+
+export function stripInternalFields(
+  result: Record<string, unknown>,
+  options: OutputSanitizerOptions = {},
+): Record<string, unknown> {
   const cleaned = { ...result };
   delete cleaned['ProjectRoot'];
+  if (options.exposeServerVersion !== true) {
+    delete cleaned['Ver'];
+  }
   return cleaned;
 }
 
@@ -852,6 +862,13 @@ function checkServerVersion(result: Record<string, unknown>): void {
   }
 }
 
+function formatToolOutput(
+  toolName: string,
+  result: Record<string, unknown>,
+): Record<string, unknown> {
+  return stripInternalFields(result, { exposeServerVersion: toolName === 'get-version' });
+}
+
 /**
  * Check if Unity is in a busy state (compiling or reloading).
  * Throws an error with appropriate message if busy.
@@ -1012,7 +1029,7 @@ export async function executeToolCommand(
             );
           }
           checkServerVersion(result);
-          console.log(JSON.stringify(stripInternalFields(result), null, 2));
+          console.log(JSON.stringify(formatToolOutput(toolName, result), null, 2));
           return;
         }
 
@@ -1100,7 +1117,7 @@ export async function executeToolCommand(
         cleanup();
         if (immediateResult !== undefined) {
           checkServerVersion(immediateResult);
-          console.log(JSON.stringify(stripInternalFields(immediateResult), null, 2));
+          console.log(JSON.stringify(formatToolOutput(toolName, immediateResult), null, 2));
           return;
         }
         if (lastError instanceof Error) {
@@ -1157,7 +1174,7 @@ export async function executeToolCommand(
             );
           }
           checkServerVersion(finalResult);
-          console.log(JSON.stringify(stripInternalFields(finalResult), null, 2));
+          console.log(JSON.stringify(formatToolOutput(toolName, finalResult), null, 2));
           return;
         }
       }

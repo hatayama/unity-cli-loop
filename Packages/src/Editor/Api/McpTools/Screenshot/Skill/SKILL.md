@@ -1,6 +1,6 @@
 ---
 name: uloop-screenshot
-description: "Capture screenshots of Unity Editor windows as PNG files. Use when you need to: (1) Screenshot Game View, Scene View, Console, Inspector, or other windows, (2) Capture current visual state for debugging or documentation, (3) Save editor window appearance as image files."
+description: "Capture screenshots of Unity Editor windows as PNG files. Use when you need to: (1) Screenshot Game View, Scene View, Console, Inspector, or other windows, (2) Capture current visual state for debugging or documentation, (3) Save editor window appearance as PNG files with optional UI element annotations. Writes PNG files via uloop CLI."
 ---
 
 # uloop screenshot
@@ -80,28 +80,12 @@ Returns JSON with:
   - `FileSizeBytes`: Size of the saved file in bytes
   - `Width`: Captured image width in pixels
   - `Height`: Captured image height in pixels
-  - `CoordinateSystem`: `"gameView"` (image pixel coords that must be converted with `ResolutionScale` and `YOffset` before using with `simulate-mouse`) or `"window"` (EditorWindow capture)
+  - `CoordinateSystem`: `"gameView"` or `"window"`
   - `ResolutionScale`: Resolution scale used for capture
-  - `YOffset`: Y offset used in `sim_y = image_y / ResolutionScale + YOffset` when `CoordinateSystem` is `"gameView"`
-  - `AnnotatedElements`: Array of annotated UI element metadata. Empty unless `--annotate-elements` is used. Sorted by z-order (frontmost first). Each item contains:
-    - `Label`: Index label shown on the screenshot (`A`=frontmost, `B`=next, ...)
-    - `Name`: Element name
-    - `Type`: Element type (`Button`, `Toggle`, `Slider`, `Dropdown`, `InputField`, `Scrollbar`, `Draggable`, `DropTarget`, `Selectable`)
-    - `SimX`, `SimY`: Center position in simulate-mouse coordinates (use directly with `--x` and `--y`)
-    - `BoundsMinX`, `BoundsMinY`, `BoundsMaxX`, `BoundsMaxY`: Bounding box in simulate-mouse coordinates
-    - `SortingOrder`: Canvas sorting order (higher = in front)
-    - `SiblingIndex`: Transform sibling index under the element's direct parent (not a reliable z-order signal across nested UI hierarchies)
+  - `YOffset`: Y offset used for gameView coordinate conversion
+  - `AnnotatedElements`: Array of annotated UI element metadata. Empty unless `--annotate-elements` is used.
 
-### Coordinate Conversion (gameView)
-
-When `CoordinateSystem` is `"gameView"`, convert image pixel coordinates to simulate-mouse coordinates:
-
-```text
-sim_x = image_x / ResolutionScale
-sim_y = image_y / ResolutionScale + YOffset
-```
-
-When `ResolutionScale` is 1.0, this simplifies to `sim_x = image_x`, `sim_y = image_y + YOffset`.
+For `AnnotatedElements` fields and gameView coordinate conversion, read [references/annotated-elements.md](references/annotated-elements.md) before using screenshot coordinates with mouse simulation tools.
 
 When multiple windows match (e.g., multiple Inspector windows or when using `contains` mode), all matching windows are captured with numbered filenames (e.g., `Inspector_1_*.png`, `Inspector_2_*.png`).
 
