@@ -7,6 +7,9 @@ description: "Launch Unity project with matching Editor version via uloop CLI. U
 
 Launch Unity Editor with the correct version for a project.
 
+`uloop launch` is not fire-and-forget. When Unity needs to start or restart, the command waits
+until Unity is actually ready for CLI operations before it exits.
+
 ## Usage
 
 ```bash
@@ -48,4 +51,4 @@ uloop launch -a
 - Prints detected Unity version
 - Prints project path
 - If Unity is already running, focuses the existing window
-- If launching, opens Unity in background
+- If launching, waits until Unity finishes startup and the CLI can connect to the project
