@@ -11,6 +11,8 @@ namespace io.github.hatayama.uLoopMCP
     [McpTool(Description = "Take a screenshot of Unity EditorWindow and save as PNG")]
     public class ScreenshotTool : AbstractUnityTool<ScreenshotSchema, ScreenshotResponse>
     {
+        private const int ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES = 2;
+
         public override string ToolName => "screenshot";
 
         protected override async Task<ScreenshotResponse> ExecuteAsync(
@@ -77,9 +79,12 @@ namespace io.github.hatayama.uLoopMCP
             {
                 if (parameters.AnnotateElements)
                 {
-                    annotationOverlay = UIElementAnnotator.CreateAnnotationOverlay(annotatedElements);
-                    // Wait 1 frame for the overlay Canvas to render into the RT
-                    await EditorDelay.DelayFrame(1, ct);
+                    annotationOverlay = UIElementAnnotator.CreateAnnotationOverlay(
+                        annotatedElements,
+                        parameters.ResolutionScale);
+                    Canvas.ForceUpdateCanvases();
+                    // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
+                    await EditorDelay.DelayFrame(ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES, ct);
                 }
 
                 (texture, yOffset) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(

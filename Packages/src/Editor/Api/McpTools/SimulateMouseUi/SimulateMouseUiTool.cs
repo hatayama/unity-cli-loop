@@ -69,10 +69,52 @@ namespace io.github.hatayama.uLoopMCP
                 };
             }
 
+            if (parameters.BypassRaycast && !SupportsBypassRaycast(parameters.Action))
+            {
+                return new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message = "BypassRaycast is not supported for this action.",
+                    Action = parameters.Action.ToString()
+                };
+            }
+
+            if (parameters.BypassRaycast &&
+                RequiresBypassTargetPath(parameters.Action) &&
+                string.IsNullOrWhiteSpace(parameters.TargetPath))
+            {
+                return new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message = "TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart.",
+                    Action = parameters.Action.ToString()
+                };
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.DropTargetPath) &&
+                parameters.Action != MouseAction.Drag &&
+                parameters.Action != MouseAction.DragEnd)
+            {
+                return new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message = "DropTargetPath supports Drag and DragEnd only.",
+                    Action = parameters.Action.ToString()
+                };
+            }
+
             VibeLogger.LogInfo(
                 "simulate_mouse_start",
                 "Mouse simulation started",
-                new { Action = parameters.Action.ToString(), X = parameters.X, Y = parameters.Y },
+                new
+                {
+                    Action = parameters.Action.ToString(),
+                    X = parameters.X,
+                    Y = parameters.Y,
+                    BypassRaycast = parameters.BypassRaycast,
+                    TargetPath = parameters.TargetPath,
+                    DropTargetPath = parameters.DropTargetPath
+                },
                 correlationId: correlationId
             );
 
@@ -170,7 +212,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             Vector2 inputPos = new Vector2(parameters.X, parameters.Y);
             Vector2 screenPos = InputToScreen(inputPos);
-            RaycastResult? hit = RaycastUI(screenPos, eventSystem);
+            RaycastResult? hit = parameters.BypassRaycast ? null : RaycastUI(screenPos, eventSystem);
 
             PointerEventData.InputButton inputButton = ToInputButton(parameters.Button);
             PointerEventData pointerData = new PointerEventData(eventSystem)
@@ -183,10 +225,38 @@ namespace io.github.hatayama.uLoopMCP
             GameObject? target = null;
             GameObject? pressTarget = null;
             GameObject? clickTarget = null;
+            GameObject? rawTarget = null;
 
-            if (hit != null)
+            if (parameters.BypassRaycast)
             {
-                GameObject rawTarget = hit.Value.gameObject;
+                if (!TryResolveGameObjectPath(
+                    parameters.TargetPath,
+                    "TargetPath",
+                    MouseAction.Click,
+                    inputPos,
+                    out rawTarget,
+                    out SimulateMouseUiResponse? failureResponse))
+                {
+                    return failureResponse!;
+                }
+
+                RaycastResult directRaycast = CreateDirectRaycastResult(rawTarget!);
+                pointerData.pointerCurrentRaycast = directRaycast;
+                pointerData.pointerPressRaycast = directRaycast;
+
+                pressTarget = ExecuteEvents.GetEventHandler<IPointerDownHandler>(rawTarget!);
+                clickTarget = ExecuteEvents.GetEventHandler<IPointerClickHandler>(rawTarget!);
+                target = pressTarget ?? clickTarget;
+
+                if (target != null)
+                {
+                    pointerData.pointerPress = target;
+                    pointerData.rawPointerPress = rawTarget;
+                }
+            }
+            else if (hit != null)
+            {
+                rawTarget = hit.Value.gameObject;
                 pointerData.pointerCurrentRaycast = hit.Value;
                 pointerData.pointerPressRaycast = hit.Value;
 
@@ -202,6 +272,18 @@ namespace io.github.hatayama.uLoopMCP
                 }
             }
 
+            if (parameters.BypassRaycast && target == null)
+            {
+                return new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message = $"TargetPath '{parameters.TargetPath}' has no pointer click or pointer down handler.",
+                    Action = MouseAction.Click.ToString(),
+                    PositionX = inputPos.x,
+                    PositionY = inputPos.y
+                };
+            }
+
             SimulateMouseUiOverlayState.Update(
                 MouseAction.Click, inputPos, null,
                 target?.name, Handles.GetMainGameViewSize());
@@ -209,12 +291,12 @@ namespace io.github.hatayama.uLoopMCP
             await PlayExpandAnimation(ct);
 
             // Fire click events after expand animation so the user sees where the click lands
-            if (hit != null)
+            if (rawTarget != null)
             {
                 if (pressTarget != null)
                 {
                     ExecuteEvents.ExecuteHierarchy(
-                        hit.Value.gameObject, pointerData, ExecuteEvents.pointerDownHandler);
+                        rawTarget, pointerData, ExecuteEvents.pointerDownHandler);
                     ExecuteEvents.Execute(pressTarget, pointerData, ExecuteEvents.pointerUpHandler);
                 }
 
@@ -230,7 +312,9 @@ namespace io.github.hatayama.uLoopMCP
             {
                 Success = true,
                 Message = target != null
-                    ? $"Clicked '{target.name}' at ({inputPos.x:F1}, {inputPos.y:F1})"
+                    ? parameters.BypassRaycast
+                        ? $"Bypass-clicked '{target.name}' at ({inputPos.x:F1}, {inputPos.y:F1}) via '{parameters.TargetPath}'"
+                        : $"Clicked '{target.name}' at ({inputPos.x:F1}, {inputPos.y:F1})"
                     : $"Clicked at ({inputPos.x:F1}, {inputPos.y:F1}) - no UI element hit",
                 Action = MouseAction.Click.ToString(),
                 HitGameObjectName = target?.name,
@@ -254,7 +338,7 @@ namespace io.github.hatayama.uLoopMCP
 
             Vector2 inputPos = new Vector2(parameters.X, parameters.Y);
             Vector2 screenPos = InputToScreen(inputPos);
-            RaycastResult? hit = RaycastUI(screenPos, eventSystem);
+            RaycastResult? hit = parameters.BypassRaycast ? null : RaycastUI(screenPos, eventSystem);
 
             PointerEventData.InputButton inputButton = ToInputButton(parameters.Button);
             PointerEventData pointerData = new PointerEventData(eventSystem)
@@ -265,10 +349,37 @@ namespace io.github.hatayama.uLoopMCP
             };
 
             GameObject? target = null;
+            GameObject? rawTarget = null;
 
-            if (hit != null)
+            if (parameters.BypassRaycast)
             {
-                GameObject rawTarget = hit.Value.gameObject;
+                if (!TryResolveGameObjectPath(
+                    parameters.TargetPath,
+                    "TargetPath",
+                    MouseAction.LongPress,
+                    inputPos,
+                    out rawTarget,
+                    out SimulateMouseUiResponse? failureResponse))
+                {
+                    return failureResponse!;
+                }
+
+                RaycastResult directRaycast = CreateDirectRaycastResult(rawTarget!);
+                pointerData.pointerCurrentRaycast = directRaycast;
+                pointerData.pointerPressRaycast = directRaycast;
+
+                target = ExecuteEvents.GetEventHandler<IPointerDownHandler>(rawTarget!)
+                         ?? ExecuteEvents.GetEventHandler<IPointerClickHandler>(rawTarget!);
+
+                if (target != null)
+                {
+                    pointerData.pointerPress = target;
+                    pointerData.rawPointerPress = rawTarget;
+                }
+            }
+            else if (hit != null)
+            {
+                rawTarget = hit.Value.gameObject;
                 pointerData.pointerCurrentRaycast = hit.Value;
                 pointerData.pointerPressRaycast = hit.Value;
 
@@ -282,16 +393,28 @@ namespace io.github.hatayama.uLoopMCP
                 }
             }
 
+            if (parameters.BypassRaycast && target == null)
+            {
+                return new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message = $"TargetPath '{parameters.TargetPath}' has no pointer down or pointer click handler.",
+                    Action = MouseAction.LongPress.ToString(),
+                    PositionX = inputPos.x,
+                    PositionY = inputPos.y
+                };
+            }
+
             SimulateMouseUiOverlayState.Update(
                 MouseAction.LongPress, inputPos, null,
                 target?.name, Handles.GetMainGameViewSize());
 
             await PlayExpandAnimation(ct);
 
-            if (hit != null && target != null)
+            if (rawTarget != null && target != null)
             {
                 ExecuteEvents.ExecuteHierarchy(
-                    hit.Value.gameObject, pointerData, ExecuteEvents.pointerDownHandler);
+                    rawTarget, pointerData, ExecuteEvents.pointerDownHandler);
             }
 
             try
@@ -310,7 +433,7 @@ namespace io.github.hatayama.uLoopMCP
             finally
             {
                 // Ensure pointerUp fires even if the hold loop is cancelled
-                if (hit != null && target != null)
+                if (rawTarget != null && target != null)
                 {
                     ExecuteEvents.Execute(target, pointerData, ExecuteEvents.pointerUpHandler);
                 }
@@ -322,7 +445,9 @@ namespace io.github.hatayama.uLoopMCP
             {
                 Success = true,
                 Message = target != null
-                    ? $"Long-pressed '{target.name}' at ({inputPos.x:F1}, {inputPos.y:F1}) for {parameters.Duration:F1}s"
+                    ? parameters.BypassRaycast
+                        ? $"Bypass-long-pressed '{target.name}' at ({inputPos.x:F1}, {inputPos.y:F1}) via '{parameters.TargetPath}' for {parameters.Duration:F1}s"
+                        : $"Long-pressed '{target.name}' at ({inputPos.x:F1}, {inputPos.y:F1}) for {parameters.Duration:F1}s"
                     : $"Long-pressed at ({inputPos.x:F1}, {inputPos.y:F1}) for {parameters.Duration:F1}s - no UI element hit",
                 Action = MouseAction.LongPress.ToString(),
                 HitGameObjectName = target?.name,
@@ -367,11 +492,45 @@ namespace io.github.hatayama.uLoopMCP
             Vector2 inputEnd = new Vector2(parameters.X, parameters.Y);
             Vector2 screenStart = InputToScreen(inputStart);
             Vector2 screenEnd = InputToScreen(inputEnd);
-            RaycastResult? hit = RaycastUI(screenStart, eventSystem);
+            RaycastResult? hit = parameters.BypassRaycast ? null : RaycastUI(screenStart, eventSystem);
+            RaycastResult startRaycast = new RaycastResult();
+            GameObject? rawTarget = null;
+
+            if (parameters.BypassRaycast)
+            {
+                if (!TryResolveGameObjectPath(
+                    parameters.TargetPath,
+                    "TargetPath",
+                    MouseAction.Drag,
+                    inputStart,
+                    out rawTarget,
+                    out SimulateMouseUiResponse? failureResponse))
+                {
+                    return failureResponse!;
+                }
+
+                startRaycast = CreateDirectRaycastResult(rawTarget!);
+            }
+            else if (hit != null)
+            {
+                rawTarget = hit.Value.gameObject;
+                startRaycast = hit.Value;
+            }
+
+            GameObject? explicitDropTarget = null;
+            if (!TryResolveDropTargetPath(
+                parameters,
+                MouseAction.Drag,
+                inputEnd,
+                out explicitDropTarget,
+                out SimulateMouseUiResponse? dropFailureResponse))
+            {
+                return dropFailureResponse!;
+            }
 
             // Execute dispatches only to the exact target; resolve the actual drag handler up the hierarchy
-            GameObject? target = hit != null
-                ? ExecuteEvents.GetEventHandler<IDragHandler>(hit.Value.gameObject)
+            GameObject? target = rawTarget != null
+                ? ExecuteEvents.GetEventHandler<IDragHandler>(rawTarget)
                 : null;
 
             if (target == null)
@@ -384,7 +543,9 @@ namespace io.github.hatayama.uLoopMCP
                 return new SimulateMouseUiResponse
                 {
                     Success = false,
-                    Message = $"No draggable UI element at ({inputStart.x:F1}, {inputStart.y:F1}). Use find-game-objects or screenshot to verify positions.",
+                    Message = parameters.BypassRaycast
+                        ? $"TargetPath '{parameters.TargetPath}' has no drag handler."
+                        : $"No draggable UI element at ({inputStart.x:F1}, {inputStart.y:F1}). Use find-game-objects or screenshot to verify positions.",
                     Action = MouseAction.Drag.ToString(),
                     PositionX = inputStart.x,
                     PositionY = inputStart.y,
@@ -394,7 +555,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             // uGUI drag controls (ScrollRect, Slider) only respond to left-button drags
-            PointerEventData pointerData = InitiateDrag(eventSystem, screenStart, hit!.Value, target, PointerEventData.InputButton.Left);
+            PointerEventData pointerData = InitiateDrag(eventSystem, screenStart, startRaycast, target, PointerEventData.InputButton.Left);
             ExecuteEvents.Execute(target, pointerData, ExecuteEvents.beginDragHandler);
             pointerData.dragging = true;
 
@@ -409,7 +570,7 @@ namespace io.github.hatayama.uLoopMCP
             }
             finally
             {
-                FinalizeDrag(pointerData, target);
+                FinalizeDrag(pointerData, target, explicitDropTarget);
             }
 
             SimulateMouseUiOverlayState.Update(
@@ -420,7 +581,9 @@ namespace io.github.hatayama.uLoopMCP
             return new SimulateMouseUiResponse
             {
                 Success = true,
-                Message = $"Dragged '{target.name}' from ({inputStart.x:F1}, {inputStart.y:F1}) to ({inputEnd.x:F1}, {inputEnd.y:F1}) at {parameters.DragSpeed:F0} px/s",
+                Message = parameters.BypassRaycast
+                    ? $"Bypass-dragged '{target.name}' from ({inputStart.x:F1}, {inputStart.y:F1}) to ({inputEnd.x:F1}, {inputEnd.y:F1}) via '{parameters.TargetPath}' at {parameters.DragSpeed:F0} px/s"
+                    : $"Dragged '{target.name}' from ({inputStart.x:F1}, {inputStart.y:F1}) to ({inputEnd.x:F1}, {inputEnd.y:F1}) at {parameters.DragSpeed:F0} px/s",
                 Action = MouseAction.Drag.ToString(),
                 HitGameObjectName = target.name,
                 PositionX = inputStart.x,
@@ -431,9 +594,16 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         // Lifecycle must match StandaloneInputModule: raycast → pointerUp → drop → endDrag
-        private void FinalizeDrag(PointerEventData pointerData, GameObject target)
+        private void FinalizeDrag(PointerEventData pointerData, GameObject target, GameObject? explicitDropTarget)
         {
-            UpdatePointerRaycast(pointerData);
+            if (explicitDropTarget != null)
+            {
+                pointerData.pointerCurrentRaycast = CreateDirectRaycastResult(explicitDropTarget);
+            }
+            else
+            {
+                UpdatePointerRaycast(pointerData);
+            }
 
             if (pointerData.pointerPress != null)
             {
@@ -533,10 +703,33 @@ namespace io.github.hatayama.uLoopMCP
 
             Vector2 inputPos = new Vector2(parameters.X, parameters.Y);
             Vector2 screenPos = InputToScreen(inputPos);
-            RaycastResult? hit = RaycastUI(screenPos, eventSystem);
+            RaycastResult? hit = parameters.BypassRaycast ? null : RaycastUI(screenPos, eventSystem);
+            RaycastResult startRaycast = new RaycastResult();
+            GameObject? rawTarget = null;
 
-            GameObject? target = hit != null
-                ? ExecuteEvents.GetEventHandler<IDragHandler>(hit.Value.gameObject)
+            if (parameters.BypassRaycast)
+            {
+                if (!TryResolveGameObjectPath(
+                    parameters.TargetPath,
+                    "TargetPath",
+                    MouseAction.DragStart,
+                    inputPos,
+                    out rawTarget,
+                    out SimulateMouseUiResponse? failureResponse))
+                {
+                    return failureResponse!;
+                }
+
+                startRaycast = CreateDirectRaycastResult(rawTarget!);
+            }
+            else if (hit != null)
+            {
+                rawTarget = hit.Value.gameObject;
+                startRaycast = hit.Value;
+            }
+
+            GameObject? target = rawTarget != null
+                ? ExecuteEvents.GetEventHandler<IDragHandler>(rawTarget)
                 : null;
 
             if (target == null)
@@ -549,14 +742,16 @@ namespace io.github.hatayama.uLoopMCP
                 return new SimulateMouseUiResponse
                 {
                     Success = false,
-                    Message = $"No draggable UI element at ({inputPos.x:F1}, {inputPos.y:F1}). Use find-game-objects or screenshot to verify positions.",
+                    Message = parameters.BypassRaycast
+                        ? $"TargetPath '{parameters.TargetPath}' has no drag handler."
+                        : $"No draggable UI element at ({inputPos.x:F1}, {inputPos.y:F1}). Use find-game-objects or screenshot to verify positions.",
                     Action = MouseAction.DragStart.ToString(),
                     PositionX = inputPos.x,
                     PositionY = inputPos.y
                 };
             }
 
-            PointerEventData pointerData = InitiateDrag(eventSystem, screenPos, hit!.Value, target, PointerEventData.InputButton.Left);
+            PointerEventData pointerData = InitiateDrag(eventSystem, screenPos, startRaycast, target, PointerEventData.InputButton.Left);
             ExecuteEvents.Execute(target, pointerData, ExecuteEvents.beginDragHandler);
             pointerData.dragging = true;
 
@@ -577,7 +772,7 @@ namespace io.github.hatayama.uLoopMCP
                 // Cancellation during animation leaves beginDrag dispatched; clean up
                 if (!animationCompleted)
                 {
-                    FinalizeDrag(pointerData, target);
+                    FinalizeDrag(pointerData, target, null);
                     MouseDragState.Clear();
                 }
             }
@@ -671,6 +866,17 @@ namespace io.github.hatayama.uLoopMCP
             Vector2 inputEnd = new Vector2(parameters.X, parameters.Y);
             Vector2 screenEnd = InputToScreen(inputEnd);
             string targetName = MouseDragState.Target!.name;
+            GameObject? explicitDropTarget = null;
+
+            if (!TryResolveDropTargetPath(
+                parameters,
+                MouseAction.DragEnd,
+                inputEnd,
+                out explicitDropTarget,
+                out SimulateMouseUiResponse? dropFailureResponse))
+            {
+                return dropFailureResponse!;
+            }
 
             SimulateMouseUiOverlayState.Update(
                 MouseAction.DragEnd,
@@ -687,7 +893,7 @@ namespace io.github.hatayama.uLoopMCP
             }
             finally
             {
-                FinalizeDrag(MouseDragState.PointerData!, MouseDragState.Target!);
+                FinalizeDrag(MouseDragState.PointerData!, MouseDragState.Target!, explicitDropTarget);
                 MouseDragState.Clear();
             }
 
@@ -780,6 +986,147 @@ namespace io.github.hatayama.uLoopMCP
         private static RaycastResult? RaycastUI(Vector2 screenPosition, EventSystem eventSystem)
         {
             return UiRaycastHelper.RaycastUI(screenPosition, eventSystem);
+        }
+
+        private static bool SupportsBypassRaycast(MouseAction action)
+        {
+            return action == MouseAction.Click
+                || action == MouseAction.LongPress
+                || IsDragAction(action);
+        }
+
+        private static bool RequiresBypassTargetPath(MouseAction action)
+        {
+            return action == MouseAction.Click
+                || action == MouseAction.LongPress
+                || action == MouseAction.Drag
+                || action == MouseAction.DragStart;
+        }
+
+        private static bool TryResolveGameObjectPath(
+            string targetPath,
+            string parameterName,
+            MouseAction action,
+            Vector2 inputPosition,
+            out GameObject? target,
+            out SimulateMouseUiResponse? failureResponse)
+        {
+            TargetPathLookupResult lookupResult = FindActiveGameObjectByPath(targetPath);
+            target = lookupResult.Target;
+            if (target != null)
+            {
+                failureResponse = null;
+                return true;
+            }
+
+            string message = lookupResult.MatchCount == 0
+                ? $"{parameterName} '{targetPath}' was not found."
+                : $"{parameterName} '{targetPath}' matched {lookupResult.MatchCount} active GameObjects. Use a unique hierarchy path.";
+
+            failureResponse = new SimulateMouseUiResponse
+            {
+                Success = false,
+                Message = message,
+                Action = action.ToString(),
+                PositionX = inputPosition.x,
+                PositionY = inputPosition.y
+            };
+            return false;
+        }
+
+        private static bool TryResolveDropTargetPath(
+            SimulateMouseUiSchema parameters,
+            MouseAction action,
+            Vector2 inputPosition,
+            out GameObject? dropTarget,
+            out SimulateMouseUiResponse? failureResponse)
+        {
+            dropTarget = null;
+            failureResponse = null;
+
+            if (string.IsNullOrWhiteSpace(parameters.DropTargetPath))
+            {
+                return true;
+            }
+
+            if (!TryResolveGameObjectPath(
+                parameters.DropTargetPath,
+                "DropTargetPath",
+                action,
+                inputPosition,
+                out GameObject? rawDropTarget,
+                out failureResponse))
+            {
+                return false;
+            }
+
+            GameObject? dropHandler = ExecuteEvents.GetEventHandler<IDropHandler>(rawDropTarget!);
+            if (dropHandler == null)
+            {
+                failureResponse = new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message = $"DropTargetPath '{parameters.DropTargetPath}' has no drop handler.",
+                    Action = action.ToString(),
+                    PositionX = inputPosition.x,
+                    PositionY = inputPosition.y
+                };
+                return false;
+            }
+
+            dropTarget = rawDropTarget;
+            return true;
+        }
+
+        private static TargetPathLookupResult FindActiveGameObjectByPath(string targetPath)
+        {
+            string normalizedPath = targetPath.Trim().Trim('/');
+            if (string.IsNullOrEmpty(normalizedPath))
+            {
+                return new TargetPathLookupResult(null, 0);
+            }
+
+            GameObject[] gameObjects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+            GameObject? matchedTarget = null;
+            int matchCount = 0;
+
+            foreach (GameObject gameObject in gameObjects)
+            {
+                if (!string.Equals(
+                    GameObjectPathUtility.GetFullPath(gameObject),
+                    normalizedPath,
+                    StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                matchCount++;
+                matchedTarget = gameObject;
+            }
+
+            return matchCount == 1
+                ? new TargetPathLookupResult(matchedTarget, matchCount)
+                : new TargetPathLookupResult(null, matchCount);
+        }
+
+        private static RaycastResult CreateDirectRaycastResult(GameObject target)
+        {
+            return new RaycastResult
+            {
+                gameObject = target
+            };
+        }
+
+        private readonly struct TargetPathLookupResult
+        {
+            public TargetPathLookupResult(GameObject? target, int matchCount)
+            {
+                Target = target;
+                MatchCount = matchCount;
+            }
+
+            public GameObject? Target { get; }
+            public int MatchCount { get; }
         }
 
         private static bool IsDragAction(MouseAction action)

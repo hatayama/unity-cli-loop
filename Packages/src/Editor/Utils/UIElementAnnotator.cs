@@ -11,16 +11,43 @@ namespace io.github.hatayama.uLoopMCP
     public static class UIElementAnnotator
     {
         private const int OVERLAY_SORT_ORDER = 32767;
-        private const int LABEL_FONT_SIZE = 18;
-        private const float BORDER_THICKNESS = 2f;
-        private const int LABEL_PADDING_H = 4;
-        private const int LABEL_PADDING_V = 2;
+        private const int LABEL_FONT_SIZE = 20;
+        private const float OUTPUT_BORDER_NEUTRAL_THICKNESS = 2f;
+        private const float OUTPUT_BORDER_COLOR_THICKNESS = 4f;
+        private const int LABEL_PADDING_H = 6;
+        private const int LABEL_PADDING_V = 3;
+        private const float LABEL_DARK_TEXT_LUMINANCE_THRESHOLD = 0.62f;
+        private const float OUTPUT_LABEL_OUTLINE_DISTANCE = 2f;
+        private const float OUTPUT_LABEL_TO_BORDER_GAP = 4f;
+        private const string INTERACTION_CLICK = "Click";
+        private const string INTERACTION_DRAG = "Drag";
+        private const string INTERACTION_DROP = "Drop";
+        private const string INTERACTION_TEXT = "Text";
+        private const string DISPLAY_LABEL_SEPARATOR = " / ";
 
-        private static readonly Color BUTTON_COLOR = new Color(0f, 1f, 0.4f, 0.9f);
-        private static readonly Color DRAGGABLE_COLOR = new Color(1f, 0.6f, 0f, 0.9f);
-        private static readonly Color DROP_TARGET_COLOR = new Color(0f, 0.8f, 1f, 0.9f);
-        private static readonly Color SELECTABLE_COLOR = new Color(1f, 1f, 0f, 0.9f);
-        private static readonly Color LABEL_BG_COLOR = new Color(0f, 0f, 0f, 0.75f);
+        // Label-based colors separate dense controls where many elements share the same UI type.
+        private static readonly Color[] ANNOTATION_COLORS =
+        {
+            new Color(1f, 0.35f, 0f, 0.95f),
+            new Color(0f, 0.9f, 1f, 0.95f),
+            new Color(1f, 0.15f, 0.65f, 0.95f),
+            new Color(1f, 0.9f, 0f, 0.95f),
+            new Color(0.2f, 1f, 0.35f, 0.95f),
+            new Color(0.65f, 0.45f, 1f, 0.95f),
+            new Color(1f, 1f, 1f, 0.95f),
+            new Color(0.15f, 0.55f, 1f, 0.95f),
+            new Color(1f, 0.55f, 0.75f, 0.95f),
+            new Color(0.45f, 1f, 0.8f, 0.95f),
+            new Color(0.9f, 0.45f, 0.15f, 0.95f),
+            new Color(0.45f, 0.85f, 0.1f, 0.95f),
+            new Color(0.95f, 0.2f, 0.2f, 0.95f),
+            new Color(0.55f, 0.7f, 1f, 0.95f),
+            new Color(0.95f, 0.95f, 0.45f, 0.95f),
+            new Color(0.85f, 0.55f, 1f, 0.95f)
+        };
+        private static readonly Color FALLBACK_COLOR = new Color(1f, 1f, 0f, 0.9f);
+        private static readonly Color DARK_CONTRAST_COLOR = new Color(0f, 0f, 0f, 0.95f);
+        private static readonly Color LIGHT_CONTRAST_COLOR = new Color(1f, 1f, 1f, 0.95f);
 
         public static List<UIElementInfo> CollectInteractiveElements()
         {
@@ -74,8 +101,9 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        public static GameObject CreateAnnotationOverlay(List<UIElementInfo> elements)
+        public static GameObject CreateAnnotationOverlay(List<UIElementInfo> elements, float outputResolutionScale)
         {
+            AnnotationBorderMetrics borderMetrics = CalculateAnnotationBorderMetrics(outputResolutionScale);
             GameObject root = new GameObject("__UIAnnotation__");
             root.hideFlags = HideFlags.HideAndDontSave;
 
@@ -87,7 +115,7 @@ namespace io.github.hatayama.uLoopMCP
 
             foreach (UIElementInfo element in elements)
             {
-                CreateAnnotationForElement(root.transform, element, font);
+                CreateAnnotationForElement(root.transform, element, font, borderMetrics);
             }
 
             return root;
@@ -216,7 +244,9 @@ namespace io.github.hatayama.uLoopMCP
             elements.Add(new UIElementInfo
             {
                 Name = name,
+                Path = GameObjectPathUtility.GetFullPath(go),
                 Type = type,
+                Interaction = GetInteractionForType(type),
                 SimX = centerX,
                 SimY = centerY,
                 BoundsMinX = minX,
@@ -324,30 +354,87 @@ namespace io.github.hatayama.uLoopMCP
             return true;
         }
 
-        private static void CreateAnnotationForElement(Transform parent, UIElementInfo element, Font font)
+        private static void CreateAnnotationForElement(
+            Transform parent,
+            UIElementInfo element,
+            Font font,
+            AnnotationBorderMetrics borderMetrics)
         {
             float screenMinX = element.BoundsMinX;
             float screenMaxX = element.BoundsMaxX;
             float screenMinY = element.BoundsMinY;
             float screenMaxY = element.BoundsMaxY;
 
-            Color color = GetColorForType(element.Type);
+            Color color = GetAnnotationColorForElement(element);
+            Color contrastColor = GetContrastingTextColor(color);
+            AnnotationBorderColors borderColors = GetAnnotationBorderColors(color);
 
-            float boxWidth = screenMaxX - screenMinX;
-            float boxHeight = screenMaxY - screenMinY;
+            CreateBorder(
+                parent,
+                "LightOuter",
+                screenMinX - borderMetrics.OuterOffset,
+                screenMinY - borderMetrics.OuterOffset,
+                screenMaxX + borderMetrics.OuterOffset,
+                screenMaxY + borderMetrics.OuterOffset,
+                borderMetrics.NeutralThickness,
+                borderColors.Outer);
+            CreateBorder(
+                parent,
+                "ColorMiddle",
+                screenMinX - borderMetrics.ColorOffset,
+                screenMinY - borderMetrics.ColorOffset,
+                screenMaxX + borderMetrics.ColorOffset,
+                screenMaxY + borderMetrics.ColorOffset,
+                borderMetrics.ColorThickness,
+                borderColors.Middle);
+            CreateBorder(parent, "DarkInner", screenMinX, screenMinY, screenMaxX, screenMaxY, borderMetrics.NeutralThickness, borderColors.Inner);
 
-            CreateBorderEdge(parent, "Top", screenMinX, screenMaxY, boxWidth, BORDER_THICKNESS, color);
-            CreateBorderEdge(parent, "Bottom", screenMinX, screenMinY, boxWidth, BORDER_THICKNESS, color);
-            CreateBorderEdge(parent, "Left", screenMinX, screenMinY, BORDER_THICKNESS, boxHeight, color);
-            CreateBorderEdge(parent, "Right", screenMaxX - BORDER_THICKNESS, screenMinY, BORDER_THICKNESS, boxHeight, color);
+            string labelText = CreateDisplayLabel(element);
+            CreateLabel(
+                parent,
+                labelText,
+                screenMinX,
+                screenMaxY + borderMetrics.OuterOffset + borderMetrics.LabelOutlineDistance + borderMetrics.LabelToBorderGap,
+                color,
+                contrastColor,
+                font,
+                borderMetrics.LabelOutlineDistance);
+        }
 
-            string labelText = element.Label;
-            CreateLabel(parent, labelText, screenMinX, screenMaxY + BORDER_THICKNESS, color, font);
+        private static void CreateBorder(
+            Transform parent, string name,
+            float minX, float minY, float maxX, float maxY,
+            float thickness, Color color)
+        {
+            BorderEdgeRects borderEdgeRects = CalculateBorderEdgeRects(minX, minY, maxX, maxY, thickness);
+
+            CreateBorderEdge(parent, $"{name}_Top", borderEdgeRects.Top, color);
+            CreateBorderEdge(parent, $"{name}_Bottom", borderEdgeRects.Bottom, color);
+            CreateBorderEdge(parent, $"{name}_Left", borderEdgeRects.Left, color);
+            CreateBorderEdge(parent, $"{name}_Right", borderEdgeRects.Right, color);
+        }
+
+        internal static BorderEdgeRects CalculateBorderEdgeRects(
+            float minX, float minY, float maxX, float maxY, float thickness)
+        {
+            Debug.Assert(maxX >= minX, "maxX must not be smaller than minX.");
+            Debug.Assert(maxY >= minY, "maxY must not be smaller than minY.");
+            Debug.Assert(thickness >= 0f, "thickness must not be negative.");
+
+            float boxWidth = maxX - minX;
+            float boxHeight = maxY - minY;
+            float verticalEdgeHeight = Mathf.Max(0f, boxHeight - thickness * 2f);
+
+            return new BorderEdgeRects(
+                new Rect(minX, maxY - thickness, boxWidth, thickness),
+                new Rect(minX, minY, boxWidth, thickness),
+                new Rect(minX, minY + thickness, thickness, verticalEdgeHeight),
+                new Rect(maxX - thickness, minY + thickness, thickness, verticalEdgeHeight));
         }
 
         private static void CreateBorderEdge(
             Transform parent, string name,
-            float x, float y, float width, float height,
+            Rect rect,
             Color color)
         {
             GameObject edgeGo = new GameObject($"Border_{name}");
@@ -358,8 +445,8 @@ namespace io.github.hatayama.uLoopMCP
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.zero;
             rt.pivot = Vector2.zero;
-            rt.anchoredPosition = new Vector2(x, y);
-            rt.sizeDelta = new Vector2(width, height);
+            rt.anchoredPosition = new Vector2(rect.x, rect.y);
+            rt.sizeDelta = new Vector2(rect.width, rect.height);
 
             Image image = edgeGo.AddComponent<Image>();
             image.color = color;
@@ -369,7 +456,7 @@ namespace io.github.hatayama.uLoopMCP
         private static void CreateLabel(
             Transform parent, string text,
             float x, float y,
-            Color textColor, Font font)
+            Color backgroundColor, Color textColor, Font font, float outlineDistance)
         {
             GameObject bgGo = new GameObject("LabelBg");
             bgGo.hideFlags = HideFlags.HideAndDontSave;
@@ -382,8 +469,12 @@ namespace io.github.hatayama.uLoopMCP
             bgRt.anchoredPosition = new Vector2(x, y);
 
             Image bgImage = bgGo.AddComponent<Image>();
-            bgImage.color = LABEL_BG_COLOR;
+            bgImage.color = backgroundColor;
             bgImage.raycastTarget = false;
+
+            Outline bgOutline = bgGo.AddComponent<Outline>();
+            bgOutline.effectColor = GetContrastPartnerColor(backgroundColor);
+            bgOutline.effectDistance = new Vector2(outlineDistance, -outlineDistance);
 
             ContentSizeFitter fitter = bgGo.AddComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -403,6 +494,7 @@ namespace io.github.hatayama.uLoopMCP
             labelText.text = text;
             labelText.font = font;
             labelText.fontSize = LABEL_FONT_SIZE;
+            labelText.fontStyle = FontStyle.Bold;
             labelText.color = textColor;
             labelText.alignment = TextAnchor.MiddleLeft;
             labelText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -410,18 +502,183 @@ namespace io.github.hatayama.uLoopMCP
             labelText.raycastTarget = false;
         }
 
-        private static Color GetColorForType(string type)
+        internal static Color GetAnnotationColorForElement(UIElementInfo element)
         {
-            return type switch
+            Debug.Assert(element != null, "UIElementInfo must not be null.");
+
+            int labelIndex = GetLabelIndex(element.Label);
+            if (labelIndex < 0)
             {
-                "Button" => BUTTON_COLOR,
-                "Toggle" => BUTTON_COLOR,
-                "Draggable" => DRAGGABLE_COLOR,
-                "DropTarget" => DROP_TARGET_COLOR,
-                "Slider" => DRAGGABLE_COLOR,
-                "Scrollbar" => DRAGGABLE_COLOR,
-                _ => SELECTABLE_COLOR
-            };
+                return FALLBACK_COLOR;
+            }
+
+            return ANNOTATION_COLORS[labelIndex % ANNOTATION_COLORS.Length];
+        }
+
+        internal static Color GetContrastingTextColor(Color backgroundColor)
+        {
+            float luminance = CalculateLuminance(backgroundColor);
+            if (luminance >= LABEL_DARK_TEXT_LUMINANCE_THRESHOLD)
+            {
+                return DARK_CONTRAST_COLOR;
+            }
+
+            return LIGHT_CONTRAST_COLOR;
+        }
+
+        internal static Color GetContrastPartnerColor(Color color)
+        {
+            Color readableColor = GetContrastingTextColor(color);
+            if (readableColor == DARK_CONTRAST_COLOR)
+            {
+                return LIGHT_CONTRAST_COLOR;
+            }
+
+            return DARK_CONTRAST_COLOR;
+        }
+
+        internal static AnnotationBorderColors GetAnnotationBorderColors(Color annotationColor)
+        {
+            return new AnnotationBorderColors(DARK_CONTRAST_COLOR, annotationColor, LIGHT_CONTRAST_COLOR);
+        }
+
+        internal static AnnotationBorderMetrics CalculateAnnotationBorderMetrics(float outputResolutionScale)
+        {
+            Debug.Assert(outputResolutionScale > 0f, "Output resolution scale must be positive.");
+
+            float neutralThickness = OUTPUT_BORDER_NEUTRAL_THICKNESS / outputResolutionScale;
+            float colorThickness = OUTPUT_BORDER_COLOR_THICKNESS / outputResolutionScale;
+            float labelOutlineDistance = OUTPUT_LABEL_OUTLINE_DISTANCE / outputResolutionScale;
+            float labelToBorderGap = OUTPUT_LABEL_TO_BORDER_GAP / outputResolutionScale;
+
+            return new AnnotationBorderMetrics(
+                neutralThickness,
+                colorThickness,
+                colorThickness,
+                colorThickness + neutralThickness,
+                labelOutlineDistance,
+                labelToBorderGap);
+        }
+
+        internal static string GetInteractionForType(string type)
+        {
+            if (type == "Slider" || type == "Scrollbar" || type == "Draggable")
+            {
+                return INTERACTION_DRAG;
+            }
+
+            if (type == "DropTarget")
+            {
+                return INTERACTION_DROP;
+            }
+
+            if (type == "InputField")
+            {
+                return INTERACTION_TEXT;
+            }
+
+            return INTERACTION_CLICK;
+        }
+
+        internal static string CreateDisplayLabel(UIElementInfo element)
+        {
+            Debug.Assert(element != null, "UIElementInfo must not be null.");
+
+            string interaction = element.Interaction;
+            if (string.IsNullOrEmpty(interaction))
+            {
+                interaction = GetInteractionForType(element.Type);
+            }
+
+            if (string.IsNullOrEmpty(element.Label))
+            {
+                return interaction.ToUpperInvariant();
+            }
+
+            return $"{element.Label}{DISPLAY_LABEL_SEPARATOR}{interaction.ToUpperInvariant()}";
+        }
+
+        private static float CalculateLuminance(Color color)
+        {
+            return color.r * 0.299f + color.g * 0.587f + color.b * 0.114f;
+        }
+
+        private static int GetLabelIndex(string label)
+        {
+            if (string.IsNullOrEmpty(label))
+            {
+                return -1;
+            }
+
+            int index = 0;
+            for (int i = 0; i < label.Length; i++)
+            {
+                char labelCharacter = label[i];
+                if (labelCharacter < 'A' || labelCharacter > 'Z')
+                {
+                    return -1;
+                }
+
+                index = index * 26 + labelCharacter - 'A' + 1;
+            }
+
+            return index - 1;
+        }
+
+        internal readonly struct BorderEdgeRects
+        {
+            public readonly Rect Top;
+            public readonly Rect Bottom;
+            public readonly Rect Left;
+            public readonly Rect Right;
+
+            public BorderEdgeRects(Rect top, Rect bottom, Rect left, Rect right)
+            {
+                Top = top;
+                Bottom = bottom;
+                Left = left;
+                Right = right;
+            }
+        }
+
+        internal readonly struct AnnotationBorderColors
+        {
+            public readonly Color Inner;
+            public readonly Color Middle;
+            public readonly Color Outer;
+
+            public AnnotationBorderColors(Color inner, Color middle, Color outer)
+            {
+                Inner = inner;
+                Middle = middle;
+                Outer = outer;
+            }
+        }
+
+        internal readonly struct AnnotationBorderMetrics
+        {
+            public readonly float NeutralThickness;
+            public readonly float ColorThickness;
+            public readonly float ColorOffset;
+            public readonly float OuterOffset;
+            public readonly float LabelOutlineDistance;
+            public readonly float LabelToBorderGap;
+
+            public AnnotationBorderMetrics(
+                float neutralThickness,
+                float colorThickness,
+                float colorOffset,
+                float outerOffset,
+                float labelOutlineDistance,
+                float labelToBorderGap)
+            {
+                NeutralThickness = neutralThickness;
+                ColorThickness = colorThickness;
+                ColorOffset = colorOffset;
+                OuterOffset = outerOffset;
+                LabelOutlineDistance = labelOutlineDistance;
+                LabelToBorderGap = labelToBorderGap;
+            }
         }
     }
 }

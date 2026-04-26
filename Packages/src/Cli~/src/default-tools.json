@@ -380,6 +380,21 @@
               "Middle"
             ],
             "default": "Left"
+          },
+          "BypassRaycast": {
+            "type": "boolean",
+            "description": "Bypass EventSystem raycast and send click, long-press, or drag events directly to TargetPath, or DropTargetPath for DragEnd. Useful for interacting with UI behind a raycast-blocking overlay.",
+            "default": false
+          },
+          "TargetPath": {
+            "type": "string",
+            "description": "Hierarchy path of the target GameObject used by Click, LongPress, Drag, and DragStart when BypassRaycast is true, for example Canvas/Panel/Button.",
+            "default": ""
+          },
+          "DropTargetPath": {
+            "type": "string",
+            "description": "Optional hierarchy path of the drop target used by Drag and DragEnd, for example Canvas/DropZone.",
+            "default": ""
           }
         }
       }
