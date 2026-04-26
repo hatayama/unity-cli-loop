@@ -1173,7 +1173,15 @@ async function main(): Promise<void> {
   program.parse();
 }
 
-if (process.env.JEST_WORKER_ID === undefined) {
+function shouldRunCliEntryPoint(): boolean {
+  if (process.env.JEST_WORKER_ID === undefined) {
+    return true;
+  }
+
+  return basename(process.argv[1] ?? '') === 'cli.bundle.cjs';
+}
+
+if (shouldRunCliEntryPoint()) {
   const args = process.argv.slice(2);
   void (async (): Promise<void> => {
     if (await tryHandleFastExecuteDynamicCodeCommand(args)) {

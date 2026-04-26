@@ -140,21 +140,7 @@ All tools automatically include the following property:
   - `message` (string): Human-readable guidance for clients to locate and read the JSON file
   - `hierarchyFilePath` (string): File path where hierarchy data was saved (e.g., "{project_root}/.uloop/outputs/HierarchyResults/hierarchy_2025-07-10_21-30-15.json"). The exported JSON file contains `hierarchy` (nested array of GameObjects) and `context` (scene info, node count, max depth)
 
-### 7. execute-menu-item
-- **Description**: Execute Unity MenuItem by path
-- **Parameters**:
-  - `MenuItemPath` (string): The menu item path to execute (e.g., "GameObject/Create Empty") (default: "")
-  - `UseReflectionFallback` (boolean): Whether to use reflection as fallback if EditorApplication.ExecuteMenuItem fails (default: true)
-- **Response**:
-  - `MenuItemPath` (string): The menu item path that was executed
-  - `Success` (boolean): Whether the execution was successful
-  - `ExecutionMethod` (string): The execution method used (EditorApplication or Reflection)
-  - `ErrorMessage` (string): Error message if execution failed
-  - `Details` (string): Additional information about the execution
-  - `MenuItemFound` (boolean): Whether the menu item was found in the system
-  - `WarningMessage` (string): Warning message if there are issues with this MenuItem (e.g., duplicate attributes)
-
-### 8. execute-dynamic-code
+### 7. execute-dynamic-code
 - **Description**: Execute C# code dynamically within Unity Editor. Implements security levels and automatic using statement processing with enhanced error messaging
 - **Parameters**:
   - `Code` (string): The C# code to execute (default: "")
@@ -179,7 +165,7 @@ All tools automatically include the following property:
   - `DiagnosticsSummary` (string): Summary of diagnostics (unique count, total count, first error brief)
   - `Diagnostics` (array): Structured diagnostics for rich clients (same structure as CompilationErrors)
 
-### 9. focus-window
+### 8. focus-window
 - **Description**: Brings Unity Editor window to front on macOS and Windows
 - **Parameters**: None
 - **Response**:
@@ -187,7 +173,7 @@ All tools automatically include the following property:
   - `Message` (string): Operation result message
   - `ErrorMessage` (string): Error message if operation failed
 
-### 10. screenshot
+### 9. screenshot
 - **Description**: Take a screenshot of Unity EditorWindow and save as PNG. Supports capturing any open EditorWindow by name with flexible matching modes
 - **Parameters**:
   - `WindowName` (string): Window name to capture (e.g., "Game", "Scene", "Console", "Inspector", "Project", "Hierarchy") (default: "Game")
@@ -205,7 +191,7 @@ All tools automatically include the following property:
     - `Width` (number): Captured image width in pixels
     - `Height` (number): Captured image height in pixels
 
-### 11. control-play-mode
+### 10. control-play-mode
 - **Description**: Control Unity Editor play mode (play/stop/pause)
 - **Parameters**:
   - `Action` (enum): Action to perform - "Play", "Stop", "Pause" (default: "Play")
@@ -219,7 +205,7 @@ All tools automatically include the following property:
 
 ---
 
-### 12. simulate-mouse-ui
+### 11. simulate-mouse-ui
 - **Description**: Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead
 - **Parameters**:
   - `Action` (enum): Mouse action - "Click", "Drag", "DragStart", "DragMove", "DragEnd", "LongPress" (default: "Click")
@@ -246,7 +232,7 @@ All tools automatically include the following property:
   - `EndPositionX` (number): End X position (for Drag actions)
   - `EndPositionY` (number): End Y position (for Drag actions)
 
-### 13. simulate-mouse-input
+### 12. simulate-mouse-input
 - **Description**: Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into `Mouse.current` for game logic that reads Input System (e.g. `wasPressedThisFrame`, `Mouse.current.delta`). Requires the Input System package and Active Input Handling set to `Input System Package (New)` or `Both` in Player Settings. For UI elements with IPointerClickHandler, use `simulate-mouse-ui` instead
 - **Parameters**:
   - `Action` (enum): Mouse input action - "Click", "LongPress", "MoveDelta", "SmoothDelta", "Scroll" (default: "Click")
@@ -271,7 +257,7 @@ All tools automatically include the following property:
   - `PositionX` (number, nullable): X position used (null for non-positional actions)
   - `PositionY` (number, nullable): Y position used (null for non-positional actions)
 
-### 14. simulate-keyboard
+### 13. simulate-keyboard
 - **Description**: Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations. Requires the Input System package, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`
 - **Parameters**:
   - `Action` (enum): Keyboard action - "Press", "KeyDown", "KeyUp" (default: "Press")

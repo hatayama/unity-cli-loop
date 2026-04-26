@@ -28,7 +28,7 @@ Tasks that humans typically handle manually—compiling, running the Test Runner
 Unity CLI Loop is built around four core ideas:
 
 1. **A self-hosted development loop where AI autonomously compiles, tests, inspects logs, and fixes issues.** Uses `compile`, `run-tests`, `get-logs`, `clear-console`.
-2. **AI-driven Unity Editor operation—scene building, object manipulation, menu execution, and UI refinement from screenshots.** Uses `execute-dynamic-code`, `execute-menu-item`, `screenshot`.
+2. **AI-driven Unity Editor operation—scene building, object manipulation, menu execution, and UI refinement from screenshots.** Uses `execute-dynamic-code`, `screenshot`.
 3. **PlayMode automated testing—AI clicks buttons, drags elements, presses keys, records and replays input, and verifies game behavior.** Uses `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `record-input`, `replay-input`, `execute-dynamic-code`, `screenshot`.
 4. **Achieving the above with a minimal set of tools.** See [Design Philosophy](#design-philosophy).
 
@@ -142,7 +142,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 
 
 <details>
-<summary>All 17 Bundled Skills</summary>
+<summary>All 16 Bundled Skills</summary>
 
 - `/uloop-launch` - Launch Unity with correct version
 - `/uloop-compile` - Execute compilation
@@ -151,7 +151,6 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 - `/uloop-clear-console` - Clear console
 - `/uloop-focus-window` - Bring Unity Editor to front
 - `/uloop-get-hierarchy` - Get scene hierarchy
-- `/uloop-execute-menu-item` - Execute menu item
 - `/uloop-find-game-objects` - Find GameObjects
 - `/uloop-screenshot` - Capture EditorWindow
 - `/uloop-simulate-mouse-ui` - Simulate mouse click, long-press, and drag on PlayMode UI elements
@@ -347,14 +346,7 @@ Clear logs that become noise during log searches.
 → Start new debug session
 ```
 
-### 5. execute-menu-item - Execute Menu Items
-Execute menu items defined with [MenuItem("xxx")] attribute.
-```text
-→ Execute project-specific tools
-→ Check results with get-logs
-```
-
-### 6. find-game-objects - Search Scene Objects
+### 5. find-game-objects - Search Scene Objects
 Retrieve objects and examine component parameters. Also retrieve information about currently selected GameObjects (multiple selection supported) in Unity Editor.
 ```text
 → find-game-objects (RequiredComponents: ["Camera"])
@@ -364,7 +356,7 @@ Retrieve objects and examine component parameters. Also retrieve information abo
 → Get detailed information about currently selected GameObjects in Unity Editor (supports multiple selection)
 ```
 
-### 7. get-hierarchy - Analyze Scene Structure
+### 6. get-hierarchy - Analyze Scene Structure
 Retrieve information about the currently active Hierarchy in nested JSON format. Works at runtime as well.
 **Automatic File Export**: Retrieved hierarchy data is always saved as JSON in `{project_root}/.uloop/outputs/HierarchyResults/` directory. The response only returns the file path, minimizing token consumption even for large datasets.
 **Selection Mode**: Use `UseSelection: true` to get hierarchy starting from currently selected GameObject(s) in Unity Editor. Supports multiple selection - when parent and child are both selected, only the parent is used as root to avoid duplicate traversal.
@@ -375,11 +367,11 @@ Retrieve information about the currently active Hierarchy in nested JSON format.
 → Get hierarchy of currently selected GameObjects without specifying paths manually
 ```
 
-### 8. focus-window - Bring Unity Editor Window to Front (macOS & Windows)
+### 7. focus-window - Bring Unity Editor Window to Front (macOS & Windows)
 Ensures the Unity Editor window becomes the foreground application on macOS and Windows Editor builds.
 Great for keeping visual feedback in sync after other apps steal focus. (Linux is currently unsupported.)
 
-### 9. screenshot - Take a Screenshot of EditorWindow
+### 8. screenshot - Take a Screenshot of EditorWindow
 Take a screenshot of any EditorWindow as a PNG. Specify the window name (the text displayed in the title bar/tab) to capture.
 When multiple windows of the same type are open (e.g., 3 Inspector windows), all windows are saved with numbered filenames.
 Supports three matching modes: `exact` (default), `prefix`, and `contains` - all case-insensitive.
@@ -389,7 +381,7 @@ Supports three matching modes: `exact` (default), `prefix`, and `contains` - all
 → Provide visual feedback to AI
 ```
 
-### 10. control-play-mode - Control Play Mode
+### 9. control-play-mode - Control Play Mode
 Control Unity Editor's Play Mode. Supports three actions: Play (start/resume), Stop, and Pause.
 ```
 → control-play-mode (Action: Play)
@@ -398,7 +390,7 @@ Control Unity Editor's Play Mode. Supports three actions: Play (start/resume), S
 → Pause to inspect state
 ```
 
-### 11. execute-dynamic-code - Dynamic C# Code Execution
+### 10. execute-dynamic-code - Dynamic C# Code Execution
 Execute C# code dynamically within Unity Editor.
 
 Async support:
@@ -442,7 +434,6 @@ Async support:
 >
 > **Basic Security Settings**:
 > - **Allow Tests Execution**: Enable `run-tests` tool
-> - **Allow Menu Item Execution**: Enable `execute-menu-item` tool
 > - **Allow Third Party Tools**: Enable user-developed custom tools
 >
 > **Dynamic Code Security Level** (`execute-dynamic-code` tool):
@@ -455,7 +446,7 @@ Async support:
 >
 
 ### PlayMode Automated Testing Tools
-### 12. simulate-mouse-ui - Simulate Mouse Input on PlayMode UI
+### 11. simulate-mouse-ui - Simulate Mouse Input on PlayMode UI
 Simulate mouse click, long-press, and drag on PlayMode UI elements. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead.
 
 Supports 6 actions: Click, LongPress, Drag (one-shot), DragStart/DragMove/DragEnd (split drag).
@@ -472,7 +463,7 @@ Supports 6 actions: Click, LongPress, Drag (one-shot), DragStart/DragMove/DragEn
 ```
 https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
 
-### 13. simulate-mouse-input - Simulate Mouse Input in PlayMode via Input System
+### 12. simulate-mouse-input - Simulate Mouse Input in PlayMode via Input System
 Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into `Mouse.current` for game logic that reads Input System. Unlike `simulate-mouse-ui` which fires EventSystem pointer events for uGUI, this tool targets game logic that reads `Mouse.current` directly. This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings.
 
 Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
@@ -486,7 +477,7 @@ Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
 → simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
 ```
 
-### 14. simulate-keyboard - Simulate Keyboard Input in PlayMode
+### 13. simulate-keyboard - Simulate Keyboard Input in PlayMode
 Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations (e.g. Shift+W for sprinting). This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`.
 
 Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down), KeyUp (release held key).
@@ -501,7 +492,7 @@ Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down),
 → simulate-keyboard (Action: KeyUp, Key: LeftShift)
 ```
 
-### 15. record-input - Record Input During PlayMode
+### 14. record-input - Record Input During PlayMode
 Record keyboard and mouse input during PlayMode frame-by-frame into a JSON file. Captures key presses, mouse movement, clicks, and scroll events via Input System device state diffing. This tool is available only when the Input System package is installed.
 
 ```text
@@ -511,7 +502,7 @@ Record keyboard and mouse input during PlayMode frame-by-frame into a JSON file.
 → JSON file saved to .uloop/outputs/InputRecordings/
 ```
 
-### 16. replay-input - Replay Recorded Input During PlayMode
+### 15. replay-input - Replay Recorded Input During PlayMode
 Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System. Supports looping and progress monitoring. This tool is available only when the Input System package is installed.
 
 ```text

@@ -1113,6 +1113,12 @@ namespace io.github.hatayama.uLoopMCP
                 SkillInstallLayout.ManagedSkillsDirName,
                 "uloop-capture-window");
             WriteSkillFile(deprecatedSkillDir, "---\nname: uloop-capture-window\n---\n");
+            string executeMenuItemSkillDir = Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-execute-menu-item");
+            WriteSkillFile(executeMenuItemSkillDir, "---\nname: uloop-execute-menu-item\n---\n");
 
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
@@ -1144,6 +1150,12 @@ namespace io.github.hatayama.uLoopMCP
                 SkillInstallLayout.ManagedSkillsDirName,
                 "uloop-capture-window");
             WriteSkillFile(deprecatedSkillDir, "---\nname: uloop-capture-window\n---\n");
+            string executeMenuItemSkillDir = Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-execute-menu-item");
+            WriteSkillFile(executeMenuItemSkillDir, "---\nname: uloop-execute-menu-item\n---\n");
 
             ToolSkillSynchronizer.SkillTargetInfo target = new(
                 "Claude Code",
@@ -1167,8 +1179,46 @@ namespace io.github.hatayama.uLoopMCP
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(deprecatedSkillDir), Is.False);
+            Assert.That(Directory.Exists(executeMenuItemSkillDir), Is.False);
             Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
             Assert.That(File.ReadAllText(Path.Combine(installedSkillDir, "reference.md")), Is.EqualTo("reference"));
+        }
+
+        [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenSettingsUpdateButtonTargetIsUsed_RemovesDeprecatedSkill()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-public-skill",
+                "PublicTool",
+                "reference.md",
+                "reference");
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName));
+
+            string executeMenuItemSkillDir = Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                "uloop-execute-menu-item");
+            WriteSkillFile(executeMenuItemSkillDir, "---\nname: uloop-execute-menu-item\n---\n");
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: false);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(Directory.Exists(executeMenuItemSkillDir), Is.False);
         }
 
         [Test]

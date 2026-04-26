@@ -35,7 +35,7 @@ When reporting a vulnerability, please provide:
 This project implements several security measures:
 
 - **Dynamic Code Execution Security Levels**: The `execute-dynamic-code` tool supports 3-tier security control (Disabled, Restricted, FullAccess)
-- **Security Settings UI**: Tools like `run-tests`, `execute-menu-item`, and third-party tools are disabled by default
+- **Security Settings UI**: Tools like `run-tests` and third-party tools are disabled by default
 - **Automated Security Scanning**: We use GitHub's security scanning features and custom security analysis tools
 
 ### Scope
@@ -62,4 +62,3 @@ When using uLoopMCP, we recommend:
 2. **Review Third-Party Tools**: Only enable "Allow Third-Party Tools" for trusted extensions
 3. **Sandbox Environment**: For AI-driven development, consider running in sandbox environments or containers
 4. **Keep Updated**: Always use the latest version to benefit from security patches
-

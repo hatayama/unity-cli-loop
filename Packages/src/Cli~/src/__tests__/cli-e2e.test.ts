@@ -56,10 +56,6 @@ function sleepSync(ms: number): void {
   }
 }
 
-function isDomainReloadError(output: string): boolean {
-  return output.includes('Unity is reloading') || output.includes('Domain Reload');
-}
-
 function isTransientUnityBusyOutput(output: string): boolean {
   return (
     output.includes('Unity is reloading') ||
@@ -100,7 +96,7 @@ function runCliWithRetry(args: string): { stdout: string; stderr: string; exitCo
     const result = runCli(args);
     const output = result.stderr || result.stdout;
 
-    if (result.exitCode === 0 || !isDomainReloadError(output)) {
+    if (result.exitCode === 0 || !isTransientUnityBusyOutput(output)) {
       return result;
     }
 
@@ -111,27 +107,6 @@ function runCliWithRetry(args: string): { stdout: string; stderr: string; exitCo
   }
 
   return runCli(args);
-}
-
-function runCliWithRetryParts(args: string[]): {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-} {
-  for (let attempt = 0; attempt < DOMAIN_RELOAD_MAX_RETRIES; attempt++) {
-    const result = runCliParts(args);
-    const output = result.stderr || result.stdout;
-
-    if (result.exitCode === 0 || !isDomainReloadError(output)) {
-      return result;
-    }
-
-    if (attempt < DOMAIN_RELOAD_MAX_RETRIES - 1) {
-      sleepSync(DOMAIN_RELOAD_RETRY_MS);
-    }
-  }
-
-  return runCliParts(args);
 }
 
 function runCliJson<T>(args: string): T {
@@ -151,6 +126,62 @@ function runCliJson<T>(args: string): T {
 
   const jsonPayload = trimmedOutput.slice(jsonStart, jsonEnd + 1);
   return JSON.parse(jsonPayload) as T;
+}
+
+function runExecuteDynamicCodeJsonWithRetry(code: string): {
+  Success: boolean;
+  Result?: string;
+  ErrorMessage?: string;
+  Logs?: string[];
+} {
+  for (let attempt = 0; attempt < UNITY_READY_MAX_RETRIES; attempt++) {
+    const result = runCliParts(['execute-dynamic-code', '--code', code]);
+    const output = result.stderr || result.stdout;
+
+    if (result.exitCode !== 0) {
+      if (isTransientUnityBusyOutput(output) && attempt < UNITY_READY_MAX_RETRIES - 1) {
+        sleepSync(UNITY_READY_RETRY_MS);
+        continue;
+      }
+
+      throw new Error(`execute-dynamic-code failed: ${output}`);
+    }
+
+    const payload = parseLastJsonObject<{
+      Success: boolean;
+      Result?: string;
+      ErrorMessage?: string;
+      Logs?: string[];
+    }>(result.stdout);
+
+    if (typeof payload.Success !== 'boolean') {
+      if (attempt < UNITY_READY_MAX_RETRIES - 1) {
+        sleepSync(UNITY_READY_RETRY_MS);
+        continue;
+      }
+
+      throw new Error(`Unexpected execute-dynamic-code payload: ${result.stdout}`);
+    }
+
+    if (payload.Success) {
+      return payload;
+    }
+
+    if (!isTransientExecuteDynamicCodeFailure(payload)) {
+      throw new Error(`execute-dynamic-code failed: ${payload.ErrorMessage ?? result.stdout}`);
+    }
+
+    if (attempt < UNITY_READY_MAX_RETRIES - 1) {
+      sleepSync(UNITY_READY_RETRY_MS);
+      continue;
+    }
+
+    throw new Error(
+      `execute-dynamic-code did not become ready: ${payload.ErrorMessage ?? result.stdout}`,
+    );
+  }
+
+  throw new Error('execute-dynamic-code did not become ready before retry budget was exhausted');
 }
 
 async function runExecuteDynamicCodeUntilReady(
@@ -252,17 +283,20 @@ describe('CLI E2E Tests (requires running Unity)', () => {
   });
 
   describe('get-logs', () => {
-    const TEST_LOG_MENU_PATH = 'uLoopMCP/Debug/LogGetter Tests/Output Test Logs';
-    const MENU_ITEM_WAIT_MS = 1000;
+    const LOG_WAIT_MS = 1000;
     const ERROR_FAMILY_PREFIX = 'CliE2EErrorFamily';
 
     function setupTestLogs(): void {
       runCliWithRetry('clear-console');
-      const result = runCliWithRetry(`execute-menu-item --menu-item-path "${TEST_LOG_MENU_PATH}"`);
-      if (result.exitCode !== 0) {
-        throw new Error(`execute-menu-item failed: ${result.stderr || result.stdout}`);
-      }
-      sleepSync(MENU_ITEM_WAIT_MS);
+      const code = [
+        'using UnityEngine;',
+        'Debug.Log("This is a normal log");',
+        'Debug.LogWarning("This is a warning log");',
+        'Debug.LogError("This is an error log");',
+        'Debug.Log("LogGetter test complete");',
+      ].join(' ');
+      runExecuteDynamicCodeJsonWithRetry(code);
+      sleepSync(LOG_WAIT_MS);
     }
 
     function setupErrorFamilyLogs(token: string): void {
@@ -275,11 +309,8 @@ describe('CLI E2E Tests (requires running Unity)', () => {
         `Debug.LogAssertion("${ERROR_FAMILY_PREFIX}_Assert_${token}");`,
         `Debug.LogWarning("${ERROR_FAMILY_PREFIX}_Warning_${token}");`,
       ].join(' ');
-      const result = runCliWithRetryParts(['execute-dynamic-code', '--code', code]);
-      if (result.exitCode !== 0) {
-        throw new Error(`execute-dynamic-code failed: ${result.stderr || result.stdout}`);
-      }
-      sleepSync(MENU_ITEM_WAIT_MS);
+      runExecuteDynamicCodeJsonWithRetry(code);
+      sleepSync(LOG_WAIT_MS);
     }
 
     function setupAssertTextLogs(token: string): void {
@@ -290,11 +321,8 @@ describe('CLI E2E Tests (requires running Unity)', () => {
         `Debug.LogWarning("All assertions passed ${token}");`,
         `Debug.LogError("${ERROR_FAMILY_PREFIX}_ErrorOnly_${token}");`,
       ].join(' ');
-      const result = runCliWithRetryParts(['execute-dynamic-code', '--code', code]);
-      if (result.exitCode !== 0) {
-        throw new Error(`execute-dynamic-code failed: ${result.stderr || result.stdout}`);
-      }
-      sleepSync(MENU_ITEM_WAIT_MS);
+      runExecuteDynamicCodeJsonWithRetry(code);
+      sleepSync(LOG_WAIT_MS);
     }
 
     it('should retrieve test logs after executing Output Test Logs menu item', () => {
@@ -426,11 +454,8 @@ describe('CLI E2E Tests (requires running Unity)', () => {
   });
 
   describe('clear-console', () => {
-    const TEST_LOG_MENU_PATH = 'uLoopMCP/Debug/LogGetter Tests/Output Test Logs';
-
     it('should clear console and verify logs are empty', () => {
-      // First output some logs
-      runCli(`execute-menu-item --menu-item-path "${TEST_LOG_MENU_PATH}"`);
+      runExecuteDynamicCodeJsonWithRetry('using UnityEngine; Debug.Log("clear test");');
 
       // Clear console
       const result = runCliJson<{ Success: boolean }>('clear-console');
@@ -477,37 +502,6 @@ describe('CLI E2E Tests (requires running Unity)', () => {
 
       expect(typeof result.hierarchyFilePath).toBe('string');
       expect(result.hierarchyFilePath).toContain('hierarchy_');
-    });
-  });
-
-  describe('execute-menu-item', () => {
-    const TEST_LOG_MENU_PATH = 'uLoopMCP/Debug/LogGetter Tests/Output Test Logs';
-
-    it('should execute menu item and verify logs are output', () => {
-      // Clear console first
-      runCli('clear-console');
-
-      // Execute menu item
-      const result = runCliJson<{ Success: boolean; MenuItemPath: string }>(
-        `execute-menu-item --menu-item-path "${TEST_LOG_MENU_PATH}"`,
-      );
-
-      expect(result.Success).toBe(true);
-      expect(result.MenuItemPath).toBe(TEST_LOG_MENU_PATH);
-
-      // Verify logs were output
-      const logs = runCliJson<{ TotalCount: number; Logs: Array<{ Message: string }> }>('get-logs');
-      expect(logs.TotalCount).toBeGreaterThan(0);
-      const messages = logs.Logs.map((log) => log.Message);
-      expect(messages.some((m) => m.includes('LogGetter test complete'))).toBe(true);
-    });
-
-    it('should support --use-reflection-fallback false option', () => {
-      const result = runCliJson<{ Success: boolean }>(
-        `execute-menu-item --menu-item-path "${TEST_LOG_MENU_PATH}" --use-reflection-fallback false`,
-      );
-
-      expect(result.Success).toBe(true);
     });
   });
 

@@ -3,6 +3,7 @@ type SpawnArgs = [string, string[], Record<string, unknown>?];
 const mockSpawn = jest.fn<unknown, SpawnArgs>();
 
 jest.mock('child_process', () => ({
+  execFile: jest.fn(),
   spawn: (...args: SpawnArgs): unknown => mockSpawn(...args),
 }));
 

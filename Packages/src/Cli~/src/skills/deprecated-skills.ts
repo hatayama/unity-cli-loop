@@ -10,4 +10,5 @@ export const DEPRECATED_SKILLS: string[] = [
   'uloop-unity-search', // removed: replaceable by execute-dynamic-code
   'uloop-get-menu-items', // removed: replaceable by execute-dynamic-code
   'uloop-get-unity-search-providers', // removed: replaceable by execute-dynamic-code
+  'uloop-execute-menu-item', // removed: replaceable by execute-dynamic-code
 ];

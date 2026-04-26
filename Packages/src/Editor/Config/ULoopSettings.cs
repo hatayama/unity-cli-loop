@@ -275,10 +275,8 @@ namespace io.github.hatayama.uLoopMCP
                 migrated = true;
             }
 
-            if (json.Contains($"\"{nameof(LegacySecuritySettingsProbe.allowMenuItemExecution)}\"")
-                && !probe.allowMenuItemExecution)
+            if (json.Contains($"\"{nameof(LegacySecuritySettingsProbe.allowMenuItemExecution)}\""))
             {
-                ToolSettings.SetToolEnabled(McpConstants.TOOL_NAME_EXECUTE_MENU_ITEM, false);
                 migrated = true;
             }
 

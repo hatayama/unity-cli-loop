@@ -56,7 +56,6 @@ Skills are dynamically loaded from the uLoopMCP package in your Unity project. T
 - `/uloop-clear-console` - Clear console
 - `/uloop-focus-window` - Bring Unity Editor to front
 - `/uloop-get-hierarchy` - Get scene hierarchy
-- `/uloop-execute-menu-item` - Execute menu item
 - `/uloop-find-game-objects` - Find GameObjects
 - `/uloop-screenshot` - Take a screenshot of EditorWindow
 - `/uloop-control-play-mode` - Control Play Mode
@@ -215,25 +214,6 @@ uloop get-hierarchy --use-selection true
 
 **Output:**
 - `hierarchyFilePath` (string) - Path to saved JSON file containing hierarchy data
-
-### execute-menu-item
-
-Execute Unity MenuItem by path.
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--menu-item-path` | string | | Menu item path (e.g., "GameObject/Create Empty") |
-| `--use-reflection-fallback` | boolean | `true` | Use reflection fallback if direct execution fails |
-
-```bash
-uloop execute-menu-item --menu-item-path "File/Save"
-uloop execute-menu-item --menu-item-path "GameObject/Create Empty"
-```
-
-**Output:**
-- `Success` (boolean) - Execution succeeded
-- `MenuItemPath` (string) - Executed menu path
-- `ExecutionMethod` (string) - Method used (EditorApplication or Reflection)
 
 ### find-game-objects
 

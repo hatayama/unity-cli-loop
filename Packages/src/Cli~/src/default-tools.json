@@ -157,24 +157,6 @@
       }
     },
     {
-      "name": "execute-menu-item",
-      "description": "Execute Unity MenuItem",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "MenuItemPath": {
-            "type": "string",
-            "description": "Menu item path (e.g., \"GameObject/Create Empty\")"
-          },
-          "UseReflectionFallback": {
-            "type": "boolean",
-            "description": "Use reflection fallback",
-            "default": true
-          }
-        }
-      }
-    },
-    {
       "name": "find-game-objects",
       "description": "Find GameObjects with search criteria",
       "inputSchema": {

@@ -140,21 +140,7 @@
   - `message` (string): クライアントがJSONファイルを参照するための案内メッセージ
   - `hierarchyFilePath` (string): 階層データが保存されたファイルパス（例: "{project_root}/.uloop/outputs/HierarchyResults/hierarchy_2025-07-10_21-30-15.json"）。エクスポートされたJSONファイルには `hierarchy`（GameObjectのネスト配列）と `context`（シーン情報、ノード数、最大深度）が含まれる
 
-### 7. execute-menu-item
-- **説明**: パスによってUnity MenuItemを実行します
-- **パラメータ**:
-  - `MenuItemPath` (string): 実行するメニューアイテムパス（例: "GameObject/Create Empty"）（デフォルト: ""）
-  - `UseReflectionFallback` (boolean): EditorApplication.ExecuteMenuItemが失敗した場合にリフレクションをフォールバックとして使用するかどうか（デフォルト: true）
-- **レスポンス**:
-  - `MenuItemPath` (string): 実行されたメニューアイテムパス
-  - `Success` (boolean): 実行が成功したかどうか
-  - `ExecutionMethod` (string): 使用された実行方法（EditorApplicationまたはReflection）
-  - `ErrorMessage` (string): 実行が失敗した場合のエラーメッセージ
-  - `Details` (string): 実行に関する追加情報
-  - `MenuItemFound` (boolean): メニューアイテムがシステムで見つかったかどうか
-  - `WarningMessage` (string): MenuItemに問題がある場合の警告メッセージ（例: 属性の重複）
-
-### 8. execute-dynamic-code
+### 7. execute-dynamic-code
 - **説明**: Unity Editor内で動的C#コードを実行します。セキュリティレベルに応じてAPI利用を制限し、using文の自動処理やエラーメッセージの改善機能を提供します
 - **パラメータ**:
   - `Code` (string): 実行するC#コード（デフォルト: ""）
@@ -179,7 +165,7 @@
   - `DiagnosticsSummary` (string): 診断情報のサマリー（ユニークエラー数、総数、最初のエラー概要）
   - `Diagnostics` (array): リッチクライアント向けの構造化された診断情報（CompilationErrorsと同じ構造）
 
-### 9. focus-window
+### 8. focus-window
 - **説明**: macOSおよびWindowsでUnity Editorウィンドウを前面に表示します
 - **パラメータ**: なし
 - **レスポンス**:
@@ -187,7 +173,7 @@
   - `Message` (string): 操作結果メッセージ
   - `ErrorMessage` (string): 操作が失敗した場合のエラーメッセージ
 
-### 10. screenshot
+### 9. screenshot
 - **説明**: Unity EditorWindowのスクリーンショットを撮影してPNG画像として保存します。名前による柔軟なマッチングモードで任意のEditorWindowをキャプチャ可能です
 - **パラメータ**:
   - `WindowName` (string): キャプチャするウィンドウ名（例: "Game", "Scene", "Console", "Inspector", "Project", "Hierarchy"）（デフォルト: "Game"）
@@ -205,7 +191,7 @@
     - `Width` (number): キャプチャ画像の幅（ピクセル）
     - `Height` (number): キャプチャ画像の高さ（ピクセル）
 
-### 11. control-play-mode
+### 10. control-play-mode
 - **説明**: Unity Editorのプレイモードを制御します（再生/停止/一時停止）
 - **パラメータ**:
   - `Action` (enum): 実行するアクション - "Play", "Stop", "Pause"（デフォルト: "Play"）
@@ -217,7 +203,7 @@
   - `IsPaused` (boolean): プレイモードが一時停止中かどうか
   - `Message` (string): 実行されたアクションの説明
 
-### 12. simulate-mouse-ui
+### 11. simulate-mouse-ui
 - **説明**: PlayMode中のUI要素に対してマウスクリック・長押し・ドラッグをシミュレーション。EventSystemとExecuteEventsを使ってポインタイベントを直接ディスパッチするため、旧・新Input Systemの両方に依存せず動作。Input Systemを読むゲームロジック（`Mouse.current.leftButton.wasPressedThisFrame`等）には `simulate-mouse-input` を使用
 - **パラメータ**:
   - `Action` (enum): マウスアクション - "Click", "Drag", "DragStart", "DragMove", "DragEnd", "LongPress"（デフォルト: "Click"）
@@ -244,7 +230,7 @@
   - `EndPositionX` (number): 終了X座標（Dragアクション用）
   - `EndPositionY` (number): 終了Y座標（Dragアクション用）
 
-### 13. simulate-mouse-input
+### 12. simulate-mouse-input
 - **説明**: Input System経由でPlayMode中のマウス入力をシミュレーション。ボタンクリック、マウスデルタ、スクロールホイールを `Mouse.current` に直接注入。`wasPressedThisFrame`や`Mouse.current.delta`等を読むゲームロジック向け。Input Systemパッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要がある。IPointerClickHandler等のUI要素には `simulate-mouse-ui` を使用
 - **パラメータ**:
   - `Action` (enum): マウス入力アクション - "Click", "LongPress", "MoveDelta", "SmoothDelta", "Scroll"（デフォルト: "Click"）
@@ -269,7 +255,7 @@
   - `PositionX` (number, nullable): 使用されたX座標（位置を使わないアクションではnull）
   - `PositionY` (number, nullable): 使用されたY座標（位置を使わないアクションではnull）
 
-### 14. simulate-keyboard
+### 13. simulate-keyboard
 - **説明**: Input System経由でPlayMode中のキーボード入力をシミュレーション。単発のキータップ、長押し、複数キーの同時押しに対応。Input Systemパッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要がある。ゲームコードがInput System API（例: `Keyboard.current[Key.W].isPressed`）で入力を読み取っている必要があり、レガシーの `Input.GetKey()` には非対応
 - **パラメータ**:
   - `Action` (enum): キーボードアクション - "Press", "KeyDown", "KeyUp"（デフォルト: "Press"）

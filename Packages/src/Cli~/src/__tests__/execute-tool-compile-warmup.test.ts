@@ -173,7 +173,7 @@ describe('executeToolCommand compile warmup', () => {
       ),
     ).resolves.toBeUndefined();
 
-    expect(mockSpawnSync).toHaveBeenCalledTimes(4);
+    expect(mockSpawnSync).toHaveBeenCalledTimes(5);
     expect(mockConsoleLog).toHaveBeenCalledTimes(1);
   });
 
@@ -202,7 +202,7 @@ describe('executeToolCommand compile warmup', () => {
       ),
     ).resolves.toBeUndefined();
 
-    expect(mockSpawnSync).toHaveBeenCalledTimes(4);
+    expect(mockSpawnSync).toHaveBeenCalledTimes(5);
     expect(mockConsoleLog).toHaveBeenCalledTimes(1);
   });
 
@@ -233,7 +233,7 @@ describe('executeToolCommand compile warmup', () => {
       ),
     ).resolves.toBeUndefined();
 
-    expect(mockSpawnSync).toHaveBeenCalledTimes(6);
+    expect(mockSpawnSync).toHaveBeenCalledTimes(7);
     expect(mockConsoleLog).toHaveBeenCalledTimes(1);
   });
 
@@ -259,7 +259,7 @@ describe('executeToolCommand compile warmup', () => {
       ),
     ).resolves.toBeUndefined();
 
-    expect(mockSpawnSync).toHaveBeenCalledTimes(4);
+    expect(mockSpawnSync).toHaveBeenCalledTimes(5);
     expect(mockConsoleLog).toHaveBeenCalledTimes(1);
   });
 

@@ -164,7 +164,7 @@ describe('executeToolCommand recovery', () => {
     expect(constructedPorts).toEqual([8711, 8712]);
   });
 
-  it('cleans up interactive feedback when server startup blocks the next retry iteration', async () => {
+  it('keeps non-dynamic tools running when server startup appears during recovery', async () => {
     let lockVisible = false;
     mockExistsSync.mockImplementation(
       (path: string) => path.endsWith('serverstarting.lock') && lockVisible,
@@ -174,8 +174,8 @@ describe('executeToolCommand recovery', () => {
       await Promise.resolve();
     });
 
-    await expect(executeToolCommand('get-logs', {}, { projectPath: '/project' })).rejects.toThrow(
-      'UNITY_SERVER_STARTING',
+    await expect(executeToolCommand('get-logs', {}, { projectPath: '/project' })).resolves.toBe(
+      undefined,
     );
 
     expect(mockSpinnerStop).toHaveBeenCalledTimes(1);

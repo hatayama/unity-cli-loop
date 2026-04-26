@@ -98,7 +98,8 @@ namespace io.github.hatayama.uLoopMCP
             "uloop-get-provider-details",
             "uloop-unity-search",
             "uloop-get-menu-items",
-            "uloop-get-unity-search-providers"
+            "uloop-get-unity-search-providers",
+            "uloop-execute-menu-item"
         };
         private static readonly string[] ExcludedSkillFileNames =
         {

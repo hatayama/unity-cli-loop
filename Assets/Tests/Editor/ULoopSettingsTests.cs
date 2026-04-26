@@ -306,10 +306,11 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public void GetSettings_WhenAllowMenuItemExecutionIsFalse_ShouldDisableExecuteMenuItemTool()
+        public void GetSettings_WhenAllowMenuItemExecutionIsFalse_ShouldRemoveLegacyFieldOnly()
         {
             string settingsJson = JsonUtility.ToJson(new SettingsFileFixture
             {
+                enableTestsExecution = true,
                 allowMenuItemExecution = false,
                 allowThirdPartyTools = true,
                 dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted
@@ -321,7 +322,7 @@ namespace io.github.hatayama.uLoopMCP
 
             ULoopSettings.GetSettings();
 
-            Assert.IsFalse(ToolSettings.IsToolEnabled(McpConstants.TOOL_NAME_EXECUTE_MENU_ITEM));
+            Assert.AreEqual(0, ToolSettings.GetDisabledTools().Length);
 
             string updatedPermissionsJson = File.ReadAllText(SettingsFilePath);
             StringAssert.DoesNotContain("\"allowMenuItemExecution\"", updatedPermissionsJson);
