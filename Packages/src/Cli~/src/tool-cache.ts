@@ -19,7 +19,7 @@ export interface ToolProperty {
   items?: { type: string };
 }
 
-export interface ToolInputSchema {
+interface ToolInputSchema {
   type: string;
   properties: Record<string, ToolProperty>;
   required?: string[];

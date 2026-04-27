@@ -3,14 +3,7 @@
  * Supports Claude Code and Codex CLI, with extensibility for future targets.
  */
 
-export type TargetId =
-  | 'claude'
-  | 'codex'
-  | 'cursor'
-  | 'gemini'
-  | 'agents'
-  | 'windsurf'
-  | 'antigravity';
+type TargetId = 'claude' | 'codex' | 'cursor' | 'gemini' | 'agents' | 'windsurf' | 'antigravity';
 
 export interface TargetConfig {
   id: TargetId;
