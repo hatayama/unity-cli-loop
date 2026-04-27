@@ -17,7 +17,7 @@ namespace io.github.hatayama.uLoopMCP
     /// - FindGameObjectsSchema: Search parameters
     /// - FindGameObjectsResponse: Type-safe response structure
     /// </summary>
-    [McpTool(Description = "Find multiple GameObjects with advanced search criteria (component type, tag, layer, etc.)")]
+    [McpTool(Description = "Find GameObjects by search criteria or inspect GameObject(s) currently selected in the Unity Hierarchy using SearchMode.Selected.")]
     public class FindGameObjectsTool : AbstractUnityTool<FindGameObjectsSchema, FindGameObjectsResponse>
     {
         public override string ToolName => "find-game-objects";

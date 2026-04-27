@@ -26,7 +26,7 @@ namespace io.github.hatayama.uLoopMCP
         [Description("Use LUT for components (auto|true|false)")]
         public string UseComponentsLut { get; set; } = "auto";
 
-        [Description("Whether to use currently selected GameObject(s) as root(s) for hierarchy traversal. When true, RootPath is ignored.")]
+        [Description("Whether to use GameObject(s) currently selected in the Unity Hierarchy as root(s) for hierarchy traversal. When true, RootPath is ignored.")]
         public bool UseSelection { get; set; } = false;
     }
 }

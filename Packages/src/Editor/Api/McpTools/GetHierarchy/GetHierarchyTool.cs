@@ -21,7 +21,7 @@ namespace io.github.hatayama.uLoopMCP
     /// - GetHierarchySchema: Type-safe parameter schema
     /// - GetHierarchyResponse: Type-safe response structure
     /// </summary>
-    [McpTool(Description = "Get Unity Hierarchy structure in AI-friendly format")]
+    [McpTool(Description = "Get Unity Hierarchy structure for the whole scene, a root path, or GameObject(s) currently selected in the Unity Hierarchy using UseSelection.")]
     public class GetHierarchyTool : AbstractUnityTool<GetHierarchySchema, GetHierarchyResponse>
     {
         public override string ToolName => "get-hierarchy";
