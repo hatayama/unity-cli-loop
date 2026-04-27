@@ -1,11 +1,13 @@
 ---
 name: uloop-find-game-objects
-description: "Inspect Unity GameObjects by search criteria or the current Hierarchy selection. Use when you need to: (1) Get details for GameObject(s) the user selected in the Unity Hierarchy with `--search-mode Selected`, (2) Search for objects by name, regex, or path, (3) Find objects with specific components, tags, or layers. Returns hierarchy paths, active state, tags, layers, and components (or writes to a file when multiple GameObjects are selected)."
+description: "Use first when the user asks about the currently selected GameObject in the Unity Hierarchy. Inspect selected object details with `--search-mode Selected` before using `execute-dynamic-code`. Use when you need to: (1) Get details and component properties for selected GameObject(s), (2) Search for objects by name, regex, or path, (3) Find objects with specific components, tags, or layers. Use get-hierarchy when the child tree under the selection is needed. Returns hierarchy paths, active state, tags, layers, and components (or writes to a file when multiple GameObjects are selected)."
 ---
 
 # uloop find-game-objects
 
 Find GameObjects with search criteria or get details for currently selected Hierarchy objects.
+
+Use this before `execute-dynamic-code` when identifying or inspecting selected GameObjects. Use `get-hierarchy` instead when you need the child tree, parent-child structure, or descendants under the selection.
 
 ## Usage
 

@@ -9,6 +9,8 @@ namespace io.github.hatayama.uLoopMCP
     /// </summary>
     [McpTool(Description = @"Execute C# code dynamically in Unity Editor for editor automation.
 
+Use find-game-objects first for basic selected GameObject discovery or property inspection. Use this after built-in inspection tools are not enough or when you need to modify Unity state.
+
 Direct statements only (no classes/namespaces/methods); return is optional (auto 'return null;' if omitted).
 
 You may include using directives at the top; they are hoisted above the wrapper.
