@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -16,6 +17,7 @@ namespace io.github.hatayama.uLoopMCP
         private const string SharedCompilerWorkerResultPrefix = "__ULOOP_RESULT__";
         private const string SharedCompilerWorkerEndMarker = "__ULOOP_END__";
         private const string SharedCompilerWorkerQuitCommand = "__QUIT__";
+        internal const string CompileRequestPathPrefix = "path-base64:";
         private const string RoslynWorkerSourceFileName = "RoslynCompilerWorker.cs";
         private const string RoslynWorkerAssemblyFileName = "RoslynCompilerWorker.dll";
         private const string RoslynWorkerCompileResponseFileName = "RoslynCompilerWorker.rsp";
@@ -368,8 +370,28 @@ namespace io.github.hatayama.uLoopMCP
 
         private static void SendCompileRequestCore(Process workerProcess, string requestFilePath)
         {
-            workerProcess.StandardInput.WriteLine(requestFilePath);
+            string requestCommand = CreateCompileRequestCommand(requestFilePath);
+            workerProcess.StandardInput.WriteLine(requestCommand);
             workerProcess.StandardInput.Flush();
+        }
+
+        internal static string CreateCompileRequestCommandForTests(string requestFilePath)
+        {
+            return CreateCompileRequestCommand(requestFilePath);
+        }
+
+        internal static string CreateProgramSourceForTests()
+        {
+            return CreateProgramSource();
+        }
+
+        private static string CreateCompileRequestCommand(string requestFilePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(requestFilePath), "requestFilePath must not be empty");
+
+            string fullRequestFilePath = Path.GetFullPath(requestFilePath);
+            byte[] requestPathBytes = Encoding.UTF8.GetBytes(fullRequestFilePath);
+            return CompileRequestPathPrefix + Convert.ToBase64String(requestPathBytes);
         }
 
         private static WorkerAttemptResult ReadWorkerResponse(
@@ -925,6 +947,7 @@ namespace io.github.hatayama.uLoopMCP
                 + "    private const string ResultPrefix = \"" + SharedCompilerWorkerResultPrefix + "\";\n"
                 + "    private const string EndMarker = \"" + SharedCompilerWorkerEndMarker + "\";\n"
                 + "    private const string QuitCommand = \"" + SharedCompilerWorkerQuitCommand + "\";\n"
+                + "    private const string RequestPathPrefix = \"" + CompileRequestPathPrefix + "\";\n"
                 + "    private const string UnsafePrefix = \"unsafe:\";\n"
                 + "    private const string DefinePrefix = \"define:\";\n"
                 + "    private const string ReferencePrefix = \"ref:\";\n"
@@ -941,7 +964,7 @@ namespace io.github.hatayama.uLoopMCP
                 + "                return 0;\n"
                 + "            }\n"
                 + "\n"
-                + "            CompileResponse response = Compile(requestPath);\n"
+                + "            CompileResponse response = Compile(DecodeRequestPath(requestPath));\n"
                 + "            Console.WriteLine(ResultPrefix + \" \" + response.ExitCode);\n"
                 + "            foreach (string diagnosticLine in response.DiagnosticLines)\n"
                 + "            {\n"
@@ -952,6 +975,119 @@ namespace io.github.hatayama.uLoopMCP
                 + "        }\n"
                 + "\n"
                 + "        return 0;\n"
+                + "    }\n"
+                + "\n"
+                + "    private static string DecodeRequestPath(string requestPath)\n"
+                + "    {\n"
+                + "        int encodedPathIndex = FindRequestPathPrefixIndex(requestPath);\n"
+                + "        if (encodedPathIndex >= 0)\n"
+                + "        {\n"
+                + "            string encodedPath = requestPath.Substring(encodedPathIndex + RequestPathPrefix.Length);\n"
+                + "            if (!IsBase64Payload(encodedPath))\n"
+                + "            {\n"
+                + "                return RecoverRawRequestPath(requestPath);\n"
+                + "            }\n"
+                + "\n"
+                + "            byte[] requestPathBytes = Convert.FromBase64String(encodedPath);\n"
+                + "            return Encoding.UTF8.GetString(requestPathBytes);\n"
+                + "        }\n"
+                + "\n"
+                + "        return RecoverRawRequestPath(requestPath);\n"
+                + "    }\n"
+                + "\n"
+                + "    private static bool IsBase64Payload(string value)\n"
+                + "    {\n"
+                + "        if (string.IsNullOrEmpty(value) || value.Length % 4 != 0 || !HasValidBase64Padding(value))\n"
+                + "        {\n"
+                + "            return false;\n"
+                + "        }\n"
+                + "\n"
+                + "        for (int i = 0; i < value.Length; i++)\n"
+                + "        {\n"
+                + "            char character = value[i];\n"
+                + "            bool isBase64Character = character >= 'A' && character <= 'Z'\n"
+                + "                || character >= 'a' && character <= 'z'\n"
+                + "                || character >= '0' && character <= '9'\n"
+                + "                || character == '+'\n"
+                + "                || character == '/'\n"
+                + "                || character == '=';\n"
+                + "            if (!isBase64Character)\n"
+                + "            {\n"
+                + "                return false;\n"
+                + "            }\n"
+                + "        }\n"
+                + "\n"
+                + "        return true;\n"
+                + "    }\n"
+                + "\n"
+                + "    private static bool HasValidBase64Padding(string value)\n"
+                + "    {\n"
+                + "        int firstPaddingIndex = value.IndexOf('=');\n"
+                + "        if (firstPaddingIndex < 0)\n"
+                + "        {\n"
+                + "            return true;\n"
+                + "        }\n"
+                + "\n"
+                + "        int paddingLength = value.Length - firstPaddingIndex;\n"
+                + "        if (paddingLength > 2)\n"
+                + "        {\n"
+                + "            return false;\n"
+                + "        }\n"
+                + "\n"
+                + "        for (int i = firstPaddingIndex; i < value.Length; i++)\n"
+                + "        {\n"
+                + "            if (value[i] != '=')\n"
+                + "            {\n"
+                + "                return false;\n"
+                + "            }\n"
+                + "        }\n"
+                + "\n"
+                + "        return true;\n"
+                + "    }\n"
+                + "\n"
+                + "    private static int FindRequestPathPrefixIndex(string requestPath)\n"
+                + "    {\n"
+                + "        int encodedPathIndex = requestPath.IndexOf(RequestPathPrefix, StringComparison.Ordinal);\n"
+                + "        if (encodedPathIndex <= 0)\n"
+                + "        {\n"
+                + "            return encodedPathIndex;\n"
+                + "        }\n"
+                + "\n"
+                + "        return HasDirectorySeparatorBeforePrefix(requestPath, encodedPathIndex) ? -1 : encodedPathIndex;\n"
+                + "    }\n"
+                + "\n"
+                + "    private static bool HasDirectorySeparatorBeforePrefix(string requestPath, int prefixIndex)\n"
+                + "    {\n"
+                + "        for (int i = 0; i < prefixIndex; i++)\n"
+                + "        {\n"
+                + "            if (requestPath[i] == '\\\\' || requestPath[i] == '/')\n"
+                + "            {\n"
+                + "                return true;\n"
+                + "            }\n"
+                + "        }\n"
+                + "\n"
+                + "        return false;\n"
+                + "    }\n"
+                + "\n"
+                + "    private static string RecoverRawRequestPath(string requestPath)\n"
+                + "    {\n"
+                + "        string trimmedPath = requestPath.TrimStart('\\uFEFF', '\\uFFFD');\n"
+                + "        int drivePathIndex = FindWindowsDrivePathIndex(trimmedPath);\n"
+                + "        return drivePathIndex > 0 ? trimmedPath.Substring(drivePathIndex) : trimmedPath;\n"
+                + "    }\n"
+                + "\n"
+                + "    private static int FindWindowsDrivePathIndex(string value)\n"
+                + "    {\n"
+                + "        for (int i = 0; i <= value.Length - 3; i++)\n"
+                + "        {\n"
+                + "            bool isDriveLetter = (value[i] >= 'A' && value[i] <= 'Z') || (value[i] >= 'a' && value[i] <= 'z');\n"
+                + "            if (isDriveLetter && value[i + 1] == ':' && (value[i + 2] == '\\\\' || value[i + 2] == '/'))\n"
+                + "            {\n"
+                + "                return i;\n"
+                + "            }\n"
+                + "        }\n"
+                + "\n"
+                + "        return -1;\n"
                 + "    }\n"
                 + "\n"
                 + "    private static CompileResponse Compile(string requestPath)\n"

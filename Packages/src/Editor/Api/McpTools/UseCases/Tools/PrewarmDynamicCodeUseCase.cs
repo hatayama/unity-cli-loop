@@ -164,6 +164,8 @@ namespace io.github.hatayama.uLoopMCP
                     // full execute-dynamic-code entry path, not just the runtime facade underneath it.
                     // Why not keep the runtime-direct prewarm: that warmed compiler startup, but it still
                     // left the first real CLI request paying extra cost in the tool/JSON-RPC layers.
+                    using IDisposable diagnosticSourceScope =
+                        DynamicCompilationHealthMonitor.UseConsoleDiagnosticSource(AutoPrewarmOperation);
                     DynamicCodeAutoPrewarmResult result = await _executor.ExecuteAsync(
                         parameters,
                         _lifecycleCancellationToken);

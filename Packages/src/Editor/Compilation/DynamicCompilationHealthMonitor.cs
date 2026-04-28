@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 namespace io.github.hatayama.uLoopMCP
@@ -7,6 +8,7 @@ namespace io.github.hatayama.uLoopMCP
     {
         private static readonly object ReportedIssueLock = new();
         private static readonly HashSet<string> ReportedIssues = new(System.StringComparer.Ordinal);
+        private static readonly AsyncLocal<string> ConsoleDiagnosticSource = new();
 
         public static void ReportFastPathUnavailable(
             string editorPath,
@@ -31,10 +33,12 @@ namespace io.github.hatayama.uLoopMCP
         public static void ReportSharedWorkerFallback(string reason, object context = null)
         {
             string issueKey = $"shared_worker_fallback::{reason}";
+            string message =
+                $"execute-dynamic-code shared Roslyn worker is unavailable; falling back to one-shot compiler execution; reason={reason}";
             LogErrorOnce(
                 issueKey,
                 "dynamic_code_shared_worker_fallback",
-                "execute-dynamic-code shared Roslyn worker is unavailable; falling back to one-shot compiler execution",
+                message,
                 context ?? new { reason },
                 "Shared worker fast path is not active.",
                 "Investigate shared worker startup, protocol, or platform support.");
@@ -43,10 +47,12 @@ namespace io.github.hatayama.uLoopMCP
         public static void ReportSharedWorkerFailure(string reason, object context = null)
         {
             string issueKey = $"shared_worker_failure::{reason}";
+            string message =
+                $"execute-dynamic-code shared Roslyn worker failed to operate correctly; reason={reason}";
             LogErrorOnce(
                 issueKey,
                 "dynamic_code_shared_worker_failure",
-                "execute-dynamic-code shared Roslyn worker failed to operate correctly",
+                message,
                 context ?? new { reason },
                 "Shared Roslyn worker encountered an unexpected failure.",
                 "Investigate worker startup, request handling, and Unity-version-specific runtime assumptions.");
@@ -71,9 +77,11 @@ namespace io.github.hatayama.uLoopMCP
             string humanNote,
             string aiTodo)
         {
+            string effectiveIssueKey = CreateEffectiveIssueKey(issueKey);
+
             lock (ReportedIssueLock)
             {
-                if (!ReportedIssues.Add(issueKey))
+                if (!ReportedIssues.Add(effectiveIssueKey))
                 {
                     return;
                 }
@@ -85,7 +93,72 @@ namespace io.github.hatayama.uLoopMCP
                 context,
                 humanNote: humanNote,
                 aiTodo: aiTodo);
-            Debug.LogError($"[{McpConstants.PROJECT_NAME}] {message}");
+            Debug.LogError(FormatConsoleErrorMessage(operation, message, context));
+        }
+
+        private static string CreateEffectiveIssueKey(string issueKey)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(issueKey), "issueKey must not be empty");
+
+            if (string.IsNullOrEmpty(ConsoleDiagnosticSource.Value))
+            {
+                return issueKey;
+            }
+
+            return $"{issueKey}::source::{ConsoleDiagnosticSource.Value}";
+        }
+
+        internal static System.IDisposable UseConsoleDiagnosticSource(string source)
+        {
+            if (string.IsNullOrEmpty(source))
+            {
+                return EmptyDisposable.Instance;
+            }
+
+            string previousSource = ConsoleDiagnosticSource.Value;
+            ConsoleDiagnosticSource.Value = source;
+            return new ConsoleDiagnosticSourceScope(previousSource);
+        }
+
+        private static string FormatConsoleErrorMessage(string operation, string message, object context)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(operation), "operation must not be empty");
+            Debug.Assert(!string.IsNullOrEmpty(message), "message must not be empty");
+
+            string diagnosticSourceLine = string.IsNullOrEmpty(ConsoleDiagnosticSource.Value)
+                ? string.Empty
+                : $"\ndiagnostic_source: {ConsoleDiagnosticSource.Value}";
+
+            if (context == null)
+            {
+                return $"[{McpConstants.PROJECT_NAME}] {message}\noperation: {operation}{diagnosticSourceLine}";
+            }
+
+            return $"[{McpConstants.PROJECT_NAME}] {message}\noperation: {operation}{diagnosticSourceLine}\ncontext: {context}";
+        }
+
+        private sealed class ConsoleDiagnosticSourceScope : System.IDisposable
+        {
+            private readonly string _previousSource;
+
+            public ConsoleDiagnosticSourceScope(string previousSource)
+            {
+                _previousSource = previousSource;
+            }
+
+            public void Dispose()
+            {
+                ConsoleDiagnosticSource.Value = _previousSource;
+            }
+        }
+
+        private sealed class EmptyDisposable : System.IDisposable
+        {
+            public static readonly EmptyDisposable Instance = new EmptyDisposable();
+
+            public void Dispose()
+            {
+            }
         }
 
         internal static void ResetForTests()
@@ -94,6 +167,8 @@ namespace io.github.hatayama.uLoopMCP
             {
                 ReportedIssues.Clear();
             }
+
+            ConsoleDiagnosticSource.Value = null;
         }
     }
 }

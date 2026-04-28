@@ -1,4 +1,7 @@
+using System;
 using System.Diagnostics;
+using System.IO;
+using System.Text;
 using NUnit.Framework;
 
 namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
@@ -17,6 +20,66 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             Assert.That(
                 startInfo.EnvironmentVariables[SharedRoslynCompilerWorkerHost.DotnetMultilevelLookupEnvironmentVariableName],
                 Is.EqualTo(SharedRoslynCompilerWorkerHost.DotnetMultilevelLookupDisabledValue));
+        }
+
+        [Test]
+        public void CreateCompileRequestCommand_WhenPathIsWindowsAbsolutePath_ShouldEncodeAsciiPayload()
+        {
+            string requestFilePath =
+                @"C:\Users\ExampleUser\Documents\unity\SampleWorkspace\SampleUnityProject\Temp\uLoopMCPCompilation\DynamicCommand_1.worker";
+
+            string command = SharedRoslynCompilerWorkerHost.CreateCompileRequestCommandForTests(requestFilePath);
+
+            Assert.That(command, Does.StartWith(SharedRoslynCompilerWorkerHost.CompileRequestPathPrefix));
+            Assert.That(command, Does.Not.Contain(requestFilePath));
+            foreach (char character in command)
+            {
+                Assert.That(character, Is.LessThanOrEqualTo((char)127));
+            }
+
+            string encodedPath = command.Substring(SharedRoslynCompilerWorkerHost.CompileRequestPathPrefix.Length);
+            string decodedPath = Encoding.UTF8.GetString(Convert.FromBase64String(encodedPath));
+            Assert.That(decodedPath, Is.EqualTo(Path.GetFullPath(requestFilePath)));
+        }
+
+        [Test]
+        public void CreateProgramSource_WhenRequestPathHasNoPrefix_ShouldRecoverRawPath()
+        {
+            string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();
+
+            Assert.That(programSource, Does.Contain("return RecoverRawRequestPath(requestPath);"));
+            Assert.That(programSource, Does.Contain("FindWindowsDrivePathIndex"));
+            Assert.That(programSource, Does.Not.Contain("Unsupported request path protocol"));
+        }
+
+        [Test]
+        public void CreateProgramSource_WhenRequestPathPrefixHasLeadingGarbage_ShouldDecodeEncodedPath()
+        {
+            string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();
+
+            Assert.That(programSource, Does.Contain("FindRequestPathPrefixIndex"));
+            Assert.That(programSource, Does.Contain("IndexOf(RequestPathPrefix"));
+            Assert.That(programSource, Does.Contain("encodedPathIndex + RequestPathPrefix.Length"));
+        }
+
+        [Test]
+        public void CreateProgramSource_WhenRawPathContainsPrefixAfterDirectorySeparator_ShouldRecoverRawPath()
+        {
+            string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();
+
+            Assert.That(programSource, Does.Contain("HasDirectorySeparatorBeforePrefix"));
+            Assert.That(programSource, Does.Contain("return HasDirectorySeparatorBeforePrefix(requestPath, encodedPathIndex) ? -1 : encodedPathIndex;"));
+        }
+
+        [Test]
+        public void CreateProgramSource_WhenEncodedPayloadIsMalformed_ShouldRecoverRawPath()
+        {
+            string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();
+
+            Assert.That(programSource, Does.Contain("IsBase64Payload"));
+            Assert.That(programSource, Does.Contain("HasValidBase64Padding"));
+            Assert.That(programSource, Does.Contain("return RecoverRawRequestPath(requestPath);"));
+            Assert.That(programSource, Does.Not.Contain("catch (FormatException)"));
         }
     }
 }
