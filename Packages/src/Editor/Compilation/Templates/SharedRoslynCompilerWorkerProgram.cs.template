@@ -1,0 +1,322 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Emit;
+using Microsoft.CodeAnalysis.Text;
+
+public static class Program
+{
+    private const string ResultPrefix = "{{SHARED_COMPILER_WORKER_RESULT_PREFIX}}";
+    private const string EndMarker = "{{SHARED_COMPILER_WORKER_END_MARKER}}";
+    private const string QuitCommand = "{{SHARED_COMPILER_WORKER_QUIT_COMMAND}}";
+    private const string RequestPathPrefix = "{{COMPILE_REQUEST_PATH_PREFIX}}";
+    private const string UnsafePrefix = "unsafe:";
+    private const string DefinePrefix = "define:";
+    private const string ReferencePrefix = "ref:";
+    private static readonly object SyncRoot = new object();
+    private static readonly Dictionary<string, CachedReference> Cache = new Dictionary<string, CachedReference>(StringComparer.OrdinalIgnoreCase);
+
+    public static int Main()
+    {
+        string requestPath;
+        while ((requestPath = Console.ReadLine()) != null)
+        {
+            if (requestPath == QuitCommand)
+            {
+                return 0;
+            }
+
+            CompileResponse response = Compile(DecodeRequestPath(requestPath));
+            Console.WriteLine(ResultPrefix + " " + response.ExitCode);
+            foreach (string diagnosticLine in response.DiagnosticLines)
+            {
+                Console.WriteLine(diagnosticLine);
+            }
+            Console.WriteLine(EndMarker);
+            Console.Out.Flush();
+        }
+
+        return 0;
+    }
+
+    private static string DecodeRequestPath(string requestPath)
+    {
+        int encodedPathIndex = FindRequestPathPrefixIndex(requestPath);
+        if (encodedPathIndex >= 0)
+        {
+            string encodedPath = requestPath.Substring(encodedPathIndex + RequestPathPrefix.Length);
+            if (!IsBase64Payload(encodedPath))
+            {
+                return RecoverRawRequestPath(requestPath);
+            }
+
+            byte[] requestPathBytes = Convert.FromBase64String(encodedPath);
+            return Encoding.UTF8.GetString(requestPathBytes);
+        }
+
+        return RecoverRawRequestPath(requestPath);
+    }
+
+    private static bool IsBase64Payload(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length % 4 != 0 || !HasValidBase64Padding(value))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < value.Length; i++)
+        {
+            char character = value[i];
+            bool isBase64Character = character >= 'A' && character <= 'Z'
+                || character >= 'a' && character <= 'z'
+                || character >= '0' && character <= '9'
+                || character == '+'
+                || character == '/'
+                || character == '=';
+            if (!isBase64Character)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasValidBase64Padding(string value)
+    {
+        int firstPaddingIndex = value.IndexOf('=');
+        if (firstPaddingIndex < 0)
+        {
+            return true;
+        }
+
+        int paddingLength = value.Length - firstPaddingIndex;
+        if (paddingLength > 2)
+        {
+            return false;
+        }
+
+        for (int i = firstPaddingIndex; i < value.Length; i++)
+        {
+            if (value[i] != '=')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int FindRequestPathPrefixIndex(string requestPath)
+    {
+        int encodedPathIndex = requestPath.IndexOf(RequestPathPrefix, StringComparison.Ordinal);
+        if (encodedPathIndex <= 0)
+        {
+            return encodedPathIndex;
+        }
+
+        return HasDirectorySeparatorBeforePrefix(requestPath, encodedPathIndex) ? -1 : encodedPathIndex;
+    }
+
+    private static bool HasDirectorySeparatorBeforePrefix(string requestPath, int prefixIndex)
+    {
+        for (int i = 0; i < prefixIndex; i++)
+        {
+            if (requestPath[i] == '\\' || requestPath[i] == '/')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string RecoverRawRequestPath(string requestPath)
+    {
+        string trimmedPath = requestPath.TrimStart('\uFEFF', '\uFFFD');
+        int drivePathIndex = FindWindowsDrivePathIndex(trimmedPath);
+        return drivePathIndex > 0 ? trimmedPath.Substring(drivePathIndex) : trimmedPath;
+    }
+
+    private static int FindWindowsDrivePathIndex(string value)
+    {
+        for (int i = 0; i <= value.Length - 3; i++)
+        {
+            bool isDriveLetter = (value[i] >= 'A' && value[i] <= 'Z') || (value[i] >= 'a' && value[i] <= 'z');
+            if (isDriveLetter && value[i + 1] == ':' && (value[i + 2] == '\\' || value[i + 2] == '/'))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static CompileResponse Compile(string requestPath)
+    {
+        string[] requestLines = File.ReadAllLines(requestPath);
+        string sourcePath = requestLines[0];
+        string dllPath = requestLines[1];
+        bool allowUnsafe = ParseAllowUnsafe(requestLines);
+        string[] defineSymbols = ParseDefineSymbols(requestLines);
+        string source = File.ReadAllText(sourcePath, Encoding.UTF8);
+        SourceText sourceText = SourceText.From(source, Encoding.UTF8);
+        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(sourceText, CreateParseOptions(defineSymbols), sourcePath);
+        List<MetadataReference> references = BuildReferences(requestLines);
+        CSharpCompilation compilation = CSharpCompilation.Create(Path.GetFileNameWithoutExtension(dllPath), new[] { syntaxTree }, references, CreateCompilationOptions(allowUnsafe));
+        using (FileStream peStream = new FileStream(dllPath, FileMode.Create, FileAccess.Write, FileShare.Read))
+        {
+            EmitResult emitResult = compilation.Emit(peStream);
+            int exitCode = 0;
+            List<string> diagnosticLines = new List<string>();
+            foreach (Diagnostic diagnostic in emitResult.Diagnostics)
+            {
+                if (diagnostic.Severity != DiagnosticSeverity.Error && diagnostic.Severity != DiagnosticSeverity.Warning)
+                {
+                    continue;
+                }
+
+                if (diagnostic.Severity == DiagnosticSeverity.Error)
+                {
+                    exitCode = 1;
+                }
+
+                FileLinePositionSpan lineSpan = diagnostic.Location != Location.None ? diagnostic.Location.GetMappedLineSpan() : default(FileLinePositionSpan);
+                int line = lineSpan.StartLinePosition.Line + 1;
+                int column = lineSpan.StartLinePosition.Character + 1;
+                string file = string.IsNullOrEmpty(lineSpan.Path) ? sourcePath : lineSpan.Path;
+                string severity = diagnostic.Severity == DiagnosticSeverity.Warning ? "warning" : "error";
+                diagnosticLines.Add(file + "(" + line + "," + column + "): " + severity + " " + diagnostic.Id + ": " + diagnostic.GetMessage());
+            }
+
+            return new CompileResponse(exitCode, diagnosticLines);
+        }
+    }
+
+    private static CSharpParseOptions CreateParseOptions(string[] defineSymbols)
+    {
+        return defineSymbols == null || defineSymbols.Length == 0
+            ? CSharpParseOptions.Default
+            : CSharpParseOptions.Default.WithPreprocessorSymbols(defineSymbols);
+    }
+
+    private static CSharpCompilationOptions CreateCompilationOptions(bool allowUnsafe)
+    {
+        return new CSharpCompilationOptions(
+            OutputKind.DynamicallyLinkedLibrary,
+            optimizationLevel: OptimizationLevel.Release,
+            allowUnsafe: allowUnsafe);
+    }
+
+    private static bool ParseAllowUnsafe(string[] requestLines)
+    {
+        for (int i = 2; i < requestLines.Length; i++)
+        {
+            string line = requestLines[i];
+            if (!line.StartsWith(UnsafePrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return string.Equals(line.Substring(UnsafePrefix.Length), "1", StringComparison.Ordinal);
+        }
+
+        return false;
+    }
+
+    private static string[] ParseDefineSymbols(string[] requestLines)
+    {
+        for (int i = 2; i < requestLines.Length; i++)
+        {
+            string line = requestLines[i];
+            if (!line.StartsWith(DefinePrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string serializedSymbols = line.Substring(DefinePrefix.Length);
+            if (string.IsNullOrWhiteSpace(serializedSymbols))
+            {
+                return new string[0];
+            }
+
+            return serializedSymbols.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        return new string[0];
+    }
+
+    private static List<MetadataReference> BuildReferences(string[] requestLines)
+    {
+        List<MetadataReference> references = new List<MetadataReference>(Math.Max(0, requestLines.Length - 2));
+        lock (SyncRoot)
+        {
+            for (int i = 2; i < requestLines.Length; i++)
+            {
+                string referencePath = requestLines[i];
+                if (referencePath.StartsWith(UnsafePrefix, StringComparison.Ordinal)
+                    || referencePath.StartsWith(DefinePrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (referencePath.StartsWith(ReferencePrefix, StringComparison.Ordinal))
+                {
+                    referencePath = referencePath.Substring(ReferencePrefix.Length);
+                }
+
+                if (string.IsNullOrWhiteSpace(referencePath) || !File.Exists(referencePath))
+                {
+                    continue;
+                }
+
+                FileInfo info = new FileInfo(referencePath);
+                long writeTicks = info.LastWriteTimeUtc.Ticks;
+                long fileLength = info.Length;
+                CachedReference cachedReference;
+                if (Cache.TryGetValue(referencePath, out cachedReference)
+                    && cachedReference.WriteTicks == writeTicks
+                    && cachedReference.FileLength == fileLength)
+                {
+                    references.Add(cachedReference.Reference);
+                    continue;
+                }
+
+                PortableExecutableReference createdReference = MetadataReference.CreateFromFile(referencePath);
+                Cache[referencePath] = new CachedReference(createdReference, writeTicks, fileLength);
+                references.Add(createdReference);
+            }
+        }
+
+        return references;
+    }
+
+    private sealed class CachedReference
+    {
+        public CachedReference(PortableExecutableReference reference, long writeTicks, long fileLength)
+        {
+            Reference = reference;
+            WriteTicks = writeTicks;
+            FileLength = fileLength;
+        }
+
+        public PortableExecutableReference Reference { get; }
+        public long WriteTicks { get; }
+        public long FileLength { get; }
+    }
+
+    private sealed class CompileResponse
+    {
+        public CompileResponse(int exitCode, List<string> diagnosticLines)
+        {
+            ExitCode = exitCode;
+            DiagnosticLines = diagnosticLines;
+        }
+
+        public int ExitCode { get; }
+        public List<string> DiagnosticLines { get; }
+    }
+}
