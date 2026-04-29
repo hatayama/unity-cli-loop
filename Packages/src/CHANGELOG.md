@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.1.0](https://github.com/hatayama/unity-cli-loop/compare/v2.0.4...v2.1.0) (2026-04-29)
+
+
+### Features
+
+* UI automation can see targets clearly and bypass blocked raycasts ([#996](https://github.com/hatayama/unity-cli-loop/issues/996)) ([fe43abe](https://github.com/hatayama/unity-cli-loop/commit/fe43abea6b8e2ce02cc540b3d553b8d07da1ddc0))
+* Unity Menu Commands Consolidated to Dynamic Code Execution ([#994](https://github.com/hatayama/unity-cli-loop/issues/994)) ([ea6c95b](https://github.com/hatayama/unity-cli-loop/commit/ea6c95bb0240872f41a8ab63761657fb7f3d4fc4))
+* Unity startup recovery does less blocking work ([#990](https://github.com/hatayama/unity-cli-loop/issues/990)) ([63ce4db](https://github.com/hatayama/unity-cli-loop/commit/63ce4db9ff4c6fa15d0a2a11f99c1b0387fc8a1b))
+
+
+### Bug Fixes
+
+* AI selects the right tool for selected GameObject inspection ([#1003](https://github.com/hatayama/unity-cli-loop/issues/1003)) ([1621d1a](https://github.com/hatayama/unity-cli-loop/commit/1621d1a2d508bf46878340e6c5df76731be872b9))
+* Dynamic code starts reliably on Windows PCs ([#1006](https://github.com/hatayama/unity-cli-loop/issues/1006)) ([68893da](https://github.com/hatayama/unity-cli-loop/commit/68893da351df60be7af3300f668d5ab111cd5be2))
+* Improve uloop skill guidance and hide internal CLI metadata ([#993](https://github.com/hatayama/unity-cli-loop/issues/993)) ([ec2ba7a](https://github.com/hatayama/unity-cli-loop/commit/ec2ba7a09a9484d4869b1d7aff5338dca9a272d6))
+* Make dynamic code compilation easier to maintain ([#1007](https://github.com/hatayama/unity-cli-loop/issues/1007)) ([b966dba](https://github.com/hatayama/unity-cli-loop/commit/b966dbac38bbdaaea87c0d1a62493d9c2b08e195))
+* Settings opens faster and tool toggles stay scoped ([#992](https://github.com/hatayama/unity-cli-loop/issues/992)) ([26745ad](https://github.com/hatayama/unity-cli-loop/commit/26745ade840f6cdd6322719fa83cc4de473b1b65))
+* Skill improvements for selected Hierarchy inspection ([#1002](https://github.com/hatayama/unity-cli-loop/issues/1002)) ([626f67c](https://github.com/hatayama/unity-cli-loop/commit/626f67c1841c74650185b37c3d94efe6c2ce4367))
+* Test runs avoid unsaved editor-change prompts ([#998](https://github.com/hatayama/unity-cli-loop/issues/998)) ([1db7c37](https://github.com/hatayama/unity-cli-loop/commit/1db7c376d8bf78a50e41abb4a4ead4b5bee40077))
+* uloop launch docs now explain Unity startup waiting ([#997](https://github.com/hatayama/unity-cli-loop/issues/997)) ([bef8f2f](https://github.com/hatayama/unity-cli-loop/commit/bef8f2fa8cfd69cea58b66c0060baa8801dd1d45))
+
 ## [2.0.4](https://github.com/hatayama/unity-cli-loop/compare/v2.0.3...v2.0.4) (2026-04-24)
 
 

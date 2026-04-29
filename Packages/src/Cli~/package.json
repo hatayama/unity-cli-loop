@@ -1,6 +1,6 @@
 {
   "name": "uloop-cli",
-  "version": "2.0.4",
+  "version": "2.1.0",
   "//version": "x-release-please-version",
   "description": "CLI tool for Unity Editor communication via Unity CLI Loop",
   "main": "dist/cli.bundle.cjs",
