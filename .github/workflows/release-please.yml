@@ -3,13 +3,14 @@ name: release-please
 on:
   push:
     branches:
-      - main
+      - v3-beta
   # Enable manual execution via "Run workflow" button in browser
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Target branch name (uses current ref if not specified)'
+        description: "Target beta branch name"
         required: false
+        default: "v3-beta"
 
 permissions:
   contents: write
@@ -21,11 +22,29 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
+      target_branch: ${{ steps.target.outputs.branch }}
+      target_sha: ${{ steps.target.outputs.sha }}
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0      # Required for tag fetching
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
+          fetch-depth: 0 # Required for tag fetching
+
+      - name: 🎯 Resolve target branch
+        id: target
+        env:
+          INPUT_BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          TARGET_BRANCH="${INPUT_BRANCH:-v3-beta}"
+          if [ "${TARGET_BRANCH}" != "v3-beta" ]; then
+            echo "This prerelease workflow only supports v3-beta." >&2
+            exit 1
+          fi
+
+          TARGET_SHA="$(git rev-parse HEAD)"
+          echo "branch=${TARGET_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
 
       # ── Debug: Show repository structure ─────────────────────────
       - name: 🕵️ Show file tree
@@ -38,7 +57,6 @@ jobs:
       - name: 🧪 Sanity check
         run: |
           test -f Packages/src/package.json && echo "✅ Unity package.json OK"
-          test -f Packages/src/TypeScriptServer~/package.json && echo "✅ TypeScript Server package.json OK"
           test -f Packages/src/Cli~/package.json && echo "✅ CLI package.json OK"
 
       # ── Execute release-please ───────────────────────────
@@ -48,43 +66,52 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          target-branch: ${{ steps.target.outputs.branch }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Rebuild bundles when Release PR is created/updated ──
-      # GITHUB_TOKEN-created PRs do not trigger pull_request events,
-      # so build-and-test.yml cannot handle this — must rebuild here.
-      - name: 🔧 Setup Node.js for bundle rebuild
-        if: ${{ steps.release.outputs.pr != '' }}
+      - name: 🔧 Setup Node.js
+        if: steps.release.outputs.prs_created == 'true'
         uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: "Packages/src/Cli~/package-lock.json"
 
-      - name: 📦 Rebuild server bundle for Release PR
-        if: ${{ steps.release.outputs.pr != '' }}
+      - name: 📦 Rebuild CLI bundle in release PR
+        if: steps.release.outputs.prs_created == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_JSON: ${{ steps.release.outputs.pr }}
+          RELEASE_PLEASE_PR: ${{ steps.release.outputs.pr || '' }}
+          RELEASE_PLEASE_PRS: ${{ steps.release.outputs.prs || '' }}
         run: |
-          PR_NUMBER=$(echo "${PR_JSON}" | jq -r '.number')
-          echo "🔄 Release PR #${PR_NUMBER} detected, rebuilding server bundle..."
+          PR_DATA="${RELEASE_PLEASE_PRS:-${RELEASE_PLEASE_PR:-}}"
+          RELEASE_BRANCH=$(
+            printf '%s' "${PR_DATA}" \
+              | jq -r 'if type == "array" then .[0] else . end | .headBranchName // .headRefName // .head.ref // empty'
+          )
 
-          gh pr checkout "${PR_NUMBER}"
-
-          cd Packages/src/TypeScriptServer~
-          npm ci --ignore-scripts=false
-          ULOOPMCP_PRODUCTION=true NODE_ENV=production npm run build:production
-          cd "$GITHUB_WORKSPACE"
-
-          git add Packages/src/TypeScriptServer~/dist/server.bundle.js Packages/src/TypeScriptServer~/dist/server.bundle.js.map
-          if git diff --cached --quiet; then
-            echo "✅ No changes to bundle, skipping commit"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "chore: rebuild server bundle for release"
-            git push
-            echo "✅ Server bundle rebuilt and pushed to PR"
+          if [ -z "${RELEASE_BRANCH}" ]; then
+            echo "Release Please did not report a release PR branch." >&2
+            exit 1
           fi
+
+          git fetch origin "${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
+          git checkout -B "${RELEASE_BRANCH}" "origin/${RELEASE_BRANCH}"
+
+          cd Packages/src/Cli~
+          npm ci
+          npm run build
+          cd ../../..
+
+          if git diff --quiet -- Packages/src/Cli~/dist/cli.bundle.cjs; then
+            echo "Project-local CLI bundle is already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Packages/src/Cli~/dist/cli.bundle.cjs
+          git commit -m "chore: rebuild project CLI bundle"
+          git push origin "HEAD:${RELEASE_BRANCH}"
 
   # ── Dispatch npm-publish when release is created ────────────
   # Keep npm-publish.yml as the single trusted publisher entrypoint.
@@ -101,12 +128,14 @@ jobs:
       - name: 🚀 Dispatch npm-publish workflow
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ needs.release.outputs.target_branch }}
+          TARGET_SHA: ${{ needs.release.outputs.target_sha }}
         run: |
           STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           gh workflow run npm-publish.yml \
-            --ref main \
-            -f ref="${GITHUB_SHA}" \
+            --ref "${TARGET_BRANCH}" \
+            -f ref="${TARGET_SHA}" \
             -f dry-run=false \
             --repo "${GITHUB_REPOSITORY}"
 
@@ -117,7 +146,7 @@ jobs:
               gh run list \
                 --workflow npm-publish.yml \
                 --event workflow_dispatch \
-                --commit "${GITHUB_SHA}" \
+                --branch "${TARGET_BRANCH}" \
                 --repo "${GITHUB_REPOSITORY}" \
                 --limit 10 \
                 --json databaseId,createdAt \

@@ -3,7 +3,7 @@ name: npm version check
 on:
   schedule:
     # Run daily at 09:00 UTC (18:00 JST)
-    - cron: '0 9 * * *'
+    - cron: "0 9 * * *"
   workflow_dispatch:
 
 permissions:
@@ -29,10 +29,22 @@ jobs:
             exit 0
           fi
 
+          case "${GIT_VERSION}" in
+            *-*)
+              NPM_TAG="${GIT_VERSION#*-}"
+              NPM_TAG="${NPM_TAG%%.*}"
+              NPM_PACKAGE_SPEC="uloop-cli@${NPM_TAG}"
+              ;;
+            *)
+              NPM_TAG="latest"
+              NPM_PACKAGE_SPEC="uloop-cli"
+              ;;
+          esac
+
           # Retry up to 3 times to avoid false positives from transient network errors
           NPM_VERSION=""
           for i in 1 2 3; do
-            if NPM_VERSION=$(npm view uloop-cli version 2>/dev/null); then
+            if NPM_VERSION=$(npm view "${NPM_PACKAGE_SPEC}" version 2>/dev/null); then
               break
             fi
             echo "⚠️ npm view attempt ${i} failed, retrying in 10s..."
@@ -46,8 +58,9 @@ jobs:
 
           echo "git_version=${GIT_VERSION}" >> "$GITHUB_OUTPUT"
           echo "npm_version=${NPM_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "npm_tag=${NPM_TAG}" >> "$GITHUB_OUTPUT"
           echo "📋 Git tag: v${GIT_VERSION}"
-          echo "📋 npm: ${NPM_VERSION}"
+          echo "📋 npm (${NPM_TAG}): ${NPM_VERSION}"
 
           if [ "${GIT_VERSION}" = "${NPM_VERSION}" ]; then
             echo "✅ Versions match"
@@ -77,17 +90,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIT_VERSION: ${{ steps.compare.outputs.git_version }}
           NPM_VERSION: ${{ steps.compare.outputs.npm_version }}
+          NPM_TAG: ${{ steps.compare.outputs.npm_tag }}
         run: |
           gh label create "npm-publish-failed" --color "d73a4a" --description "npm publish failed for a release" --force
           gh issue create \
-            --title "npm publish failed: v${GIT_VERSION} not on npm" \
+            --title "npm publish failed: v${GIT_VERSION} not on npm ${NPM_TAG}" \
             --label "npm-publish-failed" \
             --body "## npm version mismatch detected
 
           | Source | Version |
           |--------|---------|
           | Git tag | v${GIT_VERSION} |
-          | npm | ${NPM_VERSION} |
+          | npm (${NPM_TAG}) | ${NPM_VERSION} |
 
           ### How to fix
 

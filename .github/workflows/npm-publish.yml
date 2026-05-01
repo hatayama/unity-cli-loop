@@ -4,23 +4,23 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Git ref to publish from (tag, branch, or SHA). Defaults to default branch.'
+        description: "Git ref to publish from (tag, branch, or SHA). Defaults to default branch."
         required: false
-        default: ''
+        default: ""
       dry-run:
-        description: 'Dry run (skip actual publish)'
+        description: "Dry run (skip actual publish)"
         type: boolean
         default: false
 
 permissions:
   contents: read
-  id-token: write  # Required for npm OIDC trusted publishing
+  id-token: write # Required for npm OIDC trusted publishing
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # For workflow_dispatch, only allow from main branch
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    # For workflow_dispatch, only allow release-managed branches
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v6
@@ -30,8 +30,8 @@ jobs:
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
 
       - name: 📋 Check version
         id: version
@@ -43,6 +43,17 @@ jobs:
           fi
           echo "version=${CLI_VERSION}" >> "$GITHUB_OUTPUT"
           echo "📋 CLI version: ${CLI_VERSION}"
+          case "${CLI_VERSION}" in
+            *-*)
+              NPM_TAG=${CLI_VERSION#*-}
+              NPM_TAG=${NPM_TAG%%.*}
+              ;;
+            *)
+              NPM_TAG=latest
+              ;;
+          esac
+          echo "npm_tag=${NPM_TAG}" >> "$GITHUB_OUTPUT"
+          echo "📋 npm dist-tag: ${NPM_TAG}"
 
           PUBLISHED=$(npm view uloop-cli versions --json 2>/dev/null || echo '[]')
           if echo "$PUBLISHED" | jq -e ". | index(\"${CLI_VERSION}\")" > /dev/null 2>&1; then
@@ -65,6 +76,8 @@ jobs:
         run: |
           cd Packages/src/Cli~
           npm pack --dry-run --json > /tmp/pack.json
+          jq -e '.[0].files[] | select(.path=="dist/dispatcher.bundle.cjs")' /tmp/pack.json > /dev/null
+          echo "✅ dist/dispatcher.bundle.cjs found in package"
           jq -e '.[0].files[] | select(.path=="dist/cli.bundle.cjs")' /tmp/pack.json > /dev/null
           echo "✅ dist/cli.bundle.cjs found in package"
 
@@ -72,11 +85,11 @@ jobs:
         if: steps.version.outputs.already_published == 'false' && inputs.dry-run != true
         run: |
           cd Packages/src/Cli~
-          npm publish --access public --provenance
-          echo "✅ CLI v${{ steps.version.outputs.version }} published to npm with provenance"
+          npm publish --tag "${{ steps.version.outputs.npm_tag }}" --access public --provenance
+          echo "✅ CLI v${{ steps.version.outputs.version }} published to npm with ${{ steps.version.outputs.npm_tag }} tag and provenance"
 
       - name: 🧪 Dry run - skip publish
         if: inputs.dry-run == true
         run: |
           echo "🧪 Dry run mode - skipping actual publish"
-          echo "Would publish uloop-cli@${{ steps.version.outputs.version }}"
+          echo "Would publish uloop-cli@${{ steps.version.outputs.version }} with ${{ steps.version.outputs.npm_tag }} tag"
