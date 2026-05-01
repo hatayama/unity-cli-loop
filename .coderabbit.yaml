@@ -13,6 +13,8 @@ reviews:
   auto_review:
     enabled: true
     drafts: true
+    base_branches:
+      - ".*"
   path_filters:
     - "**/*.shader"
     - "**/*.hlsl"
