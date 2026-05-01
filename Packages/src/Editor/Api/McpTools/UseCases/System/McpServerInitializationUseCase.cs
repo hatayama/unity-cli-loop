@@ -4,40 +4,28 @@ using System.Threading;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// UseCase responsible for temporal cohesion of server initialization processing
-    /// Processing sequence: 1. Configuration validation, 2. Port allocation, 3. Server startup, 4. State update
-    /// Related classes: McpServerConfigurationService, PortAllocationService, McpServerStartupService, SecurityValidationService
+    /// UseCase responsible for temporal cohesion of server initialization processing.
+    /// Processing sequence: 1. Editor state validation, 2. Server startup, 3. State update.
+    /// Related classes: McpServerStartupService, SecurityValidationService.
     /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     public class McpServerInitializationUseCase : AbstractUseCase<ServerInitializationSchema, ServerInitializationResponse>
     {
-        private readonly McpServerConfigurationService _configService;
         private readonly SecurityValidationService _securityService;
-        private readonly PortAllocationService _portService;
         private readonly McpServerStartupService _startupService;
-        private readonly InitializationNotificationService _notificationService;
 
         public McpServerInitializationUseCase()
         {
-            _configService = new McpServerConfigurationService();
             _securityService = new SecurityValidationService();
-            _portService = new PortAllocationService();
             _startupService = new McpServerStartupService();
-            _notificationService = new InitializationNotificationService();
         }
 
         public McpServerInitializationUseCase(
-            McpServerConfigurationService configService,
             SecurityValidationService securityService,
-            PortAllocationService portService,
-            McpServerStartupService startupService,
-            InitializationNotificationService notificationService)
+            McpServerStartupService startupService)
         {
-            _configService = configService ?? throw new System.ArgumentNullException(nameof(configService));
             _securityService = securityService ?? throw new System.ArgumentNullException(nameof(securityService));
-            _portService = portService ?? throw new System.ArgumentNullException(nameof(portService));
             _startupService = startupService ?? throw new System.ArgumentNullException(nameof(startupService));
-            _notificationService = notificationService ?? throw new System.ArgumentNullException(nameof(notificationService));
         }
         /// <summary>
         /// Execute server initialization processing
@@ -51,28 +39,7 @@ namespace io.github.hatayama.uLoopMCP
 
             try
             {
-                // 1. Configuration validation - McpServerConfigurationService
-                var portResult = _configService.ResolvePort(parameters.Port);
-                if (!portResult.Success)
-                {
-                    response.Success = false;
-                    response.Message = portResult.ErrorMessage;
-                    return Task.FromResult(response);
-                }
-                int actualPort = portResult.Data;
-
-                var validationResult = _configService.ValidateConfiguration(actualPort);
-                if (!validationResult.Success)
-                {
-                    _notificationService.ShowInvalidPortDialog(actualPort);
-                    
-                    response.Success = false;
-                    response.Message = validationResult.ErrorMessage;
-                    return Task.FromResult(response);
-                }
-
-                // 2. Security validation - SecurityValidationService
-                var editorStateValidation = _securityService.ValidateEditorState();
+                ValidationResult editorStateValidation = _securityService.ValidateEditorState();
                 if (!editorStateValidation.IsValid)
                 {
                     response.Success = false;
@@ -80,39 +47,8 @@ namespace io.github.hatayama.uLoopMCP
                     return Task.FromResult(response);
                 }
 
-                var portSecurityValidation = _securityService.ValidatePortSecurity(actualPort);
-                if (!portSecurityValidation.IsValid)
-                {
-                    response.Success = false;
-                    response.Message = portSecurityValidation.ErrorMessage;
-                    return Task.FromResult(response);
-                }
-
-                // 3. Port allocation - PortAllocationService
-                var availablePortResult = _portService.FindAvailablePort(actualPort);
-                if (!availablePortResult.Success)
-                {
-                    response.Success = false;
-                    response.Message = availablePortResult.ErrorMessage;
-                    return Task.FromResult(response);
-                }
-                int availablePort = availablePortResult.Data;
-
-                // Handle port conflict
-                if (availablePort != actualPort)
-                {
-                    var conflictResult = _portService.HandlePortConflict(actualPort, availablePort);
-                    if (!conflictResult.Success || !conflictResult.Data)
-                    {
-                        response.Success = false;
-                        response.Message = "Port conflict resolution cancelled by user";
-                        return Task.FromResult(response);
-                    }
-                }
-
                 // 4. Server startup - McpServerStartupService
-                var serverResult = _startupService.StartServer(
-                    availablePort,
+                ServiceResult<McpBridgeServer> serverResult = _startupService.StartServer(
                     !parameters.PreserveStartupLockUntilExplicitRelease);
                 if (!serverResult.Success)
                 {
@@ -124,8 +60,8 @@ namespace io.github.hatayama.uLoopMCP
 
                 // 5. Session state update
                 string projectRootPath = UnityMcpPathResolver.GetProjectRoot();
-                var sessionUpdateResult =
-                    _startupService.UpdateSessionState(true, availablePort, projectRootPath);
+                ServiceResult<bool> sessionUpdateResult =
+                    _startupService.UpdateSessionState(true, projectRootPath);
                 if (!sessionUpdateResult.Success)
                 {
                     response.Success = false;
@@ -135,7 +71,6 @@ namespace io.github.hatayama.uLoopMCP
 
                 // Success response
                 response.Success = true;
-                response.ServerPort = availablePort;
                 response.IsRunning = true;
                 response.ServerInstance = serverInstance;
                 response.Message = "Server initialization completed successfully";

@@ -51,7 +51,6 @@ namespace io.github.hatayama.uLoopMCP
             McpEditorSettingsData settings = McpEditorSettings.GetSettings();
             
             UpdateUIState(ui => new UIState(
-                customPort: settings.customPort,
                 showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: settings.showSecuritySettings,
@@ -65,7 +64,6 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public void SaveToSettings()
         {
-            McpEditorSettings.SetCustomPort(UI.CustomPort);
         }
 
         /// <summary>
@@ -74,7 +72,6 @@ namespace io.github.hatayama.uLoopMCP
         public void LoadFromSessionState()
         {
             UpdateUIState(ui => new UIState(
-                customPort: ui.CustomPort,
                 showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: ui.ShowSecuritySettings,
@@ -98,7 +95,6 @@ namespace io.github.hatayama.uLoopMCP
                 isPostCompileMode: true,
                 needsRepaint: true,
                 lastServerRunning: runtime.LastServerRunning,
-                lastServerPort: runtime.LastServerPort,
                 lastConnectedClientsCount: runtime.LastConnectedClientsCount,
                 lastClientsInfoHash: runtime.LastClientsInfoHash));
         }
@@ -112,7 +108,6 @@ namespace io.github.hatayama.uLoopMCP
                 isPostCompileMode: false,
                 needsRepaint: runtime.NeedsRepaint,
                 lastServerRunning: runtime.LastServerRunning,
-                lastServerPort: runtime.LastServerPort,
                 lastConnectedClientsCount: runtime.LastConnectedClientsCount,
                 lastClientsInfoHash: runtime.LastClientsInfoHash));
         }
@@ -126,7 +121,6 @@ namespace io.github.hatayama.uLoopMCP
                 isPostCompileMode: runtime.IsPostCompileMode,
                 needsRepaint: true,
                 lastServerRunning: runtime.LastServerRunning,
-                lastServerPort: runtime.LastServerPort,
                 lastConnectedClientsCount: runtime.LastConnectedClientsCount,
                 lastClientsInfoHash: runtime.LastClientsInfoHash));
         }
@@ -140,7 +134,6 @@ namespace io.github.hatayama.uLoopMCP
                 isPostCompileMode: runtime.IsPostCompileMode,
                 needsRepaint: false,
                 lastServerRunning: runtime.LastServerRunning,
-                lastServerPort: runtime.LastServerPort,
                 lastConnectedClientsCount: runtime.LastConnectedClientsCount,
                 lastClientsInfoHash: runtime.LastClientsInfoHash));
         }
@@ -148,13 +141,12 @@ namespace io.github.hatayama.uLoopMCP
         /// <summary>
         /// Update server state tracking for change detection
         /// </summary>
-        public void UpdateServerStateTracking(bool isRunning, int port, int clientCount, string clientsHash)
+        public void UpdateServerStateTracking(bool isRunning, int clientCount, string clientsHash)
         {
             UpdateRuntimeState(runtime => new RuntimeState(
                 isPostCompileMode: runtime.IsPostCompileMode,
                 needsRepaint: runtime.NeedsRepaint,
                 lastServerRunning: isRunning,
-                lastServerPort: port,
                 lastConnectedClientsCount: clientCount,
                 lastClientsInfoHash: clientsHash));
         }
@@ -162,27 +154,11 @@ namespace io.github.hatayama.uLoopMCP
         // UIState-specific update methods with persistence
 
         /// <summary>
-        /// Update CustomPort setting with persistence
-        /// </summary>
-        public void UpdateCustomPort(int port)
-        {
-            UpdateUIState(ui => new UIState(
-                customPort: port,
-                showConnectedTools: ui.ShowConnectedTools,
-                mainScrollPosition: ui.MainScrollPosition,
-                showSecuritySettings: ui.ShowSecuritySettings,
-                showToolSettings: ui.ShowToolSettings,
-                showConfiguration: ui.ShowConfiguration));
-            McpEditorSettings.SetCustomPort(port);
-        }
-
-        /// <summary>
         /// Update ShowConnectedTools setting
         /// </summary>
         public void UpdateShowConnectedTools(bool show)
         {
             UpdateUIState(ui => new UIState(
-                customPort: ui.CustomPort,
                 showConnectedTools: show,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: ui.ShowSecuritySettings,
@@ -196,7 +172,6 @@ namespace io.github.hatayama.uLoopMCP
         public void UpdateMainScrollPosition(Vector2 position)
         {
             UpdateUIState(ui => new UIState(
-                customPort: ui.CustomPort,
                 showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: position,
                 showSecuritySettings: ui.ShowSecuritySettings,
@@ -210,7 +185,6 @@ namespace io.github.hatayama.uLoopMCP
         public void UpdateShowSecuritySettings(bool show)
         {
             UpdateUIState(ui => new UIState(
-                customPort: ui.CustomPort,
                 showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: show,
@@ -222,7 +196,6 @@ namespace io.github.hatayama.uLoopMCP
         public void UpdateShowToolSettings(bool show)
         {
             UpdateUIState(ui => new UIState(
-                customPort: ui.CustomPort,
                 showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: ui.ShowSecuritySettings,
@@ -247,7 +220,6 @@ namespace io.github.hatayama.uLoopMCP
         public void UpdateShowConfiguration(bool show)
         {
             UpdateUIState(ui => new UIState(
-                customPort: ui.CustomPort,
                 showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: ui.ShowSecuritySettings,

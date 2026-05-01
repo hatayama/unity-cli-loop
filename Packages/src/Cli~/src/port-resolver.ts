@@ -1,6 +1,6 @@
 /**
- * Port resolution utility for CLI.
- * Resolves Unity server port from various sources.
+ * Unity connection resolution utility for CLI.
+ * Resolves project-scoped IPC endpoints.
  */
 
 // File paths are constructed from Unity project root detection, not from user input
@@ -10,6 +10,11 @@ import { PRODUCT_DISPLAY_NAME } from './cli-constants';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, resolve } from 'path';
+import {
+  canonicalizeProjectRoot,
+  createProjectIpcEndpoint,
+  type UnityConnectionEndpoint,
+} from './ipc-endpoint.js';
 import {
   findUnityProjectRoot,
   getUnitySettingsCandidatePaths,
@@ -32,42 +37,15 @@ export class UnityServerNotRunningError extends Error {
 
 interface UnityMcpSettings {
   isServerRunning?: boolean;
-  customPort?: number;
   projectRootPath?: string;
   serverSessionId?: string;
 }
 
 export interface ResolvedUnityConnection {
-  port: number;
+  endpoint: UnityConnectionEndpoint;
   projectRoot: string | null;
   requestMetadata: UloopRequestMetadata | null;
   shouldValidateProject: boolean;
-}
-
-function normalizePort(port: unknown): number | null {
-  if (typeof port !== 'number') {
-    return null;
-  }
-
-  if (!Number.isInteger(port)) {
-    return null;
-  }
-
-  if (port < 1 || port > 65535) {
-    return null;
-  }
-
-  return port;
-}
-
-export function resolvePortFromUnitySettings(settings: UnityMcpSettings): number | null {
-  const customPort = normalizePort(settings.customPort);
-
-  if (customPort !== null) {
-    return customPort;
-  }
-
-  return null;
 }
 
 export function validateProjectPath(projectPath: string): string {
@@ -94,18 +72,10 @@ function normalizeProjectRootPath(projectRoot: string): string {
   return projectRoot.replace(/\/+$/, '');
 }
 
-export async function resolveUnityPort(
-  explicitPort?: number,
-  projectPath?: string,
-): Promise<number> {
-  const connection = await resolveUnityConnection(explicitPort, projectPath);
-  return connection.port;
-}
-
 function createSettingsReadError(projectRoot: string): Error {
   const settingsPath = join(projectRoot, 'UserSettings/UnityMcpSettings.json');
   return new Error(
-    `Could not read Unity server port from settings.\n\n` +
+    `Could not read Unity server session from settings.\n\n` +
       `  Settings file: ${settingsPath}\n\n` +
       `Run 'uloop launch -r' to restart Unity.`,
   );
@@ -137,15 +107,6 @@ async function readUnitySettingsOrThrow(projectRoot: string): Promise<UnityMcpSe
   throw createSettingsReadError(projectRoot);
 }
 
-function resolvePortFromSettingsOrThrow(settings: UnityMcpSettings, projectRoot: string): number {
-  const port = resolvePortFromUnitySettings(settings);
-  if (port !== null) {
-    return port;
-  }
-
-  throw createSettingsReadError(projectRoot);
-}
-
 function tryCreateRequestMetadata(
   settings: UnityMcpSettings,
   projectRoot: string,
@@ -172,22 +133,8 @@ function tryCreateRequestMetadata(
 }
 
 export async function resolveUnityConnection(
-  explicitPort?: number,
   projectPath?: string,
 ): Promise<ResolvedUnityConnection> {
-  if (explicitPort !== undefined && projectPath !== undefined) {
-    throw new Error('Cannot specify both --port and --project-path. Use one or the other.');
-  }
-
-  if (explicitPort !== undefined) {
-    return {
-      port: explicitPort,
-      projectRoot: null,
-      requestMetadata: null,
-      shouldValidateProject: false,
-    };
-  }
-
   let projectRoot: string | null;
   if (projectPath !== undefined) {
     projectRoot = validateProjectPath(projectPath);
@@ -198,13 +145,14 @@ export async function resolveUnityConnection(
     }
   }
 
-  const settings = await readUnitySettingsOrThrow(projectRoot);
-  const port = resolvePortFromSettingsOrThrow(settings, projectRoot);
-  const requestMetadata = tryCreateRequestMetadata(settings, projectRoot);
+  const canonicalProjectRoot = await canonicalizeProjectRoot(projectRoot);
+  const settings = await readUnitySettingsOrThrow(canonicalProjectRoot);
+  const endpoint = createProjectIpcEndpoint(canonicalProjectRoot);
+  const requestMetadata = tryCreateRequestMetadata(settings, canonicalProjectRoot);
 
   return {
-    port,
-    projectRoot,
+    endpoint,
+    projectRoot: canonicalProjectRoot,
     requestMetadata,
     shouldValidateProject: requestMetadata === null,
   };

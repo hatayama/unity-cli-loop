@@ -1,17 +1,17 @@
 /**
- * Direct Unity TCP client for CLI usage.
- * Establishes one-shot TCP connections to the Unity Editor bridge.
+ * Direct Unity client for CLI usage.
+ * Establishes one-shot local IPC connections to the Unity Editor bridge.
  */
 
-// Non-null assertions are used after TCP frame parsing where data existence is guaranteed by protocol
+// Non-null assertions are used after framed response parsing where data existence is guaranteed by protocol
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 
 import * as net from 'net';
 import { createFrame, parseFrameFromBuffer, extractFrameFromBuffer } from './simple-framer.js';
 import type { UloopRequestMetadata } from './request-metadata.js';
+import type { UnityConnectionEndpoint } from './ipc-endpoint.js';
 
 const JSONRPC_VERSION = '2.0';
-const DEFAULT_HOST = '127.0.0.1';
 const NETWORK_TIMEOUT_MS = 180000;
 
 interface JsonRpcRequest {
@@ -37,11 +37,11 @@ export class DirectUnityClient {
   private socket: net.Socket | null = null;
   private requestId: number = 0;
   private receiveBuffer: Buffer = Buffer.alloc(0);
+  private readonly endpoint: UnityConnectionEndpoint;
 
-  constructor(
-    private readonly port: number,
-    private readonly host: string = DEFAULT_HOST,
-  ) {}
+  constructor(endpoint: UnityConnectionEndpoint) {
+    this.endpoint = endpoint;
+  }
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -51,7 +51,7 @@ export class DirectUnityClient {
         reject(new Error(`Connection error: ${error.message}`));
       });
 
-      this.socket.connect(this.port, this.host, () => {
+      this.socket.connect(this.endpoint.path, () => {
         resolve();
       });
     });

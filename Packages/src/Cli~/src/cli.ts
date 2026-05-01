@@ -103,7 +103,6 @@ function registerToolCommand(program: Command, tool: ToolDefinition, helpGroup: 
     }
   }
 
-  cmd.addOption(createHiddenPortOption());
   cmd.option('--project-path <path>', 'Unity project path');
 
   cmd.action(async (options: CliOptions) => {
@@ -256,11 +255,6 @@ function getToolHelpGroup(toolName: string, defaultToolNames: ReadonlySet<string
   return defaultToolNames.has(toolName) ? HELP_GROUP_BUILTIN_TOOLS : HELP_GROUP_THIRD_PARTY_TOOLS;
 }
 
-// Option instances are mutated by commander, so each command needs its own
-function createHiddenPortOption(): Option {
-  return new Option('-p, --port <port>', 'Unity TCP port').hideHelp();
-}
-
 function createProgram(): Command {
   const program = new Command();
 
@@ -319,7 +313,6 @@ function createProgram(): Command {
   program
     .command('list')
     .description('List all available tools from Unity')
-    .addOption(createHiddenPortOption())
     .option('--project-path <path>', 'Unity project path')
     .action(async (options: CliOptions) => {
       await runWithErrorHandling(() => listAvailableTools(extractGlobalOptions(options)));
@@ -328,7 +321,6 @@ function createProgram(): Command {
   program
     .command('sync')
     .description('Sync tool definitions from Unity to local cache')
-    .addOption(createHiddenPortOption())
     .option('--project-path <path>', 'Unity project path')
     .action(async (options: CliOptions) => {
       await runWithErrorHandling(() => syncTools(extractGlobalOptions(options)));
@@ -399,8 +391,6 @@ const FAST_EXECUTE_DYNAMIC_CODE_OPTIONS = new Map<string, string>([
   ['--compile-only', 'compileOnly'],
   ['--yield-to-foreground-requests', 'yieldToForegroundRequests'],
   ['--project-path', 'projectPath'],
-  ['--port', 'port'],
-  ['-p', 'port'],
 ]);
 
 function parseFastOptionValue(arg: string): [string, string] | null {
@@ -489,9 +479,7 @@ export async function tryHandleFastExecuteDynamicCodeCommand(
   }
 
   const resolvedProjectPath: string | undefined =
-    command.globalOptions.projectPath !== undefined || command.globalOptions.port !== undefined
-      ? command.globalOptions.projectPath
-      : (dependencies.findUnityProjectRootFn() ?? undefined);
+    command.globalOptions.projectPath ?? dependencies.findUnityProjectRootFn() ?? undefined;
   const resolvedGlobalOptions: GlobalOptions = {
     ...command.globalOptions,
     projectPath: resolvedProjectPath,
@@ -515,7 +503,6 @@ export async function tryHandleFastExecuteDynamicCodeCommand(
 
 function extractGlobalOptions(options: Record<string, unknown>): GlobalOptions {
   return {
-    port: options['port'] as string | undefined,
     projectPath: options['projectPath'] as string | undefined,
   };
 }
@@ -1024,7 +1011,7 @@ function shouldSkipAutoSync(cmdName: string | undefined, args: readonly string[]
 }
 
 // Options that consume the next argument as a value
-const OPTIONS_WITH_VALUE: ReadonlySet<string> = new Set(['--port', '-p', '--project-path']);
+const OPTIONS_WITH_VALUE: ReadonlySet<string> = new Set(['--project-path']);
 
 /**
  * Find the first non-option argument that is not a value of a known option.
@@ -1048,19 +1035,6 @@ function extractSyncGlobalOptions(args: readonly string[]): GlobalOptions {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === '--port' || arg === '-p') {
-      const nextArg = args[i + 1];
-      if (nextArg !== undefined && !nextArg.startsWith('-')) {
-        options.port = nextArg;
-      }
-      continue;
-    }
-
-    if (arg.startsWith('--port=')) {
-      options.port = arg.slice('--port='.length);
-      continue;
-    }
-
     if (arg === '--project-path') {
       const nextArg = args[i + 1];
       if (nextArg !== undefined && !nextArg.startsWith('-')) {

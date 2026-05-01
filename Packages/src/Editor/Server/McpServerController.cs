@@ -9,7 +9,7 @@ using UnityEngine;
 namespace io.github.hatayama.uLoopMCP
 {
     // Related classes:
-    // - McpBridgeServer: The TCP server instance that this class manages.
+    // - McpBridgeServer: The bridge server instance that this class manages.
     // - McpEditorWindow: The UI for starting and stopping the server.
     // - AssemblyReloadEvents: Used to handle server state across domain reloads.
     /// <summary>
@@ -39,10 +39,13 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public static bool IsServerRunning => mcpServer?.IsRunning ?? false;
 
-        /// <summary>
-        /// The server's port number.
-        /// </summary>
-        public static int ServerPort => mcpServer?.Port ?? McpEditorSettings.GetCustomPort();
+        internal static void RegisterRecoveredServer(McpBridgeServer server)
+        {
+            System.Diagnostics.Debug.Assert(server != null, "server must not be null");
+
+            mcpServer = server;
+            SaveRunningServerSession();
+        }
 
         /// <summary>
         /// Current recovery task. Can be awaited by other components to ensure recovery completes first.
@@ -79,7 +82,7 @@ namespace io.github.hatayama.uLoopMCP
             // Note: ConnectedToolsMonitoringService has [InitializeOnLoad] so it's automatically initialized
             // This comment ensures the service initialization order is documented
 
-            // Recovery binds a TCP listener and may touch config files, so keep it off the
+            // Recovery binds the project IPC endpoint and may touch config files, so keep it off the
             // synchronous InitializeOnLoad path while preserving automatic startup.
             ScheduleStartupRecovery(
                 action => EditorApplication.delayCall += () => action(),
@@ -150,22 +153,15 @@ namespace io.github.hatayama.uLoopMCP
             scheduledRecoveryCompletionSource.SetResult(true);
         }
 
-        /// <summary>
-        /// Starts the server.
-        /// </summary>
-        /// <param name="port">
-        /// The port number to bind to. Use -1 to fall back to the saved custom port
-        /// from <see cref="McpEditorSettings.GetCustomPort"/>. Defaults to -1.
-        /// </param>
-        public static async void StartServer(int port = -1)
+        public static async void StartServer()
         {
-            await StartServerWithUseCaseAsync(port);
+            await StartServerWithUseCaseAsync();
         }
 
         /// <summary>
         /// Starts the server using new UseCase implementation.
         /// </summary>
-        private static async Task StartServerWithUseCaseAsync(int port)
+        private static async Task StartServerWithUseCaseAsync()
         {
             if (IsBackgroundUnityProcess())
             {
@@ -179,7 +175,7 @@ namespace io.github.hatayama.uLoopMCP
             bool startupLockReleasedByPrewarm = false;
             try
             {
-                // Always stop the existing server first (to release the port)
+                // Always stop the existing server first so the project IPC endpoint is released.
                 if (mcpServer != null)
                 {
                     await StopServerWithUseCaseAsync();
@@ -192,7 +188,6 @@ namespace io.github.hatayama.uLoopMCP
                 McpServerInitializationUseCase useCase = new();
                 ServerInitializationSchema schema = new()
                 {
-                    Port = port,
                     PreserveStartupLockUntilExplicitRelease = true
                 };
                 System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
@@ -323,7 +318,6 @@ namespace io.github.hatayama.uLoopMCP
                 return Task.CompletedTask;
             }
 
-            int savedPort = McpEditorSettings.GetCustomPort();
             bool isAfterCompile = McpEditorSettings.GetIsAfterCompile();
 
             if (mcpServer?.IsRunning == true)
@@ -341,18 +335,12 @@ namespace io.github.hatayama.uLoopMCP
                 McpEditorSettings.ClearAfterCompileFlag();
             }
 
-            int portToUse = savedPort;
-
             // Centralized, coalesced startup request
             // Store the task so McpEditorWindow can await it to prevent race conditions
-            return StartRecoveryIfNeededAsync(portToUse, isAfterCompile, CancellationToken.None);
+            return StartRecoveryIfNeededAsync(isAfterCompile, CancellationToken.None);
         }
 
-        /// <summary>
-        /// Executes server recovery with retries on the original port.
-        /// Does not change the port number; only attempts recovery on the specified port.
-        /// </summary>
-        private static void TryRestoreServerWithRetry(int port, int retryCount)
+        private static void TryRestoreServerWithRetry(int retryCount)
         {
             const int maxRetries = 3;
 
@@ -365,15 +353,9 @@ namespace io.github.hatayama.uLoopMCP
                     mcpServer = null;
                 }
 
-                // Try to start server on the requested port only
                 mcpServer = new McpBridgeServer();
-                mcpServer.StartServer(port);
-
-                // Update settings with the actual port used (same as requested)
-                if (McpEditorSettings.GetCustomPort() != port)
-                {
-                    McpEditorSettings.SetCustomPort(port);
-                }
+                mcpServer.StartServer();
+                SaveRunningServerSession();
 
                 // Clear server-side reconnecting flag on successful restoration
                 // NOTE: Do NOT clear UI display flag here - let it be cleared by timeout or client connection
@@ -386,8 +368,7 @@ namespace io.github.hatayama.uLoopMCP
                 // If the maximum number of retries has not been reached, try again.
                 if (retryCount < maxRetries)
                 {
-                    // Wait for port release before retry
-                    RetryServerRestoreAsync(port, retryCount).Forget();
+                    RetryServerRestoreAsync(retryCount).Forget();
                 }
                 else
                 {
@@ -408,8 +389,8 @@ namespace io.github.hatayama.uLoopMCP
 
         /// <summary>
         /// Cleanup on Unity exit.
-        /// Disposes the TCP listener and marks the server as stopped so the CLI
-        /// does not attempt to connect to a stale port after the editor closes.
+        /// Disposes the bridge listener and marks the server as stopped so the CLI
+        /// does not attempt to connect to a stale IPC endpoint after the editor closes.
         /// </summary>
         private static void OnEditorQuitting()
         {
@@ -444,10 +425,8 @@ namespace io.github.hatayama.uLoopMCP
                 VibeLogger.LogWarning(
                     "server_loop_exit_detected",
                     "Detected unexpected server loop exit. Initiating automatic recovery.",
-                    new { port = mcpServer?.Port }
+                    new { transport = "project_ipc" }
                 );
-
-                int portToRecover = mcpServer?.Port ?? McpEditorSettings.GetCustomPort();
 
                 // Resources already cleaned up by CleanupAfterUnexpectedLoopExit — just clear the reference
                 mcpServer = null;
@@ -456,7 +435,7 @@ namespace io.github.hatayama.uLoopMCP
                 // within the 5-second protection window after a successful start
                 System.Threading.Volatile.Write(ref startupProtectionUntilTicks, 0L);
 
-                _currentRecoveryTask = StartRecoveryIfNeededAsync(portToRecover, false, CancellationToken.None);
+                _currentRecoveryTask = StartRecoveryIfNeededAsync(false, CancellationToken.None);
                 _ = _currentRecoveryTask.ContinueWith(task =>
                 {
                     if (ReferenceEquals(_currentRecoveryTask, task))
@@ -483,15 +462,6 @@ namespace io.github.hatayama.uLoopMCP
             // Temporarily disabled to avoid main thread errors due to SessionState operations.
             // TODO: Re-enable after resolving the main thread issue.
             // CompileSessionState.StartForcedRecompile();
-        }
-
-        /// <summary>
-        /// Gets server status information.
-        /// </summary>
-        public static (bool isRunning, int port, bool wasRestoredFromSession) GetServerStatus()
-        {
-            bool wasRestored = McpEditorSettings.GetIsServerRunning();
-            return (IsServerRunning, ServerPort, wasRestored);
         }
 
         /// <summary>
@@ -554,22 +524,22 @@ namespace io.github.hatayama.uLoopMCP
         /// Restore server after compilation with frame delay.
         /// Currently kept as a helper; recovery logic is unified in StartRecoveryIfNeededAsync.
         /// </summary>
-        private static async Task RestoreServerAfterCompileAsync(int port)
+        private static async Task RestoreServerAfterCompileAsync()
         {
-            // Wait a short while for timing adjustment (TCP port release)
+            // Wait a short while for Unity editor state to settle after compilation.
             await EditorDelay.DelayFrame(1);
 
-            TryRestoreServerWithRetry(port, 0);
+            TryRestoreServerWithRetry(0);
         }
 
         /// <summary>
         /// Restore server on startup with frame delay
         /// </summary>
-        private static async Task RestoreServerOnStartupAsync(int port)
+        private static async Task RestoreServerOnStartupAsync()
         {
             // Wait for Unity Editor to be ready before auto-starting
             await EditorDelay.DelayFrame(1);
-            _ = StartRecoveryIfNeededAsync(port, false, CancellationToken.None).ContinueWith(task =>
+            _ = StartRecoveryIfNeededAsync(false, CancellationToken.None).ContinueWith(task =>
             {
                 if (task.IsFaulted)
                 {
@@ -580,13 +550,12 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         /// <summary>
-        /// Retry server restore with frame delay on the same port.
+        /// Retry server restore with frame delay on the same project IPC endpoint.
         /// </summary>
-        private static async Task RetryServerRestoreAsync(int port, int retryCount)
+        private static async Task RetryServerRestoreAsync(int retryCount)
         {
-            // Wait longer for port release before retry
             await EditorDelay.DelayFrame(5);
-            TryRestoreServerWithRetry(port, retryCount + 1);
+            TryRestoreServerWithRetry(retryCount + 1);
         }
 
         /// <summary>
@@ -622,61 +591,11 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         /// <summary>
-        /// Finds an available port starting from the given port number
-        /// Delegates to NetworkUtility for consistent port finding behavior.
-        /// </summary>
-        /// <param name="startPort">The starting port number to check</param>
-        /// <returns>The first available port number</returns>
-        private static int FindAvailablePort(int startPort)
-        {
-            return NetworkUtility.FindAvailablePort(startPort);
-        }
-
-        private static bool TryFindFallbackPort(int currentPort, out int fallbackPort)
-        {
-            const int maxAttempts = 10;
-
-            for (int offset = 1; offset <= maxAttempts; offset++)
-            {
-                int candidatePort = currentPort + offset;
-                if (!McpPortValidator.ValidatePort(candidatePort, "for recovery fallback"))
-                {
-                    continue;
-                }
-
-                if (NetworkUtility.IsPortInUse(candidatePort))
-                {
-                    continue;
-                }
-
-                fallbackPort = candidatePort;
-                return true;
-            }
-
-            fallbackPort = currentPort;
-            return false;
-        }
-
-        private static void LogRecoveryFallback(int sourcePort, int fallbackPort, string reason)
-        {
-            string message = $"Recovery fallback activated: {sourcePort} -> {fallbackPort} ({reason})";
-            VibeLogger.LogWarning("recovery_port_fallback", message);
-            Debug.LogWarning($"[{McpConstants.PROJECT_NAME}] {message}");
-        }
-
-        /// <summary>
         /// Validates server configuration before starting
         /// Implements fail-fast behavior for invalid configurations
         /// </summary>
-        private static void ValidateServerConfiguration(int port)
+        private static void ValidateServerConfiguration()
         {
-            // Validate port number using shared validator
-            if (!McpPortValidator.ValidatePort(port, "for Unity CLI bridge"))
-            {
-                throw new System.ArgumentOutOfRangeException(nameof(port),
-                    $"Port number must be between 1 and 65535. Received: {port}");
-            }
-
             // Validate Unity Editor state
             if (EditorApplication.isCompiling)
             {
@@ -684,8 +603,6 @@ namespace io.github.hatayama.uLoopMCP
                     "Cannot start Unity CLI bridge while Unity is compiling. Please wait for compilation to complete.");
             }
 
-            // Server configuration validation passed
-            // Note: Port availability and system port conflicts are handled by FindAvailablePort
         }
 
         public static bool IsStartupProtectionActive()
@@ -711,9 +628,9 @@ namespace io.github.hatayama.uLoopMCP
 
         /// <summary>
         /// Centralized, coalesced recovery start.
-        /// Attempts recovery on the specified port for up to 5 seconds without changing the port number.
+        /// Attempts recovery on the project IPC endpoint for up to 5 seconds.
         /// </summary>
-        public static async Task StartRecoveryIfNeededAsync(int savedPort, bool isAfterCompile, CancellationToken cancellationToken)
+        public static async Task StartRecoveryIfNeededAsync(bool isAfterCompile, CancellationToken cancellationToken)
         {
             if (IsBackgroundUnityProcess())
             {
@@ -727,7 +644,7 @@ namespace io.github.hatayama.uLoopMCP
             DomainReloadDetectionService.DeleteLockFile();
             CompilationLockService.DeleteLockFile();
 
-            VibeLogger.LogInfo("startup_request", $"port={savedPort}");
+            VibeLogger.LogInfo("startup_request", "transport=project_ipc");
 
             if (IsStartupProtectionActive())
             {
@@ -742,7 +659,7 @@ namespace io.github.hatayama.uLoopMCP
                 // If any server is already running, ignore this request to prevent double-binding
                 if (mcpServer != null && mcpServer.IsRunning)
                 {
-                    VibeLogger.LogInfo("server_start_ignored", $"already_running port={mcpServer.Port}");
+                    VibeLogger.LogInfo("server_start_ignored", $"already_running endpoint={mcpServer.Endpoint}");
                     return;
                 }
 
@@ -766,16 +683,7 @@ namespace io.github.hatayama.uLoopMCP
                     }
                 }
 
-                int chosenPort = savedPort;
-                bool savedPortInUse = NetworkUtility.IsPortInUse(savedPort);
-                if (savedPortInUse && TryFindFallbackPort(savedPort, out int preBindFallbackPort))
-                {
-                    chosenPort = preBindFallbackPort;
-                    LogRecoveryFallback(savedPort, chosenPort, "saved_port_in_use_before_bind");
-                }
-
                 bool started = await TryBindWithWaitAsync(
-                    chosenPort,
                     5000,
                     250,
                     cancellationToken,
@@ -783,31 +691,15 @@ namespace io.github.hatayama.uLoopMCP
 
                 if (!started)
                 {
-                    if (TryFindFallbackPort(chosenPort, out int fallbackPort) && fallbackPort != chosenPort)
-                    {
-                        int previousAttemptPort = chosenPort;
-                        chosenPort = fallbackPort;
-                        LogRecoveryFallback(previousAttemptPort, chosenPort, "bind_retry_timeout");
-                        started = await TryBindWithWaitAsync(
-                            chosenPort,
-                            5000,
-                            250,
-                            cancellationToken,
-                            clearServerStartingLockWhenReady: false);
-                    }
-                }
-
-                if (!started)
-                {
                     // Ensure session reflects stopped state on failure
                     McpEditorSettings.ClearServerSession();
                     McpEditorSettings.ClearReconnectingFlags();
-                    Debug.LogError($"[{McpConstants.PROJECT_NAME}] Recovery failed: no available port to bind. SavedPort={savedPort}, LastAttemptPort={chosenPort}");
-                    throw new InvalidOperationException($"Failed to bind any recovery port. SavedPort={savedPort}, LastAttemptPort={chosenPort}.");
+                    Debug.LogError($"[{McpConstants.PROJECT_NAME}] Recovery failed: no project IPC endpoint to bind.");
+                    throw new InvalidOperationException("Failed to bind recovery endpoint.");
                 }
 
                 // Mark running and update settings
-                SaveRunningServerSession(chosenPort);
+                SaveRunningServerSession();
 
                 // Clear reconnection-related flags on successful recovery
                 McpEditorSettings.ClearReconnectingFlags();
@@ -833,7 +725,6 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         private static async Task<bool> TryBindWithWaitAsync(
-            int port,
             int maxWaitMs,
             int stepMs,
             CancellationToken cancellationToken,
@@ -842,7 +733,7 @@ namespace io.github.hatayama.uLoopMCP
             int remainingMs = maxWaitMs;
             while (true)
             {
-                VibeLogger.LogInfo("binding_attempt", $"port={port}");
+                VibeLogger.LogInfo("binding_attempt", "transport=project_ipc");
                 McpBridgeServer server = null;
                 try
                 {
@@ -865,9 +756,9 @@ namespace io.github.hatayama.uLoopMCP
                     }
 
                     server = new McpBridgeServer();
-                    server.StartServer(port, clearServerStartingLockWhenReady);
+                    server.StartServer(clearServerStartingLockWhenReady);
                     mcpServer = server;
-                    VibeLogger.LogInfo("binding_success", $"port={port}");
+                    VibeLogger.LogInfo("binding_success", $"endpoint={server.Endpoint}");
                     return true;
                 }
                 catch (Exception ex)
@@ -883,11 +774,11 @@ namespace io.github.hatayama.uLoopMCP
 
                     if (sockEx != null)
                     {
-                        VibeLogger.LogWarning("binding_failed", $"port={port} code={sockEx.SocketErrorCode} hresult={sockEx.HResult} native={sockEx.ErrorCode}");
+                        VibeLogger.LogWarning("binding_failed", $"target=project_ipc code={sockEx.SocketErrorCode} hresult={sockEx.HResult} native={sockEx.ErrorCode}");
                     }
                     else
                     {
-                        VibeLogger.LogWarning("binding_failed", $"port={port} code=Unknown hresult={ex.HResult}");
+                        VibeLogger.LogWarning("binding_failed", $"target=project_ipc code=Unknown hresult={ex.HResult}");
                     }
 
                     if (remainingMs <= 0)
@@ -902,11 +793,11 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private static void SaveRunningServerSession(int port)
+        private static void SaveRunningServerSession()
         {
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
             string serverSessionId = Guid.NewGuid().ToString("N");
-            McpEditorSettings.SetRunningServerSession(port, projectRoot, serverSessionId);
+            McpEditorSettings.SetRunningServerSession(projectRoot, serverSessionId);
         }
 
         internal static string CreateOptionalServerStartingLock(Func<string> createLockFile = null)

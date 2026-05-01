@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Manages dynamic buffer allocation and recycling for TCP communication.
+    /// Manages dynamic buffer allocation and recycling for framed bridge communication.
     /// Provides memory-efficient buffer management with automatic sizing and cleanup.
     /// </summary>
     public class DynamicBufferManager : IDisposable

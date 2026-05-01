@@ -94,15 +94,6 @@
     flex-grow: 1;
 }
 
-.mcp-server-status__port-label {
-    margin-right: 4px;
-}
-
-.mcp-server-status__port-field {
-    width: 60px;
-    -unity-text-align: middle-right;
-}
-
 /* ===========================================
    Block: Server Controls (compact row)
    =========================================== */
@@ -293,10 +284,6 @@
 .mcp-client__name {
     -unity-font-style: bold;
     flex-grow: 1;
-}
-
-.mcp-client__port {
-    color: #888888;
 }
 
 /* ===========================================

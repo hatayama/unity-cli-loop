@@ -84,10 +84,6 @@ namespace io.github.hatayama.uLoopMCP
             nameLabel.AddToClassList("mcp-client__name");
             container.Add(nameLabel);
 
-            Label portLabel = new Label($":{client.Port}");
-            portLabel.AddToClassList("mcp-client__port");
-            container.Add(portLabel);
-
             return container;
         }
 

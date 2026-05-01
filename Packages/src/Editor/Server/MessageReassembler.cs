@@ -5,7 +5,7 @@ using System.Text;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Reassembles fragmented TCP messages using Content-Length framing.
+    /// Reassembles fragmented bridge messages using Content-Length framing.
     /// Handles partial frames and maintains state across multiple data chunks.
     /// </summary>
     public class MessageReassembler : IDisposable

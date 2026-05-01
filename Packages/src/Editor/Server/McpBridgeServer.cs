@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEngine;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -15,45 +16,39 @@ namespace io.github.hatayama.uLoopMCP
     // - McpServerController: Manages the lifecycle of this server.
     // - UnityCommandExecutor: Executes commands received from clients.
     // - JsonRpcProcessor: Handles JSON-RPC 2.0 message processing.
-    /// <summary>
-    /// Represents a connected client
-    /// </summary>
     public class ConnectedClient
     {
         public readonly string Endpoint;
         public readonly string ClientName; 
         public readonly DateTime ConnectedAt;
-        public readonly int Port;
-        public readonly NetworkStream Stream;
+        public readonly Stream Stream;
 
-        public ConnectedClient(string endpoint, NetworkStream stream, int port, string clientName = McpConstants.UNKNOWN_CLIENT_NAME)
+        public ConnectedClient(string endpoint, Stream stream, string clientName = McpConstants.UNKNOWN_CLIENT_NAME)
         {
             Endpoint = endpoint;
             Stream = stream; // Allow null stream for UI display purposes
             ClientName = clientName;
             ConnectedAt = DateTime.Now;
-            Port = port;
         }
         
         // Private constructor for WithClientName to preserve ConnectedAt
-        private ConnectedClient(string endpoint, NetworkStream stream, int port, string clientName, DateTime connectedAt)
+        private ConnectedClient(string endpoint, Stream stream, string clientName, DateTime connectedAt)
         {
             Endpoint = endpoint;
             Stream = stream; // Allow null stream for UI display purposes
             ClientName = clientName;
             ConnectedAt = connectedAt;
-            Port = port;
         }
         
         public ConnectedClient WithClientName(string clientName)
         {
-            return new ConnectedClient(Endpoint, Stream, Port, clientName, ConnectedAt);
+            return new ConnectedClient(Endpoint, Stream, clientName, ConnectedAt);
         }
 
     }
 
     /// <summary>
-    /// Unity CLI bridge TCP/IP server.
+    /// Unity CLI bridge server.
     /// Accepts project-local CLI connections and handles JSON-RPC 2.0 communication.
     /// </summary>
     public class McpBridgeServer : IDisposable
@@ -82,7 +77,7 @@ namespace io.github.hatayama.uLoopMCP
             unchecked((int)0x80072746)  // ERROR_CONNECTION_RESET
         };
         
-        private TcpListener _tcpListener;
+        private IBridgeTransportListener _transportListener;
         private CancellationTokenSource _cancellationTokenSource;
         private Task _serverTask;
         // Read from thread pool (ServerLoopAsync), written from main thread (StopServer)
@@ -99,10 +94,7 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public bool IsRunning => _isRunning;
         
-        /// <summary>
-        /// The server's port number.
-        /// </summary>
-        public int Port { get; private set; } = McpEditorSettings.GetCustomPort();
+        public string Endpoint => _transportListener?.Endpoint.DisplayName() ?? string.Empty;
         
         /// <summary>
         /// Event on client connection.
@@ -162,39 +154,21 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        /// <summary>
-        /// Checks if the specified port is in use.
-        /// Delegates to NetworkUtility for consistent port checking behavior.
-        /// </summary>
-        /// <param name="port">The port number to check.</param>
-        /// <returns>True if the port is in use.</returns>
-        public static bool IsPortInUse(int port)
-        {
-            return NetworkUtility.IsPortInUse(port);
-        }
-
-        /// <summary>
-        /// Starts the server.
-        /// </summary>
-        /// <param name="port">
-        /// The port number to bind to. Use -1 to fall back to the saved custom port
-        /// from <see cref="McpEditorSettings.GetCustomPort"/>. Defaults to -1.
-        /// </param>
-        public void StartServer(int port = -1, bool clearServerStartingLockWhenReady = true)
+        public void StartServer(bool clearServerStartingLockWhenReady = true)
         {
             if (_isRunning)
             {
                 return;
             }
 
-            Port = port == -1 ? McpEditorSettings.GetCustomPort() : port;
+            BridgeTransportEndpoint endpoint = BridgeTransportEndpoint.CreateProjectIpc(Application.dataPath + "/..");
             _cancellationTokenSource = new CancellationTokenSource();
             _unexpectedExitCleanupStarted = 0;
             
             try
             {
-                _tcpListener = new TcpListener(IPAddress.Loopback, Port);
-                _tcpListener.Start();
+                _transportListener = BridgeTransportListenerFactory.Create(endpoint);
+                _transportListener.Start();
                 _isRunning = true;
                 
                 _serverTask = Task.Run(() => ServerLoopAsync(_cancellationTokenSource.Token));
@@ -228,7 +202,7 @@ namespace io.github.hatayama.uLoopMCP
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
             {
                 _isRunning = false;
-                string errorMessage = $"Port {Port} is already in use. Please choose a different port.";
+                string errorMessage = $"Project IPC endpoint is already in use: {endpoint.DisplayName()}";
                 OnError?.Invoke(errorMessage);
                 throw new InvalidOperationException(errorMessage, ex);
             }
@@ -271,15 +245,13 @@ namespace io.github.hatayama.uLoopMCP
             // Request cancellation.
             _cancellationTokenSource?.Cancel();
             
-            // Stop the TCP listener.
             try
             {
-                _tcpListener?.Stop();
+                _transportListener?.Stop();
             }
             finally
             {
-                // Set the TCP listener to null regardless of success/failure
-                _tcpListener = null;
+                _transportListener = null;
             }
             
             // Wait for the server task to complete.
@@ -389,11 +361,11 @@ namespace io.github.hatayama.uLoopMCP
 
             try
             {
-                _tcpListener?.Stop();
+                _transportListener?.Stop();
             }
             finally
             {
-                _tcpListener = null;
+                _transportListener = null;
                 _isRunning = false;
             }
         }
@@ -409,10 +381,10 @@ namespace io.github.hatayama.uLoopMCP
                 {
                     try
                     {
-                        TcpClient client = await AcceptTcpClientAsync(_tcpListener, cancellationToken);
+                        BridgeClientConnection client = await AcceptClientAsync(_transportListener, cancellationToken);
                         if (client != null)
                         {
-                            string clientEndpoint = client.Client.RemoteEndPoint?.ToString() ?? McpServerConfig.UNKNOWN_CLIENT_ENDPOINT;
+                            string clientEndpoint = client.Endpoint;
                             OnClientConnected?.Invoke(clientEndpoint);
 
                             // Execute client handling in a separate task (fire-and-forget).
@@ -421,13 +393,13 @@ namespace io.github.hatayama.uLoopMCP
                     }
                     catch (ObjectDisposedException)
                     {
-                        // Expected when StopServer() disposes TcpListener while accept is pending.
+                        // Expected when StopServer() disposes the listener while accept is pending.
                         // If _isRunning is still true here, this is an unexpected disposal — finally block handles state cleanup.
                         if (_isRunning)
                         {
                             VibeLogger.LogWarning(
                                 "server_loop_disposed_while_running",
-                                "TcpListener disposed while server was still marked as running. Exiting loop."
+                                "Transport listener disposed while server was still marked as running. Exiting loop."
                             );
                         }
                         break;
@@ -454,7 +426,7 @@ namespace io.github.hatayama.uLoopMCP
             finally
             {
                 // StopServer sets _isRunning=false before cancelling, so if it's still true here
-                // the loop exited unexpectedly (e.g. ObjectDisposedException, TcpListener disposed externally)
+                // the loop exited unexpectedly (e.g. ObjectDisposedException, listener disposed externally)
                 bool wasUnexpectedExit = _isRunning;
                 if (wasUnexpectedExit)
                 {
@@ -470,14 +442,11 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        /// <summary>
-        /// Asynchronously accepts a client from the TcpListener.
-        /// </summary>
-        private async Task<TcpClient> AcceptTcpClientAsync(TcpListener listener, CancellationToken cancellationToken)
+        private async Task<BridgeClientConnection> AcceptClientAsync(IBridgeTransportListener listener, CancellationToken cancellationToken)
         {
             try
             {
-                return await Task.Run(() => listener.AcceptTcpClient(), cancellationToken);
+                return await Task.Run(() => listener.AcceptClient(cancellationToken), cancellationToken);
             }
             catch (ThreadAbortException ex)
             {
@@ -497,9 +466,9 @@ namespace io.github.hatayama.uLoopMCP
         /// <summary>
         /// Handles communication with the client using Content-Length framing.
         /// </summary>
-        private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
+        private async Task HandleClientAsync(BridgeClientConnection client, CancellationToken cancellationToken)
         {
-            string clientEndpoint = client.Client.RemoteEndPoint?.ToString() ?? McpServerConfig.UNKNOWN_CLIENT_ENDPOINT;
+            string clientEndpoint = client.Endpoint;
             
             // Initialize new components for Content-Length framing
             DynamicBufferManager bufferManager = null;
@@ -508,7 +477,7 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 using (client)
-                using (NetworkStream stream = client.GetStream())
+                using (Stream stream = client.Stream)
                 {
                     
                     // Check for existing connection from same endpoint and close it
@@ -523,8 +492,7 @@ namespace io.github.hatayama.uLoopMCP
                     }
                     
                     // Add new client to connected clients for notification broadcasting
-                    int clientPort = (client.Client.RemoteEndPoint as System.Net.IPEndPoint)?.Port ?? 0;
-                    ConnectedClient connectedClient = new ConnectedClient(clientEndpoint, stream, clientPort);
+                    ConnectedClient connectedClient = new ConnectedClient(clientEndpoint, stream);
                     _connectedClients.TryAdd(clientKey, connectedClient);
                     
                     // Initialize new framing components
@@ -534,7 +502,7 @@ namespace io.github.hatayama.uLoopMCP
                     // Start with initial buffer size
                     byte[] buffer = bufferManager.GetBuffer(BufferConfig.INITIAL_BUFFER_SIZE);
                     
-                    while (!cancellationToken.IsCancellationRequested && client.Connected)
+                    while (!cancellationToken.IsCancellationRequested)
                     {
                         int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
                         
@@ -560,7 +528,7 @@ namespace io.github.hatayama.uLoopMCP
                             if (!string.IsNullOrEmpty(responseJson))
                             {
                                 // Check stream and client state before attempting write
-                                if (!stream.CanWrite || !client.Connected || cancellationToken.IsCancellationRequested)
+                                if (!stream.CanWrite || cancellationToken.IsCancellationRequested)
                                 {
                                     return; // Skip the write operation
                                 }
@@ -629,7 +597,7 @@ namespace io.github.hatayama.uLoopMCP
                     OnToolDisconnected?.Invoke(clientToRemove.ClientName);
                 }
                 
-                client.Close();
+                client.Dispose();
                 OnClientDisconnected?.Invoke(clientEndpoint);
             }
         }
@@ -819,7 +787,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             StopServer();
             _cancellationTokenSource?.Dispose();
-            _tcpListener = null;
+            _transportListener = null;
             _serverTask = null;
         }
     }

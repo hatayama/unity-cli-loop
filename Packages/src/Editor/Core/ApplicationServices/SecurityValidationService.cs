@@ -3,12 +3,7 @@ using UnityEditor;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Application service responsible for security validation before server operations.
-    /// Handles editor state validation and security checks.
-    /// 
-    /// Related classes:
-    /// - UnityEditor.EditorApplication: Provides editor state information
-    /// - McpPortValidator: Validates port security
+    /// Application service responsible for editor state validation before server operations.
     /// </summary>
     public class SecurityValidationService
     {
@@ -22,22 +17,6 @@ namespace io.github.hatayama.uLoopMCP
             {
                 return new ValidationResult(false, 
                     "Cannot start Unity CLI bridge while Unity is compiling. Please wait for compilation to complete.");
-            }
-
-            return new ValidationResult(true);
-        }
-
-        /// <summary>
-        /// Validates port security settings.
-        /// </summary>
-        /// <param name="port">Port number to validate</param>
-        /// <returns>Validation result with security details</returns>
-        public ValidationResult ValidatePortSecurity(int port)
-        {
-            if (!McpPortValidator.ValidatePort(port, "for Unity CLI bridge"))
-            {
-                return new ValidationResult(false, 
-                    $"Port number must be between 1 and 65535. Received: {port}");
             }
 
             return new ValidationResult(true);

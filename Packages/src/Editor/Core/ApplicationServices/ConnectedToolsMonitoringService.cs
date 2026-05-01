@@ -133,7 +133,6 @@ namespace io.github.hatayama.uLoopMCP
             ConnectedLLMToolData toolData = new(
                 client.ClientName,
                 client.Endpoint,
-                client.Port,
                 client.ConnectedAt
             );
             _connectedTools.Add(toolData);
@@ -186,7 +185,7 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         private static ConnectedClient ConvertToConnectedClient(ConnectedLLMToolData toolData)
         {
-            return new ConnectedClient(toolData.Endpoint, null, toolData.Port, toolData.Name);
+            return new ConnectedClient(toolData.Endpoint, null, toolData.Name);
         }
 
         /// <summary>
@@ -309,7 +308,6 @@ namespace io.github.hatayama.uLoopMCP
                 .Select(client => new ConnectedLLMToolData(
                     client.ClientName,
                     client.Endpoint,
-                    client.Port,
                     client.ConnectedAt
                 ))
                 .GroupBy(tool => tool.Name)
@@ -413,8 +411,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             return string.Equals(first.Name, second.Name, StringComparison.Ordinal)
-                && string.Equals(first.Endpoint, second.Endpoint, StringComparison.Ordinal)
-                && first.Port == second.Port;
+                && string.Equals(first.Endpoint, second.Endpoint, StringComparison.Ordinal);
         }
 
         internal static void ReplaceConnectedToolsForTests(IReadOnlyCollection<ConnectedClient> connectedClients)

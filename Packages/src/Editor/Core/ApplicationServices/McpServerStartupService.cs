@@ -14,16 +14,14 @@ namespace io.github.hatayama.uLoopMCP
         /// <summary>
         /// Creates and starts a new Unity CLI bridge instance.
         /// </summary>
-        /// <param name="port">Port number to start the server on</param>
         /// <returns>The created server instance</returns>
         public ServiceResult<McpBridgeServer> StartServer(
-            int port,
             bool clearServerStartingLockWhenReady = true)
         {
             try
             {
                 McpBridgeServer server = new();
-                server.StartServer(port, clearServerStartingLockWhenReady);
+                server.StartServer(clearServerStartingLockWhenReady);
                 return ServiceResult<McpBridgeServer>.SuccessResult(server);
             }
             catch (System.Exception ex)
@@ -55,16 +53,12 @@ namespace io.github.hatayama.uLoopMCP
 
         /// <summary>
         /// Updates session manager with server state.
-        /// On shutdown (isRunning=false), only the running flag is cleared — customPort is preserved
-        /// so recovery can rebind to the same port after domain reload or editor restart.
         /// </summary>
         /// <param name="isRunning">Whether the server is running</param>
-        /// <param name="port">Server port number (only written when isRunning=true)</param>
         /// <param name="projectRootPath">Project root for fast project validation during startup</param>
         /// <returns>Success indicator</returns>
         public ServiceResult<bool> UpdateSessionState(
             bool isRunning,
-            int port = -1,
             string projectRootPath = null)
         {
             if (!isRunning)
@@ -73,19 +67,14 @@ namespace io.github.hatayama.uLoopMCP
                 return ServiceResult<bool>.SuccessResult(true);
             }
 
-            if (port > 0 && !string.IsNullOrWhiteSpace(projectRootPath))
+            if (!string.IsNullOrWhiteSpace(projectRootPath))
             {
                 string serverSessionId = System.Guid.NewGuid().ToString("N");
-                McpEditorSettings.SetRunningServerSession(port, projectRootPath, serverSessionId);
+                McpEditorSettings.SetRunningServerSession(projectRootPath, serverSessionId);
                 return ServiceResult<bool>.SuccessResult(true);
             }
 
             McpEditorSettings.SetIsServerRunning(true);
-            if (port > 0)
-            {
-                McpEditorSettings.SetCustomPort(port);
-            }
-
             return ServiceResult<bool>.SuccessResult(true);
         }
     }

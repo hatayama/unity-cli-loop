@@ -11,11 +11,6 @@ namespace io.github.hatayama.uLoopMCP
         public bool Success { get; set; }
 
         /// <summary>
-        /// Actually used server port
-        /// </summary>
-        public int ServerPort { get; set; }
-
-        /// <summary>
         /// Whether the server started successfully
         /// </summary>
         public bool IsRunning { get; set; }

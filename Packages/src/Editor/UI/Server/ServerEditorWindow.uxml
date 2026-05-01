@@ -5,12 +5,6 @@
             <ui:VisualElement name="server-status-indicator" class="mcp-server-status__indicator" />
             <ui:Label name="status-value" text="Stopped" class="mcp-server-status__text mcp-server-status__text--stopped" />
             <ui:VisualElement class="mcp-server-status__spacer" />
-            <ui:Label text="Port:" class="mcp-server-status__port-label" />
-            <uie:IntegerField name="port-field" value="8080" class="mcp-server-status__port-field" />
-        </ui:VisualElement>
-
-        <ui:VisualElement name="port-warning-container" class="mcp-warning-container">
-            <ui:Label name="port-warning-label" class="mcp-warning-label" />
         </ui:VisualElement>
 
         <ui:VisualElement class="mcp-server-controls">

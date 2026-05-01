@@ -143,15 +143,6 @@ namespace io.github.hatayama.uLoopMCP
             if (isAfterCompile)
             {
                 McpEditorSettings.ClearAfterCompileFlag();
-
-                int savedPort = McpEditorSettings.GetCustomPort();
-                bool portNeedsUpdate = savedPort != _model.UI.CustomPort;
-
-                if (portNeedsUpdate)
-                {
-                    _model.UpdateCustomPort(savedPort);
-                }
-
                 return;
             }
 

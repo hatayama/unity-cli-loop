@@ -72,26 +72,12 @@ function suppressStdinEcho(): () => void {
 }
 
 export interface GlobalOptions {
-  port?: string;
   projectPath?: string;
 }
 
 interface SpinnerHandle {
   update(message: string): void;
   stop(): void;
-}
-
-function parseExplicitPort(portText?: string): number | undefined {
-  if (portText === undefined) {
-    return undefined;
-  }
-
-  const parsed = parseInt(portText, 10);
-  if (isNaN(parsed)) {
-    throw new Error(`Invalid port number: ${portText}`);
-  }
-
-  return parsed;
 }
 
 interface OutputSanitizerOptions {
@@ -171,7 +157,6 @@ interface PostCompileDynamicCodePrewarmDependencies {
 
 interface PostCompileDynamicCodePrewarmTarget {
   projectRoot?: string;
-  port?: number;
 }
 
 const defaultPostCompileDynamicCodePrewarmDependencies: PostCompileDynamicCodePrewarmDependencies =
@@ -223,6 +208,7 @@ function isRetryableError(error: unknown): boolean {
   return (
     message.includes('ECONNREFUSED') ||
     message.includes('EADDRNOTAVAIL') ||
+    message.includes('ENOENT') ||
     message === 'UNITY_NO_RESPONSE'
   );
 }
@@ -284,18 +270,13 @@ function isRetryableProjectRecoveryError(error: unknown): boolean {
   return isRetryableFastProjectValidationErrorMessage(error.message);
 }
 
-export async function resolveRecoveryPortOrKeepCurrent(
+export async function resolveRecoveryConnectionOrKeepCurrent(
   currentConnection: ResolvedUnityConnection,
-  explicitPort: number | undefined,
   projectPath: string | undefined,
   resolveUnityConnectionFn: typeof resolveUnityConnection = resolveUnityConnection,
 ): Promise<ResolvedUnityConnection> {
-  if (explicitPort !== undefined) {
-    return currentConnection;
-  }
-
   try {
-    return await resolveUnityConnectionFn(undefined, projectPath);
+    return await resolveUnityConnectionFn(projectPath);
   } catch {
     if (currentConnection.requestMetadata === null || currentConnection.projectRoot === null) {
       return currentConnection;
@@ -336,7 +317,7 @@ function isServerStarting(
 export function isSettingsReadError(error: unknown): boolean {
   return (
     error instanceof Error &&
-    error.message.startsWith('Could not read Unity server port from settings.')
+    error.message.startsWith('Could not read Unity server session from settings.')
   );
 }
 
@@ -379,33 +360,21 @@ export async function shouldPromoteToServerStartingError(
 
 export async function resolveUnityConnectionWithStartupDiagnosis(
   toolName: string,
-  explicitPort: number | undefined,
   projectPath: string | undefined,
   dependencies: ConnectionFailureDiagnosisDependencies = defaultConnectionFailureDiagnosisDependencies,
   resolveUnityConnectionFn: typeof resolveUnityConnection = resolveUnityConnection,
 ): Promise<ResolvedUnityConnection> {
   try {
-    return await resolveUnityConnectionFn(explicitPort, projectPath);
+    return await resolveUnityConnectionFn(projectPath);
   } catch (error) {
     if (!isRetryableProjectRecoveryError(error) && !isSettingsReadError(error)) {
       throw error;
     }
 
-    const shouldDiagnoseProjectState: boolean = explicitPort === undefined;
     const projectRoot =
-      shouldDiagnoseProjectState && projectPath !== undefined
-        ? validateProjectPath(projectPath)
-        : shouldDiagnoseProjectState
-          ? findUnityProjectRoot()
-          : null;
+      projectPath !== undefined ? validateProjectPath(projectPath) : findUnityProjectRoot();
     if (
-      await shouldPromoteToServerStartingError(
-        error,
-        toolName,
-        projectRoot,
-        shouldDiagnoseProjectState,
-        dependencies,
-      )
+      await shouldPromoteToServerStartingError(error, toolName, projectRoot, true, dependencies)
     ) {
       throw createServerStartingError(error);
     }
@@ -458,8 +427,8 @@ function createServerStartingError(cause: unknown): Error {
 }
 
 // Distinct from isRetryableError(): that function covers pre-connection failures
-// (ECONNREFUSED, EADDRNOTAVAIL) which cannot occur after dispatch.
-// This function covers post-dispatch TCP failures where Unity may have received
+// (for example ECONNREFUSED, EADDRNOTAVAIL, or ENOENT) which cannot occur after dispatch.
+// This function covers post-dispatch transport failures where Unity may have received
 // the request but the response was lost — file-based recovery is appropriate.
 export function isTransportDisconnectError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -605,18 +574,6 @@ function createPostCompileDynamicCodePrewarmArgs(
   target: PostCompileDynamicCodePrewarmTarget,
   code: string,
 ): string[] {
-  if (target.port !== undefined) {
-    return [
-      'execute-dynamic-code',
-      '--code',
-      code,
-      '--yield-to-foreground-requests',
-      'true',
-      '--port',
-      target.port.toString(),
-    ];
-  }
-
   if (target.projectRoot !== undefined) {
     return [
       'execute-dynamic-code',
@@ -629,7 +586,7 @@ function createPostCompileDynamicCodePrewarmArgs(
     ];
   }
 
-  throw new Error('Post-compile dynamic code prewarm requires a project path or port.');
+  throw new Error('Post-compile dynamic code prewarm requires a project path.');
 }
 
 function didPostCompileDynamicCodePrewarmSucceed(result: {
@@ -899,10 +856,6 @@ async function checkUnityBusyStateBeforeProjectResolution(
   toolName: string,
   globalOptions: GlobalOptions,
 ): Promise<void> {
-  if (globalOptions.port !== undefined) {
-    return;
-  }
-
   await checkUnityBusyState(toolName, globalOptions.projectPath);
 }
 
@@ -925,11 +878,9 @@ export async function executeToolCommand(
   globalOptions: GlobalOptions,
 ): Promise<void> {
   const commandStartedAt: number = Date.now();
-  const portNumber = parseExplicitPort(globalOptions.port);
   await checkUnityBusyStateBeforeProjectResolution(toolName, globalOptions);
   let connection = await resolveUnityConnectionWithStartupDiagnosis(
     toolName,
-    portNumber,
     globalOptions.projectPath,
   );
   const compileOptions = getCompileExecutionOptions(toolName, params);
@@ -976,7 +927,7 @@ export async function executeToolCommand(
       currentProjectRoot = projectRoot;
       currentShouldDiagnoseProjectState = shouldDiagnoseProjectState;
 
-      const client = new DirectUnityClient(connection.port);
+      const client = new DirectUnityClient(connection.endpoint);
       try {
         await client.connect();
 
@@ -1024,7 +975,7 @@ export async function executeToolCommand(
         // entire function — bypassing waitForCompileCompletion() recovery.
         if (requestDispatched && shouldWaitForDomainReload) {
           if (isTransportDisconnectError(error)) {
-            // Unity may have received the request before the TCP drop.
+            // Unity may have received the request before the connection dropped.
             // Break out of retry loop → proceed to file-based recovery below.
             spinner.update('Connection lost during compile. Waiting for result file...');
             break;
@@ -1042,9 +993,8 @@ export async function executeToolCommand(
         ) {
           spinner.update('Unity Editor is running, waiting for CLI Loop server to recover...');
           await sleep(RETRY_DELAY_MS);
-          connection = await resolveRecoveryPortOrKeepCurrent(
+          connection = await resolveRecoveryConnectionOrKeepCurrent(
             connection,
-            portNumber,
             globalOptions.projectPath,
           );
           continue;
@@ -1068,7 +1018,7 @@ export async function executeToolCommand(
       //  - immediateResult === undefined: no JSON-RPC response was received
       //  - !requestDispatched: no attempt ever successfully connected and called sendRequest()
       // If requestDispatched is true but immediateResult is undefined, the request was sent
-      // but the TCP connection dropped before the response arrived (domain reload scenario).
+      // but the connection dropped before the response arrived (domain reload scenario).
       // In that case, Unity may have already written the result file, so we proceed to
       // file-based polling recovery.
       if (immediateResult === undefined && !requestDispatched) {
@@ -1116,7 +1066,6 @@ export async function executeToolCommand(
         requestId: compileRequestId,
         timeoutMs: COMPILE_WAIT_TIMEOUT_MS,
         pollIntervalMs: COMPILE_WAIT_POLL_INTERVAL_MS,
-        unityPort: connection.port,
       });
 
       if (outcome === 'timed_out') {
@@ -1139,8 +1088,7 @@ export async function executeToolCommand(
               // would report a ready editor while the first execute-dynamic-code can still fail.
               spinner.update('Finalizing dynamic code warmup...');
               await prewarmDynamicCodeAfterCompile({
-                projectRoot: portNumber === undefined ? effectiveProjectRoot : undefined,
-                port: portNumber,
+                projectRoot: effectiveProjectRoot,
               });
             }
           }
@@ -1176,11 +1124,9 @@ export async function executeToolCommand(
 }
 
 export async function listAvailableTools(globalOptions: GlobalOptions): Promise<void> {
-  const portNumber = parseExplicitPort(globalOptions.port);
   await checkUnityBusyStateBeforeProjectResolution('get-tool-details', globalOptions);
   let connection = await resolveUnityConnectionWithStartupDiagnosis(
     'get-tool-details',
-    portNumber,
     globalOptions.projectPath,
   );
 
@@ -1209,7 +1155,7 @@ export async function listAvailableTools(globalOptions: GlobalOptions): Promise<
       currentProjectRoot = projectRoot;
       currentShouldDiagnoseProjectState = shouldDiagnoseProjectState;
 
-      const client = new DirectUnityClient(connection.port);
+      const client = new DirectUnityClient(connection.endpoint);
       try {
         await client.connect();
 
@@ -1245,9 +1191,8 @@ export async function listAvailableTools(globalOptions: GlobalOptions): Promise<
         ) {
           spinner.update('Unity Editor is running, waiting for CLI Loop server to recover...');
           await sleep(RETRY_DELAY_MS);
-          connection = await resolveRecoveryPortOrKeepCurrent(
+          connection = await resolveRecoveryConnectionOrKeepCurrent(
             connection,
-            portNumber,
             globalOptions.projectPath,
           );
           continue;
@@ -1307,11 +1252,9 @@ function convertProperties(
 }
 
 export async function syncTools(globalOptions: GlobalOptions): Promise<void> {
-  const portNumber = parseExplicitPort(globalOptions.port);
   await checkUnityBusyStateBeforeProjectResolution('sync-tools', globalOptions);
   let connection = await resolveUnityConnectionWithStartupDiagnosis(
     'sync-tools',
-    portNumber,
     globalOptions.projectPath,
   );
 
@@ -1340,7 +1283,7 @@ export async function syncTools(globalOptions: GlobalOptions): Promise<void> {
       currentProjectRoot = projectRoot;
       currentShouldDiagnoseProjectState = shouldDiagnoseProjectState;
 
-      const client = new DirectUnityClient(connection.port);
+      const client = new DirectUnityClient(connection.endpoint);
       try {
         await client.connect();
 
@@ -1395,9 +1338,8 @@ export async function syncTools(globalOptions: GlobalOptions): Promise<void> {
         ) {
           spinner.update('Unity Editor is running, waiting for CLI Loop server to recover...');
           await sleep(RETRY_DELAY_MS);
-          connection = await resolveRecoveryPortOrKeepCurrent(
+          connection = await resolveRecoveryConnectionOrKeepCurrent(
             connection,
-            portNumber,
             globalOptions.projectPath,
           );
           continue;

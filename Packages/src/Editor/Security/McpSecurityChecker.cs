@@ -13,7 +13,7 @@ namespace io.github.hatayama.uLoopMCP
     /// - ULoopSettings: Persistent security settings storage (.uloop/settings.permissions.json)
     /// - McpSecurityException: Custom exception for security violations
     /// - UnityToolRegistry: Tool registration and execution
-    /// - McpBridgeServer: TCP bridge that executes tools
+    /// - McpBridgeServer: IPC bridge that executes tools
     /// </summary>
     public static class McpSecurityChecker
     {

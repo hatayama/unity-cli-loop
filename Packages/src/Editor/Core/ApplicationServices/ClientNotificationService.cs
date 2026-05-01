@@ -102,13 +102,12 @@ namespace io.github.hatayama.uLoopMCP
         /// Log before server stop
         /// </summary>
         /// <param name="correlationId">Tracking ID for related operations</param>
-        /// <param name="port">Port number of server to stop</param>
-        public static void LogServerStoppingBeforeDomainReload(string correlationId, int port)
+        public static void LogServerStoppingBeforeDomainReload(string correlationId)
         {
             VibeLogger.LogInfo(
                 "domain_reload_server_stopping",
                 "Stopping Unity CLI bridge before domain reload",
-                new { port = port },
+                new { transport = "project_ipc" },
                 correlationId
             );
         }
@@ -122,7 +121,7 @@ namespace io.github.hatayama.uLoopMCP
             VibeLogger.LogInfo(
                 "domain_reload_server_stopped",
                 "Unity CLI bridge stopped successfully",
-                new { tcp_port_released = true },
+                new { transport = "project_ipc" },
                 correlationId
             );
         }
@@ -132,20 +131,19 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         /// <param name="correlationId">Tracking ID for related operations</param>
         /// <param name="ex">Exception that occurred</param>
-        /// <param name="port">Port number attempted to stop</param>
-        public static void LogServerShutdownError(string correlationId, System.Exception ex, int port)
+        public static void LogServerShutdownError(string correlationId, System.Exception ex)
         {
             VibeLogger.LogException(
                 "domain_reload_server_shutdown_error",
                 ex,
                 new
                 {
-                    port = port,
+                    transport = "project_ipc",
                     server_was_running = true
                 },
                 correlationId,
-                "Critical error during server shutdown before assembly reload. This may cause port conflicts on restart.",
-                "Investigate server shutdown process and ensure proper TCP port release."
+                "Critical error during server shutdown before assembly reload.",
+                "Investigate server shutdown process and project IPC recovery."
             );
         }
     }

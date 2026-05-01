@@ -3,6 +3,7 @@ import {
   waitForDynamicCodeReadyAfterLaunch,
   waitForLaunchReadyAfterLaunch,
 } from '../launch-readiness.js';
+import { createProjectIpcEndpoint } from '../ipc-endpoint.js';
 import { type ResolvedUnityConnection } from '../port-resolver.js';
 
 interface MockReadinessResponse {
@@ -48,11 +49,11 @@ function createMockClient(
 }
 
 function createConnection(
-  port: number,
+  endpointId: number,
   overrides?: Partial<ResolvedUnityConnection>,
 ): ResolvedUnityConnection {
   return {
-    port,
+    endpoint: createProjectIpcEndpoint(`/project-${endpointId}`),
     projectRoot: '/project',
     requestMetadata: {
       expectedProjectRoot: '/project',

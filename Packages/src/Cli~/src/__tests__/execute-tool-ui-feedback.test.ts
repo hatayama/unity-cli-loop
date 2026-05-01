@@ -1,5 +1,5 @@
 interface MockResolvedUnityConnection {
-  port: number;
+  endpoint: { kind: 'unix-socket'; path: string };
   projectRoot: string | null;
   requestMetadata: null;
   shouldValidateProject: boolean;
@@ -12,7 +12,7 @@ interface MockSpinner {
 
 const mockResolveUnityConnection = jest.fn<
   Promise<MockResolvedUnityConnection>,
-  [number | undefined, string | undefined]
+  [string | undefined]
 >();
 const mockValidateProjectPath = jest.fn<string, [string]>();
 const mockExistsSync = jest.fn<boolean, [string]>();
@@ -21,7 +21,7 @@ const mockValidateConnectedProject = jest.fn();
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
 
 class MockDirectUnityClient {
-  public constructor(private readonly _port: number) {}
+  public constructor(_endpoint: unknown) {}
 
   public connect(): Promise<void> {
     return Promise.resolve();
@@ -39,10 +39,8 @@ class MockDirectUnityClient {
 }
 
 jest.mock('../port-resolver.js', () => ({
-  resolveUnityConnection: (
-    explicitPort?: number,
-    projectPath?: string,
-  ): Promise<MockResolvedUnityConnection> => mockResolveUnityConnection(explicitPort, projectPath),
+  resolveUnityConnection: (projectPath?: string): Promise<MockResolvedUnityConnection> =>
+    mockResolveUnityConnection(projectPath),
   validateProjectPath: (projectPath: string): string => mockValidateProjectPath(projectPath),
   UnityNotRunningError: class UnityNotRunningError extends Error {},
   UnityServerNotRunningError: class UnityServerNotRunningError extends Error {},
@@ -91,7 +89,7 @@ describe('executeToolCommand interactive feedback', () => {
   beforeEach(() => {
     mockResolveUnityConnection.mockReset();
     mockResolveUnityConnection.mockResolvedValue({
-      port: 8711,
+      endpoint: { kind: 'unix-socket', path: '/tmp/uloop-test.sock' },
       projectRoot: '/project',
       requestMetadata: null,
       shouldValidateProject: true,

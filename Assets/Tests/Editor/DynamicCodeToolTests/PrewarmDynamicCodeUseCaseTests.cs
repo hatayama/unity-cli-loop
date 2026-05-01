@@ -167,14 +167,14 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
-        public async Task RequestAsync_WhenLoopbackWarmupTimesOut_ShouldRetryWithinTheSameRequest()
+        public async Task RequestAsync_WhenBridgeWarmupTimesOut_ShouldRetryWithinTheSameRequest()
         {
             FakePrewarmRuntime runtime = new FakePrewarmRuntime(true);
             FakeDynamicCodeAutoPrewarmExecutor executor = new FakeDynamicCodeAutoPrewarmExecutor(
                 new DynamicCodeAutoPrewarmResult
                 {
                     Success = false,
-                    ErrorMessage = TcpDynamicCodeAutoPrewarmExecutor.TimeoutErrorMessage
+                    ErrorMessage = DynamicCodeAutoPrewarmExecutor.TimeoutErrorMessage
                 },
                 new DynamicCodeAutoPrewarmResult { Success = true },
                 new DynamicCodeAutoPrewarmResult { Success = true },
@@ -189,14 +189,14 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
-        public async Task RequestAsync_WhenLoopbackTransportFails_ShouldRetryWithinTheSameRequest()
+        public async Task RequestAsync_WhenBridgeTransportFails_ShouldRetryWithinTheSameRequest()
         {
             FakePrewarmRuntime runtime = new FakePrewarmRuntime(true);
             FakeDynamicCodeAutoPrewarmExecutor executor = new FakeDynamicCodeAutoPrewarmExecutor(
                 new DynamicCodeAutoPrewarmResult
                 {
                     Success = false,
-                    ErrorMessage = TcpDynamicCodeAutoPrewarmExecutor.TransportErrorMessage
+                    ErrorMessage = DynamicCodeAutoPrewarmExecutor.TransportErrorMessage
                 },
                 new DynamicCodeAutoPrewarmResult { Success = true },
                 new DynamicCodeAutoPrewarmResult { Success = true },
@@ -218,7 +218,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
                 new DynamicCodeAutoPrewarmResult
                 {
                     Success = false,
-                    ErrorMessage = TcpDynamicCodeAutoPrewarmExecutor.TransportErrorMessage
+                    ErrorMessage = DynamicCodeAutoPrewarmExecutor.TransportErrorMessage
                 },
                 new DynamicCodeAutoPrewarmResult
                 {

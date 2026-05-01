@@ -7,7 +7,7 @@ namespace io.github.hatayama.uLoopMCP
     /// <summary>
     /// Application service responsible for session recovery processing
     /// Single responsibility: Server session recovery and retry control
-    /// Related classes: McpSessionManager, McpBridgeServer, NetworkUtility
+    /// Related classes: McpSessionManager, McpBridgeServer
     /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public static class SessionRecoveryService
@@ -21,7 +21,6 @@ namespace io.github.hatayama.uLoopMCP
         public static ValidationResult RestoreServerStateIfNeeded()
         {
             bool wasRunning = McpEditorSettings.GetIsServerRunning();
-            int savedPort = McpEditorSettings.GetCustomPort();
             bool isAfterCompile = McpEditorSettings.GetIsAfterCompile();
 
             // If server is already running
@@ -52,7 +51,7 @@ namespace io.github.hatayama.uLoopMCP
             // If server was running and is currently stopped, delegate to centralized controller logic
             if (wasRunning && (currentServer == null || !currentServer.IsRunning))
             {
-                _ = McpServerController.StartRecoveryIfNeededAsync(savedPort, isAfterCompile, CancellationToken.None).ContinueWith(task =>
+                _ = McpServerController.StartRecoveryIfNeededAsync(isAfterCompile, CancellationToken.None).ContinueWith(task =>
                 {
                     if (task.IsFaulted)
                     {
@@ -68,10 +67,9 @@ namespace io.github.hatayama.uLoopMCP
         /// <summary>
         /// Attempt server recovery with retry mechanism
         /// </summary>
-        /// <param name="port">Port number to recover</param>
         /// <param name="retryCount">Current retry count</param>
         /// <returns>Recovery process result</returns>
-        public static ValidationResult TryRestoreServerWithRetry(int port, int retryCount)
+        public static ValidationResult TryRestoreServerWithRetry(int retryCount)
         {
             try
             {
@@ -82,17 +80,13 @@ namespace io.github.hatayama.uLoopMCP
                     currentServer.Dispose();
                 }
 
-                // Find available port
-                int availablePort = NetworkUtility.FindAvailablePort(port);
-
-                // Start new server
-                var newServer = new McpBridgeServer();
-                newServer.StartServer(availablePort);
+                McpBridgeServer newServer = new McpBridgeServer();
+                newServer.StartServer();
+                McpServerController.RegisterRecoveredServer(newServer);
 
                 // Update session state
                 McpEditorSettings.UpdateSettings(s => s with
                 {
-                    customPort = availablePort,
                     isReconnecting = false
                 });
 
@@ -103,7 +97,7 @@ namespace io.github.hatayama.uLoopMCP
                 if (retryCount < MAX_RETRIES)
                 {
                     // Execute retry
-                    _ = RetryServerRestoreAsync(port, retryCount).ContinueWith(task =>
+                    _ = RetryServerRestoreAsync(retryCount).ContinueWith(task =>
                     {
                         if (task.IsFaulted)
                         {
@@ -125,12 +119,11 @@ namespace io.github.hatayama.uLoopMCP
         /// <summary>
         /// Retry server recovery (asynchronous)
         /// </summary>
-        /// <param name="port">Port number to recover</param>
         /// <param name="retryCount">Current retry count</param>
-        private static async Task RetryServerRestoreAsync(int port, int retryCount)
+        private static async Task RetryServerRestoreAsync(int retryCount)
         {
             await EditorDelay.DelayFrame(5);
-            _ = McpServerController.StartRecoveryIfNeededAsync(port, false, CancellationToken.None).ContinueWith(task =>
+            _ = McpServerController.StartRecoveryIfNeededAsync(false, CancellationToken.None).ContinueWith(task =>
             {
                 if (task.IsFaulted)
                 {

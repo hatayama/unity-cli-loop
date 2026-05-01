@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Security;
 
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -23,7 +25,6 @@ namespace io.github.hatayama.uLoopMCP
     [Serializable]
     public record McpEditorSettingsData
     {
-        public int customPort = McpServerConfig.DEFAULT_PORT;
         public string projectRootPath = "";
         public string serverSessionId = "";
         public bool showDeveloperTools = false;
@@ -62,6 +63,14 @@ namespace io.github.hatayama.uLoopMCP
     public static class McpEditorSettings
     {
         private static string SettingsFilePath => Path.Combine(McpConstants.USER_SETTINGS_FOLDER, McpConstants.SETTINGS_FILE_NAME);
+        private static readonly string[] LegacyPortSettingKeys =
+        {
+            "customPort",
+            "serverPort",
+            "port",
+            "Port",
+            "serverTransportKind"
+        };
 
         private static McpEditorSettingsData _cachedSettings;
 
@@ -89,6 +98,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             AtomicFileWriter.RecoverSidecarFiles(SettingsFilePath);
+            RemoveLegacyPortFieldsIfNeeded(SettingsFilePath);
         }
 
         /// <summary>
@@ -150,14 +160,6 @@ namespace io.github.hatayama.uLoopMCP
             SaveSettings(updated);
         }
 
-        /// <summary>
-        /// Gets the custom port number.
-        /// </summary>
-        public static int GetCustomPort()
-        {
-            return GetSettings().customPort;
-        }
-
         public static string GetProjectRootPath()
         {
             return GetSettings().projectRootPath ?? string.Empty;
@@ -168,19 +170,8 @@ namespace io.github.hatayama.uLoopMCP
             return GetSettings().serverSessionId ?? string.Empty;
         }
 
-        /// <summary>
-        /// Saves the custom port number.
-        /// </summary>
-        public static void SetCustomPort(int port)
+        public static void SetRunningServerSession(string projectRootPath, string serverSessionId)
         {
-            McpEditorSettingsData settings = GetSettings();
-            McpEditorSettingsData updatedSettings = settings with { customPort = port };
-            SaveSettings(updatedSettings);
-        }
-
-        public static void SetRunningServerSession(int port, string projectRootPath, string serverSessionId)
-        {
-            Debug.Assert(port > 0, "port must be positive");
             Debug.Assert(!string.IsNullOrWhiteSpace(projectRootPath), "projectRootPath must not be empty");
             Debug.Assert(!string.IsNullOrWhiteSpace(serverSessionId), "serverSessionId must not be empty");
 
@@ -188,7 +179,6 @@ namespace io.github.hatayama.uLoopMCP
             UpdateSettings(settings => settings with
             {
                 isServerRunning = true,
-                customPort = port,
                 projectRootPath = normalizedProjectRootPath,
                 serverSessionId = serverSessionId
             });
@@ -785,8 +775,62 @@ namespace io.github.hatayama.uLoopMCP
 
         private static string NormalizeProjectRootPath(string projectRootPath)
         {
-            string fullPath = Path.GetFullPath(projectRootPath);
-            return fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return BridgeTransportEndpoint.CanonicalizeProjectRoot(projectRootPath);
+        }
+
+        private static void RemoveLegacyPortFieldsIfNeeded(string settingsPath)
+        {
+            if (!File.Exists(settingsPath))
+            {
+                return;
+            }
+
+            FileInfo fileInfo = new FileInfo(settingsPath);
+            if (fileInfo.Length > McpConstants.MAX_SETTINGS_SIZE_BYTES)
+            {
+                throw new SecurityException("Settings file exceeds size limit");
+            }
+
+            using StreamReader reader = File.OpenText(settingsPath);
+            JToken settingsToken = JToken.ReadFrom(new JsonTextReader(reader));
+            bool removed = RemoveLegacyPortFields(settingsToken);
+            if (!removed)
+            {
+                return;
+            }
+
+            AtomicFileWriter.Write(settingsPath, settingsToken.ToString(Formatting.Indented));
+        }
+
+        private static bool RemoveLegacyPortFields(JToken token)
+        {
+            Debug.Assert(token != null, "token must not be null");
+
+            bool removed = false;
+            if (token is JObject jsonObject)
+            {
+                foreach (string legacyKey in LegacyPortSettingKeys)
+                {
+                    removed |= jsonObject.Remove(legacyKey);
+                }
+
+                foreach (JProperty property in jsonObject.Properties())
+                {
+                    removed |= RemoveLegacyPortFields(property.Value);
+                }
+
+                return removed;
+            }
+
+            if (token is JArray jsonArray)
+            {
+                foreach (JToken item in jsonArray)
+                {
+                    removed |= RemoveLegacyPortFields(item);
+                }
+            }
+
+            return removed;
         }
 
         /// <summary>

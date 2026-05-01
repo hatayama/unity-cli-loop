@@ -38,27 +38,18 @@ describe('tryParseFastExecuteDynamicCodeCommand', () => {
       },
       globalOptions: {
         projectPath: '/project',
-        port: undefined,
       },
     });
   });
 
-  it('supports inline values and unescapes shell-escaped exclamation marks', () => {
+  it('rejects inline port values so TCP cannot bypass project IPC', () => {
     const command = tryParseFastExecuteDynamicCodeCommand([
       'execute-dynamic-code',
       '--code=return \\!flag;',
       '--port=8901',
     ]);
 
-    expect(command).toEqual({
-      params: {
-        Code: 'return !flag;',
-      },
-      globalOptions: {
-        projectPath: undefined,
-        port: '8901',
-      },
-    });
+    expect(command).toBeNull();
   });
 
   it('falls back when help is requested', () => {
@@ -91,7 +82,7 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
     );
 
     const handled = await tryHandleFastExecuteDynamicCodeCommand(
-      ['execute-dynamic-code', '--code', 'return "fast";', '--port', '8901'],
+      ['execute-dynamic-code', '--code', 'return "fast";', '--project-path', '/project'],
       {
         executeToolCommandFn,
         isToolEnabledFn: jest.fn().mockReturnValue(true),
@@ -109,7 +100,7 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
     expect(executeToolCommandFn).toHaveBeenCalledWith(
       'execute-dynamic-code',
       { Code: 'return "fast";' },
-      { projectPath: undefined, port: '8901' },
+      { projectPath: '/project' },
     );
   });
 
@@ -137,7 +128,7 @@ describe('tryHandleFastExecuteDynamicCodeCommand', () => {
     expect(executeToolCommandFn).toHaveBeenCalledWith(
       'execute-dynamic-code',
       { Code: 'return 1;' },
-      { projectPath: '/resolved-project', port: undefined },
+      { projectPath: '/resolved-project' },
     );
   });
 

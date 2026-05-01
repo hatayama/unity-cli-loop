@@ -25,7 +25,6 @@ namespace io.github.hatayama.uLoopMCP
 
     public record UIState
     {
-        public int CustomPort { get; }
         public bool ShowConnectedTools { get; }
         public Vector2 MainScrollPosition { get; }
         public bool ShowSecuritySettings { get; }
@@ -33,14 +32,12 @@ namespace io.github.hatayama.uLoopMCP
         public bool ShowConfiguration { get; }
 
         public UIState(
-            int customPort = McpServerConfig.DEFAULT_PORT,
             bool showConnectedTools = true,
             Vector2 mainScrollPosition = default,
             bool showSecuritySettings = true,
             bool showToolSettings = true,
             bool showConfiguration = true)
         {
-            CustomPort = customPort;
             ShowConnectedTools = showConnectedTools;
             MainScrollPosition = mainScrollPosition;
             ShowSecuritySettings = showSecuritySettings;
@@ -58,7 +55,6 @@ namespace io.github.hatayama.uLoopMCP
         public bool NeedsRepaint { get; }
         public bool IsPostCompileMode { get; }
         public bool LastServerRunning { get; }
-        public int LastServerPort { get; }
         public int LastConnectedClientsCount { get; }
         public string LastClientsInfoHash { get; }
 
@@ -66,14 +62,12 @@ namespace io.github.hatayama.uLoopMCP
             bool needsRepaint = false,
             bool isPostCompileMode = false,
             bool lastServerRunning = false,
-            int lastServerPort = 0,
             int lastConnectedClientsCount = 0,
             string lastClientsInfoHash = "")
         {
             NeedsRepaint = needsRepaint;
             IsPostCompileMode = isPostCompileMode;
             LastServerRunning = lastServerRunning;
-            LastServerPort = lastServerPort;
             LastConnectedClientsCount = lastConnectedClientsCount;
             LastClientsInfoHash = lastClientsInfoHash;
         }

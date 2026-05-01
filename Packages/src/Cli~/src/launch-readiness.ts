@@ -7,6 +7,7 @@ import {
   resolveUnityConnection,
   UnityNotRunningError,
 } from './port-resolver.js';
+import type { UnityConnectionEndpoint } from './ipc-endpoint.js';
 import { ProjectMismatchError, validateConnectedProject } from './project-validator.js';
 import { isRetryableFastProjectValidationErrorMessage } from './request-metadata.js';
 
@@ -54,7 +55,7 @@ interface LaunchIdentityPingResponse {
 
 interface DynamicCodeLaunchReadinessDependencies {
   resolveUnityConnectionFn: typeof resolveUnityConnection;
-  createClient: (port: number) => DirectUnityClient;
+  createClient: (endpoint: UnityConnectionEndpoint) => DirectUnityClient;
   sleepFn: typeof sleep;
   nowFn: () => number;
   isProjectBusyFn?: (projectPath: string) => boolean;
@@ -62,7 +63,7 @@ interface DynamicCodeLaunchReadinessDependencies {
 
 const defaultDependencies: DynamicCodeLaunchReadinessDependencies = {
   resolveUnityConnectionFn: resolveUnityConnection,
-  createClient: (port: number) => new DirectUnityClient(port),
+  createClient: (endpoint: UnityConnectionEndpoint) => new DirectUnityClient(endpoint),
   sleepFn: sleep,
   nowFn: () => Date.now(),
   isProjectBusyFn: isProjectBusyByLockFiles,
@@ -147,7 +148,7 @@ function isRetryableLaunchReadinessError(error: unknown): boolean {
   const message: string = error.message;
   return (
     isRetryableFastProjectValidationErrorMessage(message) ||
-    message.includes('Could not read Unity server port from settings') ||
+    message.includes('Could not read Unity server session from settings') ||
     message.includes('ECONNREFUSED') ||
     message.includes('EADDRNOTAVAIL') ||
     message === 'UNITY_NO_RESPONSE' ||
@@ -250,10 +251,8 @@ export async function waitForDynamicCodeReadyAfterLaunch(
     let client: DirectUnityClient | null = null;
 
     try {
-      const connection: ResolvedUnityConnection = await dependencies.resolveUnityConnectionFn(
-        undefined,
-        projectPath,
-      );
+      const connection: ResolvedUnityConnection =
+        await dependencies.resolveUnityConnectionFn(projectPath);
       if (!hasFastSessionMetadata(connection)) {
         if (probeSessionId !== null) {
           currentProbeStage = 0;
@@ -269,7 +268,7 @@ export async function waitForDynamicCodeReadyAfterLaunch(
         probeSessionId = resolvedSessionId;
       }
 
-      client = dependencies.createClient(connection.port);
+      client = dependencies.createClient(connection.endpoint);
       await client.connect();
 
       if (!hasFastSessionMetadata(connection) && connection.projectRoot !== null) {
@@ -367,11 +366,9 @@ export async function waitForLaunchReadyAfterLaunch(
     let client: DirectUnityClient | null = null;
 
     try {
-      const connection: ResolvedUnityConnection = await dependencies.resolveUnityConnectionFn(
-        undefined,
-        projectPath,
-      );
-      client = dependencies.createClient(connection.port);
+      const connection: ResolvedUnityConnection =
+        await dependencies.resolveUnityConnectionFn(projectPath);
+      client = dependencies.createClient(connection.endpoint);
       await client.connect();
       await validateLaunchConnectionIdentity(client, connection);
 

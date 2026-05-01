@@ -9,13 +9,13 @@ jest.mock('../port-resolver.js', () => ({
   resolveUnityConnection: (
     ...args: unknown[]
   ): Promise<{
-    port: number;
+    endpoint: { kind: 'unix-socket'; path: string };
     projectRoot: string | null;
     requestMetadata: null;
     shouldValidateProject: boolean;
   }> =>
     mockResolveUnityConnection(...args) as Promise<{
-      port: number;
+      endpoint: { kind: 'unix-socket'; path: string };
       projectRoot: string | null;
       requestMetadata: null;
       shouldValidateProject: boolean;
@@ -62,7 +62,7 @@ describe('busy state detection order', () => {
     mockFindRunningUnityProcessForProject.mockResolvedValue({ pid: 1234 });
   });
 
-  it('checks busy state before resolving port for tool execution', async () => {
+  it('checks busy state before resolving connection for tool execution', async () => {
     await expect(executeToolCommand('get-logs', {}, { projectPath: '/project' })).rejects.toThrow(
       'UNITY_COMPILING',
     );
@@ -70,7 +70,7 @@ describe('busy state detection order', () => {
     expect(mockResolveUnityConnection).not.toHaveBeenCalled();
   });
 
-  it('checks busy state before resolving port for list', async () => {
+  it('checks busy state before resolving connection for list', async () => {
     await expect(listAvailableTools({ projectPath: '/project' })).rejects.toThrow(
       'UNITY_COMPILING',
     );
@@ -78,13 +78,13 @@ describe('busy state detection order', () => {
     expect(mockResolveUnityConnection).not.toHaveBeenCalled();
   });
 
-  it('checks busy state before resolving port for sync', async () => {
+  it('checks busy state before resolving connection for sync', async () => {
     await expect(syncTools({ projectPath: '/project' })).rejects.toThrow('UNITY_COMPILING');
 
     expect(mockResolveUnityConnection).not.toHaveBeenCalled();
   });
 
-  it('treats a fresh serverstarting.lock as busy for execute-dynamic-code before resolving the port', async () => {
+  it('treats a fresh serverstarting.lock as busy for execute-dynamic-code before resolving the connection', async () => {
     mockExistsSync.mockImplementation((path: string) => path.endsWith('serverstarting.lock'));
     mockResolveUnityConnection.mockRejectedValue(new Error('RESOLVE_SHOULD_NOT_RUN'));
 
@@ -99,7 +99,7 @@ describe('busy state detection order', () => {
     mockExistsSync.mockImplementation((path: string) => path.endsWith('serverstarting.lock'));
     mockResolveUnityConnection.mockRejectedValue(
       new Error(
-        'Could not read Unity server port from settings.\n\n  Settings file: /project/UserSettings/UnityMcpSettings.json',
+        'Could not read Unity server session from settings.\n\n  Settings file: /project/UserSettings/UnityMcpSettings.json',
       ),
     );
 
@@ -114,7 +114,7 @@ describe('busy state detection order', () => {
     mockExistsSync.mockImplementation((path: string) => path.endsWith('serverstarting.lock'));
     mockResolveUnityConnection.mockRejectedValue(
       new Error(
-        'Could not read Unity server port from settings.\n\n  Settings file: /project/UserSettings/UnityMcpSettings.json',
+        'Could not read Unity server session from settings.\n\n  Settings file: /project/UserSettings/UnityMcpSettings.json',
       ),
     );
 
@@ -129,7 +129,7 @@ describe('busy state detection order', () => {
     mockExistsSync.mockImplementation((path: string) => path.endsWith('serverstarting.lock'));
     mockResolveUnityConnection.mockRejectedValue(
       new Error(
-        'Could not read Unity server port from settings.\n\n  Settings file: /project/UserSettings/UnityMcpSettings.json',
+        'Could not read Unity server session from settings.\n\n  Settings file: /project/UserSettings/UnityMcpSettings.json',
       ),
     );
 
@@ -164,67 +164,5 @@ describe('busy state detection order', () => {
     }
 
     expect(mockResolveUnityConnection).toHaveBeenCalled();
-  });
-
-  it('skips busy state checks when an explicit port is provided for tool execution', async () => {
-    mockResolveUnityConnection.mockRejectedValue(new Error('EXPLICIT_PORT_RESOLVED'));
-
-    await expect(executeToolCommand('get-logs', {}, { port: '8711' })).rejects.toThrow(
-      'EXPLICIT_PORT_RESOLVED',
-    );
-
-    expect(mockResolveUnityConnection).toHaveBeenCalledWith(8711, undefined);
-  });
-
-  it('preserves usage errors before busy state checks for tool execution', async () => {
-    mockResolveUnityConnection.mockRejectedValue(
-      new Error('Cannot specify both --port and --project-path. Use one or the other.'),
-    );
-
-    await expect(
-      executeToolCommand('get-logs', {}, { port: '8711', projectPath: '/project' }),
-    ).rejects.toThrow('Cannot specify both --port and --project-path. Use one or the other.');
-
-    expect(mockResolveUnityConnection).toHaveBeenCalledWith(8711, '/project');
-  });
-
-  it('skips busy state checks when an explicit port is provided for list', async () => {
-    mockResolveUnityConnection.mockRejectedValue(new Error('EXPLICIT_PORT_RESOLVED'));
-
-    await expect(listAvailableTools({ port: '8711' })).rejects.toThrow('EXPLICIT_PORT_RESOLVED');
-
-    expect(mockResolveUnityConnection).toHaveBeenCalledWith(8711, undefined);
-  });
-
-  it('preserves usage errors before busy state checks for list', async () => {
-    mockResolveUnityConnection.mockRejectedValue(
-      new Error('Cannot specify both --port and --project-path. Use one or the other.'),
-    );
-
-    await expect(listAvailableTools({ port: '8711', projectPath: '/project' })).rejects.toThrow(
-      'Cannot specify both --port and --project-path. Use one or the other.',
-    );
-
-    expect(mockResolveUnityConnection).toHaveBeenCalledWith(8711, '/project');
-  });
-
-  it('skips busy state checks when an explicit port is provided for sync', async () => {
-    mockResolveUnityConnection.mockRejectedValue(new Error('EXPLICIT_PORT_RESOLVED'));
-
-    await expect(syncTools({ port: '8711' })).rejects.toThrow('EXPLICIT_PORT_RESOLVED');
-
-    expect(mockResolveUnityConnection).toHaveBeenCalledWith(8711, undefined);
-  });
-
-  it('preserves usage errors before busy state checks for sync', async () => {
-    mockResolveUnityConnection.mockRejectedValue(
-      new Error('Cannot specify both --port and --project-path. Use one or the other.'),
-    );
-
-    await expect(syncTools({ port: '8711', projectPath: '/project' })).rejects.toThrow(
-      'Cannot specify both --port and --project-path. Use one or the other.',
-    );
-
-    expect(mockResolveUnityConnection).toHaveBeenCalledWith(8711, '/project');
   });
 });

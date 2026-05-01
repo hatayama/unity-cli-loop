@@ -6,16 +6,6 @@ namespace io.github.hatayama.uLoopMCP
     public static class McpServerConfig
     {
         /// <summary>
-        /// Default port number.
-        /// </summary>
-        public const int DEFAULT_PORT = 8700;
-
-        /// <summary>
-        /// Buffer size for TCP/IP communication.
-        /// </summary>
-        public const int BUFFER_SIZE = 4096;
-
-        /// <summary>
         /// Wait timeout in seconds when stopping the server.
         /// </summary>
         public const int SHUTDOWN_TIMEOUT_SECONDS = 5;
@@ -29,16 +19,6 @@ namespace io.github.hatayama.uLoopMCP
         /// Internal error code.
         /// </summary>
         public const int INTERNAL_ERROR_CODE = -32603;
-
-        /// <summary>
-        /// Minimum port number.
-        /// </summary>
-        public const int MIN_PORT_NUMBER = 1024;
-
-        /// <summary>
-        /// Maximum port number.
-        /// </summary>
-        public const int MAX_PORT_NUMBER = 65535;
 
         /// <summary>
         /// Unknown client endpoint.

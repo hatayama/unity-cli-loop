@@ -27,7 +27,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         {
             McpEditorSettings.SetConnectedLLMTools(new[]
             {
-                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 3, 24, 22, 19, 27))
+                new ConnectedLLMToolData("claude-code", "/tmp/uloop/test.sock#1", new System.DateTime(2026, 3, 24, 22, 19, 27))
             });
 
             ConnectedToolsMonitoringService.ReplaceConnectedToolsForTests(System.Array.Empty<ConnectedClient>());
@@ -41,8 +41,8 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         {
             ConnectedClient[] liveClients =
             {
-                new ConnectedClient("127.0.0.1:60001", null, 60001, "claude-code"),
-                new ConnectedClient("127.0.0.1:60002", null, 60002, McpConstants.UNKNOWN_CLIENT_NAME)
+                new ConnectedClient("/tmp/uloop/test.sock#1", null, "claude-code"),
+                new ConnectedClient("/tmp/uloop/test.sock#2", null, McpConstants.UNKNOWN_CLIENT_NAME)
             };
 
             ConnectedToolsMonitoringService.ReplaceConnectedToolsForTests(liveClients);
@@ -52,11 +52,11 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
 
             Assert.That(displayedTools, Has.Length.EqualTo(1));
             Assert.That(displayedTools[0].ClientName, Is.EqualTo("claude-code"));
-            Assert.That(displayedTools[0].Endpoint, Is.EqualTo("127.0.0.1:60001"));
+            Assert.That(displayedTools[0].Endpoint, Is.EqualTo("/tmp/uloop/test.sock#1"));
 
             Assert.That(persistedTools, Has.Length.EqualTo(1));
             Assert.That(persistedTools[0].Name, Is.EqualTo("claude-code"));
-            Assert.That(persistedTools[0].Endpoint, Is.EqualTo("127.0.0.1:60001"));
+            Assert.That(persistedTools[0].Endpoint, Is.EqualTo("/tmp/uloop/test.sock#1"));
         }
 
         [Test]
@@ -64,12 +64,12 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         {
             McpEditorSettings.SetConnectedLLMTools(new[]
             {
-                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 3, 24, 22, 19, 27))
+                new ConnectedLLMToolData("claude-code", "/tmp/uloop/test.sock#1", new System.DateTime(2026, 3, 24, 22, 19, 27))
             });
 
             ConnectedClient[] liveClients =
             {
-                new ConnectedClient("127.0.0.1:60003", null, 60003, "cursor")
+                new ConnectedClient("/tmp/uloop/test.sock#3", null, "cursor")
             };
 
             ConnectedToolsMonitoringService.ReplaceConnectedToolsForTests(liveClients);
@@ -86,7 +86,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         {
             McpEditorSettings.SetConnectedLLMTools(new[]
             {
-                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 3, 24, 22, 19, 27))
+                new ConnectedLLMToolData("claude-code", "/tmp/uloop/test.sock#1", new System.DateTime(2026, 3, 24, 22, 19, 27))
             });
 
             ConnectedToolsMonitoringService.RestorePersistedConnectedToolsForTests();
@@ -95,7 +95,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
 
             Assert.That(displayedTools, Has.Length.EqualTo(1));
             Assert.That(displayedTools[0].ClientName, Is.EqualTo("claude-code"));
-            Assert.That(displayedTools[0].Endpoint, Is.EqualTo("127.0.0.1:58784"));
+            Assert.That(displayedTools[0].Endpoint, Is.EqualTo("/tmp/uloop/test.sock#1"));
         }
 
         [Test]
@@ -103,11 +103,11 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         {
             ConnectedLLMToolData[] incomingTools =
             {
-                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+                new ConnectedLLMToolData("claude-code", "/tmp/uloop/test.sock#1", new System.DateTime(2026, 4, 24, 1, 2, 3))
             };
             ConnectedLLMToolData[] persistedTools =
             {
-                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+                new ConnectedLLMToolData("claude-code", "/tmp/uloop/test.sock#1", new System.DateTime(2026, 4, 24, 1, 2, 3))
             };
             int saveCount = 0;
 
@@ -125,11 +125,11 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         {
             ConnectedLLMToolData[] incomingTools =
             {
-                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 4, 5, 6))
+                new ConnectedLLMToolData("claude-code", "/tmp/uloop/test.sock#1", new System.DateTime(2026, 4, 24, 4, 5, 6))
             };
             ConnectedLLMToolData[] persistedTools =
             {
-                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+                new ConnectedLLMToolData("claude-code", "/tmp/uloop/test.sock#1", new System.DateTime(2026, 4, 24, 1, 2, 3))
             };
             int saveCount = 0;
 
@@ -147,11 +147,11 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         {
             ConnectedLLMToolData[] incomingTools =
             {
-                new ConnectedLLMToolData("claude-code", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+                new ConnectedLLMToolData("claude-code", "/tmp/uloop/test.sock#1", new System.DateTime(2026, 4, 24, 1, 2, 3))
             };
             ConnectedLLMToolData[] persistedTools =
             {
-                new ConnectedLLMToolData("cursor", "127.0.0.1:58784", 58784, new System.DateTime(2026, 4, 24, 1, 2, 3))
+                new ConnectedLLMToolData("cursor", "/tmp/uloop/test.sock#1", new System.DateTime(2026, 4, 24, 1, 2, 3))
             };
             int saveCount = 0;
 

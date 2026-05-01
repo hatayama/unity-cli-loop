@@ -11,14 +11,12 @@ namespace io.github.hatayama.uLoopMCP
     public record ServerStatusData
     {
         public readonly bool IsRunning;
-        public readonly int Port;
         public readonly string Status;
         public readonly Color StatusColor;
 
-        public ServerStatusData(bool isRunning, int port, string status, Color statusColor)
+        public ServerStatusData(bool isRunning, string status, Color statusColor)
         {
             IsRunning = isRunning;
-            Port = port;
             Status = status;
             StatusColor = statusColor;
         }
@@ -26,19 +24,11 @@ namespace io.github.hatayama.uLoopMCP
     
     public record ServerControlsData
     {
-        public readonly int CustomPort;
         public readonly bool IsServerRunning;
-        public readonly bool PortEditable;
-        public readonly bool HasPortWarning;
-        public readonly string PortWarningMessage;
 
-        public ServerControlsData(int customPort, bool isServerRunning, bool portEditable, bool hasPortWarning = false, string portWarningMessage = null)
+        public ServerControlsData(bool isServerRunning)
         {
-            CustomPort = customPort;
             IsServerRunning = isServerRunning;
-            PortEditable = portEditable;
-            HasPortWarning = hasPortWarning;
-            PortWarningMessage = portWarningMessage;
         }
     }
     

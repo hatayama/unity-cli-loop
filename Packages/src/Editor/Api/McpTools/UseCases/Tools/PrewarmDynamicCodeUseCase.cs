@@ -1,8 +1,5 @@
 using System;
 using System.IO;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -52,7 +49,7 @@ namespace io.github.hatayama.uLoopMCP
             string serverStartingLockToken = null)
         {
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
-            _executor = executor ?? new TcpDynamicCodeAutoPrewarmExecutor();
+            _executor = executor ?? new DynamicCodeAutoPrewarmExecutor();
             _lifecycleCancellationToken = lifecycleCancellationToken;
             _serverStartingLockToken = serverStartingLockToken;
         }
@@ -223,7 +220,7 @@ namespace io.github.hatayama.uLoopMCP
                         transientBusyRetryCount = 0;
                         VibeLogger.LogWarning(
                             AutoPrewarmOperation,
-                            "Dynamic code auto prewarm hit a transient loopback failure and will retry",
+                            "Dynamic code auto prewarm hit a transient bridge failure and will retry",
                             new
                             {
                                 class_name = AutoPrewarmClassName,
@@ -283,7 +280,7 @@ namespace io.github.hatayama.uLoopMCP
 
                 if (successfulPassCount < AutoPrewarmPassCount)
                 {
-                    DynamicCodeStartupTelemetry.MarkPrewarmFailed(TcpDynamicCodeAutoPrewarmExecutor.TimeoutErrorMessage);
+                    DynamicCodeStartupTelemetry.MarkPrewarmFailed(DynamicCodeAutoPrewarmExecutor.TimeoutErrorMessage);
                     VibeLogger.LogWarning(
                         AutoPrewarmOperation,
                         "Dynamic code auto prewarm exhausted its transient retries",
@@ -375,11 +372,11 @@ namespace io.github.hatayama.uLoopMCP
 
             return string.Equals(
                        result.ErrorMessage,
-                       TcpDynamicCodeAutoPrewarmExecutor.TimeoutErrorMessage,
+                       DynamicCodeAutoPrewarmExecutor.TimeoutErrorMessage,
                        StringComparison.Ordinal)
                    || string.Equals(
                        result.ErrorMessage,
-                       TcpDynamicCodeAutoPrewarmExecutor.TransportErrorMessage,
+                       DynamicCodeAutoPrewarmExecutor.TransportErrorMessage,
                        StringComparison.Ordinal);
         }
 
@@ -419,23 +416,23 @@ namespace io.github.hatayama.uLoopMCP
         public string ErrorMessage { get; set; }
     }
 
-    internal sealed class TcpDynamicCodeAutoPrewarmExecutor : IDynamicCodeAutoPrewarmExecutor
+    internal sealed class DynamicCodeAutoPrewarmExecutor : IDynamicCodeAutoPrewarmExecutor
     {
         private const string AutoPrewarmRequestId = "dynamic-code-auto-prewarm";
-        private const int LoopbackPrewarmTimeoutMilliseconds = 10000;
+        private const int PrewarmTimeoutMilliseconds = 10000;
         internal const string TimeoutErrorMessage = "dynamic code auto prewarm timed out";
         internal const string TransportErrorMessage = "dynamic code auto prewarm transport failed";
         private readonly Func<string, CancellationToken, Task<string>> _sendRequestAsync;
         private readonly int _timeoutMilliseconds;
 
-        public TcpDynamicCodeAutoPrewarmExecutor()
-            : this(SendRequestOverLoopbackAsync, LoopbackPrewarmTimeoutMilliseconds)
+        public DynamicCodeAutoPrewarmExecutor()
+            : this(SendRequestToCurrentBridgeAsync, PrewarmTimeoutMilliseconds)
         {
         }
 
-        internal TcpDynamicCodeAutoPrewarmExecutor(
+        internal DynamicCodeAutoPrewarmExecutor(
             Func<string, CancellationToken, Task<string>> sendRequestAsync,
-            int timeoutMilliseconds = LoopbackPrewarmTimeoutMilliseconds)
+            int timeoutMilliseconds = PrewarmTimeoutMilliseconds)
         {
             _sendRequestAsync = sendRequestAsync ?? throw new ArgumentNullException(nameof(sendRequestAsync));
             _timeoutMilliseconds = timeoutMilliseconds;
@@ -448,18 +445,16 @@ namespace io.github.hatayama.uLoopMCP
             ct.ThrowIfCancellationRequested();
 
             string requestJson = CreateRequestJson(parameters);
-            // Why: measurements showed that even the in-process JSON-RPC path left the first
-            // post-reload CLI request around 500ms, while a real loopback TCP request fully
-            // warmed the remaining listener/frame-parser path.
-            // Why not stop at JsonRpcProcessor.ProcessRequest: that bypasses the transport layer
-            // that real Unity CLI Loop requests still have to pay on their first trip after reload.
             using CancellationTokenSource timeoutCancellationTokenSource =
                 CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCancellationTokenSource.CancelAfter(_timeoutMilliseconds);
             try
             {
-                string responseJson = await _sendRequestAsync(
+                Task<string> responseTask = _sendRequestAsync(
                     requestJson,
+                    timeoutCancellationTokenSource.Token);
+                string responseJson = await AwaitWithCancellationAsync(
+                    responseTask,
                     timeoutCancellationTokenSource.Token);
 
                 ct.ThrowIfCancellationRequested();
@@ -481,23 +476,7 @@ namespace io.github.hatayama.uLoopMCP
                     ErrorMessage = TransportErrorMessage
                 };
             }
-            catch (SocketException) when (!ct.IsCancellationRequested)
-            {
-                return new DynamicCodeAutoPrewarmResult
-                {
-                    Success = false,
-                    ErrorMessage = TransportErrorMessage
-                };
-            }
             catch (JsonException) when (!ct.IsCancellationRequested)
-            {
-                return new DynamicCodeAutoPrewarmResult
-                {
-                    Success = false,
-                    ErrorMessage = TransportErrorMessage
-                };
-            }
-            catch (InvalidOperationException) when (!ct.IsCancellationRequested)
             {
                 return new DynamicCodeAutoPrewarmResult
                 {
@@ -530,64 +509,26 @@ namespace io.github.hatayama.uLoopMCP
             return request.ToString(Formatting.None);
         }
 
-        private static async Task<string> SendRequestOverLoopbackAsync(
+        private static async Task<string> SendRequestToCurrentBridgeAsync(
             string requestJson,
             CancellationToken ct)
         {
-            using TcpClient client = new TcpClient();
-            await client.ConnectAsync(IPAddress.Loopback, McpServerController.ServerPort).ConfigureAwait(false);
-            using NetworkStream stream = client.GetStream();
-
-            string framedRequest = CreateContentLengthFrame(requestJson);
-            byte[] requestBytes = Encoding.UTF8.GetBytes(framedRequest);
-            await stream.WriteAsync(requestBytes, 0, requestBytes.Length, ct).ConfigureAwait(false);
-            await stream.FlushAsync(ct).ConfigureAwait(false);
-            return await ReadFramedResponseAsync(stream, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            return await JsonRpcProcessor.ProcessRequest(requestJson, "dynamic-code-auto-prewarm");
         }
 
-        private static async Task<string> ReadFramedResponseAsync(
-            NetworkStream stream,
-            CancellationToken ct)
+        private static async Task<T> AwaitWithCancellationAsync<T>(Task<T> task, CancellationToken ct)
         {
-            FrameParser frameParser = new FrameParser();
-            byte[] readBuffer = new byte[BufferConfig.INITIAL_BUFFER_SIZE];
-            using MemoryStream responseBuffer = new MemoryStream();
+            System.Diagnostics.Debug.Assert(task != null, "task must not be null");
 
-            while (true)
+            Task cancellationTask = Task.Delay(Timeout.Infinite, ct);
+            Task completedTask = await Task.WhenAny(task, cancellationTask);
+            if (completedTask != task)
             {
-                int bytesRead = await stream.ReadAsync(readBuffer, 0, readBuffer.Length, ct).ConfigureAwait(false);
-                if (bytesRead == 0)
-                {
-                    throw new InvalidOperationException("Loopback prewarm connection closed before a JSON-RPC response was received.");
-                }
-
-                responseBuffer.Write(readBuffer, 0, bytesRead);
-                byte[] bufferedBytes = responseBuffer.GetBuffer();
-                int bufferedLength = checked((int)responseBuffer.Length);
-
-                bool parsed = frameParser.TryParseFrame(
-                    bufferedBytes,
-                    bufferedLength,
-                    out int contentLength,
-                    out int headerLength);
-                if (!parsed)
-                {
-                    continue;
-                }
-
-                if (!frameParser.IsCompleteFrame(bufferedBytes, bufferedLength, contentLength, headerLength))
-                {
-                    continue;
-                }
-
-                return frameParser.ExtractJsonContent(bufferedBytes, contentLength, headerLength);
+                ct.ThrowIfCancellationRequested();
             }
-        }
 
-        private static string CreateContentLengthFrame(string jsonContent)
-        {
-            int contentLength = Encoding.UTF8.GetByteCount(jsonContent);
-            return $"Content-Length: {contentLength}\r\n\r\n{jsonContent}";
+            return await task;
         }
 
         private static DynamicCodeAutoPrewarmResult ParseResponse(string responseJson)

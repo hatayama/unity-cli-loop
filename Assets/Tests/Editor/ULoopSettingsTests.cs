@@ -101,8 +101,7 @@ namespace io.github.hatayama.uLoopMCP
                 enableTestsExecution = true,
                 allowMenuItemExecution = true,
                 allowThirdPartyTools = true,
-                dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted,
-                customPort = 12345
+                dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted
             }, true);
             File.WriteAllText(LegacySettingsFilePath, legacyJson);
             InvalidateBothCaches();
@@ -127,8 +126,7 @@ namespace io.github.hatayama.uLoopMCP
             string legacyJson = JsonUtility.ToJson(new LegacySettingsFixture
             {
                 allowThirdPartyTools = false,
-                dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted,
-                customPort = 12345
+                dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted
             }, true);
             File.WriteAllText(LegacySettingsFilePath, legacyJson);
             InvalidateBothCaches();
@@ -161,12 +159,10 @@ namespace io.github.hatayama.uLoopMCP
         {
             DeleteIfExists(SettingsFilePath);
 
-            int expectedPort = 18080;
             string legacyJson = JsonUtility.ToJson(new LegacySettingsFixture
             {
                 allowThirdPartyTools = true,
                 dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted,
-                customPort = expectedPort,
                 showDeveloperTools = true
             }, true);
             File.WriteAllText(LegacySettingsFilePath, legacyJson);
@@ -178,9 +174,9 @@ namespace io.github.hatayama.uLoopMCP
 
             StringAssert.DoesNotContain("\"allowThirdPartyTools\"", updatedLegacy);
             StringAssert.DoesNotContain("\"dynamicCodeSecurityLevel\"", updatedLegacy);
+            StringAssert.DoesNotContain("\"customPort\"", updatedLegacy);
 
             McpEditorSettingsData legacySettings = JsonUtility.FromJson<McpEditorSettingsData>(updatedLegacy);
-            Assert.AreEqual(expectedPort, legacySettings.customPort, "customPort should be preserved");
             Assert.IsTrue(legacySettings.showDeveloperTools, "showDeveloperTools should be preserved");
         }
 
@@ -388,7 +384,6 @@ namespace io.github.hatayama.uLoopMCP
             public bool allowMenuItemExecution = false;
             public bool allowThirdPartyTools = false;
             public int dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted;
-            public int customPort = McpServerConfig.DEFAULT_PORT;
             public bool showDeveloperTools = false;
         }
 

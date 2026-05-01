@@ -9,7 +9,6 @@
 
 import assert from 'node:assert';
 import { existsSync, readFileSync } from 'fs';
-import * as net from 'net';
 import { join } from 'path';
 
 // Only alphanumeric, underscore, and hyphen — blocks path separators and traversal sequences
@@ -39,7 +38,6 @@ interface CompileCompletionWaitOptions {
   requestId: string;
   timeoutMs: number;
   pollIntervalMs: number;
-  unityPort?: number;
   isUnityReadyWhenIdle?: () => Promise<boolean>;
 }
 
@@ -55,11 +53,6 @@ interface CompileCompletionResult<T> {
  * where no lock files exist. This grace period prevents false "completed" detection during that gap.
  */
 const LOCK_GRACE_PERIOD_MS = 500;
-
-const READINESS_CHECK_TIMEOUT_MS = 3000;
-const DEFAULT_HOST = '127.0.0.1';
-const CONTENT_LENGTH_HEADER = 'Content-Length:';
-const HEADER_SEPARATOR = '\r\n\r\n';
 
 function toBoolean(value: unknown): boolean {
   if (typeof value === 'boolean') {
@@ -158,57 +151,6 @@ function tryReadCompileResult<T>(projectRoot: string, requestId: string): T | un
   }
 }
 
-/**
- * Verify Unity server can actually process a JSON-RPC request, not just accept TCP.
- * Sends a lightweight get-tool-details request and waits for any valid framed response.
- */
-function canSendRequestToUnity(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    const timer = setTimeout(() => {
-      socket.destroy();
-      resolve(false);
-    }, READINESS_CHECK_TIMEOUT_MS);
-
-    const cleanup = (): void => {
-      clearTimeout(timer);
-      socket.destroy();
-    };
-
-    socket.connect(port, DEFAULT_HOST, () => {
-      const rpcRequest: string = JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'get-tool-details',
-        params: { IncludeDevelopmentOnly: false },
-        id: 0,
-      });
-      const contentLength: number = Buffer.byteLength(rpcRequest, 'utf8');
-      const frame: string = `${CONTENT_LENGTH_HEADER} ${contentLength}${HEADER_SEPARATOR}${rpcRequest}`;
-      socket.write(frame);
-    });
-
-    let buffer: Buffer = Buffer.alloc(0);
-    socket.on('data', (chunk: Buffer) => {
-      buffer = Buffer.concat([buffer, chunk]);
-      const sepIndex: number = buffer.indexOf(HEADER_SEPARATOR);
-      if (sepIndex !== -1) {
-        cleanup();
-        resolve(true);
-      }
-    });
-
-    socket.on('error', () => {
-      cleanup();
-      resolve(false);
-    });
-
-    socket.on('close', () => {
-      clearTimeout(timer);
-      resolve(false);
-    });
-  });
-}
-
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -236,12 +178,7 @@ export async function waitForCompileCompletion<T>(
 
       const idleDuration: number = now - idleSinceTimestamp;
       if (idleDuration >= LOCK_GRACE_PERIOD_MS) {
-        if (options.unityPort !== undefined) {
-          const isReady: boolean = await canSendRequestToUnity(options.unityPort);
-          if (isReady) {
-            return { outcome: 'completed', result };
-          }
-        } else if (options.isUnityReadyWhenIdle) {
+        if (options.isUnityReadyWhenIdle) {
           const isReady: boolean = await options.isUnityReadyWhenIdle();
           if (isReady) {
             return { outcome: 'completed', result };
@@ -265,12 +202,7 @@ export async function waitForCompileCompletion<T>(
       return { outcome: 'timed_out' };
     }
 
-    if (options.unityPort !== undefined) {
-      const isReady: boolean = await canSendRequestToUnity(options.unityPort);
-      if (isReady) {
-        return { outcome: 'completed', result: lastResult };
-      }
-    } else if (options.isUnityReadyWhenIdle) {
+    if (options.isUnityReadyWhenIdle) {
       const isReady: boolean = await options.isUnityReadyWhenIdle();
       if (isReady) {
         return { outcome: 'completed', result: lastResult };

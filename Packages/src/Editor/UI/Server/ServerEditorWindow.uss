@@ -75,15 +75,6 @@
     flex-grow: 1;
 }
 
-.mcp-server-status__port-label {
-    margin-right: 4px;
-}
-
-.mcp-server-status__port-field {
-    width: 60px;
-    -unity-text-align: middle-right;
-}
-
 /* ===========================================
    Block: Server Controls
    =========================================== */

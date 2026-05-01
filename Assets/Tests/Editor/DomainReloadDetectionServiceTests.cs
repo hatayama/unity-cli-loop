@@ -5,7 +5,6 @@ namespace io.github.hatayama.uLoopMCP
     public class DomainReloadDetectionServiceTests
     {
         private bool _originalIsServerRunning;
-        private int _originalServerPort;
         private bool _originalIsAfterCompile;
         private bool _originalIsDomainReloadInProgress;
         private bool _originalIsReconnecting;
@@ -16,7 +15,6 @@ namespace io.github.hatayama.uLoopMCP
         public void SetUp()
         {
             _originalIsServerRunning = McpEditorSettings.GetIsServerRunning();
-            _originalServerPort = McpEditorSettings.GetCustomPort();
             _originalIsAfterCompile = McpEditorSettings.GetIsAfterCompile();
             _originalIsDomainReloadInProgress = McpEditorSettings.GetIsDomainReloadInProgress();
             _originalIsReconnecting = McpEditorSettings.GetIsReconnecting();
@@ -30,7 +28,6 @@ namespace io.github.hatayama.uLoopMCP
         public void TearDown()
         {
             McpEditorSettings.SetIsServerRunning(_originalIsServerRunning);
-            McpEditorSettings.SetCustomPort(_originalServerPort);
             McpEditorSettings.SetIsAfterCompile(_originalIsAfterCompile);
             McpEditorSettings.SetIsDomainReloadInProgress(_originalIsDomainReloadInProgress);
             McpEditorSettings.SetIsReconnecting(_originalIsReconnecting);
@@ -43,14 +40,12 @@ namespace io.github.hatayama.uLoopMCP
         [Test]
         public void RollbackDomainReloadStart_ClearsTemporaryFlagsProviderStateAndLockFile()
         {
-            const int serverPort = 7410;
             const string correlationId = "test-correlation";
             McpEditorDomainReloadStateProvider provider = new McpEditorDomainReloadStateProvider();
 
-            DomainReloadDetectionService.StartDomainReload(correlationId, true, serverPort);
+            DomainReloadDetectionService.StartDomainReload(correlationId, true);
 
             Assert.That(McpEditorSettings.GetIsServerRunning(), Is.True);
-            Assert.That(McpEditorSettings.GetCustomPort(), Is.EqualTo(serverPort));
             Assert.That(McpEditorSettings.GetIsAfterCompile(), Is.True);
             Assert.That(McpEditorSettings.GetIsDomainReloadInProgress(), Is.True);
             Assert.That(McpEditorSettings.GetIsReconnecting(), Is.True);
@@ -62,7 +57,6 @@ namespace io.github.hatayama.uLoopMCP
             DomainReloadDetectionService.RollbackDomainReloadStart(correlationId);
 
             Assert.That(McpEditorSettings.GetIsServerRunning(), Is.True);
-            Assert.That(McpEditorSettings.GetCustomPort(), Is.EqualTo(serverPort));
             Assert.That(McpEditorSettings.GetIsAfterCompile(), Is.False);
             Assert.That(McpEditorSettings.GetIsDomainReloadInProgress(), Is.False);
             Assert.That(McpEditorSettings.GetIsReconnecting(), Is.False);

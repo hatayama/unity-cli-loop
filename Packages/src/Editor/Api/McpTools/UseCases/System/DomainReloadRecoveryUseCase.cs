@@ -23,47 +23,30 @@ namespace io.github.hatayama.uLoopMCP
 
             // 2. Check server state from instance
             bool serverRunning = currentServer?.IsRunning ?? false;
-            int? serverPort = currentServer?.Port;
 
             // 3. Fallback to session state if instance is null but session says server was running
-                    // Handles case where bridge server instance became null unexpectedly
+            // Handles case where bridge server instance became null unexpectedly
             if (currentServer == null && McpEditorSettings.GetIsServerRunning())
             {
-                int sessionPort = McpEditorSettings.GetCustomPort();
-                if (NetworkUtility.IsValidPort(sessionPort))
-                {
-                    serverRunning = true;
-                    serverPort = sessionPort;
-                    VibeLogger.LogWarning(
-                        "domain_reload_session_fallback",
-                        "Server instance is null but session state indicates running. Using session state for recovery.",
-                        new { session_port = sessionPort },
-                        correlationId
-                    );
-                }
-                else
-                {
-                    VibeLogger.LogWarning(
-                        "domain_reload_session_fallback_invalid_port",
-                        "Session indicates running but port is invalid. Ignoring session state fallback.",
-                        new { session_port = sessionPort },
-                        correlationId
-                    );
-                }
+                serverRunning = true;
+                VibeLogger.LogWarning(
+                    "domain_reload_session_fallback",
+                    "Server instance is null but session state indicates running. Using project IPC session state for recovery.",
+                    new { project_root = McpEditorSettings.GetProjectRootPath() },
+                    correlationId
+                );
             }
 
             // 4. Detect and record Domain Reload start
-            DomainReloadDetectionService.StartDomainReload(correlationId, serverRunning, serverPort);
+            DomainReloadDetectionService.StartDomainReload(correlationId, serverRunning);
 
             // 4. If server is running, execute stop processing
             if (currentServer?.IsRunning == true)
             {
-                int portToSave = currentServer.Port;
-                
                 try
                 {
                     // 4.1. Notify client of server stop
-                    ClientNotificationService.LogServerStoppingBeforeDomainReload(correlationId, portToSave);
+                    ClientNotificationService.LogServerStoppingBeforeDomainReload(correlationId);
 
                     // 4.2. Stop server
                     currentServer.Dispose();
@@ -76,12 +59,12 @@ namespace io.github.hatayama.uLoopMCP
                 catch (System.Exception ex)
                 {
                     // 4.4. Error notification
-                    ClientNotificationService.LogServerShutdownError(correlationId, ex, portToSave);
+                    ClientNotificationService.LogServerShutdownError(correlationId, ex);
                     DomainReloadDetectionService.RollbackDomainReloadStart(correlationId);
 
-                    // Server stop failure is a critical error (causes port conflicts)
+                    // Server stop failure is a critical error because recovery must restart cleanly.
                     throw new System.InvalidOperationException(
-                        $"Failed to properly shutdown Unity CLI bridge before assembly reload. This may cause port conflicts on restart.", ex);
+                        "Failed to properly shutdown Unity CLI bridge before assembly reload.", ex);
                 }
             }
 
