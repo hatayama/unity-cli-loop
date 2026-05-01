@@ -13,12 +13,6 @@ namespace io.github.hatayama.uLoopMCP
     /// - McpEditorModel: Model layer service for managing state transitions
     /// </summary>
 
-    public enum ConnectionMode
-    {
-        CLI = 0,
-        MCP = 1
-    }
-
     public enum SkillsTarget
     {
         Claude = 0,
@@ -33,39 +27,24 @@ namespace io.github.hatayama.uLoopMCP
     {
         public int CustomPort { get; }
         public bool ShowConnectedTools { get; }
-        public McpEditorType SelectedEditorType { get; }
         public Vector2 MainScrollPosition { get; }
         public bool ShowSecuritySettings { get; }
         public bool ShowToolSettings { get; }
-        public bool AddRepositoryRoot { get; }
-        public bool SupportsRepositoryRootToggle { get; }
-        public bool ShowRepositoryRootToggle { get; }
-        public ConnectionMode ConnectionMode { get; }
         public bool ShowConfiguration { get; }
 
         public UIState(
             int customPort = McpServerConfig.DEFAULT_PORT,
             bool showConnectedTools = true,
-            McpEditorType selectedEditorType = McpEditorType.Cursor,
             Vector2 mainScrollPosition = default,
             bool showSecuritySettings = true,
             bool showToolSettings = true,
-            bool addRepositoryRoot = false,
-            bool supportsRepositoryRootToggle = false,
-            bool showRepositoryRootToggle = false,
-            ConnectionMode connectionMode = ConnectionMode.CLI,
             bool showConfiguration = true)
         {
             CustomPort = customPort;
             ShowConnectedTools = showConnectedTools;
-            SelectedEditorType = selectedEditorType;
             MainScrollPosition = mainScrollPosition;
             ShowSecuritySettings = showSecuritySettings;
             ShowToolSettings = showToolSettings;
-            AddRepositoryRoot = addRepositoryRoot;
-            SupportsRepositoryRootToggle = supportsRepositoryRootToggle;
-            ShowRepositoryRootToggle = showRepositoryRootToggle;
-            ConnectionMode = connectionMode;
             ShowConfiguration = showConfiguration;
         }
     }

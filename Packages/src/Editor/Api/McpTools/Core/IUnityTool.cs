@@ -19,7 +19,7 @@ namespace io.github.hatayama.uLoopMCP
     }
 
     /// <summary>
-    /// Base interface for Unity MCP tool handlers
+    /// Base interface for Unity CLI tool handlers.
     /// Following the Open-Closed principle, when adding new tools,
     /// create a new class that implements this interface
     /// </summary>
@@ -29,12 +29,12 @@ namespace io.github.hatayama.uLoopMCP
         /// Get tool name
         /// </summary>
         string ToolName { get; }
-        
+
         /// <summary>
-        /// Get parameter schema information for TypeScript side
+        /// Get parameter schema information for CLI clients.
         /// </summary>
         ToolParameterSchema ParameterSchema { get; }
-        
+
         /// <summary>
         /// Execute tool
         /// </summary>
@@ -42,7 +42,7 @@ namespace io.github.hatayama.uLoopMCP
         /// <returns>Execution result</returns>
         Task<BaseToolResponse> ExecuteAsync(JToken paramsToken);
     }
-    
+
     /// <summary>
     /// Parameter schema definition for tools (immutable)
     /// </summary>
@@ -50,14 +50,14 @@ namespace io.github.hatayama.uLoopMCP
     {
         public readonly Dictionary<string, ParameterInfo> Properties;
         public readonly string[] Required;
-        
+
         public ToolParameterSchema(Dictionary<string, ParameterInfo> properties = null, string[] required = null)
         {
             Properties = properties ?? new Dictionary<string, ParameterInfo>();
             Required = required ?? new string[0];
         }
     }
-    
+
     /// <summary>
     /// Individual parameter information (immutable)
     /// </summary>
@@ -67,7 +67,7 @@ namespace io.github.hatayama.uLoopMCP
         public readonly string Description;
         public readonly object DefaultValue;
         public readonly string[] Enum;
-        
+
         public ParameterInfo(string type, string description, object defaultValue = null, string[] enumValues = null)
         {
             Type = type;
@@ -76,4 +76,4 @@ namespace io.github.hatayama.uLoopMCP
             Enum = enumValues;
         }
     }
-} 
+}

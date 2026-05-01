@@ -16,7 +16,6 @@ namespace io.github.hatayama.uLoopMCP
         private const double ToolSettingsRegistryWarmupMaxDelaySeconds = 0.8;
         private const int ToolSettingsRegistryWarmupMaxAttempts = 5;
 
-        private McpConfigServiceFactory _configServiceFactory;
         private McpEditorWindowUI _view;
         private McpEditorModel _model;
         private McpEditorWindowEventHandler _eventHandler;
@@ -68,7 +67,6 @@ namespace io.github.hatayama.uLoopMCP
         private void InitializeAll()
         {
             InitializeModel();
-            InitializeConfigurationServices();
             InitializeEventHandler();
             LoadSavedSettings();
             RestoreSessionState();
@@ -88,7 +86,6 @@ namespace io.github.hatayama.uLoopMCP
 
         private void SetupViewCallbacks()
         {
-            _view.OnConnectionModeChanged += UpdateConnectionMode;
             _view.OnRefreshCliVersion += HandleRefreshCliVersion;
             _view.OnInstallCli += HandleInstallCli;
             _view.OnInstallSkills += HandleInstallSkills;
@@ -102,11 +99,6 @@ namespace io.github.hatayama.uLoopMCP
             _view.OnGroupSkillsChanged += HandleGroupSkillsChanged;
             _view.OnConfigurationFoldoutChanged += UpdateShowConfiguration;
             _view.OnConnectedToolsFoldoutChanged += UpdateShowConnectedTools;
-            _view.OnEditorTypeChanged += UpdateSelectedEditorType;
-            _view.OnRepositoryRootChanged += UpdateAddRepositoryRoot;
-            _view.OnConfigureClicked += ConfigureEditor;
-            _view.OnDeleteConfigClicked += DeleteEditorConfiguration;
-            _view.OnOpenSettingsClicked += OpenConfigurationFile;
             _view.OnToolSettingsFoldoutChanged += UpdateShowToolSettings;
             _view.OnToolToggled += HandleToolToggled;
             _view.OnAllowThirdPartyChanged += UpdateAllowThirdPartyTools;
@@ -116,11 +108,6 @@ namespace io.github.hatayama.uLoopMCP
         public IEnumerable<ConnectedClient> GetConnectedToolsAsClients()
         {
             return ConnectedToolsMonitoringService.GetConnectedToolsAsClients();
-        }
-
-        private void InitializeConfigurationServices()
-        {
-            _configServiceFactory = new McpConfigServiceFactory();
         }
 
         private void InitializeEventHandler()
@@ -220,7 +207,7 @@ namespace io.github.hatayama.uLoopMCP
 
             _hasCompletedDeferredInitialRefresh = true;
             _selectedTargetInstallState = SkillInstallState.Checking;
-            RefreshRepositoryRootSupport();
+            ApplyFlatSkillInstallPreference();
             RefreshAllSections(
                 refreshSkillInstallState: false,
                 refreshMode: McpEditorWindowRefreshMode.Full);
@@ -259,10 +246,7 @@ namespace io.github.hatayama.uLoopMCP
 
             bool runExpensiveChecks = McpEditorWindowRefreshPolicy.ShouldRunExpensiveChecks(refreshMode);
 
-            ConnectionModeData modeData = new ConnectionModeData(_model.UI.ConnectionMode);
-            _view.UpdateConnectionMode(modeData);
             _view.UpdateConfigurationFoldout(_model.UI.ShowConfiguration);
-            _view.UpdateSectionVisibility(_model.UI.ConnectionMode);
 
             if (McpEditorWindowRefreshPolicy.ShouldRefreshSkillInstallState(refreshMode, refreshSkillInstallState))
             {
@@ -281,11 +265,6 @@ namespace io.github.hatayama.uLoopMCP
 
             ConnectedToolsData toolsData = CreateConnectedToolsData();
             _view.UpdateConnectedTools(toolsData);
-
-            EditorConfigData configData = runExpensiveChecks
-                ? CreateEditorConfigData()
-                : CreateEditorConfigPlaceholderData();
-            _view.UpdateEditorConfig(configData);
 
             RefreshToolSettingsHeader();
             if (runExpensiveChecks)
@@ -358,65 +337,6 @@ namespace io.github.hatayama.uLoopMCP
             bool showSection = isServerRunning && hasNamedClients;
 
             return new ConnectedToolsData(connectedClients, _model.UI.ShowConnectedTools, isServerRunning, showReconnectingUI, showSection);
-        }
-
-        private EditorConfigData CreateEditorConfigData()
-        {
-            bool isServerRunning = McpServerController.IsServerRunning;
-            int currentPort = McpServerController.ServerPort;
-
-            bool isConfigured = false;
-            bool hasPortMismatch = false;
-            bool isUpdateNeeded = true;
-            string configurationError = null;
-
-            IMcpConfigService configService = GetConfigService(_model.UI.SelectedEditorType);
-            isConfigured = configService.IsConfigured();
-
-            if (isConfigured)
-            {
-                int configuredPort = configService.GetConfiguredPort();
-
-                if (isServerRunning)
-                {
-                    hasPortMismatch = currentPort != configuredPort;
-                }
-                else
-                {
-                    hasPortMismatch = McpEditorSettings.GetCustomPort() != configuredPort;
-                }
-            }
-
-            int portToCheck = isServerRunning ? currentPort : McpEditorSettings.GetCustomPort();
-            isUpdateNeeded = configService.IsUpdateNeeded(portToCheck);
-
-            return new EditorConfigData(
-                _model.UI.SelectedEditorType,
-                isServerRunning,
-                currentPort,
-                isConfigured,
-                hasPortMismatch,
-                configurationError,
-                isUpdateNeeded,
-                _model.UI.AddRepositoryRoot,
-                _model.UI.SupportsRepositoryRootToggle,
-                _model.UI.ShowRepositoryRootToggle);
-        }
-
-        private EditorConfigData CreateEditorConfigPlaceholderData()
-        {
-            return new EditorConfigData(
-                _model.UI.SelectedEditorType,
-                McpServerController.IsServerRunning,
-                McpServerController.ServerPort,
-                isConfigured: false,
-                hasPortMismatch: false,
-                configurationError: null,
-                isUpdateNeeded: true,
-                addRepositoryRoot: _model.UI.AddRepositoryRoot,
-                supportsRepositoryRootToggle: _model.UI.SupportsRepositoryRootToggle,
-                showRepositoryRootToggle: _model.UI.ShowRepositoryRootToggle,
-                isChecking: true);
         }
 
         public void InvalidateToolSettingsCatalog()
@@ -640,91 +560,9 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private void ConfigureEditor()
-        {
-            IMcpConfigService configService = GetConfigService(_model.UI.SelectedEditorType);
-            bool isServerRunning = McpServerController.IsServerRunning;
-            int portToUse = isServerRunning ? McpServerController.ServerPort : McpEditorSettings.GetCustomPort();
-
-            configService.AutoConfigure(portToUse);
-            RefreshAllSections();
-        }
-
-        private void DeleteEditorConfiguration()
-        {
-            string editorName = GetEditorDisplayName(_model.UI.SelectedEditorType);
-
-            bool confirmed = EditorUtility.DisplayDialog(
-                "Delete MCP Configuration",
-                $"Are you sure you want to delete the {editorName} MCP configuration?\n\n" +
-                "This will remove the uLoopMCP entry from the configuration file. " +
-                "Other MCP server configurations will not be affected.",
-                "Delete",
-                "Cancel");
-
-            if (!confirmed)
-            {
-                return;
-            }
-
-            IMcpConfigService configService = GetConfigService(_model.UI.SelectedEditorType);
-            configService.DeleteConfiguration();
-            RefreshAllSections();
-        }
-
-        private void OpenConfigurationFile()
-        {
-            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
-            string gitRoot = UnityMcpPathResolver.GetGitRepositoryRoot();
-            string baseRoot = _model.UI.AddRepositoryRoot
-                ? (gitRoot ?? projectRoot)
-                : projectRoot;
-
-            string configPath = UnityMcpPathResolver.GetConfigPathForRoot(_model.UI.SelectedEditorType, baseRoot);
-            bool exists = System.IO.File.Exists(configPath);
-
-            if (exists)
-            {
-                EditorUtility.OpenWithDefaultApp(configPath);
-            }
-            else
-            {
-                string editorName = GetEditorDisplayName(_model.UI.SelectedEditorType);
-                EditorUtility.DisplayDialog(
-                    "Configuration File Not Found",
-                    $"Configuration file for {editorName} not found at:\n{configPath}\n\nPlease run 'Configure {editorName}' first to create the configuration file.",
-                    "OK");
-            }
-        }
-
-        private string GetEditorDisplayName(McpEditorType editorType)
-        {
-            return editorType switch
-            {
-                McpEditorType.Cursor => "Cursor",
-                McpEditorType.ClaudeCode => "Claude Code",
-                McpEditorType.VSCode => "VSCode",
-                McpEditorType.GeminiCLI => "Gemini CLI",
-                McpEditorType.Codex => "Codex",
-                McpEditorType.McpInspector => "MCP Inspector",
-                _ => editorType.ToString()
-            };
-        }
-
-        private IMcpConfigService GetConfigService(McpEditorType editorType)
-        {
-            return _configServiceFactory.GetConfigService(editorType);
-        }
-
         private void UpdateShowConnectedTools(bool show)
         {
             _model.UpdateShowConnectedTools(show);
-        }
-
-        private void UpdateSelectedEditorType(McpEditorType type)
-        {
-            _model.UpdateSelectedEditorType(type);
-            RefreshAllSections();
         }
 
         private void UpdateShowConfiguration(bool show)
@@ -738,23 +576,9 @@ namespace io.github.hatayama.uLoopMCP
             RefreshToolSettingsHeader();
         }
 
-        private void UpdateAddRepositoryRoot(bool addRepositoryRoot)
-        {
-            _model.UpdateAddRepositoryRoot(addRepositoryRoot);
-            RefreshAllSections();
-        }
-
         private void UpdateDynamicCodeSecurityLevel(DynamicCodeSecurityLevel level)
         {
             ULoopSettings.SetDynamicCodeSecurityLevel(level);
-        }
-
-        private void UpdateConnectionMode(ConnectionMode mode)
-        {
-            _model.UpdateConnectionMode(mode);
-            _view.UpdateConnectionMode(new ConnectionModeData(mode));
-            _view.UpdateSectionVisibility(mode);
-            RefreshCliSetupSection();
         }
 
         private void RefreshCliSetupSection(bool includeSkillDirectoryChecks = true)
@@ -771,20 +595,24 @@ namespace io.github.hatayama.uLoopMCP
         private CliSetupData CreateCliSetupData(bool includeSkillDirectoryChecks = true)
         {
             string cliVersion = CliInstallationDetector.GetCachedCliVersion();
+            string packageVersion = McpConstants.PackageInfo.version;
+            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            CliInstallResult projectLocalResult = ProjectLocalCliAutoInstaller.EnsureProjectLocalCliCurrent(
+                projectRoot,
+                packageVersion);
+            if (!projectLocalResult.Success)
+            {
+                Debug.LogWarning(
+                    $"[{McpConstants.PROJECT_NAME}] Failed to update project-local uLoop CLI: {projectLocalResult.ErrorOutput}");
+            }
+
             bool isCliInstalled = cliVersion != null;
             bool isChecking = !CliInstallationDetector.IsCheckCompleted()
                 || _isRefreshingVersion
                 || !includeSkillDirectoryChecks;
-            string packageVersion = McpConstants.PackageInfo.version;
-            bool needsUpdate = false;
+            bool needsUpdate = cliVersion != null
+                && CliVersionComparer.IsVersionLessThan(cliVersion, packageVersion);
             bool needsDowngrade = false;
-            if (isCliInstalled)
-            {
-                System.Version cliVer = new System.Version(cliVersion);
-                System.Version pkgVer = new System.Version(packageVersion);
-                needsUpdate = cliVer < pkgVer;
-                needsDowngrade = cliVer > pkgVer;
-            }
             bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
             SkillInstallState selectedTargetInstallState = includeSkillDirectoryChecks
                 ? _selectedTargetInstallState
@@ -944,6 +772,7 @@ namespace io.github.hatayama.uLoopMCP
                     }
 
                     EditorUtility.DisplayDialog("Installation Failed", message, "OK");
+                    return;
                 }
             }
             finally
@@ -1000,20 +829,6 @@ namespace io.github.hatayama.uLoopMCP
             ApplyFlatSkillInstallPreference();
             RefreshSelectedTargetInstallStateFast();
             RefreshSelectedTargetInstallStateInBackground();
-        }
-
-        private void RefreshRepositoryRootSupport()
-        {
-            ApplyFlatSkillInstallPreference();
-
-            bool gitRootDiffers = UnityMcpPathResolver.GitRootDiffersFromProjectRoot();
-            _model.UpdateSupportsRepositoryRootToggle(gitRootDiffers);
-            _model.UpdateShowRepositoryRootToggle(gitRootDiffers);
-
-            if (!gitRootDiffers && _model.UI.AddRepositoryRoot)
-            {
-                _model.UpdateAddRepositoryRoot(false);
-            }
         }
 
         private void ApplyFlatSkillInstallPreference()

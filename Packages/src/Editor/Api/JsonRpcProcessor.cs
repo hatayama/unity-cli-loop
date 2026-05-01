@@ -27,7 +27,7 @@ namespace io.github.hatayama.uLoopMCP
     /// 
     /// Related classes:
     /// - UnityApiHandler: Executes Unity commands based on JSON-RPC requests
-    /// - McpBridgeServer: TCP server that receives JSON-RPC messages from TypeScript
+    /// - McpBridgeServer: TCP server that receives JSON-RPC messages from CLI clients
     /// - MainThreadSwitcher: Ensures Unity API calls run on the main thread
     /// - JsonRpcRequest: Request model for JSON-RPC 2.0 protocol
     /// - ClientExecutionContext: Thread-local context for tracking current client
@@ -153,12 +153,12 @@ namespace io.github.hatayama.uLoopMCP
 
         /// <summary>
         /// Handle focus-window notification.
-        /// Note: focus-window is now handled at OS level by TypeScript MCP server using launch-unity package.
+        /// Note: focus-window is handled at OS level by the CLI using launch-unity.
         /// This notification handler remains for protocol compatibility but does nothing.
         /// </summary>
         private static void HandleFocusWindowNotification()
         {
-            // Intentionally empty - focus-window is handled by TypeScript MCP server at OS level
+            // Intentionally empty because focus-window is handled by the CLI at OS level.
         }
 
         /// <summary>

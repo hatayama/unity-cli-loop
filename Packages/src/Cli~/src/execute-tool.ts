@@ -12,7 +12,6 @@ import * as readline from 'readline';
 import { spawnSync } from 'child_process';
 import { existsSync, statSync, Stats } from 'fs';
 import { join } from 'path';
-import * as semver from 'semver';
 import { DirectUnityClient } from './direct-unity-client.js';
 import {
   type ResolvedUnityConnection,
@@ -817,38 +816,19 @@ function isRetryablePostCompileDynamicCodeTransientError(errorMessage: string): 
 }
 
 /**
- * Compare two semantic versions safely.
- * Returns true if v1 < v2, false otherwise.
- * Falls back to string comparison if versions are invalid.
- */
-export function isVersionOlder(v1: string, v2: string): boolean {
-  const parsed1 = semver.valid(v1);
-  const parsed2 = semver.valid(v2);
-
-  if (parsed1 && parsed2) {
-    return semver.lt(parsed1, parsed2);
-  }
-
-  return v1 < v2;
-}
-
-/**
- * Print version mismatch warning to stderr.
+ * Print project-local CLI version mismatch warning to stderr.
  * Does not block execution - just warns the user.
  */
 function printVersionWarning(cliVersion: string, serverVersion: string): void {
-  const isCliOlder = isVersionOlder(cliVersion, serverVersion);
-  const updateCommand = isCliOlder
-    ? `npm install -g uloop-cli@${serverVersion}`
-    : `Update ${PRODUCT_DISPLAY_NAME} package to ${cliVersion} via Unity Package Manager`;
-
   console.error('\x1b[33m⚠️ Version mismatch detected!\x1b[0m');
-  console.error(`   uloop-cli version:    ${cliVersion}`);
-  console.error(`   uloop server version: ${serverVersion}`);
+  console.error(`   Project CLI version:  ${cliVersion}`);
+  console.error(`   Unity package version:${serverVersion}`);
   console.error('');
   console.error('   This may cause unexpected behavior or errors.');
   console.error('');
-  console.error(`   ${isCliOlder ? 'To update CLI:' : 'To update server:'} ${updateCommand}`);
+  console.error(
+    `   Reopen Unity or reload ${PRODUCT_DISPLAY_NAME} so the package can refresh the project-local CLI.`,
+  );
   console.error('');
 }
 

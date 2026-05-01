@@ -6,7 +6,7 @@
 // CLI commands output to console by design
 /* eslint-disable no-console */
 
-import { Command } from 'commander';
+import { type Command } from 'commander';
 import { resolve } from 'path';
 
 import { orchestrateLaunch, type OrchestrateResult } from 'launch-unity';
@@ -21,7 +21,7 @@ import { findUnityProjectRoot, isUnityProject } from '../project-root.js';
 import { createSpinner } from '../spinner.js';
 import { isToolEnabled } from '../tool-settings-loader.js';
 
-interface LaunchCommandOptions {
+export interface LaunchCommandOptions {
   restart?: boolean;
   quit?: boolean;
   deleteRecovery?: boolean;
@@ -64,7 +64,7 @@ function parseMaxDepth(value: string | undefined): number {
   return parsed;
 }
 
-async function runLaunchCommand(
+export async function runLaunchCommand(
   projectPath: string | undefined,
   options: LaunchCommandOptions,
 ): Promise<void> {

@@ -1,7 +1,7 @@
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Application service responsible for MCP server startup operations.
+    /// Application service responsible for Unity CLI bridge startup operations.
     /// Handles server instance creation, startup, and lifecycle management.
     /// 
     /// Related classes:
@@ -12,7 +12,7 @@ namespace io.github.hatayama.uLoopMCP
     public class McpServerStartupService
     {
         /// <summary>
-        /// Creates and starts a new MCP server instance.
+        /// Creates and starts a new Unity CLI bridge instance.
         /// </summary>
         /// <param name="port">Port number to start the server on</param>
         /// <returns>The created server instance</returns>

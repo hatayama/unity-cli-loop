@@ -15,7 +15,7 @@ jest.mock(
   { virtual: true },
 );
 
-import { getInstalledVersion, updateCli } from '../cli.js';
+import { getInstalledVersion, getUpdatePackageSpec, updateCli } from '../cli.js';
 
 type CloseHandler = (code: number | null) => void;
 type ErrorHandler = (error: Error) => void;
@@ -108,7 +108,7 @@ describe('CLI update npm invocation', () => {
     expect(mockSpawn).toHaveBeenNthCalledWith(
       1,
       expectedNpmCommand,
-      ['install', '-g', 'uloop-cli@latest'],
+      ['install', '-g', 'uloop-cli@beta'],
       { stdio: 'inherit' },
     );
     const installOptions = mockSpawn.mock.calls[0]?.[2];
@@ -126,5 +126,14 @@ describe('CLI update npm invocation', () => {
 
     listChild.emitStdout(JSON.stringify({ dependencies: { 'uloop-cli': { version: '1.7.1' } } }));
     listChild.emitClose(0);
+  });
+
+  it('uses the latest tag for stable update package specs', () => {
+    expect(getUpdatePackageSpec('3.0.0')).toBe('uloop-cli@latest');
+  });
+
+  it('uses the prerelease channel tag for prerelease update package specs', () => {
+    expect(getUpdatePackageSpec('3.0.0-beta.2')).toBe('uloop-cli@beta');
+    expect(getUpdatePackageSpec('3.0.0-rc.1')).toBe('uloop-cli@rc');
   });
 });

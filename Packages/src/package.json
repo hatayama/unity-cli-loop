@@ -1,15 +1,15 @@
 {
   "name": "io.github.hatayama.uloopmcp",
-  "version": "2.1.0",
+  "version": "3.0.0-beta.0",
   "displayName": "Unity CLI Loop",
-  "description": "AI-driven development loop for Unity via CLI and MCP.",
+  "description": "AI-driven development loop for Unity via CLI.",
   "unity": "2022.3",
-  "documentationUrl": "https://github.com/hatayama/uLoopMCP/blob/main/Packages/src/README.md",
-  "licensesUrl": "https://github.com/hatayama/uLoopMCP/blob/main/LICENSE.md",
+  "documentationUrl": "https://github.com/hatayama/unity-cli-loop/blob/main/Packages/src/README.md",
+  "licensesUrl": "https://github.com/hatayama/unity-cli-loop/blob/main/LICENSE.md",
   "author": {
     "name": "hatayama",
     "email": "booqle@gmail.com",
-    "url": "https://github.com/hatayama/uLoopMCP"
+    "url": "https://github.com/hatayama/unity-cli-loop"
   },
   "dependencies": {
     "com.unity.test-framework": "1.1.33",
@@ -18,8 +18,7 @@
   },
   "keywords": [
     "Unity CLI Loop",
-    "uLoopMCP",
-    "MCP",
+    "uloop",
     "Cursor",
     "Claude",
     "Windsurf",

@@ -10,9 +10,7 @@ using UnityEngine;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// AI-friendly structured logger for Unity MCP
-    /// 
-    /// Design document reference: Packages/src/TypeScriptServer~/ARCHITECTURE.md
+    /// AI-friendly structured logger for Unity CLI Loop.
     /// 
     /// Related classes:
     /// - McpLogger: Traditional Unity logger that this class replaces

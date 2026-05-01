@@ -30,8 +30,8 @@ Returns JSON with:
 - `ProductName`: Application product name
 - `CompanyName`: Company name
 - `Version`: Application version
-- `Ver`: uLoopMCP package version
+- `Ver`: Unity CLI Loop package version
 
 ## Notes
 
-This is a sample custom tool demonstrating how to create MCP tools.
+This is a sample custom tool demonstrating how to create Unity CLI Loop tools.

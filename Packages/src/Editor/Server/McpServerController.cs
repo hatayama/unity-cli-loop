@@ -13,7 +13,7 @@ namespace io.github.hatayama.uLoopMCP
     // - McpEditorWindow: The UI for starting and stopping the server.
     // - AssemblyReloadEvents: Used to handle server state across domain reloads.
     /// <summary>
-    /// Manages the state of the MCP Server with SessionState and automatically restores it on assembly reload.
+    /// Manages the Unity CLI bridge server state and restores it after assembly reload.
     /// </summary>
     [InitializeOnLoad]
     public static class McpServerController
@@ -30,7 +30,7 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         /// <summary>
-        /// The current MCP server instance.
+        /// The current Unity CLI bridge server instance.
         /// </summary>
         public static McpBridgeServer CurrentServer => mcpServer;
 
@@ -58,7 +58,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             if (IsBackgroundUnityProcess())
             {
-                VibeLogger.LogInfo("server_controller_background_skip", "Skipping MCP server controller initialization in background Unity process.");
+                VibeLogger.LogInfo("server_controller_background_skip", "Skipping Unity CLI bridge controller initialization in background Unity process.");
                 return;
             }
 
@@ -310,19 +310,6 @@ namespace io.github.hatayama.uLoopMCP
                 }
             }, TaskScheduler.FromCurrentSynchronizationContext());
 
-            // Synchronize MCP editor configurations with current debug symbol state after domain reload
-            // Use delayCall to ensure the editor is fully initialized before file I/O
-            EditorApplication.delayCall += () =>
-            {
-                try
-                {
-                    McpDebugStateUpdater.UpdateAllConfigurationsForDebugState();
-                }
-                catch (System.Exception ex)
-                {
-                    UnityEngine.Debug.LogWarning($"MCP debug-state configuration sync failed: {ex.Message}");
-                }
-            };
         }
 
         /// <summary>
@@ -684,7 +671,7 @@ namespace io.github.hatayama.uLoopMCP
         private static void ValidateServerConfiguration(int port)
         {
             // Validate port number using shared validator
-            if (!McpPortValidator.ValidatePort(port, "for MCP server"))
+            if (!McpPortValidator.ValidatePort(port, "for Unity CLI bridge"))
             {
                 throw new System.ArgumentOutOfRangeException(nameof(port),
                     $"Port number must be between 1 and 65535. Received: {port}");
@@ -694,7 +681,7 @@ namespace io.github.hatayama.uLoopMCP
             if (EditorApplication.isCompiling)
             {
                 throw new System.InvalidOperationException(
-                    "Cannot start MCP server while Unity is compiling. Please wait for compilation to complete.");
+                    "Cannot start Unity CLI bridge while Unity is compiling. Please wait for compilation to complete.");
             }
 
             // Server configuration validation passed
@@ -817,19 +804,6 @@ namespace io.github.hatayama.uLoopMCP
                     McpEditorSettings.ClearReconnectingFlags();
                     Debug.LogError($"[{McpConstants.PROJECT_NAME}] Recovery failed: no available port to bind. SavedPort={savedPort}, LastAttemptPort={chosenPort}");
                     throw new InvalidOperationException($"Failed to bind any recovery port. SavedPort={savedPort}, LastAttemptPort={chosenPort}.");
-                }
-
-                // Auto-update configuration files after startup.
-                // This keeps external editor settings aligned with path updates and recovery port fallback.
-                try
-                {
-                    McpConfigAutoUpdater.UpdateAllConfiguredEditors(chosenPort);
-                }
-                catch (Exception ex)
-                {
-                    VibeLogger.LogWarning("config_auto_update_failed", $"Failed to auto-update configurations: {ex.Message}");
-                    Debug.LogWarning($"[{McpConstants.PROJECT_NAME}] Failed to auto-update configurations: {ex.Message}");
-                    // Continue with running server even if config update fails
                 }
 
                 // Mark running and update settings

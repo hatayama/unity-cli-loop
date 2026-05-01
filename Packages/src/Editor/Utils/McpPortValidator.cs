@@ -1,7 +1,7 @@
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Port validation utility for MCP configuration
+    /// Centralizes TCP port rules used by the Unity bridge server.
     /// </summary>
     public static class McpPortValidator
     {
@@ -22,8 +22,6 @@ namespace io.github.hatayama.uLoopMCP
             {
                 return false;
             }
-
-            string contextSuffix = string.IsNullOrEmpty(context) ? "" : $" {context}";
 
             if (port < ReservedPortThreshold)
             {

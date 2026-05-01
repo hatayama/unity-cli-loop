@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Related classes:
     /// - NetworkUtility: Provides port availability checking
     /// - McpPortValidator: Validates port configurations
-    /// - McpPortChangeUpdater: Updates configurations on port changes
     /// </summary>
     public class PortAllocationService
     {
@@ -47,11 +46,6 @@ namespace io.github.hatayama.uLoopMCP
                 "OK",
                 "Cancel"
             );
-
-            if (userConfirmed)
-            {
-                McpPortChangeUpdater.UpdateAllConfigurationsForPortChange(availablePort, "Server port conflict resolution");
-            }
 
             return ServiceResult<bool>.SuccessResult(userConfirmed);
         }

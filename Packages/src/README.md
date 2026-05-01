@@ -86,6 +86,8 @@ Select Window > Unity CLI Loop > Settings. A dedicated window will open — conf
 Press the **Install CLI** button.  
 <img width="277" height="306" alt="1" src="https://github.com/user-attachments/assets/0e25c327-73bf-4af6-997b-eebb3c26b372" />
 
+This installs the global `uloop` dispatcher. The Unity package refreshes this project's `.uloop/bin/uloop` CLI bundle automatically when it is missing or version-mismatched.
+
 
 
 If you see the following display, the installation was successful.  
@@ -100,6 +102,8 @@ If you see the following display, the installation was successful.
 ```bash
 npm install -g uloop-cli
 ```
+
+This installs the same global dispatcher as the Settings button. The project-local `.uloop/bin/uloop` bundle is managed automatically by the Unity package in each project.
 
 See [uloop-cli on npm](https://www.npmjs.com/package/uloop-cli) for details.
 </details>
@@ -230,66 +234,6 @@ uloop compile --project-path /Users/foo/my-unity-project
 uloop compile --project-path ../other-project
 ```
 
-<details>
-<summary>Using MCP instead of CLI</summary>
-
-> [!WARNING]
-> MCP connection may be deprecated or removed in a future release. We recommend using the CLI instead.
-
-You can also connect via MCP (Model Context Protocol). CLI and Skills installation is not required for MCP.
-
-### MCP Connection Steps
-
-1. Select Window > Unity CLI Loop > Settings. A dedicated window will open — press the **MCP** button.
-<img width="274" height="289" alt="CleanShot 2026-02-26 at 20 37 16" src="https://github.com/user-attachments/assets/5f2fc5db-fd33-4b5d-9f0e-3e2e0d134cf6" />
-
-2. Next, select the target IDE in the LLM Tool Settings section. Press the yellow "Configure {LLM Tool Name}" button to automatically connect to the IDE.
-<img width="335" alt="image" src="https://github.com/user-attachments/assets/25f1f4f9-e3c8-40a5-a2f3-903f9ed5f45b" />
-
-3. IDE Connection Verification
-  - For example, with Cursor, check the Tools & MCP in the settings page and find uLoopMCP. Click the toggle to enable MCP.
-
-<img width="657" height="399" alt="image" src="https://github.com/user-attachments/assets/5137491d-0396-482f-b695-6700043b3f69" />
-
-> [!WARNING]
-> **About Windsurf**
-> Project-level configuration is not supported; only a global configuration is available.
-
-<details>
-<summary>Manual Setup (Usually Unnecessary)</summary>
-
-> [!NOTE]
-> Usually automatic setup is sufficient, but if needed, you can manually edit the configuration file (e.g., `mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "uLoopMCP": {
-      "command": "node",
-      "args": [
-        "[Unity Package Path]/TypeScriptServer~/dist/server.bundle.js"
-      ],
-      "env": {
-        "UNITY_TCP_PORT": "{port}"
-      }
-    }
-  }
-}
-```
-
-**Path Examples**:
-- **Via Package Manager**: `"/Users/username/UnityProject/Library/PackageCache/io.github.hatayama.uloopmcp@[hash]/TypeScriptServer~/dist/server.bundle.js"`
-> [!NOTE]
-> When installed via Package Manager, the package is placed in `Library/PackageCache` with a hashed directory name. Using the "Auto Configure Cursor" button will automatically set the correct path.
-
-</details>
-
-### Multiple Unity Instance Support
-> [!NOTE]
-> Multiple Unity instances can be supported by changing port numbers. Unity CLI Loop automatically assigns unused ports when starting up.
-
-</details>
-
 # Design Philosophy
 
 Unity CLI Loop does not chase tool count. With dynamic C# code execution (`execute-dynamic-code`), almost any Unity Editor operation can be accomplished through a single tool.
@@ -399,7 +343,7 @@ Async support:
 - You can write await in your snippet (Task/ValueTask/UniTask and any awaitable type)
 - Cancellation is propagated when you pass a CancellationToken to the tool
 
-**Security Level Support**: Implements 2-tier security control to restrict executable code. To disable this tool entirely, use the tool on/off toggle in the MCP tool settings UI.
+**Security Level Support**: Implements 2-tier security control to restrict executable code. To disable this tool entirely, use the tool on/off toggle in the Tool Settings UI.
 
   - **Level 1 - Restricted** 【Recommended Setting】
     - All Unity APIs and .NET standard libraries are generally available
@@ -432,7 +376,7 @@ Async support:
 > **Security Settings**
 >
 > Some tools are disabled by default for security reasons.
-> To use these tools, enable the corresponding items in the uLoopMCP window "Security Settings":
+> To use these tools, enable the corresponding items in the Unity CLI Loop window "Tool Settings":
 >
 > **Basic Security Settings**:
 > - **Allow Tests Execution**: Enable `run-tests` tool
@@ -523,7 +467,7 @@ Unity CLI Loop enables efficient development of project-specific tools without r
 The type-safe design allows for reliable custom tool implementation in minimal time.
 (If you ask AI, they should be able to make it for you soon ✨)
 
-You can publish your extension tools on GitHub and reuse them across other projects. See [uLoopMCP-extensions-sample](https://github.com/hatayama/uLoopMCP-extensions-sample) for an example.
+You can publish your extension tools on GitHub and reuse them across other projects.
 
 > [!TIP]
 > **For AI-assisted development**: Detailed implementation guides are available in [.claude/rules/mcp-tools.md](/.claude/rules/mcp-tools.md) for tool development and [.claude/rules/cli.md](/.claude/rules/cli.md) for CLI/Skills development. These guides are automatically loaded by Claude Code when working in the relevant directories.
@@ -531,7 +475,7 @@ You can publish your extension tools on GitHub and reuse them across other proje
 > [!IMPORTANT]
 > **Security Settings**
 >
-> Project-specific tools require enabling **Allow Third Party Tools** in the uLoopMCP window "Security Settings".
+> Project-specific tools require enabling **Allow Third Party Tools** in the Unity CLI Loop window "Tool Settings".
 > When developing custom tools that involve dynamic code execution, also consider the **Dynamic Code Security Level** setting.
 
 <details>
@@ -665,8 +609,6 @@ Detailed documentation for the tool...
 
 See [HelloWorld sample](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKILL.md) for a complete example.
 
-For a more comprehensive example project, see [uLoopMCP-extensions-sample](https://github.com/hatayama/uLoopMCP-extensions-sample).
-
 ## Other
 
 ### Unity CLI Loop Files
@@ -679,7 +621,7 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 |------|---------|------------|
 | `settings.permissions.json` | Team-wide security policy (third-party tool access, dynamic code security level) | Optional |
 | `settings.tools.json` | Per-tool enable/disable preferences | Optional |
-| `tools.json` | Auto-generated MCP tool registry | No |
+| `tools.json` | Auto-generated CLI tool registry | No |
 | `outputs/` | Runtime outputs (test results, screenshots, hierarchy dumps) | No |
 
 > [!TIP]

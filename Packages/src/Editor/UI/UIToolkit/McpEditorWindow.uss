@@ -600,51 +600,6 @@
 }
 
 /* ===========================================
-   Block: Tab Toggle (segment control)
-   =========================================== */
-.mcp-tab-toggle {
-    flex-direction: row;
-    background-color: rgba(48, 48, 48, 0.6);
-    border-radius: 3px;
-    border-width: 1px;
-    border-color: rgba(128, 128, 128, 0.2);
-    margin-bottom: 14px;
-}
-
-.mcp-tab-button {
-    flex-grow: 1;
-    height: 20px;
-    border-radius: 2px;
-    border-width: 1px;
-    border-color: transparent;
-    background-color: transparent;
-    color: rgba(255, 255, 255, 0.5);
-    -unity-font-style: normal;
-    font-size: 11px;
-    margin: 0;
-}
-
-.mcp-tab-button:hover {
-    background-color: rgba(46, 90, 136, 0.3);
-    color: rgba(255, 255, 255, 0.7);
-    border-width: 1px;
-    border-color: rgba(70, 130, 200, 0.4);
-}
-
-.mcp-tab-button--active {
-    background-color: rgba(46, 90, 136, 0.8);
-    color: #ffffff;
-    border-width: 1px;
-    border-color: rgba(70, 130, 200, 0.4);
-}
-
-.mcp-tab-button--active:hover {
-    background-color: rgba(46, 90, 136, 0.8);
-    color: #ffffff;
-    border-color: rgba(70, 130, 200, 0.4);
-}
-
-/* ===========================================
    Block: CLI Setup
    =========================================== */
 .mcp-cli-subsection-header {

@@ -8,7 +8,7 @@ namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
     /// Tool toggle settings management for .uloop/settings.tools.json.
-    /// Controls which tools are enabled/disabled in the MCP tool list.
+    /// Controls which tools are enabled or disabled in the CLI tool list.
     /// </summary>
     public static class ToolSettings
     {

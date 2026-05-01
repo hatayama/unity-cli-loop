@@ -15,6 +15,12 @@ function loadPackageManifest(): PackageManifest {
 }
 
 describe('package metadata', () => {
+  it('publishes the global uloop command as the dispatcher', () => {
+    const packageManifest = loadPackageManifest();
+
+    expect(packageManifest.bin?.['uloop']).toBe('dist/dispatcher.bundle.cjs');
+  });
+
   it('avoids bin target prefixes that npm normalizes during publish', () => {
     const packageManifest = loadPackageManifest();
     const binEntries = Object.entries(packageManifest.bin ?? {});

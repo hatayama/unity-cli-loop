@@ -73,7 +73,7 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         /// <summary>
-        /// Get internal registry (for MCP server)
+        /// Get internal registry for the Unity CLI bridge.
         /// </summary>
         /// <returns>UnityToolRegistry instance</returns>
         internal static UnityToolRegistry GetRegistry()

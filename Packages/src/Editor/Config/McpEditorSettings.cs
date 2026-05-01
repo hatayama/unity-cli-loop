@@ -18,7 +18,7 @@ namespace io.github.hatayama.uLoopMCP
     }
 
     /// <summary>
-    /// Unity MCP Editor settings data.
+    /// Unity CLI Loop Editor settings data.
     /// </summary>
     [Serializable]
     public record McpEditorSettingsData
@@ -27,10 +27,7 @@ namespace io.github.hatayama.uLoopMCP
         public string projectRootPath = "";
         public string serverSessionId = "";
         public bool showDeveloperTools = false;
-        public bool enableMcpLogs = false;
         public bool enableCommunicationLogs = false;
-        public bool enableDevelopmentMode = false;
-        public string lastUsedConfigPath = "";
         public string lastSeenSetupWizardVersion = "";
         public bool suppressSetupWizardAutoShow = false;
 
@@ -38,8 +35,6 @@ namespace io.github.hatayama.uLoopMCP
         public bool showSecuritySettings = true;
         public bool showToolSettings = true;
 
-        // Repository Root Toggle
-        public bool addRepositoryRoot = false;
         // Default to flat installation so first-time setup does not add an extra grouping layer unless requested.
         public bool installSkillsFlat = true;
         
@@ -51,8 +46,6 @@ namespace io.github.hatayama.uLoopMCP
         public bool isReconnecting = false;
         public bool showReconnectingUI = false;
         public bool showPostCompileReconnectingUI = false;
-        public int selectedEditorType = (int)McpEditorType.Cursor;
-        public int connectionMode = (int)ConnectionMode.CLI;
         public float communicationLogHeight = McpUIConstants.DEFAULT_COMMUNICATION_LOG_HEIGHT;
         public string communicationLogsJson = "[]";
         public string pendingRequestsJson = "{}";
@@ -63,7 +56,7 @@ namespace io.github.hatayama.uLoopMCP
     }
 
     /// <summary>
-    /// Management class for Unity MCP Editor settings.
+    /// Management class for Unity CLI Loop Editor settings.
     /// Saves as a JSON file in the UserSettings folder.
     /// </summary>
     public static class McpEditorSettings
@@ -220,26 +213,6 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         /// <summary>
-        /// Gets the MCP log enabled flag.
-        /// </summary>
-        public static bool GetEnableMcpLogs()
-        {
-            return GetSettings().enableMcpLogs;
-        }
-
-        /// <summary>
-        /// Sets the MCP log enabled flag.
-        /// </summary>
-        public static void SetEnableMcpLogs(bool enableMcpLogs)
-        {
-            McpEditorSettingsData settings = GetSettings();
-            McpEditorSettingsData newSettings = settings with { enableMcpLogs = enableMcpLogs };
-            SaveSettings(newSettings);
-
-            // Synchronize McpLogger settings as well.
-        }
-
-        /// <summary>
         /// Gets the communication logs enabled flag.
         /// </summary>
         public static bool GetEnableCommunicationLogs()
@@ -309,24 +282,6 @@ namespace io.github.hatayama.uLoopMCP
         {
             McpEditorSettingsData settings = GetSettings();
             McpEditorSettingsData newSettings = settings with { showToolSettings = showToolSettings };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Gets the repository root usage flag.
-        /// </summary>
-        public static bool GetAddRepositoryRoot()
-        {
-            return GetSettings().addRepositoryRoot;
-        }
-        
-        /// <summary>
-        /// Sets the repository root usage flag.
-        /// </summary>
-        public static void SetAddRepositoryRoot(bool addRepositoryRoot)
-        {
-            McpEditorSettingsData settings = GetSettings();
-            McpEditorSettingsData newSettings = settings with { addRepositoryRoot = addRepositoryRoot };
             SaveSettings(newSettings);
         }
 
@@ -449,36 +404,6 @@ namespace io.github.hatayama.uLoopMCP
         {
             McpEditorSettingsData settings = GetSettings();
             McpEditorSettingsData newSettings = settings with { showPostCompileReconnectingUI = showPostCompileReconnectingUI };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Gets the selected editor type.
-        /// </summary>
-        public static McpEditorType GetSelectedEditorType()
-        {
-            return (McpEditorType)GetSettings().selectedEditorType;
-        }
-
-        /// <summary>
-        /// Sets the selected editor type.
-        /// </summary>
-        public static void SetSelectedEditorType(McpEditorType selectedEditorType)
-        {
-            McpEditorSettingsData settings = GetSettings();
-            McpEditorSettingsData newSettings = settings with { selectedEditorType = (int)selectedEditorType };
-            SaveSettings(newSettings);
-        }
-
-        public static ConnectionMode GetConnectionMode()
-        {
-            return (ConnectionMode)GetSettings().connectionMode;
-        }
-
-        public static void SetConnectionMode(ConnectionMode mode)
-        {
-            McpEditorSettingsData settings = GetSettings();
-            McpEditorSettingsData newSettings = settings with { connectionMode = (int)mode };
             SaveSettings(newSettings);
         }
 

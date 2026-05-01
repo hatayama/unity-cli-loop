@@ -1,6 +1,6 @@
 /**
  * Direct Unity TCP client for CLI usage.
- * Establishes one-shot TCP connections to Unity without going through MCP server.
+ * Establishes one-shot TCP connections to the Unity Editor bridge.
  */
 
 // Non-null assertions are used after TCP frame parsing where data existence is guaranteed by protocol

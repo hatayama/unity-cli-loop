@@ -106,43 +106,5 @@ namespace io.github.hatayama.uLoopMCP
             Assert.IsNull(controlsData.PortWarningMessage, "Default warning message should be null");
         }
 
-        [Test]
-        public void EditorConfigData_PortMismatchDetection()
-        {
-            // Act
-            var configData = new EditorConfigData(
-                selectedEditor: McpEditorType.Cursor,
-                isServerRunning: true,
-                currentPort: 7401,
-                isConfigured: true,
-                hasPortMismatch: true,
-                configurationError: null
-            );
-            
-            // Assert
-            Assert.IsTrue(configData.HasPortMismatch, "Should detect port mismatch");
-            Assert.IsTrue(configData.IsConfigured, "Should be configured");
-            Assert.AreEqual(McpEditorType.Cursor, configData.SelectedEditor, "Editor type should be set correctly");
-            Assert.AreEqual(7401, configData.CurrentPort, "Current port should be set correctly");
-        }
-
-        [Test]
-        public void EditorConfigData_NoPortMismatch()
-        {
-            // Act
-            var configData = new EditorConfigData(
-                selectedEditor: McpEditorType.VSCode,
-                isServerRunning: false,
-                currentPort: 7400,
-                isConfigured: false,
-                hasPortMismatch: false,
-                configurationError: "Config not found"
-            );
-            
-            // Assert
-            Assert.IsFalse(configData.HasPortMismatch, "Should not detect port mismatch");
-            Assert.IsFalse(configData.IsConfigured, "Should not be configured");
-            Assert.AreEqual("Config not found", configData.ConfigurationError, "Error message should be set");
-        }
     }
 }

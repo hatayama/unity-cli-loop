@@ -15,7 +15,7 @@ namespace io.github.hatayama.uLoopMCP
     // - AbstractUnityTool: The base class for most tool implementations.
     // - McpToolAttribute: Attribute used to discover and register _tools automatically.
     /// <summary>
-    /// Unity MCP tool registry class
+    /// Unity CLI tool registry class
     /// Supports dynamic tool registration, allowing users to add their own _tools
     /// </summary>
     public class UnityToolRegistry

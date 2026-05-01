@@ -1,16 +1,13 @@
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Central constants repository for Unity MCP system.
+    /// Central constants repository for Unity CLI Loop.
     ///
     /// Design document reference: Packages/src/Editor/ARCHITECTURE.md
     ///
     /// Related classes:
-    /// - McpConfigService: Uses these constants for configuration management
-    /// - McpServerConfigFactory: Uses port and environment variable constants
     /// - McpEditorWindow: Uses SessionState keys for UI state persistence
     /// - McpSessionManager: Uses SessionState keys for connection state management
-    /// - EditorConfigProvider: Provides client names via GetClientNameForEditor method
     /// </summary>
     public static class McpConstants
     {
@@ -71,42 +68,15 @@ namespace io.github.hatayama.uLoopMCP
 
         public const string PROJECT_NAME = "uLoopMCP";
         
-        // JSON configuration keys
-        public const string JSON_KEY_MCP_SERVERS = "mcpServers";
-        public const string JSON_KEY_COMMAND = "command";
-        public const string JSON_KEY_ARGS = "args";
-        public const string JSON_KEY_ENV = "env";
-        
         // Editor settings
         public const string SETTINGS_FILE_NAME = "UnityMcpSettings.json";
         public const string USER_SETTINGS_FOLDER = "UserSettings";
-        
-        // Server configuration
-        public const string NODE_COMMAND = "node";
-        public const string UNITY_TCP_PORT_ENV_KEY = "UNITY_TCP_PORT";
         
         // Scripting define symbols
         public const string SCRIPTING_DEFINE_ULOOPMCP_DEBUG = "ULOOPMCP_DEBUG";
         
         // Environment variable keys for development mode
         public const string ENV_KEY_ULOOPMCP_DEBUG = "ULOOPMCP_DEBUG";
-        public const string ENV_KEY_ULOOPMCP_PRODUCTION = "ULOOPMCP_PRODUCTION";
-        public const string ENV_KEY_MCP_DEBUG = "MCP_DEBUG";
-        public const string ENV_KEY_NODE_OPTIONS = "NODE_OPTIONS";
-        // MCP_CLIENT_NAME removed - now using clientInfo.name from MCP protocol
-        
-        // Environment variable values
-        public const string ENV_VALUE_TRUE = "true";
-        public const string NODE_OPTIONS_ENABLE_SOURCE_MAPS = "--enable-source-maps";
-        
-        // Client names for different editors
-        public const string CLIENT_NAME_CURSOR = "Cursor";
-        public const string CLIENT_NAME_CLAUDE_CODE = "Claude Code";
-        public const string CLIENT_NAME_VSCODE = "VSCode";
-        public const string CLIENT_NAME_GEMINI_CLI = "Gemini CLI";
-        public const string CLIENT_NAME_WINDSURF = "Windsurf";
-        public const string CLIENT_NAME_CODEX = "Codex";
-        public const string CLIENT_NAME_MCP_INSPECTOR = "MCP Inspector";
         public const string UNKNOWN_CLIENT_NAME = "Unknown Client";
         
         // Command messages
@@ -114,11 +84,6 @@ namespace io.github.hatayama.uLoopMCP
         
         // Reconnection settings
         public const int RECONNECTION_TIMEOUT_SECONDS = 10;
-        
-        // TypeScript server related constants
-        public const string TYPESCRIPT_SERVER_DIR = "TypeScriptServer~";
-        public const string DIST_DIR = "dist";
-        public const string SERVER_BUNDLE_FILE = "server.bundle.js";
         
         // Package path constants
         public const string PACKAGES_DIR = "Packages";

@@ -6,9 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-22+-green.svg)](https://nodejs.org/)
 
-**CLI companion for [Unity CLI Loop](https://github.com/hatayama/uLoopMCP)** - Let AI agents compile, test, and operate your Unity project.
+**CLI companion for [Unity CLI Loop](https://github.com/hatayama/unity-cli-loop)** - Let AI agents compile, test, and operate your Unity project.
 
-> **Prerequisites**: This CLI requires [Unity CLI Loop](https://github.com/hatayama/uLoopMCP) to be installed in your Unity project and the server running. See the [main repository](https://github.com/hatayama/uLoopMCP) for setup instructions.
+> **Prerequisites**: This CLI requires [Unity CLI Loop](https://github.com/hatayama/unity-cli-loop) to be installed in your Unity project. The Unity package automatically creates or refreshes the project-local CLI bundle when it is missing or version-mismatched.
 
 ## Installation
 
@@ -44,11 +44,11 @@ After installing Skills, LLM tools can automatically handle instructions like:
 | "Run the tests and tell me why they failed" | `/uloop-run-tests` |
 | "Check the scene hierarchy" | `/uloop-get-hierarchy` |
 
-> **No MCP configuration required!** As long as the server is running in the uLoopMCP Window, LLM tools communicate directly with Unity through Skills.
+> **No external protocol configuration required.** LLM tools communicate with Unity through the `uloop` CLI and installed Skills.
 
 ## Available Skills
 
-Skills are dynamically loaded from the uLoopMCP package in your Unity project. These are the default skills provided by uLoopMCP:
+Skills are dynamically loaded from the Unity CLI Loop package in your Unity project. These are the default skills provided by Unity CLI Loop:
 
 - `/uloop-compile` - Execute compilation
 - `/uloop-get-logs` - Get console logs
@@ -341,13 +341,13 @@ uloop completion --shell powershell --install  # PowerShell
 ## Requirements
 
 - **Node.js 22.0 or later**
-- **Unity 2022.3 or later** with [uLoopMCP](https://github.com/hatayama/uLoopMCP) installed
-- uLoopMCP server running (Window > Unity CLI Loop > Start Server)
+- **Unity 2022.3 or later** with [Unity CLI Loop](https://github.com/hatayama/unity-cli-loop) installed
+- Project-local CLI automatically created or refreshed by the Unity package
 
 ## Links
 
-- [uLoopMCP Repository](https://github.com/hatayama/uLoopMCP) - Main package and documentation
-- [Tool Reference](https://github.com/hatayama/uLoopMCP/blob/main/Packages/src/TOOL_REFERENCE.md) - Detailed API specifications and response schemas
+- [Unity CLI Loop Repository](https://github.com/hatayama/unity-cli-loop) - Main package and documentation
+- [Tool Reference](https://github.com/hatayama/unity-cli-loop/blob/main/Packages/src/TOOL_REFERENCE.md) - Detailed API specifications and response schemas
 
 ## License
 

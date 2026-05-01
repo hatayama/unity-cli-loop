@@ -1,159 +1,72 @@
-name: Build and Release uLoopMCP
+name: Build and Test Unity CLI Loop
 
 on:
   push:
-    tags: [ 'v*' ]
+    tags: ["v*"]
   pull_request:
-    branches: [ main ]
+    branches: [main, v3-beta]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build-typescript-server:
+  build-cli:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Setup Node.js
-      uses: actions/setup-node@v6
-      with:
-        node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: 'Packages/src/TypeScriptServer~/package-lock.json'
-        
-    - name: Install TypeScript Server dependencies
-      working-directory: Packages/src/TypeScriptServer~
-      run: |
-        echo "Installing dependencies (node_modules will be created temporarily)..."
-        npm ci --ignore-scripts=false
-        echo "Dependencies installed successfully"
-        
-    - name: Type check TypeScript Server
-      working-directory: Packages/src/TypeScriptServer~
-      run: npx tsc --noEmit
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-    - name: Install CLI dependencies
-      working-directory: Packages/src/Cli~
-      run: npm ci
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "Packages/src/Cli~/package-lock.json"
 
-    - name: Type check CLI
-      working-directory: Packages/src/Cli~
-      run: npx tsc --noEmit
+      - name: Install CLI dependencies
+        working-directory: Packages/src/Cli~
+        run: npm ci
 
-    - name: Run knip on TypeScript Server
-      working-directory: Packages/src/TypeScriptServer~
-      run: npx knip
+      - name: Type check CLI
+        working-directory: Packages/src/Cli~
+        run: npx tsc --noEmit
 
-    - name: Run knip on CLI
-      working-directory: Packages/src/Cli~
-      run: npx knip
+      - name: Run knip on CLI
+        working-directory: Packages/src/Cli~
+        run: npx knip
 
-    - name: Build TypeScript Server
-      working-directory: Packages/src/TypeScriptServer~
-      env:
-        ULOOPMCP_PRODUCTION: "true"
-        NODE_ENV: "production"
-      run: |
-        echo "Building TypeScript Server in production mode..."
-        echo "Environment: ULOOPMCP_PRODUCTION=$ULOOPMCP_PRODUCTION, NODE_ENV=$NODE_ENV"
-        npm run build:production
-        echo "Production build completed successfully"
-        
-    - name: Verify build output
-      working-directory: Packages/src/TypeScriptServer~
-      env:
-        ULOOPMCP_PRODUCTION: "true"
-        NODE_ENV: "production"
-      run: |
-        echo "Verifying build output..."
-        ls -la dist/
-        echo "Testing server startup in production mode..."
-        echo "Environment: ULOOPMCP_PRODUCTION=$ULOOPMCP_PRODUCTION, NODE_ENV=$NODE_ENV"
-        timeout 5s node dist/server.bundle.js || echo "Production server built successfully"
-        
-    - name: Clean up node_modules (optional verification)
-      working-directory: Packages/src/TypeScriptServer~
-      run: |
-        echo "node_modules size before cleanup:"
-        du -sh node_modules/ || echo "node_modules not found"
-        echo "Note: node_modules will be automatically cleaned up when GitHub Actions environment is destroyed"
-        
-    - name: Commit built files (if changed)
-      if: github.event_name == 'pull_request'
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
+      - name: Build CLI
+        working-directory: Packages/src/Cli~
+        run: npm run build
 
-        # Validate and sanitize branch name to prevent shell injection
-        BRANCH_NAME="${{ github.head_ref }}"
-        if [[ ! "$BRANCH_NAME" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
-          echo "Error: Invalid branch name format: $BRANCH_NAME"
-          exit 1
-        fi
+      - name: Verify checked-in project CLI bundle
+        run: |
+          git diff --exit-code -- Packages/src/Cli~/dist/cli.bundle.cjs
 
-        # Save built artifacts before switching branches
-        TEMP_DIR=$(mktemp -d "$RUNNER_TEMP/server-bundle.XXXXXX")
-        cp Packages/src/TypeScriptServer~/dist/server.bundle.js "$TEMP_DIR/server.bundle.js"
-        cp Packages/src/TypeScriptServer~/dist/server.bundle.js.map "$TEMP_DIR/server.bundle.js.map"
-
-        echo "Fetching and switching to actual branch..."
-        git fetch origin "$BRANCH_NAME:$BRANCH_NAME"
-        git checkout "$BRANCH_NAME"
-
-        # Restore built artifacts
-        cp "$TEMP_DIR/server.bundle.js" Packages/src/TypeScriptServer~/dist/server.bundle.js
-        cp "$TEMP_DIR/server.bundle.js.map" Packages/src/TypeScriptServer~/dist/server.bundle.js.map
-        rm -rf "$TEMP_DIR"
-
-        echo "Adding only dist/ files to git..."
-        git add Packages/src/TypeScriptServer~/dist/server.bundle.js Packages/src/TypeScriptServer~/dist/server.bundle.js.map
-
-        echo "Checking for changes..."
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-        else
-          echo "Committing built files..."
-          git commit -m "chore: rebuild server bundle [skip ci]"
-          git push origin "$BRANCH_NAME"
-          echo "Built files committed successfully"
-        fi
-        
   test-unity-package:
     runs-on: ubuntu-latest
-    needs: build-typescript-server
-    
+    needs: build-cli
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
-      
-    - name: Validate Unity Package structure
-      run: |
-        echo "Validating Unity Package structure..."
-        
-        # Unity Package必須ファイルの存在確認
-        test -f "Packages/src/package.json" || exit 1
-        test -d "Packages/src/Editor" || exit 1
-        test -f "Packages/src/TypeScriptServer~/dist/server.bundle.js" || exit 1
-        
-        echo "✅ Unity Package structure is valid"
-        
-        # node_modulesが含まれていないことを確認
-        if [ -d "Packages/src/TypeScriptServer~/node_modules" ]; then
-          echo "❌ ERROR: node_modules should not be in the repository"
-          exit 1
-        else
-          echo "✅ node_modules correctly excluded from repository"
-        fi
-        
-    - name: Validate package.json
-      working-directory: Packages/src
-      run: |
-        echo "Validating package.json syntax..."
-        node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
-        echo "✅ package.json is valid"
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Validate Unity Package structure
+        run: |
+          echo "Validating Unity Package structure..."
+
+          test -f "Packages/src/package.json" || exit 1
+          test -d "Packages/src/Editor" || exit 1
+          test -d "Packages/src/Cli~" || exit 1
+          test -f "Packages/src/Cli~/dist/cli.bundle.cjs" || exit 1
+
+          echo "✅ Unity Package structure is valid"
+
+      - name: Validate package.json
+        working-directory: Packages/src
+        run: |
+          echo "Validating package.json syntax..."
+          node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
+          echo "✅ package.json is valid"

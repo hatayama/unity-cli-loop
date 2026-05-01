@@ -60,46 +60,6 @@ namespace io.github.hatayama.uLoopMCP
         }
     }
     
-    public record EditorConfigData
-    {
-        public readonly McpEditorType SelectedEditor;
-        public readonly bool IsServerRunning;
-        public readonly int CurrentPort;
-        public readonly bool IsConfigured;
-        public readonly bool HasPortMismatch;
-        public readonly string ConfigurationError;
-        public readonly bool IsUpdateNeeded;
-        public readonly bool AddRepositoryRoot;
-        public readonly bool SupportsRepositoryRootToggle;
-        public readonly bool ShowRepositoryRootToggle;
-        public readonly bool IsChecking;
-
-        public EditorConfigData(McpEditorType selectedEditor, bool isServerRunning, int currentPort, bool isConfigured = false, bool hasPortMismatch = false, string configurationError = null, bool isUpdateNeeded = true, bool addRepositoryRoot = false, bool supportsRepositoryRootToggle = false, bool showRepositoryRootToggle = false, bool isChecking = false)
-        {
-            SelectedEditor = selectedEditor;
-            IsServerRunning = isServerRunning;
-            CurrentPort = currentPort;
-            IsConfigured = isConfigured;
-            HasPortMismatch = hasPortMismatch;
-            ConfigurationError = configurationError;
-            IsUpdateNeeded = isUpdateNeeded;
-            AddRepositoryRoot = addRepositoryRoot;
-            SupportsRepositoryRootToggle = supportsRepositoryRootToggle;
-            ShowRepositoryRootToggle = showRepositoryRootToggle;
-            IsChecking = isChecking;
-        }
-    }
-
-    public record ConnectionModeData
-    {
-        public readonly ConnectionMode Mode;
-
-        public ConnectionModeData(ConnectionMode mode)
-        {
-            Mode = mode;
-        }
-    }
-
     public record ToolToggleItem
     {
         public readonly string ToolName;

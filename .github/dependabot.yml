@@ -15,36 +15,6 @@ updates:
       - dependency-name: "googleapis/release-please-action"
         update-types: ["version-update:semver-major"]
 
-  # TypeScript Server npm packages security updates
-  - package-ecosystem: "npm"
-    directory: "/Packages/src/TypeScriptServer~"
-    schedule:
-      interval: "daily"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "npm"
-      - "security"
-    # typescript-eslint does not yet support ESLint v10 (see typescript-eslint/typescript-eslint#11952)
-    ignore:
-      - dependency-name: "eslint"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@eslint/js"
-        update-types: ["version-update:semver-major"]
-    # Group minor/patch updates to reduce PR noise
-    groups:
-      dev-dependencies:
-        patterns:
-          - "@types/*"
-          - "eslint*"
-          - "prettier*"
-          - "typescript"
-          - "jest*"
-          - "ts-jest"
-        update-types:
-          - "minor"
-          - "patch"
-
   # CLI npm packages
   - package-ecosystem: "npm"
     directory: "/Packages/src/Cli~"

@@ -3,8 +3,8 @@ using System;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Attribute to mark classes for automatic MCP tool registration
-    /// Classes marked with this attribute will be automatically registered as MCP commands
+    /// Attribute used by the Unity tool registry.
+    /// The class name is historical and remains part of the public extension API.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public class McpToolAttribute : Attribute
@@ -25,10 +25,10 @@ namespace io.github.hatayama.uLoopMCP
         public string Description { get; set; } = string.Empty;
 
         /// <summary>
-        /// Initialize McpTool attribute
+        /// Public parameterless constructor required for attribute usage.
         /// </summary>
         public McpToolAttribute()
         {
         }
     }
-} 
+}

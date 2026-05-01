@@ -164,16 +164,6 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            // Config auto-update is best-effort; do not block server startup on unrelated config-file problems
-            try
-            {
-                McpConfigAutoUpdater.UpdateAllConfiguredEditors(port);
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"[uLoopMCP] Failed to auto-update configurations: {ex.Message}");
-            }
-
             McpServerController.StartServer(port);
         }
 

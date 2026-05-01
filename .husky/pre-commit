@@ -7,19 +7,11 @@ if [ -n "$changed_readmes" ]; then
   sh scripts/sync-readmes.sh
 fi
 
-changed_server_ts="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^Packages/src/TypeScriptServer~/src/.*\.(ts|tsx)$' || true)"
 changed_cli_ts="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^Packages/src/Cli~/src/.*\.(ts|tsx)$' || true)"
 
-cd Packages/src/TypeScriptServer~
-npx lint-staged
-
-if [ -n "$changed_server_ts" ]; then
-  npx tsc --noEmit
-  npx knip
-fi
-
-cd ../Cli~
-
 if [ -n "$changed_cli_ts" ]; then
+  cd Packages/src/Cli~
+  npm run lint
+  npx tsc --noEmit
   npx knip
 fi

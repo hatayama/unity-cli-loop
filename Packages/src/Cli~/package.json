@@ -1,15 +1,15 @@
 {
   "name": "uloop-cli",
-  "version": "2.1.0",
+  "version": "3.0.0-beta.0",
   "//version": "x-release-please-version",
   "description": "CLI tool for Unity Editor communication via Unity CLI Loop",
-  "main": "dist/cli.bundle.cjs",
+  "main": "dist/dispatcher.bundle.cjs",
   "bin": {
-    "uloop": "dist/cli.bundle.cjs"
+    "uloop": "dist/dispatcher.bundle.cjs"
   },
   "type": "module",
   "scripts": {
-    "build": "esbuild src/cli.ts --bundle --platform=node --format=cjs --outfile=dist/cli.bundle.cjs --sourcemap --banner:js=\"#!/usr/bin/env node\" --loader:.md=text",
+    "build": "esbuild src/dispatcher.ts --bundle --platform=node --format=cjs --outfile=dist/dispatcher.bundle.cjs --sourcemap --banner:js=\"#!/usr/bin/env node\" && esbuild src/cli.ts --bundle --platform=node --format=cjs --outfile=dist/cli.bundle.cjs --sourcemap --banner:js=\"#!/usr/bin/env node\" --loader:.md=text",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write src/**/*.ts",
@@ -20,7 +20,6 @@
   "keywords": [
     "cli",
     "unity",
-    "mcp",
     "uloop"
   ],
   "author": "hatayama",
@@ -31,9 +30,9 @@
     "directory": "Packages/src/Cli~"
   },
   "bugs": {
-    "url": "https://github.com/hatayama/uLoopMCP/issues"
+    "url": "https://github.com/hatayama/unity-cli-loop/issues"
   },
-  "homepage": "https://github.com/hatayama/uLoopMCP#readme",
+  "homepage": "https://github.com/hatayama/unity-cli-loop#readme",
   "engines": {
     "node": ">=22.0.0"
   },
@@ -43,14 +42,12 @@
   },
   "dependencies": {
     "commander": "14.0.3",
-    "launch-unity": "^0.17.1",
-    "semver": "7.7.4"
+    "launch-unity": "^0.17.1"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/jest": "30.0.0",
     "@types/node": "25.6.0",
-    "@types/semver": "7.7.1",
     "esbuild": "0.28.0",
     "eslint": "10.2.1",
     "eslint-config-prettier": "10.1.8",

@@ -1,12 +1,12 @@
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Base response class for all Unity MCP tool responses
+    /// Base response class for Unity CLI tool responses.
     /// </summary>
     public abstract class BaseToolResponse
     {
         /// <summary>
-        /// uLoopMCP server version for CLI version compatibility check
+        /// Unity package version for CLI compatibility checks.
         /// </summary>
         public string Ver => McpVersion.VERSION;
     }

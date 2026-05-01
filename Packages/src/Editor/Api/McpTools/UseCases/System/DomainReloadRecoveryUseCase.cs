@@ -26,7 +26,7 @@ namespace io.github.hatayama.uLoopMCP
             int? serverPort = currentServer?.Port;
 
             // 3. Fallback to session state if instance is null but session says server was running
-            // Handles case where mcpServer instance became null unexpectedly
+                    // Handles case where bridge server instance became null unexpectedly
             if (currentServer == null && McpEditorSettings.GetIsServerRunning())
             {
                 int sessionPort = McpEditorSettings.GetCustomPort();
@@ -81,7 +81,7 @@ namespace io.github.hatayama.uLoopMCP
 
                     // Server stop failure is a critical error (causes port conflicts)
                     throw new System.InvalidOperationException(
-                        $"Failed to properly shutdown MCP server before assembly reload. This may cause port conflicts on restart.", ex);
+                        $"Failed to properly shutdown Unity CLI bridge before assembly reload. This may cause port conflicts on restart.", ex);
                 }
             }
 

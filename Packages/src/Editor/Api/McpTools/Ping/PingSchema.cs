@@ -12,6 +12,6 @@ namespace io.github.hatayama.uLoopMCP
         /// Message to send to Unity
         /// </summary>
         [Description("Message to send to Unity")]
-        public string Message { get; set; } = "Hello from TypeScript MCP Server";
+        public string Message { get; set; } = "Hello from Unity CLI Loop";
     }
-} 
+}

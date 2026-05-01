@@ -164,7 +164,7 @@ interface UnityProjectStatus {
 
 /**
  * Check Unity project status with detailed information.
- * Returns whether a Unity project exists and whether uLoopMCP is installed.
+ * Returns whether a Unity project exists and whether Unity CLI Loop is installed.
  */
 export function getUnityProjectStatus(startPath: string = process.cwd()): UnityProjectStatus {
   const unityProjectWithUloop = findUnityProjectRoot(startPath);

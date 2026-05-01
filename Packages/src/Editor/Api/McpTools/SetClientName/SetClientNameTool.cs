@@ -5,18 +5,17 @@ using System.Threading.Tasks;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// SetClientName tool handler - Allows MCP clients to register their name
-    /// This tool is called by TypeScript clients to identify themselves
+    /// Development-only tool that lets CLI clients register their display name.
     /// </summary>
     [McpTool(
-        Description = "Register client name for identification in Unity MCP server",
+        Description = "Register client name for identification in Unity CLI bridge",
         DisplayDevelopmentOnly = true
     )]
     public class SetClientNameTool : AbstractUnityTool<SetClientNameSchema, SetClientNameResponse>
     {
         public override string ToolName => "set-client-name";
 
-        protected override Task<SetClientNameResponse> ExecuteAsync(SetClientNameSchema parameters, CancellationToken cancellationToken)
+        protected override Task<SetClientNameResponse> ExecuteAsync(SetClientNameSchema parameters, CancellationToken ct)
         {
             string clientName = parameters.ClientName;
             

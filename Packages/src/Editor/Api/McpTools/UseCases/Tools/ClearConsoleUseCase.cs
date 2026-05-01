@@ -43,7 +43,7 @@ namespace io.github.hatayama.uLoopMCP
                 // 3. Add confirmation message
                 if (parameters.AddConfirmationMessage)
                 {
-                    Debug.Log("=== Console cleared via MCP tool ===");
+                    Debug.Log("=== Console cleared via Unity CLI Loop ===");
                 }
 
                 // 4. Create result

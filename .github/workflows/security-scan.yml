@@ -2,21 +2,25 @@ name: Security Code Scan
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, v3-beta ]
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'Packages/src/TypeScriptServer~/**/*.ts'
-      - 'Packages/src/TypeScriptServer~/package.json'
-      - 'Packages/src/TypeScriptServer~/package-lock.json'
+      - 'Packages/src/Cli~/**/*.ts'
+      - 'Packages/src/Cli~/eslint.config.mjs'
+      - 'Packages/src/Cli~/package.json'
+      - 'Packages/src/Cli~/package-lock.json'
+      - 'Packages/src/Cli~/tsconfig.json'
   pull_request:
-    branches: [ main ]
+    branches: [ main, v3-beta ]
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'Packages/src/TypeScriptServer~/**/*.ts'
-      - 'Packages/src/TypeScriptServer~/package.json'
-      - 'Packages/src/TypeScriptServer~/package-lock.json'
+      - 'Packages/src/Cli~/**/*.ts'
+      - 'Packages/src/Cli~/eslint.config.mjs'
+      - 'Packages/src/Cli~/package.json'
+      - 'Packages/src/Cli~/package-lock.json'
+      - 'Packages/src/Cli~/tsconfig.json'
   workflow_dispatch:
 
 jobs:
@@ -38,10 +42,10 @@ jobs:
       with:
         dotnet-version: '6.0.x'
 
-    - name: Run SecurityCodeScan on uLoopMCP Package
+    - name: Run SecurityCodeScan on Unity CLI Loop Package
       run: |
         # Create a temporary project file for scanning
-        cat > temp-uloopmcp.csproj << 'EOF'
+        cat > temp-unity-cli-loop.csproj << 'EOF'
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
             <TargetFramework>net6.0</TargetFramework>
@@ -58,10 +62,10 @@ jobs:
         EOF
         
         # Run dotnet build to trigger SecurityCodeScan analysis
-        dotnet restore temp-uloopmcp.csproj
+        dotnet restore temp-unity-cli-loop.csproj
         
         # Build with continue on error and create a basic SARIF file if scanning fails
-        if ! dotnet build temp-uloopmcp.csproj --configuration Release --verbosity normal --no-restore; then
+        if ! dotnet build temp-unity-cli-loop.csproj --configuration Release --verbosity normal --no-restore; then
           echo "SecurityCodeScan completed with warnings/errors - creating placeholder SARIF"
           cat > security-results.sarif << 'SARIF_EOF'
         {
@@ -100,7 +104,7 @@ jobs:
         path: security-results.sarif
 
   typescript-security:
-    name: TypeScript Security Analysis
+    name: CLI TypeScript Security Analysis
     runs-on: ubuntu-latest
 
     steps:
@@ -112,15 +116,15 @@ jobs:
       with:
         node-version: '22'
         cache: 'npm'
-        cache-dependency-path: 'Packages/src/TypeScriptServer~/package-lock.json'
+        cache-dependency-path: 'Packages/src/Cli~/package-lock.json'
 
     - name: Install dependencies
-      working-directory: Packages/src/TypeScriptServer~
-      run: npm ci --ignore-scripts=false
+      working-directory: Packages/src/Cli~
+      run: npm ci
 
     - name: Run TypeScript security check
-      working-directory: Packages/src/TypeScriptServer~
-      run: npm run security:check
+      working-directory: Packages/src/Cli~
+      run: npx eslint src
 
   npm-supply-chain-security:
     name: NPM Supply Chain Security
@@ -136,7 +140,7 @@ jobs:
         node-version: '22'
 
     - name: Run npm audit
-      working-directory: Packages/src/TypeScriptServer~
+      working-directory: Packages/src/Cli~
       run: |
         echo "Running npm audit for security vulnerabilities..."
         npm audit --audit-level=moderate || {
@@ -148,7 +152,7 @@ jobs:
       run: npm install -g lockfile-lint
 
     - name: Run lockfile-lint
-      working-directory: Packages/src/TypeScriptServer~
+      working-directory: Packages/src/Cli~
       run: |
         echo "Validating package-lock.json integrity..."
         lockfile-lint \

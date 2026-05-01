@@ -1,5 +1,5 @@
 {
-  "version": "2.1.0",
+  "version": "3.0.0-beta.0",
   "tools": [
     {
       "name": "compile",
@@ -302,7 +302,7 @@
     },
     {
       "name": "get-version",
-      "description": "Get uLoopMCP version information",
+      "description": "Get Unity CLI Loop version information",
       "inputSchema": {
         "type": "object",
         "properties": {}

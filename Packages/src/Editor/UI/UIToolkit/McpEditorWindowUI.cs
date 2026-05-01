@@ -18,20 +18,16 @@ namespace io.github.hatayama.uLoopMCP
 
         private readonly VisualElement _root;
 
-        private ConnectionModeSection _connectionModeSection;
         private CliSetupSection _cliSetupSection;
         private ConnectedToolsSection _connectedToolsSection;
-        private EditorConfigSection _editorConfigSection;
         private ToolSettingsSection _toolSettingsSection;
 
-        private VisualElement _cliContent;
-        private VisualElement _mcpContent;
+        private Foldout _configurationFoldout;
         private ScrollView _mainScrollView;
         private VisualElement _githubLinkRow;
         private Label _githubLinkLabel;
         private Image _githubLinkIcon;
 
-        public event Action<ConnectionMode> OnConnectionModeChanged;
         public event Action OnRefreshCliVersion;
         public event Action OnInstallCli;
         public event Action OnInstallSkills;
@@ -40,11 +36,6 @@ namespace io.github.hatayama.uLoopMCP
         public event Action<bool> OnGroupSkillsChanged;
         public event Action<bool> OnConfigurationFoldoutChanged;
         public event Action<bool> OnConnectedToolsFoldoutChanged;
-        public event Action<McpEditorType> OnEditorTypeChanged;
-        public event Action<bool> OnRepositoryRootChanged;
-        public event Action OnConfigureClicked;
-        public event Action OnDeleteConfigClicked;
-        public event Action OnOpenSettingsClicked;
         public event Action<bool> OnToolSettingsFoldoutChanged;
         public event Action<string, bool> OnToolToggled;
         public event Action<bool> OnAllowThirdPartyChanged;
@@ -92,9 +83,9 @@ namespace io.github.hatayama.uLoopMCP
 
         private void InitializeSections()
         {
-            _connectionModeSection = new ConnectionModeSection(_root);
-            _connectionModeSection.OnModeChanged += mode => OnConnectionModeChanged?.Invoke(mode);
-            _connectionModeSection.OnFoldoutChanged += value => OnConfigurationFoldoutChanged?.Invoke(value);
+            _configurationFoldout = _root.Q<Foldout>("configuration-foldout");
+            Debug.Assert(_configurationFoldout != null, "configuration-foldout must not be null");
+            _configurationFoldout.RegisterValueChangedCallback(evt => OnConfigurationFoldoutChanged?.Invoke(evt.newValue));
 
             _cliSetupSection = new CliSetupSection(_root);
             _cliSetupSection.SetupBindings();
@@ -108,18 +99,8 @@ namespace io.github.hatayama.uLoopMCP
             _mainScrollView = _root.Q<ScrollView>("main-scroll-view");
             ConfigureScrollView();
 
-            _cliContent = _root.Q<VisualElement>("cli-content");
-            _mcpContent = _root.Q<VisualElement>("mcp-content");
-
             _connectedToolsSection = new ConnectedToolsSection(_root);
             _connectedToolsSection.OnFoldoutChanged += value => OnConnectedToolsFoldoutChanged?.Invoke(value);
-
-            _editorConfigSection = new EditorConfigSection(_root);
-            _editorConfigSection.OnEditorTypeChanged += value => OnEditorTypeChanged?.Invoke(value);
-            _editorConfigSection.OnRepositoryRootChanged += value => OnRepositoryRootChanged?.Invoke(value);
-            _editorConfigSection.OnConfigureClicked += () => OnConfigureClicked?.Invoke();
-            _editorConfigSection.OnDeleteConfigClicked += () => OnDeleteConfigClicked?.Invoke();
-            _editorConfigSection.OnOpenSettingsClicked += () => OnOpenSettingsClicked?.Invoke();
 
             _toolSettingsSection = new ToolSettingsSection(_root);
             _toolSettingsSection.OnFoldoutChanged += value => OnToolSettingsFoldoutChanged?.Invoke(value);
@@ -171,11 +152,6 @@ namespace io.github.hatayama.uLoopMCP
             _connectedToolsSection?.Update(data);
         }
 
-        public void UpdateEditorConfig(EditorConfigData data)
-        {
-            _editorConfigSection?.Update(data);
-        }
-
         public void UpdateToolSettings(ToolSettingsSectionData data)
         {
             _toolSettingsSection?.Update(data);
@@ -186,14 +162,9 @@ namespace io.github.hatayama.uLoopMCP
             _toolSettingsSection?.UpdateSingleToggle(toolName, enabled);
         }
 
-        public void UpdateConnectionMode(ConnectionModeData data)
-        {
-            _connectionModeSection?.Update(data);
-        }
-
         public void UpdateConfigurationFoldout(bool show)
         {
-            _connectionModeSection?.UpdateFoldout(show);
+            _configurationFoldout?.SetValueWithoutNotify(show);
         }
 
         public void UpdateCliSetup(CliSetupData data)
@@ -201,21 +172,12 @@ namespace io.github.hatayama.uLoopMCP
             _cliSetupSection?.Update(data);
         }
 
-        public void UpdateSectionVisibility(ConnectionMode mode)
-        {
-            bool isMcp = mode == ConnectionMode.MCP;
-
-            ViewDataBinder.SetVisible(_mcpContent, isMcp);
-            ViewDataBinder.SetVisible(_cliContent, !isMcp);
-        }
-
         public void Dispose()
         {
-            _connectionModeSection = null;
             _cliSetupSection = null;
             _connectedToolsSection = null;
-            _editorConfigSection = null;
             _toolSettingsSection = null;
+            _configurationFoldout = null;
         }
     }
 }

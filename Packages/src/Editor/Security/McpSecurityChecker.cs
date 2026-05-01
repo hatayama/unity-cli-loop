@@ -5,7 +5,7 @@ using UnityEngine;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Security checker for Unity MCP tools - provides runtime tool blocking based on user settings
+    /// Security checker for Unity CLI tools - provides runtime tool blocking based on user settings
     /// 
     /// Design document reference: Packages/src/Editor/Security/SECURITY.md
     /// 
@@ -13,7 +13,7 @@ namespace io.github.hatayama.uLoopMCP
     /// - ULoopSettings: Persistent security settings storage (.uloop/settings.permissions.json)
     /// - McpSecurityException: Custom exception for security violations
     /// - UnityToolRegistry: Tool registration and execution
-    /// - McpBridgeServer: Server that executes tools
+    /// - McpBridgeServer: TCP bridge that executes tools
     /// </summary>
     public static class McpSecurityChecker
     {

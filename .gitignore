@@ -113,8 +113,9 @@ Packages/src/TypeScriptServer~/dist/*
 !Packages/src/TypeScriptServer~/dist/server.bundle.js
 !Packages/src/TypeScriptServer~/dist/server.bundle.js.map
 
-# CLI (published to npm separately, dist not committed)
-Packages/src/Cli~/dist/
+# CLI dispatcher is published to npm; project CLI bundle is included in the Unity package
+Packages/src/Cli~/dist/*
+!Packages/src/Cli~/dist/cli.bundle.cjs
 
 # Environment configuration files
 .env

@@ -1,7 +1,7 @@
 /**
  * CLI End-to-End Tests
  *
- * These tests require a running Unity Editor with uLoopMCP installed.
+ * These tests require a running Unity Editor with Unity CLI Loop installed.
  * Run from Unity project root: npm run test:cli
  *
  * @jest-environment node
@@ -552,7 +552,7 @@ describe('CLI E2E Tests (requires running Unity)', () => {
       const { stdout, exitCode } = runCli('--help');
 
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('Unity MCP CLI');
+      expect(stdout).toContain('Unity CLI Loop');
       expect(stdout).toContain('compile');
       expect(stdout).toContain('get-logs');
     });

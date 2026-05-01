@@ -1,6 +1,6 @@
 /**
  * CLI entry point for uloop command.
- * Provides direct Unity communication without MCP server.
+ * Provides direct Unity communication through the project-local Unity bridge.
  * Commands are dynamically registered from tools.json cache.
  */
 
@@ -19,7 +19,6 @@ import {
   listAvailableTools,
   GlobalOptions,
   syncTools,
-  isVersionOlder,
 } from './execute-tool.js';
 import {
   loadToolsCache,
@@ -52,6 +51,7 @@ interface CliOptions extends GlobalOptions {
 const FOCUS_WINDOW_COMMAND = 'focus-window' as const;
 const LAUNCH_COMMAND = 'launch' as const;
 const UPDATE_COMMAND = 'update' as const;
+export const PROJECT_LOCAL_CLI_IN_PROCESS_MARKER = 'uloop-cli-in-process-entrypoint-v2';
 
 const HELP_GROUP_BUILTIN_TOOLS = 'Built-in Tools:' as const;
 const HELP_GROUP_THIRD_PARTY_TOOLS = 'Third-party Tools:' as const;
@@ -137,7 +137,7 @@ function convertDefaultToString(value: unknown): string {
 
 /**
  * Generate commander.js option string from property info.
- * All types use value format (--option <value>) for consistency with MCP.
+ * All types use value format (--option <value>) for consistency with Unity tool schemas.
  */
 function generateOptionString(propName: string, propInfo: ToolProperty): string {
   const kebabName = pascalToKebabCase(propName);
@@ -266,7 +266,7 @@ function createProgram(): Command {
 
   program
     .name('uloop')
-    .description('Unity MCP CLI - Direct communication with Unity Editor')
+    .description('Unity CLI Loop - Direct communication with Unity Editor')
     .version(VERSION, '-v, --version', 'Output the version number')
     .showHelpAfterError('(run with -h for available options)')
     .configureHelp({
@@ -526,20 +526,22 @@ function isConnectionError(message: string): boolean {
 
 function printToolDisabledError(cmdName: string): void {
   console.error(`\x1b[33mTool '${cmdName}' is disabled.\x1b[0m`);
-  console.error('You can enable it in Unity: Window > uLoop > Tool Settings');
+  console.error('You can enable it in Unity: Window > Unity CLI Loop > Settings > Tool Settings');
 }
 
 function printConnectionError(): void {
   console.error('\x1b[31mError: Cannot connect to Unity.\x1b[0m');
-  console.error(`Make sure Unity Editor is open and ${PRODUCT_DISPLAY_NAME} server is running.`);
+  console.error(
+    `Make sure Unity Editor is open and the ${PRODUCT_DISPLAY_NAME} bridge is running.`,
+  );
   console.error(`You can start the server from: ${MENU_PATH_SERVER}`);
   console.error('');
   console.error('[For AI] Please report the above to the user.');
 }
 
 /**
- * Print version mismatch diagnostic information when errors occur.
- * Only prints if versions are mismatched.
+ * Print project-local CLI mismatch diagnostic information when errors occur.
+ * Only prints if the project-local CLI and Unity package versions are mismatched.
  */
 function printVersionMismatchDiagnostic(): void {
   const serverVersion = getCachedServerVersion();
@@ -551,21 +553,20 @@ function printVersionMismatchDiagnostic(): void {
     return;
   }
 
-  const isCliOlder = isVersionOlder(VERSION, serverVersion);
-  const action = isCliOlder ? 'Update' : 'Downgrade';
-  const updateCommand = `npm install -g uloop-cli@${serverVersion}`;
-
   console.error('');
   console.error('\x1b[33m━━━ Version Mismatch Diagnostic ━━━\x1b[0m');
   console.error('');
-  console.error(`  CLI version:     ${VERSION}`);
+  console.error(`  Project CLI:     ${VERSION}`);
   console.error(`  Unity package:   ${serverVersion}`);
   console.error('  Version mismatch may cause communication errors.');
   console.error('');
-  console.error(`  To fix: ${action} CLI to match Unity package version`);
-  console.error(`    ${updateCommand}`);
+  console.error(
+    '  To fix: reopen Unity or reload Unity CLI Loop so the package can refresh the project-local CLI.',
+  );
   console.error('');
-  console.error('[For AI] Please ask the user if they would like to run this command.');
+  console.error(
+    '[For AI] Please report the mismatch and ask the user to refresh the CLI in Unity.',
+  );
   console.error('\x1b[33m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m');
 }
 
@@ -795,14 +796,25 @@ export function getInstalledVersion(callback: (version: string | null) => void):
 }
 
 /**
- * Update uloop CLI to the latest version using npm.
+ * Update the global uloop dispatcher to the latest version using npm.
  */
+export function getUpdatePackageSpec(version: string = VERSION): string {
+  const prereleasePrefixIndex: number = version.indexOf('-');
+  if (prereleasePrefixIndex === -1) {
+    return 'uloop-cli@latest';
+  }
+
+  const prerelease: string = version.slice(prereleasePrefixIndex + 1);
+  const channel: string = prerelease.split('.')[0];
+  return channel.length > 0 ? `uloop-cli@${channel}` : 'uloop-cli@latest';
+}
+
 export function updateCli(): void {
   const previousVersion = VERSION;
-  console.log('Updating uloop-cli to the latest version...');
+  console.log('Updating global uloop dispatcher to the latest version...');
 
   const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const child = spawn(npmCommand, ['install', '-g', 'uloop-cli@latest'], {
+  const child = spawn(npmCommand, ['install', '-g', getUpdatePackageSpec()], {
     stdio: 'inherit',
   });
 
@@ -814,6 +826,9 @@ export function updateCli(): void {
         } else {
           console.log(`\n✅ Already up to date (v${previousVersion})`);
         }
+        console.log(
+          'Unity CLI Loop refreshes the project-local CLI automatically inside each Unity project.',
+        );
       });
     } else {
       console.error(`\n❌ Update failed with exit code ${code}`);
@@ -934,8 +949,7 @@ function handleCompletion(install: boolean, shellOverride?: string): void {
 /**
  * Handle --list-commands and --list-options before parsing.
  */
-function handleCompletionOptions(): boolean {
-  const args = process.argv.slice(2);
+function handleCompletionOptions(args: readonly string[] = process.argv.slice(2)): boolean {
   const projectPath: string | undefined = extractSyncGlobalOptions(args).projectPath;
 
   if (args.includes('--list-commands')) {
@@ -1002,7 +1016,7 @@ function commandExists(cmdName: string, projectPath?: string): boolean {
   return filterEnabledTools(tools.tools, projectPath).some((t) => t.name === cmdName);
 }
 
-function shouldSkipAutoSync(cmdName: string | undefined, args: string[]): boolean {
+function shouldSkipAutoSync(cmdName: string | undefined, args: readonly string[]): boolean {
   if (cmdName === LAUNCH_COMMAND || cmdName === UPDATE_COMMAND) {
     return true;
   }
@@ -1029,7 +1043,7 @@ function findCommandName(args: readonly string[]): string | undefined {
   return undefined;
 }
 
-function extractSyncGlobalOptions(args: string[]): GlobalOptions {
+function extractSyncGlobalOptions(args: readonly string[]): GlobalOptions {
   const options: GlobalOptions = {};
 
   for (let i = 0; i < args.length; i++) {
@@ -1067,15 +1081,15 @@ function extractSyncGlobalOptions(args: string[]): GlobalOptions {
 /**
  * Main entry point with auto-sync for unknown commands.
  */
-async function main(): Promise<void> {
-  if (handleCompletionOptions()) {
+async function main(args: string[] = process.argv.slice(2)): Promise<void> {
+  if (handleCompletionOptions(args)) {
     return;
   }
 
   const program = createProgram();
-  const args = process.argv.slice(2);
   const syncGlobalOptions = extractSyncGlobalOptions(args);
   const cmdName = findCommandName(args);
+  const parseArgs = ['node', 'uloop', ...args];
 
   // No command name = no Unity operation; skip project detection
   const NO_PROJECT_COMMANDS = [UPDATE_COMMAND, 'completion'] as const;
@@ -1102,7 +1116,7 @@ async function main(): Promise<void> {
     for (const tool of tools) {
       registerToolCommand(program, tool, getToolHelpGroup(tool.name, defaultToolNames));
     }
-    program.parse();
+    await program.parseAsync(parseArgs);
     return;
   }
 
@@ -1170,10 +1184,24 @@ async function main(): Promise<void> {
     }
   }
 
-  program.parse();
+  await program.parseAsync(parseArgs);
+}
+
+export async function runCli(args: readonly string[] = process.argv.slice(2)): Promise<void> {
+  const cliArgs = [...args];
+
+  if (await tryHandleFastExecuteDynamicCodeCommand(cliArgs)) {
+    return;
+  }
+
+  await main(cliArgs);
 }
 
 function shouldRunCliEntryPoint(): boolean {
+  if (process.env['ULOOP_DISPATCHER_IN_PROCESS'] === '1') {
+    return false;
+  }
+
   if (process.env.JEST_WORKER_ID === undefined) {
     return true;
   }
@@ -1183,11 +1211,5 @@ function shouldRunCliEntryPoint(): boolean {
 
 if (shouldRunCliEntryPoint()) {
   const args = process.argv.slice(2);
-  void (async (): Promise<void> => {
-    if (await tryHandleFastExecuteDynamicCodeCommand(args)) {
-      return;
-    }
-
-    await main();
-  })();
+  void runCli(args);
 }

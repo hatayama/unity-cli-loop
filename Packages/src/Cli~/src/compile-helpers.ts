@@ -1,8 +1,6 @@
 /**
- * Compile-related helpers duplicated from TypeScriptServer~ to avoid cross-project imports
- * that violate CLI's rootDir boundary (TS6059).
- *
- * Source: TypeScriptServer~/src/compile/compile-domain-reload-helpers.ts
+ * Compile-related helpers live in the CLI because the removed TypeScript server
+ * is no longer a shared source boundary.
  */
 
 // CLI tools output to console by design, object keys come from Unity tool responses which are trusted,

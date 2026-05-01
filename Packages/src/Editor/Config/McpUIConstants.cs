@@ -3,7 +3,7 @@ using UnityEngine;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Unity MCP Editor UI constants
+    /// Unity CLI Loop Editor UI constants
     /// Centralized management of UI-related constants
     /// </summary>
     public static class McpUIConstants
@@ -30,8 +30,8 @@ namespace io.github.hatayama.uLoopMCP
         public const string CLIENT_ICON = "● ";
 
         // Tool Settings
-        public const string TOOL_SETTINGS_MENU_PATH = "Window > uLoop > Tool Settings";
-        public const string CLI_COMMAND_REFERENCE_URL = "https://github.com/hatayama/uLoopMCP/blob/main/Packages/src/Cli~/README.md#cli-command-reference";
+        public const string TOOL_SETTINGS_MENU_PATH = "Window > Unity CLI Loop > Settings";
+        public const string CLI_COMMAND_REFERENCE_URL = "https://github.com/hatayama/unity-cli-loop/blob/main/Packages/src/Cli~/README.md#cli-command-reference";
         public const string PROJECT_REPOSITORY_URL = "https://github.com/hatayama/unity-cli-loop";
     }
 }

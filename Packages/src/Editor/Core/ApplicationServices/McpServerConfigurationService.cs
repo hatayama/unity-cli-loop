@@ -1,7 +1,7 @@
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Application service responsible for MCP server configuration management.
+    /// Application service responsible for Unity CLI bridge configuration management.
     /// Handles configuration validation, port resolution, and configuration updating.
     /// 
     /// Related classes:

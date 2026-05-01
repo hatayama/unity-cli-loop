@@ -53,8 +53,8 @@ namespace io.github.hatayama.uLoopMCP
     }
 
     /// <summary>
-    /// Unity MCP Bridge TCP/IP Server.
-    /// Accepts connections from the TypeScript MCP Server and handles JSON-RPC 2.0 communication.
+    /// Unity CLI bridge TCP/IP server.
+    /// Accepts project-local CLI connections and handles JSON-RPC 2.0 communication.
     /// </summary>
     public class McpBridgeServer : IDisposable
     {
@@ -235,7 +235,7 @@ namespace io.github.hatayama.uLoopMCP
             catch (Exception ex)
             {
                 _isRunning = false;
-                string errorMessage = $"Failed to start MCP Server: {ex.Message}";
+                string errorMessage = $"Failed to start Unity CLI bridge: {ex.Message}";
                 OnError?.Invoke(errorMessage);
                 throw;
             }

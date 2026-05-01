@@ -21,7 +21,7 @@ namespace io.github.hatayama.uLoopMCP
             if (EditorApplication.isCompiling)
             {
                 return new ValidationResult(false, 
-                    "Cannot start MCP server while Unity is compiling. Please wait for compilation to complete.");
+                    "Cannot start Unity CLI bridge while Unity is compiling. Please wait for compilation to complete.");
             }
 
             return new ValidationResult(true);
@@ -34,7 +34,7 @@ namespace io.github.hatayama.uLoopMCP
         /// <returns>Validation result with security details</returns>
         public ValidationResult ValidatePortSecurity(int port)
         {
-            if (!McpPortValidator.ValidatePort(port, "for MCP server"))
+            if (!McpPortValidator.ValidatePort(port, "for Unity CLI bridge"))
             {
                 return new ValidationResult(false, 
                     $"Port number must be between 1 and 65535. Received: {port}");

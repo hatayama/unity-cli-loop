@@ -107,7 +107,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             VibeLogger.LogInfo(
                 "domain_reload_server_stopping",
-                "Stopping MCP server before domain reload",
+                "Stopping Unity CLI bridge before domain reload",
                 new { port = port },
                 correlationId
             );
@@ -121,7 +121,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             VibeLogger.LogInfo(
                 "domain_reload_server_stopped",
-                "MCP server stopped successfully",
+                "Unity CLI bridge stopped successfully",
                 new { tcp_port_released = true },
                 correlationId
             );

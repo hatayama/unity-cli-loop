@@ -6,14 +6,14 @@ namespace io.github.hatayama.uLoopMCP
     // ==========================================================================
     // IMPORTANT: Why this class still exists (Do not delete)
     // ==========================================================================
-    // The focus-window functionality is now handled at OS level by TypeScript
-    // MCP server and CLI using the launch-unity package. This works even when
-    // Unity is busy (compiling/domain reload).
+    // The focus-window functionality is handled at OS level by the CLI using the
+    // launch-unity package. This works even when Unity is busy compiling or
+    // reloading the domain.
     //
     // This class remains for two reasons:
     //
     // 1. Tool List Registration:
-    //    - MCP tool list is built from Unity's tool registry
+    //    - The CLI tool list is built from Unity's tool registry
     //    - Without this class, "focus-window" won't appear in tools/list
     //
     // 2. Graceful CLI Upgrade Message:
@@ -22,12 +22,12 @@ namespace io.github.hatayama.uLoopMCP
     //    - New CLI uses OS-level focus and never reaches this code
     //
     // Execution flow:
-    // - New CLI/MCP: TypeScript intercepts → OS-level focus → This code NOT called
+    // - New CLI: CLI intercepts → OS-level focus → This code NOT called
     // - Old CLI: Direct Unity TCP → This code called → Returns upgrade message
     // ==========================================================================
 
     /// <summary>
-    /// Stub for tool list registration. Actual focus is handled by TypeScript MCP server.
+    /// Stub for tool list registration. Actual focus is handled by the CLI.
     /// </summary>
     [McpTool(Description = "Bring Unity Editor window to front using OS-level commands. Works even when Unity is busy (compiling, domain reload).")]
     public class FocusUnityWindowTool : AbstractUnityTool<FocusUnityWindowSchema, FocusUnityWindowResponse>
@@ -40,8 +40,8 @@ namespace io.github.hatayama.uLoopMCP
             FocusUnityWindowSchema parameters,
             CancellationToken ct)
         {
-            // This code is only reached by old CLI versions that bypass TypeScript.
-            // New CLI and MCP clients use OS-level focus via launch-unity package.
+            // This code is only reached by old CLI versions that bypass the
+            // OS-level focus path.
             return Task.FromResult(new FocusUnityWindowResponse(
                 "Please update uloop-cli to the latest version for improved focus-window support. " +
                 "Run: npm install -g uloop-cli@latest",

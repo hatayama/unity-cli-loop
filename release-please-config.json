@@ -2,14 +2,12 @@
   "packages": {
     "Packages/src": {
       "release-type": "node",
+      "versioning": "prerelease",
+      "prerelease": true,
+      "prerelease-type": "beta",
       "include-v-in-tag": true,
       "include-component-in-tag": false,
       "extra-files": [
-        {
-          "type": "json",
-          "path": "TypeScriptServer~/package.json",
-          "jsonpath": "$.version"
-        },
         {
           "type": "json",
           "path": "Cli~/package.json",
@@ -17,13 +15,18 @@
         },
         {
           "type": "json",
-          "path": "Cli~/src/default-tools.json",
+          "path": "Cli~/package-lock.json",
           "jsonpath": "$.version"
         },
         {
-          "type": "generic",
-          "path": "Packages/src/TypeScriptServer~/src/version.ts",
-          "glob": "Packages/src/TypeScriptServer~/src/version.ts"
+          "type": "json",
+          "path": "Cli~/package-lock.json",
+          "jsonpath": "$['packages']['']['version']"
+        },
+        {
+          "type": "json",
+          "path": "Cli~/src/default-tools.json",
+          "jsonpath": "$.version"
         },
         {
           "type": "generic",

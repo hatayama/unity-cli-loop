@@ -1,7 +1,7 @@
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Response returned by the Focus Unity Window MCP tool.
+    /// Response returned by the Focus Unity Window CLI tool.
     /// Indicates whether the foregrounding request succeeded and includes details for optional UI display.
     /// </summary>
     public class FocusUnityWindowResponse : BaseToolResponse
