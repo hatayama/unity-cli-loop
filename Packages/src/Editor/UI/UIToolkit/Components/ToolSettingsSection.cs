@@ -16,8 +16,6 @@ namespace io.github.hatayama.uLoopMCP
         private const int InlineToolRowLimit = 40;
 
         private readonly Foldout _foldout;
-        private readonly Toggle _allowThirdPartyToggle;
-        private readonly Label _allowThirdPartyLabel;
         private readonly Button _securityLevelRestrictedButton;
         private readonly Button _securityLevelFullAccessButton;
         private readonly Label _securityLevelDescription;
@@ -27,7 +25,6 @@ namespace io.github.hatayama.uLoopMCP
         private readonly ListView _toolListView;
         private readonly List<ToolListRowData> _toolListRows = new();
         private readonly Dictionary<string, Toggle> _togglesByToolName = new();
-        private bool _allowThirdPartyTools = true;
         private bool _isRegistryAvailable;
         private bool _isUnavailableStateShown;
         private bool _isLoadingStateShown;
@@ -35,14 +32,11 @@ namespace io.github.hatayama.uLoopMCP
 
         public event Action<bool> OnFoldoutChanged;
         public event Action<string, bool> OnToolToggled;
-        public event Action<bool> OnAllowThirdPartyChanged;
         public event Action<DynamicCodeSecurityLevel> OnSecurityLevelChanged;
 
         public ToolSettingsSection(VisualElement root)
         {
             _foldout = root.Q<Foldout>("tool-settings-foldout");
-            _allowThirdPartyToggle = root.Q<Toggle>("allow-third-party-toggle");
-            _allowThirdPartyLabel = root.Q<Label>("allow-third-party-label");
             _securityLevelRestrictedButton = root.Q<Button>("security-level-restricted-button");
             _securityLevelFullAccessButton = root.Q<Button>("security-level-full-access-button");
             _securityLevelDescription = root.Q<Label>("security-level-description");
@@ -69,30 +63,13 @@ namespace io.github.hatayama.uLoopMCP
         {
             _foldout.RegisterValueChangedCallback(evt => OnFoldoutChanged?.Invoke(evt.newValue));
 
-            _allowThirdPartyToggle.RegisterValueChangedCallback(evt =>
-            {
-                evt.StopPropagation();
-                OnAllowThirdPartyChanged?.Invoke(evt.newValue);
-            });
-
-            _allowThirdPartyLabel.RegisterCallback<ClickEvent>(evt =>
-            {
-                evt.StopPropagation();
-                bool newValue = !_allowThirdPartyToggle.value;
-                _allowThirdPartyToggle.SetValueWithoutNotify(newValue);
-                OnAllowThirdPartyChanged?.Invoke(newValue);
-            });
-
             _securityLevelRestrictedButton.clicked += () => UpdateSecurityLevel(DynamicCodeSecurityLevel.Restricted);
             _securityLevelFullAccessButton.clicked += () => UpdateSecurityLevel(DynamicCodeSecurityLevel.FullAccess);
         }
 
         public void Update(ToolSettingsSectionData data)
         {
-            _allowThirdPartyTools = data.AllowThirdPartyTools;
-
             ViewDataBinder.UpdateFoldout(_foldout, data.ShowToolSettings);
-            ViewDataBinder.UpdateToggle(_allowThirdPartyToggle, data.AllowThirdPartyTools);
             UpdateSecurityLevelSelection(data.DynamicCodeSecurityLevel);
             UpdateSecurityLevelDescription(data.DynamicCodeSecurityLevel);
 
@@ -143,7 +120,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             if (_toolListRows.Count > 0 || _isUnavailableStateShown)
             {
-                UpdateThirdPartyGroupState(_allowThirdPartyTools);
+                RefreshToolListView();
                 return;
             }
 
@@ -234,7 +211,7 @@ namespace io.github.hatayama.uLoopMCP
             ViewDataBinder.SetVisible(_toolListStatusLabel, false);
             ViewDataBinder.SetVisible(_toolListView, true);
             SetToolSettingsInfoVisible(true);
-            UpdateThirdPartyGroupState(data.AllowThirdPartyTools);
+            RefreshToolListView();
 
             _isRegistryAvailable = true;
             _isUnavailableStateShown = false;
@@ -284,13 +261,13 @@ namespace io.github.hatayama.uLoopMCP
 
             if (data.BuiltInTools.Length > 0)
             {
-                _toolListRows.Add(ToolListRowData.CreateHeader("Built-in Tools", false));
+                _toolListRows.Add(ToolListRowData.CreateHeader("Built-in Tools"));
                 AddToolRows(data.BuiltInTools);
             }
 
             if (data.ThirdPartyTools.Length > 0)
             {
-                _toolListRows.Add(ToolListRowData.CreateHeader("Third Party Tools", true));
+                _toolListRows.Add(ToolListRowData.CreateHeader("Third Party Tools"));
                 AddToolRows(data.ThirdPartyTools);
             }
 
@@ -354,12 +331,6 @@ namespace io.github.hatayama.uLoopMCP
             builder.Append(';');
         }
 
-        private void UpdateThirdPartyGroupState(bool allowThirdPartyTools)
-        {
-            _allowThirdPartyTools = allowThirdPartyTools;
-            RefreshToolListView();
-        }
-
         private static Label CreateToolListStatusLabel()
         {
             Label label = new Label();
@@ -411,7 +382,7 @@ namespace io.github.hatayama.uLoopMCP
             {
                 evt.StopPropagation();
 
-                if (row.userData is not ToolListRowData item || item.IsHeader || !item.CanToggle)
+                if (row.userData is not ToolListRowData item || item.IsHeader)
                 {
                     return;
                 }
@@ -433,7 +404,6 @@ namespace io.github.hatayama.uLoopMCP
 
             ToolListRowData item = _toolListRows[index];
             item.Owner = this;
-            item.CanToggle = !item.IsThirdParty || _allowThirdPartyTools;
             row.userData = item;
 
             Toggle toggle = row.Q<Toggle>("tool-list-row-toggle");
@@ -460,7 +430,6 @@ namespace io.github.hatayama.uLoopMCP
             row.SetEnabled(true);
             row.AddToClassList("mcp-tool-list-row--header");
             label.AddToClassList("mcp-tool-group-header");
-            ViewDataBinder.ToggleClass(row, "mcp-tool-list-row--disabled", item.IsThirdParty && !_allowThirdPartyTools);
         }
 
         private void BindToolRow(VisualElement row, Toggle toggle, Label label, ToolListRowData item)
@@ -470,15 +439,13 @@ namespace io.github.hatayama.uLoopMCP
             label.text = item.ToolName;
             label.tooltip = item.Description;
 
-            row.SetEnabled(item.CanToggle);
-            ViewDataBinder.ToggleClass(row, "mcp-tool-list-row--disabled", !item.CanToggle);
+            row.SetEnabled(true);
             _togglesByToolName[item.ToolName] = toggle;
         }
 
         private static void ResetRowClasses(VisualElement row, Label label)
         {
             row.RemoveFromClassList("mcp-tool-list-row--header");
-            row.RemoveFromClassList("mcp-tool-list-row--disabled");
             label.RemoveFromClassList("mcp-tool-group-header");
         }
 
@@ -515,9 +482,7 @@ namespace io.github.hatayama.uLoopMCP
             public readonly string ToolName;
             public readonly string Label;
             public readonly string Description;
-            public readonly bool IsThirdParty;
             public bool IsEnabled;
-            public bool CanToggle = true;
             public ToolSettingsSection Owner;
 
             private ToolListRowData(
@@ -525,26 +490,23 @@ namespace io.github.hatayama.uLoopMCP
                 string toolName,
                 string label,
                 string description,
-                bool isEnabled,
-                bool isThirdParty)
+                bool isEnabled)
             {
                 IsHeader = isHeader;
                 ToolName = toolName;
                 Label = label;
                 Description = description;
                 IsEnabled = isEnabled;
-                IsThirdParty = isThirdParty;
             }
 
-            public static ToolListRowData CreateHeader(string label, bool isThirdParty)
+            public static ToolListRowData CreateHeader(string label)
             {
                 return new ToolListRowData(
                     true,
                     string.Empty,
                     label,
                     string.Empty,
-                    true,
-                    isThirdParty);
+                    true);
             }
 
             public static ToolListRowData CreateTool(ToolToggleItem item)
@@ -554,8 +516,7 @@ namespace io.github.hatayama.uLoopMCP
                     item.ToolName,
                     item.ToolName,
                     item.Description,
-                    item.IsEnabled,
-                    item.IsThirdParty);
+                    item.IsEnabled);
             }
         }
     }

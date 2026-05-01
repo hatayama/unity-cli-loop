@@ -148,7 +148,6 @@ namespace io.github.hatayama.uLoopMCP
         {
             return new ToolSettingsSectionData(
                 showToolSettings,
-                allowThirdPartyTools: false,
                 DynamicCodeSecurityLevel.Restricted,
                 System.Array.Empty<ToolToggleItem>(),
                 System.Array.Empty<ToolToggleItem>(),

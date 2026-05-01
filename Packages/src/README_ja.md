@@ -374,12 +374,7 @@ Unity Editor内で動的にC#コードを実行します。
 > [!IMPORTANT]
 > **セキュリティ設定について**
 >
-> 一部のツールはセキュリティ上の理由でデフォルトで無効化されています。
-> これらのツールを使用するには、Unity CLI Loopウィンドウの「Tool Settings」で該当する項目を有効化してください：
->
-> **基本セキュリティ設定**:
-> - **Allow Tests Execution**: `run-tests`ツールを有効化
-> - **Allow Third Party Tools**: ユーザーが独自に拡張したtoolを有効化
+> カスタムツールは常に利用できます。AIエージェントから隠したいツールは、個別のツールトグルで無効化してください。
 >
 > **Dynamic Code Security Level** (`execute-dynamic-code`ツール):
 > - **Level 1 (Restricted)**: Unity APIのみ、危険な操作はブロック（推奨）
@@ -474,8 +469,8 @@ Unity CLI Loopはコアパッケージへの変更を必要とせず、プロジ
 > [!IMPORTANT]
 > **セキュリティ設定について**
 >
-> プロジェクト固有に開発したツールは、Unity CLI Loopウィンドウの「Tool Settings」で **Allow Third Party Tools** を有効化する必要があります。
-> また、動的コード実行を含むカスタムツールを開発する場合は、**Dynamic Code Security Level**の設定も考慮してください。
+> プロジェクト固有に開発したツールは、追加の権限を有効化しなくても利用できます。
+> また、動的コード実行を含むカスタムツールを開発する場合は、**Dynamic Code Security Level**の設定を考慮してください。
 
 <details>
 <summary>実装ガイドを見る</summary>
@@ -618,7 +613,7 @@ description: "ツールの説明と使用タイミング"
 
 | ファイル | 用途 | git管理 |
 |---------|------|---------|
-| `settings.permissions.json` | チーム共有のセキュリティポリシー（サードパーティツール許可、動的コード実行レベル） | 任意 |
+| `settings.permissions.json` | チーム共有のセキュリティポリシー（動的コード実行レベル） | 任意 |
 | `settings.tools.json` | ツールごとの有効・無効設定 | 任意 |
 | `tools.json` | 自動生成されるCLIツールレジストリ | No |
 | `outputs/` | ランタイム出力（テスト結果、スクリーンショット、ヒエラルキーダンプ） | No |

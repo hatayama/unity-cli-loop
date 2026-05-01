@@ -92,7 +92,7 @@ namespace io.github.hatayama.uLoopMCP
             switch (toolInfo.RequiredSecuritySetting)
             {
                 case SecuritySettings.None:
-                    return IsThirdPartyToolAllowed(toolInfo.ToolName);
+                    return true;
                 default:
                     return false; // Unknown setting - block by default
             }
@@ -148,18 +148,7 @@ namespace io.github.hatayama.uLoopMCP
                 return $"Tool '{toolName}' is not allowed by security policy.";
             }
 
-            switch (toolInfo.Value.RequiredSecuritySetting)
-            {
-                case SecuritySettings.None:
-                    if (IsThirdPartyTool(toolName))
-                    {
-                        return "Third party tools execution is disabled. Enable 'Allow Third Party Tools' in uLoopMCP Security Settings.";
-                    }
-                    return $"Tool '{toolName}' is not allowed by security policy.";
-                    
-                default:
-                    return $"Tool '{toolName}' is not allowed by security policy.";
-            }
+            return $"Tool '{toolName}' is not allowed by security policy.";
         }
 
         /// <summary>
@@ -175,58 +164,6 @@ namespace io.github.hatayama.uLoopMCP
             return new ToolSecurityInfo(toolName, isAllowed, reason);
         }
 
-        /// <summary>
-        /// Checks if third party tools execution is allowed
-        /// </summary>
-        /// <returns>True if third party tools execution is allowed</returns>
-        private static bool IsThirdPartyToolsAllowed()
-        {
-            return ULoopSettings.GetAllowThirdPartyTools();
-        }
-
-        /// <summary>
-        /// Checks if a specific tool is allowed (considers both explicit setting and third party status)
-        /// </summary>
-        /// <param name="toolName">The name of the tool to check</param>
-        /// <returns>True if tool is allowed</returns>
-        private static bool IsThirdPartyToolAllowed(string toolName)
-        {
-            // If it's not a third party tool (i.e., official tool), allow it
-            if (!IsThirdPartyTool(toolName))
-            {
-                return true;
-            }
-            
-            // If it's a third party tool, check the setting
-            return IsThirdPartyToolsAllowed();
-        }
-
-        /// <summary>
-        /// Checks if a tool is a third party tool based on its assembly
-        /// </summary>
-        /// <param name="toolName">The name of the tool to check</param>
-        /// <returns>True if tool is from a third party assembly</returns>
-        private static bool IsThirdPartyTool(string toolName)
-        {
-            // Get tool type from registry
-            var registry = CustomToolManager.GetRegistry();
-            if (registry == null)
-            {
-                return true; // Default to third party if registry unavailable
-            }
-
-            var toolType = registry.GetToolType(toolName);
-            if (toolType == null)
-            {
-                return true; // Default to third party if tool type not found
-            }
-
-            // Check assembly name
-            string assemblyName = toolType.Assembly.GetName().Name;
-            
-            // Official uLoopMCP assembly
-            return assemblyName != "uLoopMCP.Editor";
-        }
     }
 
     /// <summary>

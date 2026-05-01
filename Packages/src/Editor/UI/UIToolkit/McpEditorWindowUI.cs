@@ -38,7 +38,6 @@ namespace io.github.hatayama.uLoopMCP
         public event Action<bool> OnConnectedToolsFoldoutChanged;
         public event Action<bool> OnToolSettingsFoldoutChanged;
         public event Action<string, bool> OnToolToggled;
-        public event Action<bool> OnAllowThirdPartyChanged;
         public event Action<DynamicCodeSecurityLevel> OnSecurityLevelChanged;
 
         public McpEditorWindowUI(VisualElement root)
@@ -105,7 +104,6 @@ namespace io.github.hatayama.uLoopMCP
             _toolSettingsSection = new ToolSettingsSection(_root);
             _toolSettingsSection.OnFoldoutChanged += value => OnToolSettingsFoldoutChanged?.Invoke(value);
             _toolSettingsSection.OnToolToggled += (toolName, enabled) => OnToolToggled?.Invoke(toolName, enabled);
-            _toolSettingsSection.OnAllowThirdPartyChanged += value => OnAllowThirdPartyChanged?.Invoke(value);
             _toolSettingsSection.OnSecurityLevelChanged += value => OnSecurityLevelChanged?.Invoke(value);
 
             _githubLinkRow = _root.Q<VisualElement>("github-link-row");

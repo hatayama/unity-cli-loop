@@ -9,7 +9,6 @@ namespace io.github.hatayama.uLoopMCP
     [Serializable]
     public record ULoopSettingsData
     {
-        public bool allowThirdPartyTools = false;
         public int dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted;
     }
 }

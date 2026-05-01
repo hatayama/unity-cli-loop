@@ -101,7 +101,6 @@ namespace io.github.hatayama.uLoopMCP
             _view.OnConnectedToolsFoldoutChanged += UpdateShowConnectedTools;
             _view.OnToolSettingsFoldoutChanged += UpdateShowToolSettings;
             _view.OnToolToggled += HandleToolToggled;
-            _view.OnAllowThirdPartyChanged += UpdateAllowThirdPartyTools;
             _view.OnSecurityLevelChanged += UpdateDynamicCodeSecurityLevel;
         }
 
@@ -382,7 +381,6 @@ namespace io.github.hatayama.uLoopMCP
         {
             return new ToolSettingsSectionData(
                 _model.UI.ShowToolSettings,
-                ULoopSettings.GetAllowThirdPartyTools(),
                 ULoopSettings.GetDynamicCodeSecurityLevel(),
                 System.Array.Empty<ToolToggleItem>(),
                 System.Array.Empty<ToolToggleItem>(),
@@ -397,7 +395,6 @@ namespace io.github.hatayama.uLoopMCP
             {
                 return new ToolSettingsSectionData(
                     _model.UI.ShowToolSettings,
-                    ULoopSettings.GetAllowThirdPartyTools(),
                     ULoopSettings.GetDynamicCodeSecurityLevel(),
                     System.Array.Empty<ToolToggleItem>(),
                     System.Array.Empty<ToolToggleItem>(),
@@ -437,7 +434,6 @@ namespace io.github.hatayama.uLoopMCP
 
             return new ToolSettingsSectionData(
                 _model.UI.ShowToolSettings,
-                ULoopSettings.GetAllowThirdPartyTools(),
                 ULoopSettings.GetDynamicCodeSecurityLevel(),
                 builtIn.ToArray(),
                 thirdParty.ToArray(),
@@ -559,12 +555,6 @@ namespace io.github.hatayama.uLoopMCP
         private void UpdateShowConfiguration(bool show)
         {
             _model.UpdateShowConfiguration(show);
-        }
-
-        private void UpdateAllowThirdPartyTools(bool allow)
-        {
-            _model.UpdateAllowThirdPartyTools(allow);
-            RefreshToolSettingsHeader();
         }
 
         private void UpdateDynamicCodeSecurityLevel(DynamicCodeSecurityLevel level)

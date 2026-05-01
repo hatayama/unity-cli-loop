@@ -8,7 +8,7 @@
                     <ui:VisualElement name="cli-content">
                         <ui:VisualElement class="mcp-cli-status-row">
                             <ui:VisualElement name="cli-status-icon" class="mcp-cli-status-icon mcp-cli-status-icon--not-installed" />
-                            <ui:Label name="cli-status-label" text="uloop-cli: Checking..." />
+                            <ui:Label name="cli-status-label" text="CLI: Checking..." />
                             <ui:Button name="refresh-cli-version-button" text="↻" class="mcp-button--refresh" />
                         </ui:VisualElement>
                         <ui:Button name="install-cli-button" text="Install CLI" class="mcp-button mcp-button--configure" />
@@ -50,17 +50,6 @@
                             <ui:VisualElement class="mcp-tool-settings-card">
                                 <ui:Label text="Permissions" class="mcp-section-header mcp-tool-settings-card__header" />
                                 <ui:VisualElement class="mcp-permission-item mcp-permission-item--first">
-                                    <ui:Label text="Allow Third Party Tools" class="mcp-permission-item__title mcp-section-header--danger" />
-                                    <ui:VisualElement class="mcp-permission-item__control-row">
-                                        <ui:VisualElement class="mcp-toggle-row mcp-permission-item__toggle-row">
-                                            <ui:Toggle name="allow-third-party-toggle" class="mcp-toggle-row__toggle" />
-                                            <ui:Label text="Enable" class="mcp-permission-item__control-label" />
-                                            <ui:Label name="allow-third-party-label" text="Allow Third Party Tools" class="mcp-toggle-row__label mcp-toggle-row__label--danger mcp-permission-item__assistive-label" />
-                                        </ui:VisualElement>
-                                    </ui:VisualElement>
-                                </ui:VisualElement>
-
-                                <ui:VisualElement class="mcp-permission-item">
                                     <ui:Label text="execute-dynamic-code" class="mcp-permission-item__title mcp-permission-item__title--dynamic-code mcp-section-header--danger" />
                                     <ui:Label text="Security Level" class="mcp-permission-item__control-label" />
                                     <ui:VisualElement class="mcp-segmented-control">

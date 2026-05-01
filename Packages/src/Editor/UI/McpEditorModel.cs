@@ -209,14 +209,6 @@ namespace io.github.hatayama.uLoopMCP
             ToolSettings.SetToolEnabled(toolName, enabled);
         }
 
-        /// <summary>
-        /// Update AllowThirdPartyTools setting with persistence
-        /// </summary>
-        public void UpdateAllowThirdPartyTools(bool allow)
-        {
-            ULoopSettings.SetAllowThirdPartyTools(allow);
-        }
-
         public void UpdateShowConfiguration(bool show)
         {
             UpdateUIState(ui => new UIState(

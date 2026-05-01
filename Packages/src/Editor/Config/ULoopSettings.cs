@@ -16,6 +16,8 @@ namespace io.github.hatayama.uLoopMCP
     /// </summary>
     public static class ULoopSettings
     {
+        private const string LEGACY_ALLOW_THIRD_PARTY_TOOLS_FIELD = "allowThirdPartyTools";
+
         private static string SettingsFilePath =>
             Path.Combine(McpConstants.ULOOP_DIR, McpConstants.ULOOP_SETTINGS_FILE_NAME);
 
@@ -60,18 +62,6 @@ namespace io.github.hatayama.uLoopMCP
 
             ULoopSettingsData current = GetSettings();
             ULoopSettingsData updated = transform(current);
-            SaveSettings(updated);
-        }
-
-        public static bool GetAllowThirdPartyTools()
-        {
-            return GetSettings().allowThirdPartyTools;
-        }
-
-        public static void SetAllowThirdPartyTools(bool value)
-        {
-            ULoopSettingsData settings = GetSettings();
-            ULoopSettingsData updated = settings with { allowThirdPartyTools = value };
             SaveSettings(updated);
         }
 
@@ -159,7 +149,8 @@ namespace io.github.hatayama.uLoopMCP
                 _cachedSettings = JsonUtility.FromJson<ULoopSettingsData>(json);
                 bool migratedToolToggles = ApplyLegacyToolToggleMigrations(json);
                 bool normalizedDynamicCode = NormalizeLegacyDisabledDynamicCode();
-                if (migratedToolToggles || normalizedDynamicCode)
+                bool removedThirdPartyToolsField = json.Contains($"\"{LEGACY_ALLOW_THIRD_PARTY_TOOLS_FIELD}\"");
+                if (migratedToolToggles || normalizedDynamicCode || removedThirdPartyToolsField)
                 {
                     SaveSettings(_cachedSettings);
                 }
@@ -178,7 +169,9 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             string json = File.ReadAllText(LegacySettingsFilePath);
-            return json.Contains($"\"{nameof(LegacySecuritySettingsProbe.allowThirdPartyTools)}\"")
+            return json.Contains($"\"{LEGACY_ALLOW_THIRD_PARTY_TOOLS_FIELD}\"")
+                || json.Contains($"\"{nameof(LegacySecuritySettingsProbe.enableTestsExecution)}\"")
+                || json.Contains($"\"{nameof(LegacySecuritySettingsProbe.allowMenuItemExecution)}\"")
                 || json.Contains($"\"{nameof(LegacySecuritySettingsProbe.dynamicCodeSecurityLevel)}\"");
         }
 
@@ -199,7 +192,6 @@ namespace io.github.hatayama.uLoopMCP
         {
             public bool enableTestsExecution = true;
             public bool allowMenuItemExecution = true;
-            public bool allowThirdPartyTools = false;
             public int dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted;
         }
 
@@ -227,7 +219,6 @@ namespace io.github.hatayama.uLoopMCP
 
             _cachedSettings = new ULoopSettingsData
             {
-                allowThirdPartyTools = probe.allowThirdPartyTools,
                 dynamicCodeSecurityLevel = probe.dynamicCodeSecurityLevel
             };
 

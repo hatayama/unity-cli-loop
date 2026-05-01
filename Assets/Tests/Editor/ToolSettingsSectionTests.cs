@@ -83,7 +83,6 @@ namespace io.github.hatayama.uLoopMCP
             ToolSettingsSectionData headerOnlyData = CreateData(
                 compileEnabled: false,
                 includeGetLogs: false,
-                allowThirdPartyTools: false,
                 includeThirdPartyTool: true,
                 hasToolListData: false);
 
@@ -177,14 +176,6 @@ namespace io.github.hatayama.uLoopMCP
             {
                 name = "cli-reference-link"
             };
-            Toggle allowThirdPartyToggle = new Toggle
-            {
-                name = "allow-third-party-toggle"
-            };
-            Label allowThirdPartyLabel = new Label
-            {
-                name = "allow-third-party-label"
-            };
             Button securityLevelRestrictedButton = new Button
             {
                 name = "security-level-restricted-button"
@@ -202,8 +193,6 @@ namespace io.github.hatayama.uLoopMCP
                 name = "tool-settings-info-container"
             };
 
-            foldout.Add(allowThirdPartyToggle);
-            foldout.Add(allowThirdPartyLabel);
             foldout.Add(securityLevelRestrictedButton);
             foldout.Add(securityLevelFullAccessButton);
             foldout.Add(securityLevelDescription);
@@ -218,7 +207,6 @@ namespace io.github.hatayama.uLoopMCP
             bool compileEnabled,
             bool includeGetLogs,
             bool showToolSettings = true,
-            bool allowThirdPartyTools = true,
             bool includeThirdPartyTool = false,
             bool hasToolListData = true,
             DynamicCodeSecurityLevel dynamicCodeSecurityLevel = DynamicCodeSecurityLevel.Restricted)
@@ -256,7 +244,6 @@ namespace io.github.hatayama.uLoopMCP
 
             return new ToolSettingsSectionData(
                 showToolSettings: showToolSettings,
-                allowThirdPartyTools: allowThirdPartyTools,
                 dynamicCodeSecurityLevel: dynamicCodeSecurityLevel,
                 builtInTools: builtInTools,
                 thirdPartyTools: thirdPartyTools,

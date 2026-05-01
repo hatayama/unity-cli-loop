@@ -69,7 +69,6 @@ namespace io.github.hatayama.uLoopMCP
     public record ToolSettingsSectionData
     {
         public readonly bool ShowToolSettings;
-        public readonly bool AllowThirdPartyTools;
         public readonly DynamicCodeSecurityLevel DynamicCodeSecurityLevel;
         public readonly ToolToggleItem[] BuiltInTools;
         public readonly ToolToggleItem[] ThirdPartyTools;
@@ -78,7 +77,6 @@ namespace io.github.hatayama.uLoopMCP
 
         public ToolSettingsSectionData(
             bool showToolSettings,
-            bool allowThirdPartyTools,
             DynamicCodeSecurityLevel dynamicCodeSecurityLevel,
             ToolToggleItem[] builtInTools,
             ToolToggleItem[] thirdPartyTools,
@@ -86,7 +84,6 @@ namespace io.github.hatayama.uLoopMCP
             bool hasToolListData = true)
         {
             ShowToolSettings = showToolSettings;
-            AllowThirdPartyTools = allowThirdPartyTools;
             DynamicCodeSecurityLevel = dynamicCodeSecurityLevel;
             BuiltInTools = builtInTools;
             ThirdPartyTools = thirdPartyTools;

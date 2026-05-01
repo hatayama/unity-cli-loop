@@ -375,12 +375,7 @@ Async support:
 > [!IMPORTANT]
 > **Security Settings**
 >
-> Some tools are disabled by default for security reasons.
-> To use these tools, enable the corresponding items in the Unity CLI Loop window "Tool Settings":
->
-> **Basic Security Settings**:
-> - **Allow Tests Execution**: Enable `run-tests` tool
-> - **Allow Third Party Tools**: Enable user-developed custom tools
+> Custom tools are always available. Use individual tool toggles to hide tools from AI agents when needed.
 >
 > **Dynamic Code Security Level** (`execute-dynamic-code` tool):
 > - **Level 1 (Restricted)**: Unity API only, dangerous operations blocked (recommended)
@@ -475,8 +470,8 @@ You can publish your extension tools on GitHub and reuse them across other proje
 > [!IMPORTANT]
 > **Security Settings**
 >
-> Project-specific tools require enabling **Allow Third Party Tools** in the Unity CLI Loop window "Tool Settings".
-> When developing custom tools that involve dynamic code execution, also consider the **Dynamic Code Security Level** setting.
+> Project-specific tools are available without enabling an additional permission.
+> When developing custom tools that involve dynamic code execution, consider the **Dynamic Code Security Level** setting.
 
 <details>
 <summary>View Implementation Guide</summary>
@@ -619,7 +614,7 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 
 | File | Purpose | Git-track? |
 |------|---------|------------|
-| `settings.permissions.json` | Team-wide security policy (third-party tool access, dynamic code security level) | Optional |
+| `settings.permissions.json` | Team-wide security policy (dynamic code security level) | Optional |
 | `settings.tools.json` | Per-tool enable/disable preferences | Optional |
 | `tools.json` | Auto-generated CLI tool registry | No |
 | `outputs/` | Runtime outputs (test results, screenshots, hierarchy dumps) | No |

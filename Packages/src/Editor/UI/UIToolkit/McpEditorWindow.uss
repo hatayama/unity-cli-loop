@@ -531,10 +531,6 @@
     padding-bottom: 0;
 }
 
-.mcp-tool-list-row--disabled {
-    opacity: 0.45;
-}
-
 .mcp-tool-registry-unavailable {
     color: #888888;
     -unity-font-style: italic;
