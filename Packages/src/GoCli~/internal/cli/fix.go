@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,16 +16,16 @@ var staleLockFileNames = []string{
 func runFix(projectRoot string, stdout io.Writer, stderr io.Writer) int {
 	cleaned, err := cleanupStaleLockFiles(projectRoot)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
 	if cleaned == 0 {
-		fmt.Fprintln(stdout, "No lock files found.")
+		writeLine(stdout, "No lock files found.")
 		return 0
 	}
 
-	fmt.Fprintf(stdout, "\nCleaned up %d lock file(s).\n", cleaned)
+	writeFormat(stdout, "\nCleaned up %d lock file(s).\n", cleaned)
 	return 0
 }
 

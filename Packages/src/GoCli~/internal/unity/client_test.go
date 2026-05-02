@@ -21,7 +21,7 @@ func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t
 	message := err.Error()
 
 	for _, expected := range []string{
-		"Unity CLI Loop server is not reachable for this project.",
+		"the Unity CLI Loop server is not reachable for this project.",
 		"connection attempt failure before a request was sent",
 		"does not mean an established connection was disconnected",
 		"Project: /tmp/MyProject",

@@ -67,7 +67,9 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 	if err != nil {
 		return SendOutcome{}, formatConnectionAttemptError(client.connection, err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	if progress != nil {
 		progress("connected")
@@ -106,7 +108,7 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		return outcome, err
 	}
 	if response.Error != nil {
-		return outcome, fmt.Errorf("Unity error: %s", response.Error.Message)
+		return outcome, fmt.Errorf("unity error: %s", response.Error.Message)
 	}
 	if len(response.Result) == 0 {
 		return outcome, fmt.Errorf("UNITY_NO_RESPONSE")
@@ -118,7 +120,7 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 
 func formatConnectionAttemptError(connection project.Connection, err error) error {
 	return fmt.Errorf(
-		"Unity CLI Loop server is not reachable for this project.\n\n"+
+		"the Unity CLI Loop server is not reachable for this project.\n\n"+
 			"The CLI could not open the project's IPC endpoint. This is a connection attempt failure before a request was sent; it does not mean an established connection was disconnected.\n\n"+
 			"Project: %s\n"+
 			"Endpoint: %s\n"+

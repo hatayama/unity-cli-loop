@@ -104,12 +104,12 @@ func FindProjectRoot(startPath string) (string, error) {
 		}
 
 		if exists(filepath.Join(currentPath, ".git")) {
-			return "", fmt.Errorf("Unity project not found. Use --project-path option to specify the target")
+			return "", fmt.Errorf("unity project not found. Use --project-path option to specify the target")
 		}
 
 		parentPath := filepath.Dir(currentPath)
 		if parentPath == currentPath {
-			return "", fmt.Errorf("Unity project not found. Use --project-path option to specify the target")
+			return "", fmt.Errorf("unity project not found. Use --project-path option to specify the target")
 		}
 		currentPath = parentPath
 	}
@@ -149,12 +149,12 @@ func findUnityProjectRootInParents(currentPath string) (string, error) {
 		}
 
 		if exists(filepath.Join(currentPath, ".git")) {
-			return "", fmt.Errorf("Unity project not found. Use --project-path option to specify the target")
+			return "", fmt.Errorf("unity project not found. Use --project-path option to specify the target")
 		}
 
 		parentPath := filepath.Dir(currentPath)
 		if parentPath == currentPath {
-			return "", fmt.Errorf("Unity project not found. Use --project-path option to specify the target")
+			return "", fmt.Errorf("unity project not found. Use --project-path option to specify the target")
 		}
 		currentPath = parentPath
 	}
@@ -208,7 +208,7 @@ func resolveProjectRoot(startPath string, explicitProjectPath string) (string, e
 		return "", fmt.Errorf("not a Unity project: %s", projectRoot)
 	}
 	if !hasUloopInstalled(projectRoot) {
-		return "", fmt.Errorf("Unity CLI Loop is not installed in this project: %s", projectRoot)
+		return "", fmt.Errorf("the Unity CLI Loop is not installed in this project: %s", projectRoot)
 	}
 
 	return projectRoot, nil

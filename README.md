@@ -600,6 +600,22 @@ See [HelloWorld sample](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKI
 
 ## Other
 
+### Native Go CLI Development
+
+Run the native Go CLI checks before changing files under `Packages/src/GoCli~`:
+
+```bash
+scripts/check-go-cli.sh
+```
+
+The check script verifies formatting with `goimports` and `gofumpt`, runs `go vet ./...`, runs `golangci-lint`, and then runs `go test ./...`. Install `golangci-lint` first if it is not available on your `PATH`.
+
+Use the existing build script when you need to refresh the checked-in native binaries:
+
+```bash
+scripts/build-go-cli.sh
+```
+
 ### Unity CLI Loop Files
 
 `UserSettings/UnityMcpSettings.json` stores per-user editor session state and should always remain local-only. The file name is a historical compatibility name.

@@ -46,7 +46,7 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 
 	if args[0] == listOptionsFlag {
 		if len(args) < 2 {
-			fmt.Fprintln(stderr, "--list-options requires a command name")
+			writeLine(stderr, "--list-options requires a command name")
 			return true, 1
 		}
 		printOptionsForCommand(args[1], cache, stdout)
@@ -64,7 +64,7 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 
 	request, err := parseCompletionRequest(args[1:])
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return true, 1
 	}
 
@@ -73,32 +73,32 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 		shellName = detectShell()
 	}
 	if shellName == "" {
-		fmt.Fprintln(stderr, "Could not detect shell. Use --shell bash, --shell zsh, --shell powershell, or --shell pwsh.")
+		writeLine(stderr, "Could not detect shell. Use --shell bash, --shell zsh, --shell powershell, or --shell pwsh.")
 		return true, 1
 	}
 
 	script := getCompletionScript(shellName)
 	if !request.install {
-		fmt.Fprintln(stdout, script)
+		writeLine(stdout, script)
 		return true, 0
 	}
 
 	configPath, err := getShellConfigPath(shellName)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return true, 1
 	}
 	if err := installCompletionScript(configPath, shellName, script); err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return true, 1
 	}
 
-	fmt.Fprintf(stdout, "Completion installed to %s\n", configPath)
+	writeFormat(stdout, "Completion installed to %s\n", configPath)
 	if isPowerShellShell(shellName) {
-		fmt.Fprintln(stdout, "Restart PowerShell to enable completion.")
+		writeLine(stdout, "Restart PowerShell to enable completion.")
 		return true, 0
 	}
-	fmt.Fprintf(stdout, "Run 'source %s' or restart your shell to enable completion.\n", configPath)
+	writeFormat(stdout, "Run 'source %s' or restart your shell to enable completion.\n", configPath)
 	return true, 0
 }
 
@@ -172,7 +172,7 @@ func printCommandNames(cache toolsCache, stdout io.Writer) {
 		commands = append(commands, tool.Name)
 	}
 	sort.Strings(commands)
-	fmt.Fprintln(stdout, strings.Join(commands, "\n"))
+	writeLine(stdout, strings.Join(commands, "\n"))
 }
 
 func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) {
@@ -192,7 +192,7 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 		options = append(options, "--"+pascalToKebab(propertyName))
 	}
 	sort.Strings(options)
-	fmt.Fprintln(stdout, strings.Join(options, "\n"))
+	writeLine(stdout, strings.Join(options, "\n"))
 }
 
 func detectShell() string {
@@ -322,6 +322,6 @@ func isPowerShellShell(shellName string) bool {
 }
 
 func printCompletionHelp(stdout io.Writer) {
-	fmt.Fprintln(stdout, "Usage:")
-	fmt.Fprintln(stdout, "  uloop completion [--shell bash|zsh|powershell|pwsh] [--install]")
+	writeLine(stdout, "Usage:")
+	writeLine(stdout, "  uloop completion [--shell bash|zsh|powershell|pwsh] [--install]")
 }

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -21,25 +22,25 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		return false, 0
 	}
 	if len(args) > 1 {
-		fmt.Fprintln(stderr, updateUnsupportedArgMessage)
+		writeLine(stderr, updateUnsupportedArgMessage)
 		return true, 1
 	}
 
 	commandName, commandArgs, err := updateCommandForOS(runtime.GOOS)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return true, 1
 	}
 
-	fmt.Fprintln(stdout, "Updating global uloop launcher...")
+	writeLine(stdout, "Updating global uloop launcher...")
 	command := exec.CommandContext(ctx, commandName, commandArgs...)
 	command.Stdout = stdout
 	command.Stderr = stderr
 	if err := command.Run(); err != nil {
-		fmt.Fprintf(stderr, "Update failed: %s\n", err.Error())
+		writeFormat(stderr, "Update failed: %s\n", err.Error())
 		return true, 1
 	}
-	fmt.Fprintln(stdout, "uloop launcher update completed.")
+	writeLine(stdout, "uloop launcher update completed.")
 	return true, 0
 }
 
@@ -56,7 +57,7 @@ func updateCommandForOS(goos string) (string, []string, error) {
 			fmt.Sprintf("irm %s | iex", shellQuote(windowsInstallerScriptURL)),
 		}, nil
 	default:
-		return "", nil, fmt.Errorf(updateUnsupportedOSMessage)
+		return "", nil, errors.New(updateUnsupportedOSMessage)
 	}
 }
 

@@ -23,7 +23,7 @@ const (
 func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
 	remainingArgs, projectPath, err := parseGlobalProjectPath(args)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
@@ -32,7 +32,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 0
 	}
 	if isVersionRequest(remainingArgs) {
-		fmt.Fprintln(stdout, version)
+		writeLine(stdout, version)
 		return 0
 	}
 
@@ -41,7 +41,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 
 	startPath, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
@@ -61,13 +61,13 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 
 	connection, err := project.ResolveConnection(startPath, projectPath)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
 	cache, err := loadTools(connection.ProjectRoot)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
@@ -83,17 +83,17 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	default:
 		tool, ok := findTool(cache, command)
 		if !ok {
-			fmt.Fprintf(stderr, "Unknown command: %s\n", command)
+			writeFormat(stderr, "Unknown command: %s\n", command)
 			return 1
 		}
 
 		params, nestedProjectPath, err := buildToolParams(commandArgs, tool)
 		if err != nil {
-			fmt.Fprintln(stderr, err.Error())
+			writeLine(stderr, err.Error())
 			return 1
 		}
 		if nestedProjectPath != "" && nestedProjectPath != connection.ProjectRoot {
-			fmt.Fprintln(stderr, "--project-path must be passed before the command in the native CLI")
+			writeLine(stderr, "--project-path must be passed before the command in the native CLI")
 			return 1
 		}
 		return runTool(ctx, connection, command, params, stdout, stderr)
@@ -102,7 +102,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 
 func RunLauncher(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
 	if isVersionRequest(args) {
-		fmt.Fprintln(stdout, version)
+		writeLine(stdout, version)
 		return 0
 	}
 	if len(args) == 0 || isHelpRequest(args) {
@@ -118,13 +118,13 @@ func RunLauncher(ctx context.Context, args []string, stdout io.Writer, stderr io
 
 	startPath, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
 	remainingArgs, explicitProjectPath, err := parseGlobalProjectPath(args)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 	if handled, code := tryHandleLaunchRequest(ctx, remainingArgs, startPath, explicitProjectPath, stdout, stderr); handled {
@@ -136,7 +136,7 @@ func RunLauncher(ctx context.Context, args []string, stdout io.Writer, stderr io
 
 	projectRoot, err := resolveLauncherProjectRoot(startPath, explicitProjectPath)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
@@ -145,7 +145,7 @@ func RunLauncher(ctx context.Context, args []string, stdout io.Writer, stderr io
 		localPath = filepath.Join(projectRoot, projectLocalWindowsPath)
 	}
 	if _, err := os.Stat(localPath); err != nil {
-		fmt.Fprintf(stderr, "Project-local uloop-core CLI was not found at %s\n", localPath)
+		writeFormat(stderr, "Project-local uloop-core CLI was not found at %s\n", localPath)
 		return 1
 	}
 
@@ -167,7 +167,7 @@ func runTool(ctx context.Context, connection project.Connection, command string,
 	})
 	spinner.Stop()
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 	writeJSON(stdout, result)
@@ -177,7 +177,7 @@ func runTool(ctx context.Context, connection project.Connection, command string,
 func runCompileWithDomainReloadWait(ctx context.Context, connection project.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
 	requestID, err := ensureCompileRequestID(params)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
@@ -190,7 +190,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection project.Conn
 	}
 	if !shouldWaitForCompileResult(err, outcome) {
 		spinner.Stop()
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
@@ -204,11 +204,11 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection project.Conn
 	})
 	spinner.Stop()
 	if waitErr != nil {
-		fmt.Fprintln(stderr, waitErr.Error())
+		writeLine(stderr, waitErr.Error())
 		return 1
 	}
 	if !completed {
-		fmt.Fprintln(stderr, "Compile wait timed out after 90000ms. Run 'uloop fix' and retry.")
+		writeLine(stderr, "Compile wait timed out after 90000ms. Run 'uloop fix' and retry.")
 		return 1
 	}
 	writeJSON(stdout, result)
@@ -222,7 +222,7 @@ func runList(ctx context.Context, connection project.Connection, stdout io.Write
 	})
 	spinner.Stop()
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 	writeJSON(stdout, result)
@@ -236,27 +236,27 @@ func runSync(ctx context.Context, connection project.Connection, stdout io.Write
 	})
 	spinner.Stop()
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
 	cachePath := filepath.Join(connection.ProjectRoot, cacheDirectoryName, cacheFileName)
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 	if err := os.WriteFile(cachePath, result, 0o644); err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
-	fmt.Fprintf(stdout, "Tools synced to %s\n", cachePath)
+	writeFormat(stdout, "Tools synced to %s\n", cachePath)
 	return 0
 }
 
 func writeJSON(stdout io.Writer, result json.RawMessage) {
 	var pretty any
 	if json.Unmarshal(result, &pretty) != nil {
-		fmt.Fprintln(stdout, string(result))
+		writeLine(stdout, string(result))
 		return
 	}
 	encoder := json.NewEncoder(stdout)
@@ -282,7 +282,7 @@ func execProjectLocal(ctx context.Context, localPath string, args []string, proj
 	if runtime.GOOS != "windows" {
 		err := syscall.Exec(localPath, append([]string{localPath}, args...), os.Environ())
 		if err != nil {
-			fmt.Fprintln(stderr, err.Error())
+			writeLine(stderr, err.Error())
 			return 1
 		}
 		return 0
@@ -308,13 +308,13 @@ func isHelpRequest(args []string) bool {
 }
 
 func printHelp(stdout io.Writer) {
-	fmt.Fprintf(stdout, "uloop %s\n\nUsage:\n  uloop <command> [options]\n\n", version)
-	fmt.Fprintln(stdout, "Native Go CLI preview. Dynamic Unity tool commands are loaded from .uloop/tools.json.")
+	writeFormat(stdout, "uloop %s\n\nUsage:\n  uloop <command> [options]\n\n", version)
+	writeLine(stdout, "Native Go CLI preview. Dynamic Unity tool commands are loaded from .uloop/tools.json.")
 }
 
 func printLauncherHelp(stdout io.Writer) {
-	fmt.Fprintf(stdout, "uloop %s\n\nUsage:\n  uloop <command> [options]\n\n", version)
-	fmt.Fprintln(stdout, "Native Go dispatcher preview. Dispatches to the project-local uloop-core binary.")
+	writeFormat(stdout, "uloop %s\n\nUsage:\n  uloop <command> [options]\n\n", version)
+	writeLine(stdout, "Native Go dispatcher preview. Dispatches to the project-local uloop-core binary.")
 }
 
 func loadCompletionTools(startPath string, projectPath string) toolsCache {

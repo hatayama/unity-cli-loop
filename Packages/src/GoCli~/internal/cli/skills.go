@@ -60,18 +60,18 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 	subcommand := args[1]
 	options, err := parseSkillsOptions(args[2:])
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return true, 1
 	}
 
 	projectRoot, err := resolveSkillsProjectRoot(startPath, globalProjectPath, options.global)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return true, 1
 	}
 	skills, err := collectSkillDefinitions(projectRoot)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return true, 1
 	}
 
@@ -91,7 +91,7 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 		}
 		return true, runSkillsUninstall(projectRoot, skills, options, stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown skills command: %s\n", subcommand)
+		writeFormat(stderr, "unknown skills command: %s\n", subcommand)
 		return true, 1
 	}
 }
@@ -146,57 +146,57 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 		location = "Global"
 	}
 
-	fmt.Fprintln(stdout, "")
-	fmt.Fprintln(stdout, "uloop Skills Status:")
-	fmt.Fprintln(stdout, "")
+	writeLine(stdout, "")
+	writeLine(stdout, "uloop Skills Status:")
+	writeLine(stdout, "")
 	for _, target := range targets {
 		baseDir := getSkillsBaseDir(projectRoot, target, options.global)
-		fmt.Fprintf(stdout, "%s (%s):\n", target.displayName, location)
-		fmt.Fprintf(stdout, "Location: %s\n", baseDir)
-		fmt.Fprintln(stdout, strings.Repeat("=", 50))
+		writeFormat(stdout, "%s (%s):\n", target.displayName, location)
+		writeFormat(stdout, "Location: %s\n", baseDir)
+		writeLine(stdout, strings.Repeat("=", 50))
 		for _, skill := range skills {
 			status := getSkillStatus(baseDir, skill, !options.flat)
-			fmt.Fprintf(stdout, "  %s %s (%s)\n", statusIcon(status), skill.name, statusText(status))
+			writeFormat(stdout, "  %s %s (%s)\n", statusIcon(status), skill.name, statusText(status))
 		}
-		fmt.Fprintln(stdout, "")
+		writeLine(stdout, "")
 	}
-	fmt.Fprintf(stdout, "Total: %d skills\n", len(skills))
+	writeFormat(stdout, "Total: %d skills\n", len(skills))
 	return 0
 }
 
 func runSkillsInstall(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
-	fmt.Fprintln(stdout, "")
-	fmt.Fprintf(stdout, "Installing uloop skills (%s)...\n", skillLocationName(options.global))
-	fmt.Fprintln(stdout, "")
+	writeLine(stdout, "")
+	writeFormat(stdout, "Installing uloop skills (%s)...\n", skillLocationName(options.global))
+	writeLine(stdout, "")
 	for _, target := range options.targets {
 		result, err := installSkillsForTarget(projectRoot, target, skills, options.global, !options.flat)
 		if err != nil {
-			fmt.Fprintln(stderr, err.Error())
+			writeLine(stderr, err.Error())
 			return 1
 		}
-		fmt.Fprintf(stdout, "%s:\n", target.displayName)
-		fmt.Fprintf(stdout, "  Installed: %d\n", result.installed)
-		fmt.Fprintf(stdout, "  Updated: %d\n", result.updated)
-		fmt.Fprintf(stdout, "  Skipped: %d\n", result.skipped)
-		fmt.Fprintf(stdout, "  Location: %s\n\n", getSkillsBaseDir(projectRoot, target, options.global))
+		writeFormat(stdout, "%s:\n", target.displayName)
+		writeFormat(stdout, "  Installed: %d\n", result.installed)
+		writeFormat(stdout, "  Updated: %d\n", result.updated)
+		writeFormat(stdout, "  Skipped: %d\n", result.skipped)
+		writeFormat(stdout, "  Location: %s\n\n", getSkillsBaseDir(projectRoot, target, options.global))
 	}
 	return 0
 }
 
 func runSkillsUninstall(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
-	fmt.Fprintln(stdout, "")
-	fmt.Fprintf(stdout, "Uninstalling uloop skills (%s)...\n", skillLocationName(options.global))
-	fmt.Fprintln(stdout, "")
+	writeLine(stdout, "")
+	writeFormat(stdout, "Uninstalling uloop skills (%s)...\n", skillLocationName(options.global))
+	writeLine(stdout, "")
 	for _, target := range options.targets {
 		removed, notFound, err := uninstallSkillsForTarget(projectRoot, target, skills, options.global, !options.flat)
 		if err != nil {
-			fmt.Fprintln(stderr, err.Error())
+			writeLine(stderr, err.Error())
 			return 1
 		}
-		fmt.Fprintf(stdout, "%s:\n", target.displayName)
-		fmt.Fprintf(stdout, "  Removed: %d\n", removed)
-		fmt.Fprintf(stdout, "  Not found: %d\n", notFound)
-		fmt.Fprintf(stdout, "  Location: %s\n\n", getSkillsBaseDir(projectRoot, target, options.global))
+		writeFormat(stdout, "%s:\n", target.displayName)
+		writeFormat(stdout, "  Removed: %d\n", removed)
+		writeFormat(stdout, "  Not found: %d\n", notFound)
+		writeFormat(stdout, "  Location: %s\n\n", getSkillsBaseDir(projectRoot, target, options.global))
 	}
 	return 0
 }
@@ -497,20 +497,20 @@ func statusText(status string) string {
 }
 
 func printSkillsHelp(stdout io.Writer) {
-	fmt.Fprintln(stdout, "Usage:")
-	fmt.Fprintln(stdout, "  uloop skills list [options]")
-	fmt.Fprintln(stdout, "  uloop skills install [options]")
-	fmt.Fprintln(stdout, "  uloop skills uninstall [options]")
+	writeLine(stdout, "Usage:")
+	writeLine(stdout, "  uloop skills list [options]")
+	writeLine(stdout, "  uloop skills install [options]")
+	writeLine(stdout, "  uloop skills uninstall [options]")
 }
 
 func printSkillsTargetGuidance(command string, stdout io.Writer) {
-	fmt.Fprintf(stdout, "\nPlease specify at least one target for '%s':\n\n", command)
-	fmt.Fprintln(stdout, "Available targets:")
-	fmt.Fprintln(stdout, "  --claude")
-	fmt.Fprintln(stdout, "  --codex")
-	fmt.Fprintln(stdout, "  --cursor")
-	fmt.Fprintln(stdout, "  --gemini")
-	fmt.Fprintln(stdout, "  --agents")
-	fmt.Fprintln(stdout, "  --windsurf")
-	fmt.Fprintln(stdout, "  --antigravity")
+	writeFormat(stdout, "\nPlease specify at least one target for '%s':\n\n", command)
+	writeLine(stdout, "Available targets:")
+	writeLine(stdout, "  --claude")
+	writeLine(stdout, "  --codex")
+	writeLine(stdout, "  --cursor")
+	writeLine(stdout, "  --gemini")
+	writeLine(stdout, "  --agents")
+	writeLine(stdout, "  --windsurf")
+	writeLine(stdout, "  --antigravity")
 }

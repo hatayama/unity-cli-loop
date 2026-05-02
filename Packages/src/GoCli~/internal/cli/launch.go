@@ -54,7 +54,7 @@ func tryHandleLaunchRequest(
 
 	options, err := parseLaunchOptions(args[1:], globalProjectPath)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return true, 1
 	}
 
@@ -147,47 +147,47 @@ func isInvalidLaunchOptionValue(option string, value string) bool {
 func runLaunch(ctx context.Context, options launchOptions, startPath string, stdout io.Writer, stderr io.Writer) int {
 	projectRoot, err := resolveLaunchProjectRoot(startPath, options)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
 	if options.deleteRecovery {
 		if err := os.RemoveAll(filepath.Join(projectRoot, recoveryDirectoryPath)); err != nil {
-			fmt.Fprintln(stderr, err.Error())
+			writeLine(stderr, err.Error())
 			return 1
 		}
 	}
 
 	runningProcess, err := findRunningUnityProcess(ctx, projectRoot)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
 	if runningProcess != nil {
 		if !options.restart && !options.quit {
 			_ = focusUnityProcess(ctx, runningProcess.pid)
-			fmt.Fprintf(stdout, "Unity is already running for %s (PID: %d)\n", projectRoot, runningProcess.pid)
+			writeFormat(stdout, "Unity is already running for %s (PID: %d)\n", projectRoot, runningProcess.pid)
 			return 0
 		}
 		if err := killUnityProcess(runningProcess.pid); err != nil {
-			fmt.Fprintln(stderr, err.Error())
+			writeLine(stderr, err.Error())
 			return 1
 		}
 		if options.quit {
-			fmt.Fprintf(stdout, "Unity process stopped (PID: %d)\n", runningProcess.pid)
+			writeFormat(stdout, "Unity process stopped (PID: %d)\n", runningProcess.pid)
 			return 0
 		}
 	}
 
 	if options.quit {
-		fmt.Fprintln(stdout, "No Unity process is running for this project.")
+		writeLine(stdout, "No Unity process is running for this project.")
 		return 0
 	}
 
 	unityPath, err := resolveUnityExecutablePath(projectRoot)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
 
@@ -198,16 +198,16 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 
 	command := exec.CommandContext(ctx, unityPath, launchArgs...)
 	if err := command.Start(); err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
-	fmt.Fprintf(stdout, "Unity launch started for %s (PID: %d)\n", projectRoot, command.Process.Pid)
+	writeFormat(stdout, "Unity launch started for %s (PID: %d)\n", projectRoot, command.Process.Pid)
 
 	if err := waitForLaunchReady(ctx, projectRoot); err != nil {
-		fmt.Fprintln(stderr, err.Error())
+		writeLine(stderr, err.Error())
 		return 1
 	}
-	fmt.Fprintln(stdout, "Unity is ready.")
+	writeLine(stdout, "Unity is ready.")
 	return 0
 }
 
@@ -238,7 +238,7 @@ func resolveUnityExecutablePath(projectRoot string) (string, error) {
 		}
 	}
 	if len(candidates) == 0 {
-		return "", fmt.Errorf("Unity launch is not supported on %s", runtime.GOOS)
+		return "", fmt.Errorf("unity launch is not supported on %s", runtime.GOOS)
 	}
 	return candidates[0], nil
 }
@@ -277,11 +277,11 @@ func readUnityEditorVersion(projectRoot string) (string, error) {
 	}
 	matches := editorVersionPattern.FindStringSubmatch(string(content))
 	if len(matches) != 2 {
-		return "", fmt.Errorf("Unity editor version not found in %s", projectVersionFilePath)
+		return "", fmt.Errorf("unity editor version not found in %s", projectVersionFilePath)
 	}
 	version := strings.TrimSpace(matches[1])
 	if version == "" {
-		return "", fmt.Errorf("Unity editor version is empty in %s", projectVersionFilePath)
+		return "", fmt.Errorf("unity editor version is empty in %s", projectVersionFilePath)
 	}
 	return version, nil
 }
@@ -318,13 +318,13 @@ func waitForLaunchReady(ctx context.Context, projectRoot string) error {
 }
 
 func printLaunchHelp(stdout io.Writer) {
-	fmt.Fprintln(stdout, "Usage:")
-	fmt.Fprintln(stdout, "  uloop launch [options] [project-path]")
-	fmt.Fprintln(stdout, "")
-	fmt.Fprintln(stdout, "Options:")
-	fmt.Fprintln(stdout, "  -r, --restart          Kill an existing Unity process for the project before launching")
-	fmt.Fprintln(stdout, "  -q, --quit             Kill an existing Unity process for the project without launching")
-	fmt.Fprintln(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
-	fmt.Fprintln(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
-	fmt.Fprintln(stdout, "      --max-depth <n>    Accepted for compatibility when searching from the current directory")
+	writeLine(stdout, "Usage:")
+	writeLine(stdout, "  uloop launch [options] [project-path]")
+	writeLine(stdout, "")
+	writeLine(stdout, "Options:")
+	writeLine(stdout, "  -r, --restart          Kill an existing Unity process for the project before launching")
+	writeLine(stdout, "  -q, --quit             Kill an existing Unity process for the project without launching")
+	writeLine(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
+	writeLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
+	writeLine(stdout, "      --max-depth <n>    Accepted for compatibility when searching from the current directory")
 }
