@@ -150,7 +150,7 @@ func tryReadCompileResult(projectRoot string, requestID string) (json.RawMessage
 }
 
 func isUnityBusyByCompileLocks(projectRoot string) (bool, error) {
-	for _, lockFile := range []string{"compiling.lock", "domainreload.lock"} {
+	for _, lockFile := range []string{"compiling.lock", "domainreload.lock", "serverstarting.lock"} {
 		_, err := os.Stat(filepath.Join(projectRoot, "Temp", lockFile))
 		if err == nil {
 			return true, nil

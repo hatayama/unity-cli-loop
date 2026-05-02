@@ -88,6 +88,52 @@ func TestWaitForCompileCompletionReadsResultAfterLocksClear(t *testing.T) {
 	}
 }
 
+func TestWaitForCompileCompletionWaitsForServerStartingLock(t *testing.T) {
+	projectRoot := t.TempDir()
+	requestID := "compile_test"
+	resultDir := filepath.Join(projectRoot, compileResultRelativeDir)
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("failed to create result dir: %v", err)
+	}
+	tempPath := filepath.Join(projectRoot, "Temp")
+	if err := os.MkdirAll(tempPath, 0o755); err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	lockPath := filepath.Join(tempPath, "serverstarting.lock")
+	if err := os.WriteFile(lockPath, []byte("busy"), 0o644); err != nil {
+		t.Fatalf("failed to write lock: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(resultDir, requestID+".json"),
+		[]byte("{\"Success\":true}"),
+		0o644,
+	); err != nil {
+		t.Fatalf("failed to write result: %v", err)
+	}
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		_ = os.Remove(lockPath)
+	}()
+
+	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+		projectRoot:  projectRoot,
+		requestID:    requestID,
+		timeout:      time.Second,
+		pollInterval: 5 * time.Millisecond,
+		lockGrace:    10 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if !completed {
+		t.Fatal("compile wait did not complete")
+	}
+	if string(result) != "{\"Success\":true}" {
+		t.Fatalf("result mismatch: %s", result)
+	}
+}
+
 func TestShouldWaitForCompileResultRequiresDispatchedTransportError(t *testing.T) {
 	if shouldWaitForCompileResult(os.ErrNotExist, unity.SendOutcome{}) {
 		t.Fatal("undispatched error should not wait")

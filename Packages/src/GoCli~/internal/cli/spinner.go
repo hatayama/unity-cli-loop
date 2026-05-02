@@ -27,6 +27,13 @@ func newToolSpinner(stderr io.Writer, command string) *terminalSpinner {
 	return newSpinner(stderr, isTerminalWriter(stderr), "Connecting to Unity...")
 }
 
+func newLaunchSpinner(stdout io.Writer, stderr io.Writer) *terminalSpinner {
+	if isTerminalWriter(stdout) {
+		return newSpinner(stdout, true, "Waiting for Unity to finish starting...")
+	}
+	return newSpinner(stderr, isTerminalWriter(stderr), "Waiting for Unity to finish starting...")
+}
+
 func newSpinner(writer io.Writer, enabled bool, message string) *terminalSpinner {
 	spinner := &terminalSpinner{
 		writer:  writer,
@@ -67,7 +74,7 @@ func (spinner *terminalSpinner) Stop() {
 		<-spinner.stopped
 		spinner.mutex.Lock()
 		defer spinner.mutex.Unlock()
-		_, _ = fmt.Fprint(spinner.writer, "\r\x1b[K")
+		_, _ = fmt.Fprint(spinner.writer, "\r\x1b[K\n")
 	})
 }
 

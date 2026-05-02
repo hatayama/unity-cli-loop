@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
@@ -98,6 +99,62 @@ func TestRunLaunchQuitDoesNotLaunchWhenUnityIsNotRunning(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "No Unity process is running") {
 		t.Fatalf("stdout mismatch: %s", stdout.String())
+	}
+}
+
+func TestNewUnityLaunchCommandIsNotContextCancelable(t *testing.T) {
+	command := newUnityLaunchCommand("/bin/echo", []string{"hello"})
+
+	if command.Cancel != nil {
+		t.Fatal("Unity launch command must not be killed when the CLI context is canceled")
+	}
+}
+
+func TestCleanStaleUnityTempDeletesTempWhenLockfileExists(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	tempPath := filepath.Join(projectRoot, launchTempDirectoryName)
+	if err := os.MkdirAll(tempPath, 0o755); err != nil {
+		t.Fatalf("failed to create Temp: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tempPath, unityLockfileName), []byte{}, 0o644); err != nil {
+		t.Fatalf("failed to create UnityLockfile: %v", err)
+	}
+
+	removed, err := cleanStaleUnityTemp(projectRoot)
+	if err != nil {
+		t.Fatalf("cleanStaleUnityTemp failed: %v", err)
+	}
+	if !removed {
+		t.Fatal("expected stale Temp removal")
+	}
+	if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
+		t.Fatalf("Temp still exists after cleanup: %v", err)
+	}
+}
+
+func TestWaitForUnityLockfileReturnsAfterLockfileAppears(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	lockfilePath := unityLockfilePath(projectRoot)
+	errChan := make(chan error, 1)
+
+	go func() {
+		errChan <- waitForUnityLockfile(context.Background(), lockfilePath, time.Millisecond, time.Second)
+	}()
+
+	if err := os.MkdirAll(filepath.Dir(lockfilePath), 0o755); err != nil {
+		t.Fatalf("failed to create Temp: %v", err)
+	}
+	if err := os.WriteFile(lockfilePath, []byte{}, 0o644); err != nil {
+		t.Fatalf("failed to create UnityLockfile: %v", err)
+	}
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Fatalf("waitForUnityLockfile failed: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for waitForUnityLockfile")
 	}
 }
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -18,14 +19,21 @@ import (
 )
 
 const (
-	launchCommandName      = "launch"
-	launchReadinessTimeout = 120 * time.Second
-	launchReadinessPoll    = 1 * time.Second
-	projectVersionFilePath = "ProjectSettings/ProjectVersion.txt"
-	recoveryDirectoryPath  = "Assets/_Recovery"
+	launchCommandName       = "launch"
+	launchLockfilePoll      = 100 * time.Millisecond
+	launchLockfileTimeout   = 5 * time.Second
+	launchReadinessTimeout  = 180 * time.Second
+	launchReadinessPoll     = 1 * time.Second
+	launchProbeTimeout      = 5 * time.Second
+	projectVersionFilePath  = "ProjectSettings/ProjectVersion.txt"
+	recoveryDirectoryPath   = "Assets/_Recovery"
+	launchTempDirectoryName = "Temp"
+	unityLockfileName       = "UnityLockfile"
 )
 
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
+
+const launchDynamicCodeProbe = `UnityEngine.LogType previous = UnityEngine.Debug.unityLogger.filterLogType; UnityEngine.Debug.unityLogger.filterLogType = UnityEngine.LogType.Warning; try { UnityEngine.Debug.Log("Unity CLI Loop dynamic code prewarm"); return "Unity CLI Loop dynamic code prewarm"; } finally { UnityEngine.Debug.unityLogger.filterLogType = previous; }`
 
 type launchOptions struct {
 	projectPath    string
@@ -160,6 +168,14 @@ func isInvalidLaunchOptionValue(option string, value string) bool {
 }
 
 func runLaunch(ctx context.Context, options launchOptions, startPath string, stdout io.Writer, stderr io.Writer) int {
+	if options.projectPath == "" {
+		depthInfo := strconv.Itoa(options.maxDepth)
+		if options.maxDepth == -1 {
+			depthInfo = "unlimited"
+		}
+		writeFormat(stdout, "Searching for Unity project under %s (max-depth: %s)...\n\n", startPath, depthInfo)
+	}
+
 	projectRoot, err := resolveLaunchProjectRoot(startPath, options)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{command: launchCommandName})
@@ -200,30 +216,171 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		return 0
 	}
 
+	removedStaleTemp, err := cleanStaleUnityTemp(projectRoot)
+	if err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		return 1
+	}
+	if removedStaleTemp {
+		writeFormat(stdout, "UnityLockfile found without active Unity process: %s\n", unityLockfilePath(projectRoot))
+		writeLine(stdout, "Assuming previous crash. Cleaning Temp directory and continuing launch.")
+		writeLine(stdout, "Deleted Temp directory.")
+		writeLine(stdout, "Deleted UnityLockfile.")
+		writeLine(stdout, "")
+	}
+
 	unityPath, err := resolveUnityExecutablePath(projectRoot)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
 
+	spinner := newLaunchSpinner(stdout, stderr)
+	defer spinner.Stop()
+
+	writeLine(stdout, "Opening Unity...")
+	writeFormat(stdout, "Project Path: %s\n", projectRoot)
+	writeFormat(stdout, "Detected Unity version: %s\n", readUnityVersionForLog(projectRoot))
+	writeLine(stdout, "Unity Hub launch options: none")
+
 	launchArgs := []string{"-projectPath", projectRoot}
 	if options.platform != "" {
 		launchArgs = append(launchArgs, "-buildTarget", options.platform)
 	}
 
-	command := exec.CommandContext(ctx, unityPath, launchArgs...)
+	command := newUnityLaunchCommand(unityPath, launchArgs)
 	if err := command.Start(); err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
-	writeFormat(stdout, "Unity launch started for %s (PID: %d)\n", projectRoot, command.Process.Pid)
-
+	if err := command.Process.Release(); err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		return 1
+	}
+	if err := waitForUnityLockfile(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		return 1
+	}
 	if err := waitForLaunchReady(ctx, projectRoot); err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
-	writeLine(stdout, "Unity is ready.")
 	return 0
+}
+
+func newUnityLaunchCommand(unityPath string, launchArgs []string) *exec.Cmd {
+	command := exec.Command(unityPath, launchArgs...)
+	command.Env = append(os.Environ(), "MSYS_NO_PATHCONV=1")
+	configureDetachedUnityLaunchCommand(command)
+	return command
+}
+
+func cleanStaleUnityTemp(projectRoot string) (bool, error) {
+	lockfilePath := unityLockfilePath(projectRoot)
+	if _, err := os.Stat(lockfilePath); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return true, os.RemoveAll(filepath.Join(projectRoot, launchTempDirectoryName))
+}
+
+func waitForUnityLockfile(ctx context.Context, lockfilePath string, pollInterval time.Duration, timeout time.Duration) error {
+	timeoutContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		if _, err := os.Stat(lockfilePath); err == nil {
+			return nil
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+
+		select {
+		case <-timeoutContext.Done():
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+func unityLockfilePath(projectRoot string) string {
+	return filepath.Join(projectRoot, launchTempDirectoryName, unityLockfileName)
+}
+
+func waitForLaunchReady(ctx context.Context, projectRoot string) error {
+	timeoutContext, cancel := context.WithTimeout(ctx, launchReadinessTimeout)
+	defer cancel()
+
+	for {
+		if err := probeLaunchReady(timeoutContext, projectRoot); err == nil {
+			return nil
+		}
+
+		select {
+		case <-timeoutContext.Done():
+			return fmt.Errorf("timed out waiting for Unity to become ready after launch")
+		case <-time.After(launchReadinessPoll):
+		}
+	}
+}
+
+func probeLaunchReady(ctx context.Context, projectRoot string) error {
+	probeContext, cancel := context.WithTimeout(ctx, launchProbeTimeout)
+	defer cancel()
+
+	connection, err := project.ResolveConnection(projectRoot, projectRoot)
+	if err != nil {
+		return err
+	}
+
+	if !isExecuteDynamicCodeAvailable(projectRoot) {
+		_, err := unity.NewClient(connection).Send(probeContext, "get-version", map[string]any{})
+		return err
+	}
+
+	response, err := unity.NewClient(connection).Send(probeContext, "execute-dynamic-code", map[string]any{
+		"Code":                      launchDynamicCodeProbe,
+		"CompileOnly":               false,
+		"YieldToForegroundRequests": true,
+	})
+	if err != nil {
+		return err
+	}
+
+	var payload executeDynamicCodeLaunchResponse
+	if err := json.Unmarshal(response, &payload); err != nil {
+		return err
+	}
+	if !payload.Success {
+		if payload.ErrorMessage != "" {
+			return fmt.Errorf("execute-dynamic-code launch readiness probe failed: %s", payload.ErrorMessage)
+		}
+		return fmt.Errorf("execute-dynamic-code launch readiness probe failed")
+	}
+	return nil
+}
+
+type executeDynamicCodeLaunchResponse struct {
+	Success      bool   `json:"Success"`
+	ErrorMessage string `json:"ErrorMessage"`
+}
+
+func isExecuteDynamicCodeAvailable(projectRoot string) bool {
+	cache, err := loadTools(projectRoot)
+	if err != nil {
+		return true
+	}
+	_, ok := findTool(cache, "execute-dynamic-code")
+	return ok
 }
 
 func resolveLaunchProjectRoot(startPath string, options launchOptions) (string, error) {
@@ -301,35 +458,20 @@ func readUnityEditorVersion(projectRoot string) (string, error) {
 	return version, nil
 }
 
+func readUnityVersionForLog(projectRoot string) string {
+	version, err := readUnityEditorVersion(projectRoot)
+	if err != nil {
+		return "unknown"
+	}
+	return version
+}
+
 func killUnityProcess(pid int) error {
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return err
 	}
 	return process.Kill()
-}
-
-func waitForLaunchReady(ctx context.Context, projectRoot string) error {
-	timeoutContext, cancel := context.WithTimeout(ctx, launchReadinessTimeout)
-	defer cancel()
-
-	ticker := time.NewTicker(launchReadinessPoll)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeoutContext.Done():
-			return fmt.Errorf("timed out waiting for Unity to become ready after launch")
-		case <-ticker.C:
-			connection, err := project.ResolveConnection(projectRoot, projectRoot)
-			if err != nil {
-				continue
-			}
-			if _, err := unity.NewClient(connection).Send(timeoutContext, "get-version", map[string]any{}); err == nil {
-				return nil
-			}
-		}
-	}
 }
 
 func printLaunchHelp(stdout io.Writer) {

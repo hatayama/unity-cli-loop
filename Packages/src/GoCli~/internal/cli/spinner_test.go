@@ -27,7 +27,22 @@ func TestSpinnerWritesMessageAndClearsLine(t *testing.T) {
 	if !strings.Contains(output, "Executing compile...") {
 		t.Fatalf("spinner output did not include message: %q", output)
 	}
-	if !strings.HasSuffix(output, "\r\x1b[K") {
+	if !strings.HasSuffix(output, "\r\x1b[K\n") {
 		t.Fatalf("spinner output did not clear the line: %q", output)
+	}
+}
+
+func TestLaunchSpinnerWritesStartupMessage(t *testing.T) {
+	var stdout bytes.Buffer
+
+	spinner := newSpinner(&stdout, true, "Waiting for Unity to finish starting...")
+	spinner.Stop()
+
+	output := stdout.String()
+	if !strings.Contains(output, "Waiting for Unity to finish starting...") {
+		t.Fatalf("launch spinner output did not include message: %q", output)
+	}
+	if !strings.HasSuffix(output, "\r\x1b[K\n") {
+		t.Fatalf("launch spinner output did not clear the line before returning: %q", output)
 	}
 }
