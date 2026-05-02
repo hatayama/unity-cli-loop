@@ -113,10 +113,6 @@ Packages/src/TypeScriptServer~/dist/*
 !Packages/src/TypeScriptServer~/dist/server.bundle.js
 !Packages/src/TypeScriptServer~/dist/server.bundle.js.map
 
-# CLI dispatcher is published to npm; project CLI bundle is included in the Unity package
-Packages/src/Cli~/dist/*
-!Packages/src/Cli~/dist/cli.bundle.cjs
-
 # Native Go CLI release artifacts are included in the Unity package
 Packages/src/GoCli~/dist/*
 !Packages/src/GoCli~/dist/darwin-arm64/
