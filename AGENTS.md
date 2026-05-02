@@ -13,6 +13,11 @@ Comments in the code, commit messages, PR titles, and PR descriptions must all b
 Do not directly edit skill files under the project-root `.agents/` or `.claude/` directories.
 These files are generated copies. Update the source skill definitions instead, then regenerate the copies through the normal workflow.
 
+## Native Go CLI Validation
+
+When changing files under `Packages/src/GoCli~` or any checked-in native CLI binary under `Packages/src/GoCli~/dist`, run `scripts/check-go-cli.sh` before opening or updating a pull request.
+This script is the local equivalent of the Go CLI CI validation: it runs formatting checks, vet, lint, tests, rebuilds the checked-in native binaries, and fails if the rebuilt binaries differ from the committed files.
+
 ## Unity Freeze Prevention
 
 Do not add or keep Unity EditMode tests that can freeze the Editor.

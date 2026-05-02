@@ -22,13 +22,17 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		return false, 0
 	}
 	if len(args) > 1 {
-		writeLine(stderr, updateUnsupportedArgMessage)
+		writeErrorEnvelope(stderr, (&argumentError{
+			message:     updateUnsupportedArgMessage,
+			command:     "update",
+			nextActions: []string{"Run `uloop update` without options."},
+		}).toCLIError(errorContext{command: "update"}))
 		return true, 1
 	}
 
 	commandName, commandArgs, err := updateCommandForOS(runtime.GOOS)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: "update"})
 		return true, 1
 	}
 
@@ -37,7 +41,18 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 	command.Stdout = stdout
 	command.Stderr = stderr
 	if err := command.Run(); err != nil {
-		writeFormat(stderr, "Update failed: %s\n", err.Error())
+		writeErrorEnvelope(stderr, cliError{
+			ErrorCode:   errorCodeInternalError,
+			Phase:       errorPhaseExecution,
+			Message:     "Update failed: " + err.Error(),
+			Retryable:   true,
+			SafeToRetry: true,
+			Command:     "update",
+			NextActions: []string{"Retry `uloop update` after checking network access to GitHub."},
+			Details: map[string]any{
+				"cause": err.Error(),
+			},
+		})
 		return true, 1
 	}
 	writeLine(stdout, "uloop launcher update completed.")

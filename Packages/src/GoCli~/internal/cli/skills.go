@@ -60,18 +60,18 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 	subcommand := args[1]
 	options, err := parseSkillsOptions(args[2:])
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: skillsCommandName})
 		return true, 1
 	}
 
 	projectRoot, err := resolveSkillsProjectRoot(startPath, globalProjectPath, options.global)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: skillsCommandName})
 		return true, 1
 	}
 	skills, err := collectSkillDefinitions(projectRoot)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
 		return true, 1
 	}
 
@@ -91,7 +91,12 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 		}
 		return true, runSkillsUninstall(projectRoot, skills, options, stdout, stderr)
 	default:
-		writeFormat(stderr, "unknown skills command: %s\n", subcommand)
+		writeErrorEnvelope(stderr, (&argumentError{
+			message:     "Unknown skills command: " + subcommand,
+			received:    subcommand,
+			command:     skillsCommandName,
+			nextActions: []string{"Use `uloop skills list`, `uloop skills install`, or `uloop skills uninstall`."},
+		}).toCLIError(errorContext{projectRoot: projectRoot, command: skillsCommandName}))
 		return true, 1
 	}
 }
@@ -108,7 +113,12 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 			targetID := strings.TrimPrefix(arg, "--")
 			options.targets = append(options.targets, targetConfigs[targetID])
 		default:
-			return skillCommandOptions{}, fmt.Errorf("unknown skills option: %s", arg)
+			return skillCommandOptions{}, &argumentError{
+				message:     "Unknown skills option: " + arg,
+				option:      arg,
+				command:     skillsCommandName,
+				nextActions: []string{"Run `uloop skills --help` to inspect supported skills options."},
+			}
 		}
 	}
 	return options, nil
@@ -171,7 +181,7 @@ func runSkillsInstall(projectRoot string, skills []skillDefinition, options skil
 	for _, target := range options.targets {
 		result, err := installSkillsForTarget(projectRoot, target, skills, options.global, !options.flat)
 		if err != nil {
-			writeLine(stderr, err.Error())
+			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
 			return 1
 		}
 		writeFormat(stdout, "%s:\n", target.displayName)
@@ -190,7 +200,7 @@ func runSkillsUninstall(projectRoot string, skills []skillDefinition, options sk
 	for _, target := range options.targets {
 		removed, notFound, err := uninstallSkillsForTarget(projectRoot, target, skills, options.global, !options.flat)
 		if err != nil {
-			writeLine(stderr, err.Error())
+			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
 			return 1
 		}
 		writeFormat(stdout, "%s:\n", target.displayName)

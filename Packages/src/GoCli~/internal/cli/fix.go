@@ -16,7 +16,7 @@ var staleLockFileNames = []string{
 func runFix(projectRoot string, stdout io.Writer, stderr io.Writer) int {
 	cleaned, err := cleanupStaleLockFiles(projectRoot)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: "fix"})
 		return 1
 	}
 

@@ -3,7 +3,6 @@ package cli
 import (
 	"embed"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -100,7 +99,12 @@ func buildToolParams(args []string, tool toolDefinition) (map[string]any, string
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 		if !strings.HasPrefix(arg, "--") {
-			return nil, "", fmt.Errorf("unexpected argument: %s", arg)
+			return nil, "", &argumentError{
+				message:     "Unexpected argument: " + arg,
+				received:    arg,
+				command:     tool.Name,
+				nextActions: []string{"Pass tool inputs as `--option value` pairs."},
+			}
 		}
 
 		name, value, consumedNext, err := parseFlagValue(arg, args, index)
@@ -118,10 +122,15 @@ func buildToolParams(args []string, tool toolDefinition) (map[string]any, string
 
 		propertyName, property, ok := findProperty(tool, name)
 		if !ok {
-			return nil, "", fmt.Errorf("unknown option for %s: --%s", tool.Name, name)
+			return nil, "", &argumentError{
+				message:     "Unknown option for " + tool.Name + ": --" + name,
+				option:      "--" + name,
+				command:     tool.Name,
+				nextActions: []string{"Run `uloop completion --list-options " + tool.Name + "` to inspect supported options."},
+			}
 		}
 
-		converted, err := convertValue(value, property)
+		converted, err := convertValue(value, property, "--"+name)
 		if err != nil {
 			return nil, "", err
 		}
@@ -162,19 +171,23 @@ func parseGlobalProjectPath(args []string) ([]string, string, error) {
 func parseFlagValue(arg string, args []string, index int) (string, string, bool, error) {
 	trimmed := strings.TrimPrefix(arg, "--")
 	if trimmed == "" {
-		return "", "", false, fmt.Errorf("invalid option: %s", arg)
+		return "", "", false, &argumentError{
+			message:     "Invalid option: " + arg,
+			option:      arg,
+			nextActions: []string{"Use `--option value` or `--option=value`."},
+		}
 	}
 
 	if strings.Contains(trimmed, "=") {
 		parts := strings.SplitN(trimmed, "=", 2)
 		if parts[1] == "" {
-			return "", "", false, fmt.Errorf("--%s requires a value", parts[0])
+			return "", "", false, missingValueArgumentError("--" + parts[0])
 		}
 		return parts[0], parts[1], false, nil
 	}
 
 	if index+1 >= len(args) || isNextOptionToken(args[index+1]) {
-		return "", "", false, fmt.Errorf("--%s requires a value", trimmed)
+		return "", "", false, missingValueArgumentError("--" + trimmed)
 	}
 
 	return trimmed, args[index+1], true, nil
@@ -199,7 +212,7 @@ func findProperty(tool toolDefinition, kebabName string) (string, toolProperty, 
 	return "", toolProperty{}, false
 }
 
-func convertValue(value string, property toolProperty) (any, error) {
+func convertValue(value string, property toolProperty, option string) (any, error) {
 	switch strings.ToLower(property.Type) {
 	case "boolean":
 		switch strings.ToLower(value) {
@@ -208,25 +221,25 @@ func convertValue(value string, property toolProperty) (any, error) {
 		case "false":
 			return false, nil
 		default:
-			return nil, fmt.Errorf("invalid boolean value: %s", value)
+			return nil, invalidValueArgumentError(option, value, "boolean")
 		}
 	case "integer":
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
-			return nil, fmt.Errorf("invalid integer value: %s", value)
+			return nil, invalidValueArgumentError(option, value, "integer")
 		}
 		return parsed, nil
 	case "number":
 		parsed, err := strconv.ParseFloat(value, 64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid number value: %s", value)
+			return nil, invalidValueArgumentError(option, value, "number")
 		}
 		return parsed, nil
 	case "array":
 		if strings.HasPrefix(value, "[") {
 			var parsed []any
 			if err := json.Unmarshal([]byte(value), &parsed); err != nil {
-				return nil, fmt.Errorf("invalid array value: %s", value)
+				return nil, invalidValueArgumentError(option, value, "array")
 			}
 			return parsed, nil
 		}
@@ -239,7 +252,7 @@ func convertValue(value string, property toolProperty) (any, error) {
 	case "object":
 		var parsed map[string]any
 		if err := json.Unmarshal([]byte(value), &parsed); err != nil {
-			return nil, fmt.Errorf("invalid object value: %s", value)
+			return nil, invalidValueArgumentError(option, value, "object")
 		}
 		return parsed, nil
 	default:

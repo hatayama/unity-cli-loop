@@ -23,7 +23,7 @@ const (
 func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
 	remainingArgs, projectPath, err := parseGlobalProjectPath(args)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{})
 		return 1
 	}
 
@@ -41,7 +41,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 
 	startPath, err := os.Getwd()
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: command})
 		return 1
 	}
 
@@ -61,13 +61,13 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 
 	connection, err := project.ResolveConnection(startPath, projectPath)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: command})
 		return 1
 	}
 
 	cache, err := loadTools(connection.ProjectRoot)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: command})
 		return 1
 	}
 
@@ -83,17 +83,29 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	default:
 		tool, ok := findTool(cache, command)
 		if !ok {
-			writeFormat(stderr, "Unknown command: %s\n", command)
+			writeErrorEnvelope(stderr, unknownCommandError(command, cache, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     command,
+			}))
 			return 1
 		}
 
 		params, nestedProjectPath, err := buildToolParams(commandArgs, tool)
 		if err != nil {
-			writeLine(stderr, err.Error())
+			writeClassifiedError(stderr, err, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     command,
+			})
 			return 1
 		}
 		if nestedProjectPath != "" && nestedProjectPath != connection.ProjectRoot {
-			writeLine(stderr, "--project-path must be passed before the command in the native CLI")
+			writeErrorEnvelope(stderr, (&argumentError{
+				message:      "--project-path must be passed before the command in the native CLI",
+				option:       "--project-path",
+				expectedType: "path",
+				command:      command,
+				nextActions:  []string{"Move `--project-path <path>` before the command name."},
+			}).toCLIError(errorContext{projectRoot: connection.ProjectRoot, command: command}))
 			return 1
 		}
 		return runTool(ctx, connection, command, params, stdout, stderr)
@@ -118,13 +130,13 @@ func RunLauncher(ctx context.Context, args []string, stdout io.Writer, stderr io
 
 	startPath, err := os.Getwd()
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{})
 		return 1
 	}
 
 	remainingArgs, explicitProjectPath, err := parseGlobalProjectPath(args)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{})
 		return 1
 	}
 	if handled, code := tryHandleLaunchRequest(ctx, remainingArgs, startPath, explicitProjectPath, stdout, stderr); handled {
@@ -136,7 +148,7 @@ func RunLauncher(ctx context.Context, args []string, stdout io.Writer, stderr io
 
 	projectRoot, err := resolveLauncherProjectRoot(startPath, explicitProjectPath)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{})
 		return 1
 	}
 
@@ -145,7 +157,11 @@ func RunLauncher(ctx context.Context, args []string, stdout io.Writer, stderr io
 		localPath = filepath.Join(projectRoot, projectLocalWindowsPath)
 	}
 	if _, err := os.Stat(localPath); err != nil {
-		writeFormat(stderr, "Project-local uloop-core CLI was not found at %s\n", localPath)
+		command := ""
+		if len(remainingArgs) > 0 {
+			command = remainingArgs[0]
+		}
+		writeErrorEnvelope(stderr, projectLocalCLIMissingError(localPath, projectRoot, command))
 		return 1
 	}
 
@@ -162,22 +178,28 @@ func runTool(ctx context.Context, connection project.Connection, command string,
 	}
 
 	spinner := newToolSpinner(stderr, command)
-	result, err := unity.NewClient(connection).SendWithProgress(ctx, command, params, func(string) {
+	outcome, err := unity.NewClient(connection).SendWithProgressOutcome(ctx, command, params, func(string) {
 		spinner.Update(fmt.Sprintf("Executing %s...", command))
 	})
 	spinner.Stop()
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeToolFailure(stderr, err, outcome, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     command,
+		})
 		return 1
 	}
-	writeJSON(stdout, result)
+	writeJSON(stdout, outcome.Result)
 	return 0
 }
 
 func runCompileWithDomainReloadWait(ctx context.Context, connection project.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
 	requestID, err := ensureCompileRequestID(params)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     compileCommandName,
+		})
 		return 1
 	}
 
@@ -190,7 +212,10 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection project.Conn
 	}
 	if !shouldWaitForCompileResult(err, outcome) {
 		spinner.Stop()
-		writeLine(stderr, err.Error())
+		writeToolFailure(stderr, err, outcome, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     compileCommandName,
+		})
 		return 1
 	}
 
@@ -204,11 +229,14 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection project.Conn
 	})
 	spinner.Stop()
 	if waitErr != nil {
-		writeLine(stderr, waitErr.Error())
+		writeClassifiedError(stderr, waitErr, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     compileCommandName,
+		})
 		return 1
 	}
 	if !completed {
-		writeLine(stderr, "Compile wait timed out after 90000ms. Run 'uloop fix' and retry.")
+		writeErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
 		return 1
 	}
 	writeJSON(stdout, result)
@@ -217,36 +245,42 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection project.Conn
 
 func runList(ctx context.Context, connection project.Connection, stdout io.Writer, stderr io.Writer) int {
 	spinner := newToolSpinner(stderr, "list")
-	result, err := unity.NewClient(connection).SendWithProgress(ctx, "get-tool-details", map[string]any{}, func(string) {
+	outcome, err := unity.NewClient(connection).SendWithProgressOutcome(ctx, "get-tool-details", map[string]any{}, func(string) {
 		spinner.Update("Fetching tool list...")
 	})
 	spinner.Stop()
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeToolFailure(stderr, err, outcome, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     "list",
+		})
 		return 1
 	}
-	writeJSON(stdout, result)
+	writeJSON(stdout, outcome.Result)
 	return 0
 }
 
 func runSync(ctx context.Context, connection project.Connection, stdout io.Writer, stderr io.Writer) int {
 	spinner := newToolSpinner(stderr, "sync")
-	result, err := unity.NewClient(connection).SendWithProgress(ctx, "get-tool-details", map[string]any{}, func(string) {
+	outcome, err := unity.NewClient(connection).SendWithProgressOutcome(ctx, "get-tool-details", map[string]any{}, func(string) {
 		spinner.Update("Syncing tools...")
 	})
 	spinner.Stop()
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeToolFailure(stderr, err, outcome, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     "sync",
+		})
 		return 1
 	}
 
 	cachePath := filepath.Join(connection.ProjectRoot, cacheDirectoryName, cacheFileName)
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: "sync"})
 		return 1
 	}
-	if err := os.WriteFile(cachePath, result, 0o644); err != nil {
-		writeLine(stderr, err.Error())
+	if err := os.WriteFile(cachePath, outcome.Result, 0o644); err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: "sync"})
 		return 1
 	}
 	writeFormat(stdout, "Tools synced to %s\n", cachePath)
@@ -282,7 +316,7 @@ func execProjectLocal(ctx context.Context, localPath string, args []string, proj
 	if runtime.GOOS != "windows" {
 		err := syscall.Exec(localPath, append([]string{localPath}, args...), os.Environ())
 		if err != nil {
-			writeLine(stderr, err.Error())
+			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot})
 			return 1
 		}
 		return 0

@@ -32,19 +32,6 @@ jobs:
       - name: Check native Go CLI
         run: scripts/check-go-cli.sh
 
-      - name: Build native Go CLI
-        run: scripts/build-go-cli.sh
-
-      - name: Verify checked-in native Go CLI binaries
-        run: |
-          git diff --exit-code -- \
-            Packages/src/GoCli~/dist/darwin-arm64/uloop-core \
-            Packages/src/GoCli~/dist/darwin-amd64/uloop-core \
-            Packages/src/GoCli~/dist/windows-amd64/uloop-core.exe \
-            Packages/src/GoCli~/dist/darwin-arm64/uloop-dispatcher \
-            Packages/src/GoCli~/dist/darwin-amd64/uloop-dispatcher \
-            Packages/src/GoCli~/dist/windows-amd64/uloop-dispatcher.exe
-
       - name: Package native Go CLI installers
         run: scripts/package-go-cli.sh
 

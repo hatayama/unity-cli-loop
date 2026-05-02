@@ -54,7 +54,7 @@ func tryHandleLaunchRequest(
 
 	options, err := parseLaunchOptions(args[1:], globalProjectPath)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: launchCommandName})
 		return true, 1
 	}
 
@@ -78,7 +78,12 @@ func parseLaunchOptions(args []string, globalProjectPath string) (launchOptions,
 		case arg == "-d" || arg == "--delete-recovery":
 			options.deleteRecovery = true
 		case arg == "-a" || arg == "-f" || arg == "--add-unity-hub" || arg == "--favorite" || arg == "--unity-hub-entry":
-			return launchOptions{}, fmt.Errorf("native launch does not support Unity Hub registration options")
+			return launchOptions{}, &argumentError{
+				message:     "Native launch does not support Unity Hub registration options.",
+				option:      arg,
+				command:     launchCommandName,
+				nextActions: []string{"Remove the Unity Hub registration option and retry `uloop launch`."},
+			}
 		case arg == "-p" || arg == "--platform":
 			value, consumed, err := readLaunchOptionValue(arg, args, index)
 			if err != nil {
@@ -97,7 +102,7 @@ func parseLaunchOptions(args []string, globalProjectPath string) (launchOptions,
 			}
 			maxDepth, err := strconv.Atoi(value)
 			if err != nil {
-				return launchOptions{}, fmt.Errorf("invalid --max-depth value: %s", value)
+				return launchOptions{}, invalidValueArgumentError("--max-depth", value, "integer")
 			}
 			options.maxDepth = maxDepth
 			if consumed {
@@ -107,14 +112,24 @@ func parseLaunchOptions(args []string, globalProjectPath string) (launchOptions,
 			value := strings.TrimPrefix(arg, "--max-depth=")
 			maxDepth, err := strconv.Atoi(value)
 			if err != nil {
-				return launchOptions{}, fmt.Errorf("invalid --max-depth value: %s", value)
+				return launchOptions{}, invalidValueArgumentError("--max-depth", value, "integer")
 			}
 			options.maxDepth = maxDepth
 		case strings.HasPrefix(arg, "-"):
-			return launchOptions{}, fmt.Errorf("unknown launch option: %s", arg)
+			return launchOptions{}, &argumentError{
+				message:     "Unknown launch option: " + arg,
+				option:      arg,
+				command:     launchCommandName,
+				nextActions: []string{"Run `uloop launch --help` to inspect supported launch options."},
+			}
 		default:
 			if options.projectPath != "" {
-				return launchOptions{}, fmt.Errorf("unexpected extra launch argument: %s", arg)
+				return launchOptions{}, &argumentError{
+					message:     "Unexpected extra launch argument: " + arg,
+					received:    arg,
+					command:     launchCommandName,
+					nextActions: []string{"Pass only one project path to `uloop launch`."},
+				}
 			}
 			options.projectPath = arg
 		}
@@ -127,12 +142,12 @@ func readLaunchOptionValue(option string, args []string, index int) (string, boo
 	if strings.Contains(option, "=") {
 		parts := strings.SplitN(option, "=", 2)
 		if parts[1] == "" {
-			return "", false, fmt.Errorf("%s requires a value", parts[0])
+			return "", false, missingValueArgumentError(parts[0])
 		}
 		return parts[1], false, nil
 	}
 	if index+1 >= len(args) || isInvalidLaunchOptionValue(option, args[index+1]) {
-		return "", false, fmt.Errorf("%s requires a value", option)
+		return "", false, missingValueArgumentError(option)
 	}
 	return args[index+1], true, nil
 }
@@ -147,20 +162,20 @@ func isInvalidLaunchOptionValue(option string, value string) bool {
 func runLaunch(ctx context.Context, options launchOptions, startPath string, stdout io.Writer, stderr io.Writer) int {
 	projectRoot, err := resolveLaunchProjectRoot(startPath, options)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: launchCommandName})
 		return 1
 	}
 
 	if options.deleteRecovery {
 		if err := os.RemoveAll(filepath.Join(projectRoot, recoveryDirectoryPath)); err != nil {
-			writeLine(stderr, err.Error())
+			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 			return 1
 		}
 	}
 
 	runningProcess, err := findRunningUnityProcess(ctx, projectRoot)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
 
@@ -171,7 +186,7 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 			return 0
 		}
 		if err := killUnityProcess(runningProcess.pid); err != nil {
-			writeLine(stderr, err.Error())
+			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 			return 1
 		}
 		if options.quit {
@@ -187,7 +202,7 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 
 	unityPath, err := resolveUnityExecutablePath(projectRoot)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
 
@@ -198,13 +213,13 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 
 	command := exec.CommandContext(ctx, unityPath, launchArgs...)
 	if err := command.Start(); err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
 	writeFormat(stdout, "Unity launch started for %s (PID: %d)\n", projectRoot, command.Process.Pid)
 
 	if err := waitForLaunchReady(ctx, projectRoot); err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
 	writeLine(stdout, "Unity is ready.")

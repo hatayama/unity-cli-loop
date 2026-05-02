@@ -46,7 +46,12 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 
 	if args[0] == listOptionsFlag {
 		if len(args) < 2 {
-			writeLine(stderr, "--list-options requires a command name")
+			writeErrorEnvelope(stderr, (&argumentError{
+				message:     "--list-options requires a command name",
+				option:      listOptionsFlag,
+				command:     completionCommand,
+				nextActions: []string{"Pass the command name after `--list-options`."},
+			}).toCLIError(errorContext{command: completionCommand}))
 			return true, 1
 		}
 		printOptionsForCommand(args[1], cache, stdout)
@@ -64,7 +69,7 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 
 	request, err := parseCompletionRequest(args[1:])
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: completionCommand})
 		return true, 1
 	}
 
@@ -73,7 +78,15 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 		shellName = detectShell()
 	}
 	if shellName == "" {
-		writeLine(stderr, "Could not detect shell. Use --shell bash, --shell zsh, --shell powershell, or --shell pwsh.")
+		writeErrorEnvelope(stderr, cliError{
+			ErrorCode:   errorCodeInvalidArgument,
+			Phase:       errorPhaseArgumentParsing,
+			Message:     "Could not detect shell.",
+			Retryable:   false,
+			SafeToRetry: false,
+			Command:     completionCommand,
+			NextActions: []string{"Pass `--shell bash`, `--shell zsh`, `--shell powershell`, or `--shell pwsh`."},
+		})
 		return true, 1
 	}
 
@@ -85,11 +98,11 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 
 	configPath, err := getShellConfigPath(shellName)
 	if err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: completionCommand})
 		return true, 1
 	}
 	if err := installCompletionScript(configPath, shellName, script); err != nil {
-		writeLine(stderr, err.Error())
+		writeClassifiedError(stderr, err, errorContext{command: completionCommand})
 		return true, 1
 	}
 
@@ -127,7 +140,7 @@ func parseCompletionRequest(args []string) (completionRequest, error) {
 
 		if arg == shellFlag {
 			if index+1 >= len(args) {
-				return completionRequest{}, fmt.Errorf("%s requires a value", shellFlag)
+				return completionRequest{}, missingValueArgumentError(shellFlag)
 			}
 			normalized, err := normalizeShell(args[index+1])
 			if err != nil {
@@ -138,7 +151,12 @@ func parseCompletionRequest(args []string) (completionRequest, error) {
 			continue
 		}
 
-		return completionRequest{}, fmt.Errorf("unknown completion option: %s", arg)
+		return completionRequest{}, &argumentError{
+			message:     "Unknown completion option: " + arg,
+			option:      arg,
+			command:     completionCommand,
+			nextActions: []string{"Run `uloop completion --help` to inspect supported completion options."},
+		}
 	}
 	return request, nil
 }
@@ -151,7 +169,14 @@ func normalizeShell(value string) (string, error) {
 	if normalized == "powershell-core" {
 		return "pwsh", nil
 	}
-	return "", fmt.Errorf("unknown shell: %s. Supported: bash, zsh, powershell, pwsh", value)
+	return "", &argumentError{
+		message:      "Unknown shell: " + value,
+		option:       shellFlag,
+		received:     value,
+		expectedType: "bash|zsh|powershell|pwsh",
+		command:      completionCommand,
+		nextActions:  []string{"Use one of: bash, zsh, powershell, pwsh."},
+	}
 }
 
 func printCommandNames(cache toolsCache, stdout io.Writer) {

@@ -2,7 +2,6 @@ package unity
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/project"
@@ -18,18 +17,17 @@ func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t
 	}
 
 	err := formatConnectionAttemptError(connection, errors.New("dial unix /tmp/uloop/uLoopMCP-sample.sock: connect: no such file or directory"))
-	message := err.Error()
-
-	for _, expected := range []string{
-		"the Unity CLI Loop server is not reachable for this project.",
-		"connection attempt failure before a request was sent",
-		"does not mean an established connection was disconnected",
-		"Project: /tmp/MyProject",
-		"Endpoint: /tmp/uloop/uLoopMCP-sample.sock",
-		"Cause: dial unix /tmp/uloop/uLoopMCP-sample.sock: connect: no such file or directory",
-	} {
-		if !strings.Contains(message, expected) {
-			t.Fatalf("message missing %q:\n%s", expected, message)
-		}
+	connectionErr, ok := err.(*ConnectionAttemptError)
+	if !ok {
+		t.Fatalf("expected ConnectionAttemptError, got %T", err)
+	}
+	if connectionErr.ProjectRoot != "/tmp/MyProject" {
+		t.Fatalf("project root mismatch: %s", connectionErr.ProjectRoot)
+	}
+	if connectionErr.Endpoint != "/tmp/uloop/uLoopMCP-sample.sock" {
+		t.Fatalf("endpoint mismatch: %s", connectionErr.Endpoint)
+	}
+	if connectionErr.Unwrap().Error() != "dial unix /tmp/uloop/uLoopMCP-sample.sock: connect: no such file or directory" {
+		t.Fatalf("cause mismatch: %v", connectionErr.Unwrap())
 	}
 }

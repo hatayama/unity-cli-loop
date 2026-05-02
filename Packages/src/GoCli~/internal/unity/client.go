@@ -46,6 +46,30 @@ type rpcError struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
+type ConnectionAttemptError struct {
+	ProjectRoot string
+	Endpoint    string
+	Cause       error
+}
+
+func (err *ConnectionAttemptError) Error() string {
+	return fmt.Sprintf("the Unity CLI Loop server is not reachable for this project: %s", err.Cause)
+}
+
+func (err *ConnectionAttemptError) Unwrap() error {
+	return err.Cause
+}
+
+type RPCError struct {
+	Code    int
+	Message string
+	Data    json.RawMessage
+}
+
+func (err *RPCError) Error() string {
+	return fmt.Sprintf("unity error: %s", err.Message)
+}
+
 func NewClient(connection project.Connection) *Client {
 	return &Client{connection: connection}
 }
@@ -108,7 +132,11 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		return outcome, err
 	}
 	if response.Error != nil {
-		return outcome, fmt.Errorf("unity error: %s", response.Error.Message)
+		return outcome, &RPCError{
+			Code:    response.Error.Code,
+			Message: response.Error.Message,
+			Data:    response.Error.Data,
+		}
 	}
 	if len(response.Result) == 0 {
 		return outcome, fmt.Errorf("UNITY_NO_RESPONSE")
@@ -119,17 +147,9 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 }
 
 func formatConnectionAttemptError(connection project.Connection, err error) error {
-	return fmt.Errorf(
-		"the Unity CLI Loop server is not reachable for this project.\n\n"+
-			"The CLI could not open the project's IPC endpoint. This is a connection attempt failure before a request was sent; it does not mean an established connection was disconnected.\n\n"+
-			"Project: %s\n"+
-			"Endpoint: %s\n"+
-			"Next steps:\n"+
-			"  - If Unity is closed, run: uloop launch\n"+
-			"  - If Unity is starting, compiling, or reloading scripts, wait and retry\n"+
-			"  - If this project is open in another Unity instance, close the other instance\n\n"+
-			"Cause: %w",
-		connection.ProjectRoot,
-		connection.Endpoint.Address,
-		err)
+	return &ConnectionAttemptError{
+		ProjectRoot: connection.ProjectRoot,
+		Endpoint:    connection.Endpoint.Address,
+		Cause:       err,
+	}
 }
