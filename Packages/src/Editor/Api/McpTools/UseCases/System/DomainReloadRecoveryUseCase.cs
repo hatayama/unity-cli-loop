@@ -32,7 +32,7 @@ namespace io.github.hatayama.uLoopMCP
                 VibeLogger.LogWarning(
                     "domain_reload_session_fallback",
                     "Server instance is null but session state indicates running. Using project IPC session state for recovery.",
-                    new { project_root = McpEditorSettings.GetProjectRootPath() },
+                    new { project_root = UnityMcpPathResolver.GetProjectRoot() },
                     correlationId
                 );
             }

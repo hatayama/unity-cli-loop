@@ -16,13 +16,13 @@ namespace io.github.hatayama.uLoopMCP
     //    - Without this class, "focus-window" won't appear in tools/list
     //
     // 2. Graceful CLI Upgrade Message:
-    //    - Old CLI versions connect directly to Unity TCP
+    //    - Old CLI versions call Unity through the legacy bridge path
     //    - When old CLI calls this tool, we return an upgrade prompt
     //    - New CLI uses OS-level focus and never reaches this code
     //
     // Execution flow:
     // - New CLI: CLI intercepts → OS-level focus → This code NOT called
-    // - Old CLI: Direct Unity TCP → This code called → Returns upgrade message
+    // - Old CLI: Legacy Unity bridge path → This code called → Returns upgrade message
     // ==========================================================================
 
     /// <summary>

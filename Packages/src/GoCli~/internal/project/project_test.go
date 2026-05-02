@@ -52,6 +52,38 @@ func TestFindUnityProjectRootWithinHonorsMaxDepth(t *testing.T) {
 	}
 }
 
+func TestResolveConnection_WhenSettingsFileIsMissing_ShouldUseProjectPathEndpoint(t *testing.T) {
+	projectRoot := t.TempDir()
+	createUnityProject(t, projectRoot)
+
+	connection, err := ResolveConnection(projectRoot, "")
+	if err != nil {
+		t.Fatalf("ResolveConnection failed: %v", err)
+	}
+	assertProjectConnection(t, connection, projectRoot)
+}
+
+func TestResolveConnection_WhenSettingsFileContainsStaleRuntimeState_ShouldIgnoreIt(t *testing.T) {
+	projectRoot := t.TempDir()
+	createUnityProject(t, projectRoot)
+	userSettingsPath := filepath.Join(projectRoot, "UserSettings")
+	if err := os.MkdirAll(userSettingsPath, 0o755); err != nil {
+		t.Fatalf("failed to create UserSettings: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(userSettingsPath, "UnityMcpSettings.json"),
+		[]byte(`{"projectRootPath":"/stale/project","serverSessionId":"stale-session"}`),
+		0o644); err != nil {
+		t.Fatalf("failed to write stale settings: %v", err)
+	}
+
+	connection, err := ResolveConnection(projectRoot, "")
+	if err != nil {
+		t.Fatalf("ResolveConnection failed: %v", err)
+	}
+	assertProjectConnection(t, connection, projectRoot)
+}
+
 func createUnityProject(t *testing.T, projectRoot string) {
 	t.Helper()
 
@@ -60,5 +92,27 @@ func createUnityProject(t *testing.T, projectRoot string) {
 	}
 	if err := os.MkdirAll(filepath.Join(projectRoot, "ProjectSettings"), 0o755); err != nil {
 		t.Fatalf("failed to create ProjectSettings: %v", err)
+	}
+}
+
+func assertProjectConnection(t *testing.T, connection Connection, projectRoot string) {
+	t.Helper()
+
+	canonicalProjectRoot, err := filepath.EvalSymlinks(projectRoot)
+	if err != nil {
+		t.Fatalf("failed to canonicalize project root: %v", err)
+	}
+	canonicalProjectRoot = trimTrailingSeparators(canonicalProjectRoot)
+	if connection.ProjectRoot != canonicalProjectRoot {
+		t.Fatalf("project root mismatch: %s", connection.ProjectRoot)
+	}
+	if connection.RequestMetadata == nil {
+		t.Fatal("request metadata should be present")
+	}
+	if connection.RequestMetadata.ExpectedProjectRoot != canonicalProjectRoot {
+		t.Fatalf("expected project root mismatch: %s", connection.RequestMetadata.ExpectedProjectRoot)
+	}
+	if connection.Endpoint != CreateEndpoint(canonicalProjectRoot) {
+		t.Fatalf("endpoint mismatch: %#v", connection.Endpoint)
 	}
 }

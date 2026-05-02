@@ -25,8 +25,6 @@ namespace io.github.hatayama.uLoopMCP
     [Serializable]
     public record McpEditorSettingsData
     {
-        public string projectRootPath = "";
-        public string serverSessionId = "";
         public bool showDeveloperTools = false;
         public bool enableCommunicationLogs = false;
         public string lastSeenSetupWizardVersion = "";
@@ -63,13 +61,15 @@ namespace io.github.hatayama.uLoopMCP
     public static class McpEditorSettings
     {
         private static string SettingsFilePath => Path.Combine(McpConstants.USER_SETTINGS_FOLDER, McpConstants.SETTINGS_FILE_NAME);
-        private static readonly string[] LegacyPortSettingKeys =
+        private static readonly string[] LegacyTransientSettingKeys =
         {
             "customPort",
             "serverPort",
             "port",
             "Port",
-            "serverTransportKind"
+            "serverTransportKind",
+            "projectRootPath",
+            "serverSessionId"
         };
 
         private static McpEditorSettingsData _cachedSettings;
@@ -98,7 +98,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             AtomicFileWriter.RecoverSidecarFiles(SettingsFilePath);
-            RemoveLegacyPortFieldsIfNeeded(SettingsFilePath);
+            RemoveLegacyTransientFieldsIfNeeded(SettingsFilePath);
         }
 
         /// <summary>
@@ -158,30 +158,6 @@ namespace io.github.hatayama.uLoopMCP
             McpEditorSettingsData current = GetSettings();
             McpEditorSettingsData updated = transform(current);
             SaveSettings(updated);
-        }
-
-        public static string GetProjectRootPath()
-        {
-            return GetSettings().projectRootPath ?? string.Empty;
-        }
-
-        public static string GetServerSessionId()
-        {
-            return GetSettings().serverSessionId ?? string.Empty;
-        }
-
-        public static void SetRunningServerSession(string projectRootPath, string serverSessionId)
-        {
-            Debug.Assert(!string.IsNullOrWhiteSpace(projectRootPath), "projectRootPath must not be empty");
-            Debug.Assert(!string.IsNullOrWhiteSpace(serverSessionId), "serverSessionId must not be empty");
-
-            string normalizedProjectRootPath = NormalizeProjectRootPath(projectRootPath);
-            UpdateSettings(settings => settings with
-            {
-                isServerRunning = true,
-                projectRootPath = normalizedProjectRootPath,
-                serverSessionId = serverSessionId
-            });
         }
 
         /// <summary>
@@ -479,8 +455,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             UpdateSettings(settings => settings with
             {
-                isServerRunning = false,
-                serverSessionId = string.Empty
+                isServerRunning = false
             });
         }
 
@@ -773,12 +748,7 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private static string NormalizeProjectRootPath(string projectRootPath)
-        {
-            return BridgeTransportEndpoint.CanonicalizeProjectRoot(projectRootPath);
-        }
-
-        private static void RemoveLegacyPortFieldsIfNeeded(string settingsPath)
+        private static void RemoveLegacyTransientFieldsIfNeeded(string settingsPath)
         {
             if (!File.Exists(settingsPath))
             {
@@ -793,7 +763,7 @@ namespace io.github.hatayama.uLoopMCP
 
             using StreamReader reader = File.OpenText(settingsPath);
             JToken settingsToken = JToken.ReadFrom(new JsonTextReader(reader));
-            bool removed = RemoveLegacyPortFields(settingsToken);
+            bool removed = RemoveLegacyTransientFields(settingsToken);
             if (!removed)
             {
                 return;
@@ -802,21 +772,21 @@ namespace io.github.hatayama.uLoopMCP
             AtomicFileWriter.Write(settingsPath, settingsToken.ToString(Formatting.Indented));
         }
 
-        private static bool RemoveLegacyPortFields(JToken token)
+        private static bool RemoveLegacyTransientFields(JToken token)
         {
             Debug.Assert(token != null, "token must not be null");
 
             bool removed = false;
             if (token is JObject jsonObject)
             {
-                foreach (string legacyKey in LegacyPortSettingKeys)
+                foreach (string legacyKey in LegacyTransientSettingKeys)
                 {
                     removed |= jsonObject.Remove(legacyKey);
                 }
 
                 foreach (JProperty property in jsonObject.Properties())
                 {
-                    removed |= RemoveLegacyPortFields(property.Value);
+                    removed |= RemoveLegacyTransientFields(property.Value);
                 }
 
                 return removed;
@@ -826,7 +796,7 @@ namespace io.github.hatayama.uLoopMCP
             {
                 foreach (JToken item in jsonArray)
                 {
-                    removed |= RemoveLegacyPortFields(item);
+                    removed |= RemoveLegacyTransientFields(item);
                 }
             }
 

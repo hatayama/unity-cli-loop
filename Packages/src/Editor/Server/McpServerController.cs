@@ -44,7 +44,7 @@ namespace io.github.hatayama.uLoopMCP
             System.Diagnostics.Debug.Assert(server != null, "server must not be null");
 
             mcpServer = server;
-            SaveRunningServerSession();
+            SaveRunningServerState();
         }
 
         /// <summary>
@@ -355,7 +355,7 @@ namespace io.github.hatayama.uLoopMCP
 
                 mcpServer = new McpBridgeServer();
                 mcpServer.StartServer();
-                SaveRunningServerSession();
+                SaveRunningServerState();
 
                 // Clear server-side reconnecting flag on successful restoration
                 // NOTE: Do NOT clear UI display flag here - let it be cleared by timeout or client connection
@@ -699,7 +699,7 @@ namespace io.github.hatayama.uLoopMCP
                 }
 
                 // Mark running and update settings
-                SaveRunningServerSession();
+                SaveRunningServerState();
 
                 // Clear reconnection-related flags on successful recovery
                 McpEditorSettings.ClearReconnectingFlags();
@@ -793,11 +793,9 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private static void SaveRunningServerSession()
+        private static void SaveRunningServerState()
         {
-            string projectRoot = UnityMcpPathResolver.GetProjectRoot();
-            string serverSessionId = Guid.NewGuid().ToString("N");
-            McpEditorSettings.SetRunningServerSession(projectRoot, serverSessionId);
+            McpEditorSettings.SetIsServerRunning(true);
         }
 
         internal static string CreateOptionalServerStartingLock(Func<string> createLockFile = null)

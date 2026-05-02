@@ -501,8 +501,8 @@ namespace io.github.hatayama.uLoopMCP
                 ["params"] = JObject.FromObject(parameters, serializer),
                 ["x-uloop"] = new JObject
                 {
-                    ["expectedProjectRoot"] = McpEditorSettings.GetProjectRootPath(),
-                    ["expectedServerSessionId"] = McpEditorSettings.GetServerSessionId()
+                    ["expectedProjectRoot"] = BridgeTransportEndpoint.CanonicalizeProjectRoot(
+                        UnityMcpPathResolver.GetProjectRoot())
                 }
             };
 

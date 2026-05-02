@@ -32,6 +32,5 @@ namespace io.github.hatayama.uLoopMCP
     internal class JsonRpcRequestUloopMetadata
     {
         public string ExpectedProjectRoot { get; set; }
-        public string ExpectedServerSessionId { get; set; }
     }
 }

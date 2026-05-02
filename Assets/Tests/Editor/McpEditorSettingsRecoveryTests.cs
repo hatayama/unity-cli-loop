@@ -126,6 +126,8 @@ namespace io.github.hatayama.uLoopMCP
                 "\"customPort\":18447," +
                 "\"serverPort\":18448," +
                 "\"serverTransportKind\":\"tcp\"," +
+                "\"projectRootPath\":\"/stale/project\"," +
+                "\"serverSessionId\":\"stale-session\"," +
                 "\"connectedLLMTools\":[{\"Name\":\"codex\",\"Endpoint\":\"/tmp/uloop/test.sock#1\",\"Port\":18449}]" +
                 "}");
 
@@ -135,6 +137,8 @@ namespace io.github.hatayama.uLoopMCP
             StringAssert.DoesNotContain("customPort", recoveredJson);
             StringAssert.DoesNotContain("serverPort", recoveredJson);
             StringAssert.DoesNotContain("serverTransportKind", recoveredJson);
+            StringAssert.DoesNotContain("projectRootPath", recoveredJson);
+            StringAssert.DoesNotContain("serverSessionId", recoveredJson);
             StringAssert.DoesNotContain("\"Port\"", recoveredJson);
         }
 
@@ -158,22 +162,17 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public void UpdateSessionState_WhenStartingServerWithProjectRoot_ShouldPersistFullSessionIdentity()
+        public void UpdateSessionState_WhenStartingServer_ShouldNotPersistRuntimeIdentity()
         {
             McpServerStartupService service = new();
-            string projectRootPath = Path.Combine(Path.GetTempPath(), "project-root");
-            string expectedProjectRootPath = Path.GetFullPath(projectRootPath)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-            ServiceResult<bool> result = service.UpdateSessionState(
-                true,
-                projectRootPath);
+            ServiceResult<bool> result = service.UpdateSessionState(true);
 
             Assert.IsTrue(result.Success, "Session update should succeed");
-            Assert.AreEqual(expectedProjectRootPath, McpEditorSettings.GetProjectRootPath(),
-                "projectRootPath should be persisted for fast project validation");
-            Assert.IsFalse(string.IsNullOrWhiteSpace(McpEditorSettings.GetServerSessionId()),
-                "serverSessionId should be generated during startup state persistence");
+            Assert.IsTrue(McpEditorSettings.GetIsServerRunning(), "Server running state should be persisted");
+            string savedJson = File.ReadAllText(SettingsFilePath);
+            StringAssert.DoesNotContain("projectRootPath", savedJson);
+            StringAssert.DoesNotContain("serverSessionId", savedJson);
         }
 
         private static void RestoreFile(string path, bool existed, string content)

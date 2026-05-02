@@ -55,22 +55,12 @@ namespace io.github.hatayama.uLoopMCP
         /// Updates session manager with server state.
         /// </summary>
         /// <param name="isRunning">Whether the server is running</param>
-        /// <param name="projectRootPath">Project root for fast project validation during startup</param>
         /// <returns>Success indicator</returns>
-        public ServiceResult<bool> UpdateSessionState(
-            bool isRunning,
-            string projectRootPath = null)
+        public ServiceResult<bool> UpdateSessionState(bool isRunning)
         {
             if (!isRunning)
             {
                 McpEditorSettings.ClearServerSession();
-                return ServiceResult<bool>.SuccessResult(true);
-            }
-
-            if (!string.IsNullOrWhiteSpace(projectRootPath))
-            {
-                string serverSessionId = System.Guid.NewGuid().ToString("N");
-                McpEditorSettings.SetRunningServerSession(projectRootPath, serverSessionId);
                 return ServiceResult<bool>.SuccessResult(true);
             }
 

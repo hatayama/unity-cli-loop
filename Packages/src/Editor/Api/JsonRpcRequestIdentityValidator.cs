@@ -4,12 +4,9 @@ namespace io.github.hatayama.uLoopMCP
 {
     internal static class JsonRpcRequestIdentityValidator
     {
-        internal const string ServerSessionChangedMessage = "Unity CLI Loop server session changed. Retry the command.";
-
         public static void Validate(
             JsonRpcRequestUloopMetadata metadata,
-            string actualProjectRoot,
-            string actualServerSessionId)
+            string actualProjectRoot)
         {
             if (metadata == null)
             {
@@ -21,43 +18,15 @@ namespace io.github.hatayama.uLoopMCP
                 throw new ParameterValidationException("Invalid x-uloop metadata: expectedProjectRoot is required.");
             }
 
-            if (string.IsNullOrWhiteSpace(metadata.ExpectedServerSessionId))
-            {
-                throw new ParameterValidationException("Invalid x-uloop metadata: expectedServerSessionId is required.");
-            }
-
             if (string.IsNullOrWhiteSpace(actualProjectRoot))
             {
                 throw new ParameterValidationException("Fast project validation is unavailable. Restart Unity CLI Loop and retry.");
-            }
-
-            if (string.IsNullOrWhiteSpace(actualServerSessionId))
-            {
-                throw new ParameterValidationException(ServerSessionChangedMessage);
             }
 
             if (!string.Equals(metadata.ExpectedProjectRoot, actualProjectRoot, StringComparison.Ordinal))
             {
                 throw new ParameterValidationException("Connected Unity instance belongs to a different project.");
             }
-
-            if (!string.Equals(metadata.ExpectedServerSessionId, actualServerSessionId, StringComparison.Ordinal))
-            {
-                throw new ParameterValidationException(ServerSessionChangedMessage);
-            }
-        }
-
-        internal static bool IsExpectedRetryableFailure(ParameterValidationException exception)
-        {
-            if (exception == null)
-            {
-                return false;
-            }
-
-            return string.Equals(
-                exception.Message,
-                ServerSessionChangedMessage,
-                StringComparison.Ordinal);
         }
     }
 }

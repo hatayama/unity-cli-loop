@@ -3,7 +3,6 @@ package project
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,11 +12,10 @@ import (
 )
 
 const (
-	settingsRelativePath = "UserSettings/UnityMcpSettings.json"
-	ipcEndpointPrefix    = "uLoopMCP"
-	ipcHashLength        = 16
-	unixSocketDir        = "/tmp/uloop"
-	windowsPipePrefix    = `\\.\pipe\uloop`
+	ipcEndpointPrefix = "uLoopMCP"
+	ipcHashLength     = 16
+	unixSocketDir     = "/tmp/uloop"
+	windowsPipePrefix = `\\.\pipe\uloop`
 )
 
 var excludedProjectSearchDirs = map[string]bool{
@@ -37,20 +35,13 @@ type Endpoint struct {
 }
 
 type RequestMetadata struct {
-	ExpectedProjectRoot     string `json:"expectedProjectRoot"`
-	ExpectedServerSessionID string `json:"expectedServerSessionId"`
+	ExpectedProjectRoot string `json:"expectedProjectRoot"`
 }
 
 type Connection struct {
 	Endpoint        Endpoint
 	ProjectRoot     string
 	RequestMetadata *RequestMetadata
-}
-
-type unitySettings struct {
-	IsServerRunning bool   `json:"isServerRunning"`
-	ProjectRootPath string `json:"projectRootPath"`
-	ServerSessionID string `json:"serverSessionId"`
 }
 
 func ResolveConnection(startPath string, explicitProjectPath string) (Connection, error) {
@@ -65,15 +56,10 @@ func ResolveConnection(startPath string, explicitProjectPath string) (Connection
 	}
 	canonicalProjectRoot = trimTrailingSeparators(canonicalProjectRoot)
 
-	settings, err := readSettings(canonicalProjectRoot)
-	if err != nil {
-		return Connection{}, err
-	}
-
 	return Connection{
 		Endpoint:        CreateEndpoint(canonicalProjectRoot),
 		ProjectRoot:     canonicalProjectRoot,
-		RequestMetadata: createRequestMetadata(settings, canonicalProjectRoot),
+		RequestMetadata: createRequestMetadata(canonicalProjectRoot),
 	}, nil
 }
 
@@ -99,7 +85,7 @@ func FindProjectRoot(startPath string) (string, error) {
 	}
 
 	for {
-		if isUnityProjectWithUloop(currentPath) {
+		if IsUnityProject(currentPath) {
 			return currentPath, nil
 		}
 
@@ -207,48 +193,13 @@ func resolveProjectRoot(startPath string, explicitProjectPath string) (string, e
 	if !IsUnityProject(projectRoot) {
 		return "", fmt.Errorf("not a Unity project: %s", projectRoot)
 	}
-	if !hasUloopInstalled(projectRoot) {
-		return "", fmt.Errorf("the Unity CLI Loop is not installed in this project: %s", projectRoot)
-	}
 
 	return projectRoot, nil
 }
 
-func readSettings(projectRoot string) (unitySettings, error) {
-	paths := []string{
-		filepath.Join(projectRoot, settingsRelativePath),
-		filepath.Join(projectRoot, settingsRelativePath+".tmp"),
-		filepath.Join(projectRoot, settingsRelativePath+".bak"),
-	}
-
-	for _, path := range paths {
-		content, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-
-		var settings unitySettings
-		if json.Unmarshal(content, &settings) == nil {
-			return settings, nil
-		}
-	}
-
-	return unitySettings{}, fmt.Errorf("could not read Unity server session from settings")
-}
-
-func createRequestMetadata(settings unitySettings, projectRoot string) *RequestMetadata {
-	if settings.ProjectRootPath == "" || settings.ServerSessionID == "" {
-		return nil
-	}
-
-	settingsProjectRoot := trimTrailingSeparators(settings.ProjectRootPath)
-	if settingsProjectRoot != projectRoot {
-		return nil
-	}
-
+func createRequestMetadata(projectRoot string) *RequestMetadata {
 	return &RequestMetadata{
-		ExpectedProjectRoot:     projectRoot,
-		ExpectedServerSessionID: settings.ServerSessionID,
+		ExpectedProjectRoot: projectRoot,
 	}
 }
 
@@ -256,16 +207,6 @@ func createEndpointName(canonicalProjectRoot string) string {
 	sum := sha256.Sum256([]byte(canonicalProjectRoot))
 	hash := hex.EncodeToString(sum[:])[:ipcHashLength]
 	return ipcEndpointPrefix + "-" + hash
-}
-
-func isUnityProjectWithUloop(projectPath string) bool {
-	return IsUnityProject(projectPath) && hasUloopInstalled(projectPath)
-}
-
-func hasUloopInstalled(projectPath string) bool {
-	return exists(filepath.Join(projectPath, settingsRelativePath)) ||
-		exists(filepath.Join(projectPath, settingsRelativePath+".tmp")) ||
-		exists(filepath.Join(projectPath, settingsRelativePath+".bak"))
 }
 
 func exists(path string) bool {
