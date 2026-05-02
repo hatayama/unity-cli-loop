@@ -213,8 +213,8 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 	}
 
 	options := make([]string, 0, len(tool.InputSchema.Properties))
-	for propertyName := range tool.InputSchema.Properties {
-		options = append(options, "--"+pascalToKebab(propertyName))
+	for propertyName, property := range tool.InputSchema.Properties {
+		options = append(options, "--"+optionNameForProperty(propertyName, property))
 	}
 	sort.Strings(options)
 	writeLine(stdout, strings.Join(options, "\n"))

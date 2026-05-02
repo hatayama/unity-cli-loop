@@ -21,8 +21,8 @@ uloop get-hierarchy [options]
 |-----------|------|---------|-------------|
 | `--root-path` | string | - | Root GameObject path to start from |
 | `--max-depth` | integer | `-1` | Maximum depth (-1 for unlimited) |
-| `--include-components` | boolean | `true` | Include component information |
-| `--include-inactive` | boolean | `true` | Include inactive GameObjects |
+| `--no-include-components` | flag | off | Exclude component information |
+| `--no-include-inactive` | flag | off | Exclude inactive GameObjects |
 | `--include-paths` | boolean | `false` | Include full path information |
 | `--use-components-lut` | string | `auto` | Use LUT for components (`auto`, `true`, `false`) |
 | `--use-selection` | boolean | `false` | Use selected GameObject(s) as root(s). When true, `--root-path` is ignored. |
@@ -46,7 +46,7 @@ uloop get-hierarchy --root-path "Canvas/UI"
 uloop get-hierarchy --max-depth 2
 
 # Without components
-uloop get-hierarchy --include-components false
+uloop get-hierarchy --no-include-components
 
 # Get hierarchy from currently selected GameObjects
 uloop get-hierarchy --use-selection

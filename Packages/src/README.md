@@ -183,7 +183,7 @@ uloop launch -r
 uloop compile
 
 # Compile and wait for Domain Reload to complete
-uloop compile --wait-for-domain-reload true
+uloop compile --wait-for-domain-reload
 
 # Get logs
 uloop get-logs --max-count 10

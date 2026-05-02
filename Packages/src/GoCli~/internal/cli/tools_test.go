@@ -21,7 +21,7 @@ func TestBuildToolParamsConvertsSchemaTypes(t *testing.T) {
 
 	params, projectPath, err := buildToolParams(
 		[]string{
-			"--enabled", "true",
+			"--enabled",
 			"--count", "12",
 			"--names", "a,b",
 			"--project-path", "/tmp/project",
@@ -44,6 +44,44 @@ func TestBuildToolParamsConvertsSchemaTypes(t *testing.T) {
 	names, ok := params["Names"].([]string)
 	if !ok || len(names) != 2 || names[0] != "a" || names[1] != "b" {
 		t.Fatalf("Names mismatch: %#v", params["Names"])
+	}
+}
+
+// Tests that default-enabled boolean tool arguments are disabled through --no-* flags.
+func TestBuildToolParamsConvertsDefaultTrueBooleanToNegatedFlag(t *testing.T) {
+	tool := toolDefinition{
+		Name: "sample-tool",
+		InputSchema: inputSchema{
+			Properties: map[string]toolProperty{
+				"IncludeComponents": {Type: "boolean", Default: true},
+			},
+		},
+	}
+
+	params, _, err := buildToolParams([]string{"--no-include-components"}, tool)
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+
+	if params["IncludeComponents"] != false {
+		t.Fatalf("IncludeComponents mismatch: %#v", params["IncludeComponents"])
+	}
+}
+
+// Tests that boolean tool arguments reject the old explicit true/false value form.
+func TestBuildToolParamsRejectsExplicitBooleanValues(t *testing.T) {
+	tool := toolDefinition{
+		Name: "sample-tool",
+		InputSchema: inputSchema{
+			Properties: map[string]toolProperty{
+				"Enabled": {Type: "boolean"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--enabled", "true"}, tool)
+	if err == nil {
+		t.Fatal("expected boolean value error")
 	}
 }
 
@@ -134,7 +172,7 @@ func TestParseGlobalProjectPathAcceptsLeadingOption(t *testing.T) {
 		[]string{
 			"--project-path", "/tmp/project",
 			"compile",
-			"--force-recompile", "true",
+			"--force-recompile",
 		},
 	)
 	if err != nil {
@@ -144,7 +182,7 @@ func TestParseGlobalProjectPathAcceptsLeadingOption(t *testing.T) {
 	if projectPath != "/tmp/project" {
 		t.Fatalf("project path mismatch: %s", projectPath)
 	}
-	expected := []string{"compile", "--force-recompile", "true"}
+	expected := []string{"compile", "--force-recompile"}
 	if len(remaining) != len(expected) {
 		t.Fatalf("remaining length mismatch: %#v", remaining)
 	}

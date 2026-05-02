@@ -7,7 +7,7 @@ description: "Execute Unity Test Runner and get detailed results. Use when you n
 
 Execute Unity Test Runner. When tests fail, NUnit XML results with error messages and stack traces are automatically saved. Read the XML file at `XmlPath` for detailed failure diagnosis.
 
-Before executing tests, `uloop run-tests` checks for unsaved loaded Scene changes and unsaved current Prefab Stage changes. If any are found, it returns `Success: false`, keeps `TestCount` at `0`, lists the unsaved items in `Message`, and does not start the Unity Test Runner. Save or discard those editor changes, then rerun the command. Use `--save-before-run true` only when the user explicitly asks to save editor changes before continuing.
+Before executing tests, `uloop run-tests` checks for unsaved loaded Scene changes and unsaved current Prefab Stage changes. If any are found, it returns `Success: false`, keeps `TestCount` at `0`, lists the unsaved items in `Message`, and does not start the Unity Test Runner. Save or discard those editor changes, then rerun the command. Use `--save-before-run` only when the user explicitly asks to save editor changes before continuing.
 
 ## Usage
 
@@ -40,7 +40,7 @@ uloop run-tests
 uloop run-tests --test-mode PlayMode
 
 # Save explicitly approved editor changes before running tests
-uloop run-tests --save-before-run true
+uloop run-tests --save-before-run
 
 # Run specific test
 uloop run-tests --filter-type exact --filter-value "MyTest.TestMethod"

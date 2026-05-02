@@ -43,7 +43,8 @@ func TestWriteErrorEnvelopeWritesMachineReadableJSON(t *testing.T) {
 	}
 }
 
-func TestBuildToolParamsReturnsStructuredInvalidBooleanError(t *testing.T) {
+// Tests that explicit boolean values are returned as structured CLI errors.
+func TestBuildToolParamsReturnsStructuredBooleanValueError(t *testing.T) {
 	tool := toolDefinition{
 		Name: "sample-tool",
 		InputSchema: inputSchema{
@@ -53,7 +54,7 @@ func TestBuildToolParamsReturnsStructuredInvalidBooleanError(t *testing.T) {
 		},
 	}
 
-	_, _, err := buildToolParams([]string{"--enabled", "maybe"}, tool)
+	_, _, err := buildToolParams([]string{"--enabled", "true"}, tool)
 	if err == nil {
 		t.Fatal("expected argument error")
 	}
@@ -66,7 +67,7 @@ func TestBuildToolParamsReturnsStructuredInvalidBooleanError(t *testing.T) {
 	if cliErr.ErrorCode != errorCodeInvalidArgument {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	if cliErr.Details["expectedType"] != "boolean" {
+	if cliErr.Details["expectedType"] != "flag" {
 		t.Fatalf("details mismatch: %#v", cliErr.Details)
 	}
 }

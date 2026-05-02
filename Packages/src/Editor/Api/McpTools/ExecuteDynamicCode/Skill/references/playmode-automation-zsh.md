@@ -146,7 +146,7 @@ Use `find-game-objects` to discover buttons with their hierarchy paths, then cli
 **Step 1**: Find all GameObjects with Button component
 
 ```zsh
-uloop find-game-objects --required-components UnityEngine.UI.Button --include-inactive false
+uloop find-game-objects --required-components UnityEngine.UI.Button
 ```
 
 **Step 2**: Click the target button using the path from Step 1
@@ -172,7 +172,7 @@ Use `get-hierarchy` to explore the UI tree structure, then target the right elem
 **Step 1**: Get Canvas hierarchy to understand UI structure
 
 ```zsh
-uloop get-hierarchy --root-path "Canvas" --max-depth 3 --include-components true
+uloop get-hierarchy --root-path "Canvas" --max-depth 3
 ```
 
 **Step 2**: Based on the hierarchy JSON, click the desired button

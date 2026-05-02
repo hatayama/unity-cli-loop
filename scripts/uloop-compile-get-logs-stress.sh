@@ -168,7 +168,7 @@ while :; do
     fi
 
     if ! run_with_logs "$LOG_DIR/${round}_compile.out" "$LOG_DIR/${round}_compile.err" \
-        uloop_cmd compile --wait-for-domain-reload true; then
+        uloop_cmd compile --wait-for-domain-reload; then
         echo "compile failed at round $round"
         exit 1
     fi

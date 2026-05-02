@@ -138,7 +138,46 @@ func buildToolParams(args []string, tool toolDefinition) (map[string]any, string
 			}
 		}
 
-		name, value, consumedNext, err := parseFlagValue(arg, args, index)
+		flag, err := parseToolFlag(arg)
+		if err != nil {
+			return nil, "", err
+		}
+
+		if flag.name == projectPathFlagName {
+			value, consumedNext, err := flagValue(flag, args, index)
+			if err != nil {
+				return nil, "", err
+			}
+			projectPath = value
+			if consumedNext {
+				index++
+			}
+			continue
+		}
+
+		propertyName, property, negated, ok := findProperty(tool, flag.name)
+		if !ok {
+			return nil, "", &argumentError{
+				message:     "Unknown option for " + tool.Name + ": --" + flag.name,
+				option:      "--" + flag.name,
+				command:     tool.Name,
+				nextActions: []string{"Run `uloop completion --list-options " + tool.Name + "` to inspect supported options."},
+			}
+		}
+
+		option := "--" + flag.name
+		if isBooleanProperty(property) {
+			if flag.hasValue {
+				return nil, "", booleanValueArgumentError(option, flag.value)
+			}
+			if index+1 < len(args) && !isNextOptionToken(args[index+1]) {
+				return nil, "", booleanValueArgumentError(option, args[index+1])
+			}
+			params[propertyName] = !negated
+			continue
+		}
+
+		value, consumedNext, err := flagValue(flag, args, index)
 		if err != nil {
 			return nil, "", err
 		}
@@ -146,22 +185,7 @@ func buildToolParams(args []string, tool toolDefinition) (map[string]any, string
 			index++
 		}
 
-		if name == projectPathFlagName {
-			projectPath = value
-			continue
-		}
-
-		propertyName, property, ok := findProperty(tool, name)
-		if !ok {
-			return nil, "", &argumentError{
-				message:     "Unknown option for " + tool.Name + ": --" + name,
-				option:      "--" + name,
-				command:     tool.Name,
-				nextActions: []string{"Run `uloop completion --list-options " + tool.Name + "` to inspect supported options."},
-			}
-		}
-
-		converted, err := convertValue(value, property, "--"+name)
+		converted, err := convertValue(value, property, option)
 		if err != nil {
 			return nil, "", err
 		}
@@ -169,6 +193,45 @@ func buildToolParams(args []string, tool toolDefinition) (map[string]any, string
 	}
 
 	return params, projectPath, nil
+}
+
+type parsedToolFlag struct {
+	name     string
+	value    string
+	hasValue bool
+}
+
+func parseToolFlag(arg string) (parsedToolFlag, error) {
+	trimmed := strings.TrimPrefix(arg, "--")
+	if trimmed == "" {
+		return parsedToolFlag{}, &argumentError{
+			message:     "Invalid option: " + arg,
+			option:      arg,
+			nextActions: []string{"Use `--option` for boolean flags or `--option value` for valued options."},
+		}
+	}
+
+	if strings.Contains(trimmed, "=") {
+		parts := strings.SplitN(trimmed, "=", 2)
+		if parts[1] == "" {
+			return parsedToolFlag{}, missingValueArgumentError("--" + parts[0])
+		}
+		return parsedToolFlag{name: parts[0], value: parts[1], hasValue: true}, nil
+	}
+
+	return parsedToolFlag{name: trimmed}, nil
+}
+
+func flagValue(flag parsedToolFlag, args []string, index int) (string, bool, error) {
+	if flag.hasValue {
+		return flag.value, false, nil
+	}
+
+	if index+1 >= len(args) || isNextOptionToken(args[index+1]) {
+		return "", false, missingValueArgumentError("--" + flag.name)
+	}
+
+	return args[index+1], true, nil
 }
 
 func parseGlobalProjectPath(args []string) ([]string, string, error) {
@@ -234,13 +297,13 @@ func isNextOptionToken(value string) bool {
 	return true
 }
 
-func findProperty(tool toolDefinition, kebabName string) (string, toolProperty, bool) {
+func findProperty(tool toolDefinition, kebabName string) (string, toolProperty, bool, bool) {
 	for propertyName, property := range tool.InputSchema.Properties {
-		if pascalToKebab(propertyName) == kebabName {
-			return propertyName, property, true
+		if optionNameForProperty(propertyName, property) == kebabName {
+			return propertyName, property, isNegatedBooleanProperty(property), true
 		}
 	}
-	return "", toolProperty{}, false
+	return "", toolProperty{}, false, false
 }
 
 func convertValue(value string, property toolProperty, option string) (any, error) {
@@ -288,6 +351,33 @@ func convertValue(value string, property toolProperty, option string) (any, erro
 		return parsed, nil
 	default:
 		return value, nil
+	}
+}
+
+func optionNameForProperty(propertyName string, property toolProperty) string {
+	kebabName := pascalToKebab(propertyName)
+	if isNegatedBooleanProperty(property) {
+		return "no-" + kebabName
+	}
+	return kebabName
+}
+
+func isBooleanProperty(property toolProperty) bool {
+	return strings.EqualFold(property.Type, "boolean")
+}
+
+func isNegatedBooleanProperty(property toolProperty) bool {
+	defaultValue, ok := property.Default.(bool)
+	return isBooleanProperty(property) && ok && defaultValue
+}
+
+func booleanValueArgumentError(option string, received string) *argumentError {
+	return &argumentError{
+		message:      "Boolean option does not accept a value: " + received,
+		option:       option,
+		received:     received,
+		expectedType: "flag",
+		nextActions:  []string{"Use `" + option + "` without a value."},
 	}
 }
 

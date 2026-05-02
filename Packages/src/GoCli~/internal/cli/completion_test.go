@@ -57,6 +57,37 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 	}
 }
 
+// Tests that completion lists default-enabled boolean arguments as --no-* flags.
+func TestCompletionListOptionsUsesNegatedDefaultTrueBooleanFlags(t *testing.T) {
+	var stdout bytes.Buffer
+	handled, code := tryHandleCompletionRequest(
+		[]string{"--list-options", "get-hierarchy"},
+		loadDefaultTools(),
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+
+	output := stdout.String()
+	options := strings.Split(strings.TrimSpace(output), "\n")
+	for _, option := range []string{"--no-include-components", "--no-include-inactive"} {
+		if !containsString(options, option) {
+			t.Fatalf("option %s was not listed: %s", option, output)
+		}
+	}
+	for _, option := range []string{"--include-components", "--include-inactive"} {
+		if containsString(options, option) {
+			t.Fatalf("default-enabled option %s should not be listed: %s", option, output)
+		}
+	}
+}
+
 func TestCompletionPrintsShellScriptWithoutProject(t *testing.T) {
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
@@ -77,6 +108,15 @@ func TestCompletionPrintsShellScriptWithoutProject(t *testing.T) {
 	if !strings.Contains(output, "complete -F _uloop_completions uloop") {
 		t.Fatalf("bash completion script mismatch: %s", output)
 	}
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCompletionInstallReplacesExistingBlock(t *testing.T) {

@@ -36,7 +36,7 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 | `--duration` | number | `0.5` | Hold duration in seconds for LongPress action. |
 | `--button` | enum | `Left` | Mouse button. `Click` and `LongPress` support `Left`, `Right`, and `Middle`. Drag actions support `Left` only; other buttons return an error. |
 | `--bypass-raycast` | boolean | `false` | For `Click`, `LongPress`, `Drag`, and `DragStart`, bypass EventSystem raycast and dispatch pointer events directly to `--target-path`. Use when a raycast-blocking overlay visually covers the intended target. |
-| `--target-path` | string | `""` | Hierarchy path of the target GameObject, for example `Canvas/Panel/Button`. Required when `--bypass-raycast true` is used with `Click`, `LongPress`, `Drag`, or `DragStart`; prefer `AnnotatedElements[].Path` from screenshot JSON. |
+| `--target-path` | string | `""` | Hierarchy path of the target GameObject, for example `Canvas/Panel/Button`. Required when `--bypass-raycast` is used with `Click`, `LongPress`, `Drag`, or `DragStart`; prefer `AnnotatedElements[].Path` from screenshot JSON. |
 | `--drop-target-path` | string | `""` | Optional hierarchy path of a drop target for `Drag` or `DragEnd`, for example `Canvas/DropZone`. Use this when the drop zone is also behind a raycast blocker. |
 
 ### Actions
@@ -71,7 +71,7 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 - Get coordinates from `AnnotatedElements` JSON (`SimX`/`SimY`) — do NOT look up GameObject positions
 - Clicking or long-pressing on empty space (no UI element) still succeeds with a message indicating no element was hit
 - Dragging on empty space (no draggable UI element) returns `Success = false`
-- `--bypass-raycast true` still uses coordinates for pointer event positions, but chooses the clicked, long-pressed, or dragged GameObject by `--target-path`
+- `--bypass-raycast` still uses coordinates for pointer event positions, but chooses the clicked, long-pressed, or dragged GameObject by `--target-path`
 - If `--target-path` or `--drop-target-path` matches multiple active GameObjects, the command fails instead of choosing an arbitrary duplicate
 
 ## Examples
@@ -81,16 +81,16 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 uloop simulate-mouse-ui --action Click --x 400 --y 300
 
 # Force-click a button behind a raycast blocker by path
-uloop simulate-mouse-ui --action Click --x 400 --y 300 --bypass-raycast true --target-path "Canvas/Panel/Button"
+uloop simulate-mouse-ui --action Click --x 400 --y 300 --bypass-raycast --target-path "Canvas/Panel/Button"
 
 # Force-long-press a button behind a raycast blocker by path
-uloop simulate-mouse-ui --action LongPress --x 400 --y 300 --duration 3.0 --bypass-raycast true --target-path "Canvas/Panel/Button"
+uloop simulate-mouse-ui --action LongPress --x 400 --y 300 --duration 3.0 --bypass-raycast --target-path "Canvas/Panel/Button"
 
 # Force-drag an item behind a raycast blocker by path
-uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast true --target-path "Canvas/Item"
+uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast --target-path "Canvas/Item"
 
 # Force-drag and dispatch Drop to a blocked drop zone
-uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast true --target-path "Canvas/Item" --drop-target-path "Canvas/DropZone"
+uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast --target-path "Canvas/Item" --drop-target-path "Canvas/DropZone"
 
 # Long-press a button for 3 seconds
 uloop simulate-mouse-ui --action LongPress --x 400 --y 300 --duration 3.0
