@@ -18,32 +18,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
         with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: "Packages/src/Cli~/package-lock.json"
+          go-version: '1.26.1'
+          cache-dependency-path: Packages/src/GoCli~/go.sum
 
-      - name: Install CLI dependencies
-        working-directory: Packages/src/Cli~
-        run: npm ci
+      - name: Test native Go CLI
+        working-directory: Packages/src/GoCli~
+        run: go test ./...
 
-      - name: Type check CLI
-        working-directory: Packages/src/Cli~
-        run: npx tsc --noEmit
+      - name: Build native Go CLI
+        run: scripts/build-go-cli.sh
 
-      - name: Run knip on CLI
-        working-directory: Packages/src/Cli~
-        run: npx knip
-
-      - name: Build CLI
-        working-directory: Packages/src/Cli~
-        run: npm run build
-
-      - name: Verify checked-in project CLI bundle
+      - name: Verify checked-in native Go CLI binaries
         run: |
-          git diff --exit-code -- Packages/src/Cli~/dist/cli.bundle.cjs
+          git diff --exit-code -- \
+            Packages/src/GoCli~/dist/darwin-arm64/uloop-core \
+            Packages/src/GoCli~/dist/darwin-amd64/uloop-core \
+            Packages/src/GoCli~/dist/windows-amd64/uloop-core.exe \
+            Packages/src/GoCli~/dist/darwin-arm64/uloop-dispatcher \
+            Packages/src/GoCli~/dist/darwin-amd64/uloop-dispatcher \
+            Packages/src/GoCli~/dist/windows-amd64/uloop-dispatcher.exe
+
+      - name: Package native Go CLI installers
+        run: scripts/package-go-cli.sh
 
   test-unity-package:
     runs-on: ubuntu-latest
@@ -59,8 +58,9 @@ jobs:
 
           test -f "Packages/src/package.json" || exit 1
           test -d "Packages/src/Editor" || exit 1
-          test -d "Packages/src/Cli~" || exit 1
-          test -f "Packages/src/Cli~/dist/cli.bundle.cjs" || exit 1
+          test -d "Packages/src/GoCli~" || exit 1
+          test -f "Packages/src/GoCli~/dist/darwin-arm64/uloop-core" || exit 1
+          test -f "Packages/src/GoCli~/dist/windows-amd64/uloop-core.exe" || exit 1
 
           echo "✅ Unity Package structure is valid"
 
@@ -68,5 +68,5 @@ jobs:
         working-directory: Packages/src
         run: |
           echo "Validating package.json syntax..."
-          node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
+          jq empty package.json
           echo "✅ package.json is valid"

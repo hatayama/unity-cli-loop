@@ -13,7 +13,7 @@ namespace io.github.hatayama.uLoopMCP
         internal const string SkillsDirName = "skills";
         internal const string ManagedSkillsDirName = "unity-cli-loop";
         internal const string SkillFileName = "SKILL.md";
-        private const string CliPackageDirName = "Cli~";
+        private const string CliPackageDirName = "GoCli~";
         private const string CliSkillDefinitionsDirName = "skill-definitions";
         private const string CliOnlySkillDefinitionsDirName = "cli-only";
         private static readonly HashSet<string> ExcludedFileNames = new()
@@ -439,8 +439,8 @@ namespace io.github.hatayama.uLoopMCP
             return Path.Combine(
                 McpConstants.PackageResolvedPath,
                 CliPackageDirName,
-                McpConstants.SRC_DIR,
-                SkillsDirName,
+                "internal",
+                "cli",
                 CliSkillDefinitionsDirName,
                 CliOnlySkillDefinitionsDirName);
         }

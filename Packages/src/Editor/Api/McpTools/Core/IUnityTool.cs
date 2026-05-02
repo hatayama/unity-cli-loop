@@ -6,7 +6,7 @@ namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
     /// Constants for parameter schema property names
-    /// Ensures consistency between Unity and TypeScript sides
+    /// Ensures consistency between Unity and client sides
     /// </summary>
     public static class ParameterSchemaConstants
     {

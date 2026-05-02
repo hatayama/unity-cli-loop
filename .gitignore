@@ -117,6 +117,19 @@ Packages/src/TypeScriptServer~/dist/*
 Packages/src/Cli~/dist/*
 !Packages/src/Cli~/dist/cli.bundle.cjs
 
+# Native Go CLI release artifacts are included in the Unity package
+Packages/src/GoCli~/dist/*
+!Packages/src/GoCli~/dist/darwin-arm64/
+!Packages/src/GoCli~/dist/darwin-amd64/
+!Packages/src/GoCli~/dist/windows-amd64/
+!Packages/src/GoCli~/dist/darwin-arm64/uloop
+!Packages/src/GoCli~/dist/darwin-amd64/uloop
+!Packages/src/GoCli~/dist/windows-amd64/uloop.exe
+!Packages/src/GoCli~/dist/darwin-arm64/uloop-launcher
+!Packages/src/GoCli~/dist/darwin-amd64/uloop-launcher
+!Packages/src/GoCli~/dist/windows-amd64/uloop-launcher.exe
+Packages/src/GoCli~/release/
+
 # Environment configuration files
 .env
 .env.local

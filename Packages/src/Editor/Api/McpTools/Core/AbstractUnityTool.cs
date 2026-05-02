@@ -65,7 +65,7 @@ namespace io.github.hatayama.uLoopMCP
             }
             
             // Create JsonSerializerSettings with CamelCasePropertyNamesContractResolver
-            // This allows TypeScript side to use camelCase while C# uses PascalCase
+            // This allows client side to use camelCase while C# uses PascalCase
             JsonSerializerSettings settings = new JsonSerializerSettings
             {
                 ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()

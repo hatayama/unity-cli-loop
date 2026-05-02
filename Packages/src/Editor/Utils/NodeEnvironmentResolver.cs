@@ -6,22 +6,12 @@ using UnityEngine;
 namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
-    /// Utility class for detecting Node.js and npm executables.
+    /// Utility class for detecting executable paths through the user's shell environment.
     /// Uses login shell to resolve PATH, matching the user's terminal environment.
     /// </summary>
     public static class NodeEnvironmentResolver
     {
         private const int PROCESS_TIMEOUT_MS = 5000;
-
-        public static string FindNodePath()
-        {
-            return FindNodePathAtPlatform(Application.platform);
-        }
-
-        public static IEnumerable<string> FindAllNodePaths()
-        {
-            return FindAllNodePathsAtPlatform(Application.platform);
-        }
 
         /// <summary>
         /// Finds an executable path using platform-appropriate resolution.
@@ -31,35 +21,6 @@ namespace io.github.hatayama.uLoopMCP
         public static string FindExecutablePath(string executableName)
         {
             return FindExecutablePathAtPlatform(executableName, Application.platform);
-        }
-
-        public static string FindNpmPath()
-        {
-            return FindExecutablePathAtPlatform("npm", Application.platform);
-        }
-
-        /// <summary>
-        /// Sets up the PATH environment variable for a process.
-        /// On Unix, retrieves PATH from login shell to match the user's terminal environment.
-        /// </summary>
-        public static void SetupEnvironmentPath(ProcessStartInfo startInfo, string executablePath)
-        {
-            SetupEnvironmentPathAtPlatform(startInfo, executablePath, Application.platform);
-        }
-
-        internal static string FindNodePathAtPlatform(RuntimePlatform platform)
-        {
-            return FindExecutablePathAtPlatform("node", platform);
-        }
-
-        internal static IEnumerable<string> FindAllNodePathsAtPlatform(RuntimePlatform platform)
-        {
-            if (IsWindowsEditor(platform))
-            {
-                return FindAllExecutablePathsWindows("node");
-            }
-
-            return FindAllExecutablePathsUnix("node");
         }
 
         internal static string FindExecutablePathAtPlatform(string executableName, RuntimePlatform platform)
@@ -72,34 +33,6 @@ namespace io.github.hatayama.uLoopMCP
             return FindExecutableUnix(executableName);
         }
 
-        internal static void SetupEnvironmentPathAtPlatform(
-            ProcessStartInfo startInfo,
-            string executablePath,
-            RuntimePlatform platform)
-        {
-            if (string.IsNullOrEmpty(executablePath))
-            {
-                return;
-            }
-
-            string executableDir = Path.GetDirectoryName(executablePath);
-            string loginShellPath = GetLoginShellPathAtPlatform(platform);
-            string basePath = !string.IsNullOrEmpty(loginShellPath)
-                ? loginShellPath
-                : (System.Environment.GetEnvironmentVariable("PATH") ?? "");
-
-            string separator = IsWindowsEditor(platform) ? ";" : ":";
-
-            if (!string.IsNullOrEmpty(executableDir))
-            {
-                startInfo.EnvironmentVariables["PATH"] = executableDir + separator + basePath;
-            }
-            else
-            {
-                startInfo.EnvironmentVariables["PATH"] = basePath;
-            }
-        }
-
         private static string FindExecutableUnix(string executableName)
         {
             return TryWhichCommand(executableName);
@@ -110,33 +43,9 @@ namespace io.github.hatayama.uLoopMCP
             return TryWhereCommand(executableName);
         }
 
-        // Only returns the login shell's which result — no hardcoded fallback paths.
+        // Only returns the login shell's which result - no hardcoded fallback paths.
         // Scanning version-manager directories directly caused false positives (e.g. detecting
         // an uninstalled CLI version), which was the original bug this PR fixes.
-        private static IEnumerable<string> FindAllExecutablePathsUnix(string executableName)
-        {
-            string whichPath = TryWhichCommand(executableName);
-            if (!string.IsNullOrEmpty(whichPath))
-            {
-                yield return whichPath;
-            }
-        }
-
-        private static IEnumerable<string> FindAllExecutablePathsWindows(string executableName)
-        {
-            string[] wherePaths = TryWhereCommandAll(executableName);
-            if (wherePaths != null)
-            {
-                foreach (string path in wherePaths)
-                {
-                    if (!string.IsNullOrEmpty(path))
-                    {
-                        yield return path;
-                    }
-                }
-            }
-        }
-
         // Interactive login shell (-l -i) loads .zprofile and .zshrc/.bashrc, matching the user's terminal
         // Markers isolate which output from shell startup banners; ExtractAbsolutePathLine filters alias text
         // executableName is not shell-escaped because all callers pass hardcoded constants (YAGNI)
@@ -160,8 +69,7 @@ namespace io.github.hatayama.uLoopMCP
 
         /// <summary>
         /// Finds the first executable path for the given name using the Windows 'where' command.
-        /// Prioritizes .cmd/.exe over extensionless entries because npm generates both a bash shim
-        /// (extensionless) and a Windows cmd shim (.cmd); the bash shim cannot be launched via Process.Start.
+        /// Prioritizes .cmd/.exe over extensionless entries because native Windows shims must be launched directly.
         /// </summary>
         private static string TryWhereCommand(string executableName)
         {

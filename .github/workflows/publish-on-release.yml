@@ -13,12 +13,12 @@ jobs:
     if: startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
-      - name: 🚀 Dispatch npm-publish workflow
+      - name: 🚀 Dispatch native-cli-publish workflow
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          gh workflow run npm-publish.yml \
+          gh workflow run native-cli-publish.yml \
             --ref main \
             -f ref="${RELEASE_TAG}" \
             -f dry-run=false \

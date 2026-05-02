@@ -40,8 +40,6 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 > The following software is required
 >
 > - **Unity 2022.3 or later**
-> - **Node.js 22.0 or later** - Required for CLI execution
-> - Install via the [official site](https://nodejs.org/en/download) or your preferred version manager
 
 ## Via Unity Package Manager
 
@@ -81,32 +79,28 @@ Scope(s): io.github.hatayama.uloopmcp
 
 ## Step 1: Install the CLI
 
+Install the global `uloop` launcher from terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+```
+
+On Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```
+
 Select Window > Unity CLI Loop > Settings. A dedicated window will open — confirm that the **CLI** button is highlighted in blue.
 
-Press the **Install CLI** button.  
 <img width="277" height="306" alt="1" src="https://github.com/user-attachments/assets/0e25c327-73bf-4af6-997b-eebb3c26b372" />
 
-This installs the global `uloop` dispatcher. The Unity package refreshes this project's `.uloop/bin/uloop` CLI bundle automatically when it is missing or version-mismatched.
+The Settings window shows whether the global `uloop` command is detected. The distributed command is backed by the `uloop-dispatcher` binary, and the Unity package refreshes this project's `.uloop/bin/uloop-core` CLI bundle automatically when it is missing, version-mismatched, or binary-mismatched.
 
 
 
 If you see the following display, the installation was successful.  
 <img width="272" height="309" alt="2" src="https://github.com/user-attachments/assets/ec14f73b-53be-4435-af95-84bb9125e3e4" />
-
-
-
-
-<details>
-<summary>To install from terminal</summary>
-
-```bash
-npm install -g uloop-cli
-```
-
-This installs the same global dispatcher as the Settings button. The project-local `.uloop/bin/uloop` bundle is managed automatically by the Unity package in each project.
-
-See [uloop-cli on npm](https://www.npmjs.com/package/uloop-cli) for details.
-</details>
 
 ## Step 2: Install Skills
 
@@ -383,7 +377,7 @@ Async support:
 >
 > To disable `execute-dynamic-code` entirely, turn it off using the tool on/off toggle.
 >
-> Setting changes take effect immediately without server restart.
+> Setting changes take effect immediately without reinstalling the CLI.
 >
 
 ### PlayMode Automated Testing Tools
@@ -465,7 +459,7 @@ The type-safe design allows for reliable custom tool implementation in minimal t
 You can publish your extension tools on GitHub and reuse them across other projects.
 
 > [!TIP]
-> **For AI-assisted development**: Detailed implementation guides are available in [.claude/rules/mcp-tools.md](/.claude/rules/mcp-tools.md) for tool development and [.claude/rules/cli.md](/.claude/rules/cli.md) for CLI/Skills development. These guides are automatically loaded by Claude Code when working in the relevant directories.
+> **For AI-assisted development**: Detailed implementation guides are available in [.claude/rules/cli.md](/.claude/rules/cli.md) for CLI and Skills development. These guides are automatically loaded by Claude Code when working in the relevant directories.
 
 > [!IMPORTANT]
 > **Security Settings**
@@ -520,7 +514,7 @@ public class MyCustomResponse : BaseToolResponse
 using System.Threading;
 using System.Threading.Tasks;
 
-[McpTool(Description = "Description of my custom tool")]  // ← Auto-registered with this attribute
+[McpTool(Description = "Description of my custom tool")]  // Auto-registered; attribute name is historical
 public class MyCustomTool : AbstractUnityTool<MyCustomSchema, MyCustomResponse>
 {
     public override string ToolName => "my-custom-tool";
@@ -608,7 +602,7 @@ See [HelloWorld sample](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKI
 
 ### Unity CLI Loop Files
 
-`UserSettings/UnityMcpSettings.json` stores per-user editor session state and should always remain local-only.
+`UserSettings/UnityMcpSettings.json` stores per-user editor session state and should always remain local-only. The file name is a historical compatibility name.
 
 The `.uloop/` directory at the project root stores CLI cache, tool registry, and runtime outputs. Most of its contents are local-only, but some files can optionally be git-tracked for team sharing.
 

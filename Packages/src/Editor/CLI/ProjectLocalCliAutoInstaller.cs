@@ -40,7 +40,10 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(expectedVersion), "expectedVersion must not be null or empty");
 
-            if (ProjectLocalCliInstaller.IsProjectLocalCliVersionCurrent(projectRoot, expectedVersion))
+            if (ProjectLocalCliInstaller.IsProjectLocalCliCurrentForBundle(
+                sourceBundlePath,
+                projectRoot,
+                expectedVersion))
             {
                 return new CliInstallResult(true, "");
             }

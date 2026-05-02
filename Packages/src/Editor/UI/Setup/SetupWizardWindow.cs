@@ -412,26 +412,8 @@ namespace io.github.hatayama.uLoopMCP
 
             await Task.Yield();
 
-            RuntimePlatform platform = Application.platform;
-            string nodePath = await Task.Run(() => NodeEnvironmentResolver.FindNodePathAtPlatform(platform));
-            bool nodeDetected = !string.IsNullOrEmpty(nodePath);
-
-            ViewDataBinder.SetVisible(_nodejsWarning, !nodeDetected);
-            ViewDataBinder.SetVisible(_nodejsOk, nodeDetected);
-
-            if (!nodeDetected)
-            {
-                _cliStatusLabel.text = "Requires Node.js";
-                ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", false);
-                ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", true);
-                _installCliButton.SetEnabled(false);
-                _installSkillsButton.SetEnabled(false);
-                _groupSkillsToggle.SetEnabled(false);
-                UpdateSkillsStatusLabel(string.Empty);
-                _skillsTargetList.Clear();
-                ScheduleResizeToContent();
-                return;
-            }
+            ViewDataBinder.SetVisible(_nodejsWarning, false);
+            ViewDataBinder.SetVisible(_nodejsOk, false);
 
             await CliInstallationDetector.ForceRefreshCliVersionAsync(CancellationToken.None);
             string cliVersion = CliInstallationDetector.GetCachedCliVersion();
@@ -817,45 +799,24 @@ namespace io.github.hatayama.uLoopMCP
         private async void HandleInstallCli()
         {
             bool wasCliInstalledBeforeInstall = CliInstallationDetector.IsCliInstalled();
-            string npmPath = NodeEnvironmentResolver.FindNpmPath();
-            if (string.IsNullOrEmpty(npmPath))
-            {
-                EditorUtility.DisplayDialog(
-                    "npm Not Found",
-                    "npm was not found on this system.\nPlease install Node.js first, then try again.",
-                    "OK");
-                return;
-            }
-
-            string packageVersion = McpConstants.PackageInfo.version;
-            string installTarget = $"{CliConstants.NPM_PACKAGE_NAME}@{packageVersion}";
-
-            bool permissionOk = CliInstaller.CheckWindowsPermissions(
-                npmPath, installTarget, out string globalPrefix, out string manualCommand);
-            if (!permissionOk)
-            {
-                EditorUtility.DisplayDialog(
-                    "Permission Issue",
-                    $"npm's global directory ({globalPrefix}) requires elevated permissions.\n\n"
-                    + NpmInstallDiagnostics.BuildPermissionSolutions(manualCommand),
-                    "OK");
-                return;
-            }
-
             _isInstallingCli = true;
             UpdateCliStep(false, null, false);
 
             try
             {
-                string nodePath = NodeEnvironmentResolver.FindNodePath();
-                CliInstallResult result = await CliInstaller.InstallAsync(npmPath, installTarget, nodePath);
+                CliInstallResult result = await NativeCliInstaller.InstallAsync(
+                    Application.platform,
+                    McpConstants.PackageInfo.version);
 
                 if (!result.Success)
                 {
+                    NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+                        Application.platform,
+                        McpConstants.PackageInfo.version);
                     EditorUtility.DisplayDialog(
                         "Installation Failed",
                         $"Failed to install uloop-cli.\n\n{result.ErrorOutput}\n\n"
-                        + $"You can install manually:\n  npm install -g {installTarget}",
+                        + $"You can install manually:\n  {command.ManualCommand}",
                         "OK");
                     return;
                 }

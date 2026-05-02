@@ -21,7 +21,7 @@ namespace io.github.hatayama.uLoopMCP
     /// - MainThreadSwitcher: Ensures command execution on Unity's main thread
     /// 
     /// Command execution flow:
-    /// 1. JsonRpcProcessor receives request from TypeScript server
+    /// 1. JsonRpcProcessor receives request from the CLI client
     /// 2. Delegates to ExecuteCommand method with command name and parameters
     /// 3. Looks up command in registry and executes asynchronously
     /// 4. Returns command response or error information

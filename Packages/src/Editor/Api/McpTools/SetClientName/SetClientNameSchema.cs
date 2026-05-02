@@ -4,7 +4,7 @@ namespace io.github.hatayama.uLoopMCP
 {
     /// <summary>
     /// Schema for SetClientName command parameters
-    /// Allows TypeScript clients to register their name for identification
+    /// Allows CLI clients to register their name for identification
     /// </summary>
     public class SetClientNameSchema : BaseToolSchema
     {

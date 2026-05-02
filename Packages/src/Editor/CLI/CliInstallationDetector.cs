@@ -126,9 +126,6 @@ namespace io.github.hatayama.uLoopMCP
                 CreateNoWindow = true
             };
 
-            string nodePath = NodeEnvironmentResolver.FindNodePathAtPlatform(platform);
-            NodeEnvironmentResolver.SetupEnvironmentPathAtPlatform(startInfo, nodePath, platform);
-
             Process process = ProcessStartHelper.TryStart(startInfo);
             if (process == null)
             {

@@ -465,7 +465,7 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         /// <summary>
-        /// Send tools changed notification to TypeScript side
+        /// Send tools changed notification to client side
         /// </summary>
         private static void SendToolsChangedNotification()
         {

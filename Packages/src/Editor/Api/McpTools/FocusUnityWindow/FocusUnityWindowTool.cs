@@ -6,9 +6,8 @@ namespace io.github.hatayama.uLoopMCP
     // ==========================================================================
     // IMPORTANT: Why this class still exists (Do not delete)
     // ==========================================================================
-    // The focus-window functionality is handled at OS level by the CLI using the
-    // launch-unity package. This works even when Unity is busy compiling or
-    // reloading the domain.
+    // The focus-window functionality is handled at OS level by the native CLI.
+    // This works even when Unity is busy compiling or reloading the domain.
     //
     // This class remains for two reasons:
     //
@@ -17,7 +16,7 @@ namespace io.github.hatayama.uLoopMCP
     //    - Without this class, "focus-window" won't appear in tools/list
     //
     // 2. Graceful CLI Upgrade Message:
-    //    - Old CLI versions connect directly to Unity TCP (bypass TypeScript)
+    //    - Old CLI versions connect directly to Unity TCP
     //    - When old CLI calls this tool, we return an upgrade prompt
     //    - New CLI uses OS-level focus and never reaches this code
     //
@@ -44,7 +43,7 @@ namespace io.github.hatayama.uLoopMCP
             // OS-level focus path.
             return Task.FromResult(new FocusUnityWindowResponse(
                 "Please update uloop-cli to the latest version for improved focus-window support. " +
-                "Run: npm install -g uloop-cli@latest",
+                "Run: uloop update, or reinstall using the direct installer from the README.",
                 "focus-window now uses OS-level commands and works even during Unity compilation. " +
                 "Update CLI to use this feature."));
         }

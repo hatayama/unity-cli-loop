@@ -698,61 +698,24 @@ namespace io.github.hatayama.uLoopMCP
         private async void HandleInstallCli()
         {
             bool wasCliInstalledBeforeInstall = CliInstallationDetector.IsCliInstalled();
-            string npmPath = NodeEnvironmentResolver.FindNpmPath();
-            if (string.IsNullOrEmpty(npmPath))
-            {
-                EditorUtility.DisplayDialog(
-                    "npm Not Found",
-                    "npm was not found on this system.\nPlease install Node.js first, then try again.",
-                    "OK");
-                return;
-            }
-
-            string packageVersion = McpConstants.PackageInfo.version;
-            string installTarget = $"{CliConstants.NPM_PACKAGE_NAME}@{packageVersion}";
-
-            bool permissionOk = CliInstaller.CheckWindowsPermissions(
-                npmPath, installTarget, out string globalPrefix, out string manualCommand);
-            if (!permissionOk)
-            {
-                EditorUtility.DisplayDialog(
-                    "Permission Issue Detected",
-                    $"npm's global directory ({globalPrefix}) requires elevated permissions.\n\n"
-                    + NpmInstallDiagnostics.BuildPermissionSolutions(manualCommand),
-                    "OK");
-                return;
-            }
-
             _isInstallingCli = true;
             RefreshCliSetupSection();
 
             try
             {
-                string nodePath = NodeEnvironmentResolver.FindNodePath();
-                CliInstallResult result = await CliInstaller.InstallAsync(npmPath, installTarget, nodePath);
+                CliInstallResult result = await NativeCliInstaller.InstallAsync(
+                    Application.platform,
+                    McpConstants.PackageInfo.version);
 
                 if (!result.Success)
                 {
-                    string installCommand = $"npm install -g {installTarget}";
-
-                    // Classifier emits Windows-specific remediation with the command embedded;
-                    // on other platforms (or unrecognized errors) show raw stderr + manual command footer
-                    string guidance = Application.platform == RuntimePlatform.WindowsEditor
-                        ? NpmInstallDiagnostics.ClassifyInstallError(result.ErrorOutput, installCommand)
-                        : null;
-
-                    string message;
-                    if (guidance != null && !string.IsNullOrEmpty(result.ErrorOutput))
-                    {
-                        message = "Failed to install uLoop CLI.\n\n"
-                            + NpmInstallDiagnostics.BuildInstallErrorMessage(guidance, result.ErrorOutput);
-                    }
-                    else
-                    {
-                        message = $"Failed to install uLoop CLI.\n\n{result.ErrorOutput}\n\nYou can try manually:\n{installCommand}";
-                    }
-
-                    EditorUtility.DisplayDialog("Installation Failed", message, "OK");
+                    NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+                        Application.platform,
+                        McpConstants.PackageInfo.version);
+                    EditorUtility.DisplayDialog(
+                        "Installation Failed",
+                        $"Failed to install uLoop CLI.\n\n{result.ErrorOutput}\n\nYou can try manually:\n{command.ManualCommand}",
+                        "OK");
                     return;
                 }
             }

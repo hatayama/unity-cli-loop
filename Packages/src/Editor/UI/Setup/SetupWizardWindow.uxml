@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
     <ui:ScrollView class="setup-main-container">
-        <!-- Prerequisite: Node.js check -->
-        <ui:VisualElement name="nodejs-warning" class="setup-prerequisite setup-prerequisite--warning">
-            <ui:Label text="⚠ Node.js is required" class="setup-prerequisite__title" />
-            <ui:Label text="Please install Node.js to continue." class="setup-prerequisite__message" />
+        <!-- Legacy prerequisite row kept hidden so older USS/layout bindings remain stable. -->
+        <ui:VisualElement name="nodejs-warning" class="setup-prerequisite setup-prerequisite--warning setup-hidden">
+            <ui:Label text="CLI installer unavailable" class="setup-prerequisite__title" />
+            <ui:Label text="Use the direct installer from the README." class="setup-prerequisite__message" />
             <ui:Button name="refresh-button" text="Refresh" class="setup-button setup-button--small" />
         </ui:VisualElement>
         <ui:VisualElement name="nodejs-ok" class="setup-prerequisite setup-prerequisite--ok setup-prerequisite--compact setup-hidden">
-            <ui:Label text="✓ Node.js detected" class="setup-prerequisite__title" />
+            <ui:Label text="CLI installer ready" class="setup-prerequisite__title" />
         </ui:VisualElement>
 
         <!-- Step 1: Install CLI -->

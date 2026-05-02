@@ -231,7 +231,7 @@ namespace io.github.hatayama.uLoopMCP
                 : ServerShutdownReason.EditorQuit;
 
             // Send shutdown notification to all connected clients BEFORE disconnecting
-            // This allows TypeScript side to differentiate between temporary and permanent shutdown
+            // This allows client side to differentiate between temporary and permanent shutdown
             SendShutdownNotification(shutdownReason);
 
             // Notify that server is stopping
@@ -281,7 +281,7 @@ namespace io.github.hatayama.uLoopMCP
 
         /// <summary>
         /// Explicitly disconnect all connected clients
-        /// This ensures TypeScript clients receive proper close events
+        /// This ensures CLI clients receive proper close events
         /// </summary>
         private void DisconnectAllClients()
         {
@@ -306,7 +306,7 @@ namespace io.github.hatayama.uLoopMCP
             {
                 try
                 {
-                    // Close the NetworkStream to send proper close event to TypeScript client
+                    // Close the NetworkStream to send proper close event to CLI client
                     if (client.Value.Stream != null && client.Value.Stream.CanWrite)
                     {
                         client.Value.Stream.Close();
@@ -622,7 +622,7 @@ namespace io.github.hatayama.uLoopMCP
 
         /// <summary>
         /// Sends a shutdown notification to all connected clients.
-        /// This should be called before disconnecting clients so TypeScript side can
+        /// This should be called before disconnecting clients so client side can
         /// differentiate between domain reload (temporary) and editor quit (permanent).
         /// </summary>
         /// <param name="reason">The reason for server shutdown</param>

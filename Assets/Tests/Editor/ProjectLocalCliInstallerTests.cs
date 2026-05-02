@@ -1,6 +1,8 @@
 using System.IO;
+using System.Runtime.InteropServices;
 
 using NUnit.Framework;
+using UnityEngine;
 
 namespace io.github.hatayama.uLoopMCP.Tests.Editor
 {
@@ -27,10 +29,10 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void InstallProjectLocalCliFromBundle_CopiesCliAndWindowsShim()
+        public void InstallProjectLocalCliFromBundle_CopiesNativeCli()
         {
-            string sourceBundlePath = Path.Combine(_temporaryRoot, "source-cli.cjs");
-            File.WriteAllText(sourceBundlePath, "#!/usr/bin/env node\nconsole.log('project cli');\n");
+            string sourceBundlePath = Path.Combine(_temporaryRoot, "source-cli");
+            File.WriteAllText(sourceBundlePath, BuildVersionScript("3.0.0-beta.0", "source"));
 
             string projectRoot = Path.Combine(_temporaryRoot, "Project");
             Directory.CreateDirectory(projectRoot);
@@ -40,13 +42,14 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
                 projectRoot);
 
             string projectLocalCliPath = ProjectLocalCliInstaller.GetProjectLocalCliPath(projectRoot);
-            string windowsCommandPath = ProjectLocalCliInstaller.GetProjectLocalWindowsCommandPath(projectRoot);
 
             Assert.That(result.Success, Is.True, result.ErrorOutput);
             Assert.That(File.Exists(projectLocalCliPath), Is.True);
+            string expectedFileName = Application.platform == RuntimePlatform.WindowsEditor
+                ? "uloop-core.exe"
+                : "uloop-core";
+            Assert.That(Path.GetFileName(projectLocalCliPath), Is.EqualTo(expectedFileName));
             Assert.That(File.ReadAllText(projectLocalCliPath), Is.EqualTo(File.ReadAllText(sourceBundlePath)));
-            Assert.That(File.Exists(windowsCommandPath), Is.True);
-            Assert.That(File.ReadAllText(windowsCommandPath), Does.Contain("node \"%~dp0\\uloop.cjs\" %*"));
         }
 
         [Test]
@@ -62,6 +65,8 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain(missingSourceBundlePath));
+            Assert.That(result.ErrorOutput, Does.Contain(Application.platform.ToString()));
+            Assert.That(result.ErrorOutput, Does.Contain(RuntimeInformation.ProcessArchitecture.ToString()));
         }
 
         [Test]
@@ -96,7 +101,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void EnsureProjectLocalCliCurrentFromBundle_WhenVersionIsCurrent_DoesNotOverwriteBundle()
+        public void EnsureProjectLocalCliCurrentFromBundle_WhenVersionAndBinaryAreCurrent_DoesNotOverwriteBundle()
         {
             string currentBundlePath = Path.Combine(_temporaryRoot, "current-cli.cjs");
             string currentBundleContent = BuildVersionScript("3.0.0-beta.0", "current");
@@ -109,11 +114,8 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
                 projectRoot);
             Assert.That(initialResult.Success, Is.True, initialResult.ErrorOutput);
 
-            string replacementBundlePath = Path.Combine(_temporaryRoot, "replacement-cli.cjs");
-            File.WriteAllText(replacementBundlePath, BuildVersionScript("3.0.0-beta.0", "replacement"));
-
             CliInstallResult result = ProjectLocalCliAutoInstaller.EnsureProjectLocalCliCurrentFromBundle(
-                replacementBundlePath,
+                currentBundlePath,
                 projectRoot,
                 "3.0.0-beta.0");
 
@@ -122,14 +124,41 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.That(File.ReadAllText(projectLocalCliPath), Is.EqualTo(currentBundleContent));
         }
 
+        [Test]
+        public void EnsureProjectLocalCliCurrentFromBundle_WhenVersionMatchesButBinaryDiffers_CopiesBundle()
+        {
+            string oldBundlePath = Path.Combine(_temporaryRoot, "old-cli.cjs");
+            File.WriteAllText(oldBundlePath, BuildVersionScript("3.0.0-beta.0", "old"));
+
+            string projectRoot = Path.Combine(_temporaryRoot, "Project");
+            Directory.CreateDirectory(projectRoot);
+            CliInstallResult initialResult = ProjectLocalCliInstaller.InstallProjectLocalCliFromBundle(
+                oldBundlePath,
+                projectRoot);
+            Assert.That(initialResult.Success, Is.True, initialResult.ErrorOutput);
+
+            string replacementBundlePath = Path.Combine(_temporaryRoot, "replacement-cli.cjs");
+            string replacementBundleContent = BuildVersionScript("3.0.0-beta.0", "replacement");
+            File.WriteAllText(replacementBundlePath, replacementBundleContent);
+
+            CliInstallResult result = ProjectLocalCliAutoInstaller.EnsureProjectLocalCliCurrentFromBundle(
+                replacementBundlePath,
+                projectRoot,
+                "3.0.0-beta.0");
+
+            string projectLocalCliPath = ProjectLocalCliInstaller.GetProjectLocalCliPath(projectRoot);
+            Assert.That(result.Success, Is.True, result.ErrorOutput);
+            Assert.That(File.ReadAllText(projectLocalCliPath), Is.EqualTo(replacementBundleContent));
+        }
+
         private static string BuildVersionScript(string version, string marker)
         {
-            return "#!/usr/bin/env node\n"
-                + "if (process.argv.includes('--version')) {\n"
-                + $"  console.log('{version}');\n"
-                + "  process.exit(0);\n"
-                + "}\n"
-                + $"console.log('{marker}');\n";
+            return "#!/bin/sh\n"
+                + "if [ \"$1\" = \"--version\" ]; then\n"
+                + $"  echo \"{version}\"\n"
+                + "  exit 0\n"
+                + "fi\n"
+                + $"echo \"{marker}\"\n";
         }
     }
 }

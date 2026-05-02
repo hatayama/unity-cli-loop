@@ -153,7 +153,7 @@ namespace io.github.hatayama.uLoopMCP
 
         /// <summary>
         /// Handle focus-window notification.
-        /// Note: focus-window is handled at OS level by the CLI using launch-unity.
+        /// Note: focus-window is handled at OS level by the CLI using native process control.
         /// This notification handler remains for protocol compatibility but does nothing.
         /// </summary>
         private static void HandleFocusWindowNotification()

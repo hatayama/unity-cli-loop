@@ -73,7 +73,7 @@ namespace io.github.hatayama.uLoopMCP
                     toolTypes.AddRange(types);
                 }
 
-                // Register all _tools - filtering will be handled by TypeScript side
+                // Register all _tools - filtering will be handled by client side
                 foreach (Type type in toolTypes)
                 {
                     // Security: Validate type before creating instance

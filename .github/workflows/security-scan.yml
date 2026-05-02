@@ -6,21 +6,17 @@ on:
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'Packages/src/Cli~/**/*.ts'
-      - 'Packages/src/Cli~/eslint.config.mjs'
-      - 'Packages/src/Cli~/package.json'
-      - 'Packages/src/Cli~/package-lock.json'
-      - 'Packages/src/Cli~/tsconfig.json'
+      - 'Packages/src/GoCli~/**/*.go'
+      - 'Packages/src/GoCli~/go.mod'
+      - 'Packages/src/GoCli~/go.sum'
   pull_request:
     branches: [ main, v3-beta ]
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'Packages/src/Cli~/**/*.ts'
-      - 'Packages/src/Cli~/eslint.config.mjs'
-      - 'Packages/src/Cli~/package.json'
-      - 'Packages/src/Cli~/package-lock.json'
-      - 'Packages/src/Cli~/tsconfig.json'
+      - 'Packages/src/GoCli~/**/*.go'
+      - 'Packages/src/GoCli~/go.mod'
+      - 'Packages/src/GoCli~/go.sum'
   workflow_dispatch:
 
 jobs:
@@ -103,60 +99,20 @@ jobs:
         name: security-scan-results
         path: security-results.sarif
 
-  typescript-security:
-    name: CLI TypeScript Security Analysis
+  go-security:
+    name: Go CLI Security Analysis
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v6
+    - name: Setup Go
+      uses: actions/setup-go@v6
       with:
-        node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: 'Packages/src/Cli~/package-lock.json'
+        go-version: '1.26.1'
+        cache-dependency-path: Packages/src/GoCli~/go.sum
 
-    - name: Install dependencies
-      working-directory: Packages/src/Cli~
-      run: npm ci
-
-    - name: Run TypeScript security check
-      working-directory: Packages/src/Cli~
-      run: npx eslint src
-
-  npm-supply-chain-security:
-    name: NPM Supply Chain Security
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v6
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v6
-      with:
-        node-version: '22'
-
-    - name: Run npm audit
-      working-directory: Packages/src/Cli~
-      run: |
-        echo "Running npm audit for security vulnerabilities..."
-        npm audit --audit-level=moderate || {
-          echo "::warning::npm audit found vulnerabilities. Review and update dependencies."
-          exit 1
-        }
-
-    - name: Install lockfile-lint
-      run: npm install -g lockfile-lint
-
-    - name: Run lockfile-lint
-      working-directory: Packages/src/Cli~
-      run: |
-        echo "Validating package-lock.json integrity..."
-        lockfile-lint \
-          --path package-lock.json \
-          --type npm \
-          --allowed-hosts npm \
-          --allowed-schemes "https:" "git+https:"
+    - name: Run Go tests
+      working-directory: Packages/src/GoCli~
+      run: go test ./...

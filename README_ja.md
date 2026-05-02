@@ -41,8 +41,6 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 > 以下のソフトウェアが必須です
 >
 > - **Unity 2022.3以上**
-> - **Node.js 22.0以上** - CLIの実行に必要
-> - [公式サイト](https://nodejs.org/en/download)やお好みのバージョンマネージャー等でインストールしてください
 
 ## Unity Package Manager経由
 
@@ -82,31 +80,28 @@ Scope(s): io.github.hatayama.uloopmcp
 
 ## ステップ1: CLIのインストール
 
+ターミナルからグローバルな `uloop` ランチャーをインストールします。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+```
+
+Windows PowerShell の場合:
+
+```powershell
+irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```
+
 Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので **CLI** ボタンが青くなっている事を確認します。
 
-**Install CLI** ボタンを押します。  
 <img width="277" height="306" alt="1" src="https://github.com/user-attachments/assets/0e25c327-73bf-4af6-997b-eebb3c26b372" />
 
-この操作でインストールされるのは、グローバルの `uloop` dispatcher です。このプロジェクト用の `.uloop/bin/uloop` CLI bundle は、未作成またはバージョン不一致のときに Unity Package が自動更新します。
+Settings ウィンドウでは、グローバルな `uloop` コマンドが検出されているかを確認できます。配布されるコマンドの実体は `uloop-dispatcher` binary で、このプロジェクト用の `.uloop/bin/uloop-core` CLI bundle は、未作成・バージョン不一致・binary 不一致のときに Unity Package が自動更新します。
 
 
 
 下記の表示になれば成功です。  
 <img width="272" height="309" alt="2" src="https://github.com/user-attachments/assets/ec14f73b-53be-4435-af95-84bb9125e3e4" />
-
-
-
-<details>
-<summary>terminalからinstallする場合はこちら</summary>
-
-```bash
-npm install -g uloop-cli
-```
-
-このコマンドでインストールされるのも、Settings ボタンと同じグローバル dispatcher です。各 Unity プロジェクトの `.uloop/bin/uloop` は Unity Package が自動管理します。
-
-詳細は [npm の uloop-cli パッケージ](https://www.npmjs.com/package/uloop-cli) を参照してください。
-</details>
 
 ## ステップ2: Skillsのインストール
 

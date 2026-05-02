@@ -22,10 +22,9 @@ uloop launch [project-path] [options]
 |-----------|------|-------------|
 | `project-path` | string | Optional. Use only when the target Unity project is not in the current directory. |
 | `-r, --restart` | boolean | Kill running Unity and restart |
+| `-q, --quit` | boolean | Kill an existing Unity process for the project without launching |
 | `-p, --platform <P>` | string | Build target (e.g., StandaloneOSX, Android, iOS) |
 | `--max-depth <N>` | number | Search depth when project-path is omitted (default: 3, -1 for unlimited) |
-| `-a, --add-unity-hub` | boolean | Add to Unity Hub only (does not launch) |
-| `-f, --favorite` | boolean | Add to Unity Hub as favorite (does not launch) |
 
 ## Examples
 
@@ -42,8 +41,8 @@ uloop launch -r
 # Launch with build target
 uloop launch -p Android
 
-# Add project to Unity Hub without launching
-uloop launch -a
+# Quit running Unity without launching
+uloop launch --quit
 ```
 
 ## Output
