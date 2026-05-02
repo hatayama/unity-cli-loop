@@ -54,7 +54,7 @@ func loadTools(projectRoot string) (toolsCache, error) {
 	if content, err := os.ReadFile(cachePath); err == nil {
 		var cache toolsCache
 		if json.Unmarshal(content, &cache) == nil {
-			return cache, nil
+			return filterInternalSkillTools(projectRoot, cache), nil
 		}
 	}
 
@@ -67,7 +67,21 @@ func loadTools(projectRoot string) (toolsCache, error) {
 	if err := json.Unmarshal(content, &cache); err != nil {
 		return toolsCache{}, err
 	}
-	return cache, nil
+	return filterInternalSkillTools(projectRoot, cache), nil
+}
+
+func loadCachedTools(projectRoot string) (toolsCache, bool) {
+	cachePath := filepath.Join(projectRoot, cacheDirectoryName, cacheFileName)
+	content, err := os.ReadFile(cachePath)
+	if err != nil {
+		return toolsCache{}, false
+	}
+
+	var cache toolsCache
+	if json.Unmarshal(content, &cache) != nil {
+		return toolsCache{}, false
+	}
+	return filterInternalSkillTools(projectRoot, cache), true
 }
 
 func loadDefaultTools() toolsCache {
@@ -90,6 +104,23 @@ func findTool(cache toolsCache, name string) (toolDefinition, bool) {
 		}
 	}
 	return toolDefinition{}, false
+}
+
+func filterInternalSkillTools(projectRoot string, cache toolsCache) toolsCache {
+	internalToolNames := collectInternalSkillToolNames(projectRoot)
+	if len(internalToolNames) == 0 {
+		return cache
+	}
+
+	filteredTools := make([]toolDefinition, 0, len(cache.Tools))
+	for _, tool := range cache.Tools {
+		if internalToolNames[tool.Name] {
+			continue
+		}
+		filteredTools = append(filteredTools, tool)
+	}
+	cache.Tools = filteredTools
+	return cache
 }
 
 func buildToolParams(args []string, tool toolDefinition) (map[string]any, string, error) {

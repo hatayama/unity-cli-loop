@@ -8,6 +8,8 @@ The C# namespace is `io.github.hatayama.uLoopMCP` for historical reasons, but th
 
 Comments in the code, commit messages, PR titles, and PR descriptions must all be written in English.
 
+Every test method must have a short comment that states what behavior the test verifies.
+
 ## Generated Skill Files
 
 Do not directly edit skill files under the project-root `.agents/` or `.claude/` directories.

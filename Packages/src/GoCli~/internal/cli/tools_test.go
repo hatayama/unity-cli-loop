@@ -1,7 +1,12 @@
 package cli
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
+// Tests that tool arguments are converted according to their schema types.
 func TestBuildToolParamsConvertsSchemaTypes(t *testing.T) {
 	tool := toolDefinition{
 		Name: "sample-tool",
@@ -42,6 +47,57 @@ func TestBuildToolParamsConvertsSchemaTypes(t *testing.T) {
 	}
 }
 
+// Tests that cached tool loading hides tools whose source skills are internal.
+func TestLoadToolsFiltersInternalSkillToolsFromCache(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeTestSkill(t, projectRoot, "Assets/Editor/InternalTool/Skill", `---
+name: uloop-internal-tool
+internal: true
+---
+
+# internal
+`)
+	writeToolCache(t, projectRoot, `{
+  "version": "test",
+  "tools": [
+    {
+      "name": "internal-tool",
+      "description": "internal",
+      "inputSchema": {"type": "object", "properties": {}}
+    },
+    {
+      "name": "public-tool",
+      "description": "public",
+      "inputSchema": {"type": "object", "properties": {}}
+    }
+  ]
+}`)
+
+	cache, err := loadTools(projectRoot)
+	if err != nil {
+		t.Fatalf("loadTools failed: %v", err)
+	}
+
+	if _, ok := findTool(cache, "internal-tool"); ok {
+		t.Fatalf("internal tool was not filtered: %#v", cache.Tools)
+	}
+	if _, ok := findTool(cache, "public-tool"); !ok {
+		t.Fatalf("public tool was filtered: %#v", cache.Tools)
+	}
+}
+
+// Tests that embedded fallback tools do not expose internal-only commands.
+func TestLoadDefaultToolsDoesNotExposeInternalSkillTools(t *testing.T) {
+	cache := loadDefaultTools()
+
+	for _, toolName := range []string{"get-project-info", "get-version"} {
+		if _, ok := findTool(cache, toolName); ok {
+			t.Fatalf("internal tool %s was exposed by default tools", toolName)
+		}
+	}
+}
+
+// Tests that numeric tool arguments can be negative values instead of being parsed as flags.
 func TestBuildToolParamsAcceptsNegativeNumericValues(t *testing.T) {
 	tool := toolDefinition{
 		Name: "sample-tool",
@@ -72,6 +128,7 @@ func TestBuildToolParamsAcceptsNegativeNumericValues(t *testing.T) {
 	}
 }
 
+// Tests that the global --project-path option is removed before command-specific parsing.
 func TestParseGlobalProjectPathAcceptsLeadingOption(t *testing.T) {
 	remaining, projectPath, err := parseGlobalProjectPath(
 		[]string{
@@ -95,5 +152,16 @@ func TestParseGlobalProjectPathAcceptsLeadingOption(t *testing.T) {
 		if remaining[index] != value {
 			t.Fatalf("remaining mismatch: %#v", remaining)
 		}
+	}
+}
+
+func writeToolCache(t *testing.T, projectRoot string, content string) {
+	t.Helper()
+	cachePath := filepath.Join(projectRoot, cacheDirectoryName, cacheFileName)
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+		t.Fatalf("failed to create tool cache directory: %v", err)
+	}
+	if err := os.WriteFile(cachePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write tool cache: %v", err)
 	}
 }

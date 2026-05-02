@@ -180,15 +180,51 @@ namespace io.github.hatayama.uLoopMCP
             if (File.Exists(skillMdPath))
             {
                 string content = File.ReadAllText(skillMdPath);
-                string parsed = ParseToolNameFromFrontmatter(content);
-                if (!string.IsNullOrEmpty(parsed))
+                if (SkillContentMatchesTool(content, skillDir, toolName))
                 {
-                    return parsed == toolName;
+                    return true;
                 }
             }
 
             string dirName = Path.GetFileName(skillDir);
             return dirName == $"{CliConstants.SKILL_DIR_PREFIX}{toolName}";
+        }
+
+        internal static HashSet<string> GetInternalSkillToolNames(string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            HashSet<string> toolNames = new(StringComparer.Ordinal);
+            foreach (string searchRoot in EnumerateSkillSourceRoots(projectRoot))
+            {
+                if (!Directory.Exists(searchRoot))
+                {
+                    continue;
+                }
+
+                foreach (string skillFilePath in EnumerateSourceSkillFiles(searchRoot))
+                {
+                    string skillDirectory = Path.GetDirectoryName(skillFilePath);
+                    if (skillDirectory == null)
+                    {
+                        continue;
+                    }
+
+                    string skillContent = File.ReadAllText(skillFilePath);
+                    if (!IsInternalSkill(skillContent))
+                    {
+                        continue;
+                    }
+
+                    string toolName = GetToolNameFromSkillContent(skillContent);
+                    if (!string.IsNullOrEmpty(toolName))
+                    {
+                        toolNames.Add(toolName);
+                    }
+                }
+            }
+
+            return toolNames;
         }
 
         internal static List<SkillSourceInfo> GetSkillSourceInfos(string projectRoot)
@@ -351,11 +387,7 @@ namespace io.github.hatayama.uLoopMCP
                     continue;
                 }
 
-                IEnumerable<string> skillFilePaths = IsCliOnlySkillSourceRoot(searchRoot)
-                    ? Directory.EnumerateFiles(searchRoot, SkillFileName, SearchOption.AllDirectories)
-                    : EnumerateEditorFolders(searchRoot, 3).SelectMany(editorFolder =>
-                        Directory.EnumerateFiles(editorFolder, SkillFileName, SearchOption.AllDirectories));
-                foreach (string skillFilePath in skillFilePaths)
+                foreach (string skillFilePath in EnumerateSourceSkillFiles(searchRoot))
                 {
                     string skillDirectory = Path.GetDirectoryName(skillFilePath);
                     if (skillDirectory == null)
@@ -386,6 +418,17 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             return sources;
+        }
+
+        private static IEnumerable<string> EnumerateSourceSkillFiles(string searchRoot)
+        {
+            if (IsCliOnlySkillSourceRoot(searchRoot))
+            {
+                return Directory.EnumerateFiles(searchRoot, SkillFileName, SearchOption.AllDirectories);
+            }
+
+            return EnumerateEditorFolders(searchRoot, 3).SelectMany(editorFolder =>
+                Directory.EnumerateFiles(editorFolder, SkillFileName, SearchOption.AllDirectories));
         }
 
         private static IEnumerable<string> EnumerateSkillSourceRoots(string projectRoot)
@@ -665,6 +708,42 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             return nameMatch.Groups[1].Value.Trim().Trim('"');
+        }
+
+        private static bool SkillContentMatchesTool(string content, string skillDirectory, string toolName)
+        {
+            string parsedToolName = ParseToolNameFromFrontmatter(content);
+            if (!string.IsNullOrEmpty(parsedToolName))
+            {
+                return parsedToolName == toolName;
+            }
+
+            string parsedSkillName = ParseNameFromFrontmatter(content);
+            if (!string.IsNullOrEmpty(parsedSkillName))
+            {
+                return parsedSkillName == $"{CliConstants.SKILL_DIR_PREFIX}{toolName}";
+            }
+
+            string dirName = Path.GetFileName(skillDirectory);
+            return dirName == $"{CliConstants.SKILL_DIR_PREFIX}{toolName}";
+        }
+
+        private static string GetToolNameFromSkillContent(string content)
+        {
+            string parsedToolName = ParseToolNameFromFrontmatter(content);
+            if (!string.IsNullOrEmpty(parsedToolName))
+            {
+                return parsedToolName;
+            }
+
+            string parsedSkillName = ParseNameFromFrontmatter(content);
+            if (string.IsNullOrEmpty(parsedSkillName)
+                || !parsedSkillName.StartsWith(CliConstants.SKILL_DIR_PREFIX, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return parsedSkillName.Substring(CliConstants.SKILL_DIR_PREFIX.Length);
         }
 
         private static bool IsInternalSkill(string content)

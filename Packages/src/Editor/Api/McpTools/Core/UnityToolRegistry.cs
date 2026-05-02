@@ -262,8 +262,15 @@ namespace io.github.hatayama.uLoopMCP
         /// <returns>Array of tool information</returns>
         public ToolInfo[] GetRegisteredTools()
         {
+            return GetRegisteredToolsForProjectRoot(UnityMcpPathResolver.GetProjectRoot());
+        }
+
+        internal ToolInfo[] GetRegisteredToolsForProjectRoot(string projectRoot)
+        {
+            HashSet<string> internalToolNames = SkillInstallLayout.GetInternalSkillToolNames(projectRoot);
             return _tools.Values
                 .Where(tool => ToolSettings.IsToolEnabled(tool.ToolName))
+                .Where(tool => !internalToolNames.Contains(tool.ToolName))
                 .Select(tool =>
             {
                 // Check if tool has McpTool attribute with DisplayDevelopmentOnly
@@ -295,7 +302,15 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public ToolInfo[] GetAllRegisteredToolInfos()
         {
-            return _tools.Values.Select(tool =>
+            return GetAllRegisteredToolInfosForProjectRoot(UnityMcpPathResolver.GetProjectRoot());
+        }
+
+        internal ToolInfo[] GetAllRegisteredToolInfosForProjectRoot(string projectRoot)
+        {
+            HashSet<string> internalToolNames = SkillInstallLayout.GetInternalSkillToolNames(projectRoot);
+            return _tools.Values
+                .Where(tool => !internalToolNames.Contains(tool.ToolName))
+                .Select(tool =>
             {
                 McpToolAttribute attribute = tool.GetType().GetCustomAttribute<McpToolAttribute>();
                 string description = attribute?.Description ?? "";
@@ -306,7 +321,15 @@ namespace io.github.hatayama.uLoopMCP
 
         public ToolSettingsCatalogItem[] GetToolSettingsCatalog()
         {
-            return _tools.Values.Select(tool =>
+            return GetToolSettingsCatalogForProjectRoot(UnityMcpPathResolver.GetProjectRoot());
+        }
+
+        internal ToolSettingsCatalogItem[] GetToolSettingsCatalogForProjectRoot(string projectRoot)
+        {
+            HashSet<string> internalToolNames = SkillInstallLayout.GetInternalSkillToolNames(projectRoot);
+            return _tools.Values
+                .Where(tool => !internalToolNames.Contains(tool.ToolName))
+                .Select(tool =>
             {
                 Type toolType = tool.GetType();
                 McpToolAttribute attribute = toolType.GetCustomAttribute<McpToolAttribute>();

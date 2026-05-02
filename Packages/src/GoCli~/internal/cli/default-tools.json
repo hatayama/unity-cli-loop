@@ -293,22 +293,6 @@
       }
     },
     {
-      "name": "get-project-info",
-      "description": "Get Unity project information",
-      "inputSchema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "name": "get-version",
-      "description": "Get Unity CLI Loop version information",
-      "inputSchema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
       "name": "control-play-mode",
       "description": "Control Unity Editor play mode (play/stop/pause)",
       "inputSchema": {
