@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.0.0-beta.1](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.0...v3.0.0-beta.1) (2026-05-03)
+
+
+### Features
+
+* Setup can install the bundled CLI without downloading it ([#1034](https://github.com/hatayama/unity-cli-loop/issues/1034)) ([11f5882](https://github.com/hatayama/unity-cli-loop/commit/11f5882d604f86e76d58b3455efb7d101c08e689))
+
+
+### Bug Fixes
+
+* CLI options and skill sync work reliably across platforms ([#1039](https://github.com/hatayama/unity-cli-loop/issues/1039)) ([f080a87](https://github.com/hatayama/unity-cli-loop/commit/f080a87253db8384cbc5e5865eda414ceb0b1acf))
+* CLI setup avoids legacy npm checks and shared-install uninstalls ([#1040](https://github.com/hatayama/unity-cli-loop/issues/1040)) ([ec3d91f](https://github.com/hatayama/unity-cli-loop/commit/ec3d91f616b1351c2a886051918f809d985e89a1))
+* stabilize Windows native CLI install flow ([#1038](https://github.com/hatayama/unity-cli-loop/issues/1038)) ([d829c16](https://github.com/hatayama/unity-cli-loop/commit/d829c16f14b6841b8d9b4761b08b1f2a6a330ef7))
+
 ## [2.1.0](https://github.com/hatayama/unity-cli-loop/compare/v2.0.4...v2.1.0) (2026-04-29)
 
 

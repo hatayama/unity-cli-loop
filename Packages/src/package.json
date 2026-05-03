@@ -1,6 +1,6 @@
 {
   "name": "io.github.hatayama.uloopmcp",
-  "version": "3.0.0-beta.0",
+  "version": "3.0.0-beta.1",
   "displayName": "Unity CLI Loop",
   "description": "AI-driven development loop for Unity via CLI.",
   "unity": "2022.3",
