@@ -576,6 +576,7 @@ namespace io.github.hatayama.UnityCliLoop
         private CliSetupData CreateCliSetupData(bool includeSkillDirectoryChecks = true)
         {
             string cliVersion = CliInstallationDetector.GetCachedCliVersion();
+            string cliExecutablePath = CliInstallationDetector.GetCachedCliExecutablePath();
             string packageVersion = McpConstants.PackageInfo.version;
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
             CliInstallResult projectLocalResult = ProjectLocalCliAutoInstaller.EnsureProjectLocalCliCurrent(
@@ -588,6 +589,9 @@ namespace io.github.hatayama.UnityCliLoop
             }
 
             bool isCliInstalled = cliVersion != null;
+            bool canUninstallCli = NativeCliInstaller.IsPackageOwnedCurrentUserInstallPath(
+                cliExecutablePath,
+                Application.platform);
             bool isChecking = !CliInstallationDetector.IsCheckCompleted()
                 || _isRefreshingVersion
                 || !includeSkillDirectoryChecks;
@@ -604,6 +608,7 @@ namespace io.github.hatayama.UnityCliLoop
                 packageVersion,
                 needsUpdate,
                 needsDowngrade,
+                canUninstallCli,
                 _isInstallingCli,
                 isChecking,
                 isClaudeSkillsInstalled: false,
@@ -702,11 +707,6 @@ namespace io.github.hatayama.UnityCliLoop
                 return;
             }
 
-            if (!LegacyNpmRemovalPrompt.ConfirmInstallCanProceed(Application.platform))
-            {
-                return;
-            }
-
             bool wasCliInstalledBeforeInstall = CliInstallationDetector.IsCliInstalled();
             _isInstallingCli = true;
             RefreshCliSetupSection();
@@ -742,19 +742,25 @@ namespace io.github.hatayama.UnityCliLoop
         private bool ShouldUninstallCliFromPrimaryButton()
         {
             string cliVersion = CliInstallationDetector.GetCachedCliVersion();
+            string cliExecutablePath = CliInstallationDetector.GetCachedCliExecutablePath();
+            bool canUninstallCli = NativeCliInstaller.IsPackageOwnedCurrentUserInstallPath(
+                cliExecutablePath,
+                Application.platform);
             return ShouldUninstallCliFromPrimaryButton(
                 cliVersion,
-                McpConstants.PackageInfo.version);
+                McpConstants.PackageInfo.version,
+                canUninstallCli);
         }
 
         internal static bool ShouldUninstallCliFromPrimaryButton(
             string cliVersion,
-            string packageVersion)
+            string packageVersion,
+            bool canUninstallCli)
         {
             bool isCliInstalled = cliVersion != null;
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, packageVersion);
             bool needsDowngrade = IsCliDowngradeNeeded(cliVersion, packageVersion);
-            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade);
+            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade, canUninstallCli);
         }
 
         internal static bool IsCliUpdateNeeded(string cliVersion, string packageVersion)

@@ -4,19 +4,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     public class CliSetupSectionTests
     {
-        [TestCase(false, false, false, false, false, null, "3.0.0", "Install CLI")]
-        [TestCase(true, false, false, false, false, "3.0.0", "3.0.0", "Uninstall CLI")]
-        [TestCase(true, false, false, true, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
-        [TestCase(true, false, false, false, true, "3.1.0", "3.0.0", "Downgrade CLI (v3.1.0 \u2192 v3.0.0)")]
-        [TestCase(true, true, false, false, false, "3.0.0", "3.0.0", "Uninstalling...")]
-        [TestCase(false, true, false, false, false, null, "3.0.0", "Installing...")]
-        [TestCase(false, false, true, false, false, null, "3.0.0", "Checking...")]
+        [TestCase(false, false, false, false, false, false, null, "3.0.0", "Install CLI")]
+        [TestCase(true, false, false, false, false, true, "3.0.0", "3.0.0", "Uninstall CLI")]
+        [TestCase(true, false, false, false, false, false, "3.0.0", "3.0.0", "Install CLI")]
+        [TestCase(true, false, false, true, false, true, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, false, false, false, true, true, "3.1.0", "3.0.0", "Downgrade CLI (v3.1.0 \u2192 v3.0.0)")]
+        [TestCase(true, true, false, false, false, true, "3.0.0", "3.0.0", "Uninstalling...")]
+        [TestCase(false, true, false, false, false, false, null, "3.0.0", "Installing...")]
+        [TestCase(false, false, true, false, false, false, null, "3.0.0", "Checking...")]
         public void GetInstallCliButtonText_ReturnsExpectedText(
             bool isCliInstalled,
             bool isInstallingCli,
             bool isChecking,
             bool needsUpdate,
             bool needsDowngrade,
+            bool canUninstallCli,
             string cliVersion,
             string packageVersion,
             string expectedText)
@@ -27,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isChecking,
                 needsUpdate,
                 needsDowngrade,
+                canUninstallCli,
                 cliVersion,
                 packageVersion);
 
@@ -48,20 +51,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }
 
-        [TestCase(true, false, false, true)]
-        [TestCase(false, false, false, false)]
-        [TestCase(true, true, false, false)]
-        [TestCase(true, false, true, false)]
+        [TestCase(true, false, false, true, true)]
+        [TestCase(true, false, false, false, false)]
+        [TestCase(false, false, false, true, false)]
+        [TestCase(true, true, false, true, false)]
+        [TestCase(true, false, true, true, false)]
         public void IsUninstallCliAction_ReturnsExpectedValue(
             bool isCliInstalled,
             bool needsUpdate,
             bool needsDowngrade,
+            bool canUninstallCli,
             bool expected)
         {
             bool result = CliSetupSection.IsUninstallCliAction(
                 isCliInstalled,
                 needsUpdate,
-                needsDowngrade);
+                needsDowngrade,
+                canUninstallCli);
 
             Assert.That(result, Is.EqualTo(expected));
         }

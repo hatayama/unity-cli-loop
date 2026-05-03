@@ -21,7 +21,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.1'
+          go-version-file: Packages/src/GoCli~/.go-version
           cache-dependency-path: Packages/src/GoCli~/go.sum
 
       - name: Install golangci-lint

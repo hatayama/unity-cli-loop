@@ -5,6 +5,9 @@ ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 GO_CLI_DIR="$ROOT_DIR/Packages/src/GoCli~"
 DIST_DIR="$GO_CLI_DIR/dist"
 
+. "$ROOT_DIR/scripts/go-cli-toolchain.sh"
+require_go_cli_toolchain "$ROOT_DIR"
+
 build_binary() {
   os="$1"
   arch="$2"

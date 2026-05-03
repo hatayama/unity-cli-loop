@@ -275,7 +275,14 @@ func getHomeDirectoryForShell(
 		return userHomeDirectory()
 	}
 
-	return environmentHomeDirectory()
+	home, err := environmentHomeDirectory()
+	if err != nil {
+		return "", err
+	}
+	if goos == "windows" && isPosixShell(shellName) {
+		return normalizeWindowsPosixHomeDirectory(home), nil
+	}
+	return home, nil
 }
 
 func getPwshProfilePath(home string, goos string) string {
@@ -283,6 +290,42 @@ func getPwshProfilePath(home string, goos string) string {
 		return filepath.Join(home, filepath.FromSlash(pwshProfileSubpath))
 	}
 	return filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1")
+}
+
+func isPosixShell(shellName string) bool {
+	return shellName == "bash" || shellName == "zsh"
+}
+
+func normalizeWindowsPosixHomeDirectory(home string) string {
+	if home == "" {
+		return home
+	}
+	if len(home) >= 3 && home[0] == '/' && isASCIIAlpha(home[1]) && home[2] == '/' {
+		return windowsDrivePath(home[1], home[3:])
+	}
+	if len(home) >= 7 && strings.HasPrefix(home, "/mnt/") && isASCIIAlpha(home[5]) && home[6] == '/' {
+		return windowsDrivePath(home[5], home[7:])
+	}
+	return home
+}
+
+func windowsDrivePath(driveLetter byte, rest string) string {
+	drive := string(toUpperASCIILetter(driveLetter)) + `:\`
+	if rest == "" {
+		return drive
+	}
+	return drive + strings.ReplaceAll(rest, "/", `\`)
+}
+
+func isASCIIAlpha(value byte) bool {
+	return (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z')
+}
+
+func toUpperASCIILetter(value byte) byte {
+	if value >= 'a' && value <= 'z' {
+		return value - ('a' - 'A')
+	}
+	return value
 }
 
 func installCompletionScript(configPath string, shellName string, script string) error {

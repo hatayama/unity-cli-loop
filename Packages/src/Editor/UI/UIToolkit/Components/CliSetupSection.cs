@@ -111,6 +111,7 @@ namespace io.github.hatayama.UnityCliLoop
                 data.IsChecking,
                 data.NeedsUpdate,
                 data.NeedsDowngrade,
+                data.CanUninstallCli,
                 data.CliVersion,
                 data.PackageVersion);
             bool enabled = IsInstallCliButtonEnabled(
@@ -193,6 +194,7 @@ namespace io.github.hatayama.UnityCliLoop
             bool isChecking,
             bool needsUpdate,
             bool needsDowngrade,
+            bool canUninstallCli,
             string cliVersion,
             string packageVersion)
         {
@@ -201,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop
                 return "Checking...";
             }
 
-            bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade);
+            bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade, canUninstallCli);
             if (isInstallingCli)
             {
                 return isUninstallAction ? "Uninstalling..." : "Installing...";
@@ -222,7 +224,7 @@ namespace io.github.hatayama.UnityCliLoop
                 return $"Downgrade CLI (v{cliVersion} \u2192 v{packageVersion})";
             }
 
-            return "Uninstall CLI";
+            return canUninstallCli ? "Uninstall CLI" : "Install CLI";
         }
 
         internal static bool IsInstallCliButtonEnabled(
@@ -235,9 +237,10 @@ namespace io.github.hatayama.UnityCliLoop
         internal static bool IsUninstallCliAction(
             bool isCliInstalled,
             bool needsUpdate,
-            bool needsDowngrade)
+            bool needsDowngrade,
+            bool canUninstallCli)
         {
-            return isCliInstalled && !needsUpdate && !needsDowngrade;
+            return canUninstallCli && isCliInstalled && !needsUpdate && !needsDowngrade;
         }
 
         internal static string GetInstallSkillsButtonText(

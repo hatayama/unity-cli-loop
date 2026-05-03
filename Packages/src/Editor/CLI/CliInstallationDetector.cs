@@ -8,11 +8,24 @@ using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop
 {
+    internal readonly struct CliInstallationDetection
+    {
+        public CliInstallationDetection(string version, string executablePath)
+        {
+            Version = version;
+            ExecutablePath = executablePath;
+        }
+
+        public string Version { get; }
+        public string ExecutablePath { get; }
+    }
+
     public static class CliInstallationDetector
     {
         private const int PROCESS_TIMEOUT_MS = 5000;
 
         private static string _cachedCliVersion;
+        private static string _cachedCliExecutablePath;
         private static bool _cacheInitialized;
         private static bool _isRefreshing;
 
@@ -24,6 +37,11 @@ namespace io.github.hatayama.UnityCliLoop
         public static string GetCachedCliVersion()
         {
             return _cacheInitialized ? _cachedCliVersion : null;
+        }
+
+        public static string GetCachedCliExecutablePath()
+        {
+            return _cacheInitialized ? _cachedCliExecutablePath : null;
         }
 
         public static bool IsCheckCompleted()
@@ -41,8 +59,9 @@ namespace io.github.hatayama.UnityCliLoop
             _isRefreshing = true;
             try
             {
-                string version = await DetectCliVersionAsync(ct);
-                _cachedCliVersion = version;
+                CliInstallationDetection detection = await DetectCliInstallationAsync(ct);
+                _cachedCliVersion = detection.Version;
+                _cachedCliExecutablePath = detection.ExecutablePath;
                 _cacheInitialized = true;
             }
             finally
@@ -90,25 +109,32 @@ namespace io.github.hatayama.UnityCliLoop
 
         public static async Task ForceRefreshCliVersionAsync(CancellationToken ct)
         {
-            string version = await DetectCliVersionAsync(ct);
-            _cachedCliVersion = version;
+            CliInstallationDetection detection = await DetectCliInstallationAsync(ct);
+            _cachedCliVersion = detection.Version;
+            _cachedCliExecutablePath = detection.ExecutablePath;
             _cacheInitialized = true;
         }
 
         public static void InvalidateCache()
         {
             _cachedCliVersion = null;
+            _cachedCliExecutablePath = null;
             _cacheInitialized = false;
             _isRefreshing = false;
         }
 
-        private static Task<string> DetectCliVersionAsync(CancellationToken ct)
+        private static Task<CliInstallationDetection> DetectCliInstallationAsync(CancellationToken ct)
         {
             RuntimePlatform platform = Application.platform;
-            return Task.Run(() => DetectCliVersionBlocking(platform, ct), ct);
+            return Task.Run(() => DetectCliInstallationBlocking(platform, ct), ct);
         }
 
         internal static string DetectCliVersionBlocking(RuntimePlatform platform, CancellationToken ct)
+        {
+            return DetectCliInstallationBlocking(platform, ct).Version;
+        }
+
+        internal static CliInstallationDetection DetectCliInstallationBlocking(RuntimePlatform platform, CancellationToken ct)
         {
             string executablePath = NodeEnvironmentResolver.FindExecutablePathAtPlatform(
                 CliConstants.EXECUTABLE_NAME,
@@ -129,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop
             Process process = ProcessStartHelper.TryStart(startInfo);
             if (process == null)
             {
-                return null;
+                return new CliInstallationDetection(null, executablePath);
             }
 
             StringBuilder outputBuilder = new StringBuilder();
@@ -159,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop
                 {
                     try { process.Kill(); } catch (System.InvalidOperationException) { }
                     process.Dispose();
-                    return null;
+                    return new CliInstallationDetection(null, executablePath);
                 }
 
                 // Parameterless WaitForExit flushes async output buffers
@@ -169,7 +195,8 @@ namespace io.github.hatayama.UnityCliLoop
                 bool failed = process.ExitCode != 0 || string.IsNullOrEmpty(output);
                 process.Dispose();
 
-                return failed ? null : output;
+                string version = failed ? null : output;
+                return new CliInstallationDetection(version, executablePath);
             }
             catch (Exception ex)
             {
@@ -178,7 +205,7 @@ namespace io.github.hatayama.UnityCliLoop
                 {
                     UnityEngine.Debug.LogWarning($"[UnityCliLoop] Failed to detect CLI version: {ex.Message}");
                 }
-                return null;
+                return new CliInstallationDetection(null, executablePath);
             }
         }
     }

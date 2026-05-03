@@ -99,6 +99,7 @@ namespace io.github.hatayama.UnityCliLoop
         public readonly string PackageVersion;
         public readonly bool NeedsUpdate;
         public readonly bool NeedsDowngrade;
+        public readonly bool CanUninstallCli;
         public readonly bool IsInstallingCli;
         public readonly bool IsChecking;
         public readonly bool IsClaudeSkillsInstalled;
@@ -118,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop
             string packageVersion,
             bool needsUpdate,
             bool needsDowngrade,
+            bool canUninstallCli,
             bool isInstallingCli,
             bool isChecking,
             bool isClaudeSkillsInstalled,
@@ -136,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop
             PackageVersion = packageVersion;
             NeedsUpdate = needsUpdate;
             NeedsDowngrade = needsDowngrade;
+            CanUninstallCli = canUninstallCli;
             IsInstallingCli = isInstallingCli;
             IsChecking = isChecking;
             IsClaudeSkillsInstalled = isClaudeSkillsInstalled;

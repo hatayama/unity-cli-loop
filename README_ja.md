@@ -97,11 +97,7 @@ Windows PowerShell の場合:
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-過去に npm 経由で TypeScript 版ランチャーを入れていた場合、installer は `uloop-cli` を検出しますが、デフォルトでは削除しません。インストール時に旧 npm package も削除する場合は、次のように実行してください。
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | ULOOP_REMOVE_LEGACY=1 sh
-```
+Windows では `ULOOP_REMOVE_LEGACY=1` を設定すると、package-owned な古い `uloop` launcher shim と、未使用の legacy command bin directory を User PATH から削除できます。
 
 ```powershell
 $env:ULOOP_REMOVE_LEGACY = "1"

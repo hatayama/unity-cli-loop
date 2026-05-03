@@ -4,7 +4,6 @@ namespace io.github.hatayama.UnityCliLoop
     {
         public const string EXECUTABLE_NAME = "uloop";
         public const string VERSION_FLAG = "--version";
-        public const int GLOBAL_INSTALL_TIMEOUT_MS = 30000;
         public const string RELEASE_DOWNLOAD_BASE_URL = "https://github.com/hatayama/unity-cli-loop/releases/download";
         public const string POSIX_INSTALL_SCRIPT_NAME = "install.sh";
         public const string WINDOWS_INSTALL_SCRIPT_NAME = "install.ps1";
@@ -19,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop
         public const string WINDOWS_PATH_ENVIRONMENT_VARIABLE = "Path";
         public const string POSIX_LOCAL_DIR_NAME = ".local";
         public const string WINDOWS_PROGRAMS_DIR_NAME = "Programs";
-        public const string WINDOWS_NPM_BIN_DIR_NAME = "npm";
+        public const string WINDOWS_NODE_GLOBAL_BIN_DIR_NAME = "npm";
         public const string NATIVE_INSTALL_DIR_NAME = "uloop";
         public const string NATIVE_INSTALL_BIN_DIR_NAME = "bin";
         public const string POSIX_PATH_SEPARATOR = ":";
@@ -35,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop
         public const string WINDOWS_POWERSHELL_SHIM_NAME = EXECUTABLE_NAME + ".ps1";
         public const string GLOBAL_DISPATCHER_UNIX_BUNDLE_NAME = "uloop-dispatcher";
         public const string GLOBAL_DISPATCHER_WINDOWS_BUNDLE_NAME = "uloop-dispatcher.exe";
-        public const string LEGACY_NPM_PACKAGE_NAME = "uloop-cli";
+        public const string LEGACY_TYPESCRIPT_PACKAGE_NAME = "uloop-cli";
         public const string PROJECT_LOCAL_BIN_DIR_NAME = "bin";
         public const string PROJECT_LOCAL_UNIX_COMMAND_NAME = "uloop-core";
         public const string PROJECT_LOCAL_WINDOWS_COMMAND_NAME = "uloop-core.exe";

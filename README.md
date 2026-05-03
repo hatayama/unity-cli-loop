@@ -96,11 +96,7 @@ On Windows PowerShell:
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-If you previously installed the TypeScript launcher through npm, the installer detects `uloop-cli` and leaves it in place by default. To remove the legacy npm package during installation:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | ULOOP_REMOVE_LEGACY=1 sh
-```
+On Windows, set `ULOOP_REMOVE_LEGACY=1` to remove package-owned legacy `uloop` launcher shims and an unused legacy command bin directory from User PATH:
 
 ```powershell
 $env:ULOOP_REMOVE_LEGACY = "1"

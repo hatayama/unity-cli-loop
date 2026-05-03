@@ -852,11 +852,6 @@ namespace io.github.hatayama.UnityCliLoop
 
         private async void HandleInstallCli()
         {
-            if (!LegacyNpmRemovalPrompt.ConfirmInstallCanProceed(Application.platform))
-            {
-                return;
-            }
-
             bool wasCliInstalledBeforeInstall = CliInstallationDetector.IsCliInstalled();
             _isInstallingCli = true;
             UpdateCliStep(false, null, false);

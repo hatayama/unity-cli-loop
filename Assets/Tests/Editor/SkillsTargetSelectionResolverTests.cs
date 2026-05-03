@@ -42,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 packageVersion: "1.7.3",
                 needsUpdate: false,
                 needsDowngrade: false,
+                canUninstallCli: true,
                 isInstallingCli: false,
                 isChecking: false,
                 isClaudeSkillsInstalled: true,

@@ -239,8 +239,8 @@ func TestGetHomeDirectoryForShellOnWindowsPowerShellIgnoresHomeOverride(t *testi
 	}
 }
 
-func TestGetHomeDirectoryForShellOnWindowsBashUsesHomeOverride(t *testing.T) {
-	// Tests that Windows POSIX shells still honor HOME for Git Bash and MSYS configs.
+func TestGetHomeDirectoryForShellOnWindowsBashNormalizesMsysHome(t *testing.T) {
+	// Tests that Windows POSIX shells convert Git Bash HOME to a Win32 path before file writes.
 	environmentHomeCalls := 0
 	userHomeCalls := 0
 
@@ -260,7 +260,7 @@ func TestGetHomeDirectoryForShellOnWindowsBashUsesHomeOverride(t *testing.T) {
 		t.Fatalf("getHomeDirectoryForShell failed: %v", err)
 	}
 
-	if home != "/c/Users/masamichi" {
+	if home != `C:\Users\masamichi` {
 		t.Fatalf("windows bash home mismatch: %s", home)
 	}
 	if environmentHomeCalls != 1 {
@@ -268,5 +268,47 @@ func TestGetHomeDirectoryForShellOnWindowsBashUsesHomeOverride(t *testing.T) {
 	}
 	if userHomeCalls != 0 {
 		t.Fatalf("user home should not be used for Windows bash")
+	}
+}
+
+func TestGetHomeDirectoryForShellOnWindowsZshNormalizesWslHome(t *testing.T) {
+	// Tests that Windows POSIX shell HOME values from /mnt/c are safe for Win32 file APIs.
+	home, err := getHomeDirectoryForShell(
+		"zsh",
+		"windows",
+		func() (string, error) {
+			return "/mnt/c/Users/masamichi", nil
+		},
+		func() (string, error) {
+			return `C:\Users\ignored`, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("getHomeDirectoryForShell failed: %v", err)
+	}
+
+	if home != `C:\Users\masamichi` {
+		t.Fatalf("windows zsh home mismatch: %s", home)
+	}
+}
+
+func TestGetHomeDirectoryForShellOnWindowsBashNormalizesWslDriveRoot(t *testing.T) {
+	// Tests that a WSL drive-root HOME is converted before Win32 file APIs receive it.
+	home, err := getHomeDirectoryForShell(
+		"bash",
+		"windows",
+		func() (string, error) {
+			return "/mnt/c/", nil
+		},
+		func() (string, error) {
+			return `C:\Users\ignored`, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("getHomeDirectoryForShell failed: %v", err)
+	}
+
+	if home != `C:\` {
+		t.Fatalf("windows bash drive-root home mismatch: %s", home)
 	}
 }
