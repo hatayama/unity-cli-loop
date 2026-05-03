@@ -2,7 +2,7 @@
 using System;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Builds slash-separated hierarchy paths shared by screenshot metadata and UI input targeting.
     internal static class GameObjectPathUtility

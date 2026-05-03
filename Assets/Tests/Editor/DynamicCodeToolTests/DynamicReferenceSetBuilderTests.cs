@@ -2,7 +2,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using System.IO;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     [TestFixture]
     public class DynamicReferenceSetBuilderTests

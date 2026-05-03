@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Debug = UnityEngine.Debug;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Dynamic compilation service for execute-dynamic-code.

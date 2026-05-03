@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Canvas-based overlay that visualizes SimulateMouseUi cursor position and drag state on Game View.
     // Animation is driven externally via SetCursorScale/SetAlpha from async functions in SimulateMouseUiTool.

@@ -5,7 +5,7 @@ using UnityEditor;
 using UnityEngine;
 using Newtonsoft.Json.Linq;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public class FindGameObjectsToolTests
     {

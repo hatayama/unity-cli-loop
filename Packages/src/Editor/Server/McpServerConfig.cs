@@ -1,4 +1,4 @@
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Settings related to the Unity CLI bridge server.

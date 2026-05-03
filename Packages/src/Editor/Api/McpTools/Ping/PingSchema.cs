@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Schema for Ping command parameters

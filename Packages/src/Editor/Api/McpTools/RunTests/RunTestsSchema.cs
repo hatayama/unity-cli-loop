@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using UnityEditor.TestTools.TestRunner.Api;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Supported test filter types
@@ -34,11 +34,11 @@ namespace io.github.hatayama.uLoopMCP
 
         /// <summary>
         /// Filter value (specify when filterType is not all)
-        /// • exact: Individual test method name (e.g.: io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs)
-        /// • regex: Class name or namespace (e.g.: io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests, io.github.hatayama.uLoopMCP)
+        /// • exact: Individual test method name (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs)
+        /// • regex: Class name or namespace (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests, io.github.hatayama.UnityCliLoop)
         /// • assembly: Assembly name (e.g.: uLoopMCP.Tests.Editor)
         /// </summary>
-        [Description("Filter value (specify when filterType is not all)\n• exact: Individual test method name (e.g.: io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs)\n• regex: Class name or namespace (e.g.: io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests, io.github.hatayama.uLoopMCP)\n• assembly: Assembly name (e.g.: uLoopMCP.Tests.Editor)")]
+        [Description("Filter value (specify when filterType is not all)\n• exact: Individual test method name (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs)\n• regex: Class name or namespace (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests, io.github.hatayama.UnityCliLoop)\n• assembly: Assembly name (e.g.: uLoopMCP.Tests.Editor)")]
         public string FilterValue { get; set; } = "";
 
         [Description("Save unsaved loaded Scene changes and current Prefab Stage changes before running tests")]

@@ -2,7 +2,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Responsible for temporal cohesion of Console clear processing

@@ -1,7 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Keeps each Unity project on the package-owned CLI bundle without making the Install CLI button do that work.
     internal static class ProjectLocalCliAutoInstaller

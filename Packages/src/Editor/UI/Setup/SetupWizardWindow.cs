@@ -9,7 +9,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using RuntimePlatform = UnityEngine.RuntimePlatform;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public class SetupWizardWindow : EditorWindow
     {

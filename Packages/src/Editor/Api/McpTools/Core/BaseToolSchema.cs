@@ -1,4 +1,4 @@
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Base schema class for all Unity CLI tool parameters.

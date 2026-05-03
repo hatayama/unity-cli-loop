@@ -6,7 +6,7 @@ using UnityEditor;
 using Newtonsoft.Json;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Related classes:
     // - McpBridgeServer: The bridge server instance that this class manages.

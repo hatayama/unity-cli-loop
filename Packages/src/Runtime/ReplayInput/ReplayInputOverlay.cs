@@ -2,7 +2,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Overlay that displays replay progress (frame counter and progress bar)
     // during input replay. Keyboard/mouse visualization is handled by existing

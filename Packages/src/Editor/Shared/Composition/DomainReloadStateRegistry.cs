@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public static class DomainReloadStateRegistry
     {

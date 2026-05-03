@@ -4,7 +4,7 @@ using System.IO;
 using UnityEditor;
 using Assembly = System.Reflection.Assembly;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal static class DynamicReferenceSetBuilder
     {

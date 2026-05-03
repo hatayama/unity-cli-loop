@@ -22,7 +22,7 @@
         {
             "name": "com.unity.inputsystem",
             "expression": "",
-            "define": "ULOOPMCP_HAS_INPUT_SYSTEM"
+            "define": "ULOOP_HAS_INPUT_SYSTEM"
         }
     ],
     "noEngineReferences": false

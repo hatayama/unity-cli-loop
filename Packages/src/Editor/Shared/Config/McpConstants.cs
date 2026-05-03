@@ -1,4 +1,4 @@
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Central constants repository for Unity CLI Loop.
@@ -14,7 +14,7 @@ namespace io.github.hatayama.uLoopMCP
         private static UnityEditor.PackageManager.PackageInfo _cachedPackageInfo;
 
         /// <summary>
-        /// Gets the PackageInfo for uLoopMCP package.
+        /// Gets the PackageInfo for UnityCliLoop package.
         /// Results are cached for performance.
         /// </summary>
         /// <exception cref="System.InvalidOperationException">Thrown when package info cannot be resolved.</exception>
@@ -30,7 +30,7 @@ namespace io.github.hatayama.uLoopMCP
                     if (_cachedPackageInfo == null)
                     {
                         throw new System.InvalidOperationException(
-                            "Failed to resolve PackageInfo for uLoopMCP. " +
+                            "Failed to resolve PackageInfo for UnityCliLoop. " +
                             "Ensure the package is properly installed via Package Manager.");
                     }
                 }
@@ -62,21 +62,21 @@ namespace io.github.hatayama.uLoopMCP
         public static string PackageNamePattern => $"{PackageName}@*";
 
         /// <summary>
-        /// Gets the C# namespace for uLoopMCP (e.g., "io.github.hatayama.uLoopMCP").
+        /// Gets the C# namespace for UnityCliLoop (e.g., "io.github.hatayama.UnityCliLoop").
         /// </summary>
         public static string PackageNamespace => typeof(McpConstants).Namespace;
 
-        public const string PROJECT_NAME = "uLoopMCP";
+        public const string PROJECT_NAME = "UnityCliLoop";
         
         // Editor settings
         public const string SETTINGS_FILE_NAME = "UnityMcpSettings.json";
         public const string USER_SETTINGS_FOLDER = "UserSettings";
         
         // Scripting define symbols
-        public const string SCRIPTING_DEFINE_ULOOPMCP_DEBUG = "ULOOPMCP_DEBUG";
+        public const string SCRIPTING_DEFINE_ULOOP_DEBUG = "ULOOP_DEBUG";
         
         // Environment variable keys for development mode
-        public const string ENV_KEY_ULOOPMCP_DEBUG = "ULOOPMCP_DEBUG";
+        public const string ENV_KEY_ULOOP_DEBUG = "ULOOP_DEBUG";
         public const string UNKNOWN_CLIENT_NAME = "Unknown Client";
         
         // Command messages
@@ -91,7 +91,7 @@ namespace io.github.hatayama.uLoopMCP
         public const string LIBRARY_DIR = "Library";
         public const string TEMP_DIR = "Temp";
         public const string PACKAGE_CACHE_DIR = "PackageCache";
-        public const string ULOOPMCP_DIR = "uLoopMCP";
+        public const string UNITYCLILOOP_DIR = "UnityCliLoop";
         public const string COMPILE_RESULTS_DIR = "compile-results";
         public const string JSON_FILE_EXTENSION = ".json";
         
@@ -145,7 +145,7 @@ namespace io.github.hatayama.uLoopMCP
         // Security constants
         public const int MAX_JSON_SIZE_BYTES = 1024 * 1024; // 1MB limit for JSON files
         public const int MAX_SETTINGS_SIZE_BYTES = 1024 * 16; // 16KB limit for settings files
-        public const string SECURITY_LOG_PREFIX = "[uLoopMCP Security]";
+        public const string SECURITY_LOG_PREFIX = "[UnityCliLoop Security]";
         
         // Security: Allowed namespaces for reflection operations
         public static readonly string[] ALLOWED_NAMESPACES = {

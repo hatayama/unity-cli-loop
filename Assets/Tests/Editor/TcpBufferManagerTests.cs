@@ -1,7 +1,7 @@
 using System;
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Unit tests for DynamicBufferManager class.

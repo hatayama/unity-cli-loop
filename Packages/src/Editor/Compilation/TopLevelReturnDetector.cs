@@ -1,4 +1,4 @@
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Detects whether top-level code contains a return statement.

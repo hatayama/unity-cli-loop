@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using io.github.hatayama.uLoopMCP.Factory;
+using io.github.hatayama.UnityCliLoop.Factory;
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     [TestFixture]
     public class DynamicCodeExecutorPoolTests

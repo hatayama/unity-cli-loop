@@ -1,6 +1,6 @@
 using System;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Compares npm-style CLI versions so Unity UI can handle prerelease dispatcher versions.
     internal static class CliVersionComparer

@@ -19,7 +19,7 @@ const (
 	compileCommandName       = "compile"
 	compileRequestIDParam    = "RequestId"
 	compileWaitParam         = "WaitForDomainReload"
-	compileResultRelativeDir = "Temp/uLoopMCP/compile-results"
+	compileResultRelativeDir = "Temp/UnityCliLoop/compile-results"
 	compileWaitTimeout       = 90 * time.Second
 	compileWaitPollInterval  = 50 * time.Millisecond
 	compileLockGracePeriod   = 500 * time.Millisecond

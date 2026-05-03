@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop;
 
 namespace Samples
 {

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [CreateAssetMenu(fileName = "BlockRegistry", menuName = "Minecraft/Block Registry")]
     public class BlockRegistry : ScriptableObject

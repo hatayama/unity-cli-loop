@@ -1,7 +1,7 @@
 using System.IO;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Writes files atomically via temp file + rename to prevent

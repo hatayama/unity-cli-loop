@@ -1,7 +1,7 @@
 using System.IO;
 using System.Diagnostics;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public class ForAssemblyCSharpTest
     {

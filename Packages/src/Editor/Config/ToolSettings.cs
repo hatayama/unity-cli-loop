@@ -4,7 +4,7 @@ using System.Linq;
 
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Tool toggle settings management for .uloop/settings.tools.json.

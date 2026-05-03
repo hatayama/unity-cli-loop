@@ -1,9 +1,9 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public class DemoMouseShooter : MonoBehaviour
     {

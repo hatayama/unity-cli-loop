@@ -1,7 +1,7 @@
 using UnityEditor.Compilation;
 using System.Text;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public class CompileLogDisplay : System.IDisposable
     {

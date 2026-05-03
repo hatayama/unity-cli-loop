@@ -4,7 +4,7 @@ using NUnit.Framework;
 using UnityEditor.Compilation;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     [TestFixture]
     public class CompiledAssemblyBuilderTests

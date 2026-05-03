@@ -2,7 +2,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using UnityEditor;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Application service responsible for session recovery processing

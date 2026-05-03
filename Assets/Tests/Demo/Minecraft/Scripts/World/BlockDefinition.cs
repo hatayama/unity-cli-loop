@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [CreateAssetMenu(fileName = "NewBlock", menuName = "Minecraft/Block Definition")]
     public class BlockDefinition : ScriptableObject

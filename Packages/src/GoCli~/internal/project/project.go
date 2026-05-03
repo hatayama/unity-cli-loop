@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	ipcEndpointPrefix = "uLoopMCP"
+	ipcEndpointPrefix = "UnityCliLoop"
 	ipcHashLength     = 16
 	unixSocketDir     = "/tmp/uloop"
 	windowsPipePrefix = `\\.\pipe\uloop`

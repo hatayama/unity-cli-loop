@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Supported log types for filtering: Log, Warning, Error, All

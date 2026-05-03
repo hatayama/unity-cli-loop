@@ -1,6 +1,6 @@
 using System;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Security settings stored in .uloop/settings.permissions.json.

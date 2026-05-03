@@ -8,7 +8,7 @@ using UnityEngine;
 
 using Debug = UnityEngine.Debug;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public enum SkillInstallState
     {
@@ -135,7 +135,7 @@ namespace io.github.hatayama.uLoopMCP
                 {
                     if (SkillInstallLayout.SkillMatchesTool(skillDir, toolName))
                     {
-                        Debug.Log($"[uLoopMCP] Removing skill '{toolName}' from '{skillDir}'");
+                        Debug.Log($"[UnityCliLoop] Removing skill '{toolName}' from '{skillDir}'");
                         Directory.Delete(skillDir, true);
                     }
                 }

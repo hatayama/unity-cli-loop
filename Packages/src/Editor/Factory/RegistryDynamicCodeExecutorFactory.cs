@@ -1,4 +1,4 @@
-namespace io.github.hatayama.uLoopMCP.Factory
+namespace io.github.hatayama.UnityCliLoop.Factory
 {
     internal sealed class RegistryDynamicCodeExecutorFactory : IDynamicCodeExecutorProvider
     {

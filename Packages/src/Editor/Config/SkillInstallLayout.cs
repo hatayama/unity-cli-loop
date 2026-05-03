@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal static class SkillInstallLayout
     {

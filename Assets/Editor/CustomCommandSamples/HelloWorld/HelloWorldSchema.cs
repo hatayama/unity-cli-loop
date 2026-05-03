@@ -1,5 +1,5 @@
 using System.ComponentModel;
-using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop;
 
 namespace Samples
 {

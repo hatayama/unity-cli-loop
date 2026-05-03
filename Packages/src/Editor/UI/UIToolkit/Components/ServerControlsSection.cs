@@ -1,7 +1,7 @@
 using System;
 using UnityEngine.UIElements;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// UI section for server start/stop controls.

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Orchestrator that owns the shared Canvas and holds references to all input visualization overlays.
     public class InputVisualizationCanvas : MonoBehaviour

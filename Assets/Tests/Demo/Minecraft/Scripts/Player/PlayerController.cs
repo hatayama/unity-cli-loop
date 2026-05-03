@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [RequireComponent(typeof(CharacterController))]
     public class MinecraftPlayerController : MonoBehaviour

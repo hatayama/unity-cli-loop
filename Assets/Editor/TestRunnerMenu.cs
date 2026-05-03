@@ -3,14 +3,14 @@ using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Class that provides menu items related to the Test Runner.
     /// </summary>
     public static class TestRunnerMenu
     {
-        [MenuItem("uLoopMCP/Tools/Test Runner/Run EditMode Tests/All Tests")]
+        [MenuItem("UnityCliLoop/Tools/Test Runner/Run EditMode Tests/All Tests")]
         public static async void RunEditModeTests()
         {
             Debug.Log("Running EditMode tests!");
@@ -20,7 +20,7 @@ namespace io.github.hatayama.uLoopMCP
             LogTestResult(result);
         }
 
-        [MenuItem("uLoopMCP/Tools/Test Runner/Run PlayMode Tests/All Tests")]
+        [MenuItem("UnityCliLoop/Tools/Test Runner/Run PlayMode Tests/All Tests")]
         public static async void RunPlayModeTests()
         {
             Debug.Log("Running PlayMode tests!");
@@ -30,7 +30,7 @@ namespace io.github.hatayama.uLoopMCP
             LogTestResult(result);
         }
         
-        [MenuItem("uLoopMCP/Tools/Test Runner/Open Test Runner Window")]
+        [MenuItem("UnityCliLoop/Tools/Test Runner/Open Test Runner Window")]
         public static void OpenTestRunnerWindow()
         {
             // Open Unity's Test Runner Window
@@ -41,40 +41,40 @@ namespace io.github.hatayama.uLoopMCP
         
         // ===== Menu to run a specific test class =====
         
-        [MenuItem("uLoopMCP/Tools/Test Runner/Run Specific Tests/CompileCommandTests")]
+        [MenuItem("UnityCliLoop/Tools/Test Runner/Run Specific Tests/CompileCommandTests")]
         public static async void RunCompileCommandTests()
         {
             Debug.Log("Running only CompileCommandTests!");
             
-            TestExecutionFilter filter = TestExecutionFilter.ByClassName("io.github.hatayama.uLoopMCP.CompileCommandTests");
+            TestExecutionFilter filter = TestExecutionFilter.ByClassName("io.github.hatayama.UnityCliLoop.CompileCommandTests");
             SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter);
                 
             LogTestResult(result);
         }
         
-        [MenuItem("uLoopMCP/Tools/Test Runner/Run Specific Tests/GetLogsCommandTests")]
+        [MenuItem("UnityCliLoop/Tools/Test Runner/Run Specific Tests/GetLogsCommandTests")]
         public static async void RunGetLogsCommandTests()
         {
             Debug.Log("Running only GetLogsCommandTests!");
             
-            TestExecutionFilter filter = TestExecutionFilter.ByClassName("io.github.hatayama.uLoopMCP.GetLogsCommandTests");
+            TestExecutionFilter filter = TestExecutionFilter.ByClassName("io.github.hatayama.UnityCliLoop.GetLogsCommandTests");
             SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter);
                 
             LogTestResult(result);
         }
         
-        [MenuItem("uLoopMCP/Tools/Test Runner/Run Specific Tests/MainThreadSwitcherTests")]
+        [MenuItem("UnityCliLoop/Tools/Test Runner/Run Specific Tests/MainThreadSwitcherTests")]
         public static async void RunMainThreadSwitcherTests()
         {
             Debug.Log("Running only MainThreadSwitcherTests!");
             
-            TestExecutionFilter filter = TestExecutionFilter.ByClassName("io.github.hatayama.uLoopMCP.MainThreadSwitcherTests");
+            TestExecutionFilter filter = TestExecutionFilter.ByClassName("io.github.hatayama.UnityCliLoop.MainThreadSwitcherTests");
             SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter);
                 
             LogTestResult(result);
         }
         
-        [MenuItem("uLoopMCP/Tools/Test Runner/Run Specific Tests/SampleEditModeTest")]
+        [MenuItem("UnityCliLoop/Tools/Test Runner/Run Specific Tests/SampleEditModeTest")]
         public static async void RunSampleEditModeTest()
         {
             Debug.Log("Running only SampleEditModeTest!");

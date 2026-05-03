@@ -2,7 +2,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Overlay that renders a mouse device icon on Game View and highlights
     // pressed buttons / scroll direction during simulate-mouse-input tool calls.

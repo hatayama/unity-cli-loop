@@ -4,7 +4,7 @@ using System.Text;
 using Newtonsoft.Json;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Persist compile responses for delayed retrieval after domain reload.
@@ -20,7 +20,7 @@ namespace io.github.hatayama.uLoopMCP
         private static string CompileResultDirectoryPath => Path.Combine(
             ProjectRootPath,
             McpConstants.TEMP_DIR,
-            McpConstants.ULOOPMCP_DIR,
+            McpConstants.UNITYCLILOOP_DIR,
             McpConstants.COMPILE_RESULTS_DIR
         );
 

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Unity CLI Loop Editor UI constants

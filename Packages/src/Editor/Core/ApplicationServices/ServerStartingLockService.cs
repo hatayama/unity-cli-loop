@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Application service responsible for server starting lock file management.

@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.Tests.Editor
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     public class CliSetupSectionTests
     {

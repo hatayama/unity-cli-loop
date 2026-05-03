@@ -2,7 +2,7 @@ using Unity.Profiling;
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Event handler for McpEditorWindow - Manages Unity and server events

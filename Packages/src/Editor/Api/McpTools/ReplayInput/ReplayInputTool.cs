@@ -6,13 +6,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [McpTool(Description = "Replay recorded input during PlayMode. Loads a JSON recording and injects keyboard/mouse input frame-by-frame with zero CLI overhead.")]
     public class ReplayInputTool : AbstractUnityTool<ReplayInputSchema, ReplayInputResponse>
@@ -20,19 +20,19 @@ namespace io.github.hatayama.uLoopMCP
         public override string ToolName => "replay-input";
 
         protected override
-#if !ULOOPMCP_HAS_INPUT_SYSTEM
+#if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
             async Task<ReplayInputResponse> ExecuteAsync(
             ReplayInputSchema parameters,
             CancellationToken ct)
-#if !ULOOPMCP_HAS_INPUT_SYSTEM
+#if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning restore CS1998
 #endif
         {
             ct.ThrowIfCancellationRequested();
 
-#if !ULOOPMCP_HAS_INPUT_SYSTEM
+#if !ULOOP_HAS_INPUT_SYSTEM
             return new ReplayInputResponse
             {
                 Success = false,
@@ -81,7 +81,7 @@ namespace io.github.hatayama.uLoopMCP
 #endif
         }
 
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
         private static ReplayInputResponse ExecuteStart(ReplayInputSchema parameters)
         {
             if (!EditorApplication.isPlaying)

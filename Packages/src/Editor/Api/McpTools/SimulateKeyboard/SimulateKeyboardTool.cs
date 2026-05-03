@@ -4,11 +4,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [McpTool(Description = "Simulate keyboard key input in PlayMode via Input System. Supports one-shot press, key-down hold, and key-up release for game controls (WASD, Space, etc.). Requires the Input System package (com.unity.inputsystem).")]
     public class SimulateKeyboardTool : AbstractUnityTool<SimulateKeyboardSchema, SimulateKeyboardResponse>
@@ -16,19 +16,19 @@ namespace io.github.hatayama.uLoopMCP
         public override string ToolName => "simulate-keyboard";
 
         protected override
-#if !ULOOPMCP_HAS_INPUT_SYSTEM
+#if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
             async Task<SimulateKeyboardResponse> ExecuteAsync(
             SimulateKeyboardSchema parameters,
             CancellationToken ct)
-#if !ULOOPMCP_HAS_INPUT_SYSTEM
+#if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning restore CS1998
 #endif
         {
             ct.ThrowIfCancellationRequested();
 
-#if !ULOOPMCP_HAS_INPUT_SYSTEM
+#if !ULOOP_HAS_INPUT_SYSTEM
             return new SimulateKeyboardResponse
             {
                 Success = false,
@@ -130,7 +130,7 @@ namespace io.github.hatayama.uLoopMCP
 #endif
         }
 
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
         private static void EnsureOverlayExists()
         {
             OverlayCanvasFactory.EnsureExists();

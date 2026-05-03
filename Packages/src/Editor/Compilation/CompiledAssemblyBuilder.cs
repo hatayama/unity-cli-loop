@@ -8,7 +8,7 @@ using UnityEditor.Compilation;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal sealed class CompiledAssemblyBuilder : ICompiledAssemblyBuilder
     {
@@ -77,7 +77,7 @@ namespace io.github.hatayama.uLoopMCP
             ct.ThrowIfCancellationRequested();
 
             ExternalCompilerPaths externalCompilerPaths = _externalCompilerPathResolver.Resolve();
-            string tempDirectoryPath = Path.Combine("Temp", "uLoopMCPCompilation");
+            string tempDirectoryPath = Path.Combine("Temp", "UnityCliLoopCompilation");
             int compileCounter = Interlocked.Increment(ref _compileCounter);
             string uniqueName = CreateUniqueCompilationName(plan.ClassName, compileCounter);
             string sourcePath = Path.Combine(tempDirectoryPath, $"{uniqueName}.cs");

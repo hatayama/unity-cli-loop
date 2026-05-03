@@ -3,11 +3,11 @@ using UnityEngine;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public static class FindGameObjectsTestMenu
     {
-        [MenuItem("uLoopMCP/Debug/FindGameObjects Tests/Test Camera Search")]
+        [MenuItem("UnityCliLoop/Debug/FindGameObjects Tests/Test Camera Search")]
         public static async void TestFindGameObjectsCamera()
         {
             FindGameObjectsTool tool = new FindGameObjectsTool();
@@ -47,7 +47,7 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
         
-        [MenuItem("uLoopMCP/Debug/FindGameObjects Tests/Test Main Camera by Path")]
+        [MenuItem("UnityCliLoop/Debug/FindGameObjects Tests/Test Main Camera by Path")]
         public static async void TestFindMainCameraByPath()
         {
             Debug.Log("[FindGameObjectsTestMenu] Starting Main Camera path search test...");

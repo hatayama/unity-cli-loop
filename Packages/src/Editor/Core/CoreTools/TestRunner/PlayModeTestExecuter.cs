@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Unified test executor with domain reload control and filtering support

@@ -6,7 +6,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public class McpEditorWindow : EditorWindow
     {
@@ -539,7 +539,7 @@ namespace io.github.hatayama.uLoopMCP
                 if (!ToolSkillSynchronizer.IsSkillInstalled(toolName))
                 {
                     Debug.LogWarning(
-                        $"[uLoopMCP] Skill for '{toolName}' was not installed after enabling. " +
+                        $"[UnityCliLoop] Skill for '{toolName}' was not installed after enabling. " +
                         "The skill source may have an incorrect directory structure " +
                         "(expected: <ToolDir>/Skill/SKILL.md). Run 'uloop skills list' for details."
                     );

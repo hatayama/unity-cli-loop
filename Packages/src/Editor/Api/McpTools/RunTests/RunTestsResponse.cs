@@ -1,6 +1,6 @@
 using System;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Response schema for RunTests command

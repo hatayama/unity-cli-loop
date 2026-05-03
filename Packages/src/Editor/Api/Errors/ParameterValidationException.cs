@@ -1,6 +1,6 @@
 using System;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Exception thrown when tool parameter JSON fails type validation.

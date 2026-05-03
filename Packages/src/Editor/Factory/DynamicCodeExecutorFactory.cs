@@ -1,4 +1,4 @@
-namespace io.github.hatayama.uLoopMCP.Factory
+namespace io.github.hatayama.UnityCliLoop.Factory
 {
     /// <summary>
     /// Exposes the default executor factory through a single composition entry point.

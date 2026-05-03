@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Scene-level grouping of hierarchy nodes for AI-friendly JSON export

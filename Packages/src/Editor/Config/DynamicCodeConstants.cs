@@ -1,4 +1,4 @@
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Constants definition for dynamic code execution
@@ -10,6 +10,6 @@ namespace io.github.hatayama.uLoopMCP
         public const string DEFAULT_CLASS_NAME = "DynamicCommand";
 
         /// <summary>Default namespace for dynamically generated classes</summary>
-        public const string DEFAULT_NAMESPACE = "uLoopMCP.Dynamic";
+        public const string DEFAULT_NAMESPACE = "UnityCliLoop.Dynamic";
     }
 }

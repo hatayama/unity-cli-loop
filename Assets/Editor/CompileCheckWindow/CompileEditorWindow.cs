@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using System.Threading.Tasks;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public class CompileEditorWindow : EditorWindow
     {
@@ -14,7 +14,7 @@ namespace io.github.hatayama.uLoopMCP
 
         // Note: Compile window data is now managed via McpSessionManager
 
-        [MenuItem("uLoopMCP/Windows/Compile Tool")]
+        [MenuItem("UnityCliLoop/Windows/Compile Tool")]
         public static void ShowWindow()
         {
             CompileEditorWindow window = GetWindow<CompileEditorWindow>();

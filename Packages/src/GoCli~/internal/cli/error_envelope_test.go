@@ -75,7 +75,7 @@ func TestBuildToolParamsReturnsStructuredBooleanValueError(t *testing.T) {
 func TestClassifyConnectionAttemptError(t *testing.T) {
 	err := &unity.ConnectionAttemptError{
 		ProjectRoot: "/tmp/MyProject",
-		Endpoint:    "/tmp/uloop/uLoopMCP-sample.sock",
+		Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
 		Cause:       errors.New("connect: no such file or directory"),
 	}
 
@@ -194,7 +194,7 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 
 func TestClassifyConnectionAttemptUsesContextProjectRootFallback(t *testing.T) {
 	err := &unity.ConnectionAttemptError{
-		Endpoint: "/tmp/uloop/uLoopMCP-sample.sock",
+		Endpoint: "/tmp/uloop/UnityCliLoop-sample.sock",
 		Cause:    errors.New("connect failed"),
 	}
 

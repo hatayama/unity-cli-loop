@@ -6,7 +6,7 @@ using System;
 using System.Threading.Tasks;
 using System.Threading;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// A class that asynchronously executes Unity's compilation process and monitors the results.

@@ -12,13 +12,13 @@ func TestCreateEndpointUsesStableProjectHash(t *testing.T) {
 	endpoint := CreateEndpoint("/tmp/MyProject")
 
 	if runtime.GOOS == "windows" {
-		if !strings.HasPrefix(endpoint.Address, `\\.\pipe\uloop-uLoopMCP-`) {
+		if !strings.HasPrefix(endpoint.Address, `\\.\pipe\uloop-UnityCliLoop-`) {
 			t.Fatalf("unexpected windows pipe endpoint: %s", endpoint.Address)
 		}
 		return
 	}
 
-	expectedPrefix := filepath.Join("/tmp/uloop", "uLoopMCP-")
+	expectedPrefix := filepath.Join("/tmp/uloop", "UnityCliLoop-")
 	if !strings.HasPrefix(endpoint.Address, expectedPrefix) {
 		t.Fatalf("unexpected unix endpoint: %s", endpoint.Address)
 	}

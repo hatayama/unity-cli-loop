@@ -1,11 +1,11 @@
-#if ULOOPMCP_HAS_ROSLYN
+#if UNITYCLILOOP_HAS_ROSLYN
 using NUnit.Framework;
 using System.Threading;
 using System.Threading.Tasks;
-using io.github.hatayama.uLoopMCP;
-using io.github.hatayama.uLoopMCP.Factory;
+using io.github.hatayama.UnityCliLoop;
+using io.github.hatayama.UnityCliLoop.Factory;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     /// <summary>
     /// Reproduce Dictionary Error in DynamicCodeExecutor

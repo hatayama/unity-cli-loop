@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [Serializable]
     internal class InputRecordingData

@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Runs the prepared wrapper entry point while keeping Undo and cancellation handling consistent.
@@ -297,7 +297,7 @@ namespace io.github.hatayama.uLoopMCP
                         cancellationToken);
                     object invoked = executeAsyncMethod.Invoke(instance, callArgs);
 
-                    object awaitedResult = await io.github.hatayama.uLoopMCP.AwaitableHelper.AwaitIfNeeded(invoked);
+                    object awaitedResult = await io.github.hatayama.UnityCliLoop.AwaitableHelper.AwaitIfNeeded(invoked);
                     string resultString = awaitedResult?.ToString() ?? "";
 
                     return CreateSuccessResult(resultString);

@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Interface for dynamic code execution integration functionality

@@ -1,11 +1,11 @@
-#if ULOOPMCP_HAS_ROSLYN
+#if UNITYCLILOOP_HAS_ROSLYN
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     /// <summary>
     /// Comprehensive testing that dangerous APIs are blocked in Restricted mode
@@ -606,7 +606,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         public async Task TestRestrictedMode_EnvironmentSetEnvironmentVariable_Blocked()
         {
             string code = @"
-                System.Environment.SetEnvironmentVariable(""TEST_VAR_ULOOPMCP"", ""x"");
+                System.Environment.SetEnvironmentVariable(""TEST_VAR_UNITYCLILOOP"", ""x"");
                 return ""ok"";
             ";
 

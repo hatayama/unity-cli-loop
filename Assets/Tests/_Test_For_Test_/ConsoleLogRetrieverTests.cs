@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP._Test
+namespace io.github.hatayama.UnityCliLoop._Test
 {
     public class Test_For_Test
     {

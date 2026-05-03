@@ -1,8 +1,8 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using System.Collections;
 using System.Threading.Tasks;
-using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;

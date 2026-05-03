@@ -810,7 +810,7 @@ PlayerSettings:
   webGLMemoryGeometricGrowthCap: 96
   webGLPowerPreference: 2
   scriptingDefineSymbols:
-    Standalone: ULOOPMCP_DEBUG;UNITY_PIPELINE_URP
+    Standalone: ULOOP_DEBUG;UNITY_PIPELINE_URP
     iPhone: UNITY_PIPELINE_URP
   additionalCompilerArguments: {}
   platformArchitecture: {}

@@ -3,7 +3,7 @@ using UnityEngine;
 using System.IO;
 using System.Threading;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public class EditorWindowCaptureTest : EditorWindow
     {
@@ -13,7 +13,7 @@ namespace io.github.hatayama.uLoopMCP
         private Texture2D _previewTexture;
         private bool _isCapturing;
 
-        [MenuItem("uLoopMCP/Windows/EditorWindow Capture Test")]
+        [MenuItem("UnityCliLoop/Windows/EditorWindow Capture Test")]
         public static void ShowWindow()
         {
             GetWindow<EditorWindowCaptureTest>("Capture Test");

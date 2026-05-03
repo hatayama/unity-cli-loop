@@ -3,7 +3,7 @@ using System.Diagnostics;
 using Assembly = System.Reflection.Assembly;
 using Debug = UnityEngine.Debug;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal static class CompiledAssemblyLoader
     {

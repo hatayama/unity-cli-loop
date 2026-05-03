@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEditor;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// View layer for McpEditorWindow in MVP architecture.
@@ -50,7 +50,7 @@ namespace io.github.hatayama.uLoopMCP
 
         private void ApplyDebugStyle()
         {
-#if ULOOPMCP_DEBUG
+#if ULOOP_DEBUG
             VisualElement mainContainer = _root.Q<VisualElement>("main-scroll-view");
             mainContainer?.AddToClassList("mcp-main-container--debug");
 #endif

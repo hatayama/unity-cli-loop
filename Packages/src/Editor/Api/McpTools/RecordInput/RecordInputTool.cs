@@ -6,13 +6,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [McpTool(Description = "Record keyboard and mouse input during PlayMode. Captures key presses, mouse movement, clicks, and scroll events frame-by-frame into a JSON file for later replay.")]
     public class RecordInputTool : AbstractUnityTool<RecordInputSchema, RecordInputResponse>
@@ -20,19 +20,19 @@ namespace io.github.hatayama.uLoopMCP
         public override string ToolName => "record-input";
 
         protected override
-#if !ULOOPMCP_HAS_INPUT_SYSTEM
+#if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
             async Task<RecordInputResponse> ExecuteAsync(
             RecordInputSchema parameters,
             CancellationToken ct)
-#if !ULOOPMCP_HAS_INPUT_SYSTEM
+#if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning restore CS1998
 #endif
         {
             ct.ThrowIfCancellationRequested();
 
-#if !ULOOPMCP_HAS_INPUT_SYSTEM
+#if !ULOOP_HAS_INPUT_SYSTEM
             return new RecordInputResponse
             {
                 Success = false,
@@ -76,7 +76,7 @@ namespace io.github.hatayama.uLoopMCP
 #endif
         }
 
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
         private static async Task<RecordInputResponse> ExecuteStartAsync(RecordInputSchema parameters, CancellationToken ct)
         {
             if (!EditorApplication.isPlaying)

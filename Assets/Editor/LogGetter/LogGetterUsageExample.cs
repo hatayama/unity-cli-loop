@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Usage examples for the LogGetter generic API.
@@ -9,7 +9,7 @@ namespace io.github.hatayama.uLoopMCP
     public class LogGetterUsageExample
     {
         
-        [MenuItem("uLoopMCP/Debug/LogGetter Tests/Direct Test")]
+        [MenuItem("UnityCliLoop/Debug/LogGetter Tests/Direct Test")]
         public static void TestLogGetter()
         {
             Debug.Log("=== LogGetter Direct Test Start ===");
@@ -25,7 +25,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Log("=== LogGetter Direct Test End ===");
         }
 
-        [MenuItem("uLoopMCP/Debug/LogGetter Tests/Run Usage Examples")]
+        [MenuItem("UnityCliLoop/Debug/LogGetter Tests/Run Usage Examples")]
         public static void RunUsageExamples()
         {
             Debug.Log("=== LogGetter Usage Examples Start ===");
@@ -87,7 +87,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Log($"Total number of console logs: {totalCount}");
         }
 
-        [MenuItem("uLoopMCP/Debug/LogGetter Tests/Custom Processing Example")]
+        [MenuItem("UnityCliLoop/Debug/LogGetter Tests/Custom Processing Example")]
         public static void CustomProcessingExample()
         {
             Debug.Log("=== Custom Processing Example ===");

@@ -1,4 +1,4 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -8,13 +8,13 @@ using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public static class InputReplayVerificationSceneBuilder
     {
         private const string SCENE_PATH = "Assets/Scenes/InputReplayVerificationScene.unity";
 
-        [MenuItem("uLoopMCP/Build InputReplay Verification Scene")]
+        [MenuItem("UnityCliLoop/Build InputReplay Verification Scene")]
         public static void Build()
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);

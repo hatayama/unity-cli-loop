@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Connected LLM Tool data structure for persistence

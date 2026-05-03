@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Application service responsible for monitoring connected LLM tools
@@ -211,7 +211,7 @@ namespace io.github.hatayama.uLoopMCP
                 {
                     EditorApplication.delayCall += () =>
                     {
-                        Debug.LogError($"[uLoopMCP] Failed to perform delayed cleanup: {task.Exception?.GetBaseException().Message}");
+                        Debug.LogError($"[UnityCliLoop] Failed to perform delayed cleanup: {task.Exception?.GetBaseException().Message}");
                     };
                 }
             }, TaskScheduler.FromCurrentSynchronizationContext());

@@ -1,4 +1,4 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using Cinemachine;
 using UnityEditor;
@@ -6,13 +6,13 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public static class DemoMouseSceneBuilder
     {
         private const string SCENE_PATH = "Assets/Scenes/SimulateMouseInputDemoScene.unity";
 
-        [MenuItem("uLoopMCP/Build Mouse Input Demo Scene")]
+        [MenuItem("UnityCliLoop/Build Mouse Input Demo Scene")]
         public static void Build()
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);

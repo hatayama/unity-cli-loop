@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP.Tests.Editor
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     public class ProjectLocalCliInstallerTests
     {

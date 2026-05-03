@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Manual testing class for EditorDelay
@@ -15,7 +15,7 @@ namespace io.github.hatayama.uLoopMCP
         private static int testFrameStart;
         private static int testCounter = 0;
         
-        [MenuItem("uLoopMCP/Debug/EditorDelay Tests/Basic Delay Tests")]
+        [MenuItem("UnityCliLoop/Debug/EditorDelay Tests/Basic Delay Tests")]
         public static void TestBasicDelays()
         {
             Debug.Log("========================================");
@@ -66,7 +66,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Log($"[Test {testCounter}] Multiple Frame Delay - Complete (Frame: {completionFrame}) - Frames elapsed: {framesDiff}");
         }
         
-        [MenuItem("uLoopMCP/Debug/EditorDelay Tests/Concurrent Execution Test")]
+        [MenuItem("UnityCliLoop/Debug/EditorDelay Tests/Concurrent Execution Test")]
         public static void TestConcurrentExecution()
         {
             Debug.Log("=========================================");
@@ -97,7 +97,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Log($"Task {taskName}: Complete (Frame: {endFrame}, Total elapsed: {elapsed} frames)");
         }
         
-        [MenuItem("uLoopMCP/Debug/EditorDelay Tests/Stress Test (100 Tasks)")]
+        [MenuItem("UnityCliLoop/Debug/EditorDelay Tests/Stress Test (100 Tasks)")]
         public static void TestStressLoad()
         {
             Debug.Log("==============================");
@@ -134,7 +134,7 @@ namespace io.github.hatayama.uLoopMCP
             onComplete?.Invoke();
         }
         
-        [MenuItem("uLoopMCP/Debug/EditorDelay Tests/Cancellation Test")]
+        [MenuItem("UnityCliLoop/Debug/EditorDelay Tests/Cancellation Test")]
         public static void TestCancellation()
         {
             Debug.Log("==============================");
@@ -171,7 +171,7 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
         
-        [MenuItem("uLoopMCP/Debug/EditorDelay Tests/Integration Test")]
+        [MenuItem("UnityCliLoop/Debug/EditorDelay Tests/Integration Test")]
         public static void TestMcpServerControllerIntegration()
         {
             Debug.Log("==========================================");
@@ -201,7 +201,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Log("Simulation: Server restoration sequence completed!");
         }
         
-        [MenuItem("uLoopMCP/Debug/EditorDelay Tests/Show Manager Status")]
+        [MenuItem("UnityCliLoop/Debug/EditorDelay Tests/Show Manager Status")]
         public static void ShowDelayManagerStatus()
         {
             Debug.Log("==============================");
@@ -212,7 +212,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Log($"Time Since Startup: {EditorApplication.timeSinceStartup:F2}s");
         }
         
-        [MenuItem("uLoopMCP/Debug/EditorDelay Tests/Clear All Tasks")]
+        [MenuItem("UnityCliLoop/Debug/EditorDelay Tests/Clear All Tasks")]
         public static void ClearAllTasks()
         {
             int clearedCount = EditorDelayManager.PendingTaskCount;
@@ -220,7 +220,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Log($"Cleared {clearedCount} pending tasks from EditorDelayManager");
         }
         
-        [MenuItem("uLoopMCP/Debug/EditorDelay Tests/Show Test Instructions")]
+        [MenuItem("UnityCliLoop/Debug/EditorDelay Tests/Show Test Instructions")]
         public static void ShowTestInstructions()
         {
             Debug.Log("=======================================");

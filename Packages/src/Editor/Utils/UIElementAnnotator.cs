@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Creates a temporary Screen Space Overlay Canvas that draws bounding boxes and labels
     // over interactive UI elements. The overlay is captured by GameView's m_RenderTexture

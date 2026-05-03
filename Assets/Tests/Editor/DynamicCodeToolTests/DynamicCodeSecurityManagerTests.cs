@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using System;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     /// <summary>
     /// Tests for DynamicCodeSecurityManager

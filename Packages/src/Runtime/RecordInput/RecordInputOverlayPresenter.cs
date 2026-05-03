@@ -1,7 +1,7 @@
 using System.Globalization;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public class RecordInputOverlayPresenter : MonoBehaviour
     {

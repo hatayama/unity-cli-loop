@@ -1,7 +1,7 @@
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Application service responsible for client notification processing
@@ -17,7 +17,7 @@ namespace io.github.hatayama.uLoopMCP
         /// <remarks>
         /// This notification serves dual purposes in this project:
         /// 1. Original MCP purpose: Notify that available tools have changed
-        /// 2. uLoopMCP additional purpose: Signal that Unity is ready after Domain Reload
+        /// 2. UnityCliLoop additional purpose: Signal that Unity is ready after Domain Reload
         ///
         /// After Domain Reload completes, this notification is sent to indicate Unity
         /// has finished initialization and can reliably process requests. client side

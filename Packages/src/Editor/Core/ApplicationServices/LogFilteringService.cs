@@ -1,6 +1,6 @@
 using System.Linq;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Log filtering service

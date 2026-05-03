@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     [TestFixture]
     public class PreUsingResolverExtractTypeIdentifiersTests
@@ -416,7 +416,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             CompilationRequest request = new CompilationRequest
             {
                 Code = @"
-                    io.github.hatayama.uLoopMCP.DynamicAssemblyTest test = new io.github.hatayama.uLoopMCP.DynamicAssemblyTest();
+                    io.github.hatayama.UnityCliLoop.DynamicAssemblyTest test = new io.github.hatayama.UnityCliLoop.DynamicAssemblyTest();
                     return test.HelloWorld();
                 ",
                 ClassName = "FullyQualifiedCustomAsmdefPreUsingCommand",

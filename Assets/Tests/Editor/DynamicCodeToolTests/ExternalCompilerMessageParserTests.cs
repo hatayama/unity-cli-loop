@@ -2,7 +2,7 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     [TestFixture]
     public class ExternalCompilerMessageParserTests

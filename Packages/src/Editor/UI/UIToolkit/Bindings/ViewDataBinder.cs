@@ -2,7 +2,7 @@ using System;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Utility for binding UI Toolkit elements to data without triggering change events.

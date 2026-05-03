@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Translation result from Translator before formatting
@@ -64,7 +64,7 @@ namespace io.github.hatayama.uLoopMCP
                     Explanation = securityException.SecurityReason ?? string.Empty,
                     Solutions = new List<string>
                     {
-                        "Open uLoopMCP Security Settings and enable the required permission"
+                        "Open UnityCliLoop Security Settings and enable the required permission"
                     }
                 };
             }

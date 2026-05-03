@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     [TestFixture]
     public class CommandRunnerTests
@@ -15,9 +15,9 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
             cancellationTokenSource.Cancel();
 
-            io.github.hatayama.uLoopMCP.ExecutionContext context = new io.github.hatayama.uLoopMCP.ExecutionContext
+            io.github.hatayama.UnityCliLoop.ExecutionContext context = new io.github.hatayama.UnityCliLoop.ExecutionContext
             {
-                CompiledAssembly = typeof(global::uLoopMCP.Dynamic.DynamicCommand).Assembly,
+                CompiledAssembly = typeof(global::UnityCliLoop.Dynamic.DynamicCommand).Assembly,
                 Parameters = new Dictionary<string, object>(),
                 CancellationToken = cancellationTokenSource.Token
             };
@@ -35,9 +35,9 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         {
             CommandRunner runner = new CommandRunner();
 
-            io.github.hatayama.uLoopMCP.ExecutionContext context = new io.github.hatayama.uLoopMCP.ExecutionContext
+            io.github.hatayama.UnityCliLoop.ExecutionContext context = new io.github.hatayama.UnityCliLoop.ExecutionContext
             {
-                CompiledAssembly = typeof(global::uLoopMCP.Dynamic.DynamicCommand).Assembly,
+                CompiledAssembly = typeof(global::UnityCliLoop.Dynamic.DynamicCommand).Assembly,
                 Parameters = new Dictionary<string, object>(),
                 CancellationToken = CancellationToken.None
             };

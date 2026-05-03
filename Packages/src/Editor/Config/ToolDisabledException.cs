@@ -1,6 +1,6 @@
 using System;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Thrown when a disabled tool is invoked.

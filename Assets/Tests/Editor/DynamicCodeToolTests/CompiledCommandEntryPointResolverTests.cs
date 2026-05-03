@@ -3,7 +3,7 @@ using System.Reflection;
 using System.Threading;
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 {
     [TestFixture]
     public class CompiledCommandEntryPointResolverTests
@@ -14,9 +14,9 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             CompiledCommandEntryPointResolver resolver = new CompiledCommandEntryPointResolver();
 
             (System.Type targetType, MethodInfo executeMethod) = resolver.TryFindExecuteMethod(
-                typeof(global::uLoopMCP.Dynamic.DynamicCommand).Assembly);
+                typeof(global::UnityCliLoop.Dynamic.DynamicCommand).Assembly);
 
-            Assert.That(targetType, Is.EqualTo(typeof(global::uLoopMCP.Dynamic.DynamicCommand)));
+            Assert.That(targetType, Is.EqualTo(typeof(global::UnityCliLoop.Dynamic.DynamicCommand)));
             Assert.That(executeMethod, Is.Not.Null);
             Assert.That(executeMethod.GetParameters(), Has.Length.EqualTo(2));
             Assert.That(
@@ -29,7 +29,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
     }
 }
 
-namespace uLoopMCP.Dynamic
+namespace UnityCliLoop.Dynamic
 {
     public class DynamicCommand
     {

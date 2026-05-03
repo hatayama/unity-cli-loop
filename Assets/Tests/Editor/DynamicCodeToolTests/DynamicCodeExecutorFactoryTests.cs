@@ -1,7 +1,7 @@
-#if ULOOPMCP_HAS_ROSLYN
+#if UNITYCLILOOP_HAS_ROSLYN
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.Tests.Editor.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
     public class DynamicCodeExecutorFactoryTests
     {

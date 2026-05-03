@@ -1,7 +1,7 @@
 using System;
 using System.Text;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Parses Content-Length framed messages for JSON-RPC 2.0 communication.

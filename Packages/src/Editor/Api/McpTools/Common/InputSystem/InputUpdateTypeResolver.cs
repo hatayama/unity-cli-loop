@@ -1,10 +1,10 @@
 #nullable enable
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Projects can process Input System events in dynamic, fixed, or manual mode.
     // Input simulation must follow that configured loop to avoid frame mismatches.

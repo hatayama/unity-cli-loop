@@ -9,7 +9,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using Debug = UnityEngine.Debug;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal static class SharedRoslynCompilerWorkerHost
     {
@@ -493,7 +493,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             return Path.Combine(
                 Path.GetTempPath(),
-                "uLoopMCPCompilation",
+                "UnityCliLoopCompilation",
                 $"RoslynWorker-{Process.GetCurrentProcess().Id}");
         }
 

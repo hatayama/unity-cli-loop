@@ -4,7 +4,7 @@ using System.IO.Pipes;
 using System.Net.Sockets;
 using System.Threading;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal sealed class BridgeClientConnection : IDisposable
     {

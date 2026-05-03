@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public static class CliInstallationDetector
     {
@@ -176,7 +176,7 @@ namespace io.github.hatayama.uLoopMCP
                 process.Dispose();
                 if (!ct.IsCancellationRequested)
                 {
-                    UnityEngine.Debug.LogWarning($"[uLoopMCP] Failed to detect CLI version: {ex.Message}");
+                    UnityEngine.Debug.LogWarning($"[UnityCliLoop] Failed to detect CLI version: {ex.Message}");
                 }
                 return null;
             }

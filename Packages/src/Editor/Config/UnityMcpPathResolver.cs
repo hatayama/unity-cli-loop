@@ -1,7 +1,7 @@
 using System.IO;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Resolves paths that are shared across CLI setup, generated skills, and editor runtime services.

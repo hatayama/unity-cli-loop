@@ -1,9 +1,9 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Subscribes to InputRecorder/InputReplayer lifecycle events and drives the
     // verification controller accordingly. The Recordings EditorWindow (or CLI)

@@ -1,10 +1,10 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Cinemachine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Orbits the Cinemachine camera around the character without rotating the character.
     // Mouse delta.x rotates the camera's FollowOffset around Y axis,

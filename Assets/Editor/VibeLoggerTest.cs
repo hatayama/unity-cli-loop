@@ -2,14 +2,14 @@ using UnityEditor;
 using UnityEngine;
 using System;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Test menu for VibeLogger stacktrace functionality
     /// </summary>
     public static class VibeLoggerTest
     {
-        [MenuItem("uLoopMCP/Debug/VibeLogger Tests/Test All Log Levels")]
+        [MenuItem("UnityCliLoop/Debug/VibeLogger Tests/Test All Log Levels")]
         public static void TestAllLogLevels()
         {
             string correlationId = VibeLogger.GenerateCorrelationId();
@@ -75,7 +75,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Log("[VibeLoggerTest] Check .uloop/outputs/VibeLogs/ folder for output files");
         }
 
-        [MenuItem("uLoopMCP/Debug/VibeLogger Tests/Test Explicit StackTrace Control")]
+        [MenuItem("UnityCliLoop/Debug/VibeLogger Tests/Test Explicit StackTrace Control")]
         public static void TestExplicitStackTraceControl()
         {
             string correlationId = VibeLogger.GenerateCorrelationId();

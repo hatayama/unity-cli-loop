@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.UnitTests
+namespace io.github.hatayama.UnityCliLoop.UnitTests
 {
     [TestFixture]
     public class DynamicCodeExecutionSchedulerTests

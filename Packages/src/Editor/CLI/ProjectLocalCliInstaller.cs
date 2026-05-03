@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Places the package-owned native CLI binary into each Unity project so the global command can stay a dispatcher.

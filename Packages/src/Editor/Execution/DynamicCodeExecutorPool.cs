@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using io.github.hatayama.uLoopMCP.Factory;
+using io.github.hatayama.UnityCliLoop.Factory;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal sealed class DynamicCodeExecutorPool : IDynamicCodeExecutorPool
     {

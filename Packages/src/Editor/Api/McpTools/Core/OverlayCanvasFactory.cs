@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     // Instantiates the InputVisualizationCanvas prefab and manages its lifecycle.
     internal static class OverlayCanvasFactory

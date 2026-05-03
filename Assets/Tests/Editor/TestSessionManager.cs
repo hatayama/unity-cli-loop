@@ -1,7 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     public sealed class TestSessionManager : ScriptableSingleton<TestSessionManager>
     {

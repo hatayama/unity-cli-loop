@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal enum BridgeTransportKind
     {
@@ -40,7 +40,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Assert(!string.IsNullOrWhiteSpace(projectRoot), "projectRoot must not be empty");
 
             string canonicalProjectRoot = CanonicalizeProjectRoot(projectRoot);
-            string endpointName = "uLoopMCP-" + CreateEndpointHash(canonicalProjectRoot);
+            string endpointName = "UnityCliLoop-" + CreateEndpointHash(canonicalProjectRoot);
             if (Application.platform == RuntimePlatform.WindowsEditor)
             {
                 string pipeName = "uloop-" + endpointName;

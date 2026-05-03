@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Roslyn-independent catalog of dangerous API types and members.
@@ -59,8 +59,8 @@ namespace io.github.hatayama.uLoopMCP
             ["UnityEditor.FileUtil"] = new() { "DeleteFileOrDirectory" },
             ["System.Environment"] = new() { "Exit", "FailFast" },
             ["System.Threading.Thread"] = new() { "Abort", "Suspend", "Resume" },
-            ["io.github.hatayama.uLoopMCP.DynamicCodeSecurityManager"] = new() { "InitializeFromSettings" },
-            ["io.github.hatayama.uLoopMCP.ULoopSettings"] = new() { "SetDynamicCodeSecurityLevel" }
+            ["io.github.hatayama.UnityCliLoop.DynamicCodeSecurityManager"] = new() { "InitializeFromSettings" },
+            ["io.github.hatayama.UnityCliLoop.ULoopSettings"] = new() { "SetDynamicCodeSecurityLevel" }
         };
 
         public static bool IsDangerousType(string fullTypeName)

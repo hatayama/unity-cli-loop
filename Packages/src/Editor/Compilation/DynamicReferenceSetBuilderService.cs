@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal sealed class DynamicReferenceSetBuilderService
     {

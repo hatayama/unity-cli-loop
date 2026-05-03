@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [McpTool(Description = "Control Unity Editor play mode (play/stop/pause)")]
     public class ControlPlayModeTool : AbstractUnityTool<ControlPlayModeSchema, ControlPlayModeResponse>

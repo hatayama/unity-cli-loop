@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Builds the namespace/class/method wrapper for top-level user code.

@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using System.IO;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [TestFixture]
     public class ToolSettingsTests

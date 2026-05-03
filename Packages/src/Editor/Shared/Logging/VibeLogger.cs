@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// AI-friendly structured logger for Unity CLI Loop.
@@ -59,9 +59,9 @@ namespace io.github.hatayama.uLoopMCP
         
         /// <summary>
         /// Log an info level message with structured context
-        /// Only logs when ULOOPENV_KEY_ULOOPMCP_DEBUG symbol is defined
+        /// Only logs when ULOOP_DEBUG symbol is defined
         /// </summary>
-        [Conditional(McpConstants.ENV_KEY_ULOOPMCP_DEBUG)]
+        [Conditional(McpConstants.ENV_KEY_ULOOP_DEBUG)]
         public static void LogInfo(string operation, string message, object context = null, 
                                   string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = false)
         {
@@ -70,9 +70,9 @@ namespace io.github.hatayama.uLoopMCP
         
         /// <summary>
         /// Log a warning level message with structured context
-        /// Only logs when ULOOPENV_KEY_ULOOPMCP_DEBUG symbol is defined
+        /// Only logs when ULOOP_DEBUG symbol is defined
         /// </summary>
-        [Conditional(McpConstants.ENV_KEY_ULOOPMCP_DEBUG)]
+        [Conditional(McpConstants.ENV_KEY_ULOOP_DEBUG)]
         public static void LogWarning(string operation, string message, object context = null, 
                                      string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = true)
         {
@@ -81,9 +81,9 @@ namespace io.github.hatayama.uLoopMCP
         
         /// <summary>
         /// Log an error level message with structured context
-        /// Only logs when ULOOPENV_KEY_ULOOPMCP_DEBUG symbol is defined
+        /// Only logs when ULOOP_DEBUG symbol is defined
         /// </summary>
-        [Conditional(McpConstants.ENV_KEY_ULOOPMCP_DEBUG)]
+        [Conditional(McpConstants.ENV_KEY_ULOOP_DEBUG)]
         public static void LogError(string operation, string message, object context = null, 
                                    string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = true)
         {
@@ -92,9 +92,9 @@ namespace io.github.hatayama.uLoopMCP
         
         /// <summary>
         /// Log a debug level message with structured context
-        /// Only logs when ULOOPENV_KEY_ULOOPMCP_DEBUG symbol is defined
+        /// Only logs when ULOOP_DEBUG symbol is defined
         /// </summary>
-        [Conditional(McpConstants.ENV_KEY_ULOOPMCP_DEBUG)]
+        [Conditional(McpConstants.ENV_KEY_ULOOP_DEBUG)]
         public static void LogDebug(string operation, string message, object context = null, 
                                    string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = false)
         {
@@ -103,9 +103,9 @@ namespace io.github.hatayama.uLoopMCP
         
         /// <summary>
         /// Log an exception with structured context
-        /// Only logs when ULOOPENV_KEY_ULOOPMCP_DEBUG symbol is defined
+        /// Only logs when ULOOP_DEBUG symbol is defined
         /// </summary>
-        [Conditional(McpConstants.ENV_KEY_ULOOPMCP_DEBUG)]
+        [Conditional(McpConstants.ENV_KEY_ULOOP_DEBUG)]
         public static void LogException(string operation, Exception exception, object context = null, 
                                        string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = true)
         {

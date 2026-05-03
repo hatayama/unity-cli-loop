@@ -3,14 +3,14 @@ using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Debug tool to analyze Unity Console mask values for different Clear settings
     /// </summary>
     public class ConsoleMaskDebugger : EditorWindow
     {
-        [MenuItem("uLoopMCP/Windows/Console Mask Debugger")]
+        [MenuItem("UnityCliLoop/Windows/Console Mask Debugger")]
         public static void ShowWindow()
         {
             GetWindow<ConsoleMaskDebugger>("Console Mask Debugger");

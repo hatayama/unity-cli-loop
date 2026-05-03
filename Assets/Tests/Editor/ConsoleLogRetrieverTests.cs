@@ -4,7 +4,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [Ignore("Skipped because full-console reflection scans make routine EditMode runs too slow; run manually when changing console log retrieval.")]
     /// <summary>

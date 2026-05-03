@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP.Tests
+namespace io.github.hatayama.UnityCliLoop.Tests
 {
     public class NativeCliInstallerTests
     {

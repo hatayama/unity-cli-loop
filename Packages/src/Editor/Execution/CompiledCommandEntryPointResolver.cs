@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Threading;
 using Assembly = System.Reflection.Assembly;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     internal sealed class CompiledCommandEntryPointResolver
     {

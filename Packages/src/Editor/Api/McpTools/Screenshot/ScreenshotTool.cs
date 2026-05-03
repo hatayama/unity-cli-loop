@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEditor;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     [McpTool(Description = "Take a screenshot of Unity EditorWindow and save as PNG")]
     public class ScreenshotTool : AbstractUnityTool<ScreenshotSchema, ScreenshotResponse>

@@ -2,7 +2,7 @@ using UnityEditor;
 using System;
 using Newtonsoft.Json;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// SessionState management class for forced recompilation

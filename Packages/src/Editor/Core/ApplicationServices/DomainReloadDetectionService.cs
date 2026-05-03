@@ -1,7 +1,7 @@
 using System.IO;
 using UnityEditor;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// Application service responsible for Domain Reload detection and state management
