@@ -80,7 +80,12 @@ Scope(s): io.github.hatayama.uloopmcp
 
 ## ステップ1: CLIのインストール
 
-ターミナルからグローバルな `uloop` ランチャーをインストールします。
+Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので、**CLI** ボタンが青くなっていなければ **Install CLI** を押してください。
+
+<details>
+<summary>CLIだけをterminalからinstallする場合はこちら</summary>
+
+Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
@@ -103,13 +108,12 @@ $env:ULOOP_REMOVE_LEGACY = "1"
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-Settings と Setup Wizard の **Install CLI** ボタンは同じ installer を使い、旧 npm package の削除も自動で有効化します。
+</details>
 
-Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので **CLI** ボタンが青くなっている事を確認します。
 
 <img width="277" height="306" alt="1" src="https://github.com/user-attachments/assets/0e25c327-73bf-4af6-997b-eebb3c26b372" />
 
-Settings ウィンドウでは、グローバルな `uloop` コマンドが検出されているかを確認できます。配布されるコマンドの実体は `uloop-dispatcher` binary で、このプロジェクト用の `.uloop/bin/uloop-core` CLI bundle は、未作成・バージョン不一致・binary 不一致のときに Unity Package が自動更新します。
+Settings ウィンドウでは、グローバルな `uloop` コマンドが検出されているかを確認できます。
 
 
 

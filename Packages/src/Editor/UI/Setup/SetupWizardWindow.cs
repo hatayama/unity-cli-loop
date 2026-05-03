@@ -806,8 +806,7 @@ namespace io.github.hatayama.UnityCliLoop
             {
                 CliInstallResult result = await NativeCliInstaller.InstallAsync(
                     Application.platform,
-                    McpConstants.PackageInfo.version,
-                    true);
+                    McpConstants.PackageInfo.version);
 
                 if (!result.Success)
                 {

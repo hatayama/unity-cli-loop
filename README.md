@@ -79,7 +79,12 @@ Scope(s): io.github.hatayama.uloopmcp
 
 ## Step 1: Install the CLI
 
-Install the global `uloop` launcher from terminal:
+Select Window > Unity CLI Loop > Settings. A dedicated window will open. If the **CLI** button is not highlighted in blue, press **Install CLI**.
+
+<details>
+<summary>CLI-only terminal install</summary>
+
+Use this only when you want to install the standalone global CLI without opening Unity package setup.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
@@ -102,13 +107,11 @@ $env:ULOOP_REMOVE_LEGACY = "1"
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-The **Install CLI** buttons in Settings and Setup Wizard use the same installer and opt into removing the legacy npm package automatically.
-
-Select Window > Unity CLI Loop > Settings. A dedicated window will open — confirm that the **CLI** button is highlighted in blue.
+</details>
 
 <img width="277" height="306" alt="1" src="https://github.com/user-attachments/assets/0e25c327-73bf-4af6-997b-eebb3c26b372" />
 
-The Settings window shows whether the global `uloop` command is detected. The distributed command is backed by the `uloop-dispatcher` binary, and the Unity package refreshes this project's `.uloop/bin/uloop-core` CLI bundle automatically when it is missing, version-mismatched, or binary-mismatched.
+The Settings window shows whether the global `uloop` command is detected.
 
 
 
