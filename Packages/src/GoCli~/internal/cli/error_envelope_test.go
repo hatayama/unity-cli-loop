@@ -178,6 +178,7 @@ func TestClassifyProjectNotFound(t *testing.T) {
 	}
 }
 
+// Tests that compile wait timeout guidance uses the current value-less boolean flag syntax.
 func TestCompileWaitTimeoutError(t *testing.T) {
 	cliErr := compileWaitTimeoutError("/tmp/MyProject")
 
@@ -189,6 +190,10 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 	}
 	if cliErr.ProjectRoot != "/tmp/MyProject" {
 		t.Fatalf("project root mismatch: %#v", cliErr)
+	}
+	expectedRetryAction := "Retry `uloop compile --wait-for-domain-reload` after Unity becomes responsive."
+	if len(cliErr.NextActions) < 2 || cliErr.NextActions[1] != expectedRetryAction {
+		t.Fatalf("retry action mismatch: %#v", cliErr.NextActions)
 	}
 }
 

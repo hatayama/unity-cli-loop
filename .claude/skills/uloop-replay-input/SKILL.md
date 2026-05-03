@@ -17,7 +17,7 @@ uloop replay-input --action Start
 uloop replay-input --action Start --input-path scripts/my-play.json
 
 # Start replay with looping
-uloop replay-input --action Start --loop true
+uloop replay-input --action Start --loop
 
 # Check replay progress
 uloop replay-input --action Status
@@ -32,7 +32,7 @@ uloop replay-input --action Stop
 |-----------|------|---------|-------------|
 | `--action` | enum | `Start` | `Start`, `Stop`, `Status` |
 | `--input-path` | string | auto | JSON path. Auto-detects latest in `.uloop/outputs/InputRecordings/` |
-| `--show-overlay` | boolean | `true` | Show replay progress overlay |
+| `--no-show-overlay` | flag | off | Hide replay progress overlay |
 | `--loop` | boolean | `false` | Loop continuously |
 
 ## Deterministic Replay

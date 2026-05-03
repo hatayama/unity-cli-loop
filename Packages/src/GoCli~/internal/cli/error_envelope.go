@@ -242,7 +242,7 @@ func compileWaitTimeoutError(projectRoot string) cliError {
 		Command:     compileCommandName,
 		NextActions: []string{
 			"Run `uloop fix` to remove stale lock files.",
-			"Retry `uloop compile --wait-for-domain-reload true` after Unity becomes responsive.",
+			"Retry `uloop compile --wait-for-domain-reload` after Unity becomes responsive.",
 		},
 	}
 }

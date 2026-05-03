@@ -23,7 +23,7 @@ For basic selected GameObject discovery or property inspection, use `find-game-o
 - `--code '<code>'` (required): Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
 - **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell doubles inner quotes (`'Debug.Log(""Hello!"");'`).
 - `--parameters {}` (advanced, optional): Pass an object when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets, and pass an object instead of a JSON string.
-- `--compile-only true` (optional): Compile the snippet without executing it. Use this when you want Roslyn diagnostics before running new code.
+- `--compile-only` (optional): Compile the snippet without executing it. Use this when you want Roslyn diagnostics before running new code.
 
 ## Code Rules
 

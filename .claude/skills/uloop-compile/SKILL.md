@@ -36,10 +36,10 @@ uloop compile
 uloop compile --force-recompile
 
 # Force recompilation and wait for Domain Reload completion
-uloop compile --force-recompile true --wait-for-domain-reload true
+uloop compile --force-recompile --wait-for-domain-reload
 
 # Wait for Domain Reload completion even without force recompilation
-uloop compile --force-recompile false --wait-for-domain-reload true
+uloop compile --wait-for-domain-reload
 ```
 
 ## Output

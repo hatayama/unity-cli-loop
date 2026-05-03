@@ -17,7 +17,9 @@ These files are generated copies. Update the source skill definitions instead, t
 
 ## Native Go CLI Validation
 
-When changing files under `Packages/src/GoCli~` or any checked-in native CLI binary under `Packages/src/GoCli~/dist`, run `scripts/check-go-cli.sh` before opening or updating a pull request.
+When changing Go CLI source files under `Packages/src/GoCli~`, run `scripts/check-go-cli.sh` before manually rebuilding checked-in binaries.
+If the source checks pass and the script fails only because the checked-in native binaries are out of date, commit the regenerated binaries under `Packages/src/GoCli~/dist`; use `scripts/build-go-cli.sh` only when you need to refresh those binaries explicitly.
+When changing any checked-in native CLI binary under `Packages/src/GoCli~/dist` directly, also run `scripts/check-go-cli.sh` before opening or updating a pull request.
 This script is the local equivalent of the Go CLI CI validation: it runs formatting checks, vet, lint, tests, rebuilds the checked-in native binaries, and fails if the rebuilt binaries differ from the committed files.
 
 ## Unity Freeze Prevention
