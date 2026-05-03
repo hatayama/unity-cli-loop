@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -169,6 +170,103 @@ name: uloop-sample
 	}
 	if removed != 1 || notFound != 0 {
 		t.Fatalf("uninstall result mismatch: removed=%d notFound=%d", removed, notFound)
+	}
+}
+
+// Tests that CRLF-only drift from Windows checkouts does not mark installed skills stale.
+func TestSkillStatusIgnoresCRLFLineEndings(t *testing.T) {
+	projectRoot := t.TempDir()
+	sourceDir := filepath.Join(projectRoot, "source", "Skill")
+	writeSkillFile(t, sourceDir, "---\nname: uloop-sample\n---\n\n# sample\n")
+	referencesDir := filepath.Join(sourceDir, "references")
+	if err := os.MkdirAll(referencesDir, 0o755); err != nil {
+		t.Fatalf("failed to create references: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(referencesDir, "note.md"), []byte("line1\nline2\n"), 0o644); err != nil {
+		t.Fatalf("failed to write source reference: %v", err)
+	}
+
+	skill := skillDefinition{
+		name:            "uloop-sample",
+		content:         []byte("---\nname: uloop-sample\n---\n\n# sample\n"),
+		sourceDirectory: sourceDir,
+	}
+	installedDir := filepath.Join(projectRoot, ".claude", "skills", managedSkillsDir, "uloop-sample")
+	writeRawSkillFile(t, installedDir, "---\r\nname: uloop-sample\r\n---\r\n\r\n# sample\r\n")
+	if err := os.MkdirAll(filepath.Join(installedDir, "references"), 0o755); err != nil {
+		t.Fatalf("failed to create installed references: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(installedDir, "references", "note.md"), []byte("line1\r\nline2\r\n"), 0o644); err != nil {
+		t.Fatalf("failed to write installed reference: %v", err)
+	}
+	installedSkillContent, err := os.ReadFile(filepath.Join(installedDir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("failed to read installed skill: %v", err)
+	}
+	if !bytes.Contains(installedSkillContent, []byte("\r\n")) {
+		t.Fatal("test setup should keep CRLF line endings in installed SKILL.md")
+	}
+
+	status := getSkillStatus(filepath.Join(projectRoot, ".claude", "skills"), skill, true)
+
+	if status != "installed" {
+		t.Fatalf("status mismatch: %s", status)
+	}
+}
+
+// Tests that installing skills writes deterministic LF line endings.
+func TestInstallSkillsNormalizesCRLFLineEndings(t *testing.T) {
+	projectRoot := t.TempDir()
+	sourceDir := filepath.Join(projectRoot, "source", "Skill")
+	writeSkillFile(t, sourceDir, "---\r\nname: uloop-sample\r\n---\r\n\r\n# sample\r\n")
+	referencesDir := filepath.Join(sourceDir, "references")
+	if err := os.MkdirAll(referencesDir, 0o755); err != nil {
+		t.Fatalf("failed to create references: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(referencesDir, "note.md"), []byte("line1\r\nline2\r\n"), 0o644); err != nil {
+		t.Fatalf("failed to write source reference: %v", err)
+	}
+
+	skill := skillDefinition{
+		name:            "uloop-sample",
+		content:         []byte("---\r\nname: uloop-sample\r\n---\r\n\r\n# sample\r\n"),
+		sourceDirectory: sourceDir,
+	}
+
+	result, err := installSkillsForTarget(projectRoot, targetConfigs["claude"], []skillDefinition{skill}, false, true)
+	if err != nil {
+		t.Fatalf("installSkillsForTarget failed: %v", err)
+	}
+	if result.installed != 1 || result.updated != 0 || result.skipped != 0 {
+		t.Fatalf("install result mismatch: %#v", result)
+	}
+
+	installedReferencePath := filepath.Join(
+		projectRoot,
+		".claude",
+		"skills",
+		managedSkillsDir,
+		"uloop-sample",
+		"references",
+		"note.md")
+	content, err := os.ReadFile(installedReferencePath)
+	if err != nil {
+		t.Fatalf("failed to read installed reference: %v", err)
+	}
+	if strings.Contains(string(content), "\r") {
+		t.Fatalf("installed reference kept CRLF line endings: %q", string(content))
+	}
+}
+
+// Tests that PowerShell scripts keep their source encoding while line endings are normalized.
+func TestNormalizeSkillFileContentPreservesUTF16PowerShellEncoding(t *testing.T) {
+	source := utf16LittleEndianWithBOM("line1\r\nline2\r\n")
+	expected := utf16LittleEndianWithBOM("line1\nline2\n")
+
+	actual := normalizeSkillFileContent("install.ps1", source)
+
+	if !bytes.Equal(actual, expected) {
+		t.Fatalf("normalized UTF-16 content mismatch:\nactual:   % x\nexpected: % x", actual, expected)
 	}
 }
 
@@ -390,6 +488,24 @@ func writeSkillFile(t *testing.T, skillDir string, content string) {
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(normalizedContent), 0o644); err != nil {
 		t.Fatalf("failed to write skill file: %v", err)
 	}
+}
+
+func writeRawSkillFile(t *testing.T, skillDir string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write raw skill file: %v", err)
+	}
+}
+
+func utf16LittleEndianWithBOM(content string) []byte {
+	bytes := []byte{0xff, 0xfe}
+	for _, char := range content {
+		bytes = append(bytes, byte(char), byte(char>>8))
+	}
+	return bytes
 }
 
 func skillNames(skills []skillDefinition) []string {

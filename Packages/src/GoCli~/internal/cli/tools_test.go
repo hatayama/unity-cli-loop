@@ -124,6 +124,66 @@ internal: true
 	}
 }
 
+// Tests that cached tools written by the Unity Editor remain usable by the native CLI.
+func TestLoadToolsAcceptsEditorParameterSchemaCache(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeToolCache(t, projectRoot, `{
+  "Tools": [
+    {
+      "name": "get-logs",
+      "description": "Retrieve logs from Unity Console",
+      "parameterSchema": {
+        "Properties": {
+          "LogType": {
+            "Type": "string",
+            "Description": "Log type to filter",
+            "DefaultValue": "All"
+          },
+          "IncludeStackTrace": {
+            "Type": "boolean",
+            "Description": "Whether to display stack trace",
+            "DefaultValue": false
+          },
+          "IncludeInactive": {
+            "Type": "boolean",
+            "Description": "Whether to include inactive objects",
+            "DefaultValue": true
+          }
+        },
+        "Required": []
+      }
+    }
+  ]
+}`)
+
+	cache, err := loadTools(projectRoot)
+	if err != nil {
+		t.Fatalf("loadTools failed: %v", err)
+	}
+	tool, ok := findTool(cache, "get-logs")
+	if !ok {
+		t.Fatalf("cached tool was not loaded: %#v", cache.Tools)
+	}
+
+	params, _, err := buildToolParams(
+		[]string{"--log-type", "Error", "--include-stack-trace", "--no-include-inactive"},
+		tool,
+	)
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+
+	if params["LogType"] != "Error" {
+		t.Fatalf("LogType mismatch: %#v", params["LogType"])
+	}
+	if params["IncludeStackTrace"] != true {
+		t.Fatalf("IncludeStackTrace mismatch: %#v", params["IncludeStackTrace"])
+	}
+	if params["IncludeInactive"] != false {
+		t.Fatalf("IncludeInactive mismatch: %#v", params["IncludeInactive"])
+	}
+}
+
 // Tests that embedded fallback tools do not expose internal-only commands.
 func TestLoadDefaultToolsDoesNotExposeInternalSkillTools(t *testing.T) {
 	cache := loadDefaultTools()

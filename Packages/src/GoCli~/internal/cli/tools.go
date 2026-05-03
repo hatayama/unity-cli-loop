@@ -28,9 +28,10 @@ type toolsCache struct {
 }
 
 type toolDefinition struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	InputSchema inputSchema `json:"inputSchema"`
+	Name            string      `json:"name"`
+	Description     string      `json:"description"`
+	InputSchema     inputSchema `json:"inputSchema"`
+	ParameterSchema inputSchema `json:"parameterSchema"`
 }
 
 type inputSchema struct {
@@ -40,13 +41,32 @@ type inputSchema struct {
 }
 
 type toolProperty struct {
-	Type        string   `json:"type"`
-	Description string   `json:"description,omitempty"`
-	Default     any      `json:"default,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
-	Items       *struct {
+	Type         string   `json:"type"`
+	Description  string   `json:"description,omitempty"`
+	Default      any      `json:"default,omitempty"`
+	DefaultValue any      `json:"DefaultValue,omitempty"`
+	Enum         []string `json:"enum,omitempty"`
+	Items        *struct {
 		Type string `json:"type"`
 	} `json:"items,omitempty"`
+}
+
+func (tool toolDefinition) effectiveInputSchema() inputSchema {
+	if tool.InputSchema.hasValues() {
+		return tool.InputSchema
+	}
+	return tool.ParameterSchema
+}
+
+func (schema inputSchema) hasValues() bool {
+	return schema.Type != "" || len(schema.Properties) > 0 || len(schema.Required) > 0
+}
+
+func (property toolProperty) effectiveDefault() any {
+	if property.Default != nil {
+		return property.Default
+	}
+	return property.DefaultValue
 }
 
 func loadTools(projectRoot string) (toolsCache, error) {
@@ -298,7 +318,8 @@ func isNextOptionToken(value string) bool {
 }
 
 func findProperty(tool toolDefinition, kebabName string) (string, toolProperty, bool, bool) {
-	for propertyName, property := range tool.InputSchema.Properties {
+	schema := tool.effectiveInputSchema()
+	for propertyName, property := range schema.Properties {
 		if optionNameForProperty(propertyName, property) == kebabName {
 			return propertyName, property, isNegatedBooleanProperty(property), true
 		}
@@ -367,7 +388,7 @@ func isBooleanProperty(property toolProperty) bool {
 }
 
 func isNegatedBooleanProperty(property toolProperty) bool {
-	defaultValue, ok := property.Default.(bool)
+	defaultValue, ok := property.effectiveDefault().(bool)
 	return isBooleanProperty(property) && ok && defaultValue
 }
 

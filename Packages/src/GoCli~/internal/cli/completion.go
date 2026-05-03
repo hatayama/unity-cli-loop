@@ -212,8 +212,9 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 		return
 	}
 
-	options := make([]string, 0, len(tool.InputSchema.Properties))
-	for propertyName, property := range tool.InputSchema.Properties {
+	schema := tool.effectiveInputSchema()
+	options := make([]string, 0, len(schema.Properties))
+	for propertyName, property := range schema.Properties {
 		options = append(options, "--"+optionNameForProperty(propertyName, property))
 	}
 	sort.Strings(options)

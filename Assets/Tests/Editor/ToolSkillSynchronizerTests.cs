@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -1147,6 +1148,111 @@ namespace io.github.hatayama.UnityCliLoop
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
             Assert.That(detectedTargets[0].InstallState, Is.EqualTo(SkillInstallState.Outdated));
             Assert.That(detectedTargets[0].HasExistingSkills, Is.True);
+        }
+
+        // Tests that CRLF-only drift from Windows checkouts does not mark installed skills stale.
+        [Test]
+        public void DetectTargets_WhenInstalledSkillUsesCrlfLineEndings_ReportsInstalled()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-public-skill",
+                "PublicTool",
+                "reference.md",
+                "line1\nline2\n");
+
+            string installedSkillDir = Path.Combine(
+                temporaryRoot,
+                ".claude",
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-public-skill");
+            WriteSkillFile(installedSkillDir, "---\r\nname: uloop-public-skill\r\n---\r\n");
+            File.WriteAllText(Path.Combine(installedSkillDir, "reference.md"), "line1\r\nline2\r\n");
+
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
+                    temporaryRoot,
+                    requireSkillsDirectory: true,
+                    groupSkillsUnderUnityCliLoop: true)
+                .ToArray();
+
+            Assert.That(detectedTargets.Length, Is.EqualTo(1));
+            Assert.That(detectedTargets[0].InstallState, Is.EqualTo(SkillInstallState.Installed));
+            Assert.That(detectedTargets[0].HasExistingSkills, Is.True);
+        }
+
+        // Tests that synchronizing skills writes deterministic LF line endings.
+        [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenSourceSkillUsesCrlfLineEndings_WritesLfGeneratedCopy()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-public-skill",
+                "PublicTool",
+                "reference.md",
+                "line1\r\nline2\r\n");
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: false);
+
+            await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                temporaryRoot,
+                new[] { target },
+                groupSkillsUnderUnityCliLoop: true);
+
+            string installedReferencePath = Path.Combine(
+                temporaryRoot,
+                ".claude",
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-public-skill",
+                "reference.md");
+            byte[] installedBytes = File.ReadAllBytes(installedReferencePath);
+
+            Assert.That(installedBytes, Has.No.Member((byte)'\r'));
+        }
+
+        // Tests that PowerShell scripts keep their source encoding while line endings are normalized.
+        [Test]
+        public void NormalizeSkillFileContent_WhenPowerShellScriptUsesUtf16LittleEndian_PreservesEncoding()
+        {
+            byte[] sourceBytes = Encoding.Unicode.GetPreamble()
+                .Concat(Encoding.Unicode.GetBytes("line1\r\nline2\r\n"))
+                .ToArray();
+            byte[] expectedBytes = Encoding.Unicode.GetPreamble()
+                .Concat(Encoding.Unicode.GetBytes("line1\nline2\n"))
+                .ToArray();
+
+            byte[] actualBytes = SkillInstallLayout.NormalizeSkillFileContent("install.ps1", sourceBytes);
+
+            Assert.That(actualBytes, Is.EqualTo(expectedBytes));
+        }
+
+        // Tests that rollback backups preserve the previous generated skill bytes.
+        [Test]
+        public void ReadSkillFilesForRollback_WhenGeneratedSkillUsesCrlfLineEndings_PreservesRawBytes()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            string installedSkillDir = Path.Combine(
+                temporaryRoot,
+                ".claude",
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-public-skill");
+            WriteSkillFile(installedSkillDir, "---\r\nname: uloop-public-skill\r\n---\r\n");
+            string installedReferencePath = Path.Combine(installedSkillDir, "reference.md");
+            File.WriteAllText(installedReferencePath, "line1\r\nline2\r\n");
+            byte[] backupBytes = File.ReadAllBytes(installedReferencePath);
+
+            Dictionary<string, byte[]> backupFiles = ToolSkillSynchronizer.ReadSkillFilesForRollback(installedSkillDir);
+
+            Assert.That(backupFiles["reference.md"], Is.EqualTo(backupBytes));
         }
 
         [Test]

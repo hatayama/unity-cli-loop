@@ -686,7 +686,7 @@ namespace io.github.hatayama.UnityCliLoop
             Directory.CreateDirectory(parentDirectory);
             bool skillDirectoryExisted = Directory.Exists(skillDirectory);
             Dictionary<string, byte[]> backupFiles = skillDirectoryExisted
-                ? ReadSkillFiles(skillDirectory)
+                ? ReadSkillFilesForRollback(skillDirectory)
                 : new Dictionary<string, byte[]>(StringComparer.Ordinal);
             Directory.CreateDirectory(skillDirectory);
 
@@ -767,7 +767,7 @@ namespace io.github.hatayama.UnityCliLoop
             }
         }
 
-        private static Dictionary<string, byte[]> ReadSkillFiles(string skillDirectory)
+        internal static Dictionary<string, byte[]> ReadSkillFilesForRollback(string skillDirectory)
         {
             Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
             foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
