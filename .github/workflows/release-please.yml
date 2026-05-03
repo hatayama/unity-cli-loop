@@ -4,13 +4,13 @@ on:
   push:
     branches:
       - main
+      - v3-beta
   # Enable manual execution via "Run workflow" button in browser
   workflow_dispatch:
     inputs:
       branch:
-        description: "Target branch name"
+        description: "Target branch name (uses current ref if not specified)"
         required: false
-        default: "main"
 
 permissions:
   contents: write
@@ -36,11 +36,15 @@ jobs:
         env:
           INPUT_BRANCH: ${{ github.event.inputs.branch }}
         run: |
-          TARGET_BRANCH="${INPUT_BRANCH:-main}"
-          if [ "${TARGET_BRANCH}" != "main" ]; then
-            echo "This release workflow only supports main." >&2
-            exit 1
-          fi
+          TARGET_BRANCH="${INPUT_BRANCH:-${GITHUB_REF_NAME}}"
+          case "${TARGET_BRANCH}" in
+            main|v3-beta)
+              ;;
+            *)
+              echo "This release workflow only supports main and v3-beta." >&2
+              exit 1
+              ;;
+          esac
 
           TARGET_SHA="$(git rev-parse HEAD)"
           echo "branch=${TARGET_BRANCH}" >> "$GITHUB_OUTPUT"
