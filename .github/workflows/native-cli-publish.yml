@@ -1,0 +1,93 @@
+name: native-cli-publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build from (tag, branch, or SHA). Defaults to default branch."
+        required: false
+        default: ""
+      release-tag:
+        description: "Release tag to upload assets to. Defaults to the checked-out ref name."
+        required: false
+        default: ""
+      dry-run:
+        description: "Dry run (skip release upload)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+          cache-dependency-path: Packages/src/GoCli~/go.sum
+
+      - name: Install golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Check native CLI
+        run: scripts/check-go-cli.sh
+
+      - name: Package native CLI release assets
+        run: scripts/package-go-cli.sh
+
+      - name: Resolve release tag
+        id: release
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          if [ -n "${INPUT_RELEASE_TAG}" ]; then
+            RELEASE_TAG="${INPUT_RELEASE_TAG}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            RELEASE_TAG=$(jq -r '.["Packages/src"]' .release-please-manifest.json)
+            RELEASE_TAG="v${RELEASE_TAG}"
+          fi
+
+          case "${RELEASE_TAG}" in
+            v[0-9]*)
+              ;;
+            *)
+              echo "Invalid release tag: ${RELEASE_TAG}" >&2
+              exit 1
+              ;;
+          esac
+
+          case "${RELEASE_TAG}" in
+            *[!A-Za-z0-9._-]*)
+              echo "Invalid release tag: ${RELEASE_TAG}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Release tag: ${RELEASE_TAG}"
+
+      - name: Upload native CLI assets
+        if: inputs.dry-run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh release upload "${RELEASE_TAG}" Packages/src/GoCli~/release/* --clobber
+
+      - name: Dry run summary
+        if: inputs.dry-run == true
+        run: |
+          ls -lh Packages/src/GoCli~/release
