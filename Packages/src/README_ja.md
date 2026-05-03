@@ -92,6 +92,19 @@ Windows PowerShell の場合:
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
+過去に npm 経由で TypeScript 版ランチャーを入れていた場合、installer は `uloop-cli` を検出しますが、デフォルトでは削除しません。インストール時に旧 npm package も削除する場合は、次のように実行してください。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | ULOOP_REMOVE_LEGACY=1 sh
+```
+
+```powershell
+$env:ULOOP_REMOVE_LEGACY = "1"
+irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```
+
+Settings と Setup Wizard の **Install CLI** ボタンは同じ installer を使い、旧 npm package の削除も自動で有効化します。
+
 Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので **CLI** ボタンが青くなっている事を確認します。
 
 <img width="277" height="306" alt="1" src="https://github.com/user-attachments/assets/0e25c327-73bf-4af6-997b-eebb3c26b372" />

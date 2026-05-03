@@ -185,12 +185,7 @@ namespace io.github.hatayama.UnityCliLoop
         private const string WHICH_END_MARKER = "__WHICH_END__";
 
         // Uses markers to extract PATH value, ignoring any banner/echo output from shell startup files
-        private static string GetLoginShellPath()
-        {
-            return GetLoginShellPathAtPlatform(Application.platform);
-        }
-
-        private static string GetLoginShellPathAtPlatform(RuntimePlatform platform)
+        internal static string GetLoginShellPathAtPlatform(RuntimePlatform platform)
         {
             if (IsWindowsEditor(platform))
             {

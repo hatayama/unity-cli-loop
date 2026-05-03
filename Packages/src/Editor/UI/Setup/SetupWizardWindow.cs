@@ -806,13 +806,15 @@ namespace io.github.hatayama.UnityCliLoop
             {
                 CliInstallResult result = await NativeCliInstaller.InstallAsync(
                     Application.platform,
-                    McpConstants.PackageInfo.version);
+                    McpConstants.PackageInfo.version,
+                    true);
 
                 if (!result.Success)
                 {
                     NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
                         Application.platform,
-                        McpConstants.PackageInfo.version);
+                        McpConstants.PackageInfo.version,
+                        true);
                     EditorUtility.DisplayDialog(
                         "Installation Failed",
                         $"Failed to install uloop-cli.\n\n{result.ErrorOutput}\n\n"
