@@ -554,13 +554,27 @@ namespace io.github.hatayama.UnityCliLoop
 
         private void UpdateCliStep(bool cliInstalled, string cliVersion, bool cliVersionMatched)
         {
+            bool needsUpdate = cliInstalled && !cliVersionMatched;
+            string buttonText = GetCliButtonTextForSetupWizard(
+                cliInstalled,
+                _isInstallingCli,
+                false,
+                needsUpdate,
+                cliVersion,
+                McpConstants.PackageInfo.version);
+            bool buttonEnabled = IsCliButtonEnabledForSetupWizard(
+                cliInstalled,
+                cliVersionMatched,
+                _isInstallingCli,
+                isChecking: false);
+
             if (cliInstalled && cliVersionMatched)
             {
                 _cliStatusLabel.text = $"v{cliVersion}";
                 ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", true);
                 ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", false);
-                _installCliButton.SetEnabled(false);
-                _installCliButton.text = "Installed";
+                _installCliButton.SetEnabled(buttonEnabled);
+                _installCliButton.text = buttonText;
                 return;
             }
 
@@ -576,8 +590,48 @@ namespace io.github.hatayama.UnityCliLoop
 
             ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", false);
             ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", true);
-            _installCliButton.SetEnabled(!_isInstallingCli);
-            _installCliButton.text = _isInstallingCli ? "Installing..." : "Install CLI";
+            _installCliButton.SetEnabled(buttonEnabled);
+            _installCliButton.text = buttonText;
+        }
+
+        internal static string GetCliButtonTextForSetupWizard(
+            bool cliInstalled,
+            bool isInstallingCli,
+            bool isChecking,
+            bool needsUpdate,
+            string cliVersion,
+            string packageVersion)
+        {
+            if (isChecking)
+            {
+                return "Checking...";
+            }
+
+            if (isInstallingCli)
+            {
+                return "Installing...";
+            }
+
+            if (!cliInstalled)
+            {
+                return "Install CLI";
+            }
+
+            if (needsUpdate)
+            {
+                return $"Update CLI (v{cliVersion} \u2192 v{packageVersion})";
+            }
+
+            return "Installed";
+        }
+
+        internal static bool IsCliButtonEnabledForSetupWizard(
+            bool cliInstalled,
+            bool cliVersionMatched,
+            bool isInstallingCli,
+            bool isChecking)
+        {
+            return !isInstallingCli && !isChecking && (!cliInstalled || !cliVersionMatched);
         }
 
         private static bool IsCliVersionMatched(string cliVersion)
@@ -798,6 +852,11 @@ namespace io.github.hatayama.UnityCliLoop
 
         private async void HandleInstallCli()
         {
+            if (!LegacyNpmRemovalPrompt.ConfirmInstallCanProceed(Application.platform))
+            {
+                return;
+            }
+
             bool wasCliInstalledBeforeInstall = CliInstallationDetector.IsCliInstalled();
             _isInstallingCli = true;
             UpdateCliStep(false, null, false);

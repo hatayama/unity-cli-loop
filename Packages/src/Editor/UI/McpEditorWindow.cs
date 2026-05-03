@@ -591,9 +591,8 @@ namespace io.github.hatayama.UnityCliLoop
             bool isChecking = !CliInstallationDetector.IsCheckCompleted()
                 || _isRefreshingVersion
                 || !includeSkillDirectoryChecks;
-            bool needsUpdate = cliVersion != null
-                && CliVersionComparer.IsVersionLessThan(cliVersion, packageVersion);
-            bool needsDowngrade = false;
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, packageVersion);
+            bool needsDowngrade = IsCliDowngradeNeeded(cliVersion, packageVersion);
             bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
             SkillInstallState selectedTargetInstallState = includeSkillDirectoryChecks
                 ? _selectedTargetInstallState
@@ -697,6 +696,17 @@ namespace io.github.hatayama.UnityCliLoop
 
         private async void HandleInstallCli()
         {
+            if (ShouldUninstallCliFromPrimaryButton())
+            {
+                await HandleUninstallCli();
+                return;
+            }
+
+            if (!LegacyNpmRemovalPrompt.ConfirmInstallCanProceed(Application.platform))
+            {
+                return;
+            }
+
             bool wasCliInstalledBeforeInstall = CliInstallationDetector.IsCliInstalled();
             _isInstallingCli = true;
             RefreshCliSetupSection();
@@ -726,6 +736,65 @@ namespace io.github.hatayama.UnityCliLoop
                 RefreshAllSections(
                     refreshSkillInstallState:
                     CliInstallRefreshPolicy.ShouldRefreshSkillsAfterCliInstall(wasCliInstalledBeforeInstall));
+            }
+        }
+
+        private bool ShouldUninstallCliFromPrimaryButton()
+        {
+            string cliVersion = CliInstallationDetector.GetCachedCliVersion();
+            return ShouldUninstallCliFromPrimaryButton(
+                cliVersion,
+                McpConstants.PackageInfo.version);
+        }
+
+        internal static bool ShouldUninstallCliFromPrimaryButton(
+            string cliVersion,
+            string packageVersion)
+        {
+            bool isCliInstalled = cliVersion != null;
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, packageVersion);
+            bool needsDowngrade = IsCliDowngradeNeeded(cliVersion, packageVersion);
+            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade);
+        }
+
+        internal static bool IsCliUpdateNeeded(string cliVersion, string packageVersion)
+        {
+            return cliVersion != null
+                && CliVersionComparer.IsVersionLessThan(cliVersion, packageVersion);
+        }
+
+        internal static bool IsCliDowngradeNeeded(string cliVersion, string packageVersion)
+        {
+            return cliVersion != null
+                && CliVersionComparer.IsVersionGreaterThan(cliVersion, packageVersion);
+        }
+
+        private async Task HandleUninstallCli()
+        {
+            if (!CliUninstallPrompt.ConfirmUninstall())
+            {
+                return;
+            }
+
+            _isInstallingCli = true;
+            RefreshCliSetupSection();
+
+            try
+            {
+                CliInstallResult result = await NativeCliInstaller.UninstallAsync(Application.platform);
+                if (!result.Success)
+                {
+                    EditorUtility.DisplayDialog(
+                        "Uninstallation Failed",
+                        $"Failed to uninstall uLoop CLI.\n\n{result.ErrorOutput}",
+                        "OK");
+                    return;
+                }
+            }
+            finally
+            {
+                _isInstallingCli = false;
+                RefreshAllSections(refreshSkillInstallState: true);
             }
         }
 

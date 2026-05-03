@@ -289,6 +289,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(canManageSkills, Is.True);
         }
 
+        [TestCase(false, false, false, false, null, "3.0.0", "Install CLI")]
+        [TestCase(true, false, false, false, "3.0.0", "3.0.0", "Installed")]
+        [TestCase(true, false, false, true, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, true, false, false, "3.0.0", "3.0.0", "Installing...")]
+        [TestCase(false, false, true, false, null, "3.0.0", "Checking...")]
+        public void GetCliButtonTextForSetupWizard_ReturnsExpectedLabel(
+            bool cliInstalled,
+            bool isInstallingCli,
+            bool isChecking,
+            bool needsUpdate,
+            string cliVersion,
+            string packageVersion,
+            string expectedLabel)
+        {
+            string label = SetupWizardWindow.GetCliButtonTextForSetupWizard(
+                cliInstalled,
+                isInstallingCli,
+                isChecking,
+                needsUpdate,
+                cliVersion,
+                packageVersion);
+
+            Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
+        [TestCase(false, false, false, false, true)]
+        [TestCase(true, false, false, false, true)]
+        [TestCase(true, true, false, false, false)]
+        [TestCase(false, false, true, false, false)]
+        [TestCase(false, false, false, true, false)]
+        public void IsCliButtonEnabledForSetupWizard_ReturnsExpectedValue(
+            bool cliInstalled,
+            bool cliVersionMatched,
+            bool isInstallingCli,
+            bool isChecking,
+            bool expectedEnabled)
+        {
+            bool enabled = SetupWizardWindow.IsCliButtonEnabledForSetupWizard(
+                cliInstalled,
+                cliVersionMatched,
+                isInstallingCli,
+                isChecking);
+
+            Assert.That(enabled, Is.EqualTo(expectedEnabled));
+        }
+
         [Test]
         public void CreateFirstInstallSkillTarget_WhenClaudeSelected_ReturnsClaudeProjectTarget()
         {

@@ -4,6 +4,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     public class CliSetupSectionTests
     {
+        [TestCase(false, false, false, false, false, null, "3.0.0", "Install CLI")]
+        [TestCase(true, false, false, false, false, "3.0.0", "3.0.0", "Uninstall CLI")]
+        [TestCase(true, false, false, true, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, false, false, false, true, "3.1.0", "3.0.0", "Downgrade CLI (v3.1.0 \u2192 v3.0.0)")]
+        [TestCase(true, true, false, false, false, "3.0.0", "3.0.0", "Uninstalling...")]
+        [TestCase(false, true, false, false, false, null, "3.0.0", "Installing...")]
+        [TestCase(false, false, true, false, false, null, "3.0.0", "Checking...")]
+        public void GetInstallCliButtonText_ReturnsExpectedText(
+            bool isCliInstalled,
+            bool isInstallingCli,
+            bool isChecking,
+            bool needsUpdate,
+            bool needsDowngrade,
+            string cliVersion,
+            string packageVersion,
+            string expectedText)
+        {
+            string text = CliSetupSection.GetInstallCliButtonText(
+                isCliInstalled,
+                isInstallingCli,
+                isChecking,
+                needsUpdate,
+                needsDowngrade,
+                cliVersion,
+                packageVersion);
+
+            Assert.That(text, Is.EqualTo(expectedText));
+        }
+
+        [TestCase(false, false, true)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, false)]
+        public void IsInstallCliButtonEnabled_ReturnsExpectedValue(
+            bool isInstallingCli,
+            bool isChecking,
+            bool expectedEnabled)
+        {
+            bool enabled = CliSetupSection.IsInstallCliButtonEnabled(
+                isInstallingCli,
+                isChecking);
+
+            Assert.That(enabled, Is.EqualTo(expectedEnabled));
+        }
+
+        [TestCase(true, false, false, true)]
+        [TestCase(false, false, false, false)]
+        [TestCase(true, true, false, false)]
+        [TestCase(true, false, true, false)]
+        public void IsUninstallCliAction_ReturnsExpectedValue(
+            bool isCliInstalled,
+            bool needsUpdate,
+            bool needsDowngrade,
+            bool expected)
+        {
+            bool result = CliSetupSection.IsUninstallCliAction(
+                isCliInstalled,
+                needsUpdate,
+                needsDowngrade);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
         [TestCase(false, false, SkillInstallState.Missing, "Install Skills")]
         [TestCase(true, true, SkillInstallState.Missing, "Installing...")]
         [TestCase(true, false, SkillInstallState.Checking, "Checking...")]

@@ -27,6 +27,32 @@ func TestCreateEndpointUsesStableProjectHash(t *testing.T) {
 	}
 }
 
+func TestTrimTrailingSeparators_WhenWindowsPathIsNotRoot_ShouldRemoveTrailingSeparator(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows path roots are platform-specific")
+	}
+
+	// Verifies that a normal Windows project path matches the Editor endpoint input.
+	path := trimTrailingSeparators(`C:\Users\booql\oss\unity-cli-loop\`)
+
+	if path != `C:\Users\booql\oss\unity-cli-loop` {
+		t.Fatalf("path should not keep trailing separator: %s", path)
+	}
+}
+
+func TestTrimTrailingSeparators_WhenWindowsPathIsDriveRoot_ShouldKeepRootSeparator(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows path roots are platform-specific")
+	}
+
+	// Verifies that a Windows drive root remains a valid root path.
+	path := trimTrailingSeparators(`C:\`)
+
+	if path != `C:\` {
+		t.Fatalf("drive root should keep trailing separator: %s", path)
+	}
+}
+
 func TestFindUnityProjectRootWithinFindsNestedProject(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	projectRoot := filepath.Join(workspaceRoot, "nested", "Game")

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,6 +33,17 @@ func runFix(projectRoot string, stdout io.Writer, stderr io.Writer) int {
 func cleanupStaleLockFiles(projectRoot string) (int, error) {
 	cleaned := 0
 	tempDirectory := filepath.Join(projectRoot, "Temp")
+	tempInfo, err := os.Stat(tempDirectory)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return cleaned, nil
+		}
+		return cleaned, err
+	}
+	if !tempInfo.IsDir() {
+		return cleaned, fmt.Errorf("temp path is not a directory: %s", tempDirectory)
+	}
+
 	for _, lockFileName := range staleLockFileNames {
 		lockFilePath := filepath.Join(tempDirectory, lockFileName)
 		if _, err := os.Stat(lockFilePath); err != nil {

@@ -14,10 +14,12 @@ namespace io.github.hatayama.UnityCliLoop
         public const string REMOVE_LEGACY_ENABLED_VALUE = "1";
         public const string POSIX_HOME_ENVIRONMENT_VARIABLE = "HOME";
         public const string POSIX_PATH_ENVIRONMENT_VARIABLE = "PATH";
+        public const string WINDOWS_APPDATA_ENVIRONMENT_VARIABLE = "APPDATA";
         public const string WINDOWS_LOCAL_APPDATA_ENVIRONMENT_VARIABLE = "LOCALAPPDATA";
         public const string WINDOWS_PATH_ENVIRONMENT_VARIABLE = "Path";
         public const string POSIX_LOCAL_DIR_NAME = ".local";
         public const string WINDOWS_PROGRAMS_DIR_NAME = "Programs";
+        public const string WINDOWS_NPM_BIN_DIR_NAME = "npm";
         public const string NATIVE_INSTALL_DIR_NAME = "uloop";
         public const string NATIVE_INSTALL_BIN_DIR_NAME = "bin";
         public const string POSIX_PATH_SEPARATOR = ":";
@@ -29,6 +31,8 @@ namespace io.github.hatayama.UnityCliLoop
         public const string DIST_DIR_NAME = "dist";
         public const string GLOBAL_UNIX_COMMAND_NAME = EXECUTABLE_NAME;
         public const string GLOBAL_WINDOWS_COMMAND_NAME = EXECUTABLE_NAME + ".exe";
+        public const string WINDOWS_CMD_SHIM_NAME = EXECUTABLE_NAME + ".cmd";
+        public const string WINDOWS_POWERSHELL_SHIM_NAME = EXECUTABLE_NAME + ".ps1";
         public const string GLOBAL_DISPATCHER_UNIX_BUNDLE_NAME = "uloop-dispatcher";
         public const string GLOBAL_DISPATCHER_WINDOWS_BUNDLE_NAME = "uloop-dispatcher.exe";
         public const string LEGACY_NPM_PACKAGE_NAME = "uloop-cli";

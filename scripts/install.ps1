@@ -114,6 +114,160 @@ function Report-PathShadowing {
     Write-Host "Move $InstallDir earlier in PATH, or remove the legacy installation if it owns that command."
 }
 
+function Test-LegacyUloopShimContent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Content
+    )
+
+    return $Content.IndexOf("node_modules/uloop-cli", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
+        -or $Content.IndexOf("node_modules\uloop-cli", [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+}
+
+function Test-NativeUloopShimContent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Content,
+        [Parameter(Mandatory = $true)]
+        [string]$NativeUloopPath
+    )
+
+    return $Content.IndexOf($NativeUloopPath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
+        -or $Content.IndexOf("Programs\uloop\bin\uloop.exe", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
+        -or $Content.IndexOf("Programs/uloop/bin/uloop.exe", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
+        -or (
+            ($Content.IndexOf("GoCli~\dist", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
+                -or $Content.IndexOf("GoCli~/dist", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) `
+            -and (
+                $Content.IndexOf("uloop-dispatcher.exe", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
+                    -or $Content.IndexOf("uloop-dispatcher", [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+            )
+        )
+}
+
+function Test-PackageOwnedUloopShimContent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Content,
+        [Parameter(Mandatory = $true)]
+        [string]$NativeUloopPath
+    )
+
+    return (Test-LegacyUloopShimContent -Content $Content) `
+        -or (Test-NativeUloopShimContent -Content $Content -NativeUloopPath $NativeUloopPath)
+}
+
+function Remove-PathEntry {
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$PathValue,
+        [Parameter(Mandatory = $true)]
+        [string]$EntryToRemove
+    )
+
+    if (-not $PathValue) {
+        return ""
+    }
+
+    $FilteredEntries = @()
+    foreach ($PathEntry in ($PathValue -split ";")) {
+        if (-not $PathEntry) {
+            continue
+        }
+
+        if ([string]::Equals($PathEntry, $EntryToRemove, [System.StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+
+        $FilteredEntries += $PathEntry
+    }
+
+    return ($FilteredEntries -join ";")
+}
+
+function Remove-LegacyUloopShims {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$NativeUloopPath
+    )
+
+    if (-not $env:APPDATA) {
+        return
+    }
+
+    $LegacyBinDir = Join-Path $env:APPDATA "npm"
+    if (-not (Test-Path $LegacyBinDir -PathType Container)) {
+        return
+    }
+
+    $ShimNames = @("uloop", "uloop.cmd", "uloop.ps1")
+    foreach ($ShimName in $ShimNames) {
+        $ShimPath = Join-Path $LegacyBinDir $ShimName
+        if (-not (Test-Path $ShimPath -PathType Leaf)) {
+            continue
+        }
+
+        $ShimContent = Get-Content -LiteralPath $ShimPath -Raw -ErrorAction SilentlyContinue
+        if (-not $ShimContent) {
+            continue
+        }
+
+        if (-not (Test-PackageOwnedUloopShimContent -Content $ShimContent -NativeUloopPath $NativeUloopPath)) {
+            continue
+        }
+
+        Remove-Item -LiteralPath $ShimPath -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path $ShimPath -PathType Leaf)) {
+            Write-Host "Removed legacy uloop shim: $ShimPath"
+        }
+    }
+}
+
+function Test-NpmBinContainsCommandEntries {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LegacyBinDir
+    )
+
+    if (-not (Test-Path $LegacyBinDir -PathType Container)) {
+        return $false
+    }
+
+    foreach ($Entry in (Get-ChildItem -LiteralPath $LegacyBinDir -Force)) {
+        if ($Entry.PSIsContainer -and [string]::Equals($Entry.Name, "node_modules", [System.StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+
+        return $true
+    }
+
+    return $false
+}
+
+function Remove-LegacyNpmBinPathIfUnused {
+    if (-not $env:APPDATA) {
+        return
+    }
+
+    $LegacyBinDir = Join-Path $env:APPDATA "npm"
+    if (Test-NpmBinContainsCommandEntries -LegacyBinDir $LegacyBinDir) {
+        return
+    }
+
+    $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $UpdatedUserPath = Remove-PathEntry -PathValue $UserPath -EntryToRemove $LegacyBinDir
+    if ($UserPath -and (-not [string]::Equals($UserPath, $UpdatedUserPath, [System.StringComparison]::OrdinalIgnoreCase))) {
+        [Environment]::SetEnvironmentVariable("Path", $UpdatedUserPath, "User")
+        Write-Host "Removed unused npm global bin directory from User PATH: $LegacyBinDir"
+    }
+
+    $UpdatedProcessPath = Remove-PathEntry -PathValue $env:Path -EntryToRemove $LegacyBinDir
+    if ($env:Path -and (-not [string]::Equals($env:Path, $UpdatedProcessPath, [System.StringComparison]::OrdinalIgnoreCase))) {
+        $env:Path = $UpdatedProcessPath
+    }
+}
+
 function Assert-UloopVersionSucceeds {
     param(
         [Parameter(Mandatory = $true)]
@@ -174,6 +328,10 @@ try {
     }
 
     Assert-UloopVersionSucceeds -UloopPath $FinalUloopPath
+    if (Test-RemoveLegacyEnabled) {
+        Remove-LegacyUloopShims -NativeUloopPath $FinalUloopPath
+        Remove-LegacyNpmBinPathIfUnused
+    }
     Confirm-ActiveUloopAfterLegacyCleanup
     Write-LegacyNpmWarningIfPresent
     Report-PathShadowing

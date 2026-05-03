@@ -170,7 +170,15 @@ func TestCompletionSupportsPwshProfile(t *testing.T) {
 		t.Fatalf("getShellConfigPath failed: %v", err)
 	}
 
-	expectedPath := getPwshProfilePath(temporaryHome, runtime.GOOS)
+	expectedHome := temporaryHome
+	if runtime.GOOS == "windows" {
+		userHome, userHomeErr := os.UserHomeDir()
+		if userHomeErr != nil {
+			t.Fatalf("os.UserHomeDir failed: %v", userHomeErr)
+		}
+		expectedHome = userHome
+	}
+	expectedPath := getPwshProfilePath(expectedHome, runtime.GOOS)
 	if configPath != expectedPath {
 		t.Fatalf("pwsh profile path mismatch: %s", configPath)
 	}
@@ -194,5 +202,71 @@ func TestGetPwshProfilePathUsesPlatformSpecificLocation(t *testing.T) {
 	expectedPosixPath := filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1")
 	if posixPath != expectedPosixPath {
 		t.Fatalf("posix pwsh profile path mismatch: %s", posixPath)
+	}
+}
+
+func TestGetHomeDirectoryForShellOnWindowsPowerShellIgnoresHomeOverride(t *testing.T) {
+	// Tests that Windows PowerShell profiles use the Windows user profile instead of MSYS-style HOME.
+	environmentHomeCalls := 0
+	userHomeCalls := 0
+
+	for _, shellName := range []string{"powershell", "pwsh"} {
+		home, err := getHomeDirectoryForShell(
+			shellName,
+			"windows",
+			func() (string, error) {
+				environmentHomeCalls++
+				return "/c/Users/masamichi", nil
+			},
+			func() (string, error) {
+				userHomeCalls++
+				return `C:\Users\masamichi`, nil
+			},
+		)
+		if err != nil {
+			t.Fatalf("getHomeDirectoryForShell failed: %v", err)
+		}
+
+		if home != `C:\Users\masamichi` {
+			t.Fatalf("windows %s home mismatch: %s", shellName, home)
+		}
+	}
+	if environmentHomeCalls != 0 {
+		t.Fatalf("environment HOME should not be used for Windows PowerShell")
+	}
+	if userHomeCalls != 2 {
+		t.Fatalf("user home resolver call count mismatch: %d", userHomeCalls)
+	}
+}
+
+func TestGetHomeDirectoryForShellOnWindowsBashUsesHomeOverride(t *testing.T) {
+	// Tests that Windows POSIX shells still honor HOME for Git Bash and MSYS configs.
+	environmentHomeCalls := 0
+	userHomeCalls := 0
+
+	home, err := getHomeDirectoryForShell(
+		"bash",
+		"windows",
+		func() (string, error) {
+			environmentHomeCalls++
+			return "/c/Users/masamichi", nil
+		},
+		func() (string, error) {
+			userHomeCalls++
+			return `C:\Users\masamichi`, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("getHomeDirectoryForShell failed: %v", err)
+	}
+
+	if home != "/c/Users/masamichi" {
+		t.Fatalf("windows bash home mismatch: %s", home)
+	}
+	if environmentHomeCalls != 1 {
+		t.Fatalf("environment HOME resolver call count mismatch: %d", environmentHomeCalls)
+	}
+	if userHomeCalls != 0 {
+		t.Fatalf("user home should not be used for Windows bash")
 	}
 }

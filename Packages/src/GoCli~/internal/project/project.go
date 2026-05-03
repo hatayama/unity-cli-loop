@@ -215,16 +215,22 @@ func exists(path string) bool {
 }
 
 func trimTrailingSeparators(path string) string {
-	if len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') {
-		return strings.TrimRight(path, `\/`) + `\`
+	trimmed := strings.TrimRight(path, `\/`)
+	if trimmed == "" {
+		if strings.HasPrefix(path, "/") {
+			return "/"
+		}
+		return path
 	}
 
-	trimmed := strings.TrimRight(path, `\/`)
-	if trimmed != "" {
-		return trimmed
+	volumeName := filepath.VolumeName(path)
+	if volumeName != "" {
+		rootPath := volumeName + string(filepath.Separator)
+		trimmedRootPath := strings.TrimRight(rootPath, `\/`)
+		if strings.EqualFold(trimmed, trimmedRootPath) {
+			return rootPath
+		}
 	}
-	if strings.HasPrefix(path, "/") {
-		return "/"
-	}
-	return path
+
+	return trimmed
 }

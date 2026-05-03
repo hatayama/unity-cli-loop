@@ -761,8 +761,12 @@ namespace io.github.hatayama.UnityCliLoop
                 throw new SecurityException("Settings file exceeds size limit");
             }
 
-            using StreamReader reader = File.OpenText(settingsPath);
-            JToken settingsToken = JToken.ReadFrom(new JsonTextReader(reader));
+            JToken settingsToken;
+            using (StreamReader reader = File.OpenText(settingsPath))
+            {
+                settingsToken = JToken.ReadFrom(new JsonTextReader(reader));
+            }
+
             bool removed = RemoveLegacyTransientFields(settingsToken);
             if (!removed)
             {
