@@ -14,3 +14,12 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "googleapis/release-please-action"
         update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "gomod"
+    directory: "/Packages/src/GoCli~"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "go"

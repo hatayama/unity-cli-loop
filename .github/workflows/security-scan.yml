@@ -124,3 +124,12 @@ jobs:
 
     - name: Check Go CLI
       run: scripts/check-go-cli.sh
+
+    - name: Install govulncheck
+      run: |
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+    - name: Run govulncheck
+      working-directory: Packages/src/GoCli~
+      run: govulncheck ./...
