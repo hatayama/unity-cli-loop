@@ -9,33 +9,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 
-	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/project"
-	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/unity"
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/adapters/project"
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/adapters/unity"
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/application"
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/domain"
 )
 
 const (
 	projectLocalUnixPath    = ".uloop/bin/uloop-core"
 	projectLocalWindowsPath = ".uloop/bin/uloop-core.exe"
 )
-
-type commandHelpEntry struct {
-	name        string
-	description string
-}
-
-var nativeCommandHelpEntries = []commandHelpEntry{
-	{name: "launch", description: "Open this Unity project with the matching Editor version"},
-	{name: "list", description: "Show Unity tools currently exposed by the Editor"},
-	{name: "sync", description: "Refresh .uloop/tools.json from the running Editor"},
-	{name: "focus-window", description: "Bring the Unity Editor window to the foreground"},
-	{name: "fix", description: "Remove stale uloop lock files after an interrupted run"},
-	{name: "skills", description: "List, install, or uninstall agent skills"},
-	{name: "completion", description: "Print or install shell completion"},
-	{name: "update", description: "Update the global uloop launcher binary"},
-}
 
 func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
 	remainingArgs, projectPath, err := parseGlobalProjectPath(args)
@@ -193,14 +178,19 @@ func RunLauncher(ctx context.Context, args []string, stdout io.Writer, stderr io
 	return execProjectLocal(ctx, localPath, forwardedArgs, projectRoot, stderr)
 }
 
-func runTool(ctx context.Context, connection project.Connection, command string, params map[string]any, stdout io.Writer, stderr io.Writer) int {
+func runTool(ctx context.Context, connection domain.Connection, command string, params map[string]any, stdout io.Writer, stderr io.Writer) int {
 	if shouldWaitForCompileDomainReload(command, params) {
 		return runCompileWithDomainReloadWait(ctx, connection, params, stdout, stderr)
 	}
 
 	spinner := newToolSpinner(stderr, command)
-	outcome, err := unity.NewClient(connection).SendWithProgressOutcome(ctx, command, params, func(string) {
-		spinner.Update(fmt.Sprintf("Executing %s...", command))
+	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
+	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
+		Command: command,
+		Params:  params,
+		Progress: func(string) {
+			spinner.Update(fmt.Sprintf("Executing %s...", command))
+		},
 	})
 	spinner.Stop()
 	if err != nil {
@@ -214,7 +204,7 @@ func runTool(ctx context.Context, connection project.Connection, command string,
 	return 0
 }
 
-func runCompileWithDomainReloadWait(ctx context.Context, connection project.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
+func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
 	requestID, err := ensureCompileRequestID(params)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{
@@ -225,8 +215,13 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection project.Conn
 	}
 
 	spinner := newToolSpinner(stderr, compileCommandName)
-	outcome, err := unity.NewClient(connection).SendWithProgressOutcome(ctx, compileCommandName, params, func(string) {
-		spinner.Update("Executing compile...")
+	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
+	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
+		Command: compileCommandName,
+		Params:  params,
+		Progress: func(string) {
+			spinner.Update("Executing compile...")
+		},
 	})
 	if err != nil && shouldWaitForCompileResult(err, outcome) {
 		spinner.Update("Connection lost during compile. Waiting for result file...")
@@ -264,10 +259,15 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection project.Conn
 	return 0
 }
 
-func runList(ctx context.Context, connection project.Connection, stdout io.Writer, stderr io.Writer) int {
+func runList(ctx context.Context, connection domain.Connection, stdout io.Writer, stderr io.Writer) int {
 	spinner := newToolSpinner(stderr, "list")
-	outcome, err := unity.NewClient(connection).SendWithProgressOutcome(ctx, "get-tool-details", map[string]any{}, func(string) {
-		spinner.Update("Fetching tool list...")
+	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
+	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
+		Command: "get-tool-details",
+		Params:  map[string]any{},
+		Progress: func(string) {
+			spinner.Update("Fetching tool list...")
+		},
 	})
 	spinner.Stop()
 	if err != nil {
@@ -281,10 +281,15 @@ func runList(ctx context.Context, connection project.Connection, stdout io.Write
 	return 0
 }
 
-func runSync(ctx context.Context, connection project.Connection, stdout io.Writer, stderr io.Writer) int {
+func runSync(ctx context.Context, connection domain.Connection, stdout io.Writer, stderr io.Writer) int {
 	spinner := newToolSpinner(stderr, "sync")
-	outcome, err := unity.NewClient(connection).SendWithProgressOutcome(ctx, "get-tool-details", map[string]any{}, func(string) {
-		spinner.Update("Syncing tools...")
+	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
+	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
+		Command: "get-tool-details",
+		Params:  map[string]any{},
+		Progress: func(string) {
+			spinner.Update("Syncing tools...")
+		},
 	})
 	spinner.Stop()
 	if err != nil {
@@ -352,130 +357,4 @@ func execProjectLocal(ctx context.Context, localPath string, args []string, proj
 		return 1
 	}
 	return 0
-}
-
-func isVersionRequest(args []string) bool {
-	return len(args) == 1 && (args[0] == "--version" || args[0] == "-v")
-}
-
-func isHelpRequest(args []string) bool {
-	return len(args) == 1 && (args[0] == "--help" || args[0] == "-h")
-}
-
-func printHelp(stdout io.Writer) {
-	printMainHelp(
-		stdout,
-		"Project-local CLI. Runs native uloop commands and dispatches live Unity tool commands.",
-		toolsCache{},
-		false)
-}
-
-func printLauncherHelp(stdout io.Writer) {
-	printMainHelp(
-		stdout,
-		"Global dispatcher. Finds the Unity project, then dispatches to the project-local uloop-core binary.",
-		toolsCache{},
-		false)
-}
-
-func printLauncherHelpForResolvedProject(stdout io.Writer, startPath string, explicitProjectPath string) {
-	projectRoot, err := resolveLauncherProjectRoot(startPath, explicitProjectPath)
-	if err != nil {
-		printLauncherHelp(stdout)
-		return
-	}
-
-	cache, ok := loadCachedTools(projectRoot)
-	printMainHelp(
-		stdout,
-		"Global dispatcher. Finds the Unity project, then dispatches to the project-local uloop-core binary.",
-		cache,
-		ok)
-}
-
-func printMainHelp(stdout io.Writer, description string, cache toolsCache, hasProjectToolCache bool) {
-	writeFormat(stdout, "uloop %s\n\n", version)
-	writeLine(stdout, "Usage:")
-	writeLine(stdout, "  uloop <command> [options]")
-	writeLine(stdout, "")
-	writeLine(stdout, description)
-	writeLine(stdout, "")
-	printNativeCommandHelp(stdout)
-	writeLine(stdout, "")
-	printGlobalOptionsHelp(stdout)
-	writeLine(stdout, "")
-	printUnityToolCommandHelp(stdout, cache, hasProjectToolCache)
-	writeLine(stdout, "")
-	writeLine(stdout, "More:")
-	writeLine(stdout, "  uloop list                                  Show the live Unity tool list")
-	writeLine(stdout, "  uloop --project-path /path/to/project list  Show tools for another Unity project")
-	writeLine(stdout, "  uloop <command> --help                      Show help for native commands that support it")
-	writeLine(stdout, "  uloop completion --list-commands            Print command names for completion")
-	writeLine(stdout, "  uloop completion --list-options <command>   Print options for a Unity tool command")
-}
-
-func printNativeCommandHelp(stdout io.Writer) {
-	writeLine(stdout, "Native commands:")
-	for _, entry := range nativeCommandHelpEntries {
-		writeFormat(stdout, "  %-14s %s\n", entry.name, entry.description)
-	}
-}
-
-func printGlobalOptionsHelp(stdout io.Writer) {
-	writeLine(stdout, "Global options:")
-	writeLine(stdout, "  --project-path <path>   Run against a Unity project outside the current directory")
-}
-
-func printUnityToolCommandHelp(stdout io.Writer, cache toolsCache, hasProjectToolCache bool) {
-	if !hasProjectToolCache {
-		writeLine(stdout, "Unity tool commands are project-specific.")
-		writeLine(stdout, "  Run `uloop list` inside a Unity project to show the live tool list.")
-		writeLine(stdout, "  Run `uloop sync` after the Editor tool set changes to refresh cached commands.")
-		return
-	}
-
-	writeLine(stdout, "Unity tool commands from this project's cache:")
-	if len(cache.Tools) == 0 {
-		writeLine(stdout, "  No cached Unity tools found. Run `uloop sync` while Unity is running.")
-		return
-	}
-
-	for _, tool := range cache.Tools {
-		if isNativeCommandName(tool.Name) {
-			continue
-		}
-		writeFormat(stdout, "  %-22s %s\n", tool.Name, firstHelpLine(tool.Description))
-	}
-	writeLine(stdout, "  Run `uloop sync` after the Editor tool set changes to refresh this list.")
-}
-
-func isNativeCommandName(name string) bool {
-	for _, entry := range nativeCommandHelpEntries {
-		if entry.name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func firstHelpLine(description string) string {
-	for _, line := range strings.Split(description, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
-}
-
-func loadCompletionTools(startPath string, projectPath string) toolsCache {
-	connection, err := project.ResolveConnection(startPath, projectPath)
-	if err != nil {
-		return loadDefaultTools()
-	}
-	cache, err := loadTools(connection.ProjectRoot)
-	if err != nil {
-		return loadDefaultTools()
-	}
-	return cache
 }

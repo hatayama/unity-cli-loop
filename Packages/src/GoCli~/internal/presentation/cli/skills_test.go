@@ -13,13 +13,13 @@ import (
 // Tests that CLI-only skill discovery excludes skills marked as internal.
 func TestCollectSkillDefinitionsIncludesCliOnlyAndSkipsInternal(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeTestSkill(t, projectRoot, "Packages/src/GoCli~/internal/cli/skill-definitions/cli-only/uloop-launch/Skill", `---
+	writeTestSkill(t, projectRoot, "Packages/src/GoCli~/internal/presentation/cli/skill-definitions/cli-only/uloop-launch/Skill", `---
 name: uloop-launch
 ---
 
 # uloop launch
 `)
-	writeTestSkill(t, projectRoot, "Packages/src/GoCli~/internal/cli/skill-definitions/cli-only/uloop-internal/Skill", `---
+	writeTestSkill(t, projectRoot, "Packages/src/GoCli~/internal/presentation/cli/skill-definitions/cli-only/uloop-internal/Skill", `---
 name: uloop-internal
 internal: true
 ---
@@ -49,7 +49,7 @@ name: uloop-compile
 
 # package
 `)
-	writeTestSkill(t, projectRoot, "Packages/src/GoCli~/internal/cli/skill-definitions/cli-only/uloop-launch/Skill", `---
+	writeTestSkill(t, projectRoot, "Packages/src/GoCli~/internal/presentation/cli/skill-definitions/cli-only/uloop-launch/Skill", `---
 name: uloop-launch
 ---
 
@@ -98,6 +98,43 @@ name: uloop-cached-package
 	if !reflect.DeepEqual(actualNames, expectedNames) {
 		t.Fatalf("skill names mismatch:\nactual:   %#v\nexpected: %#v", actualNames, expectedNames)
 	}
+}
+
+// Tests that CLI-only and project-local skills win over package-root duplicates.
+func TestCollectSkillDefinitionsUsesUnitySideSourcePrecedence(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeTestSkill(t, projectRoot, "Packages/src/Editor/Api/McpTools/Compile/Skill", `---
+name: uloop-launch
+---
+
+# package launch
+`)
+	writeTestSkill(t, projectRoot, "Packages/src/Editor/Api/McpTools/ProjectDuplicate/Skill", `---
+name: uloop-project
+---
+
+# package project
+`)
+	writeTestSkill(t, projectRoot, "Packages/src/GoCli~/internal/presentation/cli/skill-definitions/cli-only/uloop-launch/Skill", `---
+name: uloop-launch
+---
+
+# cli-only launch
+`)
+	writeTestSkill(t, projectRoot, "Assets/Editor/ProjectDuplicate/Skill", `---
+name: uloop-project
+---
+
+# asset project
+`)
+
+	skills, err := collectSkillDefinitions(projectRoot)
+	if err != nil {
+		t.Fatalf("collectSkillDefinitions failed: %v", err)
+	}
+
+	assertSkillContentContains(t, skills, "uloop-launch", "# cli-only launch")
+	assertSkillContentContains(t, skills, "uloop-project", "# asset project")
 }
 
 // Tests that direct SKILL.md files without a frontmatter name use their own directory name.
@@ -207,10 +244,33 @@ func TestSkillStatusIgnoresCRLFLineEndings(t *testing.T) {
 		t.Fatal("test setup should keep CRLF line endings in installed SKILL.md")
 	}
 
-	status := getSkillStatus(filepath.Join(projectRoot, ".claude", "skills"), skill, true)
+	status, err := getSkillStatus(filepath.Join(projectRoot, ".claude", "skills"), skill, true)
+	if err != nil {
+		t.Fatalf("getSkillStatus failed: %v", err)
+	}
 
 	if status != "installed" {
 		t.Fatalf("status mismatch: %s", status)
+	}
+}
+
+// Tests that status checks surface inaccessible installed skill directories.
+func TestSkillStatusReturnsStatErrors(t *testing.T) {
+	projectRoot := t.TempDir()
+	baseDir := filepath.Join(projectRoot, ".claude", "skills")
+	skill := skillDefinition{name: "uloop-sample"}
+
+	_, err := getSkillStatusWithStat(
+		baseDir,
+		skill,
+		true,
+		func(string) (os.FileInfo, error) {
+			return nil, os.ErrPermission
+		},
+	)
+
+	if err == nil {
+		t.Fatal("expected status check error")
 	}
 }
 
@@ -349,7 +409,10 @@ name: uloop-sample
 		sourceDirectory: sourceDir,
 	}
 	target := targetConfigs["claude"]
-	baseDir := getSkillsBaseDir(projectRoot, target, false)
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
 	flatDir := getPreferredSkillDir(baseDir, skill.name, false)
 	groupedDir := getPreferredSkillDir(baseDir, skill.name, true)
 	writeSkillFile(t, flatDir, skillContent)
@@ -386,7 +449,10 @@ name: uloop-sample
 		sourceDirectory: sourceDir,
 	}
 	target := targetConfigs["claude"]
-	baseDir := getSkillsBaseDir(projectRoot, target, false)
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
 	groupedDir := getPreferredSkillDir(baseDir, skill.name, true)
 	flatDir := getPreferredSkillDir(baseDir, skill.name, false)
 	writeSkillFile(t, groupedDir, "# grouped\n")
@@ -423,7 +489,10 @@ name: uloop-sample
 		sourceDirectory: sourceDir,
 	}
 	target := targetConfigs["claude"]
-	baseDir := getSkillsBaseDir(projectRoot, target, false)
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
 	groupedDir := getPreferredSkillDir(baseDir, skill.name, true)
 	flatDir := getPreferredSkillDir(baseDir, skill.name, false)
 	writeSkillFile(t, groupedDir, "# grouped\n")
@@ -444,11 +513,97 @@ name: uloop-sample
 	}
 }
 
+// Tests that uninstalling deprecated skills only cleans the selected layout.
+func TestUninstallSkillsForTargetRemovesDeprecatedSkillsFromSelectedLayoutOnly(t *testing.T) {
+	projectRoot := t.TempDir()
+	target := targetConfigs["claude"]
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	groupedDeprecatedDir := getPreferredSkillDir(baseDir, "uloop-capture-window", true)
+	flatDeprecatedDir := getPreferredSkillDir(baseDir, "uloop-capture-window", false)
+	writeSkillFile(t, groupedDeprecatedDir, "# grouped deprecated\n")
+	writeSkillFile(t, flatDeprecatedDir, "# flat deprecated\n")
+
+	removed, notFound, err := uninstallSkillsForTarget(projectRoot, target, []skillDefinition{}, false, true)
+	if err != nil {
+		t.Fatalf("uninstallSkillsForTarget failed: %v", err)
+	}
+	if removed != 1 || notFound != 0 {
+		t.Fatalf("uninstall result mismatch: removed=%d notFound=%d", removed, notFound)
+	}
+	if _, err := os.Stat(groupedDeprecatedDir); err == nil {
+		t.Fatal("grouped deprecated skill should be removed")
+	}
+	if _, err := os.Stat(flatDeprecatedDir); err != nil {
+		t.Fatalf("flat deprecated skill should remain: %v", err)
+	}
+}
+
+// Tests that global skill paths fail instead of falling back to a relative directory.
+func TestGetSkillsBaseDirReturnsHomeLookupErrorForGlobalTargets(t *testing.T) {
+	originalUserHomeDir := userHomeDir
+	userHomeDir = func() (string, error) {
+		return "", os.ErrPermission
+	}
+	t.Cleanup(func() {
+		userHomeDir = originalUserHomeDir
+	})
+
+	_, err := getSkillsBaseDir(t.TempDir(), targetConfigs["claude"], true)
+
+	if err == nil {
+		t.Fatal("expected home lookup error")
+	}
+}
+
 // Tests that skills option parsing rejects unknown flags.
 func TestParseSkillsOptionsRequiresKnownFlags(t *testing.T) {
 	_, err := parseSkillsOptions([]string{"--claude", "--bad-target"})
 	if err == nil {
 		t.Fatal("expected unknown option error")
+	}
+}
+
+// Tests that repeated target flags are ignored after their first occurrence.
+func TestParseSkillsOptionsDeduplicatesTargets(t *testing.T) {
+	options, err := parseSkillsOptions([]string{"--claude", "--claude", "--codex"})
+	if err != nil {
+		t.Fatalf("parseSkillsOptions failed: %v", err)
+	}
+
+	actualIDs := []string{}
+	for _, target := range options.targets {
+		actualIDs = append(actualIDs, target.id)
+	}
+	expectedIDs := []string{"claude", "codex"}
+	if !reflect.DeepEqual(actualIDs, expectedIDs) {
+		t.Fatalf("target ids mismatch: %#v", actualIDs)
+	}
+}
+
+// Tests that unknown skills subcommands are rejected before project resolution.
+func TestTryHandleSkillsRequestRejectsUnknownSubcommandWithoutProject(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	handled, code := tryHandleSkillsRequest(
+		[]string{"skills", "unknown"},
+		t.TempDir(),
+		"",
+		stdout,
+		stderr,
+	)
+
+	if !handled || code != 1 {
+		t.Fatalf("unexpected result: handled=%v code=%d", handled, code)
+	}
+	if !strings.Contains(stderr.String(), "Unknown skills command: unknown") {
+		t.Fatalf("stderr mismatch: %s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "unity project not found") {
+		t.Fatalf("unknown subcommand should not resolve project first: %s", stderr.String())
 	}
 }
 
@@ -515,4 +670,18 @@ func skillNames(skills []skillDefinition) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func assertSkillContentContains(t *testing.T, skills []skillDefinition, skillName string, expectedContent string) {
+	t.Helper()
+	for _, skill := range skills {
+		if skill.name != skillName {
+			continue
+		}
+		if !strings.Contains(string(skill.content), expectedContent) {
+			t.Fatalf("skill %s content mismatch: %s", skillName, string(skill.content))
+		}
+		return
+	}
+	t.Fatalf("skill not found: %s", skillName)
 }

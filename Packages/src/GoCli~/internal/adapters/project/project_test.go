@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/domain"
 )
 
 func TestCreateEndpointUsesStableProjectHash(t *testing.T) {
@@ -121,7 +123,7 @@ func createUnityProject(t *testing.T, projectRoot string) {
 	}
 }
 
-func assertProjectConnection(t *testing.T, connection Connection, projectRoot string) {
+func assertProjectConnection(t *testing.T, connection domain.Connection, projectRoot string) {
 	t.Helper()
 
 	canonicalProjectRoot, err := filepath.EvalSymlinks(projectRoot)

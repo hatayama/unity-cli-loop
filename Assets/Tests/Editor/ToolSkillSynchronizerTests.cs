@@ -1026,6 +1026,16 @@ namespace io.github.hatayama.UnityCliLoop
             Assert.That(detectedTargets[0].HasExistingSkills, Is.True);
         }
 
+        // Tests that Unity-side discovery includes CLI-only skills from the Go CLI package.
+        [Test]
+        public void GetSkillSourceInfos_WhenProjectIsCurrentRoot_IncludesCliOnlyGoCliSkills()
+        {
+            SkillInstallLayout.SkillSourceInfo[] skillSources = SkillInstallLayout.GetSkillSourceInfos(_projectRoot)
+                .ToArray();
+
+            Assert.That(skillSources.Select(skill => skill.Name), Does.Contain("uloop-launch"));
+        }
+
         // Tests that internal skill metadata maps back to the hidden tool name only.
         [Test]
         public void GetInternalSkillToolNames_WhenInternalSkillUsesSkillName_ReturnsToolName()

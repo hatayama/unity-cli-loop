@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/domain"
 )
 
 //go:embed default-tools.json
@@ -20,54 +22,12 @@ const (
 	projectPathFlagName = "project-path"
 )
 
-type toolsCache struct {
-	Version       string           `json:"version"`
-	ServerVersion string           `json:"serverVersion,omitempty"`
-	UpdatedAt     string           `json:"updatedAt,omitempty"`
-	Tools         []toolDefinition `json:"tools"`
-}
-
-type toolDefinition struct {
-	Name            string      `json:"name"`
-	Description     string      `json:"description"`
-	InputSchema     inputSchema `json:"inputSchema"`
-	ParameterSchema inputSchema `json:"parameterSchema"`
-}
-
-type inputSchema struct {
-	Type       string                  `json:"type"`
-	Properties map[string]toolProperty `json:"properties"`
-	Required   []string                `json:"required,omitempty"`
-}
-
-type toolProperty struct {
-	Type         string   `json:"type"`
-	Description  string   `json:"description,omitempty"`
-	Default      any      `json:"default,omitempty"`
-	DefaultValue any      `json:"DefaultValue,omitempty"`
-	Enum         []string `json:"enum,omitempty"`
-	Items        *struct {
-		Type string `json:"type"`
-	} `json:"items,omitempty"`
-}
-
-func (tool toolDefinition) effectiveInputSchema() inputSchema {
-	if tool.InputSchema.hasValues() {
-		return tool.InputSchema
-	}
-	return tool.ParameterSchema
-}
-
-func (schema inputSchema) hasValues() bool {
-	return schema.Type != "" || len(schema.Properties) > 0 || len(schema.Required) > 0
-}
-
-func (property toolProperty) effectiveDefault() any {
-	if property.Default != nil {
-		return property.Default
-	}
-	return property.DefaultValue
-}
+type (
+	toolsCache     = domain.ToolCatalog
+	toolDefinition = domain.ToolDefinition
+	inputSchema    = domain.ToolInputSchema
+	toolProperty   = domain.ToolProperty
+)
 
 func loadTools(projectRoot string) (toolsCache, error) {
 	cachePath := filepath.Join(projectRoot, cacheDirectoryName, cacheFileName)
@@ -318,7 +278,7 @@ func isNextOptionToken(value string) bool {
 }
 
 func findProperty(tool toolDefinition, kebabName string) (string, toolProperty, bool, bool) {
-	schema := tool.effectiveInputSchema()
+	schema := tool.EffectiveInputSchema()
 	for propertyName, property := range schema.Properties {
 		if optionNameForProperty(propertyName, property) == kebabName {
 			return propertyName, property, isNegatedBooleanProperty(property), true
@@ -388,7 +348,7 @@ func isBooleanProperty(property toolProperty) bool {
 }
 
 func isNegatedBooleanProperty(property toolProperty) bool {
-	defaultValue, ok := property.effectiveDefault().(bool)
+	defaultValue, ok := property.EffectiveDefault().(bool)
 	return isBooleanProperty(property) && ok && defaultValue
 }
 

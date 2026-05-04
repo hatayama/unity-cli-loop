@@ -10,13 +10,13 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "GoCli~/internal/cli/default-tools.json",
+          "path": "GoCli~/internal/presentation/cli/default-tools.json",
           "jsonpath": "$.version"
         },
         {
           "type": "generic",
-          "path": "Packages/src/GoCli~/internal/cli/tools.go",
-          "glob": "Packages/src/GoCli~/internal/cli/tools.go"
+          "path": "Packages/src/GoCli~/internal/presentation/cli/tools.go",
+          "glob": "Packages/src/GoCli~/internal/presentation/cli/tools.go"
         },
         {
           "type": "generic",

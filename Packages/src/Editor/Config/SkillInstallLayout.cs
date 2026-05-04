@@ -21,6 +21,9 @@ namespace io.github.hatayama.UnityCliLoop
         private const ushort CarriageReturnCodeUnit = 0x000D;
         private const ushort LineFeedCodeUnit = 0x000A;
         private const string CliPackageDirName = "GoCli~";
+        private const string CliInternalDirName = "internal";
+        private const string CliPresentationDirName = "presentation";
+        private const string CliPresentationPackageDirName = "cli";
         private const string CliSkillDefinitionsDirName = "skill-definitions";
         private const string CliOnlySkillDefinitionsDirName = "cli-only";
         private static readonly HashSet<string> ExcludedFileNames = new()
@@ -660,8 +663,9 @@ namespace io.github.hatayama.UnityCliLoop
             return Path.Combine(
                 McpConstants.PackageResolvedPath,
                 CliPackageDirName,
-                "internal",
-                "cli",
+                CliInternalDirName,
+                CliPresentationDirName,
+                CliPresentationPackageDirName,
                 CliSkillDefinitionsDirName,
                 CliOnlySkillDefinitionsDirName);
         }

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/unity"
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/domain"
 )
 
 func TestEnsureCompileRequestIDPreservesSafeValue(t *testing.T) {
@@ -135,11 +135,11 @@ func TestWaitForCompileCompletionWaitsForServerStartingLock(t *testing.T) {
 }
 
 func TestShouldWaitForCompileResultRequiresDispatchedTransportError(t *testing.T) {
-	if shouldWaitForCompileResult(os.ErrNotExist, unity.SendOutcome{}) {
+	if shouldWaitForCompileResult(os.ErrNotExist, domain.UnitySendOutcome{}) {
 		t.Fatal("undispatched error should not wait")
 	}
 
-	outcome := unity.SendOutcome{RequestDispatched: true}
+	outcome := domain.UnitySendOutcome{RequestDispatched: true}
 	if !shouldWaitForCompileResult(fmt.Errorf("EOF"), outcome) {
 		t.Fatal("dispatched transport error should wait")
 	}

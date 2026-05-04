@@ -23,17 +23,6 @@ const (
 	pwshProfileSubpath       = "Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
 )
 
-var nativeCommandNames = []string{
-	"completion",
-	"fix",
-	"focus-window",
-	"launch",
-	"list",
-	"skills",
-	"sync",
-	"update",
-}
-
 func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Writer, stderr io.Writer) (bool, int) {
 	if len(args) == 0 {
 		return false, 0
@@ -181,6 +170,7 @@ func normalizeShell(value string) (string, error) {
 
 func printCommandNames(cache toolsCache, stdout io.Writer) {
 	seen := map[string]bool{}
+	nativeCommandNames := nativeCommandNamesForCompletion()
 	commands := make([]string, 0, len(nativeCommandNames)+len(cache.Tools))
 	for _, command := range nativeCommandNames {
 		if seen[command] {
@@ -201,7 +191,7 @@ func printCommandNames(cache toolsCache, stdout io.Writer) {
 }
 
 func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) {
-	for _, nativeCommand := range nativeCommandNames {
+	for _, nativeCommand := range nativeCommandNamesForCompletion() {
 		if command == nativeCommand {
 			return
 		}
@@ -212,7 +202,7 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 		return
 	}
 
-	schema := tool.effectiveInputSchema()
+	schema := tool.EffectiveInputSchema()
 	options := make([]string, 0, len(schema.Properties))
 	for propertyName, property := range schema.Properties {
 		options = append(options, "--"+optionNameForProperty(propertyName, property))

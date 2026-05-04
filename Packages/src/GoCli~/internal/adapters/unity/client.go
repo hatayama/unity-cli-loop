@@ -7,30 +7,25 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/framing"
-	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/project"
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/adapters/framing"
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/domain"
 )
 
 const requestTimeout = 180 * time.Second
 
 type Client struct {
-	connection project.Connection
+	connection domain.Connection
 	requestID  int
 }
 
-type ProgressFunc func(message string)
-
-type SendOutcome struct {
-	Result            json.RawMessage
-	RequestDispatched bool
-}
+type ProgressFunc = func(message string)
 
 type rpcRequest struct {
-	JSONRPC string                   `json:"jsonrpc"`
-	Method  string                   `json:"method"`
-	Params  map[string]any           `json:"params"`
-	ID      int                      `json:"id"`
-	Uloop   *project.RequestMetadata `json:"x-uloop,omitempty"`
+	JSONRPC string                  `json:"jsonrpc"`
+	Method  string                  `json:"method"`
+	Params  map[string]any          `json:"params"`
+	ID      int                     `json:"id"`
+	Uloop   *domain.RequestMetadata `json:"x-uloop,omitempty"`
 }
 
 type rpcResponse struct {
@@ -70,7 +65,7 @@ func (err *RPCError) Error() string {
 	return fmt.Sprintf("unity error: %s", err.Message)
 }
 
-func NewClient(connection project.Connection) *Client {
+func NewClient(connection domain.Connection) *Client {
 	return &Client{connection: connection}
 }
 
@@ -83,13 +78,13 @@ func (client *Client) SendWithProgress(ctx context.Context, method string, param
 	return outcome.Result, err
 }
 
-func (client *Client) SendWithProgressOutcome(ctx context.Context, method string, params map[string]any, progress ProgressFunc) (SendOutcome, error) {
+func (client *Client) SendWithProgressOutcome(ctx context.Context, method string, params map[string]any, progress ProgressFunc) (domain.UnitySendOutcome, error) {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
 	conn, err := dialEndpoint(ctx, client.connection.Endpoint)
 	if err != nil {
-		return SendOutcome{}, formatConnectionAttemptError(client.connection, err)
+		return domain.UnitySendOutcome{}, formatConnectionAttemptError(client.connection, err)
 	}
 	defer func() {
 		_ = conn.Close()
@@ -110,7 +105,7 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 
 	payload, err := json.Marshal(request)
 	if err != nil {
-		return SendOutcome{}, err
+		return domain.UnitySendOutcome{}, err
 	}
 
 	if deadline, ok := ctx.Deadline(); ok {
@@ -118,9 +113,9 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 	}
 
 	if err := framing.Write(conn, payload); err != nil {
-		return SendOutcome{}, err
+		return domain.UnitySendOutcome{}, err
 	}
-	outcome := SendOutcome{RequestDispatched: true}
+	outcome := domain.UnitySendOutcome{RequestDispatched: true}
 
 	responsePayload, err := framing.Read(bufio.NewReader(conn))
 	if err != nil {
@@ -146,7 +141,7 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 	return outcome, nil
 }
 
-func formatConnectionAttemptError(connection project.Connection, err error) error {
+func formatConnectionAttemptError(connection domain.Connection, err error) error {
 	return &ConnectionAttemptError{
 		ProjectRoot: connection.ProjectRoot,
 		Endpoint:    connection.Endpoint.Address,

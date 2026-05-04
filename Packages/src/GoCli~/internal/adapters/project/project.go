@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/domain"
 )
 
 const (
@@ -29,50 +31,35 @@ var excludedProjectSearchDirs = map[string]bool{
 	"obj":          true,
 }
 
-type Endpoint struct {
-	Network string
-	Address string
-}
-
-type RequestMetadata struct {
-	ExpectedProjectRoot string `json:"expectedProjectRoot"`
-}
-
-type Connection struct {
-	Endpoint        Endpoint
-	ProjectRoot     string
-	RequestMetadata *RequestMetadata
-}
-
-func ResolveConnection(startPath string, explicitProjectPath string) (Connection, error) {
+func ResolveConnection(startPath string, explicitProjectPath string) (domain.Connection, error) {
 	projectRoot, err := resolveProjectRoot(startPath, explicitProjectPath)
 	if err != nil {
-		return Connection{}, err
+		return domain.Connection{}, err
 	}
 
 	canonicalProjectRoot, err := filepath.EvalSymlinks(projectRoot)
 	if err != nil {
-		return Connection{}, err
+		return domain.Connection{}, err
 	}
 	canonicalProjectRoot = trimTrailingSeparators(canonicalProjectRoot)
 
-	return Connection{
+	return domain.Connection{
 		Endpoint:        CreateEndpoint(canonicalProjectRoot),
 		ProjectRoot:     canonicalProjectRoot,
 		RequestMetadata: createRequestMetadata(canonicalProjectRoot),
 	}, nil
 }
 
-func CreateEndpoint(canonicalProjectRoot string) Endpoint {
+func CreateEndpoint(canonicalProjectRoot string) domain.Endpoint {
 	endpointName := createEndpointName(canonicalProjectRoot)
 	if runtime.GOOS == "windows" {
-		return Endpoint{
+		return domain.Endpoint{
 			Network: "pipe",
 			Address: fmt.Sprintf(`%s-%s`, windowsPipePrefix, endpointName),
 		}
 	}
 
-	return Endpoint{
+	return domain.Endpoint{
 		Network: "unix",
 		Address: filepath.Join(unixSocketDir, endpointName+".sock"),
 	}
@@ -197,8 +184,8 @@ func resolveProjectRoot(startPath string, explicitProjectPath string) (string, e
 	return projectRoot, nil
 }
 
-func createRequestMetadata(projectRoot string) *RequestMetadata {
-	return &RequestMetadata{
+func createRequestMetadata(projectRoot string) *domain.RequestMetadata {
+	return &domain.RequestMetadata{
 		ExpectedProjectRoot: projectRoot,
 	}
 }

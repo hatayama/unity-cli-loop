@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/unity"
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/domain"
 )
 
 const (
@@ -162,7 +162,7 @@ func isUnityBusyByCompileLocks(projectRoot string) (bool, error) {
 	return false, nil
 }
 
-func shouldWaitForCompileResult(err error, outcome unity.SendOutcome) bool {
+func shouldWaitForCompileResult(err error, outcome domain.UnitySendOutcome) bool {
 	if err == nil {
 		return true
 	}

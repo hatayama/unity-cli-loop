@@ -4,12 +4,12 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/project"
+	"github.com/hatayama/unity-cli-loop/Packages/src/GoCli/internal/domain"
 )
 
 func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t *testing.T) {
-	connection := project.Connection{
-		Endpoint: project.Endpoint{
+	connection := domain.Connection{
+		Endpoint: domain.Endpoint{
 			Network: "unix",
 			Address: "/tmp/uloop/UnityCliLoop-sample.sock",
 		},
