@@ -53,10 +53,7 @@ def assert_compile_then_get_logs(project_path: str, timeout: float, round_index:
     compile_result = run_uloop(
         [
             "compile",
-            "--force-recompile",
-            "false",
             "--wait-for-domain-reload",
-            "true",
         ],
         project_path,
         timeout,

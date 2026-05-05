@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop
         private const float KEY_GAP = 6f;
         private const float ROW_GAP = 6f;
         private const string SCENE_PATH = "Assets/Scenes/SimulateKeyboardDemoScene.unity";
+        private const string CUBE_NAME = "KeyboardInputCube";
 
         private static bool IsMac =>
             Application.platform == RuntimePlatform.OSXEditor ||
@@ -47,7 +48,13 @@ namespace io.github.hatayama.UnityCliLoop
             GameObject cameraGo = new GameObject("Main Camera");
             Camera camera = cameraGo.AddComponent<Camera>();
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.1f, 0.1f, 0.1f, 1f);
+            camera.backgroundColor = new Color(0.08f, 0.09f, 0.12f, 1f);
+            camera.transform.position = new Vector3(0f, 4f, -7f);
+            camera.transform.rotation = Quaternion.Euler(30f, 0f, 0f);
+
+            CreateDirectionalLight();
+            CreateGround();
+            CreateKeyboardInputCube();
 
             GameObject eventSystemGo = new GameObject("EventSystem");
             eventSystemGo.AddComponent<EventSystem>();
@@ -75,6 +82,39 @@ namespace io.github.hatayama.UnityCliLoop
                 return;
             }
             Debug.Log($"[DemoKeyboardSceneBuilder] Scene saved to {SCENE_PATH}");
+        }
+
+        private static void CreateDirectionalLight()
+        {
+            GameObject lightGo = new GameObject("Directional Light");
+            Light light = lightGo.AddComponent<Light>();
+            light.type = LightType.Directional;
+            light.color = new Color(1f, 0.96f, 0.84f);
+            light.intensity = 1.2f;
+            lightGo.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+        }
+
+        private static void CreateGround()
+        {
+            GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            ground.name = "KeyboardInputGround";
+            ground.transform.position = Vector3.zero;
+            ground.transform.localScale = new Vector3(5f, 1f, 5f);
+
+            Renderer renderer = ground.GetComponent<Renderer>();
+            renderer.material.color = new Color(0.16f, 0.20f, 0.24f);
+        }
+
+        private static void CreateKeyboardInputCube()
+        {
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = CUBE_NAME;
+            cube.transform.position = new Vector3(0f, 0.5f, 0f);
+            cube.transform.localScale = Vector3.one;
+
+            Renderer renderer = cube.GetComponent<Renderer>();
+            renderer.material.color = Color.white;
+            cube.AddComponent<DemoKeyboardMover>();
         }
 
         private static void CreateTitle(Transform parent)

@@ -100,10 +100,14 @@ func resolveLocalDependencyPath(dependencyValue string, projectRoot string) stri
 	if strings.HasPrefix(rawPath, "///") {
 		rawPath = strings.TrimPrefix(rawPath, "//")
 	}
-	if filepath.IsAbs(rawPath) {
+	if isLocalDependencyAbsolutePath(rawPath) {
 		return rawPath
 	}
 	return filepath.Join(projectRoot, rawPath)
+}
+
+func isLocalDependencyAbsolutePath(candidate string) bool {
+	return filepath.IsAbs(candidate) || strings.HasPrefix(candidate, "/")
 }
 
 func resolvePackageRootCandidate(candidate string) string {

@@ -271,6 +271,10 @@ func buildFocusUnityProcessWindowsScript(pid int) string {
 		"$shown = [Win32Interop]::ShowWindowAsync($handle, 9)",
 		"if (-not $shown) { throw 'Failed to show Unity window' }",
 		"$focused = [Win32Interop]::SetForegroundWindow($handle)",
+		"if (-not $focused) {",
+		"  $shell = New-Object -ComObject WScript.Shell",
+		fmt.Sprintf("  $focused = $shell.AppActivate(%d)", pid),
+		"}",
 		"if (-not $focused) { throw 'Failed to focus Unity window' }",
 	)
 	return strings.Join(scriptLines, "\n")

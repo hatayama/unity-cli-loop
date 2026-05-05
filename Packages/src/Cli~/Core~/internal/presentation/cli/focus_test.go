@@ -65,6 +65,7 @@ func TestBuildFocusUnityProcessWindowsScriptThrowsOnFailures(t *testing.T) {
 		"throw 'Unity process was not found: 123'",
 		"throw 'Unity process has no main window handle: 123'",
 		"throw 'Failed to show Unity window'",
+		"$focused = $shell.AppActivate(123)",
 		"throw 'Failed to focus Unity window'",
 	} {
 		if !strings.Contains(script, expected) {
