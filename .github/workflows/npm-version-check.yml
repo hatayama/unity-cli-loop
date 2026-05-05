@@ -22,9 +22,11 @@ jobs:
       - name: 🔍 Compare git tag vs npm version
         id: compare
         run: |
-          GIT_VERSION=$(git tag --list 'v*' --sort=-version:refname | head -1 | sed 's/^v//')
+          # Why: v3 beta releases ship as native GitHub Release assets, while npm only tracks
+          # stable TypeScript-era releases that still use the uloop-cli package.
+          GIT_VERSION=$(git tag --list 'v*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 | sed 's/^v//')
           if [ -z "${GIT_VERSION}" ]; then
-            echo "⚠️ No git tags found matching 'v*', skipping check"
+            echo "⚠️ No stable git tags found matching 'vX.Y.Z', skipping check"
             echo "mismatch=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
