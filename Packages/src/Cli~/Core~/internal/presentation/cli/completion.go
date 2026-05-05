@@ -212,11 +212,23 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 }
 
 func detectShell() string {
-	if runtime.GOOS == "windows" {
+	return detectShellFromEnvironment(runtime.GOOS, os.Getenv("SHELL"), os.Getenv("MSYSTEM"))
+}
+
+func detectShellFromEnvironment(goos string, shellPath string, msystem string) string {
+	posixShell := detectPosixShell(shellPath)
+	if goos == "windows" {
+		if posixShell != "" && msystem != "" {
+			return posixShell
+		}
 		return "powershell"
 	}
 
-	shellPath := os.Getenv("SHELL")
+	return posixShell
+}
+
+func detectPosixShell(shellPath string) string {
+	shellPath = strings.ToLower(shellPath)
 	if strings.Contains(shellPath, "zsh") {
 		return "zsh"
 	}

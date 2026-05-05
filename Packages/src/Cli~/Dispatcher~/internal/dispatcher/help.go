@@ -83,8 +83,8 @@ func printMainHelp(stdout io.Writer, cache cachedTools, hasProjectToolCache bool
 	writeLine(stdout, "  uloop list                                  Show the live Unity tool list")
 	writeLine(stdout, "  uloop --project-path /path/to/project list  Show tools for another Unity project")
 	writeLine(stdout, "  uloop <command> --help                      Show help for native commands that support it")
-	writeLine(stdout, "  uloop completion --list-commands            Print command names for completion")
-	writeLine(stdout, "  uloop completion --list-options <command>   Print options for a Unity tool command")
+	writeLine(stdout, "  uloop --list-commands                       Print command names for completion")
+	writeLine(stdout, "  uloop --list-options <command>              Print options for a Unity tool command")
 }
 
 func printUnityToolCommandHelp(stdout io.Writer, cache cachedTools, hasProjectToolCache bool) {

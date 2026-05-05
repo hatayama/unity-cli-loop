@@ -129,7 +129,7 @@ func buildToolParams(args []string, tool toolDefinition) (map[string]any, string
 				message:     "Unknown option for " + tool.Name + ": --" + flag.name,
 				option:      "--" + flag.name,
 				command:     tool.Name,
-				nextActions: []string{"Run `uloop completion --list-options " + tool.Name + "` to inspect supported options."},
+				nextActions: []string{"Run `uloop --list-options " + tool.Name + "` to inspect supported options."},
 			}
 		}
 

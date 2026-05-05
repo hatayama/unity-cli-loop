@@ -760,7 +760,7 @@ func TestRunCompletionListsNoUpdateOptions(t *testing.T) {
 
 func TestDetectShellForPlatformPrefersPwshOnWindows(t *testing.T) {
 	// Verifies that Windows completion install targets PowerShell 7 when it is available.
-	shell := detectShellForPlatform("windows", "", func(name string) (string, error) {
+	shell := detectShellForPlatform("windows", "", "", func(name string) (string, error) {
 		if name == "pwsh" {
 			return filepath.Join("bin", "pwsh"), nil
 		}
@@ -774,7 +774,32 @@ func TestDetectShellForPlatformPrefersPwshOnWindows(t *testing.T) {
 
 func TestDetectShellForPlatformHonorsWindowsPowerShellEnvironment(t *testing.T) {
 	// Verifies that Windows PowerShell is not mistaken for a pwsh profile.
-	shell := detectShellForPlatform("windows", `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, func(string) (string, error) {
+	shell := detectShellForPlatform("windows", `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, "", func(string) (string, error) {
+		return "", os.ErrNotExist
+	})
+
+	if shell != "powershell" {
+		t.Fatalf("shell mismatch: %s", shell)
+	}
+}
+
+func TestDetectShellForPlatformHonorsWindowsGitBashEnvironment(t *testing.T) {
+	// Verifies that Git Bash completion install does not fall back to PowerShell.
+	shell := detectShellForPlatform("windows", "/usr/bin/bash", "MINGW64", func(string) (string, error) {
+		return "", os.ErrNotExist
+	})
+
+	if shell != "bash" {
+		t.Fatalf("shell mismatch: %s", shell)
+	}
+}
+
+func TestDetectShellForPlatformIgnoresWindowsBashWithoutMsys(t *testing.T) {
+	// Verifies that a plain SHELL override is not enough to redirect Windows completion install.
+	shell := detectShellForPlatform("windows", "/usr/bin/bash", "", func(name string) (string, error) {
+		if name == "powershell" {
+			return filepath.Join("bin", "powershell"), nil
+		}
 		return "", os.ErrNotExist
 	})
 
