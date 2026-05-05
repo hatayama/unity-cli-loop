@@ -18,16 +18,8 @@ namespace io.github.hatayama.UnityCliLoop
         private const float SECTION_BACKGROUND_COLOR_ONE = 0.18f;
         public static readonly Color SECTION_BACKGROUND_COLOR = new(SECTION_BACKGROUND_COLOR_ONE, SECTION_BACKGROUND_COLOR_ONE, SECTION_BACKGROUND_COLOR_ONE, 1f);
 
-        private const float CLIENT_ITEM_BACKGROUND_COLOR_ONE = 0.3f;
-        public static readonly Color CLIENT_ITEM_BACKGROUND_COLOR = new(CLIENT_ITEM_BACKGROUND_COLOR_ONE, CLIENT_ITEM_BACKGROUND_COLOR_ONE, CLIENT_ITEM_BACKGROUND_COLOR_ONE, 0.5f);
-
         // Communication log settings
         public const int MAX_COMMUNICATION_LOG_ENTRIES = 20;
-        
-        // Connected clients display
-        public const float CLIENT_ITEM_SPACING = 3f;
-        public const string CONNECTED_TOOLS_FOLDOUT_TEXT = "Connected LLM Tools";
-        public const string CLIENT_ICON = "● ";
 
         // Tool Settings
         public const string TOOL_SETTINGS_MENU_PATH = "Window > Unity CLI Loop > Settings";

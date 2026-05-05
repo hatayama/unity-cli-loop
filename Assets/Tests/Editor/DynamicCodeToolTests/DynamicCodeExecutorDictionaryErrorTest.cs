@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             // This test verifies the fix for the JSON serialization error
             // where Parameters field receives "{}" as string instead of object
             
-            // Note: This test would need to be executed through MCP protocol
+            // Note: This test would need to be executed through the CLI JSON-RPC path
             // to actually test the JSON deserialization error handling.
             // Here we just ensure the executor itself works correctly.
             

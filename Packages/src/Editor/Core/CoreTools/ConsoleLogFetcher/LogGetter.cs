@@ -187,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop
         /// <summary>
         /// Converts McpLogType to Unity's LogType
         /// </summary>
-        /// <param name="mcpLogType">MCP log type</param>
+        /// <param name="mcpLogType">Unity console log type</param>
         /// <returns>Corresponding Unity LogType</returns>
         private static LogType ConvertMcpLogTypeToLogType(string mcpLogType)
         {

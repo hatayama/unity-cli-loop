@@ -19,8 +19,6 @@ Let an AI agent compile, test, and operate your Unity project from popular LLM t
 
 Designed to keep AI-driven development loops running autonomously inside your existing Unity projects.
 
-> **Note**: This project was formerly known as **uLoopMCP**.
-
 # Concept
 Unity CLI Loop is a Unity integration tool designed so that **AI can drive your Unity project forward with minimal human intervention**.
 Tasks that humans typically handle manually—compiling, running the Test Runner, checking logs, editing scenes, and capturing windows to verify UI layouts—are exposed as tools that LLMs can orchestrate.
@@ -51,13 +49,6 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 ```text
 https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
 ```
-
-> **If you installed via git URL before v1.0.0**: The repository was renamed from `uLoopMCP` to `unity-cli-loop` in v1.0.0. Please update your `manifest.json`:
-> ```text
-> Old: https://github.com/hatayama/uLoopMCP.git?path=/Packages/src
-> New: https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
-> ```
-> The old URL still works via GitHub redirect, but updating is recommended. OpenUPM users are not affected.
 
 ## Via OpenUPM (Recommended)
 

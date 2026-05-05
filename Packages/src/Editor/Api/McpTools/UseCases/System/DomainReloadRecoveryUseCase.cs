@@ -5,8 +5,8 @@ namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
     /// UseCase responsible for temporal cohesion of Domain Reload recovery processing
-    /// Processing sequence: 1. Pre-stop processing, 2. Recovery processing, 3. Notification processing
-    /// Related classes: DomainReloadDetectionService, SessionRecoveryService, ClientNotificationService
+    /// Processing sequence: 1. Pre-stop processing, 2. Recovery processing, 3. Pending compile processing
+    /// Related classes: DomainReloadDetectionService, SessionRecoveryService
     /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     public class DomainReloadRecoveryUseCase
@@ -45,21 +45,18 @@ namespace io.github.hatayama.UnityCliLoop
             {
                 try
                 {
-                    // 4.1. Notify client of server stop
-                    ClientNotificationService.LogServerStoppingBeforeDomainReload(correlationId);
+                    LogServerStoppingBeforeDomainReload(correlationId);
 
                     // 4.2. Stop server
                     currentServer.Dispose();
 
-                    // 4.3. Notify client of stop completion
-                    ClientNotificationService.LogServerStoppedAfterDomainReload(correlationId);
+                    LogServerStoppedAfterDomainReload(correlationId);
 
                     return ServiceResult<string>.SuccessResult(correlationId);
                 }
                 catch (System.Exception ex)
                 {
-                    // 4.4. Error notification
-                    ClientNotificationService.LogServerShutdownError(correlationId, ex);
+                    LogServerShutdownError(correlationId, ex);
                     DomainReloadDetectionService.RollbackDomainReloadStart(correlationId);
 
                     // Server stop failure is a critical error because recovery must restart cleanly.
@@ -75,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop
         /// Execute recovery processing after Domain Reload completion
         /// </summary>
         /// <returns>Processing result</returns>
-        public async Task<ServiceResult<string>> ExecuteAfterDomainReloadAsync(CancellationToken cancellationToken = default)
+        public Task<ServiceResult<string>> ExecuteAfterDomainReloadAsync(CancellationToken cancellationToken = default)
         {
             // 1. Generate tracking ID for related operations
             string correlationId = VibeLogger.GenerateCorrelationId();
@@ -93,26 +90,49 @@ namespace io.github.hatayama.UnityCliLoop
             ValidationResult restoreResult = SessionRecoveryService.RestoreServerStateIfNeeded();
             if (!restoreResult.IsValid)
             {
-                return ServiceResult<string>.FailureResult($"Server restoration failed: {restoreResult.ErrorMessage}");
+                return Task.FromResult(ServiceResult<string>.FailureResult($"Server restoration failed: {restoreResult.ErrorMessage}"));
             }
 
             // 5. Process pending compile requests (currently disabled)
             ProcessPendingCompileRequests(correlationId);
 
-            // 6. Send tool change notification if server is running
-            if (McpServerController.IsServerRunning)
-            {
-                try
-                {
-                    await ClientNotificationService.SendToolNotificationAfterCompilationAsync();
-                }
-                catch (System.Exception ex)
-                {
-                    VibeLogger.LogWarning("tool_notification_failed", $"Failed to send tool notification: {ex.Message}", correlationId: correlationId);
-                }
-            }
+            return Task.FromResult(ServiceResult<string>.SuccessResult(correlationId));
+        }
 
-            return ServiceResult<string>.SuccessResult(correlationId);
+        private static void LogServerStoppingBeforeDomainReload(string correlationId)
+        {
+            VibeLogger.LogInfo(
+                "domain_reload_server_stopping",
+                "Stopping Unity CLI bridge before domain reload",
+                new { transport = "project_ipc" },
+                correlationId
+            );
+        }
+
+        private static void LogServerStoppedAfterDomainReload(string correlationId)
+        {
+            VibeLogger.LogInfo(
+                "domain_reload_server_stopped",
+                "Unity CLI bridge stopped successfully",
+                new { transport = "project_ipc" },
+                correlationId
+            );
+        }
+
+        private static void LogServerShutdownError(string correlationId, System.Exception ex)
+        {
+            VibeLogger.LogException(
+                "domain_reload_server_shutdown_error",
+                ex,
+                new
+                {
+                    transport = "project_ipc",
+                    server_was_running = true
+                },
+                correlationId,
+                "Critical error during server shutdown before assembly reload.",
+                "Investigate server shutdown process and project IPC recovery."
+            );
         }
 
         /// <summary>

@@ -213,7 +213,7 @@ flowchart TD
 ## Class responsibilities
 
 - `ExecuteDynamicCodeTool`
-  - Thin entry point for the MCP/CLI tool.
+  - Thin entry point for the CLI tool.
   - Delegates the full workflow to `IExecuteDynamicCodeUseCase`.
 
 - `ExecuteDynamicCodeUseCase`

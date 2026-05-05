@@ -1,6 +1,6 @@
 ---
 name: uloop-hello-world
-description: "Sample hello world tool via uloop CLI. Use when you need to test the MCP tool system or see an example of custom tool implementation."
+description: "Sample hello world tool via uloop CLI. Use when you need to test the Unity CLI Loop tool system or see an example of custom tool implementation."
 ---
 
 # uloop hello-world

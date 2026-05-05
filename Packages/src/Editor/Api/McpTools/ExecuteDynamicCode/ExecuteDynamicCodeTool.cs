@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
-    /// MCP Dynamic C# Code Execution Tool.
+    /// Dynamic C# code execution tool exposed through the CLI.
     /// Delegates workflow orchestration to the dedicated execute-dynamic-code use case.
     /// </summary>
     [McpTool(Description = @"Execute C# code dynamically in Unity Editor for editor automation.

@@ -3,7 +3,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Sockets;
 using UnityEditor;
-using Newtonsoft.Json;
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop
@@ -77,10 +76,6 @@ namespace io.github.hatayama.UnityCliLoop
             // Domain Reload disabled (Enter Play Mode Settings) causes static constructor re-entry
             McpBridgeServer.OnServerLoopExited -= OnServerLoopUnexpectedlyExited;
             McpBridgeServer.OnServerLoopExited += OnServerLoopUnexpectedlyExited;
-
-            // Initialize connected tools monitoring service
-            // Note: ConnectedToolsMonitoringService has [InitializeOnLoad] so it's automatically initialized
-            // This comment ensures the service initialization order is documented
 
             // Recovery binds the project IPC endpoint and may touch config files, so keep it off the
             // synchronous InitializeOnLoad path while preserving automatic startup.
@@ -361,7 +356,6 @@ namespace io.github.hatayama.UnityCliLoop
                 // NOTE: Do NOT clear UI display flag here - let it be cleared by timeout or client connection
                 McpEditorSettings.SetIsReconnecting(false);
 
-                // Tools changed notification will be sent by OnAfterAssemblyReload
             }
             catch (System.Exception)
             {
@@ -455,101 +449,6 @@ namespace io.github.hatayama.UnityCliLoop
         }
 
         /// <summary>
-        /// Processes pending compile requests.
-        /// </summary>
-        private static void ProcessPendingCompileRequests()
-        {
-            // Temporarily disabled to avoid main thread errors due to SessionState operations.
-            // TODO: Re-enable after resolving the main thread issue.
-            // CompileSessionState.StartForcedRecompile();
-        }
-
-        /// <summary>
-        /// Send tools changed notification to client side
-        /// </summary>
-        private static void SendToolsChangedNotification()
-        {
-            // Log with stack trace to identify caller
-            System.Diagnostics.StackTrace stackTrace = new System.Diagnostics.StackTrace(true);
-            string callerInfo = stackTrace.GetFrame(1)?.GetMethod()?.Name ?? "Unknown";
-
-            if (mcpServer == null)
-            {
-                return;
-            }
-
-            // Send MCP standard notification only
-            var notificationParams = new
-            {
-                timestamp = System.DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                message = "Unity tools have been updated"
-            };
-
-            var mcpNotification = new
-            {
-                jsonrpc = McpServerConfig.JSONRPC_VERSION,
-                method = "notifications/tools/list_changed",
-                @params = notificationParams
-            };
-
-            string mcpNotificationJson = JsonConvert.SerializeObject(mcpNotification);
-            mcpServer.SendNotificationToClients(mcpNotificationJson);
-        }
-
-        /// <summary>
-        /// Manually trigger tool change notification
-        /// Public method for external calls (e.g., from UnityToolRegistry)
-        /// </summary>
-        public static void TriggerToolChangeNotification()
-        {
-            if (IsServerRunning)
-            {
-                SendToolsChangedNotification();
-            }
-        }
-
-        /// <summary>
-        /// Send tool notification after compilation with frame delay
-        /// </summary>
-        private static async Task SendToolNotificationAfterCompilationAsync()
-        {
-            // Use frame delay for timing adjustment after domain reload
-            // This ensures Unity Editor is in a stable state before sending notifications
-            await EditorDelay.DelayFrame(1);
-
-            CustomToolManager.NotifyToolChanges();
-        }
-
-        /// <summary>
-        /// Restore server after compilation with frame delay.
-        /// Currently kept as a helper; recovery logic is unified in StartRecoveryIfNeededAsync.
-        /// </summary>
-        private static async Task RestoreServerAfterCompileAsync()
-        {
-            // Wait a short while for Unity editor state to settle after compilation.
-            await EditorDelay.DelayFrame(1);
-
-            TryRestoreServerWithRetry(0);
-        }
-
-        /// <summary>
-        /// Restore server on startup with frame delay
-        /// </summary>
-        private static async Task RestoreServerOnStartupAsync()
-        {
-            // Wait for Unity Editor to be ready before auto-starting
-            await EditorDelay.DelayFrame(1);
-            _ = StartRecoveryIfNeededAsync(false, CancellationToken.None).ContinueWith(task =>
-            {
-                if (task.IsFaulted)
-                {
-                    VibeLogger.LogError("server_startup_restore_failed",
-                        $"Failed to restore server: {task.Exception?.GetBaseException().Message}");
-                }
-            }, TaskScheduler.FromCurrentSynchronizationContext());
-        }
-
-        /// <summary>
         /// Retry server restore with frame delay on the same project IPC endpoint.
         /// </summary>
         private static async Task RetryServerRestoreAsync(int retryCount)
@@ -570,21 +469,6 @@ namespace io.github.hatayama.UnityCliLoop
             // Check if UI flag is still set after timeout
             bool isStillShowingUI = McpEditorSettings.GetShowReconnectingUI();
             if (isStillShowingUI)
-            {
-                McpEditorSettings.ClearReconnectingFlags();
-            }
-        }
-
-        /// <summary>
-        /// Clear reconnecting flags when client connects
-        /// Called by UI or bridge server when client connection is detected
-        /// </summary>
-        public static void ClearReconnectingFlag()
-        {
-            bool wasReconnecting = McpEditorSettings.GetIsReconnecting();
-            bool wasShowingUI = McpEditorSettings.GetShowReconnectingUI();
-
-            if (wasReconnecting || wasShowingUI)
             {
                 McpEditorSettings.ClearReconnectingFlags();
             }

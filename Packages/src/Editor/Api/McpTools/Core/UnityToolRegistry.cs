@@ -387,16 +387,6 @@ namespace io.github.hatayama.UnityCliLoop
             return _tools.ContainsKey(toolName);
         }
 
-        /// <summary>
-        /// Manually trigger _tools changed notification
-        /// Used for manual notifications and post-compilation notifications
-        /// </summary>
-        public static void TriggerToolsChangedNotification()
-        {
-            // Call the public method in McpServerController
-            McpServerController.TriggerToolChangeNotification();
-        }
-
     }
 
     /// <summary>

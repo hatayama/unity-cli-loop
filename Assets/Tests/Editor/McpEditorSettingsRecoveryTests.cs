@@ -139,6 +139,7 @@ namespace io.github.hatayama.UnityCliLoop
             StringAssert.DoesNotContain("serverTransportKind", recoveredJson);
             StringAssert.DoesNotContain("projectRootPath", recoveredJson);
             StringAssert.DoesNotContain("serverSessionId", recoveredJson);
+            StringAssert.DoesNotContain("connectedLLMTools", recoveredJson);
             StringAssert.DoesNotContain("\"Port\"", recoveredJson);
         }
 

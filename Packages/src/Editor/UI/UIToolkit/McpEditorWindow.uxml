@@ -34,15 +34,6 @@
                 </ui:Foldout>
             </ui:VisualElement>
 
-            <!-- Connected LLM Tools Section -->
-            <ui:VisualElement name="connected-tools-section" class="mcp-section mcp-section--box">
-                <ui:Foldout name="connected-tools-foldout" text="Connected CLI Clients" class="mcp-foldout">
-                    <ui:VisualElement name="connected-tools-content">
-                        <ui:VisualElement name="clients-list" class="mcp-clients-list" />
-                    </ui:VisualElement>
-                </ui:Foldout>
-            </ui:VisualElement>
-
             <!-- Tool Settings Section -->
             <ui:VisualElement name="tool-settings-section" class="mcp-section mcp-section--box">
                 <ui:Foldout name="tool-settings-foldout" text="Tool Settings" class="mcp-foldout">
@@ -62,7 +53,6 @@
 
                         <ui:VisualElement name="tool-settings-info-container">
                             <ui:Label text="Enable or disable individual tools. Disabled tools are completely hidden from AI agents, eliminating unnecessary context window consumption." class="mcp-tool-settings-info" />
-                            <ui:Label text="Changes are notified to connected CLI clients immediately." class="mcp-tool-settings-note" />
                             <ui:Label name="cli-reference-link" text="See CLI Command Reference for uloop-cli usage." class="mcp-tool-settings-link" />
                         </ui:VisualElement>
                         <ui:VisualElement name="tool-list-container" class="mcp-tool-list-container" />

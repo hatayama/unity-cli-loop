@@ -100,7 +100,7 @@ Relevant files:
 Run these in order on Windows:
 
 1. `uloop compile`
-2. `uloop run-tests --test-mode EditMode --filter-type regex --filter-value 'io.github.hatayama.uLoopMCP.DynamicCodeToolTests'`
+2. `uloop run-tests --test-mode EditMode --filter-type regex --filter-value 'io.github.hatayama.UnityCliLoop.DynamicCodeToolTests'`
 3. `uloop execute-dynamic-code --code "return 1 + 2;"`
 4. `uloop execute-dynamic-code --code "StringBuilder sb = new StringBuilder(); sb.Append(\"ok\"); return sb.ToString();"`
 5. `uloop execute-dynamic-code --code "UnityEngine.GameObject go = new UnityEngine.GameObject(\"bench\"); UnityEngine.Object.DestroyImmediate(go); return \"ok\";"`
@@ -169,7 +169,7 @@ Goal:
 
 Suggested validation commands:
 1. uloop compile
-2. uloop run-tests --test-mode EditMode --filter-type regex --filter-value 'io.github.hatayama.uLoopMCP.DynamicCodeToolTests'
+2. uloop run-tests --test-mode EditMode --filter-type regex --filter-value 'io.github.hatayama.UnityCliLoop.DynamicCodeToolTests'
 3. uloop execute-dynamic-code --code "return 1 + 2;"
 4. uloop execute-dynamic-code --code "StringBuilder builder1002 = new StringBuilder(); builder1002.Append(\"ok-1002\"); return builder1002.ToString();"
 5. uloop execute-dynamic-code --code "DynamicAssemblyTest test1004 = new DynamicAssemblyTest(); return test1004.HelloWorld();"

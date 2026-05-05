@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop
     // - ToolParameterSchemaGenerator: Generates the JSON schema for tool parameters.
     /// <summary>
     /// Abstract base class for type-safe Unity tools using Schema and Response types
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Tool Layer (MCP Interface)
+    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Tool Layer (CLI Command Interface)
     /// </summary>
     /// <typeparam name="TSchema">Schema type for tool parameters</typeparam>
     /// <typeparam name="TResponse">Response type for tool results</typeparam>

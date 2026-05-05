@@ -1,5 +1,4 @@
 using UnityEngine;
-using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop
 {
@@ -29,24 +28,6 @@ namespace io.github.hatayama.UnityCliLoop
         public ServerControlsData(bool isServerRunning)
         {
             IsServerRunning = isServerRunning;
-        }
-    }
-    
-    public record ConnectedToolsData
-    {
-        public readonly IReadOnlyCollection<ConnectedClient> Clients;
-        public readonly bool ShowFoldout;
-        public readonly bool IsServerRunning;
-        public readonly bool ShowReconnectingUI;
-        public readonly bool ShowSection;
-
-        public ConnectedToolsData(IReadOnlyCollection<ConnectedClient> clients, bool showFoldout, bool isServerRunning, bool showReconnectingUI, bool showSection)
-        {
-            Clients = clients;
-            ShowFoldout = showFoldout;
-            IsServerRunning = isServerRunning;
-            ShowReconnectingUI = showReconnectingUI;
-            ShowSection = showSection;
         }
     }
     

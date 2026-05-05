@@ -1,16 +1,16 @@
 [日本語](TOOL_REFERENCE_ja.md)
 
-# uLoopMCP Tool Reference
+# Unity CLI Loop Tool Reference
 
-This document provides detailed specifications for all uLoopMCP tools.
+This document provides detailed specifications for all Unity CLI Loop tools.
 
 ## Common Response Format
 
-All Unity MCP tools share the following common elements:
+All Unity CLI Loop tools share the following common elements:
 
 ### Common Response Properties
 All tools automatically include the following property:
-- `Ver` (string): uLoopMCP server version for CLI compatibility check
+- `Ver` (string): Unity CLI Loop package version for CLI compatibility checks
 
 ---
 
@@ -62,8 +62,8 @@ All tools automatically include the following property:
 - **Parameters**:
   - `FilterType` (enum): Type of test filter - "all"(0), "exact"(1), "regex"(2), "assembly"(3) (default: "all")
   - `FilterValue` (string): Filter value (specify when FilterType is other than all) (default: "")
-    - `exact`: Individual test method name (exact match) (e.g.: io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs)
-    - `regex`: Class name or namespace (regex pattern) (e.g.: io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests, io.github.hatayama.uLoopMCP)
+    - `exact`: Individual test method name (exact match) (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs)
+    - `regex`: Class name or namespace (regex pattern) (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests, io.github.hatayama.UnityCliLoop)
     - `assembly`: Assembly name (e.g.: uLoopMCP.Tests.Editor)
   - `TestMode` (enum): Test mode - "EditMode"(0), "PlayMode"(1) (default: "EditMode")
     - **PlayMode Warning**: During PlayMode test execution, domain reload is temporarily disabled

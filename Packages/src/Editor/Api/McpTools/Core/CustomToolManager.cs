@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop
 {
@@ -106,13 +105,8 @@ namespace io.github.hatayama.UnityCliLoop
             return $"Registry instance: {SharedRegistry.GetHashCode()}, Tools: [{string.Join(", ", toolNames)}]";
         }
         
-        /// <summary>
-        /// Manually notify tool changes to MCP clients
-        /// Public API for users to trigger notifications when needed
-        /// </summary>
         public static void NotifyToolChanges()
         {
-            UnityToolRegistry.TriggerToolsChangedNotification();
             OnToolsChanged?.Invoke();
         }
     }

@@ -1,16 +1,16 @@
 [English](TOOL_REFERENCE.md)
 
-# uLoopMCP ツールリファレンス
+# Unity CLI Loop ツールリファレンス
 
-このドキュメントでは、全uLoopMCPツールの詳細仕様を提供します。
+このドキュメントでは、全Unity CLI Loopツールの詳細仕様を提供します。
 
 ## 共通レスポンス形式
 
-すべてのUnity MCPツールは以下の共通要素を持ちます：
+すべてのUnity CLI Loopツールは以下の共通要素を持ちます：
 
 ### 共通レスポンスプロパティ
 すべてのツールには以下のプロパティが自動的に含まれます：
-- `Ver` (string): CLIとの互換性チェック用のuLoopMCPサーバーバージョン
+- `Ver` (string): CLIとの互換性チェック用のUnity CLI Loopパッケージバージョン
 
 ---
 
@@ -62,8 +62,8 @@
 - **パラメータ**:
   - `FilterType` (enum): テストフィルタのタイプ - "all"(0), "exact"(1), "regex"(2), "assembly"(3)（デフォルト: "all"）
   - `FilterValue` (string): フィルタ値（FilterTypeがall以外の場合に指定）（デフォルト: ""）
-    - `exact`: 個別テストメソッド名（完全一致）（例：io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs）
-    - `regex`: クラス名または名前空間（正規表現パターン）（例：io.github.hatayama.uLoopMCP.ConsoleLogRetrieverTests, io.github.hatayama.uLoopMCP）
+    - `exact`: 個別テストメソッド名（完全一致）（例：io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs）
+    - `regex`: クラス名または名前空間（正規表現パターン）（例：io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests, io.github.hatayama.UnityCliLoop）
     - `assembly`: アセンブリ名（例：uLoopMCP.Tests.Editor）
   - `TestMode` (enum): テストモード - "EditMode"(0), "PlayMode"(1)（デフォルト: "EditMode"）
     - **PlayMode注意**: PlayModeテスト実行時は、一時的にdomain reloadが無効化されます

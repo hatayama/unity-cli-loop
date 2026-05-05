@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.IO;
-using System.Linq;
-using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -12,41 +10,6 @@ using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop
 {
-    // Related classes:
-    // - McpServerController: Manages the lifecycle of this server.
-    // - UnityCommandExecutor: Executes commands received from clients.
-    // - JsonRpcProcessor: Handles JSON-RPC 2.0 message processing.
-    public class ConnectedClient
-    {
-        public readonly string Endpoint;
-        public readonly string ClientName; 
-        public readonly DateTime ConnectedAt;
-        public readonly Stream Stream;
-
-        public ConnectedClient(string endpoint, Stream stream, string clientName = McpConstants.UNKNOWN_CLIENT_NAME)
-        {
-            Endpoint = endpoint;
-            Stream = stream; // Allow null stream for UI display purposes
-            ClientName = clientName;
-            ConnectedAt = DateTime.Now;
-        }
-        
-        // Private constructor for WithClientName to preserve ConnectedAt
-        private ConnectedClient(string endpoint, Stream stream, string clientName, DateTime connectedAt)
-        {
-            Endpoint = endpoint;
-            Stream = stream; // Allow null stream for UI display purposes
-            ClientName = clientName;
-            ConnectedAt = connectedAt;
-        }
-        
-        public ConnectedClient WithClientName(string clientName)
-        {
-            return new ConnectedClient(Endpoint, Stream, clientName, ConnectedAt);
-        }
-
-    }
-
     /// <summary>
     /// Unity CLI bridge server.
     /// Accepts project-local CLI connections and handles JSON-RPC 2.0 communication.
@@ -58,11 +21,6 @@ namespace io.github.hatayama.UnityCliLoop
         // Events for server lifecycle notifications
         public static event System.Action OnServerStopping;
         public static event System.Action OnServerStarted;
-        
-        // Events for individual tool management
-        public static event System.Action<ConnectedClient> OnToolConnected;
-        public static event System.Action<string> OnToolDisconnected;
-        public static event System.Action OnAllToolsCleared;
 
         // Fired from thread pool when ServerLoopAsync exits while _isRunning is still true.
         // Subscribers must marshal to main thread before accessing Unity APIs.
@@ -86,8 +44,7 @@ namespace io.github.hatayama.UnityCliLoop
         // Guard against concurrent cleanup from ServerLoopAsync finally + external disposal
         private int _unexpectedExitCleanupStarted = 0;
         
-        // Client management for broadcasting notifications
-        private readonly ConcurrentDictionary<string, ConnectedClient> _connectedClients = new();
+        private readonly ConcurrentDictionary<string, Stream> _clientStreams = new();
         
         /// <summary>
         /// Whether the server is running.
@@ -97,61 +54,13 @@ namespace io.github.hatayama.UnityCliLoop
         public string Endpoint => _transportListener?.Endpoint.DisplayName() ?? string.Empty;
         
         /// <summary>
-        /// Event on client connection.
-        /// </summary>
-        public event Action<string> OnClientConnected;
-        
-        /// <summary>
-        /// Event on client disconnection.
-        /// </summary>
-        public event Action<string> OnClientDisconnected;
-        
-        /// <summary>
         /// Event on error.
         /// </summary>
         public event Action<string> OnError;
 
-        /// <summary>
-        /// Generate unique client key using Endpoint
-        /// </summary>
         private string GenerateClientKey(string endpoint)
         {
-            // Use endpoint as unique identifier
             return endpoint;
-        }
-
-        /// <summary>
-        /// Get list of connected clients sorted by name
-        /// </summary>
-        public IReadOnlyCollection<ConnectedClient> GetConnectedClients()
-        {
-            return _connectedClients.Values.OrderBy(client => client.ClientName).ToArray();
-        }
-
-        /// <summary>
-        /// Update client name for a connected client
-        /// </summary>
-        public void UpdateClientName(string clientEndpoint, string clientName)
-        {
-            // Find client by endpoint (backward compatibility)
-            ConnectedClient targetClient = _connectedClients.Values
-                .FirstOrDefault(c => c.Endpoint == clientEndpoint);
-                
-            if (targetClient != null)
-            {
-                string clientKey = GenerateClientKey(targetClient.Endpoint);
-                ConnectedClient updatedClient = targetClient.WithClientName(clientName);
-                bool updateResult = _connectedClients.TryUpdate(clientKey, updatedClient, targetClient);
-                
-                // Clear reconnecting flags when client name is successfully set (client is now fully connected)
-                if (updateResult && clientName != McpConstants.UNKNOWN_CLIENT_NAME)
-                {
-                    McpServerController.ClearReconnectingFlag();
-                    
-                    // Notify tool connected
-                    OnToolConnected?.Invoke(updatedClient);
-                }
-            }
         }
 
         public void StartServer(bool clearServerStartingLockWhenReady = true)
@@ -225,15 +134,6 @@ namespace io.github.hatayama.UnityCliLoop
                 return;
             }
 
-            // Determine shutdown reason based on domain reload state
-            ServerShutdownReason shutdownReason = McpEditorSettings.GetIsDomainReloadInProgress()
-                ? ServerShutdownReason.DomainReload
-                : ServerShutdownReason.EditorQuit;
-
-            // Send shutdown notification to all connected clients BEFORE disconnecting
-            // This allows client side to differentiate between temporary and permanent shutdown
-            SendShutdownNotification(shutdownReason);
-
             // Notify that server is stopping
             OnServerStopping?.Invoke();
 
@@ -285,31 +185,20 @@ namespace io.github.hatayama.UnityCliLoop
         /// </summary>
         private void DisconnectAllClients()
         {
-            DisconnectAllClientsCore(notifyLifecycleEvents: true);
-        }
-
-        /// <summary>
-        /// OnAllToolsCleared subscribers (UI components) require the main thread.
-        /// Background-thread callers (CleanupAfterUnexpectedLoopExit) must suppress
-        /// lifecycle events to avoid cross-thread Unity API violations.
-        /// </summary>
-        private void DisconnectAllClientsCore(bool notifyLifecycleEvents)
-        {
-            if (_connectedClients.IsEmpty)
+            if (_clientStreams.IsEmpty)
             {
                 return;
             }
 
             List<string> clientsToRemove = new List<string>();
 
-            foreach (KeyValuePair<string, ConnectedClient> client in _connectedClients)
+            foreach (KeyValuePair<string, Stream> client in _clientStreams)
             {
                 try
                 {
-                    // Close the NetworkStream to send proper close event to CLI client
-                    if (client.Value.Stream != null && client.Value.Stream.CanWrite)
+                    if (client.Value != null && client.Value.CanWrite)
                     {
-                        client.Value.Stream.Close();
+                        client.Value.Close();
                     }
                     clientsToRemove.Add(client.Key);
                 }
@@ -323,13 +212,7 @@ namespace io.github.hatayama.UnityCliLoop
             // Remove all clients from the connected clients list
             foreach (string clientKey in clientsToRemove)
             {
-                _connectedClients.TryRemove(clientKey, out _);
-            }
-
-            // Lifecycle events require main thread — only fire when explicitly requested
-            if (notifyLifecycleEvents && !McpEditorSettings.GetIsDomainReloadInProgress())
-            {
-                OnAllToolsCleared?.Invoke();
+                _clientStreams.TryRemove(clientKey, out _);
             }
         }
 
@@ -347,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop
                 return;
             }
 
-            DisconnectAllClientsCore(notifyLifecycleEvents: false);
+            DisconnectAllClients();
 
             try
             {
@@ -384,9 +267,6 @@ namespace io.github.hatayama.UnityCliLoop
                         BridgeClientConnection client = await AcceptClientAsync(_transportListener, cancellationToken);
                         if (client != null)
                         {
-                            string clientEndpoint = client.Endpoint;
-                            OnClientConnected?.Invoke(clientEndpoint);
-
                             // Execute client handling in a separate task (fire-and-forget).
                             Task.Run(() => HandleClientAsync(client, cancellationToken)).Forget();
                         }
@@ -469,6 +349,7 @@ namespace io.github.hatayama.UnityCliLoop
         private async Task HandleClientAsync(BridgeClientConnection client, CancellationToken cancellationToken)
         {
             string clientEndpoint = client.Endpoint;
+            string clientKey = GenerateClientKey(clientEndpoint);
             
             // Initialize new components for Content-Length framing
             DynamicBufferManager bufferManager = null;
@@ -481,19 +362,12 @@ namespace io.github.hatayama.UnityCliLoop
                 {
                     
                     // Check for existing connection from same endpoint and close it
-                    string clientKey = GenerateClientKey(clientEndpoint);
-                    if (_connectedClients.TryGetValue(clientKey, out ConnectedClient existingClient))
+                    if (_clientStreams.TryRemove(clientKey, out Stream existingStream))
                     {
-                        existingClient.Stream?.Close();
-                        _connectedClients.TryRemove(clientKey, out _);
-                        
-                        // Notify tool disconnected
-                        OnToolDisconnected?.Invoke(existingClient.ClientName);
+                        existingStream?.Close();
                     }
                     
-                    // Add new client to connected clients for notification broadcasting
-                    ConnectedClient connectedClient = new ConnectedClient(clientEndpoint, stream);
-                    _connectedClients.TryAdd(clientKey, connectedClient);
+                    _clientStreams.TryAdd(clientKey, stream);
                     
                     // Initialize new framing components
                     bufferManager = new DynamicBufferManager();
@@ -524,7 +398,6 @@ namespace io.github.hatayama.UnityCliLoop
                             // JSON-RPC processing and response sending with client context
                             string responseJson = await JsonRpcProcessor.ProcessRequest(requestJson, clientEndpoint);
                             
-                            // Only send response if it's not null (notifications return null)
                             if (!string.IsNullOrEmpty(responseJson))
                             {
                                 // Check stream and client state before attempting write
@@ -583,128 +456,11 @@ namespace io.github.hatayama.UnityCliLoop
                     OnError?.Invoke($"Error during client disposal: {ex.Message}");
                 }
                 
-                // Remove client from connected clients list
-                // Find client by endpoint to get the correct key
-                ConnectedClient clientToRemove = _connectedClients.Values
-                    .FirstOrDefault(c => c.Endpoint == clientEndpoint);
-                    
-                if (clientToRemove != null)
-                {
-                    string clientKey = GenerateClientKey(clientToRemove.Endpoint);
-                    _connectedClients.TryRemove(clientKey, out _);
-                    
-                    // Notify tool disconnected
-                    OnToolDisconnected?.Invoke(clientToRemove.ClientName);
-                }
+                _clientStreams.TryRemove(clientKey, out _);
                 
                 client.Dispose();
-                OnClientDisconnected?.Invoke(clientEndpoint);
             }
         }
-
-        /// <summary>
-        /// Sends a pre-formatted JSON-RPC notification to all connected clients using Content-Length framing.
-        /// </summary>
-        /// <param name="notificationJson">The complete JSON-RPC notification string</param>
-        public void SendNotificationToClients(string notificationJson)
-        {
-            if (_connectedClients.IsEmpty)
-            {
-                return;
-            }
-
-            // Frame the notification with Content-Length header
-            string framedNotification = CreateContentLengthFrame(notificationJson);
-            byte[] notificationData = Encoding.UTF8.GetBytes(framedNotification);
-
-            SendNotificationDataAsync(notificationData).Forget();
-        }
-
-        /// <summary>
-        /// Sends a shutdown notification to all connected clients.
-        /// This should be called before disconnecting clients so client side can
-        /// differentiate between domain reload (temporary) and editor quit (permanent).
-        /// </summary>
-        /// <param name="reason">The reason for server shutdown</param>
-        public void SendShutdownNotification(ServerShutdownReason reason)
-        {
-            if (_connectedClients.IsEmpty)
-            {
-                return;
-            }
-
-            // Create JSON-RPC 2.0 notification with shutdown reason
-            string notificationJson = $"{{\"jsonrpc\":\"2.0\",\"method\":\"notifications/server/shutdown\",\"params\":{{\"reason\":\"{reason}\"}}}}";
-
-            // Frame the notification with Content-Length header
-            string framedNotification = CreateContentLengthFrame(notificationJson);
-            byte[] notificationData = Encoding.UTF8.GetBytes(framedNotification);
-
-            // Send synchronously to ensure it's sent before connection closes
-            SendNotificationDataSync(notificationData);
-        }
-
-        /// <summary>
-        /// Send notification data to all connected clients synchronously.
-        /// Used for shutdown notifications to ensure delivery before connection closes.
-        /// </summary>
-        private void SendNotificationDataSync(byte[] notificationData)
-        {
-            foreach (KeyValuePair<string, ConnectedClient> client in _connectedClients)
-            {
-                try
-                {
-                    if (client.Value.Stream?.CanWrite == true)
-                    {
-                        client.Value.Stream.Write(notificationData, 0, notificationData.Length);
-                        client.Value.Stream.Flush();
-                    }
-                }
-                catch (Exception)
-                {
-                    // Ignore errors during shutdown notification - client may already be disconnected
-                }
-            }
-        }
-
-        /// <summary>
-        /// Send notification data to all connected clients
-        /// </summary>
-        private async Task SendNotificationDataAsync(byte[] notificationData)
-        {
-            List<string> clientsToRemove = new List<string>();
-            
-            foreach (KeyValuePair<string, ConnectedClient> client in _connectedClients)
-            {
-                try
-                {
-                    if (client.Value.Stream?.CanWrite == true)
-                    {
-                        await client.Value.Stream.WriteAsync(notificationData, 0, notificationData.Length);
-                    }
-                    else
-                    {
-                        clientsToRemove.Add(client.Key);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    OnError?.Invoke($"Error writing notification to client {client.Key}: {ex.Message}");
-                    clientsToRemove.Add(client.Key);
-                }
-            }
-            
-            // Remove disconnected clients
-            foreach (string clientKey in clientsToRemove)
-            {
-                if (_connectedClients.TryRemove(clientKey, out ConnectedClient removedClient))
-                {
-                    // Notify tool disconnected
-                    OnToolDisconnected?.Invoke(removedClient.ClientName);
-                }
-            }
-        }
-
 
         /// <summary>
         /// Creates a Content-Length framed message for JSON-RPC 2.0 communication.

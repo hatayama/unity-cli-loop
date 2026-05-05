@@ -84,8 +84,6 @@ crashlytics-build.properties
 # AI
 .claude/settings.local.json
 .kiro
-.mcp.json
-.inspector.mcp.json
 .serena
 working-notes**
 

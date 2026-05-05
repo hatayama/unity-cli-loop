@@ -12,7 +12,7 @@
 We take security vulnerabilities seriously. If you discover a security issue, please follow these steps:
 
 1. **DO NOT** create a public GitHub issue for security vulnerabilities
-2. Use GitHub's [Private Vulnerability Reporting](https://github.com/hatayama/uLoopMCP/security/advisories/new) feature
+2. Use GitHub's [Private Vulnerability Reporting](https://github.com/hatayama/unity-cli-loop/security/advisories/new) feature
 3. Or contact the maintainer directly
 
 ### What to Include
@@ -56,7 +56,7 @@ The following are considered in scope for security reports:
 
 ## Security Best Practices for Users
 
-When using uLoopMCP, we recommend:
+When using Unity CLI Loop, we recommend:
 
 1. **Use Restricted Mode**: Set Dynamic Code Security Level to "Restricted" (Level 1) unless you specifically need full access
 2. **Review Third-Party Tools**: Only enable "Allow Third-Party Tools" for trusted extensions

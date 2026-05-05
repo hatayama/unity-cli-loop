@@ -134,20 +134,6 @@ namespace io.github.hatayama.UnityCliLoop
         }
 
         /// <summary>
-        /// Clear reconnection flag
-        /// </summary>
-        public static void ClearReconnectingFlag()
-        {
-            bool wasReconnecting = McpEditorSettings.GetIsReconnecting();
-            bool wasShowingUI = McpEditorSettings.GetShowReconnectingUI();
-
-            if (wasReconnecting || wasShowingUI)
-            {
-                McpEditorSettings.ClearReconnectingFlags();
-            }
-        }
-
-        /// <summary>
         /// Start reconnection UI display timeout
         /// </summary>
         /// <returns>Task for timeout processing</returns>

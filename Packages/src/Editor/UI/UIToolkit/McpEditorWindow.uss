@@ -257,36 +257,6 @@
 }
 
 /* ===========================================
-   Block: Client (Connected Tools Item)
-   =========================================== */
-.mcp-clients-list {
-    margin-top: 4px;
-}
-
-.mcp-client {
-    background-color: rgba(76, 76, 76, 0.5);
-    border-width: 1px;
-    border-color: rgba(128, 128, 128, 0.5);
-    border-radius: 3px;
-    padding: 8px;
-    margin-left: 3px;
-    margin-right: 3px;
-    margin-bottom: 6px;
-    flex-direction: row;
-    align-items: center;
-}
-
-.mcp-client__icon {
-    color: var(--mcp-color-success);
-    margin-right: 4px;
-}
-
-.mcp-client__name {
-    -unity-font-style: bold;
-    flex-grow: 1;
-}
-
-/* ===========================================
    Block: Messages
    =========================================== */
 .mcp-info-message {

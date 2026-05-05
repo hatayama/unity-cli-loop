@@ -77,11 +77,6 @@ namespace io.github.hatayama.UnityCliLoop
         
         // Environment variable keys for development mode
         public const string ENV_KEY_ULOOP_DEBUG = "ULOOP_DEBUG";
-        public const string UNKNOWN_CLIENT_NAME = "Unknown Client";
-        
-        // Command messages
-        public const string CLIENT_SUCCESS_MESSAGE_TEMPLATE = "Client name registered successfully: {0}";
-        
         // Reconnection settings
         public const int RECONNECTION_TIMEOUT_SECONDS = 10;
         

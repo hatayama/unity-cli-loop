@@ -37,4 +37,4 @@ Returns JSON with:
 
 ## Notes
 
-This is a sample custom tool demonstrating how to create MCP tools.
+This is a sample custom tool demonstrating how to create Unity CLI Loop tools.

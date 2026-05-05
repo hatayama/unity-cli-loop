@@ -19,7 +19,6 @@ namespace io.github.hatayama.UnityCliLoop
         private readonly VisualElement _root;
 
         private CliSetupSection _cliSetupSection;
-        private ConnectedToolsSection _connectedToolsSection;
         private ToolSettingsSection _toolSettingsSection;
 
         private Foldout _configurationFoldout;
@@ -35,7 +34,6 @@ namespace io.github.hatayama.UnityCliLoop
         public event Action<SkillsTarget> OnSkillsTargetChanged;
         public event Action<bool> OnGroupSkillsChanged;
         public event Action<bool> OnConfigurationFoldoutChanged;
-        public event Action<bool> OnConnectedToolsFoldoutChanged;
         public event Action<bool> OnToolSettingsFoldoutChanged;
         public event Action<string, bool> OnToolToggled;
         public event Action<DynamicCodeSecurityLevel> OnSecurityLevelChanged;
@@ -98,9 +96,6 @@ namespace io.github.hatayama.UnityCliLoop
             _mainScrollView = _root.Q<ScrollView>("main-scroll-view");
             ConfigureScrollView();
 
-            _connectedToolsSection = new ConnectedToolsSection(_root);
-            _connectedToolsSection.OnFoldoutChanged += value => OnConnectedToolsFoldoutChanged?.Invoke(value);
-
             _toolSettingsSection = new ToolSettingsSection(_root);
             _toolSettingsSection.OnFoldoutChanged += value => OnToolSettingsFoldoutChanged?.Invoke(value);
             _toolSettingsSection.OnToolToggled += (toolName, enabled) => OnToolToggled?.Invoke(toolName, enabled);
@@ -145,11 +140,6 @@ namespace io.github.hatayama.UnityCliLoop
             ViewDataBinder.ToggleClass(_githubLinkIcon, "mcp-github-link__icon--hover", isHovered);
         }
 
-        public void UpdateConnectedTools(ConnectedToolsData data)
-        {
-            _connectedToolsSection?.Update(data);
-        }
-
         public void UpdateToolSettings(ToolSettingsSectionData data)
         {
             _toolSettingsSection?.Update(data);
@@ -173,7 +163,6 @@ namespace io.github.hatayama.UnityCliLoop
         public void Dispose()
         {
             _cliSetupSection = null;
-            _connectedToolsSection = null;
             _toolSettingsSection = null;
             _configurationFoldout = null;
         }

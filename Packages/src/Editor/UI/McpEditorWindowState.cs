@@ -1,5 +1,4 @@
 using UnityEngine;
-using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop
 {
@@ -25,20 +24,17 @@ namespace io.github.hatayama.UnityCliLoop
 
     public record UIState
     {
-        public bool ShowConnectedTools { get; }
         public Vector2 MainScrollPosition { get; }
         public bool ShowSecuritySettings { get; }
         public bool ShowToolSettings { get; }
         public bool ShowConfiguration { get; }
 
         public UIState(
-            bool showConnectedTools = true,
             Vector2 mainScrollPosition = default,
             bool showSecuritySettings = true,
             bool showToolSettings = true,
             bool showConfiguration = true)
         {
-            ShowConnectedTools = showConnectedTools;
             MainScrollPosition = mainScrollPosition;
             ShowSecuritySettings = showSecuritySettings;
             ShowToolSettings = showToolSettings;
@@ -55,21 +51,15 @@ namespace io.github.hatayama.UnityCliLoop
         public bool NeedsRepaint { get; }
         public bool IsPostCompileMode { get; }
         public bool LastServerRunning { get; }
-        public int LastConnectedClientsCount { get; }
-        public string LastClientsInfoHash { get; }
 
         public RuntimeState(
             bool needsRepaint = false,
             bool isPostCompileMode = false,
-            bool lastServerRunning = false,
-            int lastConnectedClientsCount = 0,
-            string lastClientsInfoHash = "")
+            bool lastServerRunning = false)
         {
             NeedsRepaint = needsRepaint;
             IsPostCompileMode = isPostCompileMode;
             LastServerRunning = lastServerRunning;
-            LastConnectedClientsCount = lastConnectedClientsCount;
-            LastClientsInfoHash = lastClientsInfoHash;
         }
     }
 

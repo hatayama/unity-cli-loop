@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEditor;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -98,15 +98,9 @@ namespace io.github.hatayama.UnityCliLoop
             };
             _view.OnGroupSkillsChanged += HandleGroupSkillsChanged;
             _view.OnConfigurationFoldoutChanged += UpdateShowConfiguration;
-            _view.OnConnectedToolsFoldoutChanged += UpdateShowConnectedTools;
             _view.OnToolSettingsFoldoutChanged += UpdateShowToolSettings;
             _view.OnToolToggled += HandleToolToggled;
             _view.OnSecurityLevelChanged += UpdateDynamicCodeSecurityLevel;
-        }
-
-        public IEnumerable<ConnectedClient> GetConnectedToolsAsClients()
-        {
-            return ConnectedToolsMonitoringService.GetConnectedToolsAsClients();
         }
 
         private void InitializeEventHandler()
@@ -253,9 +247,6 @@ namespace io.github.hatayama.UnityCliLoop
             }
             RefreshCliSetupSection(runExpensiveChecks);
 
-            ConnectedToolsData toolsData = CreateConnectedToolsData();
-            _view.UpdateConnectedTools(toolsData);
-
             RefreshToolSettingsHeader();
             if (runExpensiveChecks)
             {
@@ -297,36 +288,6 @@ namespace io.github.hatayama.UnityCliLoop
                 RefreshCliSetupSection();
                 RefreshSelectedTargetInstallStateInBackground();
             }
-        }
-
-        public void RefreshConnectedToolsSection()
-        {
-            if (_view == null)
-            {
-                return;
-            }
-
-            ConnectedToolsData toolsData = CreateConnectedToolsData();
-            _view.UpdateConnectedTools(toolsData);
-        }
-
-        private ConnectedToolsData CreateConnectedToolsData()
-        {
-            bool isServerRunning = McpServerController.IsServerRunning;
-            ConnectedClient[] connectedClients = GetConnectedToolsAsClients().ToArray();
-            bool showReconnectingUIFlag = McpEditorSettings.GetShowReconnectingUI();
-            bool showPostCompileUIFlag = McpEditorSettings.GetShowPostCompileReconnectingUI();
-            bool hasNamedClients = connectedClients.Any();
-            bool showReconnectingUI = (showReconnectingUIFlag || showPostCompileUIFlag) && !hasNamedClients;
-
-            if (hasNamedClients && showPostCompileUIFlag)
-            {
-                McpEditorSettings.ClearPostCompileReconnectingUI();
-            }
-
-            bool showSection = isServerRunning && hasNamedClients;
-
-            return new ConnectedToolsData(connectedClients, _model.UI.ShowConnectedTools, isServerRunning, showReconnectingUI, showSection);
         }
 
         public void InvalidateToolSettingsCatalog()
@@ -404,8 +365,8 @@ namespace io.github.hatayama.UnityCliLoop
 
             ToolSettingsCatalogItem[] allTools = registry.GetToolSettingsCatalog();
 
-            System.Collections.Generic.List<ToolToggleItem> builtIn = new();
-            System.Collections.Generic.List<ToolToggleItem> thirdParty = new();
+            List<ToolToggleItem> builtIn = new();
+            List<ToolToggleItem> thirdParty = new();
 
             foreach (ToolSettingsCatalogItem tool in allTools)
             {
@@ -526,8 +487,6 @@ namespace io.github.hatayama.UnityCliLoop
 
         private async void ApplyToolToggleSideEffects(string toolName, bool enabled)
         {
-            ClientNotificationService.TriggerToolChangeNotification();
-
             if (!enabled)
             {
                 ToolSkillSynchronizer.RemoveSkillFiles(toolName);
@@ -545,11 +504,6 @@ namespace io.github.hatayama.UnityCliLoop
                     );
                 }
             }
-        }
-
-        private void UpdateShowConnectedTools(bool show)
-        {
-            _model.UpdateShowConnectedTools(show);
         }
 
         private void UpdateShowConfiguration(bool show)

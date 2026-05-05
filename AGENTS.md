@@ -1,10 +1,10 @@
 ## Architecture Overview
 
 This project provides a **CLI tool (`uloop`)** that communicates with Unity Editor via TCP.
-AI agents interact with Unity through `uloop` CLI commands (e.g., `uloop get-logs`, `uloop compile`), NOT through MCP protocol directly.
-The MCP server (TypeScriptServer~) exists as a separate component but is not the primary interface for AI agents.
+AI agents interact with Unity through `uloop` CLI commands (e.g., `uloop get-logs`, `uloop compile`).
+The Unity Editor side hosts a local project IPC server that accepts short-lived CLI command sessions.
 
-The C# namespace is `io.github.hatayama.uLoopMCP` for historical reasons, but this is a CLI-based tool, not an MCP tool.
+Do not rename public package, assembly, or extension API identifiers as part of cleanup-only changes.
 
 Comments in the code, commit messages, PR titles, and PR descriptions must all be written in English.
 

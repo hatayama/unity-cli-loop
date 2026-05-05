@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using UnityEditor;
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop
@@ -51,7 +49,6 @@ namespace io.github.hatayama.UnityCliLoop
             McpEditorSettingsData settings = McpEditorSettings.GetSettings();
             
             UpdateUIState(ui => new UIState(
-                showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: settings.showSecuritySettings,
                 showToolSettings: settings.showToolSettings,
@@ -72,7 +69,6 @@ namespace io.github.hatayama.UnityCliLoop
         public void LoadFromSessionState()
         {
             UpdateUIState(ui => new UIState(
-                showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: ui.ShowSecuritySettings,
                 showToolSettings: ui.ShowToolSettings,
@@ -94,9 +90,7 @@ namespace io.github.hatayama.UnityCliLoop
             UpdateRuntimeState(runtime => new RuntimeState(
                 isPostCompileMode: true,
                 needsRepaint: true,
-                lastServerRunning: runtime.LastServerRunning,
-                lastConnectedClientsCount: runtime.LastConnectedClientsCount,
-                lastClientsInfoHash: runtime.LastClientsInfoHash));
+                lastServerRunning: runtime.LastServerRunning));
         }
 
         /// <summary>
@@ -107,9 +101,7 @@ namespace io.github.hatayama.UnityCliLoop
             UpdateRuntimeState(runtime => new RuntimeState(
                 isPostCompileMode: false,
                 needsRepaint: runtime.NeedsRepaint,
-                lastServerRunning: runtime.LastServerRunning,
-                lastConnectedClientsCount: runtime.LastConnectedClientsCount,
-                lastClientsInfoHash: runtime.LastClientsInfoHash));
+                lastServerRunning: runtime.LastServerRunning));
         }
 
         /// <summary>
@@ -120,9 +112,7 @@ namespace io.github.hatayama.UnityCliLoop
             UpdateRuntimeState(runtime => new RuntimeState(
                 isPostCompileMode: runtime.IsPostCompileMode,
                 needsRepaint: true,
-                lastServerRunning: runtime.LastServerRunning,
-                lastConnectedClientsCount: runtime.LastConnectedClientsCount,
-                lastClientsInfoHash: runtime.LastClientsInfoHash));
+                lastServerRunning: runtime.LastServerRunning));
         }
 
         /// <summary>
@@ -133,38 +123,10 @@ namespace io.github.hatayama.UnityCliLoop
             UpdateRuntimeState(runtime => new RuntimeState(
                 isPostCompileMode: runtime.IsPostCompileMode,
                 needsRepaint: false,
-                lastServerRunning: runtime.LastServerRunning,
-                lastConnectedClientsCount: runtime.LastConnectedClientsCount,
-                lastClientsInfoHash: runtime.LastClientsInfoHash));
-        }
-
-        /// <summary>
-        /// Update server state tracking for change detection
-        /// </summary>
-        public void UpdateServerStateTracking(bool isRunning, int clientCount, string clientsHash)
-        {
-            UpdateRuntimeState(runtime => new RuntimeState(
-                isPostCompileMode: runtime.IsPostCompileMode,
-                needsRepaint: runtime.NeedsRepaint,
-                lastServerRunning: isRunning,
-                lastConnectedClientsCount: clientCount,
-                lastClientsInfoHash: clientsHash));
+                lastServerRunning: runtime.LastServerRunning));
         }
 
         // UIState-specific update methods with persistence
-
-        /// <summary>
-        /// Update ShowConnectedTools setting
-        /// </summary>
-        public void UpdateShowConnectedTools(bool show)
-        {
-            UpdateUIState(ui => new UIState(
-                showConnectedTools: show,
-                mainScrollPosition: ui.MainScrollPosition,
-                showSecuritySettings: ui.ShowSecuritySettings,
-                showToolSettings: ui.ShowToolSettings,
-                showConfiguration: ui.ShowConfiguration));
-        }
 
         /// <summary>
         /// Update MainScrollPosition setting
@@ -172,7 +134,6 @@ namespace io.github.hatayama.UnityCliLoop
         public void UpdateMainScrollPosition(Vector2 position)
         {
             UpdateUIState(ui => new UIState(
-                showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: position,
                 showSecuritySettings: ui.ShowSecuritySettings,
                 showToolSettings: ui.ShowToolSettings,
@@ -185,7 +146,6 @@ namespace io.github.hatayama.UnityCliLoop
         public void UpdateShowSecuritySettings(bool show)
         {
             UpdateUIState(ui => new UIState(
-                showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: show,
                 showToolSettings: ui.ShowToolSettings,
@@ -196,7 +156,6 @@ namespace io.github.hatayama.UnityCliLoop
         public void UpdateShowToolSettings(bool show)
         {
             UpdateUIState(ui => new UIState(
-                showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: ui.ShowSecuritySettings,
                 showToolSettings: show,
@@ -212,7 +171,6 @@ namespace io.github.hatayama.UnityCliLoop
         public void UpdateShowConfiguration(bool show)
         {
             UpdateUIState(ui => new UIState(
-                showConnectedTools: ui.ShowConnectedTools,
                 mainScrollPosition: ui.MainScrollPosition,
                 showSecuritySettings: ui.ShowSecuritySettings,
                 showToolSettings: ui.ShowToolSettings,

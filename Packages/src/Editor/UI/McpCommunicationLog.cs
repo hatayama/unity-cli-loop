@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 namespace io.github.hatayama.UnityCliLoop
 {
     /// <summary>
-    /// An entry for the MCP communication log.
+    /// An entry for the CLI communication log.
     /// Log information that includes a request/response pair.
     /// </summary>
     public record McpCommunicationLogEntry
@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop
     }
 
     /// <summary>
-    /// A class for managing MCP communication logs.
+    /// A class for managing CLI communication logs.
     /// </summary>
     public static class McpCommunicationLogger
     {
