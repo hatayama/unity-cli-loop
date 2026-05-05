@@ -57,6 +57,7 @@ jobs:
         id: release
         env:
           EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF_NAME: ${{ github.ref_name }}
           BEFORE_SHA: ${{ github.event.before }}
           INPUT_RELEASE_TAG: ${{ inputs.release-tag }}
           INPUT_DRY_RUN: ${{ inputs.dry-run }}
@@ -86,18 +87,46 @@ jobs:
               ;;
           esac
 
+          IS_PRERELEASE="false"
+          case "${VERSION}" in
+            *-*)
+              IS_PRERELEASE="true"
+              ;;
+          esac
+
           SHOULD_PUBLISH="true"
           if [ "${EVENT_NAME}" = "push" ]; then
-            case "${BEFORE_SHA}" in
-              ""|0000000000000000000000000000000000000000)
-                echo "Cannot compare release manifest from push before SHA: ${BEFORE_SHA}" >&2
-                exit 1
+            case "${EVENT_REF_NAME}" in
+              main)
+                if [ "${IS_PRERELEASE}" = "true" ]; then
+                  echo "Refusing to publish prerelease version ${VERSION} from main." >&2
+                  exit 1
+                fi
+                ;;
+              v3-beta)
+                if [ "${IS_PRERELEASE}" != "true" ]; then
+                  echo "Refusing to publish stable version ${VERSION} from v3-beta." >&2
+                  exit 1
+                fi
+                ;;
+              *)
+                echo "Skipping native CLI publish for unsupported branch ${EVENT_REF_NAME}."
+                SHOULD_PUBLISH="false"
                 ;;
             esac
 
-            PREVIOUS_VERSION=$(git show "${BEFORE_SHA}:.release-please-manifest.json" | jq -r '.["Packages/src"]')
-            if [ "${PREVIOUS_VERSION}" = "${VERSION}" ]; then
-              SHOULD_PUBLISH="false"
+            if [ "${SHOULD_PUBLISH}" = "true" ]; then
+              case "${BEFORE_SHA}" in
+                ""|0000000000000000000000000000000000000000)
+                  echo "Cannot compare release manifest from push before SHA: ${BEFORE_SHA}" >&2
+                  exit 1
+                  ;;
+              esac
+
+              PREVIOUS_VERSION=$(git show "${BEFORE_SHA}:.release-please-manifest.json" | jq -r '.["Packages/src"]')
+              if [ "${PREVIOUS_VERSION}" = "${VERSION}" ]; then
+                SHOULD_PUBLISH="false"
+              fi
             fi
           fi
 
