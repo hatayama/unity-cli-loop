@@ -20,10 +20,6 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    outputs:
-      releases_created: ${{ steps.release.outputs.releases_created }}
-      target_branch: ${{ steps.target.outputs.branch }}
-      target_sha: ${{ steps.target.outputs.sha }}
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v6
@@ -70,61 +66,5 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: ${{ steps.target.outputs.branch }}
+          skip-github-release: true
           token: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── Dispatch publish workflows when release is created ────────────
-  # Keep publish workflows as the trusted publisher entrypoints.
-  # GITHUB_TOKEN-created releases do not trigger publish-on-release.yml,
-  # so release-please must explicitly dispatch them here.
-  dispatch-publish:
-    needs: release
-    if: needs.release.outputs.releases_created == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - name: 🚀 Dispatch native-cli-publish workflow
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_BRANCH: ${{ needs.release.outputs.target_branch }}
-          TARGET_SHA: ${{ needs.release.outputs.target_sha }}
-        run: |
-          STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-          gh workflow run native-cli-publish.yml \
-            --ref "${TARGET_BRANCH}" \
-            -f ref="${TARGET_SHA}" \
-            -f dry-run=false \
-            --repo "${GITHUB_REPOSITORY}"
-
-          RUN_ID=""
-          for _ in 1 2 3 4 5; do
-            sleep 3
-            RUN_ID=$(
-              gh run list \
-                --workflow native-cli-publish.yml \
-                --event workflow_dispatch \
-                --branch "${TARGET_BRANCH}" \
-                --repo "${GITHUB_REPOSITORY}" \
-                --limit 10 \
-                --json databaseId,createdAt \
-              | jq -r --arg started_at "${STARTED_AT}" '
-                  map(select(.createdAt >= $started_at))
-                  | sort_by(.createdAt)
-                  | last
-                  | .databaseId // empty
-                '
-            )
-
-            if [ -n "${RUN_ID}" ]; then
-              break
-            fi
-          done
-
-          if [ -z "${RUN_ID}" ]; then
-            echo "Failed to find the dispatched native-cli-publish workflow run." >&2
-            exit 1
-          fi
-
-          gh run watch "${RUN_ID}" --exit-status --repo "${GITHUB_REPOSITORY}"

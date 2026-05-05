@@ -1,6 +1,10 @@
 name: native-cli-publish
 
 on:
+  push:
+    branches:
+      - main
+      - v3-beta
   workflow_dispatch:
     inputs:
       ref:
@@ -8,7 +12,7 @@ on:
         required: false
         default: ""
       release-tag:
-        description: "Release tag to upload assets to. Defaults to the checked-out ref name."
+        description: "Release tag to upload assets to. Defaults to the package version."
         required: false
         default: ""
       dry-run:
@@ -24,42 +28,48 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'
     steps:
+      - name: Resolve checkout ref
+        id: checkout
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          set -eu
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            CHECKOUT_REF="${INPUT_REF:-${EVENT_REF}}"
+          else
+            CHECKOUT_REF="${EVENT_SHA}"
+          fi
+
+          echo "ref=${CHECKOUT_REF}" >> "$GITHUB_OUTPUT"
+          echo "Checkout ref: ${CHECKOUT_REF}"
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ steps.checkout.outputs.ref }}
+          fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: Packages/src/Cli~/.go-version
-          cache-dependency-path: Packages/src/Cli~/**/go.sum
-
-      - name: Install golangci-lint
-        run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
-      - name: Check native CLI
-        run: scripts/check-go-cli.sh
-
-      - name: Package native CLI release assets
-        run: scripts/package-go-cli.sh
-
-      - name: Resolve release tag
+      - name: Resolve release target
         id: release
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
           INPUT_RELEASE_TAG: ${{ inputs.release-tag }}
+          INPUT_DRY_RUN: ${{ inputs.dry-run }}
         run: |
-          if [ -n "${INPUT_RELEASE_TAG}" ]; then
-            RELEASE_TAG="${INPUT_RELEASE_TAG}"
-          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            RELEASE_TAG="${GITHUB_REF_NAME}"
-          else
-            RELEASE_TAG=$(jq -r '.["Packages/src"]' .release-please-manifest.json)
-            RELEASE_TAG="v${RELEASE_TAG}"
+          set -eu
+
+          VERSION=$(jq -r '.["Packages/src"]' .release-please-manifest.json)
+          if [ -z "${VERSION}" ] || [ "${VERSION}" = "null" ]; then
+            echo "Could not resolve Packages/src version from .release-please-manifest.json." >&2
+            exit 1
           fi
 
+          RELEASE_TAG="${INPUT_RELEASE_TAG:-v${VERSION}}"
           case "${RELEASE_TAG}" in
             v[0-9]*)
               ;;
@@ -76,18 +86,198 @@ jobs:
               ;;
           esac
 
+          SHOULD_PUBLISH="true"
+          if [ "${EVENT_NAME}" = "push" ]; then
+            case "${BEFORE_SHA}" in
+              ""|0000000000000000000000000000000000000000)
+                echo "Cannot compare release manifest from push before SHA: ${BEFORE_SHA}" >&2
+                exit 1
+                ;;
+            esac
+
+            PREVIOUS_VERSION=$(git show "${BEFORE_SHA}:.release-please-manifest.json" | jq -r '.["Packages/src"]')
+            if [ "${PREVIOUS_VERSION}" = "${VERSION}" ]; then
+              SHOULD_PUBLISH="false"
+            fi
+          fi
+
+          TARGET_SHA=$(git rev-parse HEAD)
+          DRY_RUN="false"
+          if [ "${INPUT_DRY_RUN}" = "true" ]; then
+            DRY_RUN="true"
+          fi
+
+          echo "publish=${SHOULD_PUBLISH}" >> "$GITHUB_OUTPUT"
           echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${DRY_RUN}" >> "$GITHUB_OUTPUT"
+
+          echo "Publish: ${SHOULD_PUBLISH}"
           echo "Release tag: ${RELEASE_TAG}"
+          echo "Target SHA: ${TARGET_SHA}"
+
+      - name: Setup Go
+        if: steps.release.outputs.publish == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: Packages/src/Cli~/.go-version
+          cache-dependency-path: Packages/src/Cli~/**/go.sum
+
+      - name: Install golangci-lint
+        if: steps.release.outputs.publish == 'true'
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Check native CLI
+        if: steps.release.outputs.publish == 'true'
+        run: scripts/check-go-cli.sh
+
+      - name: Package native CLI release assets
+        if: steps.release.outputs.publish == 'true'
+        run: scripts/package-go-cli.sh
+
+      - name: Verify packaged release assets
+        if: steps.release.outputs.publish == 'true'
+        run: scripts/verify-native-cli-release-assets.sh
+
+      - name: Upload packaged release assets artifact
+        if: steps.release.outputs.publish == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-cli-release-assets-${{ steps.release.outputs.tag }}
+          path: Packages/src/Cli~/Dispatcher~/release/*
+          if-no-files-found: error
+
+      - name: Write release notes
+        if: steps.release.outputs.publish == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -eu
+          NOTES_FILE="$RUNNER_TEMP/native-cli-release-notes.md"
+
+          awk -v version="${RELEASE_VERSION}" '
+            $0 ~ "^## \\[" version "\\]" {
+              found = 1
+              printing = 1
+              print
+              next
+            }
+            printing && /^## \[/ {
+              exit
+            }
+            printing {
+              print
+            }
+            END {
+              if (!found) {
+                exit 1
+              }
+            }
+          ' Packages/src/CHANGELOG.md > "${NOTES_FILE}"
+
+          echo "RELEASE_NOTES_FILE=${NOTES_FILE}" >> "$GITHUB_ENV"
+
+      - name: Create or reuse draft release
+        id: draft
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          TARGET_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -eu
+          git fetch --force --tags origin
+
+          EXISTING_TAG_SHA=$(git rev-list -n 1 "${RELEASE_TAG}" 2>/dev/null || true)
+          if [ -n "${EXISTING_TAG_SHA}" ] && [ "${EXISTING_TAG_SHA}" != "${TARGET_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} points at ${EXISTING_TAG_SHA}, expected ${TARGET_SHA}." >&2
+            exit 1
+          fi
+
+          if [ -z "${EXISTING_TAG_SHA}" ]; then
+            git tag "${RELEASE_TAG}" "${TARGET_SHA}"
+            git push origin "refs/tags/${RELEASE_TAG}"
+          fi
+
+          if gh release view "${RELEASE_TAG}" --json isDraft --jq '.isDraft' >/tmp/native-cli-release-draft 2>/dev/null; then
+            IS_DRAFT=$(cat /tmp/native-cli-release-draft)
+            if [ "${IS_DRAFT}" != "true" ]; then
+              echo "release_published=true" >> "$GITHUB_OUTPUT"
+              echo "Release ${RELEASE_TAG} is already published; verifying existing assets."
+              exit 0
+            fi
+
+            echo "release_published=false" >> "$GITHUB_OUTPUT"
+            echo "Reusing draft release ${RELEASE_TAG}."
+            exit 0
+          fi
+
+          PRERELEASE_FLAG=""
+          case "${RELEASE_TAG}" in
+            *-beta.*)
+              PRERELEASE_FLAG="--prerelease"
+              ;;
+          esac
+
+          gh release create "${RELEASE_TAG}" \
+            --draft \
+            --title "${RELEASE_TAG}" \
+            --notes-file "${RELEASE_NOTES_FILE}" \
+            --target "${TARGET_SHA}" \
+            ${PRERELEASE_FLAG}
+
+          echo "release_published=false" >> "$GITHUB_OUTPUT"
 
       - name: Upload native CLI assets
-        if: inputs.dry-run != true
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           gh release upload "${RELEASE_TAG}" Packages/src/Cli~/Dispatcher~/release/* --clobber
 
+      - name: Verify remote release assets
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -eu
+          ASSETS_JSON=$(gh release view "${RELEASE_TAG}" --json assets)
+
+          for asset_name in $(scripts/verify-native-cli-release-assets.sh --list); do
+            ASSET_SIZE=$(printf '%s' "${ASSETS_JSON}" | jq -r --arg name "${asset_name}" '.assets[] | select(.name == $name) | .size')
+            if [ -z "${ASSET_SIZE}" ] || [ "${ASSET_SIZE}" = "null" ]; then
+              echo "Missing remote release asset: ${asset_name}" >&2
+              exit 1
+            fi
+
+            if [ "${ASSET_SIZE}" -le 0 ]; then
+              echo "Remote release asset is empty: ${asset_name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish draft release
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true' && steps.draft.outputs.release_published != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -eu
+          case "${RELEASE_TAG}" in
+            *-beta.*)
+              gh release edit "${RELEASE_TAG}" --draft=false --prerelease
+              ;;
+            *)
+              gh release edit "${RELEASE_TAG}" --draft=false
+              ;;
+          esac
+
       - name: Dry run summary
-        if: inputs.dry-run == true
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run == 'true'
         run: |
           ls -lh Packages/src/Cli~/Dispatcher~/release
