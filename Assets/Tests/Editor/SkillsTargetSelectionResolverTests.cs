@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliSetupData data = new(
                 isCliInstalled: true,
                 cliVersion: "1.7.3",
-                packageVersion: "1.7.3",
+                requiredDispatcherVersion: "1.7.3",
                 needsUpdate: false,
                 needsDowngrade: false,
                 canUninstallCli: true,

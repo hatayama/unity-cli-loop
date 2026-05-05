@@ -578,6 +578,7 @@ namespace io.github.hatayama.UnityCliLoop
             string cliVersion = CliInstallationDetector.GetCachedCliVersion();
             string cliExecutablePath = CliInstallationDetector.GetCachedCliExecutablePath();
             string packageVersion = McpConstants.PackageInfo.version;
+            string requiredDispatcherVersion = GetRequiredDispatcherVersion();
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
             CliInstallResult projectLocalResult = ProjectLocalCliAutoInstaller.EnsureProjectLocalCliCurrent(
                 projectRoot,
@@ -595,8 +596,8 @@ namespace io.github.hatayama.UnityCliLoop
             bool isChecking = !CliInstallationDetector.IsCheckCompleted()
                 || _isRefreshingVersion
                 || !includeSkillDirectoryChecks;
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, packageVersion);
-            bool needsDowngrade = IsCliDowngradeNeeded(cliVersion, packageVersion);
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredDispatcherVersion);
+            bool needsDowngrade = false;
             bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
             SkillInstallState selectedTargetInstallState = includeSkillDirectoryChecks
                 ? _selectedTargetInstallState
@@ -605,7 +606,7 @@ namespace io.github.hatayama.UnityCliLoop
             return new CliSetupData(
                 isCliInstalled,
                 cliVersion,
-                packageVersion,
+                requiredDispatcherVersion,
                 needsUpdate,
                 needsDowngrade,
                 canUninstallCli,
@@ -621,6 +622,14 @@ namespace io.github.hatayama.UnityCliLoop
                 _skillsTarget,
                 groupSkillsUnderUnityCliLoop,
                 _isInstallingSkills);
+        }
+
+        private static string GetRequiredDispatcherVersion()
+        {
+            string requiredDispatcherVersion = ProjectLocalCliInstaller.DetectBundledRequiredDispatcherVersion();
+            return string.IsNullOrEmpty(requiredDispatcherVersion)
+                ? McpConstants.PackageInfo.version
+                : requiredDispatcherVersion;
         }
 
         private void RefreshSelectedTargetInstallStateFast()
@@ -748,31 +757,24 @@ namespace io.github.hatayama.UnityCliLoop
                 Application.platform);
             return ShouldUninstallCliFromPrimaryButton(
                 cliVersion,
-                McpConstants.PackageInfo.version,
+                GetRequiredDispatcherVersion(),
                 canUninstallCli);
         }
 
         internal static bool ShouldUninstallCliFromPrimaryButton(
             string cliVersion,
-            string packageVersion,
+            string requiredDispatcherVersion,
             bool canUninstallCli)
         {
             bool isCliInstalled = cliVersion != null;
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, packageVersion);
-            bool needsDowngrade = IsCliDowngradeNeeded(cliVersion, packageVersion);
-            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade, canUninstallCli);
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredDispatcherVersion);
+            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade: false, canUninstallCli);
         }
 
-        internal static bool IsCliUpdateNeeded(string cliVersion, string packageVersion)
+        internal static bool IsCliUpdateNeeded(string cliVersion, string requiredDispatcherVersion)
         {
             return cliVersion != null
-                && CliVersionComparer.IsVersionLessThan(cliVersion, packageVersion);
-        }
-
-        internal static bool IsCliDowngradeNeeded(string cliVersion, string packageVersion)
-        {
-            return cliVersion != null
-                && CliVersionComparer.IsVersionGreaterThan(cliVersion, packageVersion);
+                && CliVersionComparer.IsVersionLessThan(cliVersion, requiredDispatcherVersion);
         }
 
         private async Task HandleUninstallCli()

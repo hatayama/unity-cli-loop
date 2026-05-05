@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool needsDowngrade,
             bool canUninstallCli,
             string cliVersion,
-            string packageVersion,
+            string requiredDispatcherVersion,
             string expectedText)
         {
             string text = CliSetupSection.GetInstallCliButtonText(
@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsDowngrade,
                 canUninstallCli,
                 cliVersion,
-                packageVersion);
+                requiredDispatcherVersion);
 
             Assert.That(text, Is.EqualTo(expectedText));
         }

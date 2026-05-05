@@ -419,10 +419,11 @@ namespace io.github.hatayama.UnityCliLoop
             string cliVersion = CliInstallationDetector.GetCachedCliVersion();
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
             EnsureProjectLocalCliCurrent(projectRoot);
+            string requiredDispatcherVersion = GetRequiredDispatcherVersion();
             bool cliInstalled = IsCliInstalled(cliVersion);
-            bool cliVersionMatched = IsCliVersionMatched(cliVersion) && cliInstalled;
+            bool cliVersionMatched = IsDispatcherVersionSatisfied(cliVersion, requiredDispatcherVersion) && cliInstalled;
 
-            UpdateCliStep(cliInstalled, cliVersion, cliVersionMatched);
+            UpdateCliStep(cliInstalled, cliVersion, requiredDispatcherVersion, cliVersionMatched);
 
             if (!refreshSkillsSection)
             {
@@ -552,7 +553,11 @@ namespace io.github.hatayama.UnityCliLoop
                 : new List<ToolSkillSynchronizer.SkillTargetInfo> { selectedTargetInfo };
         }
 
-        private void UpdateCliStep(bool cliInstalled, string cliVersion, bool cliVersionMatched)
+        private void UpdateCliStep(
+            bool cliInstalled,
+            string cliVersion,
+            string requiredDispatcherVersion,
+            bool cliVersionMatched)
         {
             bool needsUpdate = cliInstalled && !cliVersionMatched;
             string buttonText = GetCliButtonTextForSetupWizard(
@@ -561,7 +566,7 @@ namespace io.github.hatayama.UnityCliLoop
                 false,
                 needsUpdate,
                 cliVersion,
-                McpConstants.PackageInfo.version);
+                requiredDispatcherVersion);
             bool buttonEnabled = IsCliButtonEnabledForSetupWizard(
                 cliInstalled,
                 cliVersionMatched,
@@ -580,8 +585,7 @@ namespace io.github.hatayama.UnityCliLoop
 
             if (cliInstalled)
             {
-                string requiredVersion = McpConstants.PackageInfo.version;
-                _cliStatusLabel.text = $"v{cliVersion} (requires v{requiredVersion})";
+                _cliStatusLabel.text = $"v{cliVersion} (requires v{requiredDispatcherVersion})";
             }
             else
             {
@@ -600,7 +604,7 @@ namespace io.github.hatayama.UnityCliLoop
             bool isChecking,
             bool needsUpdate,
             string cliVersion,
-            string packageVersion)
+            string requiredDispatcherVersion)
         {
             if (isChecking)
             {
@@ -619,7 +623,7 @@ namespace io.github.hatayama.UnityCliLoop
 
             if (needsUpdate)
             {
-                return $"Update CLI (v{cliVersion} \u2192 v{packageVersion})";
+                return $"Update CLI (v{cliVersion} \u2192 v{requiredDispatcherVersion})";
             }
 
             return "Installed";
@@ -634,11 +638,22 @@ namespace io.github.hatayama.UnityCliLoop
             return !isInstallingCli && !isChecking && (!cliInstalled || !cliVersionMatched);
         }
 
-        private static bool IsCliVersionMatched(string cliVersion)
+        private static bool IsDispatcherVersionSatisfied(string cliVersion, string requiredDispatcherVersion)
         {
-            if (string.IsNullOrEmpty(cliVersion)) return false;
+            if (string.IsNullOrEmpty(cliVersion))
+            {
+                return false;
+            }
 
-            return CliVersionComparer.IsVersionGreaterThanOrEqual(cliVersion, McpConstants.PackageInfo.version);
+            return CliVersionComparer.IsVersionGreaterThanOrEqual(cliVersion, requiredDispatcherVersion);
+        }
+
+        private static string GetRequiredDispatcherVersion()
+        {
+            string requiredDispatcherVersion = ProjectLocalCliInstaller.DetectBundledRequiredDispatcherVersion();
+            return string.IsNullOrEmpty(requiredDispatcherVersion)
+                ? McpConstants.PackageInfo.version
+                : requiredDispatcherVersion;
         }
 
         private static bool IsCliInstalled(string cliVersion)
@@ -854,7 +869,7 @@ namespace io.github.hatayama.UnityCliLoop
         {
             bool wasCliInstalledBeforeInstall = CliInstallationDetector.IsCliInstalled();
             _isInstallingCli = true;
-            UpdateCliStep(false, null, false);
+            UpdateCliStep(false, null, GetRequiredDispatcherVersion(), false);
 
             try
             {

@@ -78,7 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests
 
             Assert.That(result, Is.EqualTo(Path.Combine(
                 "/package",
-                "GoCli~",
+                "Cli~",
+                "Dispatcher~",
                 "dist",
                 "darwin-arm64",
                 "uloop-dispatcher")));
@@ -95,7 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests
 
             Assert.That(result, Is.EqualTo(Path.Combine(
                 "C:\\package",
-                "GoCli~",
+                "Cli~",
+                "Dispatcher~",
                 "dist",
                 "windows-amd64",
                 "uloop-dispatcher.exe")));
@@ -560,6 +562,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests
             Directory.CreateDirectory(legacyBinDirectory);
             Directory.CreateDirectory(Path.GetDirectoryName(nativeUloopPath));
             File.WriteAllText(commandShimPath, $"@\"{oldNativeUloopPath}\" %*");
+
+            try
+            {
+                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
+                    legacyBinDirectory,
+                    nativeUloopPath);
+
+                Assert.That(result.Success, Is.True, result.ErrorOutput);
+                Assert.That(File.Exists(commandShimPath), Is.False);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, true);
+                }
+            }
+        }
+
+        [Test]
+        public void CleanupLegacyCommandShimsInDirectory_WhenLegacyGoCliDispatcherShimExistsDeletesIt()
+        {
+            // Verifies that stale package-owned GoCli dispatcher shims do not remain earlier in PATH.
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-native-installer-tests",
+                System.Guid.NewGuid().ToString("N"));
+            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
+            string nativeUloopPath = Path.Combine(tempRoot, "native", "uloop.exe");
+            string commandShimPath = Path.Combine(legacyBinDirectory, "uloop.cmd");
+            string legacyDispatcherPath = Path.Combine(
+                "Packages",
+                "src",
+                CliConstants.LEGACY_GO_CLI_PACKAGE_DIR_NAME,
+                CliConstants.DIST_DIR_NAME,
+                "windows-amd64",
+                CliConstants.GLOBAL_DISPATCHER_WINDOWS_BUNDLE_NAME);
+
+            Directory.CreateDirectory(legacyBinDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(nativeUloopPath));
+            File.WriteAllText(commandShimPath, $"@\"{legacyDispatcherPath}\" %*");
 
             try
             {

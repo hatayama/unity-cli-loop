@@ -20,7 +20,8 @@ namespace io.github.hatayama.UnityCliLoop
         private const int Utf16CodeUnitByteCount = 2;
         private const ushort CarriageReturnCodeUnit = 0x000D;
         private const ushort LineFeedCodeUnit = 0x000A;
-        private const string CliPackageDirName = "GoCli~";
+        private const string CliPackageDirName = "Cli~";
+        private const string CliCoreDirName = "Core~";
         private const string CliInternalDirName = "internal";
         private const string CliPresentationDirName = "presentation";
         private const string CliPresentationPackageDirName = "cli";
@@ -663,6 +664,7 @@ namespace io.github.hatayama.UnityCliLoop
             return Path.Combine(
                 McpConstants.PackageResolvedPath,
                 CliPackageDirName,
+                CliCoreDirName,
                 CliInternalDirName,
                 CliPresentationDirName,
                 CliPresentationPackageDirName,

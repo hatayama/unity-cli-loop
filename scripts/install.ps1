@@ -63,7 +63,9 @@ function Test-NativeUloopShimContent {
         -or $Content.IndexOf("Programs\uloop\bin\uloop.exe", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
         -or $Content.IndexOf("Programs/uloop/bin/uloop.exe", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
         -or (
-            ($Content.IndexOf("GoCli~\dist", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
+            ($Content.IndexOf("Cli~\Dispatcher~\dist", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
+                -or $Content.IndexOf("Cli~/Dispatcher~/dist", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
+                -or $Content.IndexOf("GoCli~\dist", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `
                 -or $Content.IndexOf("GoCli~/dist", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) `
             -and (
                 $Content.IndexOf("uloop-dispatcher.exe", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 `

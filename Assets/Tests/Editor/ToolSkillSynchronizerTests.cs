@@ -1026,9 +1026,9 @@ namespace io.github.hatayama.UnityCliLoop
             Assert.That(detectedTargets[0].HasExistingSkills, Is.True);
         }
 
-        // Tests that Unity-side discovery includes CLI-only skills from the Go CLI package.
+        // Tests that Unity-side discovery includes CLI-only skills from the packaged core CLI.
         [Test]
-        public void GetSkillSourceInfos_WhenProjectIsCurrentRoot_IncludesCliOnlyGoCliSkills()
+        public void GetSkillSourceInfos_WhenProjectIsCurrentRoot_IncludesCliOnlyCoreSkills()
         {
             SkillInstallLayout.SkillSourceInfo[] skillSources = SkillInstallLayout.GetSkillSourceInfos(_projectRoot)
                 .ToArray();

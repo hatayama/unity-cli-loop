@@ -2,9 +2,9 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-GO_CLI_DIR="$ROOT_DIR/Packages/src/GoCli~"
-DIST_DIR="$GO_CLI_DIR/dist"
-RELEASE_DIR="$GO_CLI_DIR/release"
+DISPATCHER_DIR="$ROOT_DIR/Packages/src/Cli~/Dispatcher~"
+DIST_DIR="$DISPATCHER_DIR/dist"
+RELEASE_DIR="$DISPATCHER_DIR/release"
 
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"

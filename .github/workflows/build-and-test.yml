@@ -21,8 +21,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: Packages/src/GoCli~/.go-version
-          cache-dependency-path: Packages/src/GoCli~/go.sum
+          go-version-file: Packages/src/Cli~/.go-version
+          cache-dependency-path: Packages/src/Cli~/**/go.sum
 
       - name: Install golangci-lint
         run: |
@@ -49,9 +49,13 @@ jobs:
 
           test -f "Packages/src/package.json" || exit 1
           test -d "Packages/src/Editor" || exit 1
-          test -d "Packages/src/GoCli~" || exit 1
-          test -f "Packages/src/GoCli~/dist/darwin-arm64/uloop-core" || exit 1
-          test -f "Packages/src/GoCli~/dist/windows-amd64/uloop-core.exe" || exit 1
+          test -d "Packages/src/Cli~/Core~" || exit 1
+          test -d "Packages/src/Cli~/Dispatcher~" || exit 1
+          test -d "Packages/src/Cli~/Shared~" || exit 1
+          test -f "Packages/src/Cli~/Core~/dist/darwin-arm64/uloop-core" || exit 1
+          test -f "Packages/src/Cli~/Dispatcher~/dist/darwin-arm64/uloop-dispatcher" || exit 1
+          test -f "Packages/src/Cli~/Core~/dist/windows-amd64/uloop-core.exe" || exit 1
+          test -f "Packages/src/Cli~/Dispatcher~/dist/windows-amd64/uloop-dispatcher.exe" || exit 1
 
           echo "✅ Unity Package structure is valid"
 

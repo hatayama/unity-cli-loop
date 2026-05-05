@@ -32,8 +32,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: Packages/src/GoCli~/.go-version
-          cache-dependency-path: Packages/src/GoCli~/go.sum
+          go-version-file: Packages/src/Cli~/.go-version
+          cache-dependency-path: Packages/src/Cli~/**/go.sum
 
       - name: Install golangci-lint
         run: |
@@ -85,9 +85,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          gh release upload "${RELEASE_TAG}" Packages/src/GoCli~/release/* --clobber
+          gh release upload "${RELEASE_TAG}" Packages/src/Cli~/Dispatcher~/release/* --clobber
 
       - name: Dry run summary
         if: inputs.dry-run == true
         run: |
-          ls -lh Packages/src/GoCli~/release
+          ls -lh Packages/src/Cli~/Dispatcher~/release

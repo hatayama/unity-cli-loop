@@ -3,7 +3,7 @@ set -eu
 
 require_go_cli_toolchain() {
   root_dir="$1"
-  version_file="$root_dir/Packages/src/GoCli~/.go-version"
+  version_file="$root_dir/Packages/src/Cli~/.go-version"
 
   if [ ! -f "$version_file" ]; then
     echo "Go CLI toolchain version file is missing: $version_file" >&2

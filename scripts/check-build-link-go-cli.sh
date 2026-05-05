@@ -87,16 +87,16 @@ arch=$(uname -m)
 
 case "$os:$arch" in
   Darwin:arm64 | Darwin:aarch64)
-    core_path="$ROOT_DIR/Packages/src/GoCli~/dist/darwin-arm64/uloop-core"
-    dispatcher_path="$ROOT_DIR/Packages/src/GoCli~/dist/darwin-arm64/uloop-dispatcher"
+    core_path="$ROOT_DIR/Packages/src/Cli~/Core~/dist/darwin-arm64/uloop-core"
+    dispatcher_path="$ROOT_DIR/Packages/src/Cli~/Dispatcher~/dist/darwin-arm64/uloop-dispatcher"
     ;;
   Darwin:x86_64 | Darwin:amd64)
-    core_path="$ROOT_DIR/Packages/src/GoCli~/dist/darwin-amd64/uloop-core"
-    dispatcher_path="$ROOT_DIR/Packages/src/GoCli~/dist/darwin-amd64/uloop-dispatcher"
+    core_path="$ROOT_DIR/Packages/src/Cli~/Core~/dist/darwin-amd64/uloop-core"
+    dispatcher_path="$ROOT_DIR/Packages/src/Cli~/Dispatcher~/dist/darwin-amd64/uloop-dispatcher"
     ;;
   MINGW*:x86_64 | MINGW*:amd64 | MSYS*:x86_64 | MSYS*:amd64 | CYGWIN*:x86_64 | CYGWIN*:amd64 | Windows_NT:x86_64 | Windows_NT:amd64)
-    core_path="$ROOT_DIR/Packages/src/GoCli~/dist/windows-amd64/uloop-core.exe"
-    dispatcher_path="$ROOT_DIR/Packages/src/GoCli~/dist/windows-amd64/uloop-dispatcher.exe"
+    core_path="$ROOT_DIR/Packages/src/Cli~/Core~/dist/windows-amd64/uloop-core.exe"
+    dispatcher_path="$ROOT_DIR/Packages/src/Cli~/Dispatcher~/dist/windows-amd64/uloop-dispatcher.exe"
     global_command_name="uloop.exe"
     project_local_core_path="$ROOT_DIR/.uloop/bin/uloop-core.exe"
     ;;

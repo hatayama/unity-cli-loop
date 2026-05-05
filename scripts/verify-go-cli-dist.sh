@@ -4,12 +4,12 @@ set -eu
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 
 DIST_FILES="
-Packages/src/GoCli~/dist/darwin-arm64/uloop-core
-Packages/src/GoCli~/dist/darwin-amd64/uloop-core
-Packages/src/GoCli~/dist/windows-amd64/uloop-core.exe
-Packages/src/GoCli~/dist/darwin-arm64/uloop-dispatcher
-Packages/src/GoCli~/dist/darwin-amd64/uloop-dispatcher
-Packages/src/GoCli~/dist/windows-amd64/uloop-dispatcher.exe
+Packages/src/Cli~/Core~/dist/darwin-arm64/uloop-core
+Packages/src/Cli~/Core~/dist/darwin-amd64/uloop-core
+Packages/src/Cli~/Core~/dist/windows-amd64/uloop-core.exe
+Packages/src/Cli~/Dispatcher~/dist/darwin-arm64/uloop-dispatcher
+Packages/src/Cli~/Dispatcher~/dist/darwin-amd64/uloop-dispatcher
+Packages/src/Cli~/Dispatcher~/dist/windows-amd64/uloop-dispatcher.exe
 "
 
 "$ROOT_DIR/scripts/build-go-cli.sh"

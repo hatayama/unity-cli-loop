@@ -109,20 +109,27 @@ yarn-error.log*
 .yarn-integrity
 
 # Native Go CLI release artifacts are included in the Unity package
-Packages/src/GoCli~/dist/*
-!Packages/src/GoCli~/dist/darwin-arm64/
-!Packages/src/GoCli~/dist/darwin-amd64/
-!Packages/src/GoCli~/dist/windows-amd64/
-Packages/src/GoCli~/dist/darwin-arm64/*
-Packages/src/GoCli~/dist/darwin-amd64/*
-Packages/src/GoCli~/dist/windows-amd64/*
-!Packages/src/GoCli~/dist/darwin-arm64/uloop-core
-!Packages/src/GoCli~/dist/darwin-arm64/uloop-dispatcher
-!Packages/src/GoCli~/dist/darwin-amd64/uloop-core
-!Packages/src/GoCli~/dist/darwin-amd64/uloop-dispatcher
-!Packages/src/GoCli~/dist/windows-amd64/uloop-core.exe
-!Packages/src/GoCli~/dist/windows-amd64/uloop-dispatcher.exe
-Packages/src/GoCli~/release/
+Packages/src/Cli~/Core~/dist/*
+!Packages/src/Cli~/Core~/dist/darwin-arm64/
+!Packages/src/Cli~/Core~/dist/darwin-amd64/
+!Packages/src/Cli~/Core~/dist/windows-amd64/
+Packages/src/Cli~/Core~/dist/darwin-arm64/*
+Packages/src/Cli~/Core~/dist/darwin-amd64/*
+Packages/src/Cli~/Core~/dist/windows-amd64/*
+!Packages/src/Cli~/Core~/dist/darwin-arm64/uloop-core
+!Packages/src/Cli~/Core~/dist/darwin-amd64/uloop-core
+!Packages/src/Cli~/Core~/dist/windows-amd64/uloop-core.exe
+Packages/src/Cli~/Dispatcher~/dist/*
+!Packages/src/Cli~/Dispatcher~/dist/darwin-arm64/
+!Packages/src/Cli~/Dispatcher~/dist/darwin-amd64/
+!Packages/src/Cli~/Dispatcher~/dist/windows-amd64/
+Packages/src/Cli~/Dispatcher~/dist/darwin-arm64/*
+Packages/src/Cli~/Dispatcher~/dist/darwin-amd64/*
+Packages/src/Cli~/Dispatcher~/dist/windows-amd64/*
+!Packages/src/Cli~/Dispatcher~/dist/darwin-arm64/uloop-dispatcher
+!Packages/src/Cli~/Dispatcher~/dist/darwin-amd64/uloop-dispatcher
+!Packages/src/Cli~/Dispatcher~/dist/windows-amd64/uloop-dispatcher.exe
+Packages/src/Cli~/Dispatcher~/release/
 
 # Environment configuration files
 .env

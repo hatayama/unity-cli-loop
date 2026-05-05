@@ -6,21 +6,21 @@ on:
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'Packages/src/GoCli~/**/*.go'
-      - 'Packages/src/GoCli~/.golangci.yml'
-      - 'Packages/src/GoCli~/.go-version'
-      - 'Packages/src/GoCli~/go.mod'
-      - 'Packages/src/GoCli~/go.sum'
+      - 'Packages/src/Cli~/**/*.go'
+      - 'Packages/src/Cli~/.golangci.yml'
+      - 'Packages/src/Cli~/.go-version'
+      - 'Packages/src/Cli~/**/go.mod'
+      - 'Packages/src/Cli~/**/go.sum'
   pull_request:
     branches: [ main, v3-beta ]
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'Packages/src/GoCli~/**/*.go'
-      - 'Packages/src/GoCli~/.golangci.yml'
-      - 'Packages/src/GoCli~/.go-version'
-      - 'Packages/src/GoCli~/go.mod'
-      - 'Packages/src/GoCli~/go.sum'
+      - 'Packages/src/Cli~/**/*.go'
+      - 'Packages/src/Cli~/.golangci.yml'
+      - 'Packages/src/Cli~/.go-version'
+      - 'Packages/src/Cli~/**/go.mod'
+      - 'Packages/src/Cli~/**/go.sum'
   workflow_dispatch:
 
 jobs:
@@ -114,8 +114,8 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v6
       with:
-        go-version-file: Packages/src/GoCli~/.go-version
-        cache-dependency-path: Packages/src/GoCli~/go.sum
+        go-version-file: Packages/src/Cli~/.go-version
+        cache-dependency-path: Packages/src/Cli~/**/go.sum
 
     - name: Install golangci-lint
       run: |
@@ -131,5 +131,7 @@ jobs:
         echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
     - name: Run govulncheck
-      working-directory: Packages/src/GoCli~
-      run: govulncheck ./...
+      run: |
+        for module in Packages/src/Cli~/Shared~ Packages/src/Cli~/Core~ Packages/src/Cli~/Dispatcher~; do
+          (cd "$module" && govulncheck ./...)
+        done
