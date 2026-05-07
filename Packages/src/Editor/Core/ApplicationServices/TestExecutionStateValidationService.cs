@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.SceneManagement;
-using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -27,7 +26,7 @@ namespace io.github.hatayama.uLoopMCP
             return SaveCurrentUnsavedEditorChanges();
         }
 
-        public virtual ValidationResult Validate(TestMode testMode, bool saveBeforeRun)
+        public virtual ValidationResult Validate(RunTestMode testMode, bool saveBeforeRun)
         {
             if (IsCompiling)
             {
@@ -44,7 +43,7 @@ namespace io.github.hatayama.uLoopMCP
                 return ValidationResult.Failure("Tests cannot run while the editor is updating");
             }
 
-            if (testMode == TestMode.EditMode && IsPlaying)
+            if (testMode == RunTestMode.EditMode && IsPlaying)
             {
                 return ValidationResult.Failure("EditMode tests cannot run during play mode");
             }

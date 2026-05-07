@@ -8,6 +8,9 @@ namespace io.github.hatayama.uLoopMCP
     /// </summary>
     public class RunTestsResponse : BaseToolResponse
     {
+        public const string TestFrameworkUnavailableMessage =
+            "run-tests requires the Unity Test Framework package (com.unity.test-framework). Install it via Package Manager to use test execution.";
+
         /// <summary>
         /// Whether test execution was successful
         /// </summary>
@@ -73,5 +76,19 @@ namespace io.github.hatayama.uLoopMCP
             CompletedAt = string.Empty;
             XmlPath = string.Empty;
         }
+
+        public static RunTestsResponse CreateTestFrameworkUnavailable()
+        {
+            return new RunTestsResponse(
+                success: false,
+                message: TestFrameworkUnavailableMessage,
+                completedAt: DateTime.UtcNow.ToString("o"),
+                testCount: 0,
+                passedCount: 0,
+                failedCount: 0,
+                skippedCount: 0,
+                xmlPath: null
+            );
+        }
     }
-} 
+}

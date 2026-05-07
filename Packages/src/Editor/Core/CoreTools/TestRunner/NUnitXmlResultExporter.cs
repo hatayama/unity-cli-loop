@@ -1,3 +1,4 @@
+#if ULOOPMCP_HAS_TEST_FRAMEWORK
 using System;
 using System.IO;
 using System.Text;
@@ -267,3 +268,4 @@ namespace io.github.hatayama.uLoopMCP
         }
     }
 }
+#endif

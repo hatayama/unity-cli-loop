@@ -22,13 +22,13 @@ namespace io.github.hatayama.uLoopMCP
     )]
     public class RunTestsTool : AbstractUnityTool<RunTestsSchema, RunTestsResponse>
     {
-        public override string ToolName => "run-tests";
+        public override string ToolName => McpConstants.TOOL_NAME_RUN_TESTS;
 
-        protected override async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken cancellationToken)
+        protected override async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken ct)
         {
             // Create and execute RunTestsUseCase instance
             RunTestsUseCase useCase = new();
-            return await useCase.ExecuteAsync(parameters, cancellationToken);
+            return await useCase.ExecuteAsync(parameters, ct);
         }
 
     }

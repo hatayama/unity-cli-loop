@@ -22,6 +22,11 @@
             "name": "com.unity.inputsystem",
             "expression": "",
             "define": "ULOOPMCP_HAS_INPUT_SYSTEM"
+        },
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "ULOOPMCP_HAS_TEST_FRAMEWORK"
         }
     ],
     "noEngineReferences": false

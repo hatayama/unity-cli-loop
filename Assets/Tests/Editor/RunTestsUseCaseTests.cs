@@ -1,7 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
-using UnityEditor.TestTools.TestRunner.Api;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -20,7 +19,7 @@ namespace io.github.hatayama.uLoopMCP
             );
             RunTestsSchema parameters = new()
             {
-                TestMode = TestMode.EditMode,
+                TestMode = RunTestMode.EditMode,
                 SaveBeforeRun = true
             };
 
@@ -48,7 +47,7 @@ namespace io.github.hatayama.uLoopMCP
                 _result = result;
             }
 
-            public override ValidationResult Validate(TestMode testMode, bool saveBeforeRun)
+            public override ValidationResult Validate(RunTestMode testMode, bool saveBeforeRun)
             {
                 SaveBeforeRun = saveBeforeRun;
                 return _result;

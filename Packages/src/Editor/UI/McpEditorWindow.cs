@@ -780,10 +780,12 @@ namespace io.github.hatayama.uLoopMCP
             bool needsDowngrade = false;
             if (isCliInstalled)
             {
-                System.Version cliVer = new System.Version(cliVersion);
-                System.Version pkgVer = new System.Version(packageVersion);
-                needsUpdate = cliVer < pkgVer;
-                needsDowngrade = cliVer > pkgVer;
+                bool comparisonAvailable = CliVersionComparison.TryCompare(
+                    cliVersion,
+                    packageVersion,
+                    out int cliVersionComparison);
+                needsUpdate = comparisonAvailable && cliVersionComparison < 0;
+                needsDowngrade = comparisonAvailable && cliVersionComparison > 0;
             }
             bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
             SkillInstallState selectedTargetInstallState = includeSkillDirectoryChecks

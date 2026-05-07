@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using System.Threading;
-using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
 namespace io.github.hatayama.uLoopMCP
@@ -45,8 +44,12 @@ namespace io.github.hatayama.uLoopMCP
         /// <param name="parameters">Test execution parameters</param>
         /// <param name="cancellationToken">Cancellation control token</param>
         /// <returns>Test execution result</returns>
-        public override async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken cancellationToken)
+        public override async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken ct)
         {
+#if !ULOOPMCP_HAS_TEST_FRAMEWORK
+            ct.ThrowIfCancellationRequested();
+            return await Task.FromResult(RunTestsResponse.CreateTestFrameworkUnavailable());
+#else
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
             if (!validation.IsValid)
             {
@@ -61,12 +64,12 @@ namespace io.github.hatayama.uLoopMCP
             }
             
             // 2. Test execution
-            cancellationToken.ThrowIfCancellationRequested();
+            ct.ThrowIfCancellationRequested();
             SerializableTestResult result;
             
             try
             {
-                if (parameters.TestMode == TestMode.PlayMode)
+                if (parameters.TestMode == RunTestMode.PlayMode)
                 {
                     // TODO: Add cancellationToken parameter when TestExecutionService supports it
                     result = await _executionService.ExecutePlayModeTestAsync(filter);
@@ -107,6 +110,7 @@ namespace io.github.hatayama.uLoopMCP
                 skippedCount: result.skippedCount,
                 xmlPath: result.xmlPath
             );
+#endif
         }
 
         private static RunTestsResponse CreateFailureResponse(string message)

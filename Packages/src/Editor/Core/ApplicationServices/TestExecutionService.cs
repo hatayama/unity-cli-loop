@@ -10,6 +10,7 @@ namespace io.github.hatayama.uLoopMCP
     /// </summary>
     public class TestExecutionService
     {
+#if ULOOPMCP_HAS_TEST_FRAMEWORK
         /// <summary>
         /// Execute tests in PlayMode
         /// </summary>
@@ -29,5 +30,16 @@ namespace io.github.hatayama.uLoopMCP
         {
             return await PlayModeTestExecuter.ExecuteEditModeTest(filter);
         }
+#else
+        public virtual Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter)
+        {
+            return Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());
+        }
+
+        public virtual Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter)
+        {
+            return Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());
+        }
+#endif
     }
 }

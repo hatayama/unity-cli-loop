@@ -14,6 +14,7 @@ import {
   getInstallDir,
   getManagedSkillsDir,
   getProjectSkillSearchRoots,
+  installAllSkills,
   migrateLegacyManagedSkills,
   parseFrontmatter,
   removeDeprecatedSkillDirs,
@@ -318,6 +319,39 @@ describe('skill install layout', () => {
     expect(
       skills.find((skill) => skill.name === 'uloop-replay-tool' && skill.source === 'project'),
     ).toBeDefined();
+  });
+
+  it('should install run-tests skill when test framework package is missing', () => {
+    const projectRoot = createUnityProjectRoot();
+    const runTestsSkillDir = join(
+      projectRoot,
+      'Packages',
+      'src',
+      'Editor',
+      'Api',
+      'McpTools',
+      'RunTests',
+      'Skill',
+    );
+    mkdirSync(runTestsSkillDir, { recursive: true });
+    writeFileSync(
+      join(runTestsSkillDir, 'SKILL.md'),
+      ['---', 'name: uloop-run-tests', '---', '', '# Run Tests', ''].join('\n'),
+      'utf-8',
+    );
+    mkdirSync(join(projectRoot, '.uloop'), { recursive: true });
+    writeFileSync(
+      join(projectRoot, '.uloop', 'settings.tools.json'),
+      JSON.stringify({ disabledTools: ['run-tests'] }),
+      'utf-8',
+    );
+    process.chdir(projectRoot);
+
+    installAllSkills(getTargetConfig('claude'), false, true);
+
+    expect(
+      existsSync(join(projectRoot, '.claude', 'skills', 'unity-cli-loop', 'uloop-run-tests')),
+    ).toBe(true);
   });
 
   it('should ignore sibling implementation files beside a direct SKILL.md in the tool folder', () => {

@@ -77,6 +77,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 > [!NOTE]
 > `com.unity.inputsystem` は optional dependency になりました。`simulate-keyboard`、`simulate-mouse-input`、`record-input`、`replay-input`、Recordings ウィンドウを使いたい場合だけ追加してください。
+> `com.unity.test-framework` も optional dependency です。`run-tests` で Unity Test Runner を実行したい場合だけ追加してください。
 
 # クイックスタート
 
@@ -324,7 +325,7 @@ LogTypeや検索対象の文字列で絞り込む事ができます。また、s
 ```
 
 ### 3. run-tests - TestRunnerの実行 (PlayMode, EditMode対応)
-Unity Test Runnerを実行し、テスト結果を取得します。FilterTypeとFilterValueで条件を設定できます。
+Unity Test Runnerを実行し、テスト結果を取得します。このツールは Unity Test Framework パッケージが必要です。未導入の場合、`run-tests` は unsupported メッセージを返し、それ以外の Unity CLI Loop 機能は動作し続けます。FilterTypeとFilterValueで条件を設定できます。
 - FilterType: all（全テスト）、exact（個別テストメソッド名）、regex（クラス名や名前空間）、assembly（アセンブリ名）
 - FilterValue: フィルタータイプに応じた値（クラス名、名前空間など）
 - SaveBeforeRun: 明示的に有効化した場合、未保存のロード済みScene変更と現在のPrefab Stage変更を保存してからテストを実行

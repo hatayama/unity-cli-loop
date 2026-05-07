@@ -597,13 +597,7 @@ namespace io.github.hatayama.uLoopMCP
         }
         private static bool IsCliVersionMatched(string cliVersion)
         {
-            if (string.IsNullOrEmpty(cliVersion)) return false;
-
-            string normalized = cliVersion.Trim().TrimStart('v', 'V');
-            if (!System.Version.TryParse(normalized, out System.Version installed)) return false;
-            if (!System.Version.TryParse(McpConstants.PackageInfo.version, out System.Version required)) return false;
-
-            return installed.CompareTo(required) == 0;
+            return CliVersionComparison.IsSameVersion(cliVersion, McpConstants.PackageInfo.version);
         }
 
         private void UpdateSkillsStep(

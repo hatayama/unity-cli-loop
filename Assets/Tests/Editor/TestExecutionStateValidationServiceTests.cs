@@ -1,5 +1,4 @@
 using NUnit.Framework;
-using UnityEditor.TestTools.TestRunner.Api;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -10,7 +9,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(true);
 
-            ValidationResult result = service.Validate(TestMode.EditMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("EditMode tests cannot run during play mode"));
@@ -21,7 +20,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(false);
 
-            ValidationResult result = service.Validate(TestMode.EditMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(result.ErrorMessage, Is.Null);
@@ -32,7 +31,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(true);
 
-            ValidationResult result = service.Validate(TestMode.PlayMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(RunTestMode.PlayMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(result.ErrorMessage, Is.Null);
@@ -45,7 +44,7 @@ namespace io.github.hatayama.uLoopMCP
                 isPlaying: false,
                 isCompiling: true);
 
-            ValidationResult result = service.Validate(TestMode.EditMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("Tests cannot run while compilation is in progress"));
@@ -58,7 +57,7 @@ namespace io.github.hatayama.uLoopMCP
                 isPlaying: false,
                 isDomainReloadInProgress: true);
 
-            ValidationResult result = service.Validate(TestMode.EditMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("Tests cannot run while domain reload is in progress"));
@@ -71,7 +70,7 @@ namespace io.github.hatayama.uLoopMCP
                 isPlaying: false,
                 isUpdating: true);
 
-            ValidationResult result = service.Validate(TestMode.EditMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("Tests cannot run while the editor is updating"));
@@ -89,7 +88,7 @@ namespace io.github.hatayama.uLoopMCP
                 isPlaying: false,
                 unsavedEditorChanges: unsavedEditorChanges);
 
-            ValidationResult result = service.Validate(TestMode.PlayMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(RunTestMode.PlayMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Tests cannot run while the editor has unsaved scene or prefab changes"));
@@ -110,7 +109,7 @@ namespace io.github.hatayama.uLoopMCP
                 saveResult: ValidationResult.Success(),
                 clearUnsavedChangesAfterSave: true);
 
-            ValidationResult result = service.Validate(TestMode.PlayMode, saveBeforeRun: true);
+            ValidationResult result = service.Validate(RunTestMode.PlayMode, saveBeforeRun: true);
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(result.ErrorMessage, Is.Null);
@@ -129,7 +128,7 @@ namespace io.github.hatayama.uLoopMCP
                 unsavedEditorChanges: unsavedEditorChanges,
                 saveResult: ValidationResult.Failure("Tests cannot save unsaved scene or prefab changes before running tests. Unsaved changes that failed to save: Prefab Stage: Assets/Scenes/Crosshair.prefab"));
 
-            ValidationResult result = service.Validate(TestMode.PlayMode, saveBeforeRun: true);
+            ValidationResult result = service.Validate(RunTestMode.PlayMode, saveBeforeRun: true);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Tests cannot save unsaved scene or prefab changes before running tests"));

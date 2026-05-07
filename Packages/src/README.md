@@ -76,6 +76,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 > [!NOTE]
 > `com.unity.inputsystem` is now an optional dependency. Install it only if you want Input System features such as `simulate-keyboard`, `simulate-mouse-input`, `record-input`, `replay-input`, and the Recordings window.
+> `com.unity.test-framework` is also optional. Install it only if you want the `run-tests` tool to execute Unity Test Runner.
 
 # Quickstart
 
@@ -325,7 +326,7 @@ This allows you to retrieve logs while keeping the context small.
 ```
 
 ### 3. run-tests - Execute TestRunner (PlayMode, EditMode supported)
-Executes Unity Test Runner and retrieves test results. You can set conditions with FilterType and FilterValue.
+Executes Unity Test Runner and retrieves test results. This tool requires the Unity Test Framework package. If the package is not installed, `run-tests` returns an unsupported message while the rest of Unity CLI Loop keeps working. You can set conditions with FilterType and FilterValue.
 - FilterType: all (all tests), exact (individual test method name), regex (class name or namespace), assembly (assembly name)
 - FilterValue: Value according to filter type (class name, namespace, etc.)
 - SaveBeforeRun: Saves unsaved loaded Scene changes and current Prefab Stage changes before running tests when explicitly enabled

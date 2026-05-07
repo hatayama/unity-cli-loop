@@ -24,7 +24,7 @@ import { homedir } from 'os';
 import { TargetConfig } from './target-config.js';
 import { findUnityProjectRoot, getUnityProjectStatus } from '../project-root.js';
 import { DEPRECATED_SKILLS } from './deprecated-skills.js';
-import { loadDisabledTools } from '../tool-settings-loader.js';
+import { isToolEnabled, loadDisabledTools } from '../tool-settings-loader.js';
 
 type SkillStatus = 'installed' | 'not_installed' | 'outdated';
 
@@ -815,7 +815,7 @@ function isSkillDisabledByToolSettings(skill: SkillDefinition, disabledTools: st
   if (toolName === null) {
     return false;
   }
-  return disabledTools.includes(toolName);
+  return disabledTools.includes(toolName) && !isToolEnabled(toolName);
 }
 
 interface UninstallResult {

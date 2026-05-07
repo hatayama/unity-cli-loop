@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -404,6 +405,38 @@ namespace io.github.hatayama.uLoopMCP
                 File.ReadAllText(Path.Combine(unrelatedSkillDir, "reference.md")),
                 Is.EqualTo("old-unrelated-reference"));
             Assert.That(Directory.Exists(thirdPartySkillDir), Is.True);
+        }
+
+        [Test]
+        public void IsSkillDisabledByToolSettings_WhenRunTestsDependencyIsMissing_ReturnsFalse()
+        {
+            SkillInstallLayout.SkillSourceInfo skill = new(
+                "uloop-run-tests",
+                string.Empty,
+                new Dictionary<string, byte[]>());
+
+            bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
+                skill,
+                new[] { McpConstants.TOOL_NAME_RUN_TESTS },
+                isTestFrameworkAvailable: false);
+
+            Assert.That(isDisabled, Is.False);
+        }
+
+        [Test]
+        public void IsSkillDisabledByToolSettings_WhenRunTestsDependencyExists_ReturnsTrue()
+        {
+            SkillInstallLayout.SkillSourceInfo skill = new(
+                "uloop-run-tests",
+                string.Empty,
+                new Dictionary<string, byte[]>());
+
+            bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
+                skill,
+                new[] { McpConstants.TOOL_NAME_RUN_TESTS },
+                isTestFrameworkAvailable: true);
+
+            Assert.That(isDisabled, Is.True);
         }
 
         [Test]

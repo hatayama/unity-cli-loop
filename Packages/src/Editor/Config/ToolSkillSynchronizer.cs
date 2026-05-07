@@ -429,7 +429,10 @@ namespace io.github.hatayama.uLoopMCP
                 string[] disabledTools = ToolSettings.GetDisabledTools();
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabled(skill, disabledTools))
+                    .Where(skill => IsSkillDisabledByToolSettings(
+                        skill,
+                        disabledTools,
+                        ToolExecutionAvailability.IsTestFrameworkAvailable))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> enabledSkills = allSkills
                     .Except(disabledSkills)
@@ -465,7 +468,10 @@ namespace io.github.hatayama.uLoopMCP
                 string[] disabledTools = ToolSettings.GetDisabledTools();
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabled(skill, disabledTools))
+                    .Where(skill => IsSkillDisabledByToolSettings(
+                        skill,
+                        disabledTools,
+                        ToolExecutionAvailability.IsTestFrameworkAvailable))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> toolSkills = allSkills
                     .Where(skill => IsSkillForTool(skill, toolName))
@@ -581,9 +587,10 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private static bool IsSkillDisabled(
+        internal static bool IsSkillDisabledByToolSettings(
             SkillInstallLayout.SkillSourceInfo skill,
-            IReadOnlyCollection<string> disabledTools)
+            IReadOnlyCollection<string> disabledTools,
+            bool isTestFrameworkAvailable)
         {
             if (disabledTools.Count == 0)
             {
@@ -596,7 +603,10 @@ namespace io.github.hatayama.uLoopMCP
                 return false;
             }
 
-            return disabledTools.Contains(toolName);
+            return disabledTools.Contains(toolName)
+                && !ToolExecutionAvailability.ShouldReportDependencyUnavailableBeforeDisabled(
+                    toolName,
+                    isTestFrameworkAvailable);
         }
 
         private static bool IsSkillForTool(
