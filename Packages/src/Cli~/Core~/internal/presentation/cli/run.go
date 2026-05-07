@@ -44,9 +44,11 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 1
 	}
 
-	completionTools := loadCompletionTools(startPath, projectPath)
-	if handled, code := tryHandleCompletionRequest(remainingArgs, completionTools, stdout, stderr); handled {
-		return code
+	if shouldHandleCompletionRequest(remainingArgs) {
+		completionTools := loadCompletionTools(startPath, projectPath)
+		if handled, code := tryHandleCompletionRequest(remainingArgs, completionTools, stdout, stderr); handled {
+			return code
+		}
 	}
 	if handled, code := tryHandleUpdateRequest(ctx, remainingArgs, stdout, stderr); handled {
 		return code
@@ -71,12 +73,6 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 1
 	}
 
-	cache, err := loadTools(connection.ProjectRoot)
-	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: command})
-		return 1
-	}
-
 	switch command {
 	case "list":
 		return runList(ctx, connection, stdout, stderr)
@@ -87,7 +83,11 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	case "fix":
 		return runFix(connection.ProjectRoot, stdout, stderr)
 	default:
-		tool, ok := findTool(cache, command)
+		tool, cache, ok, err := findToolForCommand(connection.ProjectRoot, command)
+		if err != nil {
+			writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: command})
+			return 1
+		}
 		if !ok {
 			writeErrorEnvelope(stderr, unknownCommandError(command, cache, errorContext{
 				projectRoot: connection.ProjectRoot,

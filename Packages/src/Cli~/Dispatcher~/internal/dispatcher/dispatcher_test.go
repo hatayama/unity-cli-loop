@@ -602,6 +602,22 @@ func TestForwardedProjectLocalArgsForLaunchUsesResolvedPositionalProjectPath(t *
 	}
 }
 
+func TestForwardedProjectLocalArgsAddsResolvedProjectPathForImplicitToolDispatch(t *testing.T) {
+	// Verifies that project-local core dispatch skips duplicate project-root discovery.
+	projectRoot := filepath.Join(t.TempDir(), "Game")
+	args := []string{"execute-dynamic-code", "--code", "return 1;"}
+
+	forwarded := forwardedProjectLocalArgs(args, "", projectRoot)
+
+	expected := []string{"execute-dynamic-code", "--code", "return 1;", "--project-path", projectRoot}
+	if strings.Join(forwarded, "\n") != strings.Join(expected, "\n") {
+		t.Fatalf("forwarded args mismatch: %#v", forwarded)
+	}
+	if len(args) != 3 {
+		t.Fatalf("input args were mutated: %#v", args)
+	}
+}
+
 func TestRunCompletionScriptDoesNotRequireUnityProject(t *testing.T) {
 	// Verifies that shell completion stays a dispatcher-owned global command.
 	changeDirectory(t, t.TempDir())

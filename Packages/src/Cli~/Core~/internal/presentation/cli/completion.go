@@ -104,6 +104,19 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 	return true, 0
 }
 
+func shouldHandleCompletionRequest(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+
+	switch args[0] {
+	case listCommandsFlag, listOptionsFlag, completionCommand:
+		return true
+	default:
+		return false
+	}
+}
+
 type completionRequest struct {
 	install bool
 	shell   string

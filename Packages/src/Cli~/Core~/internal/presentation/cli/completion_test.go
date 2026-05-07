@@ -110,6 +110,26 @@ func TestCompletionPrintsShellScriptWithoutProject(t *testing.T) {
 	}
 }
 
+func TestCompletionDetectionSkipsRegularToolCommands(t *testing.T) {
+	// Verifies that normal tool execution avoids completion cache loading.
+	if shouldHandleCompletionRequest([]string{executeDynamicCodeCommandName, "--code", "return 1;"}) {
+		t.Fatal("execute-dynamic-code should not enter completion handling")
+	}
+}
+
+func TestCompletionDetectionHandlesCompletionCommands(t *testing.T) {
+	// Verifies that completion-specific commands still load completion metadata.
+	for _, args := range [][]string{
+		{completionCommand, "--shell", "bash"},
+		{listCommandsFlag},
+		{listOptionsFlag, "compile"},
+	} {
+		if !shouldHandleCompletionRequest(args) {
+			t.Fatalf("completion request was not detected: %#v", args)
+		}
+	}
+}
+
 // Tests that Git Bash auto-install writes bash completion instead of PowerShell completion.
 func TestDetectShellOnWindowsGitBashUsesBash(t *testing.T) {
 	shellName := detectShellFromEnvironment("windows", "/usr/bin/bash", "MINGW64")

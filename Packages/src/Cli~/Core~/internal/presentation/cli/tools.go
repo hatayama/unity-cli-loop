@@ -74,6 +74,26 @@ func findTool(cache toolsCache, name string) (toolDefinition, bool) {
 	return toolDefinition{}, false
 }
 
+func findToolForCommand(projectRoot string, command string) (toolDefinition, toolsCache, bool, error) {
+	if shouldUseEmbeddedToolDefinition(command) {
+		cache := loadDefaultTools()
+		tool, ok := findTool(cache, command)
+		return tool, cache, ok, nil
+	}
+
+	cache, err := loadTools(projectRoot)
+	if err != nil {
+		return toolDefinition{}, toolsCache{}, false, err
+	}
+
+	tool, ok := findTool(cache, command)
+	return tool, cache, ok, nil
+}
+
+func shouldUseEmbeddedToolDefinition(command string) bool {
+	return command == executeDynamicCodeCommandName
+}
+
 func filterInternalSkillTools(projectRoot string, cache toolsCache) toolsCache {
 	internalToolNames := collectInternalSkillToolNames(projectRoot)
 	if len(internalToolNames) == 0 {
