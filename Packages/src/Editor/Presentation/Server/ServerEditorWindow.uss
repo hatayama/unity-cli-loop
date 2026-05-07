@@ -1,0 +1,148 @@
+/* ===========================================
+   ServerEditorWindow Stylesheet
+   Extracted from UnityCliLoopSettingsWindow.uss for the
+   standalone Server window.
+   =========================================== */
+
+:root {
+    --unity-cli-loop-color-success: #4caf50;
+    --unity-cli-loop-color-danger: #ef5350;
+}
+
+/* ===========================================
+   Block: Section
+   =========================================== */
+.unity-cli-loop-section {
+    margin-bottom: 8px;
+}
+
+.unity-cli-loop-section--box {
+    background-color: var(--unity-colors-helpbox-background);
+    border-color: var(--unity-colors-helpbox-border);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    overflow: hidden;
+}
+
+/* ===========================================
+   Block: Server Status
+   =========================================== */
+.unity-cli-loop-server-status {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 8px;
+    margin-left: 7px;
+}
+
+.unity-cli-loop-server-status__indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.unity-cli-loop-server-status__indicator--running {
+    background-color: var(--unity-cli-loop-color-success);
+}
+
+.unity-cli-loop-server-status__indicator--stopped {
+    background-color: var(--unity-cli-loop-color-danger);
+}
+
+.unity-cli-loop-server-status__text {
+    -unity-font-style: bold;
+}
+
+.unity-cli-loop-server-status__text--running {
+    color: var(--unity-cli-loop-color-success);
+    border-color: var(--unity-cli-loop-color-success);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 2px 6px;
+}
+
+.unity-cli-loop-server-status__text--stopped {
+    color: var(--unity-cli-loop-color-danger);
+    border-color: var(--unity-cli-loop-color-danger);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 2px 6px;
+}
+
+.unity-cli-loop-server-status__spacer {
+    flex-grow: 1;
+}
+
+/* ===========================================
+   Block: Server Controls
+   =========================================== */
+.unity-cli-loop-server-controls {
+    margin-top: 4px;
+    padding-left: 8px;
+}
+
+.unity-cli-loop-server-controls .unity-cli-loop-button {
+    flex-grow: 1;
+}
+
+/* ===========================================
+   Block: Warning Container
+   =========================================== */
+.unity-cli-loop-warning-container {
+    display: none;
+    margin-bottom: 8px;
+}
+
+.unity-cli-loop-warning-container--visible {
+    display: flex;
+}
+
+.unity-cli-loop-warning-label {
+    background-color: #5c4a00;
+    border-color: #7a6400;
+    color: #ffcc00;
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    white-space: normal;
+}
+
+/* ===========================================
+   Block: Button
+   =========================================== */
+.unity-cli-loop-button {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.unity-cli-loop-button--compact {
+    height: 22px;
+    padding-left: 12px;
+    padding-right: 12px;
+    font-size: 11px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    margin-left: 0;
+}
+
+.unity-cli-loop-button--start {
+    background-color: #2e7d32;
+    border-color: var(--unity-cli-loop-color-success);
+    color: #ffffff;
+}
+
+.unity-cli-loop-button--start:hover {
+    background-color: #388e3c;
+}
+
+.unity-cli-loop-button--stop {
+    background-color: #4a4a4a;
+    border-color: #666666;
+    color: #ff6b6b;
+}
+
+.unity-cli-loop-button--stop:hover {
+    background-color: #555555;
+}

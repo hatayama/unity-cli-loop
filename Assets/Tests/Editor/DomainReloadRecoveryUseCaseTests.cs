@@ -1,6 +1,12 @@
 using NUnit.Framework;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Tests for DomainReloadRecoveryUseCase session state fallback functionality.
@@ -14,19 +20,19 @@ namespace io.github.hatayama.UnityCliLoop
         public void SetUp()
         {
             // Save original session state
-            _originalIsServerRunning = McpEditorSettings.GetIsServerRunning();
+            _originalIsServerRunning = UnityCliLoopEditorSettings.GetIsServerRunning();
         }
 
         [TearDown]
         public void TearDown()
         {
             // Restore original session state
-            McpEditorSettings.SetIsServerRunning(_originalIsServerRunning);
-            McpEditorSettings.SetIsAfterCompile(false);
-            McpEditorSettings.SetIsDomainReloadInProgress(false);
-            McpEditorSettings.SetIsReconnecting(false);
-            McpEditorSettings.SetShowReconnectingUI(false);
-            McpEditorSettings.SetShowPostCompileReconnectingUI(false);
+            UnityCliLoopEditorSettings.SetIsServerRunning(_originalIsServerRunning);
+            UnityCliLoopEditorSettings.SetIsAfterCompile(false);
+            UnityCliLoopEditorSettings.SetIsDomainReloadInProgress(false);
+            UnityCliLoopEditorSettings.SetIsReconnecting(false);
+            UnityCliLoopEditorSettings.SetShowReconnectingUI(false);
+            UnityCliLoopEditorSettings.SetShowPostCompileReconnectingUI(false);
 
             // Clean up lock file created by ExecuteBeforeDomainReload
             DomainReloadDetectionService.DeleteLockFile();
@@ -36,49 +42,49 @@ namespace io.github.hatayama.UnityCliLoop
         public void ExecuteBeforeDomainReload_ShouldUseSessionState_WhenServerInstanceIsNull()
         {
             // Arrange
-            McpEditorSettings.SetIsServerRunning(true);
+            UnityCliLoopEditorSettings.SetIsServerRunning(true);
 
-            DomainReloadRecoveryUseCase useCase = new();
+            DomainReloadRecoveryUseCase useCase = CreateUseCase();
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
 
             // Assert
             Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
-            Assert.IsTrue(McpEditorSettings.GetIsAfterCompile(), "IsAfterCompile should be set to true");
+            Assert.IsTrue(UnityCliLoopEditorSettings.GetIsAfterCompile(), "IsAfterCompile should be set to true");
         }
 
         [Test]
         public void ExecuteBeforeDomainReload_ShouldNotSaveState_WhenBothInstanceAndSessionAreNotRunning()
         {
             // Arrange
-            McpEditorSettings.SetIsServerRunning(false);
-            McpEditorSettings.SetIsAfterCompile(false);
+            UnityCliLoopEditorSettings.SetIsServerRunning(false);
+            UnityCliLoopEditorSettings.SetIsAfterCompile(false);
 
-            DomainReloadRecoveryUseCase useCase = new();
+            DomainReloadRecoveryUseCase useCase = CreateUseCase();
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
 
             // Assert
             Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
-            Assert.IsFalse(McpEditorSettings.GetIsAfterCompile(), "IsAfterCompile should remain false when server was not running");
+            Assert.IsFalse(UnityCliLoopEditorSettings.GetIsAfterCompile(), "IsAfterCompile should remain false when server was not running");
         }
 
         [Test]
         public void ExecuteBeforeDomainReload_ShouldPreferInstanceState_WhenInstanceIsRunning()
         {
             // Arrange
-            McpEditorSettings.SetIsServerRunning(true);
+            UnityCliLoopEditorSettings.SetIsServerRunning(true);
 
             // Create a running server instance
-            McpBridgeServer server = null;
+            UnityCliLoopBridgeServer server = null;
             try
             {
-                server = new McpBridgeServer();
+                server = new UnityCliLoopBridgeServer();
                 server.StartServer();
 
-                DomainReloadRecoveryUseCase useCase = new();
+                DomainReloadRecoveryUseCase useCase = CreateUseCase();
 
                 // Act
                 ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(server);
@@ -90,6 +96,27 @@ namespace io.github.hatayama.UnityCliLoop
             finally
             {
                 server?.Dispose();
+            }
+        }
+
+        private static DomainReloadRecoveryUseCase CreateUseCase()
+        {
+            TestRecoveryCoordinator recoveryCoordinator = new();
+            SessionRecoveryService sessionRecoveryService =
+                new SessionRecoveryService(recoveryCoordinator);
+            return new DomainReloadRecoveryUseCase(sessionRecoveryService);
+        }
+
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
+        private sealed class TestRecoveryCoordinator : IUnityCliLoopServerRecoveryCoordinator
+        {
+            public IUnityCliLoopServerInstance CurrentServer => null;
+
+            public Task StartRecoveryIfNeededAsync(bool isAfterCompile, CancellationToken cancellationToken)
+            {
+                return Task.CompletedTask;
             }
         }
     }

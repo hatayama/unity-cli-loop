@@ -2,8 +2,13 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies External Compiler Message Parser behavior.
+    /// </summary>
     [TestFixture]
     public class ExternalCompilerMessageParserTests
     {

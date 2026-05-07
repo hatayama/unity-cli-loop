@@ -1,0 +1,656 @@
+/* ===========================================
+   UnityCliLoopSettingsWindow UI Toolkit Stylesheet
+   Using BEM naming convention and Unity theme variables
+   =========================================== */
+
+:root {
+    --unity-cli-loop-color-success: #4caf50;
+    --unity-cli-loop-color-danger: #ef5350;
+    --unity-cli-loop-color-warning: #ffd200;
+}
+
+/* Main Container */
+.unity-cli-loop-window-root {
+    flex-direction: column;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 0;
+}
+
+.unity-cli-loop-main-container {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 0;
+    padding: 4px;
+}
+
+.unity-cli-loop-main-container--debug {
+    background-color: rgba(128, 0, 128, 0.15);
+}
+
+/* ===========================================
+   Block: Section
+   =========================================== */
+.unity-cli-loop-section {
+    margin-bottom: 8px;
+}
+
+.unity-cli-loop-section--box {
+    background-color: var(--unity-colors-helpbox-background);
+    border-color: var(--unity-colors-helpbox-border);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    overflow: hidden;
+}
+
+/* ===========================================
+   Block: Server Status (prominent status row)
+   =========================================== */
+.unity-cli-loop-server-status {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 8px;
+    margin-left: 7px;
+}
+
+.unity-cli-loop-server-status__indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.unity-cli-loop-server-status__indicator--running {
+    background-color: var(--unity-cli-loop-color-success);
+}
+
+.unity-cli-loop-server-status__indicator--stopped {
+    background-color: var(--unity-cli-loop-color-danger);
+}
+
+.unity-cli-loop-server-status__text {
+    -unity-font-style: bold;
+}
+
+.unity-cli-loop-server-status__text--running {
+    color: var(--unity-cli-loop-color-success);
+    border-color: var(--unity-cli-loop-color-success);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 2px 6px;
+}
+
+.unity-cli-loop-server-status__text--stopped {
+    color: var(--unity-cli-loop-color-danger);
+    border-color: var(--unity-cli-loop-color-danger);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 2px 6px;
+}
+
+.unity-cli-loop-server-status__spacer {
+    flex-grow: 1;
+}
+
+/* ===========================================
+   Block: Server Controls (compact row)
+   =========================================== */
+.unity-cli-loop-server-controls {
+    margin-top: 4px;
+    padding-left: 8px;
+}
+
+.unity-cli-loop-server-controls .unity-cli-loop-button {
+    flex-grow: 1;
+}
+
+/* ===========================================
+   Block: Warning Container
+   =========================================== */
+.unity-cli-loop-warning-container {
+    display: none;
+    margin-bottom: 8px;
+}
+
+.unity-cli-loop-warning-container--visible {
+    display: flex;
+}
+
+.unity-cli-loop-warning-label {
+    background-color: #5c4a00;
+    border-color: #7a6400;
+    color: #ffcc00;
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    white-space: normal;
+}
+
+/* ===========================================
+   Block: Button
+   =========================================== */
+.unity-cli-loop-button {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.unity-cli-loop-button--compact {
+    height: 22px;
+    padding-left: 12px;
+    padding-right: 12px;
+    font-size: 11px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    margin-left: 0;
+}
+
+.unity-cli-loop-button--start {
+    background-color: #2e7d32;
+    border-color: var(--unity-cli-loop-color-success);
+    color: #ffffff;
+}
+
+.unity-cli-loop-button--start:hover {
+    background-color: #388e3c;
+}
+
+.unity-cli-loop-button--stop {
+    background-color: #4a4a4a;
+    border-color: #666666;
+    color: #ff6b6b;
+}
+
+.unity-cli-loop-button--stop:hover {
+    background-color: #555555;
+}
+
+.unity-cli-loop-button--warning {
+    background-color: #665522;
+    border-color: #aa9944;
+}
+
+.unity-cli-loop-button--warning:hover {
+    background-color: #887744;
+}
+
+.unity-cli-loop-button--configure {
+    margin-top: 8px;
+}
+
+#install-cli-button {
+    margin-top: 2px;
+}
+
+.unity-cli-loop-button--delete {
+    margin-top: 12px;
+    color: #ff6b6b;
+}
+
+.unity-cli-loop-button--delete:hover {
+    color: #ff8a8a;
+}
+
+.unity-cli-loop-button--disabled {
+    background-color: #4a4a4a;
+    border-width: 1px;
+    border-color: rgba(128, 128, 128, 0.5);
+    color: #999999;
+    opacity: 1;
+}
+
+/* ===========================================
+   Block: Toggle Row
+   =========================================== */
+.unity-cli-loop-toggle-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.unity-cli-loop-toggle-row__toggle {
+    width: 20px;
+    margin-right: 4px;
+}
+
+.unity-cli-loop-toggle-row__label {
+    flex-grow: 1;
+}
+
+.unity-cli-loop-toggle-row__label--danger {
+    color: var(--unity-cli-loop-color-warning);
+}
+
+/* ===========================================
+   Block: Target Row (Editor Selection)
+   =========================================== */
+.unity-cli-loop-target-row {
+    flex-direction: row;
+    align-items: center;
+    overflow: hidden;
+}
+
+.unity-cli-loop-target-row__label {
+    width: 50px;
+    flex-shrink: 0;
+}
+
+.unity-cli-loop-target-row__field {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* ===========================================
+   Block: Foldout
+   =========================================== */
+.unity-cli-loop-foldout {
+    margin-left: -8px;
+}
+
+#tool-settings-foldout > .unity-foldout__content {
+    margin-top: 2px;
+    padding-top: 0;
+}
+
+/* ===========================================
+   Block: Messages
+   =========================================== */
+.unity-cli-loop-info-message {
+    display: none;
+    background-color: var(--unity-colors-helpbox-background);
+    border-color: var(--unity-colors-helpbox-border);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    margin-top: 8px;
+    white-space: normal;
+}
+
+.unity-cli-loop-info-message--visible {
+    display: flex;
+}
+
+.unity-cli-loop-warning-message {
+    display: none;
+    background-color: #5c4a00;
+    border-color: #7a6400;
+    color: #ffcc00;
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    margin-top: 8px;
+    white-space: normal;
+}
+
+.unity-cli-loop-warning-message--visible {
+    display: flex;
+}
+
+.unity-cli-loop-error-message {
+    display: none;
+    background-color: var(--unity-colors-error-background, #440000);
+    border-color: var(--unity-colors-error-border, #aa0000);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    white-space: normal;
+    color: var(--unity-colors-error-text, #ff4444);
+}
+
+.unity-cli-loop-error-message--visible {
+    display: flex;
+}
+
+/* ===========================================
+   Block: Tool Settings
+   =========================================== */
+.unity-cli-loop-tool-settings-info {
+    white-space: normal;
+    margin-top: 14px;
+    margin-bottom: 4px;
+}
+
+.unity-cli-loop-tool-settings-note {
+    font-size: 10px;
+    color: #888888;
+    white-space: normal;
+    margin-bottom: 8px;
+}
+
+.unity-cli-loop-tool-settings-link {
+    font-size: 10px;
+    color: #4C7EF3;
+    white-space: normal;
+    margin-bottom: 8px;
+    cursor: link;
+    -unity-font-style: italic;
+}
+
+.unity-cli-loop-tool-settings-link:hover {
+    color: #6B9AFF;
+}
+
+.unity-cli-loop-tool-settings-content {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+#tool-settings-info-container {
+    padding-left: 14px;
+}
+
+.unity-cli-loop-tool-settings-card {
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.22);
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.03);
+    padding: 0px 8px 8px 8px;
+    margin-bottom: 12px;
+}
+
+.unity-cli-loop-tool-settings-card__header {
+    margin-top: 0;
+    padding-top: 0;
+    margin-bottom: 2px;
+}
+
+.unity-cli-loop-tool-group-header {
+    -unity-font-style: bold;
+    margin-top: 6px;
+    margin-bottom: 4px;
+}
+
+.unity-cli-loop-tool-group--disabled {
+    opacity: 0.45;
+}
+
+.unity-cli-loop-permission-item {
+    margin-top: 8px;
+    padding: 8px 0 0 14px;
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.unity-cli-loop-permission-item--first {
+    margin-top: 0;
+    padding-top: 4px;
+    border-top-width: 0;
+}
+
+.unity-cli-loop-permission-item__title {
+    margin-top: 0;
+    margin-bottom: 6px;
+    color: var(--unity-cli-loop-color-warning);
+}
+
+.unity-cli-loop-permission-item__title--dynamic-code {
+    font-size: 13px;
+}
+
+.unity-cli-loop-permission-item__control-row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.unity-cli-loop-permission-item__control-label {
+    min-width: 0;
+    margin-right: 0;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.unity-cli-loop-permission-item__toggle-row {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.unity-cli-loop-permission-item__assistive-label {
+    display: none;
+}
+
+.unity-cli-loop-segmented-control {
+    flex-direction: row;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    background-color: rgba(48, 48, 48, 0.6);
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: rgba(128, 128, 128, 0.2);
+}
+
+.unity-cli-loop-segmented-control__button {
+    flex-grow: 1;
+    height: 20px;
+    margin: 0;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: transparent;
+    background-color: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    -unity-font-style: normal;
+    font-size: 11px;
+}
+
+.unity-cli-loop-segmented-control__button:hover {
+    background-color: rgba(46, 90, 136, 0.3);
+    color: rgba(255, 255, 255, 0.7);
+    border-width: 1px;
+    border-color: rgba(70, 130, 200, 0.4);
+}
+
+#security-level-full-access-button:hover {
+    background-color: rgba(122, 39, 39, 0.35);
+    color: #ffe3e3;
+    border-width: 1px;
+    border-color: rgba(178, 76, 76, 0.55);
+}
+
+.unity-cli-loop-segmented-control__button--active {
+    background-color: rgba(46, 90, 136, 0.8);
+    color: #ffffff;
+    border-width: 1px;
+    border-color: rgba(70, 130, 200, 0.4);
+}
+
+.unity-cli-loop-segmented-control__button--warning-active {
+    background-color: rgba(122, 39, 39, 0.85);
+    color: #ffd7d7;
+    border-width: 1px;
+    border-color: rgba(178, 76, 76, 0.7);
+}
+
+.unity-cli-loop-tool-toggle-row {
+    flex-direction: row;
+    align-items: center;
+    padding: 2px 4px 2px 14px;
+    margin-top: 1px;
+    margin-bottom: 1px;
+}
+
+.unity-cli-loop-tool-toggle-row__toggle {
+    margin-right: 4px;
+}
+
+.unity-cli-loop-tool-toggle-row__label {
+    flex-grow: 1;
+}
+
+.unity-cli-loop-tool-list-container {
+    padding-left: 0;
+}
+
+.unity-cli-loop-tool-list-view {
+    margin-top: 4px;
+    margin-left: 0;
+    margin-right: 0;
+    border-width: 0;
+    background-color: transparent;
+}
+
+.unity-cli-loop-tool-list-row {
+    min-height: 24px;
+}
+
+.unity-cli-loop-tool-list-row--header {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.unity-cli-loop-tool-registry-unavailable {
+    color: #888888;
+    -unity-font-style: italic;
+    margin-top: 4px;
+}
+
+/* ===========================================
+   Block: Security
+   =========================================== */
+.unity-cli-loop-security-warning {
+    background-color: #5c4a00;
+    border-color: #7a6400;
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    margin-bottom: 8px;
+    white-space: normal;
+    color: #ffcc00;
+}
+
+.unity-cli-loop-section-header {
+    -unity-font-style: bold;
+    margin-top: 10px;
+    margin-bottom: 4px;
+}
+
+.unity-cli-loop-section-header--danger {
+    color: var(--unity-cli-loop-color-warning);
+}
+
+.unity-cli-loop-security-level-field {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.unity-cli-loop-security-level-description {
+    background-color: var(--unity-colors-helpbox-background);
+    border-color: var(--unity-colors-helpbox-border);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    margin-top: 6px;
+    white-space: normal;
+}
+
+.unity-cli-loop-security-level-description--warning {
+    background-color: #5c4a00;
+    border-color: #7a6400;
+    color: #ffcc00;
+}
+
+/* ===========================================
+   Block: CLI Setup
+   =========================================== */
+.unity-cli-loop-cli-subsection-header {
+    -unity-font-style: bold;
+    margin-top: 6px;
+    margin-bottom: 4px;
+}
+
+.unity-cli-loop-cli-separator {
+    height: 1px;
+    margin-top: 10px;
+    margin-bottom: 6px;
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.unity-cli-loop-cli-status-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+#cli-status-label {
+    flex-grow: 1;
+}
+
+.unity-cli-loop-cli-status-icon {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    margin-right: 6px;
+}
+
+.unity-cli-loop-cli-status-icon--installed {
+    background-color: var(--unity-cli-loop-color-success);
+}
+
+.unity-cli-loop-cli-status-icon--not-installed {
+    background-color: rgba(128, 128, 128, 0.5);
+}
+
+.unity-cli-loop-button--refresh {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    margin: 0 3px 0 4px;
+    padding: 0;
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-radius: 2px;
+}
+
+/* ===========================================
+   Block: GitHub Link
+   =========================================== */
+.unity-cli-loop-github-link {
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    flex-shrink: 0;
+    padding-top: 4px;
+    padding-right: 10px;
+    padding-bottom: 4px;
+    padding-left: 4px;
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.08);
+    margin-right: 6px;
+    opacity: 0.78;
+}
+
+.unity-cli-loop-github-link__label {
+    font-size: 11px;
+    color: #c3cad3;
+    margin-right: 5px;
+}
+
+.unity-cli-loop-github-link__icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.78;
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.unity-cli-loop-github-link--hover {
+    opacity: 1;
+}
+
+.unity-cli-loop-github-link__label--hover {
+    color: #ffffff;
+}
+
+.unity-cli-loop-github-link__icon--hover {
+    opacity: 1;
+}
+
+/* ===========================================
+   Utility: Hidden
+   =========================================== */
+.unity-cli-loop-hidden {
+    display: none;
+}

@@ -4,7 +4,9 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     [Ignore("Skipped because full-console reflection scans make routine EditMode runs too slow; run manually when changing console log retrieval.")]
     /// <summary>
@@ -96,7 +98,7 @@ namespace io.github.hatayama.UnityCliLoop
 
             // Log should be retrieved correctly
             Assert.IsNotNull(logTypeLogs);
-            Assert.IsTrue(logTypeLogs.Any(log => log.Message.Contains(testLogMessage) && log.LogType == McpLogType.Log));
+            Assert.IsTrue(logTypeLogs.Any(log => log.Message.Contains(testLogMessage) && log.LogType == UnityCliLoopLogType.Log));
         }
 
         [Test]
@@ -187,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop
             string testMessage = $"MessageWithStack_{uniqueTestId}";
             
             // Create a dummy GameObject to use as context (this generates stack trace)
-            GameObject testObject = new GameObject("TestObject");
+            GameObject testObject = new("TestObject");
             
             LogAssert.Expect(UnityEngine.LogType.Log, testMessage);
             Debug.Log(testMessage, testObject);
@@ -273,7 +275,7 @@ namespace io.github.hatayama.UnityCliLoop
 
             // Assert - Error should have message and stack trace separated
             LogEntryDto testLog = logs.FirstOrDefault(log => 
-                log.LogType == McpLogType.Error && log.Message.Contains(testErrorMessage));
+                log.LogType == UnityCliLoopLogType.Error && log.Message.Contains(testErrorMessage));
             Assert.IsNotNull(testLog, "Test error log should be found");
             
             // Message should be clean
@@ -325,7 +327,7 @@ namespace io.github.hatayama.UnityCliLoop
 
             // Act & Assert - Reflection-based initialization should succeed
             Assert.DoesNotThrow(() => {
-                ConsoleLogRetriever newRetriever = new ConsoleLogRetriever();
+                ConsoleLogRetriever newRetriever = new();
 
                 // Basic reflection functionality should work
                 int count = newRetriever.GetLogCount();

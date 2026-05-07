@@ -1,8 +1,11 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
+    /// <summary>
+    /// Provides the Unity component behavior for Record Input Overlay View.
+    /// </summary>
     public class RecordInputOverlayView : MonoBehaviour
     {
         [SerializeField] private CanvasGroup _canvasGroup;

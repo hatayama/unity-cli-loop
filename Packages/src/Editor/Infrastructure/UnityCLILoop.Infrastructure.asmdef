@@ -1,0 +1,20 @@
+{
+    "name": "UnityCLILoop.Infrastructure",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Infrastructure",
+    "references": [
+        "UnityCLILoop.Application",
+        "UnityCLILoop.Domain",
+        "UnityCLILoop.ToolContracts"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -6,7 +6,9 @@ using System.Threading.Tasks;
 using UnityEngine.TestTools;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Unit tests for EditorDelay system
@@ -219,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop
         public void DelayFrame_WithImmediateCancellation_ThrowsImmediately()
         {
             // Arrange - Already cancelled token
-            CancellationTokenSource cts = new CancellationTokenSource();
+            CancellationTokenSource cts = new();
             cts.Cancel(); // Cancel in advance
             
             bool executed = false;
@@ -259,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop
         public IEnumerator DelayFrame_WithDelayedCancellation_CancelsCorrectly()
         {
             // Arrange
-            CancellationTokenSource cts = new CancellationTokenSource();
+            CancellationTokenSource cts = new();
             bool taskStarted = false;
             bool executed = false;
             

@@ -3,21 +3,26 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Command Runner behavior.
+    /// </summary>
     [TestFixture]
     public class CommandRunnerTests
     {
         [Test]
         public async Task ExecuteAsync_WhenCallerCancellationIsRequested_ShouldReturnNeutralCancelledMessage()
         {
-            CommandRunner runner = new CommandRunner();
+            CommandRunner runner = new();
             using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
             cancellationTokenSource.Cancel();
 
-            io.github.hatayama.UnityCliLoop.ExecutionContext context = new io.github.hatayama.UnityCliLoop.ExecutionContext
-            {
-                CompiledAssembly = typeof(global::UnityCliLoop.Dynamic.DynamicCommand).Assembly,
+            io.github.hatayama.UnityCliLoop.FirstPartyTools.ExecutionContext context = new()            {
+                CompiledAssembly = typeof(global::io.github.hatayama.UnityCliLoop.Tests.Editor.Dynamic.DynamicCommand).Assembly,
                 Parameters = new Dictionary<string, object>(),
                 CancellationToken = cancellationTokenSource.Token
             };
@@ -25,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             ExecutionResult result = await runner.ExecuteAsync(context);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorMessage, Is.EqualTo(McpConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
+            Assert.That(result.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
             Assert.That(result.Logs, Contains.Item("Execution cancelled"));
             Assert.That(result.Logs, Has.No.Member("Execution cancelled due to timeout"));
         }
@@ -33,11 +38,10 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task ExecuteAsync_WhenSyncFallbackAcceptsCancellationToken_ShouldUseSupportedSignature()
         {
-            CommandRunner runner = new CommandRunner();
+            CommandRunner runner = new();
 
-            io.github.hatayama.UnityCliLoop.ExecutionContext context = new io.github.hatayama.UnityCliLoop.ExecutionContext
-            {
-                CompiledAssembly = typeof(global::UnityCliLoop.Dynamic.DynamicCommand).Assembly,
+            io.github.hatayama.UnityCliLoop.FirstPartyTools.ExecutionContext context = new()            {
+                CompiledAssembly = typeof(global::io.github.hatayama.UnityCliLoop.Tests.Editor.Dynamic.DynamicCommand).Assembly,
                 Parameters = new Dictionary<string, object>(),
                 CancellationToken = CancellationToken.None
             };

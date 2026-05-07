@@ -1,8 +1,13 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Hierarchy Serializer behavior.
+    /// </summary>
     public class HierarchySerializerTests
     {
         private HierarchySerializer serializer;
@@ -23,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop
                 new(2, "Child", 1, 1, true, new[] { "Transform", "MeshRenderer" }, "SceneA")
             };
             
-            HierarchyContext context = new HierarchyContext("editor", "TestScene", 0, 0);
+            HierarchyContext context = new("editor", "TestScene", 0, 0);
             
             // Act
             HierarchySerializationResult result = serializer.BuildGroups(nodes, context, new HierarchySerializationOptions());
@@ -52,8 +57,8 @@ namespace io.github.hatayama.UnityCliLoop
         public void BuildGroups_WithEmptyNodes_ReturnsEmptyGroups()
         {
             // Arrange
-            List<HierarchyNode> nodes = new List<HierarchyNode>();
-            HierarchyContext context = new HierarchyContext("editor", "EmptyScene", 0, 0);
+            List<HierarchyNode> nodes = new();
+            HierarchyContext context = new("editor", "EmptyScene", 0, 0);
             
             // Act
             HierarchySerializationResult result = serializer.BuildGroups(nodes, context, new HierarchySerializationOptions());
@@ -78,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop
                 new(4, "Level3", 3, 3, true, new string[0])
             };
             
-            HierarchyContext context = new HierarchyContext("editor", "DeepScene", 0, 0);
+            HierarchyContext context = new("editor", "DeepScene", 0, 0);
             
             // Act
             HierarchySerializationResult result = serializer.BuildGroups(nodes, context, new HierarchySerializationOptions());

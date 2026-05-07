@@ -1,13 +1,19 @@
 using NUnit.Framework;
 using System.IO;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Tool Settings behavior.
+    /// </summary>
     [TestFixture]
     public class ToolSettingsTests
     {
         private static readonly string SettingsFilePath =
-            Path.Combine(McpConstants.ULOOP_DIR, McpConstants.ULOOP_TOOL_SETTINGS_FILE_NAME);
+            Path.Combine(UnityCliLoopConstants.ULOOP_DIR, UnityCliLoopConstants.ULOOP_TOOL_SETTINGS_FILE_NAME);
         private static readonly string SettingsBackupPath = SettingsFilePath + ".bak";
 
         private bool _settingsFileExisted;

@@ -5,8 +5,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Execute Dynamic Code Use Case behavior.
+    /// </summary>
     [TestFixture]
     public class ExecuteDynamicCodeUseCaseTests
     {
@@ -20,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteAsync_WhenInitialCompilationLooksLikeMissingReturn_ShouldRetryOnce()
         {
             MarkForegroundWarmupCompleted();
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = false,
@@ -38,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                     Success = true,
                     Result = "ok"
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -64,10 +71,102 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenMissingReturnFailureHasUpdatedCode_ShouldRetryOnce()
+        {
+            // Tests that wrapped compiler output does not block the missing-return recovery retry.
+            MarkForegroundWarmupCompleted();
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = false,
+                    UpdatedCode = "if (condition) return \"x\";",
+                    CompilationErrors = new List<CompilationError>
+                    {
+                        new CompilationError
+                        {
+                            ErrorCode = "CS0161",
+                            Message = "Not all code paths return a value"
+                        }
+                    }
+                },
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "ok"
+                });
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+
+            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
+            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
+
+            try
+            {
+                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema
+                    {
+                        Code = "if (condition) return \"x\";",
+                        CompileOnly = false
+                    },
+                    CancellationToken.None);
+
+                Assert.That(response.Success, Is.True);
+                Assert.That(runtime.Requests, Has.Count.EqualTo(2));
+                Assert.That(runtime.Requests[1].Code, Does.Contain("return null;"));
+            }
+            finally
+            {
+                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
+            }
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenRawTypeDeclarationHasMissingReturnFailure_ShouldNotRetry()
+        {
+            // Tests that missing-return recovery stays limited to script-style top-level snippets.
+            MarkForegroundWarmupCompleted();
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = false,
+                    UpdatedCode = "public class Sample { public string Run(bool condition) { if (condition) return \"x\"; } }",
+                    CompilationErrors = new List<CompilationError>
+                    {
+                        new CompilationError
+                        {
+                            ErrorCode = "CS0161",
+                            Message = "Not all code paths return a value"
+                        }
+                    }
+                });
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+
+            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
+            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
+
+            try
+            {
+                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema
+                    {
+                        Code = "public class Sample { public string Run(bool condition) { if (condition) return \"x\"; } }",
+                        CompileOnly = false
+                    },
+                    CancellationToken.None);
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(runtime.Requests, Has.Count.EqualTo(1));
+            }
+            finally
+            {
+                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
+            }
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenYieldingRequestNeedsMissingReturnRetry_ShouldPreserveYieldingOnRetry()
         {
             MarkForegroundWarmupCompleted();
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = false,
@@ -85,7 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                     Success = true,
                     Result = "ok"
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -115,13 +214,13 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteAsync_WhenInitialExecutionSucceeds_ShouldNotRetry()
         {
             MarkForegroundWarmupCompleted();
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = true,
                     Result = "ok"
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -148,7 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task ExecuteAsync_WhenFirstForegroundExecutionRuns_ShouldWarmHiddenPathBeforeUserCode()
         {
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = true,
@@ -159,7 +258,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                     Success = true,
                     Result = "ok"
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -187,7 +286,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task ExecuteAsync_WhenForegroundWarmupAlreadyCompleted_ShouldNotRepeatIt()
         {
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = true,
@@ -203,7 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                     Success = true,
                     Result = "second"
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -237,11 +336,11 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task ExecuteAsync_WhenWarmupFailsButForegroundExecutionSucceeds_ShouldNotRepeatWarmupOnNextRequest()
         {
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = false,
-                    ErrorMessage = McpConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS
+                    ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS
                 },
                 new ExecutionResult
                 {
@@ -253,7 +352,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                     Success = true,
                     Result = "second"
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -289,13 +388,13 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task ExecuteAsync_WhenRequestIsCompileOnly_ShouldSkipForegroundWarmup()
         {
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = true,
                     Result = "ok"
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -324,7 +423,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteAsync_WhenRetryAfterMissingReturnStillFails_ShouldReturnRetryDiagnostics()
         {
             MarkForegroundWarmupCompleted();
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = false,
@@ -358,7 +457,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                     Logs = new List<string> { "retry failure" },
                     Timings = new List<string> { "retry timing" }
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -392,7 +491,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             string updatedCode = string.Join(
                 "\n",
                 Enumerable.Range(1, 12).Select(index => index == 10 ? "abcd" : $"line{index}"));
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = false,
@@ -409,7 +508,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                         }
                     }
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -442,8 +541,8 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteAsync_WhenRuntimeThrowsOperationCanceledException_ShouldReturnNeutralCancelledResponse()
         {
             MarkForegroundWarmupCompleted();
-            CancellingDynamicCodeExecutionRuntime runtime = new CancellingDynamicCodeExecutionRuntime();
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            CancellingDynamicCodeExecutionRuntime runtime = new();
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
             using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
             cancellationTokenSource.Cancel();
 
@@ -460,7 +559,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                     cancellationTokenSource.Token);
 
                 Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorMessage, Is.EqualTo(McpConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
+                Assert.That(response.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
                 Assert.That(response.Logs, Contains.Item("Execution cancelled"));
             }
             finally
@@ -473,15 +572,15 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteAsync_WhenRuntimeReturnsCancelledResult_ShouldPreserveNeutralCancelledResponse()
         {
             MarkForegroundWarmupCompleted();
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = false,
-                    ErrorMessage = McpConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
+                    ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
                     Logs = new List<string> { "Execution cancelled" },
                     Timings = new List<string> { "compile_ms=1" }
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -496,7 +595,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                     CancellationToken.None);
 
                 Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorMessage, Is.EqualTo(McpConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
+                Assert.That(response.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
                 Assert.That(response.Logs, Contains.Item("Execution cancelled"));
                 Assert.That(response.Timings, Contains.Item("compile_ms=1"));
             }
@@ -510,14 +609,14 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteAsync_WhenRuntimeFailsAfterProducingLogs_ShouldPreserveOriginalLogs()
         {
             MarkForegroundWarmupCompleted();
-            FakeDynamicCodeExecutionRuntime runtime = new FakeDynamicCodeExecutionRuntime(
+            FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {
                     Success = false,
                     ErrorMessage = "Object reference not set to an instance of an object",
                     Logs = new List<string> { "partial log" }
                 });
-            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
 
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
@@ -540,6 +639,88 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             }
         }
 
+        [Test]
+        public async Task ExecuteAsync_WhenRuntimeReturnsKnownCompilePattern_ShouldReturnFriendlyGuidance()
+        {
+            // Tests that known dynamic-code compile failures keep the CLI-facing guidance text.
+            MarkForegroundWarmupCompleted();
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = false,
+                    ErrorMessage = "Compilation error occurred",
+                    Logs = new List<string> { "Top-level statements must precede namespace and type declarations." }
+                });
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+
+            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
+            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
+
+            try
+            {
+                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema
+                    {
+                        Code = "namespace Bad { class Wrapped {} }"
+                    },
+                    CancellationToken.None);
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorMessage, Is.EqualTo("There is an issue with the code structure"));
+                Assert.That(response.Logs, Contains.Item("Solutions:"));
+            }
+            finally
+            {
+                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
+            }
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenKnownCompilePatternExistsOnlyInCompilationErrors_ShouldReturnFriendlyGuidance()
+        {
+            // Tests that friendly guidance is derived from structured compiler diagnostics before logs.
+            MarkForegroundWarmupCompleted();
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = false,
+                    ErrorMessage = "Compilation error occurred",
+                    CompilationErrors = new List<CompilationError>
+                    {
+                        new CompilationError
+                        {
+                            ErrorCode = "CS8803",
+                            Message = "Top-level statements must precede namespace and type declarations."
+                        }
+                    }
+                });
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+
+            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
+            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
+
+            try
+            {
+                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema
+                    {
+                        Code = "namespace Bad { class Wrapped {} }"
+                    },
+                    CancellationToken.None);
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorMessage, Is.EqualTo("There is an issue with the code structure"));
+                Assert.That(response.Logs, Contains.Item("Solutions:"));
+            }
+            finally
+            {
+                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
+            }
+        }
+
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class FakeDynamicCodeExecutionRuntime : IDynamicCodeExecutionRuntime
         {
             private readonly Queue<ExecutionResult> _results;
@@ -551,11 +732,6 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 
             public List<DynamicCodeExecutionRequest> Requests { get; } = new List<DynamicCodeExecutionRequest>();
             public List<DynamicCodeExecutionRequest> TryExecuteRequests { get; } = new List<DynamicCodeExecutionRequest>();
-
-            public bool SupportsAutoPrewarm()
-            {
-                return true;
-            }
 
             public Task<ExecutionResult> ExecuteAsync(
                 DynamicCodeExecutionRequest request,
@@ -601,13 +777,11 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             DynamicCodeForegroundWarmupState.MarkCompleted();
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class CancellingDynamicCodeExecutionRuntime : IDynamicCodeExecutionRuntime
         {
-            public bool SupportsAutoPrewarm()
-            {
-                return true;
-            }
-
             public Task<ExecutionResult> ExecuteAsync(
                 DynamicCodeExecutionRequest request,
                 CancellationToken cancellationToken = default)

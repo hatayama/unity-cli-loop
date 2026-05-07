@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public static class ChunkMeshBuilder
     {
         private static readonly Vector3Int[] FaceDirections = new Vector3Int[]
@@ -49,9 +52,9 @@ namespace io.github.hatayama.UnityCliLoop
             Debug.Assert(registry != null, "registry must not be null");
             Debug.Assert(getWorldBlock != null, "getWorldBlock must not be null");
 
-            List<Vector3> vertices = new List<Vector3>(4096);
-            List<int> triangles = new List<int>(6144);
-            List<Vector2> uvs = new List<Vector2>(4096);
+            List<Vector3> vertices = new(4096);
+            List<int> triangles = new(6144);
+            List<Vector2> uvs = new(4096);
 
             int worldOffsetX = chunkData.ChunkPosition.x * WorldConstants.ChunkSizeX;
             int worldOffsetZ = chunkData.ChunkPosition.y * WorldConstants.ChunkSizeZ;
@@ -91,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop
                 }
             }
 
-            Mesh mesh = new Mesh();
+            Mesh mesh = new();
             mesh.SetVertices(vertices);
             mesh.SetTriangles(triangles, 0);
             mesh.SetUVs(0, uvs);
@@ -133,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop
             int x, int y, int z, int faceIndex, BlockDefinition definition)
         {
             int vertexStart = vertices.Count;
-            Vector3 blockPos = new Vector3(x, y, z);
+            Vector3 blockPos = new(x, y, z);
 
             Vector3[] faceVerts = FaceVertices[faceIndex];
             vertices.Add(blockPos + faceVerts[0]);

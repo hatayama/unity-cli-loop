@@ -2,8 +2,11 @@ using UnityEngine;
 using System.IO;
 using System.Diagnostics;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies For Dynamic Assembly behavior.
+    /// </summary>
     public class ForDynamicAssemblyTest
     {
         public string HelloWorldInAnotherDLL()

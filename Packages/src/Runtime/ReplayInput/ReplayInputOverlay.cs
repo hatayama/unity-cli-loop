@@ -2,11 +2,14 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     // Overlay that displays replay progress (frame counter and progress bar)
     // during input replay. Keyboard/mouse visualization is handled by existing
     // SimulateKeyboardOverlay and SimulateMouseInputOverlay.
+    /// <summary>
+    /// Drives the runtime overlay used by Replay Input behavior.
+    /// </summary>
     public class ReplayInputOverlay : MonoBehaviour
     {
         private const float FADE_OUT_DURATION = 0.5f;

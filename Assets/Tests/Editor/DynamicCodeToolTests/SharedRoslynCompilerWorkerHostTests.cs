@@ -4,15 +4,20 @@ using System.IO;
 using System.Text;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Shared Roslyn Compiler Worker Host behavior.
+    /// </summary>
     [TestFixture]
     public class SharedRoslynCompilerWorkerHostTests
     {
         [Test]
         public void ConfigureWorkerDotnetRuntimeEnvironment_WhenCalled_ShouldDisableMultilevelLookup()
         {
-            ProcessStartInfo startInfo = new ProcessStartInfo();
+            ProcessStartInfo startInfo = new();
             startInfo.EnvironmentVariables[SharedRoslynCompilerWorkerHost.DotnetMultilevelLookupEnvironmentVariableName] = "1";
 
             SharedRoslynCompilerWorkerHost.ConfigureWorkerDotnetRuntimeEnvironment(startInfo);

@@ -1,7 +1,9 @@
 #nullable enable
 using System.Collections;
 using System.Threading.Tasks;
-using io.github.hatayama.UnityCliLoop;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -9,8 +11,11 @@ using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
-namespace Tests.PlayMode
+namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
+    /// <summary>
+    /// Test fixture that verifies Simulate Mouse UI behavior.
+    /// </summary>
     public class SimulateMouseUiTests
     {
         private GameObject canvasGo = null!;
@@ -554,7 +559,7 @@ namespace Tests.PlayMode
 
         private IEnumerator RunTool(JObject parameters)
         {
-            Task<BaseToolResponse> task = tool.ExecuteAsync(parameters);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters);
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
                 task.IsCompleted || Time.realtimeSinceStartup >= timeoutAt);
@@ -598,7 +603,7 @@ namespace Tests.PlayMode
 
         private GameObject CreateChildUIElement(string name, Transform parent, Vector2 anchoredPosition, Vector2 sizeDelta)
         {
-            GameObject go = new GameObject(name);
+            GameObject go = new(name);
             go.transform.SetParent(parent, false);
             RectTransform rect = go.AddComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -654,6 +659,9 @@ namespace Tests.PlayMode
     }
 
     // Tracks pointer click events for testing
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class ClickTracker : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler
     {
         public bool PointerDownCalled { get; private set; }
@@ -666,6 +674,9 @@ namespace Tests.PlayMode
     }
 
     // Tracks drag events and moves the element for testing
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class DragTracker : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         public bool BeginDragCalled { get; private set; }
@@ -694,6 +705,9 @@ namespace Tests.PlayMode
         public void OnEndDrag(PointerEventData eventData) { EndDragCalled = true; }
     }
 
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class DropTracker : MonoBehaviour, IDropHandler
     {
         public bool DropCalled { get; private set; }

@@ -3,7 +3,9 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Unit tests for FrameParser class.

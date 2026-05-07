@@ -6,8 +6,13 @@ using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Tests.Demo;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo.Editor
 {
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public static class MinecraftSceneBuilder
     {
         private const string ScenePath = "Assets/Scenes/Minecraft.unity";
@@ -42,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void CreateDirectionalLight()
         {
-            GameObject lightObj = new GameObject("Directional Light");
+            GameObject lightObj = new("Directional Light");
             Light light = lightObj.AddComponent<Light>();
             light.type = LightType.Directional;
             light.color = new Color(1f, 0.96f, 0.84f);
@@ -52,10 +57,10 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static GameObject CreateWorld(BlockRegistry blockRegistry, Material blockMaterial)
         {
-            GameObject worldObj = new GameObject("World");
+            GameObject worldObj = new("World");
             World world = worldObj.AddComponent<World>();
 
-            SerializedObject so = new SerializedObject(world);
+            SerializedObject so = new(world);
             so.FindProperty("blockRegistry").objectReferenceValue = blockRegistry;
             so.FindProperty("blockMaterial").objectReferenceValue = blockMaterial;
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -81,8 +86,8 @@ namespace io.github.hatayama.UnityCliLoop
             {
                 for (int cz = 0; cz < WorldConstants.WorldSizeInChunks; cz++)
                 {
-                    Vector2Int chunkPos = new Vector2Int(cx, cz);
-                    ChunkData data = new ChunkData(chunkPos);
+                    Vector2Int chunkPos = new(cx, cz);
+                    ChunkData data = new(chunkPos);
                     TerrainGenerator.GenerateChunk(data);
                     allChunkData[cx, cz] = data;
                 }
@@ -118,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop
                     EditorUtility.DisplayProgressBar("Prebaking Chunks",
                         $"Building mesh {progress}/{totalChunks}", (float)progress / totalChunks);
 
-                    Vector2Int chunkPos = new Vector2Int(cx, cz);
+                    Vector2Int chunkPos = new(cx, cz);
                     ChunkData data = allChunkData[cx, cz];
 
                     Mesh mesh = ChunkMeshBuilder.BuildMesh(data, blockRegistry,
@@ -128,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop
                     AssetDatabase.DeleteAsset(meshPath);
                     AssetDatabase.CreateAsset(mesh, meshPath);
 
-                    GameObject chunkObj = new GameObject($"Chunk_{cx}_{cz}");
+                    GameObject chunkObj = new($"Chunk_{cx}_{cz}");
                     chunkObj.transform.parent = worldObj.transform;
 
                     float worldX = cx * WorldConstants.ChunkSizeX;
@@ -145,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop
                     meshCollider.sharedMesh = mesh;
 
                     ChunkRenderer chunkRenderer = chunkObj.AddComponent<ChunkRenderer>();
-                    SerializedObject chunkSo = new SerializedObject(chunkRenderer);
+                    SerializedObject chunkSo = new(chunkRenderer);
                     chunkSo.FindProperty("chunkPosition").vector2IntValue = chunkPos;
                     chunkSo.ApplyModifiedPropertiesWithoutUndo();
                 }
@@ -158,7 +163,7 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static GameObject CreatePlayer(InputActionAsset inputActions, GameObject worldObj)
         {
-            GameObject playerObj = new GameObject("Player");
+            GameObject playerObj = new("Player");
             // CharacterController is a Collider; without this, downward raycasts
             // hit the player's own capsule before reaching ground blocks
             playerObj.layer = LayerMask.NameToLayer("Ignore Raycast");
@@ -178,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop
             WireInputAction(controller, "jumpAction", inputActions, "Player/Jump");
             WireInputAction(controller, "sprintAction", inputActions, "Player/Sprint");
 
-            GameObject cameraObj = new GameObject("PlayerCamera");
+            GameObject cameraObj = new("PlayerCamera");
             cameraObj.transform.SetParent(playerObj.transform);
             cameraObj.transform.localPosition = new Vector3(0f, PlayerConstants.PlayerHeight - 0.1f, 0f);
             cameraObj.tag = "MainCamera";
@@ -189,13 +194,13 @@ namespace io.github.hatayama.UnityCliLoop
             cameraObj.AddComponent<AudioListener>();
 
             MinecraftPlayerCamera playerCamera = cameraObj.AddComponent<MinecraftPlayerCamera>();
-            SerializedObject camSo = new SerializedObject(playerCamera);
+            SerializedObject camSo = new(playerCamera);
             camSo.FindProperty("playerBody").objectReferenceValue = playerObj.transform;
             camSo.ApplyModifiedPropertiesWithoutUndo();
             WireInputAction(playerCamera, "lookAction", inputActions, "Player/Look");
 
             BlockInteraction blockInteraction = playerObj.AddComponent<BlockInteraction>();
-            SerializedObject biSo = new SerializedObject(blockInteraction);
+            SerializedObject biSo = new(blockInteraction);
             biSo.FindProperty("world").objectReferenceValue = worldObj.GetComponent<World>();
             biSo.FindProperty("playerCamera").objectReferenceValue = cam;
             biSo.ApplyModifiedPropertiesWithoutUndo();
@@ -210,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void CreateGameCanvas(InputActionAsset inputActions, BlockRegistry blockRegistry, GameObject playerObj)
         {
-            GameObject canvasObj = new GameObject("GameCanvas");
+            GameObject canvasObj = new("GameCanvas");
             Canvas canvas = canvasObj.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 10;
@@ -223,7 +228,7 @@ namespace io.github.hatayama.UnityCliLoop
             HotbarSlotUI[] slots = CreateHotbar(canvasObj);
 
             HotbarUI hotbarUI = canvasObj.GetComponentInChildren<HotbarUI>();
-            SerializedObject hotbarSo = new SerializedObject(hotbarUI);
+            SerializedObject hotbarSo = new(hotbarUI);
             hotbarSo.FindProperty("blockRegistry").objectReferenceValue = blockRegistry;
             SerializedProperty slotsProperty = hotbarSo.FindProperty("slots");
             slotsProperty.arraySize = slots.Length;
@@ -235,14 +240,14 @@ namespace io.github.hatayama.UnityCliLoop
 
             // Wire hotbarUI to BlockInteraction
             BlockInteraction blockInteraction = playerObj.GetComponent<BlockInteraction>();
-            SerializedObject biSo = new SerializedObject(blockInteraction);
+            SerializedObject biSo = new(blockInteraction);
             biSo.FindProperty("hotbarUI").objectReferenceValue = hotbarUI;
             biSo.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void CreateCrosshair(GameObject canvasObj)
         {
-            GameObject crosshairObj = new GameObject("Crosshair");
+            GameObject crosshairObj = new("Crosshair");
             crosshairObj.transform.SetParent(canvasObj.transform, false);
 
             RectTransform rt = crosshairObj.AddComponent<RectTransform>();
@@ -253,14 +258,14 @@ namespace io.github.hatayama.UnityCliLoop
             crosshairImage.color = new Color(1f, 1f, 1f, 0.8f);
 
             CrosshairUI crosshairUI = crosshairObj.AddComponent<CrosshairUI>();
-            SerializedObject so = new SerializedObject(crosshairUI);
+            SerializedObject so = new(crosshairUI);
             so.FindProperty("crosshairImage").objectReferenceValue = crosshairImage;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static HotbarSlotUI[] CreateHotbar(GameObject canvasObj)
         {
-            GameObject hotbarObj = new GameObject("Hotbar");
+            GameObject hotbarObj = new("Hotbar");
             hotbarObj.transform.SetParent(canvasObj.transform, false);
 
             RectTransform hotbarRt = hotbarObj.AddComponent<RectTransform>();
@@ -289,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static HotbarSlotUI CreateSlot(GameObject hotbarObj, int index)
         {
-            GameObject slotObj = new GameObject($"Slot_{index}");
+            GameObject slotObj = new($"Slot_{index}");
             slotObj.transform.SetParent(hotbarObj.transform, false);
 
             RectTransform slotRt = slotObj.AddComponent<RectTransform>();
@@ -299,7 +304,7 @@ namespace io.github.hatayama.UnityCliLoop
             selectionFrame.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
 
             // Block color child
-            GameObject colorObj = new GameObject("BlockColor");
+            GameObject colorObj = new("BlockColor");
             colorObj.transform.SetParent(slotObj.transform, false);
 
             RectTransform colorRt = colorObj.AddComponent<RectTransform>();
@@ -311,7 +316,7 @@ namespace io.github.hatayama.UnityCliLoop
             Image blockColorImage = colorObj.AddComponent<Image>();
 
             HotbarSlotUI slotUI = slotObj.AddComponent<HotbarSlotUI>();
-            SerializedObject so = new SerializedObject(slotUI);
+            SerializedObject so = new(slotUI);
             so.FindProperty("blockColorImage").objectReferenceValue = blockColorImage;
             so.FindProperty("selectionFrame").objectReferenceValue = selectionFrame;
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -321,7 +326,7 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void CreateEventSystem()
         {
-            GameObject esObj = new GameObject("EventSystem");
+            GameObject esObj = new("EventSystem");
             esObj.AddComponent<UnityEngine.EventSystems.EventSystem>();
             esObj.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
         }
@@ -332,7 +337,7 @@ namespace io.github.hatayama.UnityCliLoop
             InputActionReference actionRef = GetActionReference(inputActions, actionPath);
             Debug.Assert(actionRef != null, $"InputAction '{actionPath}' not found in InputActions asset");
 
-            SerializedObject so = new SerializedObject(target);
+            SerializedObject so = new(target);
             so.FindProperty(propertyName).objectReferenceValue = actionRef;
             so.ApplyModifiedPropertiesWithoutUndo();
         }

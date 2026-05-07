@@ -1,13 +1,17 @@
 using NUnit.Framework;
 using System.Collections;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Application;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Main Thread Switcher behavior.
+    /// </summary>
     public class MainThreadSwitcherTests
     {
         private int mainThreadId;
@@ -88,40 +92,6 @@ namespace io.github.hatayama.UnityCliLoop
             Assert.That(taskCompleted, Is.True, "Background task should complete within timeout");
             Assert.That(backgroundThreadId, Is.Not.EqualTo(mainThreadId), "Should start on background thread");
             Assert.That(afterSwitchThreadId, Is.EqualTo(mainThreadId), "Should switch to main thread");
-        }
-
-        /// <summary>
-        /// Verifies that PlayerLoopTiming can be specified
-        /// </summary>
-        [UnityTest]
-        public IEnumerator SwitchToMainThread_WithPlayerLoopTiming_ShouldAcceptTiming()
-        {
-            // Arrange
-            PlayerLoopTiming timing = PlayerLoopTiming.FixedUpdate;
-            bool executed = false;
-            bool completed = false;
-
-            // Act
-            Task.Run(async () =>
-            {
-                try
-                {
-                    await MainThreadSwitcher.SwitchToMainThread(timing);
-                    executed = true;
-                    completed = true;
-                }
-                catch (System.Exception ex)
-                {
-                    UnityEngine.Debug.LogError($"Test failed: {ex.Message}");
-                    completed = true;
-                }
-            });
-
-            // Wait for completion
-            yield return new UnityEngine.WaitUntil(() => completed);
-
-            // Assert
-            Assert.That(executed, Is.True, "Should execute with specified timing");
         }
 
     }

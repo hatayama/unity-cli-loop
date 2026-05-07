@@ -1,9 +1,12 @@
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
     // simulate-keyboard cannot reproduce mouse-driven actions (look, click),
     // so this script uses random automation to exercise them during PlayMode
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     [DisallowMultipleComponent]
     public class AutoPlayer : MonoBehaviour
     {
@@ -88,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop
                 return;
             }
 
-            Ray ray = new Ray(cameraTransform.position, cameraTransform.forward);
+            Ray ray = new(cameraTransform.position, cameraTransform.forward);
             if (!Physics.Raycast(ray, out RaycastHit hit, BlockConstants.InteractionRange))
             {
                 ResetActionTimer();

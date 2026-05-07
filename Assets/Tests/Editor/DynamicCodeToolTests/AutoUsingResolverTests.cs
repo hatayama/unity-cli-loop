@@ -1,19 +1,23 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Auto Using Resolver behavior.
+    /// </summary>
     [TestFixture]
     public class AutoUsingResolverTests
     {
         [Test]
         public void AddAssemblyReferenceIfMissing_WhenAssemblyIdentityAlreadyExistsUnderDifferentPath_ShouldSkipDuplicate()
         {
-            List<string> currentReferences = new List<string>
-            {
+            List<string> currentReferences = new()            {
                 "/reference/System.Runtime.dll"
             };
-            List<string> assemblyReferencesToAdd = new List<string>();
+            List<string> assemblyReferencesToAdd = new();
 
             AutoUsingResolver.AddAssemblyReferenceIfMissing(
                 assemblyReferencesToAdd,
@@ -26,11 +30,10 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public void AddAssemblyReferenceIfMissing_WhenAssemblyIdentityIsNew_ShouldAddReference()
         {
-            List<string> currentReferences = new List<string>
-            {
+            List<string> currentReferences = new()            {
                 "/reference/System.Runtime.dll"
             };
-            List<string> assemblyReferencesToAdd = new List<string>();
+            List<string> assemblyReferencesToAdd = new();
 
             AutoUsingResolver.AddAssemblyReferenceIfMissing(
                 assemblyReferencesToAdd,

@@ -1,8 +1,13 @@
 using System.IO;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Domain;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Bridge Transport Endpoint behavior.
+    /// </summary>
     public class BridgeTransportEndpointTests
     {
         [Test]
@@ -10,7 +15,8 @@ namespace io.github.hatayama.UnityCliLoop
         {
             string filesystemRoot = Path.GetPathRoot(Directory.GetCurrentDirectory());
 
-            string canonicalProjectRoot = BridgeTransportEndpoint.CanonicalizeProjectRoot(filesystemRoot);
+            // Tests that root path canonicalization keeps the filesystem root stable.
+            string canonicalProjectRoot = ProjectRootCanonicalizer.Canonicalize(filesystemRoot);
 
             Assert.That(canonicalProjectRoot, Is.EqualTo(filesystemRoot));
         }

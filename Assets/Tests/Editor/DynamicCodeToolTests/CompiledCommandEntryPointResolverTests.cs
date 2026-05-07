@@ -3,20 +3,25 @@ using System.Reflection;
 using System.Threading;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Compiled Command Entry Point Resolver behavior.
+    /// </summary>
     [TestFixture]
     public class CompiledCommandEntryPointResolverTests
     {
         [Test]
         public void TryFindExecuteMethod_WhenDirectTypeHasOverloads_ShouldPickSupportedSignature()
         {
-            CompiledCommandEntryPointResolver resolver = new CompiledCommandEntryPointResolver();
+            CompiledCommandEntryPointResolver resolver = new();
 
             (System.Type targetType, MethodInfo executeMethod) = resolver.TryFindExecuteMethod(
-                typeof(global::UnityCliLoop.Dynamic.DynamicCommand).Assembly);
+                typeof(global::io.github.hatayama.UnityCliLoop.Tests.Editor.Dynamic.DynamicCommand).Assembly);
 
-            Assert.That(targetType, Is.EqualTo(typeof(global::UnityCliLoop.Dynamic.DynamicCommand)));
+            Assert.That(targetType, Is.EqualTo(typeof(global::io.github.hatayama.UnityCliLoop.Tests.Editor.Dynamic.DynamicCommand)));
             Assert.That(executeMethod, Is.Not.Null);
             Assert.That(executeMethod.GetParameters(), Has.Length.EqualTo(2));
             Assert.That(
@@ -29,8 +34,11 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
     }
 }
 
-namespace UnityCliLoop.Dynamic
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.Dynamic
 {
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class DynamicCommand
     {
         public string Execute()

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     public enum RecordInputOverlayPhase
     {
@@ -9,15 +9,18 @@ namespace io.github.hatayama.UnityCliLoop
         Recording
     }
 
-    public static class RecordInputOverlayState
+    /// <summary>
+    /// Provides Record Input Overlay State operations for its owning module.
+    /// </summary>
+    public sealed class RecordInputOverlayStateService
     {
-        private static RecordInputOverlayPhase _phase;
-        private static float _countdownEndTime;
-        private static float _recordingStartTime;
+        private RecordInputOverlayPhase _phase;
+        private float _countdownEndTime;
+        private float _recordingStartTime;
 
-        public static RecordInputOverlayPhase Phase => _phase;
+        public RecordInputOverlayPhase Phase => _phase;
 
-        public static float RemainingSeconds
+        public float RemainingSeconds
         {
             get
             {
@@ -30,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop
             }
         }
 
-        public static float ElapsedSeconds
+        public float ElapsedSeconds
         {
             get
             {
@@ -42,23 +45,52 @@ namespace io.github.hatayama.UnityCliLoop
             }
         }
 
-        public static void StartCountdown(float durationSeconds)
+        public void StartCountdown(float durationSeconds)
         {
             _phase = RecordInputOverlayPhase.Countdown;
             _countdownEndTime = Time.realtimeSinceStartup + durationSeconds;
         }
 
-        public static void StartRecording()
+        public void StartRecording()
         {
             _phase = RecordInputOverlayPhase.Recording;
             _recordingStartTime = Time.realtimeSinceStartup;
         }
 
-        public static void Clear()
+        public void Clear()
         {
             _phase = RecordInputOverlayPhase.None;
             _countdownEndTime = 0f;
             _recordingStartTime = 0f;
+        }
+    }
+
+    /// <summary>
+    /// Stores Record Input Overlay state shared by the owning workflow.
+    /// </summary>
+    public static class RecordInputOverlayState
+    {
+        private static readonly RecordInputOverlayStateService ServiceValue = new RecordInputOverlayStateService();
+
+        public static RecordInputOverlayPhase Phase => ServiceValue.Phase;
+
+        public static float RemainingSeconds => ServiceValue.RemainingSeconds;
+
+        public static float ElapsedSeconds => ServiceValue.ElapsedSeconds;
+
+        public static void StartCountdown(float durationSeconds)
+        {
+            ServiceValue.StartCountdown(durationSeconds);
+        }
+
+        public static void StartRecording()
+        {
+            ServiceValue.StartRecording();
+        }
+
+        public static void Clear()
+        {
+            ServiceValue.Clear();
         }
     }
 }

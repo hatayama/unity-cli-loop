@@ -3,8 +3,11 @@ using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class DemoVirtualPad : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
     {
         [SerializeField] private RectTransform knob = null!;

@@ -4,11 +4,14 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
     // Verification controller for UI-based record/replay.
     // Logs mouse position, button states, and UI interaction results
     // to compare recording vs replay for EventSystem-driven scenes.
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class UiReplayVerificationController : ReplayVerificationControllerBase
     {
         [SerializeField] private Text? _mousePositionText;

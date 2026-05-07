@@ -2,10 +2,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEditor.Compilation;
-using UnityEngine;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Compiled Assembly Builder behavior.
+    /// </summary>
     [TestFixture]
     public class CompiledAssemblyBuilderTests
     {
@@ -66,25 +69,6 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             await continuationTask;
 
             Assert.That(buildFinished, Is.True);
-        }
-
-        [Test]
-        public void SupportsAutoPrewarm_WhenExternalCompilerIsAvailableOnWindows_ShouldReturnTrue()
-        {
-            Assert.That(
-                CompiledAssemblyBuilder.SupportsAutoPrewarm(
-                    new ExternalCompilerPaths(
-                        "Editor",
-                        "Editor",
-                        "dotnet",
-                        "csc.dll",
-                        "csc.runtimeconfig.json",
-                        "csc.deps.json",
-                        "Microsoft.CodeAnalysis.dll",
-                        "Microsoft.CodeAnalysis.CSharp.dll",
-                        "runtime"),
-                    RuntimePlatform.WindowsEditor),
-                Is.True);
         }
     }
 }

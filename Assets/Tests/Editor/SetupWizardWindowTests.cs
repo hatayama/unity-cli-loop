@@ -6,12 +6,20 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.Presentation;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Setup Wizard Window behavior.
+    /// </summary>
     public class SetupWizardWindowTests
     {
         private static readonly string SettingsFilePath =
-            Path.Combine(McpConstants.USER_SETTINGS_FOLDER, McpConstants.SETTINGS_FILE_NAME);
+            Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
 
         private bool _settingsFileExisted;
         private string _settingsFileContent;
@@ -22,20 +30,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _settingsFileExisted = File.Exists(SettingsFilePath);
             _settingsFileContent = _settingsFileExisted ? File.ReadAllText(SettingsFilePath) : null;
 
-            if (!Directory.Exists(McpConstants.USER_SETTINGS_FOLDER))
+            if (!Directory.Exists(UnityCliLoopConstants.USER_SETTINGS_FOLDER))
             {
-                Directory.CreateDirectory(McpConstants.USER_SETTINGS_FOLDER);
+                Directory.CreateDirectory(UnityCliLoopConstants.USER_SETTINGS_FOLDER);
             }
 
             DeleteIfExists(SettingsFilePath);
-            McpEditorSettings.InvalidateCache();
+            UnityCliLoopEditorSettings.InvalidateCache();
         }
 
         [TearDown]
         public void TearDown()
         {
             RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
-            McpEditorSettings.InvalidateCache();
+            UnityCliLoopEditorSettings.InvalidateCache();
         }
 
         [TestCase("", "1.7.3", false, true)]
@@ -59,60 +67,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void MaybeRecordLastSeenVersion_WhenAutoShow_UpdatesStoredVersion()
         {
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
 
             SetupWizardWindow.MaybeRecordLastSeenVersion(true, "1.7.3");
 
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
         }
 
         [Test]
         public void MaybeRecordLastSeenVersion_WhenManualShow_KeepsStoredVersion()
         {
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
 
             SetupWizardWindow.MaybeRecordLastSeenVersion(false, "1.7.3");
 
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
         }
 
         [Test]
         public void MaybeRecordSuppressedVersion_WhenAutoShowSuppressed_UpdatesStoredVersion()
         {
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
 
             SetupWizardWindow.MaybeRecordSuppressedVersion(true, "1.7.3");
 
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
         }
 
         [Test]
         public void MaybeRecordSuppressedVersion_WhenAutoShowAllowed_KeepsStoredVersion()
         {
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
 
             SetupWizardWindow.MaybeRecordSuppressedVersion(false, "1.7.3");
 
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
         }
 
         [Test]
         public void TryReuseOpenWindow_WhenExistingWindowAndAutoShow_FocusesWindowAndRecordsVersion()
         {
             bool focusedExistingWindow = false;
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
@@ -125,14 +133,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(reused, Is.True);
             Assert.That(focusedExistingWindow, Is.True);
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
         }
 
         [Test]
         public void TryReuseOpenWindow_WhenExistingWindowAndManualShow_FocusesWindowWithoutRecordingVersion()
         {
             bool focusedExistingWindow = false;
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
@@ -145,14 +153,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(reused, Is.True);
             Assert.That(focusedExistingWindow, Is.True);
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
         }
 
         [Test]
         public void TryReuseOpenWindow_WhenNoExistingWindow_DoesNotFocusOrRecordVersion()
         {
             bool focusedExistingWindow = false;
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
@@ -165,7 +173,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(reused, Is.False);
             Assert.That(focusedExistingWindow, Is.False);
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
         }
 
         [Test]
@@ -242,14 +250,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void FilterInstallableSkillTargets_ExcludesTargetsWithoutSkillsDirectory()
         {
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
+            List<SkillSetupApplicationFacade.SkillTargetInfo> targets = new()
             {
                 new("Claude Code", ".claude", "--claude", true, true),
                 new("Cursor", ".cursor", "--cursor", false, false),
                 new("Codex CLI", ".codex", "--codex", true, false, hasDifferentLayoutSkills: true)
             };
 
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
+            List<SkillSetupApplicationFacade.SkillTargetInfo> installableTargets =
                 SetupWizardWindow.FilterInstallableSkillTargets(targets);
 
             Assert.That(installableTargets.Count, Is.EqualTo(2));
@@ -338,7 +346,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void CreateFirstInstallSkillTarget_WhenClaudeSelected_ReturnsClaudeProjectTarget()
         {
-            ToolSkillSynchronizer.SkillTargetInfo target =
+            SkillSetupApplicationFacade.SkillTargetInfo target =
                 SetupWizardWindow.CreateFirstInstallSkillTarget(SkillsTarget.Claude, true);
 
             Assert.That(target.DisplayName, Is.EqualTo("Claude Code"));
@@ -358,7 +366,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string expectedDirName,
             string expectedInstallFlag)
         {
-            ToolSkillSynchronizer.SkillTargetInfo target =
+            SkillSetupApplicationFacade.SkillTargetInfo target =
                 SetupWizardWindow.CreateFirstInstallSkillTarget(targetType, true);
 
             Assert.That(target.DisplayName, Is.EqualTo(expectedDisplayName));
@@ -371,7 +379,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void CreateFirstInstallSkillTarget_WhenGroupingDisabled_KeepsTargetMetadata()
         {
-            ToolSkillSynchronizer.SkillTargetInfo target =
+            SkillSetupApplicationFacade.SkillTargetInfo target =
                 SetupWizardWindow.CreateFirstInstallSkillTarget(SkillsTarget.Claude, false);
 
             Assert.That(target.DisplayName, Is.EqualTo("Claude Code"));
@@ -382,7 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetSelectedSkillTargetInfo_WhenDetectedTargetExists_ReturnsDetectedState()
         {
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
+            List<SkillSetupApplicationFacade.SkillTargetInfo> targets = new()
             {
                 new(
                     "Claude Code",
@@ -393,7 +401,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     installState: SkillInstallState.Installed)
             };
 
-            ToolSkillSynchronizer.SkillTargetInfo target = SetupWizardWindow.GetSelectedSkillTargetInfo(
+            SkillSetupApplicationFacade.SkillTargetInfo target = SetupWizardWindow.GetSelectedSkillTargetInfo(
                 targets,
                 SkillsTarget.Claude,
                 groupSkillsUnderUnityCliLoop: true);
@@ -405,7 +413,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetFirstInstallableSkillTargets_WhenSelectedTargetIsInstalled_ReturnsEmpty()
         {
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
+            List<SkillSetupApplicationFacade.SkillTargetInfo> targets = new()
             {
                 new(
                     "Claude Code",
@@ -416,7 +424,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     installState: SkillInstallState.Installed)
             };
 
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
+            List<SkillSetupApplicationFacade.SkillTargetInfo> installableTargets =
                 SetupWizardWindow.GetFirstInstallableSkillTargets(
                     targets,
                     SkillsTarget.Claude,
@@ -428,9 +436,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetFirstInstallableSkillTargets_WhenSelectedTargetIsMissing_ReturnsMappedTarget()
         {
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
+            List<SkillSetupApplicationFacade.SkillTargetInfo> installableTargets =
                 SetupWizardWindow.GetFirstInstallableSkillTargets(
-                    new List<ToolSkillSynchronizer.SkillTargetInfo>(),
+                    new List<SkillSetupApplicationFacade.SkillTargetInfo>(),
                     SkillsTarget.Claude,
                     groupSkillsUnderUnityCliLoop: true);
 

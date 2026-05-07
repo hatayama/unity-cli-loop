@@ -1,15 +1,19 @@
 #if ULOOP_HAS_INPUT_SYSTEM
 using System.Collections;
 using System.IO;
-using io.github.hatayama.UnityCliLoop;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Tests.Demo;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
-namespace Tests.PlayMode
+namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
+    /// <summary>
+    /// Test fixture that verifies Input Replay Verification 2 E behavior.
+    /// </summary>
     public class InputReplayVerificationE2ETests
     {
         private const string SCENE_PATH = "Assets/Scenes/InputReplayVerificationScene.unity";
@@ -22,7 +26,7 @@ namespace Tests.PlayMode
         public IEnumerator SetUp()
         {
             _replayCompleted = false;
-            InputReplayer.ReplayCompleted += OnReplayCompleted;
+            InputReplayer.AddReplayCompletedHandler(OnReplayCompleted);
 
             AsyncOperation loadOp = EditorSceneManager.LoadSceneAsyncInPlayMode(
                 SCENE_PATH,
@@ -42,7 +46,7 @@ namespace Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            InputReplayer.ReplayCompleted -= OnReplayCompleted;
+            InputReplayer.RemoveReplayCompletedHandler(OnReplayCompleted);
 
             if (InputReplayer.IsReplaying)
             {

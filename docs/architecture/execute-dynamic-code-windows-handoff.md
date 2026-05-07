@@ -13,7 +13,7 @@ The rebuild has already moved to a layered shape:
 
 - `Entry`
   - `ExecuteDynamicCodeTool`
-  - `McpServerController`
+  - `UnityCliLoopServerController`
 - `UseCase`
   - `ExecuteDynamicCodeUseCase`
   - `PrewarmDynamicCodeUseCase`
@@ -36,11 +36,11 @@ The key design rule is:
 Start with these files in order:
 
 1. `docs/architecture/execute-dynamic-code-rebuild.md`
-2. `Packages/src/Editor/Api/McpTools/ExecuteDynamicCode/ExecuteDynamicCodeTool.cs`
-3. `Packages/src/Editor/Api/McpTools/UseCases/Tools/ExecuteDynamicCodeUseCase.cs`
-4. `Packages/src/Editor/Execution/DynamicCodeExecutionFacade.cs`
-5. `Packages/src/Editor/Compilation/DynamicCodeCompiler.cs`
-6. `Packages/src/Editor/Compilation/CompiledAssemblyBuilder.cs`
+2. `Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/ExecuteDynamicCodeTool.cs`
+3. `Packages/src/Editor/Application/Api/Tools/UseCases/Tools/ExecuteDynamicCodeUseCase.cs`
+4. `Packages/src/Editor/Application/Execution/DynamicCodeExecutionFacade.cs`
+5. `Packages/src/Editor/Infrastructure/DynamicCompilation/DynamicCodeCompiler.cs`
+6. `Packages/src/Editor/Infrastructure/DynamicCompilation/CompiledAssemblyBuilder.cs`
 
 ## Important module facades
 
@@ -90,10 +90,10 @@ Look for messages related to:
 
 Relevant files:
 
-- `Packages/src/Editor/Compilation/DynamicCompilationHealthMonitor.cs`
-- `Packages/src/Editor/Compilation/ExternalCompilerPathResolver.cs`
-- `Packages/src/Editor/Compilation/RoslynCompilerBackend.cs`
-- `Packages/src/Editor/Compilation/SharedRoslynCompilerWorkerHost.cs`
+- `Packages/src/Editor/Application/Compilation/DynamicCompilationHealthMonitor.cs`
+- `Packages/src/Editor/Infrastructure/DynamicCompilation/ExternalCompilerPathResolver.cs`
+- `Packages/src/Editor/Infrastructure/DynamicCompilation/RoslynCompilerBackend.cs`
+- `Packages/src/Editor/Infrastructure/DynamicCompilation/SharedRoslynCompilerWorkerHost.cs`
 
 ## Windows validation checklist
 

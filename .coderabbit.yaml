@@ -12,7 +12,7 @@ reviews:
   poem: false
   auto_review:
     enabled: true
-    drafts: true
+    drafts: false
     base_branches:
       - ".*"
   path_filters:

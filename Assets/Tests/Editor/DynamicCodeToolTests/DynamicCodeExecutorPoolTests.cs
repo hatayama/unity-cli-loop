@@ -1,18 +1,24 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using io.github.hatayama.UnityCliLoop.Factory;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Dynamic Code Executor Pool behavior.
+    /// </summary>
     [TestFixture]
     public class DynamicCodeExecutorPoolTests
     {
         [Test]
         public void GetOrCreate_WhenSameSecurityLevelRequestedTwice_ShouldReuseExecutor()
         {
-            FakeDynamicCodeExecutorProvider provider = new FakeDynamicCodeExecutorProvider();
+            FakeDynamicCodeExecutorProvider provider = new();
             using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
 
             IDynamicCodeExecutor first = pool.GetOrCreate(DynamicCodeSecurityLevel.Restricted);
@@ -25,8 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public void Dispose_WhenExecutorsWereCreated_ShouldDisposeAllExecutors()
         {
-            FakeDynamicCodeExecutorProvider provider = new FakeDynamicCodeExecutorProvider();
-            DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
+            FakeDynamicCodeExecutorProvider provider = new();
+            DynamicCodeExecutorPool pool = new(provider);
 
             pool.GetOrCreate(DynamicCodeSecurityLevel.Restricted);
             pool.GetOrCreate(DynamicCodeSecurityLevel.FullAccess);
@@ -39,8 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public void GetOrCreate_AfterDispose_ShouldThrowObjectDisposedException()
         {
-            FakeDynamicCodeExecutorProvider provider = new FakeDynamicCodeExecutorProvider();
-            DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
+            FakeDynamicCodeExecutorProvider provider = new();
+            DynamicCodeExecutorPool pool = new(provider);
 
             pool.Dispose();
 
@@ -52,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public void GetOrCreate_WhenProviderReturnsStubFirst_ShouldReplaceItWhenRealExecutorBecomesAvailable()
         {
-            SequenceDynamicCodeExecutorProvider provider = new SequenceDynamicCodeExecutorProvider(
+            SequenceDynamicCodeExecutorProvider provider = new(
                 new DynamicCodeExecutorStub(),
                 new FakeDynamicCodeExecutor());
             using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
@@ -65,6 +71,9 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             Assert.That(second, Is.Not.SameAs(first));
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class FakeDynamicCodeExecutorProvider : IDynamicCodeExecutorProvider
         {
             public Dictionary<DynamicCodeSecurityLevel, int> CreateCallsBySecurityLevel { get; } = new();
@@ -80,12 +89,15 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
 
                 CreateCallsBySecurityLevel[securityLevel]++;
 
-                FakeDynamicCodeExecutor executor = new FakeDynamicCodeExecutor();
+                FakeDynamicCodeExecutor executor = new();
                 CreatedExecutors.Add(executor);
                 return executor;
             }
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class SequenceDynamicCodeExecutorProvider : IDynamicCodeExecutorProvider
         {
             private readonly Queue<IDynamicCodeExecutor> _executors;
@@ -101,6 +113,9 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             }
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class FakeDynamicCodeExecutor : IDynamicCodeExecutor
         {
             public int DisposeCallCount { get; private set; }

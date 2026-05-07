@@ -1,8 +1,13 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Dangerous API Catalog behavior.
+    /// </summary>
     [TestFixture]
     public class DangerousApiCatalogTests
     {

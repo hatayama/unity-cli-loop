@@ -4,7 +4,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
     /// <summary>
     /// Test for AssemblyReferencePolicy

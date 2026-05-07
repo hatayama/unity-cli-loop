@@ -8,7 +8,7 @@ This document describes the rebuilt `execute-dynamic-code` pipeline after the la
 flowchart TD
     subgraph Entry["Entry layer"]
         Tool["ExecuteDynamicCodeTool"]
-        Server["McpServerController"]
+        Server["UnityCliLoopServerController"]
     end
 
     subgraph UseCase["UseCase layer"]
@@ -155,7 +155,7 @@ flowchart TD
 
 1. Start with `Entry layer`.
    - `ExecuteDynamicCodeTool` only delegates the tool workflow.
-   - `McpServerController` only requests warm-up after server start and recovery.
+   - `UnityCliLoopServerController` only requests warm-up after server start and recovery.
 2. Move to `UseCase layer`.
    - `ExecuteDynamicCodeUseCase` owns the user-facing workflow for execute-dynamic-code.
    - `PrewarmDynamicCodeUseCase` owns the warm-up workflow.

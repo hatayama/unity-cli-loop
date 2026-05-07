@@ -3,8 +3,14 @@ using UnityEngine;
 using System.IO;
 using System.Threading;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
+    /// <summary>
+    /// Defines the Unity Editor window for Editor Window Capture workflows.
+    /// </summary>
     public class EditorWindowCaptureTest : EditorWindow
     {
         private string _windowName = "Console";
@@ -34,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop
                 EditorWindow[] windows = EditorWindowCaptureUtility.FindWindowsByName(_windowName, _matchMode);
                 if (windows.Length > 0)
                 {
-                    System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                    System.Text.StringBuilder sb = new();
                     sb.AppendLine($"Found {windows.Length} window(s):");
                     for (int i = 0; i < windows.Length; i++)
                     {
@@ -117,14 +123,14 @@ namespace io.github.hatayama.UnityCliLoop
                 DestroyImmediate(_previewTexture);
             }
 
-            string outputDir = Path.Combine(Application.dataPath.Replace("/Assets", ""), McpConstants.OUTPUT_ROOT_DIR, McpConstants.SCREENSHOTS_DIR);
+            string outputDir = Path.Combine(UnityEngine.Application.dataPath.Replace("/Assets", ""), UnityCliLoopConstants.OUTPUT_ROOT_DIR, UnityCliLoopConstants.SCREENSHOTS_DIR);
             if (!Directory.Exists(outputDir))
             {
                 Directory.CreateDirectory(outputDir);
             }
 
             string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            System.Text.StringBuilder sb = new();
             sb.AppendLine($"Captured {windows.Length} window(s):");
 
             for (int i = 0; i < windows.Length; i++)
@@ -176,14 +182,14 @@ namespace io.github.hatayama.UnityCliLoop
         /// </summary>
         private void OpenOutputFolder()
         {
-            string outputDir = Path.Combine(Application.dataPath.Replace("/Assets", ""), McpConstants.OUTPUT_ROOT_DIR, McpConstants.SCREENSHOTS_DIR);
+            string outputDir = Path.Combine(UnityEngine.Application.dataPath.Replace("/Assets", ""), UnityCliLoopConstants.OUTPUT_ROOT_DIR, UnityCliLoopConstants.SCREENSHOTS_DIR);
             if (!Directory.Exists(outputDir))
             {
                 Directory.CreateDirectory(outputDir);
             }
 
             string fileUri = "file:///" + outputDir.Replace("\\", "/");
-            Application.OpenURL(fileUri);
+            UnityEngine.Application.OpenURL(fileUri);
         }
     }
 }

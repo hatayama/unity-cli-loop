@@ -16,7 +16,7 @@ graph TB
     subgraph "2. Unity Editor (Project IPC Server)"
         MB[McpBridgeServer<br/>Project IPC Server<br/>McpBridgeServer.cs]
         CMD[Tool System<br/>UnityApiHandler.cs]
-        UI[McpEditorWindow<br/>GUI<br/>McpEditorWindow.cs]
+        UI[UnityCliLoopSettingsWindow<br/>GUI<br/>UnityCliLoopSettingsWindow.cs]
         API[Unity APIs]
         SM[McpSessionManager<br/>McpSessionManager.cs]
     end
@@ -195,7 +195,7 @@ Its primary responsibilities are:
 2.  **Executing Unity Operations**: Processes received tool requests to perform actions within the Unity Editor, such as compiling the project, running tests, or retrieving logs.
 3.  **Security Management**: Validates and controls tool execution through `McpSecurityChecker` to prevent unauthorized operations.
 4.  **Session Management**: Maintains server session state through `McpSessionManager`.
-5.  **Providing a User Interface (`McpEditorWindow`)**: Offers a GUI within the Unity Editor for developers to manage the CLI setup, skills, security settings, and project IPC server state.
+5.  **Providing a User Interface (`UnityCliLoopSettingsWindow`)**: Offers a GUI within the Unity Editor for developers to manage the CLI setup, skills, security settings, and project IPC server state.
 6.  **Managing Configuration**: Persists Unity CLI Loop settings and skill installation state for supported AI tools.
 
 ## 2. Core Architectural Principles
@@ -308,18 +308,18 @@ classDiagram
 
 ```mermaid
 classDiagram
-    class McpEditorWindow {
+    class UnityCliLoopSettingsWindow {
         <<Presenter>>
-        -model: McpEditorModel
-        -view: McpEditorWindowView
-        -eventHandler: McpEditorWindowEventHandler
+        -model: UnityCliLoopSettingsModel
+        -view: UnityCliLoopSettingsWindowUI
+        -eventHandler: UnityCliLoopSettingsWindowEventHandler
         -serverOperations: McpServerOperations
         +OnEnable()
         +OnGUI()
         +OnDisable()
     }
 
-    class McpEditorModel {
+    class UnityCliLoopSettingsModel {
         <<Model>>
         -serverPort: int
         -isServerRunning: bool
@@ -329,21 +329,21 @@ classDiagram
         +UpdateServerStatus()
     }
 
-    class McpEditorWindowView {
+    class UnityCliLoopSettingsWindowUI {
         <<View>>
         +DrawServerSection(ViewData)
         +DrawConfigSection(ViewData)
         +DrawDeveloperTools(ViewData)
     }
 
-    class McpEditorWindowViewData {
+    class UnityCliLoopSettingsWindowViewData {
         <<DTO>>
         +ServerPort: int
         +IsServerRunning: bool
         +SelectedEditor: EditorType
     }
 
-    class McpEditorWindowEventHandler {
+    class UnityCliLoopSettingsWindowEventHandler {
         <<Helper>>
         +HandleEditorUpdate()
         +HandleServerEvents()
@@ -357,12 +357,12 @@ classDiagram
         +ValidateServerConfig()
     }
 
-    McpEditorWindow --> McpEditorModel : manages state
-    McpEditorWindow --> McpEditorWindowView : delegates rendering
-    McpEditorWindow --> McpEditorWindowEventHandler : delegates events
-    McpEditorWindow --> McpServerOperations : delegates operations
-    McpEditorWindowView --> McpEditorWindowViewData : receives
-    McpEditorModel --> McpEditorWindowViewData : creates
+    UnityCliLoopSettingsWindow --> UnityCliLoopSettingsModel : manages state
+    UnityCliLoopSettingsWindow --> UnityCliLoopSettingsWindowUI : delegates rendering
+    UnityCliLoopSettingsWindow --> UnityCliLoopSettingsWindowEventHandler : delegates events
+    UnityCliLoopSettingsWindow --> McpServerOperations : delegates operations
+    UnityCliLoopSettingsWindowUI --> UnityCliLoopSettingsWindowViewData : receives
+    UnityCliLoopSettingsModel --> UnityCliLoopSettingsWindowViewData : creates
 ```
 
 ### 2.6. Schema-Driven and Type-Safe Communication
@@ -382,9 +382,9 @@ This design eliminates inconsistencies between the server and client and provide
     - `ToolSkillSynchronizer`: Handles skill installation file updates.
     - `JsonRpcProcessor`: Deals exclusively with parsing and formatting JSON-RPC 2.0 messages.
     - **UI Layer Examples**:
-        - `McpEditorModel`: Manages application state and business logic only.
-        - `McpEditorWindowView`: Handles UI rendering only.
-        - `McpEditorWindowEventHandler`: Manages Unity Editor events only.
+        - `UnityCliLoopSettingsModel`: Manages application state and business logic only.
+        - `UnityCliLoopSettingsWindowUI`: Handles UI rendering only.
+        - `UnityCliLoopSettingsWindowEventHandler`: Manages Unity Editor events only.
         - `McpServerOperations`: Handles server operations only.
 - **Open/Closed Principle (OCP)**: The system is open for extension but closed for modification. The Command Pattern is the prime example; new commands can be added without altering the core execution logic. The MVP + Helper pattern also demonstrates this principle - new functionality can be added by creating new helper classes without modifying existing components.
 
@@ -392,11 +392,11 @@ This design eliminates inconsistencies between the server and client and provide
 The UI layer implements a sophisticated **MVP (Model-View-Presenter) + Helper Pattern** that evolved from a monolithic 1247-line class into a well-structured, maintainable architecture.
 
 #### Pattern Components
-- **Model (`McpEditorModel`)**: Contains all application state, configuration data, and business logic. Provides methods for state updates while maintaining encapsulation. Handles persistence through Unity's `SessionState` and `EditorPrefs`.
-- **View (`McpEditorWindowView`)**: Pure UI rendering component with no business logic. Receives all necessary data through `McpEditorWindowViewData` transfer objects.
-- **Presenter (`McpEditorWindow`)**: Coordinates between Model and View, handles Unity-specific lifecycle events, and delegates complex operations to specialized helper classes.
+- **Model (`UnityCliLoopSettingsModel`)**: Contains all application state, configuration data, and business logic. Provides methods for state updates while maintaining encapsulation. Handles persistence through Unity's `SessionState` and `EditorPrefs`.
+- **View (`UnityCliLoopSettingsWindowUI`)**: Pure UI rendering component with no business logic. Receives all necessary data through `UnityCliLoopSettingsWindowViewData` transfer objects.
+- **Presenter (`UnityCliLoopSettingsWindow`)**: Coordinates between Model and View, handles Unity-specific lifecycle events, and delegates complex operations to specialized helper classes.
 - **Helper Classes**: Specialized components that handle specific aspects of functionality:
-  - Event management (`McpEditorWindowEventHandler`)
+  - Event management (`UnityCliLoopSettingsWindowEventHandler`)
   - Server operations (`McpServerOperations`)
   - Skill installation services (`ToolSkillSynchronizer`)
 
@@ -511,13 +511,13 @@ Contains core infrastructure components for session and state management.
 Contains the code for the user-facing Editor Window, implemented using the **MVP (Model-View-Presenter) + Helper Pattern**.
 
 #### Core MVP Components
-- **`McpEditorWindow.cs`**: The **Presenter** layer (503 lines). Acts as the coordinator between the Model and View, handling Unity-specific lifecycle events and user interactions. Delegates complex operations to specialized helper classes.
-- **`McpEditorModel.cs`**: The **Model** layer (470 lines). Manages all application state, persistence, and business logic. Contains UI state, server configuration, and provides methods for state updates with proper encapsulation.
-- **`McpEditorWindowView.cs`**: The **View** layer. Handles pure UI rendering logic, completely separated from business logic. Receives data through `McpEditorWindowViewData` and renders the interface.
-- **`McpEditorWindowViewData.cs`**: Data transfer object that carries all necessary information from the Model to the View, ensuring clean separation of concerns.
+- **`UnityCliLoopSettingsWindow.cs`**: The **Presenter** layer (503 lines). Acts as the coordinator between the Model and View, handling Unity-specific lifecycle events and user interactions. Delegates complex operations to specialized helper classes.
+- **`UnityCliLoopSettingsModel.cs`**: The **Model** layer (470 lines). Manages all application state, persistence, and business logic. Contains UI state, server configuration, and provides methods for state updates with proper encapsulation.
+- **`UnityCliLoopSettingsWindowUI.cs`**: The **View** layer. Handles pure UI rendering logic, completely separated from business logic. Receives data through `UnityCliLoopSettingsWindowViewData` and renders the interface.
+- **`UnityCliLoopSettingsWindowViewData.cs`**: Data transfer object that carries all necessary information from the Model to the View, ensuring clean separation of concerns.
 
 #### Specialized Helper Classes
-- **`McpEditorWindowEventHandler.cs`**: Manages Unity Editor events. Handles `EditorApplication.update`, `McpCommunicationLogger.OnLogUpdated`, server lifecycle events, and state change detection. Completely isolates event management logic from the main window.
+- **`UnityCliLoopSettingsWindowEventHandler.cs`**: Manages Unity Editor events. Handles `EditorApplication.update`, `McpCommunicationLogger.OnLogUpdated`, server lifecycle events, and state change detection. Completely isolates event management logic from the main window.
 - **`McpServerOperations.cs`**: Handles complex server operations (131 lines). Contains server validation, starting, and stopping logic. Supports both user-interactive and internal operation modes with comprehensive error handling.
 - **`McpCommunicationLog.cs`**: Manages the in-memory and `SessionState`-backed log of requests and responses displayed in the "Developer Tools" section of the window.
 
@@ -605,15 +605,15 @@ sequenceDiagram
 
 ### 5.2. UI Interaction Flow (MVP + Helper Pattern)
 1.  **User Interaction**: User interacts with the Unity Editor window (button clicks, field changes, etc.).
-2.  **Presenter Processing**: `McpEditorWindow` (Presenter) receives the Unity Editor event.
-3.  **State Update**: Presenter calls appropriate method on `McpEditorModel` to update application state.
+2.  **Presenter Processing**: `UnityCliLoopSettingsWindow` (Presenter) receives the Unity Editor event.
+3.  **State Update**: Presenter calls appropriate method on `UnityCliLoopSettingsModel` to update application state.
 4.  **Complex Operations**: For complex operations (server start/stop, validation), Presenter delegates to specialized helper classes:
     - `McpServerOperations` for server-related operations
-    - `McpEditorWindowEventHandler` for event management
+    - `UnityCliLoopSettingsWindowEventHandler` for event management
     - `ToolSkillSynchronizer` for skill installation operations
-5.  **View Data Preparation**: Model state is packaged into `McpEditorWindowViewData` transfer objects.
-6.  **UI Rendering**: `McpEditorWindowView` receives the transfer objects and renders the interface.
-7.  **Event Propagation**: `McpEditorWindowEventHandler` manages Unity Editor events and updates the Model accordingly.
+5.  **View Data Preparation**: Model state is packaged into `UnityCliLoopSettingsWindowViewData` transfer objects.
+6.  **UI Rendering**: `UnityCliLoopSettingsWindowUI` receives the transfer objects and renders the interface.
+7.  **Event Propagation**: `UnityCliLoopSettingsWindowEventHandler` manages Unity Editor events and updates the Model accordingly.
 8.  **Persistence**: Model automatically handles state persistence through Unity's `SessionState` and `EditorPrefs`.
 
 This workflow ensures clean separation of concerns while maintaining responsiveness and proper state management throughout the application lifecycle.

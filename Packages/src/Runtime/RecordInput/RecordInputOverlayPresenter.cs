@@ -1,8 +1,11 @@
 using System.Globalization;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
+    /// <summary>
+    /// Connects Record Input Overlay UI state with the behavior that drives it.
+    /// </summary>
     public class RecordInputOverlayPresenter : MonoBehaviour
     {
         private const float FADE_OUT_DURATION = 0.5f;

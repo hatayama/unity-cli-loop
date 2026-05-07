@@ -3,8 +3,14 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEditor.TestTools.TestRunner.Api;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Run Tests Use Case behavior.
+    /// </summary>
     public class RunTestsUseCaseTests
     {
         [Test]
@@ -18,13 +24,13 @@ namespace io.github.hatayama.UnityCliLoop
                 executionService,
                 validationService
             );
-            RunTestsSchema parameters = new()
+            UnityCliLoopTestExecutionRequest parameters = new()
             {
-                TestMode = TestMode.EditMode,
+                TestMode = UnityCliLoopTestMode.EditMode,
                 SaveBeforeRun = true
             };
 
-            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+            UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Is.EqualTo("EditMode tests cannot run during play mode"));
@@ -37,6 +43,9 @@ namespace io.github.hatayama.UnityCliLoop
             Assert.That(validationService.SaveBeforeRun, Is.True);
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class StubTestExecutionStateValidationService : TestExecutionStateValidationService
         {
             private readonly ValidationResult _result;
@@ -55,6 +64,9 @@ namespace io.github.hatayama.UnityCliLoop
             }
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class StubTestExecutionService : TestExecutionService
         {
             public bool WasCalled { get; private set; }

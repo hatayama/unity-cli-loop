@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     // Canvas-based overlay that visualizes SimulateMouseUi cursor position and drag state on Game View.
     // Animation is driven externally via SetCursorScale/SetAlpha from async functions in SimulateMouseUiTool.
+    /// <summary>
+    /// Drives the runtime overlay used by Simulate Mouse UI behavior.
+    /// </summary>
     public class SimulateMouseUiOverlay : MonoBehaviour
     {
         private const float WAYPOINT_MARKER_DIAMETER = 12f;
@@ -302,7 +305,7 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static Image CreateImage(string name, Transform parent)
         {
-            GameObject go = new GameObject(name);
+            GameObject go = new(name);
             go.transform.SetParent(parent, false);
             RectTransform rect = go.AddComponent<RectTransform>();
             rect.anchorMin = Vector2.zero;

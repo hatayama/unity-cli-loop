@@ -6,13 +6,20 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Tool Skill Synchronizer behavior.
+    /// </summary>
     [TestFixture]
     public class ToolSkillSynchronizerTests
     {
         private static readonly string ToolSettingsFilePath =
-            Path.Combine(McpConstants.ULOOP_DIR, McpConstants.ULOOP_TOOL_SETTINGS_FILE_NAME);
+            Path.Combine(UnityCliLoopConstants.ULOOP_DIR, UnityCliLoopConstants.ULOOP_TOOL_SETTINGS_FILE_NAME);
 
         private string _projectRoot;
         private string[] _nonExistentDirsBefore;
@@ -23,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop
         [SetUp]
         public void SetUp()
         {
-            _projectRoot = UnityMcpPathResolver.GetProjectRoot();
+            _projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             _toolSettingsFileExisted = File.Exists(ToolSettingsFilePath);
             _toolSettingsFileContent = _toolSettingsFileExisted ? File.ReadAllText(ToolSettingsFilePath) : null;
             ToolSettings.InvalidateCache();
@@ -883,14 +890,15 @@ namespace io.github.hatayama.UnityCliLoop
             WriteSkillFile(
                 Path.Combine(manualTargetRoot, SkillInstallLayout.SkillsDirName, "find-orphaned-meta"),
                 "---\nname: find-orphaned-meta\n---\n");
-            Assert.IsFalse(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".claude"),
+            SkillInstallationDetector detector = new();
+            Assert.IsFalse(detector.AreSkillsInstalled(temporaryRoot, ".claude"),
                 "Manual local skills should not be treated as installed uLoop skills");
 
             string legacyTargetRoot = Path.Combine(temporaryRoot, ".codex");
             WriteSkillFile(
                 Path.Combine(legacyTargetRoot, SkillInstallLayout.SkillsDirName, "acme-third-party"),
                 "---\nname: acme-third-party\ntoolName: acme-third-party\n---\n");
-            Assert.IsTrue(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".codex"),
+            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".codex"),
                 "Legacy third-party managed skills should be detected");
 
             string managedTargetRoot = Path.Combine(temporaryRoot, ".agents");
@@ -899,7 +907,7 @@ namespace io.github.hatayama.UnityCliLoop
                 SkillInstallLayout.SkillsDirName,
                 SkillInstallLayout.ManagedSkillsDirName,
                 "uloop-compile"));
-            Assert.IsTrue(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".agents"),
+            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".agents"),
                 "Namespaced managed skills should be detected");
         }
 
@@ -908,11 +916,12 @@ namespace io.github.hatayama.UnityCliLoop
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
             CreateFakeSourceSkill(temporaryRoot, "uloop-compile", "CompileTool", "reference.md", "reference");
+            SkillInstallationDetector detector = new();
 
             string flatTargetRoot = Path.Combine(temporaryRoot, ".claude");
             WriteSkillFile(Path.Combine(flatTargetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
-            Assert.IsTrue(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".claude", false));
-            Assert.IsFalse(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".claude", true));
+            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".claude", false));
+            Assert.IsFalse(detector.AreSkillsInstalled(temporaryRoot, ".claude", true));
 
             string groupedTargetRoot = Path.Combine(temporaryRoot, ".codex");
             WriteSkillFile(Path.Combine(
@@ -920,8 +929,8 @@ namespace io.github.hatayama.UnityCliLoop
                 SkillInstallLayout.SkillsDirName,
                 SkillInstallLayout.ManagedSkillsDirName,
                 "uloop-compile"));
-            Assert.IsTrue(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".codex", true));
-            Assert.IsFalse(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".codex", false));
+            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".codex", true));
+            Assert.IsFalse(detector.AreSkillsInstalled(temporaryRoot, ".codex", false));
         }
 
         [Test]
@@ -930,9 +939,10 @@ namespace io.github.hatayama.UnityCliLoop
             string temporaryRoot = CreateTemporaryProjectRoot();
             string targetRoot = Path.Combine(temporaryRoot, ".cursor");
             Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
+            SkillInstallationDetector detector = new();
 
-            Assert.IsTrue(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".cursor", false));
-            Assert.IsFalse(CliInstallationDetector.AreSkillsInstalled(temporaryRoot, ".cursor", true));
+            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".cursor", false));
+            Assert.IsFalse(detector.AreSkillsInstalled(temporaryRoot, ".cursor", true));
         }
 
         [Test]
@@ -1036,6 +1046,98 @@ namespace io.github.hatayama.UnityCliLoop
             Assert.That(skillSources.Select(skill => skill.Name), Does.Contain("uloop-launch"));
         }
 
+        // Tests that skill discovery follows bundled tools after they move into the first-party plugin assembly.
+        [Test]
+        public void GetSkillSourceInfos_WhenFirstPartyToolIsUnderFirstPartyTools_IncludesToolSkill()
+        {
+            SkillInstallLayout.SkillSourceInfo[] skillSources = SkillInstallLayout.GetSkillSourceInfos(_projectRoot)
+                .ToArray();
+
+            SkillInstallLayout.SkillSourceInfo controlPlayModeSkill = skillSources
+                .Single(skill => skill.Name == "uloop-control-play-mode");
+
+            Assert.That(controlPlayModeSkill.ToolName, Is.EqualTo("control-play-mode"));
+            Assert.That(controlPlayModeSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo getLogsSkill = skillSources
+                .Single(skill => skill.Name == "uloop-get-logs");
+
+            Assert.That(getLogsSkill.ToolName, Is.EqualTo("get-logs"));
+            Assert.That(getLogsSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo compileSkill = skillSources
+                .Single(skill => skill.Name == "uloop-compile");
+
+            Assert.That(compileSkill.ToolName, Is.EqualTo("compile"));
+            Assert.That(compileSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo executeDynamicCodeSkill = skillSources
+                .Single(skill => skill.Name == "uloop-execute-dynamic-code");
+
+            Assert.That(executeDynamicCodeSkill.ToolName, Is.EqualTo("execute-dynamic-code"));
+            Assert.That(executeDynamicCodeSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo clearConsoleSkill = skillSources
+                .Single(skill => skill.Name == "uloop-clear-console");
+
+            Assert.That(clearConsoleSkill.ToolName, Is.EqualTo("clear-console"));
+            Assert.That(clearConsoleSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo getHierarchySkill = skillSources
+                .Single(skill => skill.Name == "uloop-get-hierarchy");
+
+            Assert.That(getHierarchySkill.ToolName, Is.EqualTo("get-hierarchy"));
+            Assert.That(getHierarchySkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo runTestsSkill = skillSources
+                .Single(skill => skill.Name == "uloop-run-tests");
+
+            Assert.That(runTestsSkill.ToolName, Is.EqualTo("run-tests"));
+            Assert.That(runTestsSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo findGameObjectsSkill = skillSources
+                .Single(skill => skill.Name == "uloop-find-game-objects");
+
+            Assert.That(findGameObjectsSkill.ToolName, Is.EqualTo("find-game-objects"));
+            Assert.That(findGameObjectsSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo screenshotSkill = skillSources
+                .Single(skill => skill.Name == "uloop-screenshot");
+
+            Assert.That(screenshotSkill.ToolName, Is.EqualTo("screenshot"));
+            Assert.That(screenshotSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo recordInputSkill = skillSources
+                .Single(skill => skill.Name == "uloop-record-input");
+
+            Assert.That(recordInputSkill.ToolName, Is.EqualTo("record-input"));
+            Assert.That(recordInputSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo replayInputSkill = skillSources
+                .Single(skill => skill.Name == "uloop-replay-input");
+
+            Assert.That(replayInputSkill.ToolName, Is.EqualTo("replay-input"));
+            Assert.That(replayInputSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo simulateKeyboardSkill = skillSources
+                .Single(skill => skill.Name == "uloop-simulate-keyboard");
+
+            Assert.That(simulateKeyboardSkill.ToolName, Is.EqualTo("simulate-keyboard"));
+            Assert.That(simulateKeyboardSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo simulateMouseInputSkill = skillSources
+                .Single(skill => skill.Name == "uloop-simulate-mouse-input");
+
+            Assert.That(simulateMouseInputSkill.ToolName, Is.EqualTo("simulate-mouse-input"));
+            Assert.That(simulateMouseInputSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+
+            SkillInstallLayout.SkillSourceInfo simulateMouseUiSkill = skillSources
+                .Single(skill => skill.Name == "uloop-simulate-mouse-ui");
+
+            Assert.That(simulateMouseUiSkill.ToolName, Is.EqualTo("simulate-mouse-ui"));
+            Assert.That(simulateMouseUiSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
+        }
+
         // Tests that internal skill metadata maps back to the hidden tool name only.
         [Test]
         public void GetInternalSkillToolNames_WhenInternalSkillUsesSkillName_ReturnsToolName()
@@ -1074,7 +1176,8 @@ namespace io.github.hatayama.UnityCliLoop
                 "internal-reference",
                 isInternal: true);
 
-            UnityToolRegistry registry = new();
+            UnityCliLoopToolRegistry registry = new UnityCliLoopToolRegistry(
+                new SkillInstallLayoutInternalToolNameProvider());
             registry.RegisterTool(new FakeUnityTool("internal-tool"));
             registry.RegisterTool(new FakeUnityTool("public-tool"));
 
@@ -1538,7 +1641,10 @@ namespace io.github.hatayama.UnityCliLoop
                 "{\n  \"dependencies\": {\n" + dependenciesContent + "\n  }\n}");
         }
 
-        private sealed class FakeUnityTool : IUnityTool
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
+        private sealed class FakeUnityTool : IUnityCliLoopTool
         {
             public string ToolName { get; }
 
@@ -1549,13 +1655,16 @@ namespace io.github.hatayama.UnityCliLoop
                 ToolName = toolName;
             }
 
-            public Task<BaseToolResponse> ExecuteAsync(JToken paramsToken)
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken)
             {
-                return Task.FromResult<BaseToolResponse>(new FakeToolResponse());
+                return Task.FromResult<UnityCliLoopToolResponse>(new FakeToolResponse());
             }
         }
 
-        private sealed class FakeToolResponse : BaseToolResponse
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
+        private sealed class FakeToolResponse : UnityCliLoopToolResponse
         {
         }
     }

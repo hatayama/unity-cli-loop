@@ -106,6 +106,10 @@ yarn-error.log*
 .npm
 .yarn-integrity
 
+# .NET development tools
+**/[Bb]in/
+**/[Oo]bj/
+
 # Native Go CLI release artifacts are included in the Unity package
 Packages/src/Cli~/Core~/dist/*
 !Packages/src/Cli~/Core~/dist/darwin-arm64/

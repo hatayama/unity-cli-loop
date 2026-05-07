@@ -1,0 +1,22 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.MetadataValidation.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "UnityCLILoop.ToolContracts"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "System.Collections.Immutable.dll",
+        "System.Runtime.CompilerServices.Unsafe.dll",
+        "System.Reflection.Metadata.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -2,8 +2,14 @@ using System.Collections;
 using NUnit.Framework;
 using UnityEngine.UIElements;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Presentation;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Tool Settings Section behavior.
+    /// </summary>
     [TestFixture]
     public class ToolSettingsSectionTests
     {
@@ -13,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop
         public void Update_ClosedWithoutToolListData_DoesNotCreateToolRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
                 includeGetLogs: true,
@@ -32,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop
         public void Update_OpenWithoutToolListData_ShowsLoadingWithoutToolRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
                 includeGetLogs: true,
@@ -54,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop
         public void Update_LoadedData_PopulatesVirtualizedRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
                 includeGetLogs: true,
@@ -75,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop
         public void Update_HeaderOnlyRefreshAfterLoad_PreservesLoadedRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData loadedData = CreateData(
                 compileEnabled: true,
                 includeGetLogs: false,
@@ -99,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop
         public void Update_ClosedAfterLoad_ReleasesLoadedRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData loadedData = CreateData(
                 compileEnabled: true,
                 includeGetLogs: false,
@@ -123,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop
         public void Update_RestrictedLevel_MarksRestrictedButtonAsActive()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
                 includeGetLogs: false,
@@ -134,15 +140,15 @@ namespace io.github.hatayama.UnityCliLoop
             Button restrictedButton = root.Q<Button>("security-level-restricted-button");
             Button fullAccessButton = root.Q<Button>("security-level-full-access-button");
 
-            Assert.IsTrue(restrictedButton.ClassListContains("mcp-segmented-control__button--active"));
-            Assert.IsFalse(fullAccessButton.ClassListContains("mcp-segmented-control__button--active"));
+            Assert.IsTrue(restrictedButton.ClassListContains("unity-cli-loop-segmented-control__button--active"));
+            Assert.IsFalse(fullAccessButton.ClassListContains("unity-cli-loop-segmented-control__button--active"));
         }
 
         [Test]
         public void Update_FullAccessLevel_MarksFullAccessButtonAsWarningActive()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
                 includeGetLogs: false,
@@ -154,42 +160,35 @@ namespace io.github.hatayama.UnityCliLoop
             Button fullAccessButton = root.Q<Button>("security-level-full-access-button");
             Label description = root.Q<Label>("security-level-description");
 
-            Assert.IsFalse(restrictedButton.ClassListContains("mcp-segmented-control__button--active"));
-            Assert.IsTrue(fullAccessButton.ClassListContains("mcp-segmented-control__button--active"));
-            Assert.IsTrue(fullAccessButton.ClassListContains("mcp-segmented-control__button--warning-active"));
-            Assert.IsTrue(description.ClassListContains("mcp-security-level-description--warning"));
+            Assert.IsFalse(restrictedButton.ClassListContains("unity-cli-loop-segmented-control__button--active"));
+            Assert.IsTrue(fullAccessButton.ClassListContains("unity-cli-loop-segmented-control__button--active"));
+            Assert.IsTrue(fullAccessButton.ClassListContains("unity-cli-loop-segmented-control__button--warning-active"));
+            Assert.IsTrue(description.ClassListContains("unity-cli-loop-security-level-description--warning"));
         }
 
         private static VisualElement CreateRootElement()
         {
-            VisualElement root = new VisualElement();
-            Foldout foldout = new Foldout
-            {
+            VisualElement root = new();
+            Foldout foldout = new()            {
                 name = "tool-settings-foldout"
             };
-            VisualElement container = new VisualElement
-            {
+            VisualElement container = new()            {
                 name = "tool-list-container"
             };
 
-            Label cliReferenceLink = new Label
-            {
+            Label cliReferenceLink = new()            {
                 name = "cli-reference-link"
             };
-            Button securityLevelRestrictedButton = new Button
-            {
+            Button securityLevelRestrictedButton = new()            {
                 name = "security-level-restricted-button"
             };
-            Button securityLevelFullAccessButton = new Button
-            {
+            Button securityLevelFullAccessButton = new()            {
                 name = "security-level-full-access-button"
             };
-            Label securityLevelDescription = new Label
-            {
+            Label securityLevelDescription = new()            {
                 name = "security-level-description"
             };
-            VisualElement toolSettingsInfoContainer = new VisualElement
-            {
+            VisualElement toolSettingsInfoContainer = new()            {
                 name = "tool-settings-info-container"
             };
 
@@ -211,9 +210,8 @@ namespace io.github.hatayama.UnityCliLoop
             bool hasToolListData = true,
             DynamicCodeSecurityLevel dynamicCodeSecurityLevel = DynamicCodeSecurityLevel.Restricted)
         {
-            ToolToggleItem compile = new ToolToggleItem(
+            ToolToggleItem compile = new(
                 toolName: "compile",
-                description: "Compile project",
                 isEnabled: compileEnabled,
                 isThirdParty: false);
             ToolToggleItem[] thirdPartyTools = includeThirdPartyTool
@@ -221,7 +219,6 @@ namespace io.github.hatayama.UnityCliLoop
                 {
                     new ToolToggleItem(
                         toolName: "sample-third-party",
-                        description: "Third-party sample",
                         isEnabled: true,
                         isThirdParty: true)
                 }
@@ -230,9 +227,8 @@ namespace io.github.hatayama.UnityCliLoop
             ToolToggleItem[] builtInTools;
             if (includeGetLogs)
             {
-                ToolToggleItem getLogs = new ToolToggleItem(
+                ToolToggleItem getLogs = new(
                     toolName: "get-logs",
-                    description: "Read Unity logs",
                     isEnabled: true,
                     isThirdParty: false);
                 builtInTools = new[] { compile, getLogs };

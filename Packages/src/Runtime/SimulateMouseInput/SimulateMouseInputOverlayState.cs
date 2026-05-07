@@ -1,54 +1,57 @@
 #nullable enable
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
-    public static class SimulateMouseInputOverlayState
+    /// <summary>
+    /// Provides Simulate Mouse Input Overlay State operations for its owning module.
+    /// </summary>
+    public sealed class SimulateMouseInputOverlayStateService
     {
         private const float BUTTON_MIN_DISPLAY_DURATION = 0.05f;
 
-        private static bool _leftButtonHeld;
-        private static bool _rightButtonHeld;
-        private static bool _middleButtonHeld;
-        private static float _leftButtonActiveUntil;
-        private static float _rightButtonActiveUntil;
-        private static float _middleButtonActiveUntil;
+        private bool _leftButtonHeld;
+        private bool _rightButtonHeld;
+        private bool _middleButtonHeld;
+        private float _leftButtonActiveUntil;
+        private float _rightButtonActiveUntil;
+        private float _middleButtonActiveUntil;
 
-        public static bool IsLeftButtonHeld =>
+        public bool IsLeftButtonHeld =>
             _leftButtonHeld || Time.realtimeSinceStartup < _leftButtonActiveUntil;
-        public static bool IsRightButtonHeld =>
+        public bool IsRightButtonHeld =>
             _rightButtonHeld || Time.realtimeSinceStartup < _rightButtonActiveUntil;
-        public static bool IsMiddleButtonHeld =>
+        public bool IsMiddleButtonHeld =>
             _middleButtonHeld || Time.realtimeSinceStartup < _middleButtonActiveUntil;
 
         private const float SCROLL_DISPLAY_DURATION = 0.05f;
-        private static int _scrollDirection;
-        private static float _scrollActiveUntil;
+        private int _scrollDirection;
+        private float _scrollActiveUntil;
 
-        public static int ScrollDirection =>
+        public int ScrollDirection =>
             _scrollDirection != 0 && Time.realtimeSinceStartup < _scrollActiveUntil
                 ? _scrollDirection
                 : 0;
 
         private const float MOVE_DISPLAY_DURATION = 0.3f;
         private const int MOVE_SAMPLE_FRAMES = 5;
-        private static Vector2 _moveDelta;
-        private static Vector2 _moveAccumulator;
-        private static int _moveFrameCount;
-        private static float _moveActiveUntil;
+        private Vector2 _moveDelta;
+        private Vector2 _moveAccumulator;
+        private int _moveFrameCount;
+        private float _moveActiveUntil;
 
-        public static Vector2 MoveDelta =>
+        public Vector2 MoveDelta =>
             _moveDelta != Vector2.zero && Time.realtimeSinceStartup < _moveActiveUntil
                 ? _moveDelta
                 : Vector2.zero;
 
-        public static float LastActivityTime { get; private set; }
+        public float LastActivityTime { get; private set; }
 
-        public static bool HasAnyActivity =>
+        public bool HasAnyActivity =>
             IsLeftButtonHeld || IsRightButtonHeld || IsMiddleButtonHeld
             || ScrollDirection != 0 || MoveDelta != Vector2.zero;
 
-        public static void SetButtonHeld(MouseButton button, bool held)
+        public void SetButtonHeld(MouseButton button, bool held)
         {
             // When releasing, set a minimum display time so short clicks are always visible
             float activeUntil = held ? 0f : Time.realtimeSinceStartup + BUTTON_MIN_DISPLAY_DURATION;
@@ -75,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop
             LastActivityTime = Time.realtimeSinceStartup;
         }
 
-        public static void SetScrollDirection(int direction)
+        public void SetScrollDirection(int direction)
         {
             Debug.Assert(direction >= -1 && direction <= 1, $"direction must be -1, 0, or 1, got: {direction}");
             _scrollDirection = direction;
@@ -83,12 +86,12 @@ namespace io.github.hatayama.UnityCliLoop
             LastActivityTime = Time.realtimeSinceStartup;
         }
 
-        public static void ClearScroll()
+        public void ClearScroll()
         {
             _scrollActiveUntil = 0f;
         }
 
-        public static void SetMoveDelta(Vector2 delta)
+        public void SetMoveDelta(Vector2 delta)
         {
             _moveAccumulator += delta;
             _moveFrameCount++;
@@ -111,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop
             LastActivityTime = Time.realtimeSinceStartup;
         }
 
-        public static void Clear()
+        public void Clear()
         {
             _leftButtonHeld = false;
             _rightButtonHeld = false;
@@ -126,6 +129,48 @@ namespace io.github.hatayama.UnityCliLoop
             _moveFrameCount = 0;
             _moveActiveUntil = 0f;
             LastActivityTime = 0f;
+        }
+    }
+
+    /// <summary>
+    /// Stores Simulate Mouse Input Overlay state shared by the owning workflow.
+    /// </summary>
+    public static class SimulateMouseInputOverlayState
+    {
+        private static readonly SimulateMouseInputOverlayStateService ServiceValue =
+            new SimulateMouseInputOverlayStateService();
+
+        public static bool IsLeftButtonHeld => ServiceValue.IsLeftButtonHeld;
+        public static bool IsRightButtonHeld => ServiceValue.IsRightButtonHeld;
+        public static bool IsMiddleButtonHeld => ServiceValue.IsMiddleButtonHeld;
+        public static int ScrollDirection => ServiceValue.ScrollDirection;
+        public static Vector2 MoveDelta => ServiceValue.MoveDelta;
+        public static float LastActivityTime => ServiceValue.LastActivityTime;
+        public static bool HasAnyActivity => ServiceValue.HasAnyActivity;
+
+        public static void SetButtonHeld(MouseButton button, bool held)
+        {
+            ServiceValue.SetButtonHeld(button, held);
+        }
+
+        public static void SetScrollDirection(int direction)
+        {
+            ServiceValue.SetScrollDirection(direction);
+        }
+
+        public static void ClearScroll()
+        {
+            ServiceValue.ClearScroll();
+        }
+
+        public static void SetMoveDelta(Vector2 delta)
+        {
+            ServiceValue.SetMoveDelta(delta);
+        }
+
+        public static void Clear()
+        {
+            ServiceValue.Clear();
         }
     }
 }

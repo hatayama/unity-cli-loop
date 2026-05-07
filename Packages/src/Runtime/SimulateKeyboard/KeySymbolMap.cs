@@ -2,8 +2,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
+    /// <summary>
+    /// Provides Key Symbol Map behavior for Unity CLI Loop.
+    /// </summary>
     public static class KeySymbolMap
     {
         private static readonly Dictionary<string, string> Symbols = new()
@@ -23,8 +26,8 @@ namespace io.github.hatayama.UnityCliLoop
 
         // Meta key maps to ⌘ on macOS, ⊞ on Windows/Linux
         private static bool IsMac =>
-            Application.platform == RuntimePlatform.OSXEditor ||
-            Application.platform == RuntimePlatform.OSXPlayer;
+            UnityEngine.Application.platform == RuntimePlatform.OSXEditor ||
+            UnityEngine.Application.platform == RuntimePlatform.OSXPlayer;
 
         public static string GetSymbol(string keyName)
         {

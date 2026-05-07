@@ -2,10 +2,11 @@
 using NUnit.Framework;
 using System.Threading;
 using System.Threading.Tasks;
-using io.github.hatayama.UnityCliLoop;
-using io.github.hatayama.UnityCliLoop.Factory;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
     /// <summary>
     /// Reproduce Dictionary Error in DynamicCodeExecutor
@@ -21,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         {
             // v4.0 Stateless design - Remove global configuration changes
             // Create Executor in Restricted mode
-            _executor = DynamicCodeExecutorFactory.Create(DynamicCodeSecurityLevel.Restricted);
+            _executor = DynamicCodeServices.ExecutorFactory.Create(DynamicCodeSecurityLevel.Restricted);
         }
 
         [Test]

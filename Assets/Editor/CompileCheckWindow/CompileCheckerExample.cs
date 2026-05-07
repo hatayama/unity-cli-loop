@@ -1,14 +1,19 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
+    /// <summary>
+    /// Provides Compile Checker Example behavior for Unity CLI Loop.
+    /// </summary>
     public class CompileCheckerExample
     {
         [MenuItem("UnityCliLoop/Debug/Compile Tests/Compile Checker Usage Example")]
         public static async void TestCompileChecker()
         {
-            CompileController compileController = new CompileController();
+            CompileController compileController = new();
             
             try
             {
@@ -42,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop
         [MenuItem("UnityCliLoop/Debug/Compile Tests/Force Compile Checker Usage Example")]
         public static async void TestForceCompileChecker()
         {
-            CompileController compileController = new CompileController();
+            CompileController compileController = new();
             
             try
             {

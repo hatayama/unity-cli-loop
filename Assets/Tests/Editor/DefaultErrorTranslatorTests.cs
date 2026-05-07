@@ -1,7 +1,13 @@
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Default Error Translator behavior.
+    /// </summary>
     [TestFixture]
     public class DefaultErrorTranslatorTests
     {
@@ -20,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void TranslateFromException_ToolDisabled_ShouldReturnToolNameInMessage()
         {
-            ToolDisabledException exception = new ToolDisabledException("compile");
+            ToolDisabledException exception = new("compile");
 
             TranslationOutput result = _translator.TranslateFromException(exception);
 
@@ -31,17 +37,17 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void TranslateFromException_ToolDisabled_ShouldIncludeMenuPath()
         {
-            ToolDisabledException exception = new ToolDisabledException("compile");
+            ToolDisabledException exception = new("compile");
 
             TranslationOutput result = _translator.TranslateFromException(exception);
 
-            StringAssert.Contains(McpUIConstants.TOOL_SETTINGS_MENU_PATH, result.FriendlyMessage);
+            StringAssert.Contains(UnityCliLoopUIConstants.TOOL_SETTINGS_MENU_PATH, result.FriendlyMessage);
         }
 
         [Test]
         public void TranslateFromException_ToolDisabled_ShouldHaveExplanation()
         {
-            ToolDisabledException exception = new ToolDisabledException("compile");
+            ToolDisabledException exception = new("compile");
 
             TranslationOutput result = _translator.TranslateFromException(exception);
 
@@ -51,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void TranslateFromException_ToolDisabled_ShouldHaveSolution()
         {
-            ToolDisabledException exception = new ToolDisabledException("get-logs");
+            ToolDisabledException exception = new("get-logs");
 
             TranslationOutput result = _translator.TranslateFromException(exception);
 
@@ -64,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void DetermineSeverity_ToolDisabled_ShouldBeMedium()
         {
-            ToolDisabledException exception = new ToolDisabledException("compile");
+            ToolDisabledException exception = new("compile");
             TranslationOutput translation = _translator.TranslateFromException(exception);
 
             UserFriendlyErrorDto dto = _formatter.Format(translation, exception.Message, exception);
@@ -77,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void TranslateFromException_GenericException_ShouldReturnInternalError()
         {
-            System.Exception exception = new System.Exception("something went wrong");
+            System.Exception exception = new("something went wrong");
 
             TranslationOutput result = _translator.TranslateFromException(exception);
 

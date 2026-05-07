@@ -1,0 +1,283 @@
+using System;
+using System.IO;
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Infrastructure
+{
+    /// <summary>
+    /// Security settings management for .uloop/settings.permissions.json.
+    /// This file is stored in the project root so it can be git-tracked
+    /// and shared across team members as a security policy.
+    /// </summary>
+    public sealed class ULoopSettingsRepository : IULoopSettingsPort
+    {
+        private const string LEGACY_ALLOW_THIRD_PARTY_TOOLS_FIELD = "allowThirdPartyTools";
+
+        private string SettingsFilePath =>
+            Path.Combine(UnityCliLoopConstants.ULOOP_DIR, UnityCliLoopConstants.ULOOP_SETTINGS_FILE_NAME);
+
+        private string LegacySettingsFilePath =>
+            Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
+
+        private ULoopSettingsData _cachedSettings;
+
+        public ULoopSettingsData GetSettings()
+        {
+            if (_cachedSettings == null)
+            {
+                LoadSettings();
+            }
+            return _cachedSettings;
+        }
+
+        public void SaveSettings(ULoopSettingsData settings)
+        {
+            Debug.Assert(settings != null, "settings must not be null");
+
+            string directory = Path.GetDirectoryName(SettingsFilePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            string json = JsonUtility.ToJson(settings, true);
+
+            Debug.Assert(json.Length <= UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES,
+                "Settings JSON content exceeds size limit");
+
+            AtomicFileWriter.Write(SettingsFilePath, json);
+            _cachedSettings = settings;
+
+            AtomicFileWriter.CleanupBackup(SettingsFilePath + ".bak");
+        }
+
+        public void UpdateSettings(Func<ULoopSettingsData, ULoopSettingsData> transform)
+        {
+            Debug.Assert(transform != null, "transform must not be null");
+
+            ULoopSettingsData current = GetSettings();
+            ULoopSettingsData updated = transform(current);
+            SaveSettings(updated);
+        }
+
+        public DynamicCodeSecurityLevel GetDynamicCodeSecurityLevel()
+        {
+            ULoopSettingsData settings = GetSettings();
+            int persistedValue = settings.dynamicCodeSecurityLevel;
+
+            // Disabled(0) was removed; migrate any undefined value to Restricted and persist
+            if (!Enum.IsDefined(typeof(DynamicCodeSecurityLevel), persistedValue))
+            {
+                DynamicCodeSecurityLevel fallback = DynamicCodeSecurityLevel.Restricted;
+                ULoopSettingsData migrated = settings with { dynamicCodeSecurityLevel = (int)fallback };
+                SaveSettings(migrated);
+                return fallback;
+            }
+            return (DynamicCodeSecurityLevel)persistedValue;
+        }
+
+        public void SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel level)
+        {
+            ULoopSettingsData settings = GetSettings();
+            ULoopSettingsData updated = settings with { dynamicCodeSecurityLevel = (int)level };
+            SaveSettings(updated);
+
+            VibeLogger.LogInfo(
+                "editor_settings_security_level_changed",
+                $"Security level changed to: {level}",
+                new { level = level.ToString() },
+                correlationId: UnityCliLoopConstants.GenerateCorrelationId(),
+                humanNote: "Security level updated in editor settings",
+                aiTodo: "Monitor security level changes"
+            );
+        }
+
+        // Loading & Migration
+
+        private void LoadSettings()
+        {
+            string oldSettingsPath = Path.Combine(UnityCliLoopConstants.ULOOP_DIR, "settings.security.json");
+            string oldBackupPath = oldSettingsPath + ".bak";
+
+            AtomicFileWriter.RecoverSidecarFiles(SettingsFilePath);
+
+            // When upgrading directly from v0.67 (or earlier) to v0.69+, the legacy
+            // file still contains security fields because v0.68's extraction never ran.
+            // Legacy file takes priority over any settings.security.json which may hold
+            // stale default values.
+            if (!File.Exists(SettingsFilePath) && LegacyFileHasSecurityFields())
+            {
+                MigrateFromLegacySettings();
+                DeleteIfExists(oldSettingsPath);
+                DeleteIfExists(oldBackupPath);
+                return;
+            }
+
+            // v0.68.0 used "settings.security.json"; rename once so existing users keep their settings.
+            // This migration block can be removed after a few releases.
+            if (!File.Exists(SettingsFilePath))
+            {
+                if (File.Exists(oldSettingsPath))
+                {
+                    File.Move(oldSettingsPath, SettingsFilePath);
+                }
+                else if (File.Exists(oldBackupPath))
+                {
+                    File.Move(oldBackupPath, SettingsFilePath);
+                }
+            }
+
+            if (File.Exists(SettingsFilePath))
+            {
+                FileInfo fileInfo = new(SettingsFilePath);
+                Debug.Assert(fileInfo.Length <= UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES,
+                    $"Settings file exceeds size limit: {fileInfo.Length} bytes");
+
+                string json = File.ReadAllText(SettingsFilePath);
+
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    _cachedSettings = new ULoopSettingsData();
+                    return;
+                }
+
+                _cachedSettings = JsonUtility.FromJson<ULoopSettingsData>(json);
+                bool migratedToolToggles = ApplyLegacyToolToggleMigrations(json);
+                bool normalizedDynamicCode = NormalizeLegacyDisabledDynamicCode();
+                bool removedThirdPartyToolsField = json.Contains($"\"{LEGACY_ALLOW_THIRD_PARTY_TOOLS_FIELD}\"");
+                if (migratedToolToggles || normalizedDynamicCode || removedThirdPartyToolsField)
+                {
+                    SaveSettings(_cachedSettings);
+                }
+                return;
+            }
+
+            // .uloop/settings.permissions.json does not exist yet — attempt migration from legacy file
+            MigrateFromLegacySettings();
+        }
+
+        private bool LegacyFileHasSecurityFields()
+        {
+            if (!File.Exists(LegacySettingsFilePath))
+            {
+                return false;
+            }
+
+            string json = File.ReadAllText(LegacySettingsFilePath);
+            return json.Contains($"\"{LEGACY_ALLOW_THIRD_PARTY_TOOLS_FIELD}\"")
+                || json.Contains($"\"{nameof(LegacyUnityCliLoopSecuritySettingProbe.enableTestsExecution)}\"")
+                || json.Contains($"\"{nameof(LegacyUnityCliLoopSecuritySettingProbe.allowMenuItemExecution)}\"")
+                || json.Contains($"\"{nameof(LegacyUnityCliLoopSecuritySettingProbe.dynamicCodeSecurityLevel)}\"");
+        }
+
+        private static void DeleteIfExists(string path)
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+
+        /// <summary>
+        /// UnityCliLoopEditorSettingsData no longer contains security fields, so we need
+        /// a dedicated probe class to extract them from the legacy JSON.
+        /// </summary>
+        [Serializable]
+        private class LegacyUnityCliLoopSecuritySettingProbe
+        {
+            public bool enableTestsExecution = true;
+            public bool allowMenuItemExecution = true;
+            public int dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted;
+        }
+
+        /// <summary>
+        /// One-time migration: .uloop/settings.permissions.json absence is used as the trigger
+        /// to guarantee this runs exactly once — after migration the file exists and
+        /// this path is never taken again.
+        /// </summary>
+        private void MigrateFromLegacySettings()
+        {
+            if (!File.Exists(LegacySettingsFilePath))
+            {
+                _cachedSettings = new ULoopSettingsData();
+                return;
+            }
+
+            string legacyJson = File.ReadAllText(LegacySettingsFilePath);
+            if (string.IsNullOrWhiteSpace(legacyJson))
+            {
+                _cachedSettings = new ULoopSettingsData();
+                return;
+            }
+
+            LegacyUnityCliLoopSecuritySettingProbe probe = JsonUtility.FromJson<LegacyUnityCliLoopSecuritySettingProbe>(legacyJson);
+
+            _cachedSettings = new ULoopSettingsData
+            {
+                dynamicCodeSecurityLevel = probe.dynamicCodeSecurityLevel
+            };
+
+            ApplyLegacyToolToggleMigrations(legacyJson);
+            NormalizeLegacyDisabledDynamicCode();
+            SaveSettings(_cachedSettings);
+
+            // Re-save legacy file to purge security fields that are no longer in
+            // UnityCliLoopEditorSettingsData — JsonUtility.ToJson only serializes defined fields,
+            // so the 4 removed fields disappear from the JSON on re-serialization.
+            UnityCliLoopEditorSettings.SaveSettings(UnityCliLoopEditorSettings.GetSettings());
+        }
+
+        private bool NormalizeLegacyDisabledDynamicCode()
+        {
+            Debug.Assert(_cachedSettings != null, "_cachedSettings must not be null");
+
+            if (_cachedSettings.dynamicCodeSecurityLevel != 0)
+            {
+                return false;
+            }
+
+            ToolSettings.SetToolEnabled(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE, false);
+            _cachedSettings = _cachedSettings with
+            {
+                dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted
+            };
+            return true;
+        }
+
+        private bool ApplyLegacyToolToggleMigrations(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return false;
+            }
+
+            LegacyUnityCliLoopSecuritySettingProbe probe = JsonUtility.FromJson<LegacyUnityCliLoopSecuritySettingProbe>(json);
+            bool migrated = false;
+
+            if (json.Contains($"\"{nameof(LegacyUnityCliLoopSecuritySettingProbe.enableTestsExecution)}\"")
+                && !probe.enableTestsExecution)
+            {
+                ToolSettings.SetToolEnabled(UnityCliLoopConstants.TOOL_NAME_RUN_TESTS, false);
+                migrated = true;
+            }
+
+            if (json.Contains($"\"{nameof(LegacyUnityCliLoopSecuritySettingProbe.allowMenuItemExecution)}\""))
+            {
+                migrated = true;
+            }
+
+            return migrated;
+        }
+
+        public void InvalidateCache()
+        {
+            _cachedSettings = null;
+        }
+
+        // Roslyn Define Symbol Management
+
+    }
+}

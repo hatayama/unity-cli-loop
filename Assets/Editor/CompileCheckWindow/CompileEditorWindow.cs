@@ -3,8 +3,15 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using System.Threading.Tasks;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
+    /// <summary>
+    /// Defines the Unity Editor window for Compile Editor workflows.
+    /// </summary>
     public class CompileEditorWindow : EditorWindow
     {
         private CompileController _compileController;
@@ -139,7 +146,7 @@ namespace io.github.hatayama.UnityCliLoop
         private void OnCompileCompleted(CompileResult result)
         {
             _logDisplay.AppendCompletionMessage(result);
-            McpEditorSettings.SetCompileWindowHasData(true);
+            UnityCliLoopEditorSettings.SetCompileWindowHasData(true);
             Repaint();
         }
 
@@ -168,7 +175,7 @@ namespace io.github.hatayama.UnityCliLoop
             _compileController.ClearMessages();
 
             // Also clear McpSessionManager data
-            McpEditorSettings.ClearCompileWindowData();
+            UnityCliLoopEditorSettings.ClearCompileWindowData();
 
             Repaint();
         }

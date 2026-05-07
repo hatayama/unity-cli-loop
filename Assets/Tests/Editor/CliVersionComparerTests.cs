@@ -1,7 +1,12 @@
 using NUnit.Framework;
 
+using io.github.hatayama.UnityCliLoop.Domain;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies CLI Version Comparer behavior.
+    /// </summary>
     public class CliVersionComparerTests
     {
         [TestCase("3.0.0-beta.0", "3.0.0-beta.0", true)]

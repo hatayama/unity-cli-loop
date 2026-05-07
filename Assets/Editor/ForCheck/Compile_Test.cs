@@ -1,5 +1,8 @@
 using UnityEngine;
 
+/// <summary>
+/// Provides the Unity component behavior for Compile.
+/// </summary>
 public class Compile_Test : MonoBehaviour
 {
     void Start()

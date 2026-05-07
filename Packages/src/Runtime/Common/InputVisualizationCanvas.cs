@@ -1,8 +1,12 @@
 using UnityEngine;
+using UnityEngine.UI;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     // Orchestrator that owns the shared Canvas and holds references to all input visualization overlays.
+    /// <summary>
+    /// Provides the Unity component behavior for Input Visualization Canvas.
+    /// </summary>
     public class InputVisualizationCanvas : MonoBehaviour
     {
         [SerializeField] private SimulateKeyboardOverlay _keyboardOverlay = null!;
@@ -19,11 +23,20 @@ namespace io.github.hatayama.UnityCliLoop
 
         private void Awake()
         {
+            EnsureUnitScaleCanvas();
             Debug.Assert(_keyboardOverlay != null, "_keyboardOverlay must be assigned in prefab");
             Debug.Assert(_mouseUiOverlay != null, "_mouseUiOverlay must be assigned in prefab");
             Debug.Assert(_mouseInputOverlay != null, "_mouseInputOverlay must be assigned in prefab");
             Debug.Assert(_recordInputOverlayPresenter != null, "_recordInputOverlayPresenter must be assigned in prefab");
             Debug.Assert(_replayInputOverlay != null, "_replayInputOverlay must be assigned in prefab");
+        }
+
+        private void EnsureUnitScaleCanvas()
+        {
+            CanvasScaler canvasScaler = GetComponent<CanvasScaler>();
+            Debug.Assert(canvasScaler != null, "InputVisualizationCanvas prefab must include CanvasScaler");
+            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            transform.localScale = Vector3.one;
         }
     }
 }

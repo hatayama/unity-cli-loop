@@ -1,7 +1,12 @@
 using NUnit.Framework;
 
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Compilation Diagnostic Message Parser behavior.
+    /// </summary>
     public class CompilationDiagnosticMessageParserTests
     {
         [Test]

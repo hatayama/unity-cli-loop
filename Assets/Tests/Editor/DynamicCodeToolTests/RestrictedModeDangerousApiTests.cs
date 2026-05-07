@@ -5,7 +5,10 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
     /// <summary>
     /// Comprehensive testing that dangerous APIs are blocked in Restricted mode
@@ -26,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         {
             // v4.0 stateless design - Remove changes to global settings
             // Directly specify level in Executor (keep existing)
-            executor = Factory.DynamicCodeExecutorFactory.Create(
+            executor = DynamicCodeServices.ExecutorFactory.Create(
                 DynamicCodeSecurityLevel.Restricted
             );
             

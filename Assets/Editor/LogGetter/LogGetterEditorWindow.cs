@@ -1,8 +1,13 @@
 using UnityEngine;
 using UnityEditor;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
+    /// <summary>
+    /// Defines the Unity Editor window for Log Getter Editor workflows.
+    /// </summary>
     public class LogGetterEditorWindow : EditorWindow
     {
         private LogGetterPresenter _presenter;
@@ -69,8 +74,8 @@ namespace io.github.hatayama.UnityCliLoop
             string buttonText = _selectedLogType == "All" ? "Get All Logs" : $"Get {_selectedLogType} Logs";
             if (GUILayout.Button(buttonText, GUILayout.Height(30)))
             {
-                string mcpLogType = ConvertStringToMcpLogType(_selectedLogType);
-                _presenter.GetLogs(mcpLogType);
+                string unityCliLoopLogType = ConvertStringToUnityCliLoopLogType(_selectedLogType);
+                _presenter.GetLogs(unityCliLoopLogType);
             }
 
             GUILayout.Space(5);
@@ -141,13 +146,13 @@ namespace io.github.hatayama.UnityCliLoop
             {
                 switch (entry.LogType)
                 {
-                    case McpLogType.Log:
+                    case UnityCliLoopLogType.Log:
                         logCount++;
                         break;
-                    case McpLogType.Warning:
+                    case UnityCliLoopLogType.Warning:
                         warningCount++;
                         break;
-                    case McpLogType.Error:
+                    case UnityCliLoopLogType.Error:
                         errorCount++;
                         break;
                     default:
@@ -188,15 +193,15 @@ namespace io.github.hatayama.UnityCliLoop
             GUILayout.Space(2);
         }
 
-        private string ConvertStringToMcpLogType(string logType)
+        private string ConvertStringToUnityCliLoopLogType(string logType)
         {
             return logType switch
             {
-                "Error" => McpLogType.Error,
-                "Warning" => McpLogType.Warning,
-                "Log" => McpLogType.Log,
-                "All" => McpLogType.All,
-                _ => McpLogType.All
+                "Error" => UnityCliLoopLogType.Error,
+                "Warning" => UnityCliLoopLogType.Warning,
+                "Log" => UnityCliLoopLogType.Log,
+                "All" => UnityCliLoopLogType.All,
+                _ => UnityCliLoopLogType.All
             };
         }
 
@@ -204,8 +209,8 @@ namespace io.github.hatayama.UnityCliLoop
         {
             switch (logType)
             {
-                case McpLogType.Error:
-                case McpLogType.Warning:
+                case UnityCliLoopLogType.Error:
+                case UnityCliLoopLogType.Warning:
                 default:
                     return EditorStyles.helpBox;
             }

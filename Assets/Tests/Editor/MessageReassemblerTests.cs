@@ -2,7 +2,9 @@ using System;
 using System.Text;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Unit tests for MessageReassembler class.

@@ -1,8 +1,11 @@
 using System;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     [RequireComponent(typeof(MeshFilter))]
     [RequireComponent(typeof(MeshRenderer))]
     [RequireComponent(typeof(MeshCollider))]

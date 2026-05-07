@@ -2,8 +2,15 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Execute Dynamic Code Tool Auto Using behavior.
+    /// </summary>
     [TestFixture]
     public class ExecuteDynamicCodeToolAutoUsingTests
     {
@@ -11,18 +18,17 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteAsync_CompileOnly_WhenTypeRequiresMissingUsing_ShouldSucceed()
         {
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ExecuteDynamicCodeTool tool = new ExecuteDynamicCodeTool();
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
 
             try
             {
-                JObject paramsToken = new JObject
-                {
+                JObject paramsToken = new()                {
                     ["Code"] = "StringBuilder builder = new StringBuilder(); builder.Append(\"ok\"); return builder.ToString();",
                     ["CompileOnly"] = true
                 };
 
                 ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-                BaseToolResponse response = await tool.ExecuteAsync(paramsToken);
+                UnityCliLoopToolResponse response = await registry.ExecuteToolAsync("execute-dynamic-code", paramsToken);
                 ExecuteDynamicCodeResponse typedResponse = response as ExecuteDynamicCodeResponse;
 
                 Assert.IsNotNull(typedResponse, "Response should be ExecuteDynamicCodeResponse");

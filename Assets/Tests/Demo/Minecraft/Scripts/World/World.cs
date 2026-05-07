@@ -1,8 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     [DefaultExecutionOrder(-10)]
     public class World : MonoBehaviour
     {
@@ -37,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop
                 ChunkRenderer renderer = existingChunks[i];
                 Vector2Int chunkPos = renderer.ChunkPosition;
 
-                ChunkData data = new ChunkData(chunkPos);
+                ChunkData data = new(chunkPos);
                 TerrainGenerator.GenerateChunk(data);
 
                 chunks[chunkPos] = renderer;
@@ -96,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop
             {
                 for (int cz = 0; cz < WorldConstants.WorldSizeInChunks; cz++)
                 {
-                    Vector2Int chunkPos = new Vector2Int(cx, cz);
+                    Vector2Int chunkPos = new(cx, cz);
                     CreateChunk(chunkPos);
                 }
             }
@@ -104,10 +107,10 @@ namespace io.github.hatayama.UnityCliLoop
 
         private void CreateChunk(Vector2Int chunkPos)
         {
-            ChunkData data = new ChunkData(chunkPos);
+            ChunkData data = new(chunkPos);
             TerrainGenerator.GenerateChunk(data);
 
-            GameObject chunkObj = new GameObject($"Chunk_{chunkPos.x}_{chunkPos.y}");
+            GameObject chunkObj = new($"Chunk_{chunkPos.x}_{chunkPos.y}");
             chunkObj.transform.parent = transform;
             chunkObj.AddComponent<MeshFilter>();
             chunkObj.AddComponent<MeshRenderer>();

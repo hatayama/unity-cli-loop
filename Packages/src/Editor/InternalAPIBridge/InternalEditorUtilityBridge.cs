@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEditor;
 using UnityEditorInternal;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.InternalAPIBridge
 {
     /// <summary>
     /// Bridge class for accessing Unity internal APIs.
@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop
             RenderTexture temporary = RenderTexture.GetTemporary(descriptor);
 
             float scale = EditorGUIUtility.pixelsPerPoint;
-            Rect rect = new Rect(0.0f, 0.0f, window.position.width * scale, window.position.height * scale);
+            Rect rect = new(0.0f, 0.0f, window.position.width * scale, window.position.height * scale);
 
             // m_Parent is the HostView/DockArea that contains the EditorWindow
             // GrabPixels is an internal method that captures the view contents

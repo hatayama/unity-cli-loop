@@ -3,28 +3,34 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Tests.Demo;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo.Editor
 {
     // Subscribes to InputRecorder/InputReplayer lifecycle events and drives the
     // verification controller accordingly. The Recordings EditorWindow (or CLI)
     // starts recording/replay; this bridge resets the controller so logging
     // stays in sync within the same frame.
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     [InitializeOnLoad]
     internal static class InputReplayVerificationEditorBridge
     {
         static InputReplayVerificationEditorBridge()
         {
-            InputRecorder.RecordingStarted -= OnRecordingStarted;
-            InputRecorder.RecordingStarted += OnRecordingStarted;
+            InputRecorder.RemoveRecordingStartedHandler(OnRecordingStarted);
+            InputRecorder.AddRecordingStartedHandler(OnRecordingStarted);
 
-            InputRecorder.RecordingStopped -= OnRecordingStopped;
-            InputRecorder.RecordingStopped += OnRecordingStopped;
+            InputRecorder.RemoveRecordingStoppedHandler(OnRecordingStopped);
+            InputRecorder.AddRecordingStoppedHandler(OnRecordingStopped);
 
-            InputReplayer.ReplayStarted -= OnReplayStarted;
-            InputReplayer.ReplayStarted += OnReplayStarted;
+            InputReplayer.RemoveReplayStartedHandler(OnReplayStarted);
+            InputReplayer.AddReplayStartedHandler(OnReplayStarted);
 
-            InputReplayer.ReplayCompleted -= OnReplayCompleted;
-            InputReplayer.ReplayCompleted += OnReplayCompleted;
+            InputReplayer.RemoveReplayCompletedHandler(OnReplayCompleted);
+            InputReplayer.AddReplayCompletedHandler(OnReplayCompleted);
         }
 
         private static void OnRecordingStarted()

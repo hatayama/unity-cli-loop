@@ -3,7 +3,9 @@
 using System.Collections;
 using System.Threading;
 using System.Threading.Tasks;
-using io.github.hatayama.UnityCliLoop;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -13,8 +15,11 @@ using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
 using UnityEngine.TestTools;
 
-namespace Tests.PlayMode
+namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
+    /// <summary>
+    /// Test fixture that verifies Simulate Keyboard behavior.
+    /// </summary>
     public class SimulateKeyboardTests : InputTestFixture
     {
         private GameObject eventSystemGo = null!;
@@ -496,12 +501,11 @@ namespace Tests.PlayMode
         {
             yield return null;
 
-            SimulateKeyboardSchema parameters = new SimulateKeyboardSchema
-            {
-                Action = KeyboardAction.KeyDown,
+            SimulateKeyboardSchema parameters = new()            {
+                Action = UnityCliLoopKeyboardAction.KeyDown,
                 Key = "W"
             };
-            CancellationTokenSource cts = new CancellationTokenSource();
+            CancellationTokenSource cts = new();
             Task<SimulateKeyboardResponse> task = tool.ExecuteWithCancellationAsync(parameters, cts.Token);
 
             yield return new WaitUntil(() => KeyboardKeyState.IsKeyHeld(Key.W) || task.IsCompleted);
@@ -531,7 +535,7 @@ namespace Tests.PlayMode
 
         private IEnumerator RunTool(JObject parameters)
         {
-            Task<BaseToolResponse> task = tool.ExecuteAsync(parameters);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters);
             yield return WaitForTask(task);
             lastResponse = (SimulateKeyboardResponse)task.Result;
         }
@@ -599,6 +603,9 @@ namespace Tests.PlayMode
         }
     }
 
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class FramePressObserver : MonoBehaviour
     {
         public int SpacePressedFrameCount { get; private set; }
@@ -649,6 +656,9 @@ namespace Tests.PlayMode
         }
     }
 
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class FrameStateObserver : MonoBehaviour
     {
         public int WPressedUpdateCount { get; private set; }
@@ -678,6 +688,9 @@ namespace Tests.PlayMode
         }
     }
 
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class ManualModeFramePressObserver : MonoBehaviour
     {
         public int EnterPressedStateCount { get; private set; }
@@ -710,6 +723,9 @@ namespace Tests.PlayMode
         }
     }
 
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class TestableSimulateKeyboardTool : SimulateKeyboardTool
     {
         public Task<SimulateKeyboardResponse> ExecuteWithCancellationAsync(

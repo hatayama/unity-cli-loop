@@ -1,0 +1,37 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "UnityCLILoop.FirstPartyTools.ClearConsole.Editor",
+        "UnityCLILoop.FirstPartyTools.Compile.Editor",
+        "UnityCLILoop.FirstPartyTools.ControlPlayMode.Editor",
+        "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor",
+        "UnityCLILoop.FirstPartyTools.FindGameObjects.Editor",
+        "UnityCLILoop.FirstPartyTools.GetHierarchy.Editor",
+        "UnityCLILoop.FirstPartyTools.GetLogs.Editor",
+        "UnityCLILoop.FirstPartyTools.RecordInput.Editor",
+        "UnityCLILoop.FirstPartyTools.ReplayInput.Editor",
+        "UnityCLILoop.FirstPartyTools.RunTests.Editor",
+        "UnityCLILoop.FirstPartyTools.Screenshot.Editor",
+        "UnityCLILoop.FirstPartyTools.SimulateKeyboard.Editor",
+        "UnityCLILoop.FirstPartyTools.SimulateMouseInput.Editor",
+        "UnityCLILoop.FirstPartyTools.SimulateMouseUi.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "",
+            "define": "ULOOP_HAS_INPUT_SYSTEM"
+        }
+    ],
+    "noEngineReferences": false
+}

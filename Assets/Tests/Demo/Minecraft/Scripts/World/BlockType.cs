@@ -1,4 +1,5 @@
-namespace io.github.hatayama.UnityCliLoop
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
     public enum BlockType : byte
     {

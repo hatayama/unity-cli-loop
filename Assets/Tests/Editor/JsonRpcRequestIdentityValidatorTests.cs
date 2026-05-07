@@ -1,7 +1,13 @@
 using NUnit.Framework;
 
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies JSON RPC Request Identity Validator behavior.
+    /// </summary>
     [TestFixture]
     public class JsonRpcRequestIdentityValidatorTests
     {
@@ -20,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ExpectedProjectRoot = string.Empty
             };
 
-            ParameterValidationException exception = Assert.Throws<ParameterValidationException>(() =>
+            UnityCliLoopToolParameterValidationException exception = Assert.Throws<UnityCliLoopToolParameterValidationException>(() =>
                 JsonRpcRequestIdentityValidator.Validate(metadata, "/project"));
 
             Assert.That(exception.Message, Does.Contain("expectedProjectRoot is required"));
@@ -34,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ExpectedProjectRoot = "/project"
             };
 
-            ParameterValidationException exception = Assert.Throws<ParameterValidationException>(() =>
+            UnityCliLoopToolParameterValidationException exception = Assert.Throws<UnityCliLoopToolParameterValidationException>(() =>
                 JsonRpcRequestIdentityValidator.Validate(metadata, string.Empty));
 
             Assert.That(exception.Message, Does.Contain("Fast project validation is unavailable"));
@@ -48,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ExpectedProjectRoot = "/project-a"
             };
 
-            ParameterValidationException exception = Assert.Throws<ParameterValidationException>(() =>
+            UnityCliLoopToolParameterValidationException exception = Assert.Throws<UnityCliLoopToolParameterValidationException>(() =>
                 JsonRpcRequestIdentityValidator.Validate(metadata, "/project-b"));
 
             Assert.That(exception.Message, Does.Contain("different project"));

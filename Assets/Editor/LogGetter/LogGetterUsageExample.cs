@@ -1,7 +1,9 @@
 using UnityEngine;
 using UnityEditor;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
     /// <summary>
     /// Usage examples for the LogGetter generic API.
@@ -66,15 +68,15 @@ namespace io.github.hatayama.UnityCliLoop
             Debug.Log("--- Filtering Usage Example ---");
 
             // Get only error logs
-            LogDisplayDto errorLogs = LogGetter.GetConsoleLogsByType(McpLogType.Error);
+            LogDisplayDto errorLogs = LogGetter.GetConsoleLogsByType(UnityCliLoopLogType.Error);
             Debug.Log($"Number of error logs: {errorLogs.TotalCount}");
 
             // Get only warning logs
-            LogDisplayDto warningLogs = LogGetter.GetConsoleLogsByType(McpLogType.Warning);
+            LogDisplayDto warningLogs = LogGetter.GetConsoleLogsByType(UnityCliLoopLogType.Warning);
             Debug.Log($"Number of warning logs: {warningLogs.TotalCount}");
 
             // Get only normal logs
-            LogDisplayDto normalLogs = LogGetter.GetConsoleLogsByType(McpLogType.Log);
+            LogDisplayDto normalLogs = LogGetter.GetConsoleLogsByType(UnityCliLoopLogType.Log);
             Debug.Log($"Number of normal logs: {normalLogs.TotalCount}");
         }
 
@@ -103,13 +105,13 @@ namespace io.github.hatayama.UnityCliLoop
             {
                 switch (entry.LogType)
                 {
-                    case McpLogType.Error:
+                    case UnityCliLoopLogType.Error:
                         errorCount++;
                         break;
-                    case McpLogType.Warning:
+                    case UnityCliLoopLogType.Warning:
                         warningCount++;
                         break;
-                    case McpLogType.Log:
+                    case UnityCliLoopLogType.Log:
                         logCount++;
                         break;
                 }

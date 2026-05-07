@@ -1,8 +1,13 @@
 using UnityEditor.Compilation;
 using System.Text;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
+    /// <summary>
+    /// Provides Compile Log Display behavior for Unity CLI Loop.
+    /// </summary>
     public class CompileLogDisplay : System.IDisposable
     {
         private StringBuilder _logBuilder = new();

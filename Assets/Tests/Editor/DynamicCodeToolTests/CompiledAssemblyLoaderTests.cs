@@ -5,8 +5,14 @@ using System.IO;
 using System.Linq;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Compiled Assembly Loader behavior.
+    /// </summary>
     [TestFixture]
     public class CompiledAssemblyLoaderTests
     {
@@ -73,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
             Assert.That(externalCompilerPaths, Is.Not.Null, "Unity external compiler layout should be available for this test");
 
-            DynamicReferenceSetBuilderService referenceSetBuilder = new DynamicReferenceSetBuilderService();
+            DynamicReferenceSetBuilderService referenceSetBuilder = new();
             List<string> references = referenceSetBuilder.BuildReferenceSet(
                 new List<string>(),
                 null,
@@ -86,8 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             File.WriteAllText(sourcePath, source);
             WriteCompilerResponseFile(responsePath, sourcePath, dllPath, references);
 
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
+            ProcessStartInfo startInfo = new()            {
                 FileName = externalCompilerPaths.DotnetHostPath,
                 Arguments = $"\"{externalCompilerPaths.CompilerDllPath}\" @\"{responsePath}\"",
                 WorkingDirectory = _tempDirectoryPath,
@@ -114,8 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             string dllPath,
             IReadOnlyCollection<string> references)
         {
-            List<string> lines = new List<string>
-            {
+            List<string> lines = new()            {
                 "-nologo",
                 "-target:library",
                 $"-out:\"{dllPath}\""
@@ -130,6 +134,9 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             File.WriteAllLines(responsePath, lines);
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class AllowAllPreloadAssemblySecurityValidator : IPreloadAssemblySecurityValidator
         {
             public SecurityValidationResult Validate(byte[] assemblyBytes)
@@ -143,6 +150,9 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             }
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class AllowAllOverridePreloadAssemblySecurityValidator :
             IPreloadAssemblySecurityValidator,
             IOverrideDefaultPreloadAssemblySecurityValidation

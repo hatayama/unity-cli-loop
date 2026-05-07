@@ -1,0 +1,23 @@
+{
+    "name": "UnityCLILoop.CompositionRoot.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.CompositionRoot",
+    "references": [
+        "UnityCLILoop.Application",
+        "UnityCLILoop.Domain",
+        "UnityCLILoop.FirstPartyTools.Editor",
+        "UnityCLILoop.Infrastructure",
+        "UnityCLILoop.Presentation",
+        "UnityCLILoop.ToolContracts"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

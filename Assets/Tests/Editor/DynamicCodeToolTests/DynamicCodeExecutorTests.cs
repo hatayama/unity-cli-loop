@@ -4,17 +4,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Dynamic Code Executor behavior.
+    /// </summary>
     [TestFixture]
     public class DynamicCodeExecutorTests
     {
         [Test]
         public async Task ExecuteCodeAsync_WhenCompilationIsCancelled_ShouldReturnNeutralCancelledMessage()
         {
-            CancelledCompilationService compiler = new CancelledCompilationService();
-            CountingCompiledCommandInvoker invoker = new CountingCompiledCommandInvoker();
-            DynamicCodeExecutor executor = new DynamicCodeExecutor(
+            CancelledCompilationService compiler = new();
+            CountingCompiledCommandInvoker invoker = new();
+            DynamicCodeExecutor executor = new(
                 compiler,
                 invoker,
                 new DynamicCodeSourcePreparationService());
@@ -24,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
                 cancellationToken: new CancellationToken(canceled: true));
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorMessage, Is.EqualTo(McpConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
+            Assert.That(result.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
             Assert.That(result.Logs, Contains.Item("Execution cancelled"));
             Assert.That(invoker.ExecuteAsyncCallCount, Is.EqualTo(0));
         }
@@ -33,8 +39,8 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteCodeAsync_WhenCompileOnlyCompilationHasNullTimings_ShouldReturnExecutorStageTimings()
         {
             NullTimingCompilationService compiler = NullTimingCompilationService.CreateSuccessful();
-            CountingCompiledCommandInvoker invoker = new CountingCompiledCommandInvoker();
-            DynamicCodeExecutor executor = new DynamicCodeExecutor(
+            CountingCompiledCommandInvoker invoker = new();
+            DynamicCodeExecutor executor = new(
                 compiler,
                 invoker,
                 new DynamicCodeSourcePreparationService());
@@ -55,8 +61,8 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteCodeAsync_WhenCompilationFailureHasNullTimings_ShouldReturnExecutorStageTimings()
         {
             NullTimingCompilationService compiler = NullTimingCompilationService.CreateFailed();
-            CountingCompiledCommandInvoker invoker = new CountingCompiledCommandInvoker();
-            DynamicCodeExecutor executor = new DynamicCodeExecutor(
+            CountingCompiledCommandInvoker invoker = new();
+            DynamicCodeExecutor executor = new(
                 compiler,
                 invoker,
                 new DynamicCodeSourcePreparationService());
@@ -77,8 +83,8 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         public async Task ExecuteCodeAsync_WhenCompileOnlyUsesAssemblyBuilderFallback_ShouldSurfaceWarningLog()
         {
             AdvisoryCompilationService compiler = AdvisoryCompilationService.CreateSuccessfulCompileOnly();
-            CountingCompiledCommandInvoker invoker = new CountingCompiledCommandInvoker();
-            DynamicCodeExecutor executor = new DynamicCodeExecutor(
+            CountingCompiledCommandInvoker invoker = new();
+            DynamicCodeExecutor executor = new(
                 compiler,
                 invoker,
                 new DynamicCodeSourcePreparationService());
@@ -96,6 +102,9 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             Assert.That(invoker.ExecuteAsyncCallCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class CancelledCompilationService : IDynamicCompilationService
         {
             public Task<CompilationResult> CompileAsync(CompilationRequest request, CancellationToken ct = default)
@@ -104,17 +113,23 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             }
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class CountingCompiledCommandInvoker : ICompiledCommandInvoker
         {
             public int ExecuteAsyncCallCount { get; private set; }
 
-            public Task<ExecutionResult> ExecuteAsync(ExecutionContext context)
+            public Task<ExecutionResult> ExecuteAsync(io.github.hatayama.UnityCliLoop.FirstPartyTools.ExecutionContext context)
             {
                 ExecuteAsyncCallCount++;
                 return Task.FromResult(new ExecutionResult { Success = true });
             }
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class NullTimingCompilationService : IDynamicCompilationService
         {
             private readonly CompilationResult _result;
@@ -148,6 +163,9 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
             }
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class AdvisoryCompilationService : IDynamicCompilationService
         {
             private readonly CompilationResult _result;

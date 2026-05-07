@@ -1,0 +1,20 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.Screenshot.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "GUID:5079a8d3a72924a81aa1cbc25f65ed1b",
+        "UnityCLILoop.FirstPartyTools.Common.MouseUi.Editor",
+        "UnityCLILoop.ToolContracts"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

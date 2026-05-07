@@ -1,4 +1,4 @@
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
     /// <summary>
     /// Test class for another assembly (safe API version)

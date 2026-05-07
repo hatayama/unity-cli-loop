@@ -3,17 +3,22 @@ using UnityEngine;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
+    /// <summary>
+    /// Provides Find Game Objects Test Menu behavior for Unity CLI Loop.
+    /// </summary>
     public static class FindGameObjectsTestMenu
     {
         [MenuItem("UnityCliLoop/Debug/FindGameObjects Tests/Test Camera Search")]
         public static async void TestFindGameObjectsCamera()
         {
-            FindGameObjectsTool tool = new FindGameObjectsTool();
+            FindGameObjectsTool tool = CreateTool();
             
-            JObject parameters = new JObject
-            {
+            JObject parameters = new()            {
                 ["RequiredComponents"] = new JArray { "Camera" },
                 ["MaxResults"] = 1,
                 ["IncludeInheritedProperties"] = true
@@ -21,17 +26,17 @@ namespace io.github.hatayama.UnityCliLoop
             
             try
             {
-                BaseToolResponse response = await tool.ExecuteAsync(parameters);
+                UnityCliLoopToolResponse response = await tool.ExecuteAsync(parameters);
                 
                 if (response is FindGameObjectsResponse findResponse)
                 {
                     Debug.Log($"Found {findResponse.totalFound} objects with Camera");
                     
-                    foreach (var result in findResponse.results)
+                    foreach (FindGameObjectResult result in findResponse.results)
                     {
                         Debug.Log($"- {result.name}: {result.components.Length} components");
                         
-                        foreach (var component in result.components)
+                        foreach (ComponentInfo component in result.components)
                         {
                             if (component.type == "Camera")
                             {
@@ -52,11 +57,10 @@ namespace io.github.hatayama.UnityCliLoop
         {
             Debug.Log("[FindGameObjectsTestMenu] Starting Main Camera path search test...");
             
-            FindGameObjectsTool tool = new FindGameObjectsTool();
+            FindGameObjectsTool tool = CreateTool();
             
             // Search for Main Camera by path
-            JObject parameters = new JObject
-            {
+            JObject parameters = new()            {
                 ["NamePattern"] = "Main Camera",
                 ["SearchMode"] = "Path",
                 ["MaxResults"] = 1
@@ -65,18 +69,18 @@ namespace io.github.hatayama.UnityCliLoop
             try
             {
                 Debug.Log("[FindGameObjectsTestMenu] Executing search for Main Camera...");
-                BaseToolResponse response = await tool.ExecuteAsync(parameters);
+                UnityCliLoopToolResponse response = await tool.ExecuteAsync(parameters);
                 
                 if (response is FindGameObjectsResponse findResponse)
                 {
                     Debug.Log($"[FindGameObjectsTestMenu] Found {findResponse.totalFound} objects");
                     
-                    foreach (var result in findResponse.results)
+                    foreach (FindGameObjectResult result in findResponse.results)
                     {
                         Debug.Log($"[FindGameObjectsTestMenu] - {result.name} at {result.path}");
                         Debug.Log($"[FindGameObjectsTestMenu]   Components: {result.components.Length}");
                         
-                        foreach (var component in result.components)
+                        foreach (ComponentInfo component in result.components)
                         {
                             Debug.Log($"[FindGameObjectsTestMenu]   - {component.type}: {component.properties?.Length ?? 0} properties");
                         }
@@ -94,6 +98,11 @@ namespace io.github.hatayama.UnityCliLoop
             }
             
             Debug.Log("[FindGameObjectsTestMenu] Test completed");
+        }
+
+        private static FindGameObjectsTool CreateTool()
+        {
+            return new FindGameObjectsTool();
         }
     }
 }

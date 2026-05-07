@@ -3,8 +3,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Pre Using Resolver Added Namespaces behavior.
+    /// </summary>
     [TestFixture]
     public class PreUsingResolverAddedNamespacesTests
     {
@@ -60,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public void Resolve_WhenAlreadyHasUsing_ShouldNotReportIt()
         {
-            List<string> usings = new List<string> { "using System.Text;" };
+            List<string> usings = new() { "using System.Text;" };
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
             string wrappedSource = WrapperTemplate.Build(usings, "TestNs", "TestClass", body);
 
@@ -70,6 +76,9 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         }
     }
 
+    /// <summary>
+    /// Test fixture that verifies Auto Injected Namespaces Integration behavior.
+    /// </summary>
     [TestFixture]
     public class AutoInjectedNamespacesIntegrationTests
     {
@@ -91,11 +100,10 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_MissingUsing_ShouldReportAutoInjectedNamespaces()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
-                    StringBuilder builder = new StringBuilder();
+                    StringBuilder builder = new();
                     builder.Append(""hello"");
                     return builder.ToString();
                 ",
@@ -113,9 +121,8 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_NoMissingUsing_ShouldReportEmptyAutoInjectedNamespaces()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = "return 1 + 2;",
                 ClassName = "NoAutoInjectionCommand",
                 Namespace = "TestNamespace"
@@ -131,12 +138,11 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_WithExistingUsing_ShouldNotReportIt()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
                     using System.Text;
-                    StringBuilder builder = new StringBuilder();
+                    StringBuilder builder = new();
                     builder.Append(""already imported"");
                     return builder.ToString();
                 ",
@@ -154,12 +160,11 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_MultipleMissing_ShouldReportAll()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
-                    StringBuilder sb = new StringBuilder();
-                    Regex regex = new Regex(@""\d+"");
+                    StringBuilder sb = new();
+                    Regex regex = new(@""\d+"");
                     return sb.ToString() + regex.ToString();
                 ",
                 ClassName = "MultipleAutoInjectedCommand",
@@ -177,17 +182,19 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_RawMode_MissingUsing_ShouldReportAutoInjectedNamespaces()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
+                    /// <summary>
+                    /// Test fixture that verifies Raw Mode Missing Using behavior.
+                    /// </summary>
                     public class RawModeMissingUsingTest
                     {
                         public async System.Threading.Tasks.Task<object> ExecuteAsync(
                             System.Collections.Generic.Dictionary<string, object> parameters = null,
                             System.Threading.CancellationToken ct = default)
                         {
-                            StringBuilder sb = new StringBuilder();
+                            StringBuilder sb = new();
                             sb.Append(""raw"");
                             return sb.ToString();
                         }
@@ -207,17 +214,19 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_RawMode_FullyQualifiedNames_ShouldReportEmptyAutoInjectedNamespaces()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
+                    /// <summary>
+                    /// Test fixture that verifies Raw Mode Auto Injected behavior.
+                    /// </summary>
                     public class RawModeAutoInjectedTest
                     {
                         public async System.Threading.Tasks.Task<object> ExecuteAsync(
                             System.Collections.Generic.Dictionary<string, object> parameters = null,
                             System.Threading.CancellationToken ct = default)
                         {
-                            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                            System.Text.StringBuilder sb = new();
                             sb.Append(""raw"");
                             return sb.ToString();
                         }
@@ -238,9 +247,8 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_ShouldPopulateCoreTimings()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = "return 1 + 2;",
                 ClassName = "TimingVisibilityCommand",
                 Namespace = "TestNamespace"

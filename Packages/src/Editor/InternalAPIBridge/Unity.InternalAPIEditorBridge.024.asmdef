@@ -1,6 +1,6 @@
 {
     "name": "Unity.InternalAPIEditorBridge.024",
-    "rootNamespace": "io.github.hatayama.uLoopMCP",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.InternalAPIBridge",
     "references": [],
     "includePlatforms": [
         "Editor"

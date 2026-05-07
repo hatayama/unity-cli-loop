@@ -2,8 +2,13 @@ using UnityEngine;
 using UnityEditor;
 using System.IO;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Tests.Demo;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo.Editor
 {
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public static class BlockAtlasGenerator
     {
         private const int PixelSize = BlockConstants.TexturePixelSize;
@@ -40,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static Texture2D GenerateAtlasTexture()
         {
-            Texture2D atlas = new Texture2D(AtlasSize, AtlasSize, TextureFormat.RGBA32, false);
+            Texture2D atlas = new(AtlasSize, AtlasSize, TextureFormat.RGBA32, false);
             Color[] pixels = new Color[AtlasSize * AtlasSize];
 
             // Initialize with magenta to visually detect unpainted cells during debug
@@ -66,8 +71,8 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void DrawGrassTop(Color[] pixels, int col, int row)
         {
-            Color baseGreen = new Color(0.36f, 0.67f, 0.24f);
-            Color darkGreen = new Color(0.28f, 0.55f, 0.18f);
+            Color baseGreen = new(0.36f, 0.67f, 0.24f);
+            Color darkGreen = new(0.28f, 0.55f, 0.18f);
 
             FillCell(pixels, col, row, baseGreen);
             SetCellPixel(pixels, col, row, 2, 3, darkGreen);
@@ -84,9 +89,9 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void DrawGrassSide(Color[] pixels, int col, int row)
         {
-            Color green = new Color(0.36f, 0.67f, 0.24f);
-            Color dirt = new Color(0.55f, 0.36f, 0.20f);
-            Color darkDirt = new Color(0.45f, 0.28f, 0.15f);
+            Color green = new(0.36f, 0.67f, 0.24f);
+            Color dirt = new(0.55f, 0.36f, 0.20f);
+            Color darkDirt = new(0.45f, 0.28f, 0.15f);
 
             FillCell(pixels, col, row, dirt);
 
@@ -114,9 +119,9 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void DrawDirt(Color[] pixels, int col, int row)
         {
-            Color dirt = new Color(0.55f, 0.36f, 0.20f);
-            Color darkDirt = new Color(0.45f, 0.28f, 0.15f);
-            Color lightDirt = new Color(0.62f, 0.42f, 0.25f);
+            Color dirt = new(0.55f, 0.36f, 0.20f);
+            Color darkDirt = new(0.45f, 0.28f, 0.15f);
+            Color lightDirt = new(0.62f, 0.42f, 0.25f);
 
             FillCell(pixels, col, row, dirt);
             SetCellPixel(pixels, col, row, 2, 2, darkDirt);
@@ -133,9 +138,9 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void DrawStone(Color[] pixels, int col, int row)
         {
-            Color stone = new Color(0.50f, 0.50f, 0.50f);
-            Color darkStone = new Color(0.38f, 0.38f, 0.38f);
-            Color lightStone = new Color(0.60f, 0.60f, 0.60f);
+            Color stone = new(0.50f, 0.50f, 0.50f);
+            Color darkStone = new(0.38f, 0.38f, 0.38f);
+            Color lightStone = new(0.60f, 0.60f, 0.60f);
 
             FillCell(pixels, col, row, stone);
             for (int x = 0; x < PixelSize; x++)
@@ -157,9 +162,9 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void DrawWoodTop(Color[] pixels, int col, int row)
         {
-            Color wood = new Color(0.65f, 0.50f, 0.28f);
-            Color ring = new Color(0.50f, 0.38f, 0.20f);
-            Color center = new Color(0.55f, 0.42f, 0.22f);
+            Color wood = new(0.65f, 0.50f, 0.28f);
+            Color ring = new(0.50f, 0.38f, 0.20f);
+            Color center = new(0.55f, 0.42f, 0.22f);
 
             FillCell(pixels, col, row, wood);
             for (int x = 0; x < PixelSize; x++)
@@ -187,8 +192,8 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void DrawWoodSide(Color[] pixels, int col, int row)
         {
-            Color wood = new Color(0.55f, 0.38f, 0.18f);
-            Color darkWood = new Color(0.45f, 0.30f, 0.14f);
+            Color wood = new(0.55f, 0.38f, 0.18f);
+            Color darkWood = new(0.45f, 0.30f, 0.14f);
 
             FillCell(pixels, col, row, wood);
             for (int x = 0; x < PixelSize; x++)
@@ -205,9 +210,9 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void DrawSand(Color[] pixels, int col, int row)
         {
-            Color sand = new Color(0.86f, 0.80f, 0.55f);
-            Color darkSand = new Color(0.78f, 0.72f, 0.48f);
-            Color lightSand = new Color(0.92f, 0.86f, 0.62f);
+            Color sand = new(0.86f, 0.80f, 0.55f);
+            Color darkSand = new(0.78f, 0.72f, 0.48f);
+            Color lightSand = new(0.92f, 0.86f, 0.62f);
 
             FillCell(pixels, col, row, sand);
             for (int x = 0; x < PixelSize; x++)
@@ -229,8 +234,8 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void DrawBrick(Color[] pixels, int col, int row)
         {
-            Color brick = new Color(0.65f, 0.30f, 0.20f);
-            Color mortar = new Color(0.75f, 0.72f, 0.68f);
+            Color brick = new(0.65f, 0.30f, 0.20f);
+            Color mortar = new(0.75f, 0.72f, 0.68f);
 
             FillCell(pixels, col, row, brick);
             for (int y = 3; y < PixelSize; y += 4)
@@ -278,9 +283,9 @@ namespace io.github.hatayama.UnityCliLoop
 
         private static void DrawWater(Color[] pixels, int col, int row)
         {
-            Color water = new Color(0.20f, 0.40f, 0.80f);
-            Color deepWater = new Color(0.15f, 0.30f, 0.70f);
-            Color lightWater = new Color(0.30f, 0.50f, 0.90f);
+            Color water = new(0.20f, 0.40f, 0.80f);
+            Color deepWater = new(0.15f, 0.30f, 0.70f);
+            Color lightWater = new(0.30f, 0.50f, 0.90f);
 
             FillCell(pixels, col, row, water);
             for (int x = 0; x < PixelSize; x++)
@@ -331,7 +336,7 @@ namespace io.github.hatayama.UnityCliLoop
             Shader shader = Shader.Find(URPLitShaderName);
             Debug.Assert(shader != null, "URP Lit shader not found");
 
-            Material material = new Material(shader);
+            Material material = new(shader);
             Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(TexturePath);
             Debug.Assert(texture != null, "Atlas texture not found at " + TexturePath);
 

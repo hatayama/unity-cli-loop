@@ -5,8 +5,14 @@ using UnityEditor;
 using UnityEngine;
 using Newtonsoft.Json.Linq;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Find Game Objects Tool behavior.
+    /// </summary>
     public class FindGameObjectsToolTests
     {
         private FindGameObjectsTool tool;
@@ -44,14 +50,13 @@ namespace io.github.hatayama.UnityCliLoop
         public async Task ExecuteAsync_WithNamePattern_FindsMatchingObjects()
         {
             // Arrange
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject",
                 ["SearchMode"] = "Contains"
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
@@ -71,10 +76,10 @@ namespace io.github.hatayama.UnityCliLoop
         public async Task ExecuteAsync_WithEmptyParameters_ReturnsError()
         {
             // Arrange
-            JObject paramsJson = new JObject();
+            JObject paramsJson = new();
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
@@ -92,13 +97,12 @@ namespace io.github.hatayama.UnityCliLoop
             testObject2.AddComponent<Rigidbody>();
             testObject3.AddComponent<BoxCollider>();
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["RequiredComponents"] = new JArray { "BoxCollider" }
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
@@ -120,13 +124,12 @@ namespace io.github.hatayama.UnityCliLoop
             testObject2.AddComponent<BoxCollider>();
             testObject3.AddComponent<Rigidbody>();
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["RequiredComponents"] = new JArray { "BoxCollider", "Rigidbody" }
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
@@ -151,15 +154,14 @@ namespace io.github.hatayama.UnityCliLoop
             testObject2.tag = "Untagged";
             testObject3.tag = "Untagged";
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject|AnotherObject",
                 ["SearchMode"] = "Regex",
                 ["Tag"] = "Untagged"
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
@@ -190,13 +192,12 @@ namespace io.github.hatayama.UnityCliLoop
             testObject2.layer = enemyLayer;
             testObject3.layer = enemyLayer;
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["Layer"] = enemyLayer
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
@@ -216,12 +217,11 @@ namespace io.github.hatayama.UnityCliLoop
         public async Task ExecuteAsync_WithRegexSearch_FindsObjectsMatchingPattern()
         {
             // Arrange
-            GameObject enemy1 = new GameObject("Enemy1");
-            GameObject enemy2 = new GameObject("Enemy2");
-            GameObject player = new GameObject("Player1");
+            GameObject enemy1 = new("Enemy1");
+            GameObject enemy2 = new("Enemy2");
+            GameObject player = new("Player1");
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Enemy\\d+",
                 ["SearchMode"] = "Regex"
             };
@@ -229,7 +229,7 @@ namespace io.github.hatayama.UnityCliLoop
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
                 
                 // Assert
@@ -258,15 +258,14 @@ namespace io.github.hatayama.UnityCliLoop
             testObject2.SetActive(false);
             testObject3.SetActive(false);
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Object",
                 ["SearchMode"] = "Contains",
                 ["IncludeInactive"] = true
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
@@ -287,15 +286,14 @@ namespace io.github.hatayama.UnityCliLoop
             testObject2.SetActive(false);
             testObject3.SetActive(false);
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Object",
                 ["SearchMode"] = "Contains",
                 ["IncludeInactive"] = false
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
@@ -315,8 +313,7 @@ namespace io.github.hatayama.UnityCliLoop
             testObject2.layer = 8;
             testObject3.layer = 8;
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Object",
                 ["SearchMode"] = "Contains",
                 ["RequiredComponents"] = new JArray { "BoxCollider" },
@@ -324,7 +321,7 @@ namespace io.github.hatayama.UnityCliLoop
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
@@ -349,8 +346,7 @@ namespace io.github.hatayama.UnityCliLoop
                 manyObjects[i] = new GameObject($"ManyObject{i}");
             }
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "ManyObject",
                 ["SearchMode"] = "Contains",
                 ["MaxResults"] = 5
@@ -359,7 +355,7 @@ namespace io.github.hatayama.UnityCliLoop
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
                 
                 // Assert
@@ -387,14 +383,13 @@ namespace io.github.hatayama.UnityCliLoop
         public async Task ExecuteAsync_WithPathSearchMode_FindsObjectByHierarchyPath()
         {
             // Arrange
-            GameObject parent = new GameObject("Parent");
-            GameObject child = new GameObject("Child");
-            GameObject grandchild = new GameObject("Grandchild");
+            GameObject parent = new("Parent");
+            GameObject child = new("Child");
+            GameObject grandchild = new("Grandchild");
             child.transform.SetParent(parent.transform);
             grandchild.transform.SetParent(child.transform);
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Parent/Child/Grandchild",
                 ["SearchMode"] = "Path"
             };
@@ -402,7 +397,7 @@ namespace io.github.hatayama.UnityCliLoop
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
                 
                 // Assert
@@ -422,12 +417,11 @@ namespace io.github.hatayama.UnityCliLoop
         public async Task ExecuteAsync_WithExactSearchMode_FindsExactNameMatch()
         {
             // Arrange
-            GameObject exact = new GameObject("ExactName");
-            GameObject partial = new GameObject("ExactNamePart");
-            GameObject different = new GameObject("DifferentName");
+            GameObject exact = new("ExactName");
+            GameObject partial = new("ExactNamePart");
+            GameObject different = new("DifferentName");
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "ExactName",
                 ["SearchMode"] = "Exact"
             };
@@ -435,7 +429,7 @@ namespace io.github.hatayama.UnityCliLoop
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
                 
                 // Assert
@@ -456,12 +450,11 @@ namespace io.github.hatayama.UnityCliLoop
         public async Task ExecuteAsync_WithContainsSearchMode_FindsPartialMatch()
         {
             // Arrange
-            GameObject obj1 = new GameObject("TestObjectOne");
-            GameObject obj2 = new GameObject("AnotherTestObjectTwo");
-            GameObject obj3 = new GameObject("DifferentName");
+            GameObject obj1 = new("TestObjectOne");
+            GameObject obj2 = new("AnotherTestObjectTwo");
+            GameObject obj3 = new("DifferentName");
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject",
                 ["SearchMode"] = "Contains"
             };
@@ -469,7 +462,7 @@ namespace io.github.hatayama.UnityCliLoop
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
@@ -496,13 +489,12 @@ namespace io.github.hatayama.UnityCliLoop
             // Arrange
             Selection.objects = new Object[0];
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected"
             };
 
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
             // Assert
@@ -519,15 +511,14 @@ namespace io.github.hatayama.UnityCliLoop
             Object[] previousSelection = Selection.objects;
             Selection.objects = new Object[] { testObject1 };
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected"
             };
 
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
@@ -550,15 +541,14 @@ namespace io.github.hatayama.UnityCliLoop
             // Arrange
             Selection.objects = new Object[] { testObject1, testObject2 };
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected"
             };
 
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
@@ -569,7 +559,7 @@ namespace io.github.hatayama.UnityCliLoop
                 Assert.That(response.message, Does.Contain("Multiple objects selected"));
 
                 // Verify file exists
-                string fullPath = Path.Combine(Application.dataPath, "..", response.resultsFilePath);
+                string fullPath = Path.Combine(UnityEngine.Application.dataPath, "..", response.resultsFilePath);
                 Assert.That(File.Exists(fullPath), Is.True, $"Export file should exist at {fullPath}");
 
                 // Cleanup exported file
@@ -592,8 +582,7 @@ namespace io.github.hatayama.UnityCliLoop
             testObject2.SetActive(false);
             Selection.objects = new Object[] { testObject1, testObject2 };
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected",
                 ["IncludeInactive"] = false
             };
@@ -601,7 +590,7 @@ namespace io.github.hatayama.UnityCliLoop
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
@@ -623,12 +612,11 @@ namespace io.github.hatayama.UnityCliLoop
         public async Task ExecuteAsync_ReturnsObjectReferenceProperties()
         {
             // Arrange
-            GameObject anchorTarget = new GameObject("AnchorTarget");
+            GameObject anchorTarget = new("AnchorTarget");
             MeshRenderer renderer = testObject1.AddComponent<MeshRenderer>();
             renderer.probeAnchor = anchorTarget.transform;
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject1",
                 ["SearchMode"] = "Exact"
             };
@@ -636,7 +624,7 @@ namespace io.github.hatayama.UnityCliLoop
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
@@ -670,14 +658,13 @@ namespace io.github.hatayama.UnityCliLoop
             // Arrange
             testObject1.AddComponent<MeshRenderer>();
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject1",
                 ["SearchMode"] = "Exact"
             };
 
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
             // Assert
@@ -706,8 +693,7 @@ namespace io.github.hatayama.UnityCliLoop
             testObject2.SetActive(false);
             Selection.objects = new Object[] { testObject1, testObject2 };
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected",
                 ["IncludeInactive"] = true
             };
@@ -715,7 +701,7 @@ namespace io.github.hatayama.UnityCliLoop
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
@@ -724,7 +710,7 @@ namespace io.github.hatayama.UnityCliLoop
                 Assert.That(response.resultsFilePath, Is.Not.Null); // Multiple selection exports to file
 
                 // Cleanup exported file
-                string fullPath = Path.Combine(Application.dataPath, "..", response.resultsFilePath);
+                string fullPath = Path.Combine(UnityEngine.Application.dataPath, "..", response.resultsFilePath);
                 if (File.Exists(fullPath))
                 {
                     File.Delete(fullPath);

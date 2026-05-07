@@ -6,8 +6,13 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Hierarchy Service behavior.
+    /// </summary>
     public class HierarchyServiceTests
     {
         private GameObject testRoot;
@@ -37,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop
         public void GetHierarchyNodes_WithSingleObject_ReturnsOneNode()
         {
             // Arrange
-            HierarchyOptions options = new HierarchyOptions();
+            HierarchyOptions options = new();
             
             // Act
             List<HierarchyNode> nodes = service.GetHierarchyNodes(options);
@@ -51,12 +56,12 @@ namespace io.github.hatayama.UnityCliLoop
         public void GetHierarchyNodes_WithNestedObjects_ReturnsCorrectDepth()
         {
             // Arrange
-            GameObject child = new GameObject("Child");
-            GameObject grandChild = new GameObject("GrandChild");
+            GameObject child = new("Child");
+            GameObject grandChild = new("GrandChild");
             child.transform.SetParent(testRoot.transform);
             grandChild.transform.SetParent(child.transform);
             
-            HierarchyOptions options = new HierarchyOptions();
+            HierarchyOptions options = new();
             
             // Act
             List<HierarchyNode> nodes = service.GetHierarchyNodes(options);
@@ -71,14 +76,14 @@ namespace io.github.hatayama.UnityCliLoop
         public void GetHierarchyNodes_WithMaxDepth_LimitsDepth()
         {
             // Arrange
-            GameObject child = new GameObject("Child");
-            GameObject grandChild = new GameObject("GrandChild");
-            GameObject greatGrandChild = new GameObject("GreatGrandChild");
+            GameObject child = new("Child");
+            GameObject grandChild = new("GrandChild");
+            GameObject greatGrandChild = new("GreatGrandChild");
             child.transform.SetParent(testRoot.transform);
             grandChild.transform.SetParent(child.transform);
             greatGrandChild.transform.SetParent(grandChild.transform);
             
-            HierarchyOptions options = new HierarchyOptions { MaxDepth = 1 };
+            HierarchyOptions options = new() { MaxDepth = 1 };
             
             // Act
             List<HierarchyNode> nodes = service.GetHierarchyNodes(options);
@@ -93,13 +98,13 @@ namespace io.github.hatayama.UnityCliLoop
         public void GetHierarchyNodes_WithInactiveFilter_ExcludesInactive()
         {
             // Arrange
-            GameObject activeChild = new GameObject("ActiveChild");
-            GameObject inactiveChild = new GameObject("InactiveChild");
+            GameObject activeChild = new("ActiveChild");
+            GameObject inactiveChild = new("InactiveChild");
             activeChild.transform.SetParent(testRoot.transform);
             inactiveChild.transform.SetParent(testRoot.transform);
             inactiveChild.SetActive(false);
             
-            HierarchyOptions options = new HierarchyOptions { IncludeInactive = false };
+            HierarchyOptions options = new() { IncludeInactive = false };
             
             // Act
             List<HierarchyNode> nodes = service.GetHierarchyNodes(options);
@@ -116,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop
             testRoot.AddComponent<BoxCollider>();
             testRoot.AddComponent<Rigidbody>();
             
-            HierarchyOptions options = new HierarchyOptions { IncludeComponents = true };
+            HierarchyOptions options = new() { IncludeComponents = true };
             
             // Act
             List<HierarchyNode> nodes = service.GetHierarchyNodes(options);
@@ -133,10 +138,9 @@ namespace io.github.hatayama.UnityCliLoop
         public void GetHierarchyNodes_WithRootPathIncludingRootName_ReturnsChild()
         {
             // Arrange
-            GameObject child = new GameObject("ChildForRootPath");
+            GameObject child = new("ChildForRootPath");
             child.transform.SetParent(testRoot.transform);
-            HierarchyOptions options = new HierarchyOptions
-            {
+            HierarchyOptions options = new()            {
                 RootPath = testRoot.name + "/" + child.name
             };
 
@@ -165,11 +169,11 @@ namespace io.github.hatayama.UnityCliLoop
         public void GetHierarchyNodes_WithUseSelection_ReturnsSelectedHierarchy()
         {
             // Arrange
-            GameObject child = new GameObject("ChildForSelection");
+            GameObject child = new("ChildForSelection");
             child.transform.SetParent(testRoot.transform);
             Selection.objects = new Object[] { testRoot };
 
-            HierarchyOptions options = new HierarchyOptions { UseSelection = true };
+            HierarchyOptions options = new() { UseSelection = true };
 
             // Act
             List<HierarchyNode> nodes = service.GetHierarchyNodes(options);
@@ -184,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop
         {
             // Arrange
             Selection.objects = new Object[0];
-            HierarchyOptions options = new HierarchyOptions { UseSelection = true };
+            HierarchyOptions options = new() { UseSelection = true };
 
             // Act
             List<HierarchyNode> nodes = service.GetHierarchyNodes(options);
@@ -197,11 +201,11 @@ namespace io.github.hatayama.UnityCliLoop
         public void GetHierarchyNodes_WithUseSelectionAndParentChildSelection_FiltersDescendants()
         {
             // Arrange
-            GameObject child = new GameObject("ChildFiltered");
+            GameObject child = new("ChildFiltered");
             child.transform.SetParent(testRoot.transform);
             Selection.objects = new Object[] { testRoot, child };
 
-            HierarchyOptions options = new HierarchyOptions { UseSelection = true };
+            HierarchyOptions options = new() { UseSelection = true };
 
             // Act
             List<HierarchyNode> nodes = service.GetHierarchyNodes(options);

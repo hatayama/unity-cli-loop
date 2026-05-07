@@ -2,15 +2,20 @@
 #nullable enable
 using System.Collections;
 using System.Threading.Tasks;
-using io.github.hatayama.UnityCliLoop;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.TestTools;
 
-namespace Tests.PlayMode
+namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
+    /// <summary>
+    /// Test fixture that verifies Simulate Mouse Input behavior.
+    /// </summary>
     public class SimulateMouseInputTests : InputTestFixture
     {
         private SimulateMouseInputTool tool = null!;
@@ -185,7 +190,7 @@ namespace Tests.PlayMode
 
         private IEnumerator RunTool(JObject parameters)
         {
-            Task<BaseToolResponse> task = tool.ExecuteAsync(parameters);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters);
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
                 task.IsCompleted || Time.realtimeSinceStartup >= timeoutAt);

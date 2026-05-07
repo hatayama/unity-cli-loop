@@ -2,17 +2,23 @@ using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies U Loop Settings behavior.
+    /// </summary>
     [TestFixture]
     public class ULoopSettingsTests
     {
         private static readonly string SettingsFilePath =
-            Path.Combine(McpConstants.ULOOP_DIR, McpConstants.ULOOP_SETTINGS_FILE_NAME);
+            Path.Combine(UnityCliLoopConstants.ULOOP_DIR, UnityCliLoopConstants.ULOOP_SETTINGS_FILE_NAME);
         private static readonly string ToolSettingsFilePath =
-            Path.Combine(McpConstants.ULOOP_DIR, McpConstants.ULOOP_TOOL_SETTINGS_FILE_NAME);
+            Path.Combine(UnityCliLoopConstants.ULOOP_DIR, UnityCliLoopConstants.ULOOP_TOOL_SETTINGS_FILE_NAME);
         private static readonly string LegacySettingsFilePath =
-            Path.Combine(McpConstants.USER_SETTINGS_FOLDER, McpConstants.SETTINGS_FILE_NAME);
+            Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
         private static readonly string SettingsBackupPath = SettingsFilePath + ".bak";
         private static readonly string ToolSettingsBackupPath = ToolSettingsFilePath + ".bak";
         private static readonly string SettingsTmpPath = SettingsFilePath + ".tmp";
@@ -20,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop
         private static readonly string LegacyBackupPath = LegacySettingsFilePath + ".bak";
         private static readonly string LegacyTmpPath = LegacySettingsFilePath + ".tmp";
         private static readonly string OldSettingsFilePath =
-            Path.Combine(McpConstants.ULOOP_DIR, "settings.security.json");
+            Path.Combine(UnityCliLoopConstants.ULOOP_DIR, "settings.security.json");
         private static readonly string OldSettingsBackupPath = OldSettingsFilePath + ".bak";
 
         private static readonly string[] AllSidecarPaths = new[]
@@ -65,9 +71,9 @@ namespace io.github.hatayama.UnityCliLoop
                 Directory.CreateDirectory(uloopDir);
             }
 
-            if (!Directory.Exists(McpConstants.USER_SETTINGS_FOLDER))
+            if (!Directory.Exists(UnityCliLoopConstants.USER_SETTINGS_FOLDER))
             {
-                Directory.CreateDirectory(McpConstants.USER_SETTINGS_FOLDER);
+                Directory.CreateDirectory(UnityCliLoopConstants.USER_SETTINGS_FOLDER);
             }
 
             DeleteIfExists(OldSettingsFilePath);
@@ -117,8 +123,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void GetSettings_WhenNewFileExists_ShouldIgnoreLegacy()
         {
-            ULoopSettingsData newSettings = new ULoopSettingsData
-            {
+            ULoopSettingsData newSettings = new()            {
                 dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.FullAccess
             };
             File.WriteAllText(SettingsFilePath, JsonUtility.ToJson(newSettings, true));
@@ -139,8 +144,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void SetAndGet_RoundTrip_ShouldPreserveRemainingValues()
         {
-            ULoopSettingsData written = new ULoopSettingsData
-            {
+            ULoopSettingsData written = new()            {
                 dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted
             };
             ULoopSettings.SaveSettings(written);
@@ -173,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop
             StringAssert.DoesNotContain("\"dynamicCodeSecurityLevel\"", updatedLegacy);
             StringAssert.DoesNotContain("\"customPort\"", updatedLegacy);
 
-            McpEditorSettingsData legacySettings = JsonUtility.FromJson<McpEditorSettingsData>(updatedLegacy);
+            UnityCliLoopEditorSettingsData legacySettings = JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(updatedLegacy);
             Assert.IsTrue(legacySettings.showDeveloperTools, "showDeveloperTools should be preserved");
         }
 
@@ -196,8 +200,7 @@ namespace io.github.hatayama.UnityCliLoop
         {
             DeleteIfExists(SettingsFilePath);
 
-            SettingsFileFixture backupData = new SettingsFileFixture
-            {
+            SettingsFileFixture backupData = new()            {
                 allowThirdPartyTools = false,
                 dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.FullAccess
             };
@@ -219,8 +222,7 @@ namespace io.github.hatayama.UnityCliLoop
             DeleteIfExists(SettingsFilePath);
             DeleteIfExists(LegacySettingsFilePath);
 
-            SettingsFileFixture oldData = new SettingsFileFixture
-            {
+            SettingsFileFixture oldData = new()            {
                 allowThirdPartyTools = false,
                 dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted
             };
@@ -242,8 +244,7 @@ namespace io.github.hatayama.UnityCliLoop
             DeleteIfExists(SettingsFilePath);
             DeleteIfExists(ToolSettingsFilePath);
 
-            ULoopSettingsData oldData = new ULoopSettingsData
-            {
+            ULoopSettingsData oldData = new()            {
                 dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted
             };
             File.WriteAllText(OldSettingsFilePath, JsonUtility.ToJson(oldData, true));
@@ -253,7 +254,7 @@ namespace io.github.hatayama.UnityCliLoop
             ULoopSettingsData result = ULoopSettings.GetSettings();
 
             Assert.AreEqual((int)DynamicCodeSecurityLevel.Restricted, result.dynamicCodeSecurityLevel);
-            Assert.IsFalse(ToolSettings.IsToolEnabled(McpConstants.TOOL_NAME_RUN_TESTS));
+            Assert.IsFalse(ToolSettings.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_RUN_TESTS));
             Assert.IsFalse(File.Exists(OldSettingsFilePath), "Old settings file should be removed after legacy migration");
         }
 
@@ -293,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop
             ULoopSettingsData result = ULoopSettings.GetSettings();
 
             Assert.AreEqual((int)DynamicCodeSecurityLevel.Restricted, result.dynamicCodeSecurityLevel);
-            Assert.IsFalse(ToolSettings.IsToolEnabled(McpConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
+            Assert.IsFalse(ToolSettings.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
 
             string updatedPermissionsJson = File.ReadAllText(SettingsFilePath);
             StringAssert.Contains("\"dynamicCodeSecurityLevel\": 1", updatedPermissionsJson);
@@ -315,7 +316,7 @@ namespace io.github.hatayama.UnityCliLoop
 
             ULoopSettings.GetSettings();
 
-            Assert.IsFalse(ToolSettings.IsToolEnabled(McpConstants.TOOL_NAME_RUN_TESTS));
+            Assert.IsFalse(ToolSettings.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_RUN_TESTS));
 
             string updatedPermissionsJson = File.ReadAllText(SettingsFilePath);
             StringAssert.DoesNotContain("\"enableTestsExecution\"", updatedPermissionsJson);
@@ -393,10 +394,13 @@ namespace io.github.hatayama.UnityCliLoop
         private void InvalidateBothCaches()
         {
             ULoopSettings.InvalidateCache();
-            McpEditorSettings.InvalidateCache();
+            UnityCliLoopEditorSettings.InvalidateCache();
             ToolSettings.InvalidateCache();
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         [System.Serializable]
         private class LegacySettingsFixture
         {
@@ -407,6 +411,9 @@ namespace io.github.hatayama.UnityCliLoop
             public bool showDeveloperTools = false;
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         [System.Serializable]
         private class SettingsFileFixture
         {

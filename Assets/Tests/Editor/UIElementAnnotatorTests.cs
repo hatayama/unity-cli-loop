@@ -3,8 +3,13 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies UI Element Annotator behavior.
+    /// </summary>
     public class UIElementAnnotatorTests
     {
         [Test]
@@ -28,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void GetAnnotationColorForElement_WhenFirstSixteenLabelsAreUsed_ShouldReturnUniqueColors()
         {
-            HashSet<string> colorKeys = new HashSet<string>();
+            HashSet<string> colorKeys = new();
             for (int i = 0; i < 16; i++)
             {
                 string label = ((char)('A' + i)).ToString();
@@ -87,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void GetAnnotationBorderColors_WhenAnnotationColorIsProvided_ShouldPutAnnotationColorInTheMiddle()
         {
-            Color annotationColor = new Color(1f, 0.15f, 0.65f, 0.95f);
+            Color annotationColor = new(1f, 0.15f, 0.65f, 0.95f);
             UIElementAnnotator.AnnotationBorderColors borderColors =
                 UIElementAnnotator.GetAnnotationBorderColors(annotationColor);
 
@@ -99,8 +104,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void CreateAnnotationOverlay_WhenElementIsAnnotated_ShouldUseThickerColorBorder()
         {
-            List<UIElementInfo> elements = new List<UIElementInfo>
-            {
+            List<UIElementInfo> elements = new()            {
                 new UIElementInfo
                 {
                     Label = "A",
@@ -133,8 +137,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void CreateAnnotationOverlay_WhenElementIsAnnotated_ShouldKeepLabelOutlineAwayFromBorder()
         {
-            List<UIElementInfo> elements = new List<UIElementInfo>
-            {
+            List<UIElementInfo> elements = new()            {
                 new UIElementInfo
                 {
                     Label = "A",
@@ -163,8 +166,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void CreateAnnotationOverlay_WhenResolutionScaleIsHalf_ShouldCompensateBorderThickness()
         {
-            List<UIElementInfo> elements = new List<UIElementInfo>
-            {
+            List<UIElementInfo> elements = new()            {
                 new UIElementInfo
                 {
                     Label = "A",
@@ -233,8 +235,7 @@ namespace io.github.hatayama.UnityCliLoop
         [Test]
         public void CreateDisplayLabel_WhenElementIsDraggable_ShouldAppendInteraction()
         {
-            UIElementInfo element = new UIElementInfo
-            {
+            UIElementInfo element = new()            {
                 Label = "B",
                 Type = "Draggable",
                 Interaction = "Drag"

@@ -3,7 +3,7 @@ using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
     /// <summary>
     /// Debug tool to analyze Unity Console mask values for different Clear settings

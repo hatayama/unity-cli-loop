@@ -43,7 +43,7 @@ internal: true
 // Tests that skill discovery includes package, CLI-only, project-local, and cached package skill roots.
 func TestCollectSkillDefinitionsIncludesProjectAndPackageRoots(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeTestSkill(t, projectRoot, "Packages/src/Editor/Api/McpTools/Compile/Skill", `---
+	writeTestSkill(t, projectRoot, "Packages/src/Editor/FirstPartyTools/Compile/Skill", `---
 name: uloop-compile
 ---
 
@@ -103,13 +103,13 @@ name: uloop-cached-package
 // Tests that CLI-only and project-local skills win over package-root duplicates.
 func TestCollectSkillDefinitionsUsesUnitySideSourcePrecedence(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeTestSkill(t, projectRoot, "Packages/src/Editor/Api/McpTools/Compile/Skill", `---
+	writeTestSkill(t, projectRoot, "Packages/src/Editor/FirstPartyTools/Compile/Skill", `---
 name: uloop-launch
 ---
 
 # package launch
 `)
-	writeTestSkill(t, projectRoot, "Packages/src/Editor/Api/McpTools/ProjectDuplicate/Skill", `---
+	writeTestSkill(t, projectRoot, "Packages/src/Editor/FirstPartyTools/ProjectDuplicate/Skill", `---
 name: uloop-project
 ---
 
@@ -135,6 +135,21 @@ name: uloop-project
 
 	assertSkillContentContains(t, skills, "uloop-launch", "# cli-only launch")
 	assertSkillContentContains(t, skills, "uloop-project", "# asset project")
+}
+
+// Tests that package root probing uses the current first-party tool marker.
+func TestResolvePackageRootCandidateUsesFirstPartyToolsMarker(t *testing.T) {
+	projectRoot := t.TempDir()
+	markerPath := filepath.Join(projectRoot, "Packages", "src", "Editor", "FirstPartyTools")
+	if err := os.MkdirAll(markerPath, 0o755); err != nil {
+		t.Fatalf("failed to create marker path: %v", err)
+	}
+
+	actualRoot := resolvePackageRootCandidate(projectRoot)
+	expectedRoot := filepath.Join(projectRoot, "Packages", "src")
+	if actualRoot != expectedRoot {
+		t.Fatalf("package root mismatch: actual=%s expected=%s", actualRoot, expectedRoot)
+	}
 }
 
 // Tests that direct SKILL.md files without a frontmatter name use their own directory name.

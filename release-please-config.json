@@ -25,8 +25,8 @@
         },
         {
           "type": "generic",
-          "path": "Packages/src/Editor/Config/McpVersion.cs",
-          "glob": "Packages/src/Editor/Config/McpVersion.cs"
+          "path": "Packages/src/Editor/Application/Config/UnityCliLoopVersion.cs",
+          "glob": "Packages/src/Editor/Application/Config/UnityCliLoopVersion.cs"
         }
       ]
     }

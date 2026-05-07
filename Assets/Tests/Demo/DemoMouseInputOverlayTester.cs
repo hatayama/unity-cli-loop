@@ -3,10 +3,15 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace io.github.hatayama.UnityCliLoop
+using io.github.hatayama.UnityCliLoop.Runtime;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
     // Reads actual mouse input and drives SimulateMouseInputOverlayState
     // so the overlay can be tested standalone without the CLI tool pipeline.
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class DemoMouseInputOverlayTester : MonoBehaviour
     {
         private void Update()

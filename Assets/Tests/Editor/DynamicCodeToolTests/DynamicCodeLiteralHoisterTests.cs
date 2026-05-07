@@ -1,7 +1,12 @@
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Dynamic Code Literal Hoister behavior.
+    /// </summary>
     [TestFixture]
     public class DynamicCodeLiteralHoisterTests
     {

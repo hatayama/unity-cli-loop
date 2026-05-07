@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
+    /// <summary>
+    /// Drives the runtime overlay used by Simulate Keyboard behavior.
+    /// </summary>
     public class SimulateKeyboardOverlay : MonoBehaviour
     {
         public const float CONTAINER_BACKGROUND_ALPHA = 0.8f;
@@ -109,7 +112,7 @@ namespace io.github.hatayama.UnityCliLoop
 
         private BadgeEntry CreateBadge()
         {
-            GameObject badge = new GameObject("KeyBadge");
+            GameObject badge = new("KeyBadge");
             badge.transform.SetParent(_container.transform, false);
 
             badge.AddComponent<RectTransform>();
@@ -120,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop
 
             LayoutElement layoutElement = badge.AddComponent<LayoutElement>();
 
-            GameObject textGo = new GameObject("KeyText");
+            GameObject textGo = new("KeyText");
             textGo.transform.SetParent(badge.transform, false);
 
             RectTransform textRect = textGo.AddComponent<RectTransform>();

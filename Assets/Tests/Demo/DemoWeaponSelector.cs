@@ -4,9 +4,12 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
     // Cycles bullet color via mouse scroll wheel and shows a HUD indicator.
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class DemoWeaponSelector : MonoBehaviour
     {
         private static readonly Color[] BULLET_COLORS =
@@ -76,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop
 
         private void BuildHud()
         {
-            GameObject canvasGo = new GameObject("WeaponSelectorCanvas");
+            GameObject canvasGo = new("WeaponSelectorCanvas");
             canvasGo.transform.SetParent(transform, false);
             Canvas canvas = canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -86,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
 
-            GameObject containerGo = new GameObject("Container");
+            GameObject containerGo = new("Container");
             containerGo.transform.SetParent(canvasGo.transform, false);
             RectTransform containerRect = containerGo.AddComponent<RectTransform>();
             containerRect.anchorMin = new Vector2(1f, 0f);
@@ -99,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop
             containerBg.color = new Color(0f, 0f, 0f, 0.5f);
             containerBg.raycastTarget = false;
 
-            GameObject swatchGo = new GameObject("ColorSwatch");
+            GameObject swatchGo = new("ColorSwatch");
             swatchGo.transform.SetParent(containerGo.transform, false);
             RectTransform swatchRect = swatchGo.AddComponent<RectTransform>();
             swatchRect.anchorMin = new Vector2(0f, 0.5f);
@@ -110,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop
             _colorSwatch = swatchGo.AddComponent<Image>();
             _colorSwatch.raycastTarget = false;
 
-            GameObject labelGo = new GameObject("ColorLabel");
+            GameObject labelGo = new("ColorLabel");
             labelGo.transform.SetParent(containerGo.transform, false);
             RectTransform labelRect = labelGo.AddComponent<RectTransform>();
             labelRect.anchorMin = new Vector2(0f, 0f);

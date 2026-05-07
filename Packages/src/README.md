@@ -487,14 +487,12 @@ You can publish your extension tools on GitHub and reuse them across other proje
 
 **Step 1: Create Schema Class** (define parameters):
 ```csharp
-using System.ComponentModel;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
-public class MyCustomSchema : BaseToolSchema
+public class MyCustomSchema : UnityCliLoopToolSchema
 {
-    [Description("Parameter description")]
     public string MyParameter { get; set; } = "default_value";
 
-    [Description("Example enum parameter")]
     public MyEnum EnumParameter { get; set; } = MyEnum.Option1;
 }
 
@@ -508,7 +506,9 @@ public enum MyEnum
 
 **Step 2: Create Response Class** (define return data):
 ```csharp
-public class MyCustomResponse : BaseToolResponse
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public class MyCustomResponse : UnityCliLoopToolResponse
 {
     public string Result { get; set; }
     public bool Success { get; set; }
@@ -528,28 +528,29 @@ public class MyCustomResponse : BaseToolResponse
 ```csharp
 using System.Threading;
 using System.Threading.Tasks;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
-[McpTool(Description = "Description of my custom tool")]  // Auto-registered; attribute name is historical
-public class MyCustomTool : AbstractUnityTool<MyCustomSchema, MyCustomResponse>
+[UnityCliLoopTool]
+public class MyCustomTool : UnityCliLoopTool<MyCustomSchema, MyCustomResponse>
 {
     public override string ToolName => "my-custom-tool";
 
     // Executed on main thread
-    protected override Task<MyCustomResponse> ExecuteAsync(MyCustomSchema parameters, CancellationToken cancellationToken)
+    protected override Task<MyCustomResponse> ExecuteAsync(MyCustomSchema parameters, CancellationToken ct)
     {
         // Type-safe parameter access
         string param = parameters.MyParameter;
         MyEnum enumValue = parameters.EnumParameter;
 
         // Check for cancellation before long-running operations
-        cancellationToken.ThrowIfCancellationRequested();
+        ct.ThrowIfCancellationRequested();
 
         // Implement custom logic here
         string result = ProcessCustomLogic(param, enumValue);
         bool success = !string.IsNullOrEmpty(result);
 
         // For long-running operations, periodically check for cancellation
-        // cancellationToken.ThrowIfCancellationRequested();
+        // ct.ThrowIfCancellationRequested();
 
         return Task.FromResult(new MyCustomResponse(result, success));
     }
@@ -633,7 +634,7 @@ scripts/build-go-cli.sh
 
 ### Unity CLI Loop Files
 
-`UserSettings/UnityMcpSettings.json` stores per-user editor session state and should always remain local-only. The file name is a historical compatibility name.
+`UserSettings/UnityCliLoopSettings.json` stores per-user editor session state and should always remain local-only.
 
 The `.uloop/` directory at the project root stores CLI cache, tool registry, and runtime outputs. Most of its contents are local-only, but some files can optionally be git-tracked for team sharing.
 

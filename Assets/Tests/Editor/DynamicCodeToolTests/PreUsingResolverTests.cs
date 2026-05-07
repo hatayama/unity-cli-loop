@@ -3,8 +3,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Pre Using Resolver Extract Type Identifiers behavior.
+    /// </summary>
     [TestFixture]
     public class PreUsingResolverExtractTypeIdentifiersTests
     {
@@ -157,6 +163,9 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         }
     }
 
+    /// <summary>
+    /// Test fixture that verifies Pre Using Resolver Resolve behavior.
+    /// </summary>
     [TestFixture]
     public class PreUsingResolverResolveTests
     {
@@ -188,7 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public void Resolve_WhenAlreadyHasUsing_ShouldNotAddDuplicate()
         {
-            List<string> usings = new List<string> { "using System.Text;" };
+            List<string> usings = new() { "using System.Text;" };
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
             string wrappedSource = WrapperTemplate.Build(usings, "TestNs", "TestClass", body);
 
@@ -248,6 +257,9 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         }
     }
 
+    /// <summary>
+    /// Test fixture that verifies Pre Using Resolver Integration behavior.
+    /// </summary>
     [TestFixture]
     public class PreUsingResolverIntegrationTests
     {
@@ -269,11 +281,10 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_MissingUsing_ShouldSucceedWithSingleBuild()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
-                    StringBuilder builder = new StringBuilder();
+                    StringBuilder builder = new();
                     builder.Append(""hello"");
                     return builder.ToString();
                 ",
@@ -293,19 +304,21 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_RawMode_FullClass_ShouldSucceedWithoutPreUsingIntervention()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
                     using System.Text;
 
+                    /// <summary>
+                    /// Test support type used by editor and play mode fixtures.
+                    /// </summary>
                     public class RawModeTestClass
                     {
                         public async System.Threading.Tasks.Task<object> ExecuteAsync(
                             System.Collections.Generic.Dictionary<string, object> parameters = null,
                             System.Threading.CancellationToken ct = default)
                         {
-                            StringBuilder sb = new StringBuilder();
+                            StringBuilder sb = new();
                             sb.Append(""raw"");
                             return sb.ToString();
                         }
@@ -325,12 +338,11 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_AllUsingsPresent_ShouldCompileNormally()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
                     using System.Text;
-                    StringBuilder builder = new StringBuilder();
+                    StringBuilder builder = new();
                     builder.Append(""already imported"");
                     return builder.ToString();
                 ",
@@ -348,12 +360,11 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_MultipleMissingUsings_ShouldPreInjectAllAndSucceed()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
-                    StringBuilder sb = new StringBuilder();
-                    Regex regex = new Regex(@""\d+"");
+                    StringBuilder sb = new();
+                    Regex regex = new(@""\d+"");
                     return sb.ToString() + regex.ToString();
                 ",
                 ClassName = "MultiplePreUsingCommand",
@@ -372,9 +383,8 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_SimpleArithmetic_ShouldSucceedWithSingleBuild()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = "return 1 + 2;",
                 ClassName = "SimpleArithmeticPreUsingCommand",
                 Namespace = "TestNamespace"
@@ -391,11 +401,10 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_CustomAsmdefType_ShouldResolveAssemblyReference()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
-                    DynamicAssemblyTest test = new DynamicAssemblyTest();
+                    DynamicAssemblyTest test = new();
                     return test.HelloWorld();
                 ",
                 ClassName = "CustomAsmdefReferenceCommand",
@@ -412,11 +421,10 @@ namespace io.github.hatayama.UnityCliLoop.DynamicCodeToolTests
         [Test]
         public async Task CompileAsync_ScriptMode_FullyQualifiedCustomAsmdefType_ShouldResolveWithoutRetry()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
                 Code = @"
-                    io.github.hatayama.UnityCliLoop.DynamicAssemblyTest test = new io.github.hatayama.UnityCliLoop.DynamicAssemblyTest();
+                    io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests.DynamicAssemblyTest test = new();
                     return test.HelloWorld();
                 ",
                 ClassName = "FullyQualifiedCustomAsmdefPreUsingCommand",

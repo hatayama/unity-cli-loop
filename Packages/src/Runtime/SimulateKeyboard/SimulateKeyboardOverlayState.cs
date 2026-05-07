@@ -1,21 +1,24 @@
 #nullable enable
 using System.Collections.Generic;
 
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
-    public static class SimulateKeyboardOverlayState
+    /// <summary>
+    /// Provides Simulate Keyboard Overlay State operations for its owning module.
+    /// </summary>
+    public sealed class SimulateKeyboardOverlayStateService
     {
-        private static readonly List<string> _heldKeys = new();
-        private static string? _pressKey;
-        private static float _pressReleasedTime = -1f;
+        private readonly List<string> _heldKeys = new List<string>();
+        private string? _pressKey;
+        private float _pressReleasedTime = -1f;
 
-        public static bool IsActive => _heldKeys.Count > 0 || _pressKey != null;
-        public static IReadOnlyList<string> HeldKeys => _heldKeys;
-        public static string? PressKey => _pressKey;
-        public static bool IsPressHeld => _pressKey != null && _pressReleasedTime < 0f;
-        public static float PressReleasedTime => _pressReleasedTime;
+        public bool IsActive => _heldKeys.Count > 0 || _pressKey != null;
+        public IReadOnlyList<string> HeldKeys => _heldKeys;
+        public string? PressKey => _pressKey;
+        public bool IsPressHeld => _pressKey != null && _pressReleasedTime < 0f;
+        public float PressReleasedTime => _pressReleasedTime;
 
-        public static void AddHeldKey(string keyName)
+        public void AddHeldKey(string keyName)
         {
             if (!_heldKeys.Contains(keyName))
             {
@@ -23,18 +26,18 @@ namespace io.github.hatayama.UnityCliLoop
             }
         }
 
-        public static void RemoveHeldKey(string keyName)
+        public void RemoveHeldKey(string keyName)
         {
             _heldKeys.Remove(keyName);
         }
 
-        public static void ShowPress(string keyName)
+        public void ShowPress(string keyName)
         {
             _pressKey = keyName;
             _pressReleasedTime = -1f;
         }
 
-        public static void ReleasePress()
+        public void ReleasePress()
         {
             UnityEngine.Debug.Assert(_pressKey != null, "Press key must exist before it can be released.");
             if (_pressKey == null)
@@ -45,17 +48,62 @@ namespace io.github.hatayama.UnityCliLoop
             _pressReleasedTime = UnityEngine.Time.realtimeSinceStartup;
         }
 
-        public static void ClearPress()
+        public void ClearPress()
         {
             _pressKey = null;
             _pressReleasedTime = -1f;
         }
 
-        public static void Clear()
+        public void Clear()
         {
             _heldKeys.Clear();
             _pressKey = null;
             _pressReleasedTime = -1f;
+        }
+    }
+
+    /// <summary>
+    /// Stores Simulate Keyboard Overlay state shared by the owning workflow.
+    /// </summary>
+    public static class SimulateKeyboardOverlayState
+    {
+        private static readonly SimulateKeyboardOverlayStateService ServiceValue =
+            new SimulateKeyboardOverlayStateService();
+
+        public static bool IsActive => ServiceValue.IsActive;
+        public static IReadOnlyList<string> HeldKeys => ServiceValue.HeldKeys;
+        public static string? PressKey => ServiceValue.PressKey;
+        public static bool IsPressHeld => ServiceValue.IsPressHeld;
+        public static float PressReleasedTime => ServiceValue.PressReleasedTime;
+
+        public static void AddHeldKey(string keyName)
+        {
+            ServiceValue.AddHeldKey(keyName);
+        }
+
+        public static void RemoveHeldKey(string keyName)
+        {
+            ServiceValue.RemoveHeldKey(keyName);
+        }
+
+        public static void ShowPress(string keyName)
+        {
+            ServiceValue.ShowPress(keyName);
+        }
+
+        public static void ReleasePress()
+        {
+            ServiceValue.ReleasePress();
+        }
+
+        public static void ClearPress()
+        {
+            ServiceValue.ClearPress();
+        }
+
+        public static void Clear()
+        {
+            ServiceValue.Clear();
         }
     }
 }

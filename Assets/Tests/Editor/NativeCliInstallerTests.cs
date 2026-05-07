@@ -3,8 +3,14 @@ using System.Runtime.InteropServices;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop.Tests
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Native CLI Installer behavior.
+    /// </summary>
     public class NativeCliInstallerTests
     {
         [Test]

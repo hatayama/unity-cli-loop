@@ -488,14 +488,12 @@ Unity CLI Loopはコアパッケージへの変更を必要とせず、プロジ
 
 **ステップ1: スキーマクラスの作成**（パラメータを定義）：
 ```csharp
-using System.ComponentModel;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
-public class MyCustomSchema : BaseToolSchema
+public class MyCustomSchema : UnityCliLoopToolSchema
 {
-    [Description("パラメータの説明")]
     public string MyParameter { get; set; } = "default_value";
 
-    [Description("Enumパラメータの例")]
     public MyEnum EnumParameter { get; set; } = MyEnum.Option1;
 }
 
@@ -509,7 +507,9 @@ public enum MyEnum
 
 **ステップ2: レスポンスクラスの作成**（返却データを定義）：
 ```csharp
-public class MyCustomResponse : BaseToolResponse
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public class MyCustomResponse : UnityCliLoopToolResponse
 {
     public string Result { get; set; }
     public bool Success { get; set; }
@@ -529,28 +529,29 @@ public class MyCustomResponse : BaseToolResponse
 ```csharp
 using System.Threading;
 using System.Threading.Tasks;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
-[McpTool(Description = "私のカスタムツールの説明")]  // 自動登録されます。属性名は旧名称由来です
-public class MyCustomTool : AbstractUnityTool<MyCustomSchema, MyCustomResponse>
+[UnityCliLoopTool]
+public class MyCustomTool : UnityCliLoopTool<MyCustomSchema, MyCustomResponse>
 {
     public override string ToolName => "my-custom-tool";
 
     // メインスレッドで実行されます
-    protected override Task<MyCustomResponse> ExecuteAsync(MyCustomSchema parameters, CancellationToken cancellationToken)
+    protected override Task<MyCustomResponse> ExecuteAsync(MyCustomSchema parameters, CancellationToken ct)
     {
         // 型安全なパラメータアクセス
         string param = parameters.MyParameter;
         MyEnum enumValue = parameters.EnumParameter;
 
         // 長時間実行される処理の前にキャンセレーションをチェック
-        cancellationToken.ThrowIfCancellationRequested();
+        ct.ThrowIfCancellationRequested();
 
         // カスタムロジックをここに実装
         string result = ProcessCustomLogic(param, enumValue);
         bool success = !string.IsNullOrEmpty(result);
 
         // 長時間実行される処理では定期的にキャンセレーションをチェック
-        // cancellationToken.ThrowIfCancellationRequested();
+        // ct.ThrowIfCancellationRequested();
 
         return Task.FromResult(new MyCustomResponse(result, success));
     }
@@ -618,7 +619,7 @@ description: "ツールの説明と使用タイミング"
 
 ### Unity CLI Loop 関連ファイル
 
-`UserSettings/UnityMcpSettings.json` はユーザー個別のエディタセッション状態を保持するため、常にローカル専用です。このファイル名は旧名称由来の互換名です。
+`UserSettings/UnityCliLoopSettings.json` はユーザー個別のエディタセッション状態を保持するため、常にローカル専用です。
 
 プロジェクトルートの `.uloop/` ディレクトリには、CLIキャッシュ、ツールレジストリ、ランタイム出力が格納されます。大半はローカル専用ですが、一部のファイルはチーム共有のためにオプションでgit管理できます。
 

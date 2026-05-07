@@ -1,4 +1,4 @@
-namespace io.github.hatayama.UnityCliLoop
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     public enum MouseAction
     {

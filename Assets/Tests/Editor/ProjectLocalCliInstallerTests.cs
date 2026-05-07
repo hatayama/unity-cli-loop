@@ -5,8 +5,15 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Project Local CLI Installer behavior.
+    /// </summary>
     public class ProjectLocalCliInstallerTests
     {
         private string _temporaryRoot;
@@ -36,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string result = ProjectLocalCliInstaller.GetProjectCliBundlePath();
 
             Assert.That(result, Does.Contain(Path.Combine("Cli~", "Core~", "dist")));
-            string expectedFileName = Application.platform == RuntimePlatform.WindowsEditor
+            string expectedFileName = UnityEngine.Application.platform == RuntimePlatform.WindowsEditor
                 ? "uloop-core.exe"
                 : "uloop-core";
             Assert.That(Path.GetFileName(result), Is.EqualTo(expectedFileName));
@@ -59,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result.Success, Is.True, result.ErrorOutput);
             Assert.That(File.Exists(projectLocalCliPath), Is.True);
-            string expectedFileName = Application.platform == RuntimePlatform.WindowsEditor
+            string expectedFileName = UnityEngine.Application.platform == RuntimePlatform.WindowsEditor
                 ? "uloop-core.exe"
                 : "uloop-core";
             Assert.That(Path.GetFileName(projectLocalCliPath), Is.EqualTo(expectedFileName));
@@ -79,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain(missingSourceBundlePath));
-            Assert.That(result.ErrorOutput, Does.Contain(Application.platform.ToString()));
+            Assert.That(result.ErrorOutput, Does.Contain(UnityEngine.Application.platform.ToString()));
             Assert.That(result.ErrorOutput, Does.Contain(RuntimeInformation.ProcessArchitecture.ToString()));
         }
 
@@ -169,7 +176,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void DetectCliOutput_WithRequiredDispatcherVersionFlag_ReturnsRequirement()
         {
             // Verifies that setup can query the bundled core for its required dispatcher version.
-            if (Application.platform == RuntimePlatform.WindowsEditor)
+            if (UnityEngine.Application.platform == RuntimePlatform.WindowsEditor)
             {
                 Assert.Ignore("This test uses a POSIX shell stub and is not executable on Windows.");
             }
@@ -209,7 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that editor path constants stay aligned with the CLI layout manifest.
             string path = Path.Combine(
-                McpConstants.PackageResolvedPath,
+                UnityCliLoopConstants.PackageResolvedPath,
                 CliConstants.CLI_PACKAGE_DIR_NAME,
                 CliConstants.CLI_LAYOUT_CONTRACT_FILE_NAME);
 

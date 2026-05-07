@@ -1,12 +1,12 @@
-using io.github.hatayama.UnityCliLoop;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
-namespace Samples
+namespace io.github.hatayama.UnityCliLoop.Samples
 {
     /// <summary>
     /// Response schema for HelloWorld tool
     /// Provides type-safe response structure
     /// </summary>
-    public class HelloWorldResponse : BaseToolResponse
+    public class HelloWorldResponse : UnityCliLoopToolResponse
     {
         /// <summary>
         /// The greeting message
