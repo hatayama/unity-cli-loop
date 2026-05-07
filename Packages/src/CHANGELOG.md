@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/hatayama/unity-cli-loop/compare/v2.1.0...v2.1.1) (2026-05-07)
+
+
+### Bug Fixes
+
+* allow installation without Unity Test Framework ([#1062](https://github.com/hatayama/unity-cli-loop/issues/1062)) ([45d58b9](https://github.com/hatayama/unity-cli-loop/commit/45d58b944da687f8505457d1a32361c188f119a5))
+
 ## [2.1.0](https://github.com/hatayama/unity-cli-loop/compare/v2.0.4...v2.1.0) (2026-04-29)
 
 
