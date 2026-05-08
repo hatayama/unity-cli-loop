@@ -22,14 +22,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// </summary>
     public class UnityCliLoopToolRegistry
     {
-        private const string ApplicationAssemblyName = "UnityCLILoop.Application";
-        private const string FirstPartyToolsAssemblyNamePrefix = "UnityCLILoop.FirstPartyTools.";
-
         private readonly Dictionary<string, IUnityCliLoopTool> _tools = new();
         private readonly IInternalToolNameProvider _internalToolNameProvider;
+        private readonly ToolSettingsService _toolSettingsService;
 
-        internal UnityCliLoopToolRegistry(IInternalToolNameProvider internalToolNameProvider = null)
+        internal UnityCliLoopToolRegistry(
+            ToolSettingsService toolSettingsService,
+            IInternalToolNameProvider internalToolNameProvider = null)
         {
+            System.Diagnostics.Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+
+            _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
             _internalToolNameProvider = internalToolNameProvider ?? new EmptyInternalToolNameProvider();
             RegisterDefaultTools();
         }
@@ -137,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 throw new ArgumentException($"Unknown tool: {toolName}");
             }
 
-            if (!ToolSettings.IsToolEnabled(toolName))
+            if (!_toolSettingsService.IsToolEnabled(toolName))
             {
                 throw new ToolDisabledException(toolName);
             }
@@ -171,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             HashSet<string> internalToolNames = _internalToolNameProvider.GetInternalToolNames(projectRoot);
             return _tools.Values
-                .Where(tool => ToolSettings.IsToolEnabled(tool.ToolName))
+                .Where(tool => _toolSettingsService.IsToolEnabled(tool.ToolName))
                 .Where(tool => !internalToolNames.Contains(tool.ToolName))
                 .Select(tool =>
             {
@@ -222,7 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 Type toolType = tool.GetType();
                 UnityCliLoopToolAttribute attribute = toolType.GetCustomAttribute<UnityCliLoopToolAttribute>();
                 bool displayDevelopmentOnly = attribute?.DisplayDevelopmentOnly ?? false;
-                bool isThirdParty = IsThirdPartyAssembly(toolType.Assembly.GetName().Name);
+                bool isThirdParty = ToolAssemblyClassifier.IsThirdPartyAssembly(toolType.Assembly.GetName().Name);
 
                 return new ToolSettingsCatalogItem(
                     tool.ToolName,
@@ -241,13 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 return true;
             }
             string assemblyName = tool.GetType().Assembly.GetName().Name;
-            return IsThirdPartyAssembly(assemblyName);
-        }
-
-        private static bool IsThirdPartyAssembly(string assemblyName)
-        {
-            return assemblyName != ApplicationAssemblyName &&
-                   !assemblyName.StartsWith(FirstPartyToolsAssemblyNamePrefix, StringComparison.Ordinal);
+            return ToolAssemblyClassifier.IsThirdPartyAssembly(assemblyName);
         }
 
         /// <summary>
@@ -295,23 +292,4 @@ namespace io.github.hatayama.UnityCliLoop.Application
         }
     }
 
-    /// <summary>
-    /// Lightweight registry metadata used by Tool Settings UI without generating parameter schemas.
-    /// </summary>
-    public class ToolSettingsCatalogItem
-    {
-        public readonly string Name;
-        public readonly bool DisplayDevelopmentOnly;
-        public readonly bool IsThirdParty;
-
-        public ToolSettingsCatalogItem(
-            string name,
-            bool displayDevelopmentOnly,
-            bool isThirdParty)
-        {
-            Name = name;
-            DisplayDevelopmentOnly = displayDevelopmentOnly;
-            IsThirdParty = isThirdParty;
-        }
-    }
 }

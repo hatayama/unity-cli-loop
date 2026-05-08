@@ -14,6 +14,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class ToolSkillSetupService : ISkillSetupPort
     {
+        private readonly ToolSettingsService _toolSettingsService;
+
+        public ToolSkillSetupService(ToolSettingsService toolSettingsService)
+        {
+            Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+
+            _toolSettingsService = toolSettingsService ?? throw new System.ArgumentNullException(nameof(toolSettingsService));
+        }
+
         public void RemoveSkillFiles(string toolName)
         {
             ToolSkillSynchronizer.RemoveSkillFiles(toolName);
@@ -59,7 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 .ToList();
             await ToolSkillSynchronizer.InstallSkillFiles(
                 synchronizerTargets,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                _toolSettingsService.GetDisabledTools());
             ct.ThrowIfCancellationRequested();
         }
 
@@ -73,7 +83,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             await ToolSkillSynchronizer.InstallSkillFilesForTool(
                 toolName,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                _toolSettingsService.GetDisabledTools());
             ct.ThrowIfCancellationRequested();
         }
 

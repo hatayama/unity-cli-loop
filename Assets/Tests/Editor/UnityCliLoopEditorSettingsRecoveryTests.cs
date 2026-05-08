@@ -119,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             File.WriteAllText(SettingsFilePath, "{\"showDeveloperTools\":true}");
             UnityCliLoopEditorSettings.InvalidateCache();
 
-            bool installSkillsFlat = UnityCliLoopEditorSettings.GetInstallSkillsFlat();
+            bool installSkillsFlat = UnityCliLoopEditorSettings.GetSettings().installSkillsFlat;
 
             Assert.IsTrue(installSkillsFlat);
         }
@@ -164,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorSettings.SetInstallSkillsFlat(true);
             UnityCliLoopEditorSettings.InvalidateCache();
 
-            bool installSkillsFlat = UnityCliLoopEditorSettings.GetInstallSkillsFlat();
+            bool installSkillsFlat = UnityCliLoopEditorSettings.GetSettings().installSkillsFlat;
 
             Assert.IsTrue(installSkillsFlat);
         }

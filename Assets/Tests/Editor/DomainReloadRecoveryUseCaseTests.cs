@@ -15,27 +15,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class DomainReloadRecoveryUseCaseTests
     {
         private bool _originalIsServerRunning;
+        private IDomainReloadDetectionService _domainReloadDetectionService;
 
         [SetUp]
         public void SetUp()
         {
             // Save original session state
             _originalIsServerRunning = UnityCliLoopEditorSettings.GetIsServerRunning();
+            _domainReloadDetectionService = new DomainReloadDetectionFileService();
         }
 
         [TearDown]
         public void TearDown()
         {
             // Restore original session state
-            UnityCliLoopEditorSettings.SetIsServerRunning(_originalIsServerRunning);
-            UnityCliLoopEditorSettings.SetIsAfterCompile(false);
-            UnityCliLoopEditorSettings.SetIsDomainReloadInProgress(false);
-            UnityCliLoopEditorSettings.SetIsReconnecting(false);
-            UnityCliLoopEditorSettings.SetShowReconnectingUI(false);
-            UnityCliLoopEditorSettings.SetShowPostCompileReconnectingUI(false);
+            UnityCliLoopEditorSettings.UpdateSettings(s => s with
+            {
+                isServerRunning = _originalIsServerRunning,
+                isAfterCompile = false,
+                isDomainReloadInProgress = false,
+                isReconnecting = false,
+                showReconnectingUI = false,
+                showPostCompileReconnectingUI = false
+            });
 
             // Clean up lock file created by ExecuteBeforeDomainReload
-            DomainReloadDetectionService.DeleteLockFile();
+            _domainReloadDetectionService.DeleteLockFile();
         }
 
         [Test]
@@ -44,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Arrange
             UnityCliLoopEditorSettings.SetIsServerRunning(true);
 
-            DomainReloadRecoveryUseCase useCase = CreateUseCase();
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(_domainReloadDetectionService);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
@@ -59,9 +64,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Arrange
             UnityCliLoopEditorSettings.SetIsServerRunning(false);
-            UnityCliLoopEditorSettings.SetIsAfterCompile(false);
+            UnityCliLoopEditorSettings.UpdateSettings(s => s with { isAfterCompile = false });
 
-            DomainReloadRecoveryUseCase useCase = CreateUseCase();
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(_domainReloadDetectionService);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
@@ -81,10 +86,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopBridgeServer server = null;
             try
             {
-                server = new UnityCliLoopBridgeServer();
+                server = new UnityCliLoopBridgeServer(_domainReloadDetectionService);
                 server.StartServer();
 
-                DomainReloadRecoveryUseCase useCase = CreateUseCase();
+                DomainReloadRecoveryUseCase useCase = CreateUseCase(_domainReloadDetectionService);
 
                 // Act
                 ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(server);
@@ -99,12 +104,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
-        private static DomainReloadRecoveryUseCase CreateUseCase()
+        private static DomainReloadRecoveryUseCase CreateUseCase(
+            IDomainReloadDetectionService domainReloadDetectionService)
         {
             TestRecoveryCoordinator recoveryCoordinator = new();
             SessionRecoveryService sessionRecoveryService =
-                new SessionRecoveryService(recoveryCoordinator);
-            return new DomainReloadRecoveryUseCase(sessionRecoveryService);
+                new SessionRecoveryService(recoveryCoordinator, domainReloadDetectionService);
+            return new DomainReloadRecoveryUseCase(
+                sessionRecoveryService,
+                domainReloadDetectionService);
         }
 
         /// <summary>

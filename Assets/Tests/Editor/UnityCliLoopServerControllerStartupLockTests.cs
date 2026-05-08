@@ -113,7 +113,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UnityCliLoopServerLifecycleRegistryService();
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
-                lifecycleRegistry);
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService());
             string claimedLockPath = null;
             ServerStartingLockService.OnOwnedLockFileClaimedForDeletionForTests = path => claimedLockPath = path;
 
@@ -138,7 +139,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UnityCliLoopServerLifecycleRegistryService();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
-                lifecycleRegistry);
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService());
         }
 
         /// <summary>

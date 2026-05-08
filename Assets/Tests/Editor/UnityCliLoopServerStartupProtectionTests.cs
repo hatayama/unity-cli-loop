@@ -1,6 +1,7 @@
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -50,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             finally
             {
                 UnityCliLoopEditorSettings.SaveSettings(originalSettings);
-                DomainReloadDetectionService.DeleteLockFile();
+                new DomainReloadDetectionFileService().DeleteLockFile();
                 service.ClearStartupProtection();
             }
         }
@@ -86,7 +87,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UnityCliLoopServerLifecycleRegistryService();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
-                lifecycleRegistry);
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService());
         }
 
         /// <summary>

@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using System.Threading;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Application
@@ -21,13 +22,19 @@ namespace io.github.hatayama.UnityCliLoop.Application
     public sealed class SessionRecoveryService
     {
         private readonly IUnityCliLoopServerRecoveryCoordinator _recoveryCoordinator;
+        private readonly IDomainReloadDetectionService _domainReloadDetectionService;
 
-        public SessionRecoveryService(IUnityCliLoopServerRecoveryCoordinator recoveryCoordinator)
+        public SessionRecoveryService(
+            IUnityCliLoopServerRecoveryCoordinator recoveryCoordinator,
+            IDomainReloadDetectionService domainReloadDetectionService)
         {
             System.Diagnostics.Debug.Assert(recoveryCoordinator != null, "recoveryCoordinator must not be null");
+            System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
 
             _recoveryCoordinator = recoveryCoordinator
                 ?? throw new System.ArgumentNullException(nameof(recoveryCoordinator));
+            _domainReloadDetectionService = domainReloadDetectionService
+                ?? throw new System.ArgumentNullException(nameof(domainReloadDetectionService));
         }
 
         public ValidationResult RestoreServerStateIfNeeded(CancellationToken ct)
@@ -41,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             if (currentServer?.IsRunning == true)
             {
                 CompilationLockService.DeleteLockFile();
-                DomainReloadDetectionService.DeleteLockFile();
+                _domainReloadDetectionService.DeleteLockFile();
                 // Why: only the startup generation that created serverstarting.lock knows whether
                 // the canonical lock still belongs to it or has already been replaced by a newer
                 // generation. Why not delete it here: a stale domain-reload recovery path can race

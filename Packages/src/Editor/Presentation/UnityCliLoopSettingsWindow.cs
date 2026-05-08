@@ -27,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private UnityCliLoopSettingsModel _model;
         private UnityCliLoopSettingsWindowEventHandler _eventHandler;
         private SkillSetupUseCase _skillSetupUseCase;
+        private ToolSettingsUseCase _toolSettingsUseCase;
 
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private bool _installSkillsFlat;
@@ -84,12 +85,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeModel()
         {
-            _model = new UnityCliLoopSettingsModel();
+            _model = new UnityCliLoopSettingsModel(_toolSettingsUseCase);
         }
 
         private void InitializeApplicationServices()
         {
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            _toolSettingsUseCase = ToolSettingsUseCaseRegistry.GetRegisteredUseCase();
         }
 
         private void InitializeView()
@@ -119,7 +121,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeEventHandler()
         {
-            _eventHandler = new UnityCliLoopSettingsWindowEventHandler(_model, this);
+            _eventHandler = new UnityCliLoopSettingsWindowEventHandler(
+                _model,
+                this,
+                _toolSettingsUseCase);
             _eventHandler.Initialize();
         }
 
@@ -356,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             return new ToolSettingsSectionData(
                 _model.UI.ShowToolSettings,
-                ToolSettingsApplicationFacade.GetDynamicCodeSecurityLevel(),
+                _toolSettingsUseCase.GetDynamicCodeSecurityLevel(),
                 System.Array.Empty<ToolToggleItem>(),
                 System.Array.Empty<ToolToggleItem>(),
                 true,
@@ -366,13 +371,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private ToolSettingsSectionData CreateToolSettingsData()
         {
             bool isRegistryAvailable =
-                ToolSettingsApplicationFacade.TryGetToolCatalog(
-                    out ToolSettingsApplicationFacade.ToolCatalogItem[] allTools);
+                _toolSettingsUseCase.TryGetToolCatalog(
+                    out ToolSettingsUseCase.ToolCatalogItem[] allTools);
             if (!isRegistryAvailable)
             {
                 return new ToolSettingsSectionData(
                     _model.UI.ShowToolSettings,
-                    ToolSettingsApplicationFacade.GetDynamicCodeSecurityLevel(),
+                    _toolSettingsUseCase.GetDynamicCodeSecurityLevel(),
                     System.Array.Empty<ToolToggleItem>(),
                     System.Array.Empty<ToolToggleItem>(),
                     false,
@@ -382,14 +387,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             List<ToolToggleItem> builtIn = new();
             List<ToolToggleItem> thirdParty = new();
 
-            foreach (ToolSettingsApplicationFacade.ToolCatalogItem tool in allTools)
+            foreach (ToolSettingsUseCase.ToolCatalogItem tool in allTools)
             {
                 if (tool.DisplayDevelopmentOnly)
                 {
                     continue;
                 }
 
-                bool isEnabled = ToolSettingsApplicationFacade.IsToolEnabled(tool.Name);
+                bool isEnabled = _toolSettingsUseCase.IsToolEnabled(tool.Name);
                 bool isThirdPartyTool = tool.IsThirdParty;
 
                 ToolToggleItem item = new(tool.Name, isEnabled, isThirdPartyTool);
@@ -409,7 +414,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             return new ToolSettingsSectionData(
                 _model.UI.ShowToolSettings,
-                ToolSettingsApplicationFacade.GetDynamicCodeSecurityLevel(),
+                _toolSettingsUseCase.GetDynamicCodeSecurityLevel(),
                 builtIn.ToArray(),
                 thirdParty.ToArray(),
                 true,
@@ -469,7 +474,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            ToolSettingsApplicationFacade.WarmupRegistry();
+            _toolSettingsUseCase.WarmupRegistry();
             InvalidateToolSettingsCatalog();
             RefreshToolSettingsCatalogIfNeeded();
         }
@@ -530,7 +535,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateDynamicCodeSecurityLevel(DynamicCodeSecurityLevel level)
         {
-            ToolSettingsApplicationFacade.SetDynamicCodeSecurityLevel(level);
+            _toolSettingsUseCase.SetDynamicCodeSecurityLevel(level);
         }
 
         private void RefreshCliSetupSection(bool includeSkillDirectoryChecks = true)

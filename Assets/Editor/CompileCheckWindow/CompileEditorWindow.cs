@@ -206,7 +206,6 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         private void OnCompileCompleted(CompileResult result)
         {
             _logDisplay.AppendCompletionMessage(result);
-            UnityCliLoopEditorSettings.SetCompileWindowHasData(true);
             Repaint();
         }
 
@@ -233,9 +232,6 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         {
             _logDisplay.Clear();
             _compileController.ClearMessages();
-
-            // Also clear McpSessionManager data
-            UnityCliLoopEditorSettings.ClearCompileWindowData();
 
             Repaint();
         }

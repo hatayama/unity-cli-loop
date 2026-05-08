@@ -2,6 +2,7 @@ using System.IO;
 using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -162,30 +163,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Check if currently in Domain Reload
-        /// </summary>
-        /// <returns>True if Domain Reload is in progress</returns>
-        public bool IsDomainReloadInProgress()
-        {
-            return UnityCliLoopEditorSettings.GetIsDomainReloadInProgress();
-        }
-
-        /// <summary>
         /// Check if reconnection UI display is required
         /// </summary>
         /// <returns>True if reconnection UI display is required</returns>
         public bool ShouldShowReconnectingUI()
         {
             return UnityCliLoopEditorSettings.GetShowReconnectingUI();
-        }
-
-        /// <summary>
-        /// Check if in after-compile state
-        /// </summary>
-        /// <returns>True if after compile</returns>
-        public bool IsAfterCompile()
-        {
-            return UnityCliLoopEditorSettings.GetIsAfterCompile();
         }
 
         private static void CreateLockFile()

@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private readonly IUnityCliLoopServerInstanceFactory _serverInstanceFactory;
         private readonly UnityCliLoopServerLifecycleRegistryService _serverLifecycleRegistry;
+        private readonly IDomainReloadDetectionService _domainReloadDetectionService;
         private readonly SessionRecoveryService _sessionRecoveryService;
         private IUnityCliLoopServerInstance _bridgeServer;
         private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
@@ -29,14 +30,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal UnityCliLoopServerControllerService(
             IUnityCliLoopServerInstanceFactory serverInstanceFactory,
-            UnityCliLoopServerLifecycleRegistryService serverLifecycleRegistry)
+            UnityCliLoopServerLifecycleRegistryService serverLifecycleRegistry,
+            IDomainReloadDetectionService domainReloadDetectionService)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
+            System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
 
             _serverInstanceFactory = serverInstanceFactory ?? throw new ArgumentNullException(nameof(serverInstanceFactory));
             _serverLifecycleRegistry = serverLifecycleRegistry ?? throw new ArgumentNullException(nameof(serverLifecycleRegistry));
-            _sessionRecoveryService = new SessionRecoveryService(this);
+            _domainReloadDetectionService = domainReloadDetectionService ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
+            _sessionRecoveryService = new SessionRecoveryService(this, _domainReloadDetectionService);
         }
 
         private bool IsBackgroundUnityProcess()
@@ -261,7 +265,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ClearStartupProtection();
 
             DomainReloadRecoveryUseCase useCase =
-                new DomainReloadRecoveryUseCase(_sessionRecoveryService);
+                new DomainReloadRecoveryUseCase(
+                    _sessionRecoveryService,
+                    _domainReloadDetectionService);
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(_bridgeServer);
             
             // Clear instance if server shutdown succeeded
@@ -278,7 +284,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private void OnAfterAssemblyReload()
         {
             DomainReloadRecoveryUseCase useCase =
-                new DomainReloadRecoveryUseCase(_sessionRecoveryService);
+                new DomainReloadRecoveryUseCase(
+                    _sessionRecoveryService,
+                    _domainReloadDetectionService);
             _ = useCase.ExecuteAfterDomainReloadAsync(System.Threading.CancellationToken.None).ContinueWith(task =>
             {
                 if (task.IsFaulted)
@@ -474,7 +482,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // Ensure stale reload locks are cleaned up before recovery.
             // Why not clear serverstarting.lock here: a previous generation may still be finishing
             // and ownership is now tracked per startup token below.
-            DomainReloadDetectionService.DeleteLockFile();
+            _domainReloadDetectionService.DeleteLockFile();
             CompilationLockService.DeleteLockFile();
 
             VibeLogger.LogInfo("startup_request", "transport=project_ipc");

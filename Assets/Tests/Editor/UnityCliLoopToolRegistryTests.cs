@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -17,7 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         public static UnityCliLoopToolRegistry Create()
         {
-            return new UnityCliLoopToolRegistry();
+            return new UnityCliLoopToolRegistry(
+                new ToolSettingsService(new ToolSettingsRepository()));
         }
     }
 
@@ -388,8 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "Editor",
                 "CustomCommandSamples",
                 "UnityCLILoop.CustomCommandSamples.Editor.asmdef");
-            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
-            string[] references = asmdef["references"]?.Values<string>().ToArray() ?? new string[0];
+            string[] references = ReadResolvedReferences(asmdefPath);
 
             Assert.That(references, Does.Contain("UnityCLILoop.ToolContracts"));
             Assert.That(references, Does.Not.Contain("UnityCLILoop.Application"));
@@ -409,8 +410,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "Editor",
                 "FirstPartyTools",
                 "UnityCLILoop.FirstPartyTools.Editor.asmdef");
-            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
-            string[] references = asmdef["references"]?.Values<string>().ToArray() ?? new string[0];
+            string[] references = ReadResolvedReferences(asmdefPath);
 
             Assert.That(references, Does.Contain(ClearConsoleAssemblyName));
             Assert.That(references, Does.Contain(CompileAssemblyName));
@@ -430,6 +430,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(references, Does.Not.Contain("UnityCLILoop.Domain"));
             Assert.That(references, Does.Not.Contain("UnityCLILoop.Infrastructure"));
             Assert.That(references, Does.Not.Contain("UnityCLILoop.Presentation"));
+        }
+
+        private static string[] ReadResolvedReferences(string asmdefPath)
+        {
+            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
+            string[] references = asmdef["references"]?.Values<string>().ToArray() ?? new string[0];
+            return references.Select(ResolveAsmdefReference).ToArray();
+        }
+
+        private static string ResolveAsmdefReference(string reference)
+        {
+            const string guidPrefix = "GUID:";
+            if (!reference.StartsWith(guidPrefix, System.StringComparison.Ordinal))
+            {
+                return reference;
+            }
+
+            string guid = reference.Substring(guidPrefix.Length);
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            foreach (string metaPath in Directory.GetFiles(projectRoot, "*.asmdef.meta", SearchOption.AllDirectories))
+            {
+                string meta = File.ReadAllText(metaPath);
+                if (!meta.Contains($"guid: {guid}"))
+                {
+                    continue;
+                }
+
+                string resolvedAsmdefPath = metaPath.Substring(0, metaPath.Length - ".meta".Length);
+                JObject asmdef = JObject.Parse(File.ReadAllText(resolvedAsmdefPath));
+                return asmdef["name"]?.Value<string>() ?? reference;
+            }
+
+            return reference;
         }
 
         [Test]

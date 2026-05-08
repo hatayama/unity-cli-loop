@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
@@ -18,9 +19,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         public UIState UI { get; private set; }
         public RuntimeState Runtime { get; private set; }
+        private readonly ToolSettingsUseCase _toolSettingsUseCase;
 
-        public UnityCliLoopSettingsModel()
+        internal UnityCliLoopSettingsModel(ToolSettingsUseCase toolSettingsUseCase)
         {
+            System.Diagnostics.Debug.Assert(toolSettingsUseCase != null, "toolSettingsUseCase must not be null");
+
+            _toolSettingsUseCase = toolSettingsUseCase
+                ?? throw new ArgumentNullException(nameof(toolSettingsUseCase));
             UI = new UIState();
             Runtime = new RuntimeState();
         }
@@ -167,7 +173,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         public void UpdateToolEnabled(string toolName, bool enabled)
         {
-            ToolSettingsApplicationFacade.SetToolEnabled(toolName, enabled);
+            _toolSettingsUseCase.SetToolEnabled(toolName, enabled);
         }
 
         public void UpdateShowConfiguration(bool show)

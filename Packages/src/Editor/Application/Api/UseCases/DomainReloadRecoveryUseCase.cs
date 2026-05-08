@@ -15,13 +15,19 @@ namespace io.github.hatayama.UnityCliLoop.Application
     public class DomainReloadRecoveryUseCase
     {
         private readonly SessionRecoveryService _sessionRecoveryService;
+        private readonly IDomainReloadDetectionService _domainReloadDetectionService;
 
-        public DomainReloadRecoveryUseCase(SessionRecoveryService sessionRecoveryService)
+        public DomainReloadRecoveryUseCase(
+            SessionRecoveryService sessionRecoveryService,
+            IDomainReloadDetectionService domainReloadDetectionService)
         {
             System.Diagnostics.Debug.Assert(sessionRecoveryService != null, "sessionRecoveryService must not be null");
+            System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
 
             _sessionRecoveryService = sessionRecoveryService
                 ?? throw new System.ArgumentNullException(nameof(sessionRecoveryService));
+            _domainReloadDetectionService = domainReloadDetectionService
+                ?? throw new System.ArgumentNullException(nameof(domainReloadDetectionService));
         }
 
         /// <summary>
@@ -51,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             }
 
             // 4. Detect and record Domain Reload start
-            DomainReloadDetectionService.StartDomainReload(correlationId, serverRunning);
+            _domainReloadDetectionService.StartDomainReload(correlationId, serverRunning);
 
             // 4. If server is running, execute stop processing
             if (currentServer?.IsRunning == true)
@@ -70,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 catch (System.Exception ex)
                 {
                     LogServerShutdownError(correlationId, ex);
-                    DomainReloadDetectionService.RollbackDomainReloadStart(correlationId);
+                    _domainReloadDetectionService.RollbackDomainReloadStart(correlationId);
 
                     // Server stop failure is a critical error because recovery must restart cleanly.
                     throw new System.InvalidOperationException(
@@ -91,10 +97,10 @@ namespace io.github.hatayama.UnityCliLoop.Application
             string correlationId = VibeLogger.GenerateCorrelationId();
 
             // 2. Record Domain Reload completion
-            DomainReloadDetectionService.CompleteDomainReload(correlationId);
+            _domainReloadDetectionService.CompleteDomainReload(correlationId);
 
             // 3. Start timeout for reconnection UI display if needed
-            if (DomainReloadDetectionService.ShouldShowReconnectingUI())
+            if (_domainReloadDetectionService.ShouldShowReconnectingUI())
             {
                 _sessionRecoveryService.StartReconnectionUITimeoutAsync(cancellationToken).Forget();
             }

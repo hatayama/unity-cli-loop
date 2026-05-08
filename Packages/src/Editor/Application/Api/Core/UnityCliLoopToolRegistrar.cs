@@ -1,5 +1,6 @@
 using System;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Application
@@ -10,15 +11,20 @@ namespace io.github.hatayama.UnityCliLoop.Application
     public sealed class UnityCliLoopToolRegistrarService
     {
         private readonly IInternalToolNameProvider _internalToolNameProvider;
+        private readonly ToolSettingsService _toolSettingsService;
         private UnityCliLoopToolRegistry _sharedRegistry;
 
         internal event Action OnToolsChanged;
 
-        public UnityCliLoopToolRegistrarService(IInternalToolNameProvider internalToolNameProvider)
+        public UnityCliLoopToolRegistrarService(
+            IInternalToolNameProvider internalToolNameProvider,
+            ToolSettingsService toolSettingsService)
         {
             UnityEngine.Debug.Assert(internalToolNameProvider != null, "internalToolNameProvider must not be null");
+            UnityEngine.Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
 
             _internalToolNameProvider = internalToolNameProvider ?? throw new ArgumentNullException(nameof(internalToolNameProvider));
+            _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
         }
 
         /// <summary>
@@ -30,7 +36,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
             {
                 if (_sharedRegistry == null)
                 {
-                    _sharedRegistry = new UnityCliLoopToolRegistry(_internalToolNameProvider);
+                    _sharedRegistry = new UnityCliLoopToolRegistry(
+                        _toolSettingsService,
+                        _internalToolNameProvider);
                     // Standard tools are automatically registered in UnityCliLoopToolRegistry constructor
                 }
                 return _sharedRegistry;

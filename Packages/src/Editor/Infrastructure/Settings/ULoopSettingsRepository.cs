@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     public sealed class ULoopSettingsRepository : IULoopSettingsPort
     {
         private const string LEGACY_ALLOW_THIRD_PARTY_TOOLS_FIELD = "allowThirdPartyTools";
+        private readonly ToolSettingsService _toolSettingsService;
 
         private string SettingsFilePath =>
             Path.Combine(UnityCliLoopConstants.ULOOP_DIR, UnityCliLoopConstants.ULOOP_SETTINGS_FILE_NAME);
@@ -24,6 +25,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
 
         private ULoopSettingsData _cachedSettings;
+
+        public ULoopSettingsRepository(ToolSettingsService toolSettingsService)
+        {
+            Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+
+            _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
+        }
 
         public ULoopSettingsData GetSettings()
         {
@@ -240,7 +248,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            ToolSettings.SetToolEnabled(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE, false);
+            SetToolEnabledFromMigration(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE, false);
             _cachedSettings = _cachedSettings with
             {
                 dynamicCodeSecurityLevel = (int)DynamicCodeSecurityLevel.Restricted
@@ -261,7 +269,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (json.Contains($"\"{nameof(LegacyUnityCliLoopSecuritySettingProbe.enableTestsExecution)}\"")
                 && !probe.enableTestsExecution)
             {
-                ToolSettings.SetToolEnabled(UnityCliLoopConstants.TOOL_NAME_RUN_TESTS, false);
+                SetToolEnabledFromMigration(UnityCliLoopConstants.TOOL_NAME_RUN_TESTS, false);
                 migrated = true;
             }
 
@@ -271,6 +279,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return migrated;
+        }
+
+        private void SetToolEnabledFromMigration(string toolName, bool enabled)
+        {
+            _toolSettingsService.InvalidateCache();
+            _toolSettingsService.SetToolEnabled(toolName, enabled);
         }
 
         public void InvalidateCache()

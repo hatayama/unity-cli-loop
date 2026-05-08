@@ -4,6 +4,7 @@ using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -45,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _legacyFileContent;
         private bool[] _sidecarExisted;
         private string[] _sidecarContents;
+        private ToolSettingsService _toolSettingsService;
 
         [SetUp]
         public void SetUp()
@@ -57,6 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             _legacyFileExisted = File.Exists(LegacySettingsFilePath);
             _legacyFileContent = _legacyFileExisted ? File.ReadAllText(LegacySettingsFilePath) : null;
+            _toolSettingsService = new ToolSettingsService(new ToolSettingsRepository());
 
             _sidecarExisted = new bool[AllSidecarPaths.Length];
             _sidecarContents = new string[AllSidecarPaths.Length];
@@ -114,6 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             InvalidateBothCaches();
 
             ULoopSettingsData result = ULoopSettings.GetSettings();
+            _toolSettingsService.InvalidateCache();
 
             Assert.AreEqual((int)DynamicCodeSecurityLevel.Restricted, result.dynamicCodeSecurityLevel);
             Assert.IsTrue(File.Exists(SettingsFilePath), $"{SettingsFilePath} should be created by migration");
@@ -138,6 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             InvalidateBothCaches();
 
             ULoopSettingsData result = ULoopSettings.GetSettings();
+            _toolSettingsService.InvalidateCache();
 
             Assert.AreEqual((int)DynamicCodeSecurityLevel.FullAccess, result.dynamicCodeSecurityLevel);
         }
@@ -171,6 +176,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             InvalidateBothCaches();
 
             ULoopSettings.GetSettings();
+            _toolSettingsService.InvalidateCache();
 
             string updatedLegacy = File.ReadAllText(LegacySettingsFilePath);
 
@@ -190,6 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             InvalidateBothCaches();
 
             ULoopSettingsData result = ULoopSettings.GetSettings();
+            _toolSettingsService.InvalidateCache();
 
             Assert.AreEqual((int)DynamicCodeSecurityLevel.Restricted, result.dynamicCodeSecurityLevel);
             Assert.IsFalse(File.Exists(LegacySettingsFilePath),
@@ -253,9 +260,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             InvalidateBothCaches();
 
             ULoopSettingsData result = ULoopSettings.GetSettings();
+            _toolSettingsService.InvalidateCache();
 
             Assert.AreEqual((int)DynamicCodeSecurityLevel.Restricted, result.dynamicCodeSecurityLevel);
-            Assert.IsFalse(ToolSettings.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_RUN_TESTS));
+            Assert.IsFalse(_toolSettingsService.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_RUN_TESTS));
             Assert.IsFalse(File.Exists(OldSettingsFilePath), "Old settings file should be removed after legacy migration");
         }
 
@@ -290,12 +298,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             File.WriteAllText(SettingsFilePath, settingsJson);
             DeleteIfExists(ToolSettingsFilePath);
             InvalidateBothCaches();
-            ToolSettings.InvalidateCache();
 
             ULoopSettingsData result = ULoopSettings.GetSettings();
 
             Assert.AreEqual((int)DynamicCodeSecurityLevel.Restricted, result.dynamicCodeSecurityLevel);
-            Assert.IsFalse(ToolSettings.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
+            Assert.IsFalse(_toolSettingsService.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
 
             string updatedPermissionsJson = File.ReadAllText(SettingsFilePath);
             StringAssert.Contains("\"dynamicCodeSecurityLevel\": 1", updatedPermissionsJson);
@@ -313,11 +320,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             File.WriteAllText(SettingsFilePath, settingsJson);
             DeleteIfExists(ToolSettingsFilePath);
             InvalidateBothCaches();
-            ToolSettings.InvalidateCache();
 
             ULoopSettings.GetSettings();
+            _toolSettingsService.InvalidateCache();
 
-            Assert.IsFalse(ToolSettings.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_RUN_TESTS));
+            Assert.IsFalse(_toolSettingsService.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_RUN_TESTS));
 
             string updatedPermissionsJson = File.ReadAllText(SettingsFilePath);
             StringAssert.DoesNotContain("\"enableTestsExecution\"", updatedPermissionsJson);
@@ -336,11 +343,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             File.WriteAllText(SettingsFilePath, settingsJson);
             DeleteIfExists(ToolSettingsFilePath);
             InvalidateBothCaches();
-            ToolSettings.InvalidateCache();
 
             ULoopSettings.GetSettings();
+            _toolSettingsService.InvalidateCache();
 
-            Assert.AreEqual(0, ToolSettings.GetDisabledTools().Length);
+            Assert.AreEqual(0, _toolSettingsService.GetDisabledTools().Length);
 
             string updatedPermissionsJson = File.ReadAllText(SettingsFilePath);
             StringAssert.DoesNotContain("\"allowMenuItemExecution\"", updatedPermissionsJson);
@@ -396,7 +403,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             ULoopSettings.InvalidateCache();
             UnityCliLoopEditorSettings.InvalidateCache();
-            ToolSettings.InvalidateCache();
+            _toolSettingsService.InvalidateCache();
         }
 
         /// <summary>

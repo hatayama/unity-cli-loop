@@ -385,7 +385,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string toolName,
             bool groupSkillsUnderUnityCliLoop)
         {
+            return await InstallSkillFilesForTool(
+                toolName,
+                groupSkillsUnderUnityCliLoop,
+                Array.Empty<string>());
+        }
+
+        internal static async Task<SkillInstallResult> InstallSkillFilesForTool(
+            string toolName,
+            bool groupSkillsUnderUnityCliLoop,
+            string[] disabledTools)
+        {
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
+            Debug.Assert(disabledTools != null, "disabledTools must not be null");
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
@@ -393,7 +405,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return await InstallSkillFilesForToolAtProjectRoot(
                 projectRoot,
                 toolName,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                disabledTools);
         }
 
         public static async Task<SkillInstallResult> InstallSkillFiles(List<SkillTargetInfo> targets)
@@ -405,11 +418,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             List<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop)
         {
+            return await InstallSkillFiles(
+                targets,
+                groupSkillsUnderUnityCliLoop,
+                Array.Empty<string>());
+        }
+
+        internal static async Task<SkillInstallResult> InstallSkillFiles(
+            List<SkillTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            string[] disabledTools)
+        {
             Debug.Assert(targets != null, "targets must not be null");
+            Debug.Assert(disabledTools != null, "disabledTools must not be null");
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            return await InstallSkillFilesAtProjectRoot(projectRoot, targets, groupSkillsUnderUnityCliLoop);
+            return await InstallSkillFilesAtProjectRoot(
+                projectRoot,
+                targets,
+                groupSkillsUnderUnityCliLoop,
+                disabledTools);
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFilesAtProjectRoot(
@@ -417,13 +446,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             IEnumerable<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop)
         {
+            return await InstallSkillFilesAtProjectRoot(
+                projectRoot,
+                targets,
+                groupSkillsUnderUnityCliLoop,
+                Array.Empty<string>());
+        }
+
+        internal static async Task<SkillInstallResult> InstallSkillFilesAtProjectRoot(
+            string projectRoot,
+            IEnumerable<SkillTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            string[] disabledTools)
+        {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(targets != null, "targets must not be null");
+            Debug.Assert(disabledTools != null, "disabledTools must not be null");
 
             SkillTargetInfo[] targetArray = targets.ToArray();
             return await Task.Run(() =>
             {
-                string[] disabledTools = ToolSettings.GetDisabledTools();
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
                     .Where(skill => IsSkillDisabled(skill, disabledTools))
@@ -453,13 +495,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string toolName,
             bool groupSkillsUnderUnityCliLoop)
         {
+            return await InstallSkillFilesForToolAtProjectRoot(
+                projectRoot,
+                toolName,
+                groupSkillsUnderUnityCliLoop,
+                Array.Empty<string>());
+        }
+
+        internal static async Task<SkillInstallResult> InstallSkillFilesForToolAtProjectRoot(
+            string projectRoot,
+            string toolName,
+            bool groupSkillsUnderUnityCliLoop,
+            string[] disabledTools)
+        {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
+            Debug.Assert(disabledTools != null, "disabledTools must not be null");
 
             SkillTargetInfo[] targetArray = DetectTargetsWithSkillsDirectory(projectRoot).ToArray();
             return await Task.Run(() =>
             {
-                string[] disabledTools = ToolSettings.GetDisabledTools();
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
                     .Where(skill => IsSkillDisabled(skill, disabledTools))

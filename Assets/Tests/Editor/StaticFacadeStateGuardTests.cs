@@ -18,10 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             "Packages/src/Editor/Application/CLI/CliSetupApplicationService.cs",
             "Packages/src/Editor/Application/Config/SkillSetupUseCaseRegistry.cs",
-            "Packages/src/Editor/Application/Config/ToolSettings.cs",
             "Packages/src/Editor/Application/Config/UnityCliLoopEditorSettings.cs",
             "Packages/src/Editor/Domain/ULoopSettings.cs",
-            "Packages/src/Editor/Application/Api/Tools/Core/UnityCliLoopToolRegistrar.cs",
+            "Packages/src/Editor/Application/Api/Core/UnityCliLoopToolRegistrar.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeServices.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/DynamicCodeForegroundWarmupState.cs",
             "Packages/src/Editor/ToolContracts/EditorDelayManager.cs",
@@ -50,7 +49,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static readonly string[] InstanceServicePaths = new string[]
         {
             "Packages/src/Editor/Application/Core/ApplicationServices/SessionRecoveryService.cs",
-            "Packages/src/Editor/Application/Config/SkillSetupUseCase.cs"
+            "Packages/src/Editor/Application/Config/SkillSetupUseCase.cs",
+            "Packages/src/Editor/Domain/ToolSettingsService.cs",
+            "Packages/src/Editor/Infrastructure/Server/DomainReloadDetectionFileService.cs"
         };
 
         private static readonly Regex DirectMutableStaticFieldPattern = new Regex(
