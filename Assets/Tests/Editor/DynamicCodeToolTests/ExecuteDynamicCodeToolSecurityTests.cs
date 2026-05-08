@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -20,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            UnityCliLoopToolExecutionService executionService = new();
 
             try
             {
@@ -29,7 +31,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 };
 
                 ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-                UnityCliLoopToolResponse response = await registry.ExecuteToolAsync("execute-dynamic-code", paramsToken);
+                UnityCliLoopToolResponse response = await executionService.ExecuteToolAsync(
+                    registry,
+                    "execute-dynamic-code",
+                    paramsToken,
+                    CancellationToken.None);
                 ExecuteDynamicCodeResponse typedResponse = response as ExecuteDynamicCodeResponse;
 
                 Assert.IsNotNull(typedResponse, "Response should be ExecuteDynamicCodeResponse");

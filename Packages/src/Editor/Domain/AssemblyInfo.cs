@@ -4,4 +4,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("uLoopMCP.Tests.PlayMode")]
 [assembly: InternalsVisibleTo("uLoopMCP.Tests.Demo.Editor")]
 [assembly: InternalsVisibleTo("uLoopMCP.Dev")]
+[assembly: InternalsVisibleTo("UnityCLILoop.Application")]
 [assembly: InternalsVisibleTo("UnityCLILoop.CompositionRoot.Editor")]

@@ -1,4 +1,7 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -11,20 +14,24 @@ namespace io.github.hatayama.UnityCliLoop.Application
     public sealed class UnityCliLoopToolRegistrarService
     {
         private readonly IInternalToolNameProvider _internalToolNameProvider;
+        private readonly UnityCliLoopToolExecutionService _toolExecutionService;
         private readonly ToolSettingsService _toolSettingsService;
         private UnityCliLoopToolRegistry _sharedRegistry;
 
         internal event Action OnToolsChanged;
 
-        public UnityCliLoopToolRegistrarService(
+        internal UnityCliLoopToolRegistrarService(
             IInternalToolNameProvider internalToolNameProvider,
-            ToolSettingsService toolSettingsService)
+            ToolSettingsService toolSettingsService,
+            UnityCliLoopToolExecutionService toolExecutionService)
         {
             UnityEngine.Debug.Assert(internalToolNameProvider != null, "internalToolNameProvider must not be null");
             UnityEngine.Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+            UnityEngine.Debug.Assert(toolExecutionService != null, "toolExecutionService must not be null");
 
             _internalToolNameProvider = internalToolNameProvider ?? throw new ArgumentNullException(nameof(internalToolNameProvider));
             _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
+            _toolExecutionService = toolExecutionService ?? throw new ArgumentNullException(nameof(toolExecutionService));
         }
 
         /// <summary>
@@ -100,6 +107,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public UnityCliLoopToolRegistry TryGetRegistry()
         {
             return _sharedRegistry;
+        }
+
+        public Task<UnityCliLoopToolResponse> ExecuteToolAsync(string toolName, JToken paramsToken, CancellationToken ct)
+        {
+            return _toolExecutionService.ExecuteToolAsync(SharedRegistry, toolName, paramsToken, ct);
         }
 
         public void WarmupRegistry()
@@ -193,6 +205,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public static UnityCliLoopToolRegistry TryGetRegistry()
         {
             return Service.TryGetRegistry();
+        }
+
+        public static Task<UnityCliLoopToolResponse> ExecuteToolAsync(string toolName, JToken paramsToken, CancellationToken ct)
+        {
+            return Service.ExecuteToolAsync(toolName, paramsToken, ct);
         }
 
         public static void WarmupRegistry()

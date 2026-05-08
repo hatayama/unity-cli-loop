@@ -1,7 +1,9 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -52,9 +54,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return response;
             }
 
-            UnityCliLoopToolRegistry registry = UnityCliLoopToolRegistrar.GetRegistry();
-
-            response = await registry.ExecuteToolAsync(commandName, paramsToken);
+            response = await UnityCliLoopToolRegistrar.ExecuteToolAsync(
+                commandName,
+                paramsToken,
+                CancellationToken.None);
             return response;
         }
     }

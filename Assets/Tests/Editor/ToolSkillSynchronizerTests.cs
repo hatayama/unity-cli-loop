@@ -1183,16 +1183,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string[] registeredToolNames = registry.GetRegisteredToolsForProjectRoot(temporaryRoot)
                 .Select(tool => tool.Name)
                 .ToArray();
-            string[] allToolNames = registry.GetAllRegisteredToolInfosForProjectRoot(temporaryRoot)
-                .Select(tool => tool.Name)
-                .ToArray();
 
             Assert.That(catalogNames, Does.Not.Contain("internal-tool"));
             Assert.That(catalogNames, Does.Contain("public-tool"));
             Assert.That(registeredToolNames, Does.Not.Contain("internal-tool"));
             Assert.That(registeredToolNames, Does.Contain("public-tool"));
-            Assert.That(allToolNames, Does.Not.Contain("internal-tool"));
-            Assert.That(allToolNames, Does.Contain("public-tool"));
         }
 
         [Test]

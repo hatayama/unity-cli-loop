@@ -47,12 +47,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string RemovedSharedAssemblyGuidReference = "GUID:290394860909340b7835eb7cc215ee75";
 
         [Test]
-        public void DomainAsmdef_WhenLoaded_HasNoProjectAssemblyReferences()
+        public void DomainAsmdef_WhenLoaded_ReferencesOnlyPublicToolContracts()
         {
-            // Tests that the domain layer stays independent from outer project assemblies.
+            // Tests that the domain layer can model tools through public contracts without depending on outer layers.
             string[] references = ReadResolvedReferences("Packages/src/Editor/Domain/UnityCLILoop.Domain.asmdef");
 
-            Assert.That(references, Is.Empty);
+            Assert.That(references, Is.EquivalentTo(new[] { ToolContractsAssemblyName }));
         }
 
         [Test]
@@ -156,10 +156,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ToolCorePolicy_WhenLoaded_CompilesUnderDomainAssembly()
         {
             // Tests that tool catalog and assembly classification rules stay in the domain layer.
+            string registryAssemblyName = typeof(UnityCliLoopToolRegistry).Assembly.GetName().Name;
+            string internalToolNameProviderAssemblyName = typeof(IInternalToolNameProvider).Assembly.GetName().Name;
             string classifierAssemblyName = typeof(ToolAssemblyClassifier).Assembly.GetName().Name;
             string catalogItemAssemblyName = typeof(ToolSettingsCatalogItem).Assembly.GetName().Name;
             string domainReloadServiceAssemblyName = typeof(IDomainReloadDetectionService).Assembly.GetName().Name;
 
+            Assert.That(registryAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(internalToolNameProviderAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(classifierAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(catalogItemAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(domainReloadServiceAssemblyName, Is.EqualTo(DomainAssemblyName));
@@ -762,9 +766,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ToolRegistry_WhenLoaded_DoesNotCreateOrReceiveConcreteHostServices()
         {
-            // Tests that the application registry creates tools through their public parameterless contract.
+            // Tests that the domain registry creates tools through their public parameterless contract.
             string registrySource = File.ReadAllText(
-                "Packages/src/Editor/Application/UnityCliLoopToolRegistry.cs");
+                "Packages/src/Editor/Domain/UnityCliLoopToolRegistry.cs");
 
             Assert.That(registrySource, Does.Not.Contain("new UnityCliLoopToolHostServices"));
             Assert.That(registrySource, Does.Not.Contain("IUnityCliLoopToolHostServices"));

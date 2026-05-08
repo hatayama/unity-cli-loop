@@ -2,23 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
-using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
-namespace io.github.hatayama.UnityCliLoop.Application
+namespace io.github.hatayama.UnityCliLoop.Domain
 {
-    // Related classes:
-    // - UnityToolExecutor: Uses this registry to execute _tools.
-    // - IUnityCliLoopTool: The interface for all _tools stored in this registry.
-    // - UnityCliLoopTool: The base class for most tool implementations.
-    // - UnityCliLoopToolAttribute: Attribute used to discover and register _tools automatically.
     /// <summary>
-    /// Unity CLI tool registry class
-    /// Supports dynamic tool registration, allowing users to add their own _tools
+    /// Registry for Unity CLI tool implementations and their catalog metadata.
     /// </summary>
     public class UnityCliLoopToolRegistry
     {
@@ -97,10 +88,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return type.GetConstructor(Type.EmptyTypes) != null;
         }
 
-        /// <summary>
-        /// Register tool
-        /// </summary>
-        /// <param name="tool">Tool to register</param>
         public void RegisterTool(IUnityCliLoopTool tool)
         {
             if (tool == null)
@@ -116,55 +103,21 @@ namespace io.github.hatayama.UnityCliLoop.Application
             _tools[tool.ToolName] = tool;
         }
 
-        /// <summary>
-        /// Unregister tool
-        /// </summary>
-        /// <param name="toolName">Name of tool to unregister</param>
         public void UnregisterTool(string toolName)
         {
             _tools.Remove(toolName);
         }
 
-        /// <summary>
-        /// Execute tool
-        /// </summary>
-        /// <param name="toolName">Tool name</param>
-        /// <param name="paramsToken">Parameters</param>
-        /// <returns>Execution result</returns>
-        /// <exception cref="ArgumentException">When tool is unknown</exception>
-        /// <exception cref="UnityCliLoopSecurityException">When tool is blocked by security settings</exception>
-        public async Task<UnityCliLoopToolResponse> ExecuteToolAsync(string toolName, JToken paramsToken)
+        public bool TryGetTool(string toolName, out IUnityCliLoopTool tool)
         {
-            if (!_tools.TryGetValue(toolName, out IUnityCliLoopTool tool))
-            {
-                throw new ArgumentException($"Unknown tool: {toolName}");
-            }
-
-            if (!_toolSettingsService.IsToolEnabled(toolName))
-            {
-                throw new ToolDisabledException(toolName);
-            }
-
-            if (!UnityCliLoopSecurityChecker.IsToolAllowed(toolName))
-            {
-                throw new UnityCliLoopSecurityException(toolName, "Tool is blocked by security settings");
-            }
-
-            await MainThreadSwitcher.SwitchToMainThread();
-
-            UnityCliLoopToolResponse response = await tool.ExecuteAsync(paramsToken);
-            if (response == null)
-            {
-                throw new InvalidOperationException($"Tool returned null response: {toolName}");
-            }
-
-            return response;
+            return _tools.TryGetValue(toolName, out tool);
         }
 
-        /// <summary>
-        /// Get detailed information of registered _tools
-        /// </summary>
-        /// <returns>Array of tool information</returns>
+        public bool IsToolEnabled(string toolName)
+        {
+            return _toolSettingsService.IsToolEnabled(toolName);
+        }
+
         public ToolInfo[] GetRegisteredTools()
         {
             return GetRegisteredToolsForProjectRoot(UnityCliLoopPathResolver.GetProjectRoot());
@@ -185,27 +138,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     displayDevelopmentOnly = attribute.DisplayDevelopmentOnly;
                 }
 
-                return new ToolInfo(tool.ToolName, tool.ParameterSchema, displayDevelopmentOnly);
-            }).ToArray();
-        }
-
-        /// <summary>
-        /// Get all tools including disabled ones. Used by Tool Settings UI.
-        /// </summary>
-        public ToolInfo[] GetAllRegisteredToolInfos()
-        {
-            return GetAllRegisteredToolInfosForProjectRoot(UnityCliLoopPathResolver.GetProjectRoot());
-        }
-
-        internal ToolInfo[] GetAllRegisteredToolInfosForProjectRoot(string projectRoot)
-        {
-            HashSet<string> internalToolNames = _internalToolNameProvider.GetInternalToolNames(projectRoot);
-            return _tools.Values
-                .Where(tool => !internalToolNames.Contains(tool.ToolName))
-                .Select(tool =>
-            {
-                UnityCliLoopToolAttribute attribute = tool.GetType().GetCustomAttribute<UnityCliLoopToolAttribute>();
-                bool displayDevelopmentOnly = attribute?.DisplayDevelopmentOnly ?? false;
                 return new ToolInfo(tool.ToolName, tool.ParameterSchema, displayDevelopmentOnly);
             }).ToArray();
         }
@@ -234,24 +166,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             }).ToArray();
         }
 
-        /// <summary>
-        /// Check if a tool belongs to a third-party assembly.
-        /// </summary>
-        public bool IsThirdPartyTool(string toolName)
-        {
-            if (!_tools.TryGetValue(toolName, out IUnityCliLoopTool tool))
-            {
-                return true;
-            }
-            string assemblyName = tool.GetType().Assembly.GetName().Name;
-            return ToolAssemblyClassifier.IsThirdPartyAssembly(assemblyName);
-        }
-
-        /// <summary>
-        /// Get tool type by name for security checking
-        /// </summary>
-        /// <param name="toolName">Tool name</param>
-        /// <returns>Tool type or null if not found</returns>
         public Type GetToolType(string toolName)
         {
             if (_tools.TryGetValue(toolName, out IUnityCliLoopTool tool))
@@ -261,11 +175,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return null;
         }
 
-        /// <summary>
-        /// Check if specified tool is registered
-        /// </summary>
-        /// <param name="toolName">Tool name</param>
-        /// <returns>True if registered</returns>
         public bool IsToolRegistered(string toolName)
         {
             return _tools.ContainsKey(toolName);
@@ -274,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
-    /// Class representing tool information
+    /// Catalog DTO returned by the CLI tool-details command.
     /// </summary>
     public class ToolInfo
     {

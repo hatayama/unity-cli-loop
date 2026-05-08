@@ -177,9 +177,10 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                     ["CompileOnly"] = false,
                     ["YieldToForegroundRequests"] = false
                 };
-                await UnityCliLoopToolRegistrar.GetRegistry().ExecuteToolAsync(
+                await UnityCliLoopToolRegistrar.ExecuteToolAsync(
                     "execute-dynamic-code",
-                    parameters);
+                    parameters,
+                    ct);
             }
         }
 
