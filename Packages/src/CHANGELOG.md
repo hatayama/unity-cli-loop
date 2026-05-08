@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.0.0-beta.2](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.1...v3.0.0-beta.2) (2026-05-08)
+
+
+### Features
+
+* Git Bash can install and complete uloop on Windows ([#1055](https://github.com/hatayama/unity-cli-loop/issues/1055)) ([7f7c78d](https://github.com/hatayama/unity-cli-loop/commit/7f7c78dddc67a4fbc092aed47fb88864b2df1d3a))
+* Improve native CLI maintainability and local validation ([#1042](https://github.com/hatayama/unity-cli-loop/issues/1042)) ([9ab932b](https://github.com/hatayama/unity-cli-loop/commit/9ab932b9c1e104c69682b298c687ec4c2c83efc0))
+* Make Unity tools easier to extend and maintain ([#1063](https://github.com/hatayama/unity-cli-loop/issues/1063)) ([c50f54c](https://github.com/hatayama/unity-cli-loop/commit/c50f54c3afe7cb94985c26eb6eaec910f1ae2cce))
+* Setup updates the dispatcher only when projects require it ([#1053](https://github.com/hatayama/unity-cli-loop/issues/1053)) ([20aab00](https://github.com/hatayama/unity-cli-loop/commit/20aab004b6a360573416ddf4648cd0728010aa8d))
+* Windows users can run terminal-driven E2E checks ([#1054](https://github.com/hatayama/unity-cli-loop/issues/1054)) ([8648984](https://github.com/hatayama/unity-cli-loop/commit/864898472e25bdd485b5f91c481485848ffac441))
+
+
+### Bug Fixes
+
+* Improve code execution responsiveness after Unity recompiles ([#1070](https://github.com/hatayama/unity-cli-loop/issues/1070)) ([7b972b4](https://github.com/hatayama/unity-cli-loop/commit/7b972b4cc9c40ea10e31f7d808d761fe6a9f6b3f))
+* Settings no longer shows obsolete connected client details ([#1060](https://github.com/hatayama/unity-cli-loop/issues/1060)) ([b66790f](https://github.com/hatayama/unity-cli-loop/commit/b66790fb3b2bc89512c8cb595a2698f5bfc7d68b))
+
 ## [3.0.0-beta.1](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.0...v3.0.0-beta.1) (2026-05-03)
 
 
