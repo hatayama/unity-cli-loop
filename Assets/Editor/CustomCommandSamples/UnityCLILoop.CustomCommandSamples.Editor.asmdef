@@ -2,7 +2,7 @@
     "name": "UnityCLILoop.CustomCommandSamples.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.Samples",
     "references": [
-        "UnityCLILoop.ToolContracts"
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b"
     ],
     "includePlatforms": [
         "Editor"

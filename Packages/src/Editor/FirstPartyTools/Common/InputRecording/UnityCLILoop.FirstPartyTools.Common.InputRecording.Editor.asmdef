@@ -2,9 +2,9 @@
     "name": "UnityCLILoop.FirstPartyTools.Common.InputRecording.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
-        "UnityCLILoop.ToolContracts",
-        "UnityCLILoop.FirstPartyTools.Common.InputSystem.Editor",
-        "UnityCLILoop.FirstPartyTools.Common.MouseUi.Editor",
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:45d3617c96fa64d3e95383450e67f25a",
+        "GUID:a2d87883023de4cf59b7d1962d5dd8aa",
         "GUID:c956a21f824994ef087b6de566690b3d",
         "GUID:75469ad4d38634e559750d17036d5f7c"
     ],
