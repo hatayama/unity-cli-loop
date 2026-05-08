@@ -14,9 +14,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ParseContentLength_WhenPayloadIsWithinLimit_ReturnsLength()
         {
             // Tests that warmup response framing accepts payloads within the shared IPC size limit.
+            ProjectIpcWarmupClient client = new();
             List<byte> headerBytes = HeaderBytes("Content-Length: 12\r\n\r\n");
 
-            int contentLength = ProjectIpcWarmupClient.ParseContentLength(headerBytes);
+            int contentLength = client.ParseContentLength(headerBytes);
 
             Assert.That(contentLength, Is.EqualTo(12));
         }
@@ -25,10 +26,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ParseContentLength_WhenPayloadExceedsLimit_Throws()
         {
             // Tests that warmup response framing rejects payloads that would allocate too much memory.
+            ProjectIpcWarmupClient client = new();
             List<byte> headerBytes = HeaderBytes($"Content-Length: {BufferConfig.MAX_MESSAGE_SIZE + 1}\r\n\r\n");
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-                () => ProjectIpcWarmupClient.ParseContentLength(headerBytes));
+                () => client.ParseContentLength(headerBytes));
 
             Assert.That(exception.Message, Does.Contain("invalid Content-Length"));
         }

@@ -13,15 +13,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// <summary>
     /// Sends a local bridge request through the same project IPC transport used by external CLI clients.
     /// </summary>
-    internal static class ProjectIpcWarmupClient
+    internal sealed class ProjectIpcWarmupClient
     {
         private const string ContentLengthHeader = "Content-Length:";
         private const int EndpointConnectTimeoutMilliseconds = 5000;
         private const int MaxHeaderByteCount = 8192;
         private const int MaxPayloadByteCount = BufferConfig.MAX_MESSAGE_SIZE;
-        private static readonly byte[] HeaderSeparatorBytes = { 13, 10, 13, 10 };
+        private readonly byte[] _headerSeparatorBytes = { 13, 10, 13, 10 };
 
-        internal static Task SendProjectIpcRequestAsync(
+        internal Task SendProjectIpcRequestAsync(
             string projectRoot,
             string requestJson,
             CancellationToken ct)
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }, ct);
         }
 
-        private static async Task<Stream> ConnectToEndpointAsync(BridgeTransportEndpoint endpoint, CancellationToken ct)
+        private async Task<Stream> ConnectToEndpointAsync(BridgeTransportEndpoint endpoint, CancellationToken ct)
         {
             System.Diagnostics.Debug.Assert(endpoint != null, "endpoint must not be null");
 
@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static async Task<Stream> ConnectToUnixDomainSocketAsync(BridgeTransportEndpoint endpoint, CancellationToken ct)
+        private async Task<Stream> ConnectToUnixDomainSocketAsync(BridgeTransportEndpoint endpoint, CancellationToken ct)
         {
             Socket socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             bool connected = false;
@@ -86,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static Stream ConnectToWindowsNamedPipe(BridgeTransportEndpoint endpoint)
+        private Stream ConnectToWindowsNamedPipe(BridgeTransportEndpoint endpoint)
         {
             NamedPipeClientStream pipe = new NamedPipeClientStream(
                 ".",
@@ -109,7 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static async Task WriteFrameAsync(
+        private async Task WriteFrameAsync(
             Stream stream,
             string requestJson,
             CancellationToken ct)
@@ -121,14 +121,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             await stream.WriteAsync(payload, 0, payload.Length, ct);
         }
 
-        private static async Task ReadResponseFrameAsync(Stream stream, CancellationToken ct)
+        private async Task ReadResponseFrameAsync(Stream stream, CancellationToken ct)
         {
             int contentLength = await ReadContentLengthAsync(stream, ct);
             byte[] payload = new byte[contentLength];
             await ReadPayloadAsync(stream, payload, ct);
         }
 
-        private static async Task<int> ReadContentLengthAsync(Stream stream, CancellationToken ct)
+        private async Task<int> ReadContentLengthAsync(Stream stream, CancellationToken ct)
         {
             List<byte> headerBytes = new List<byte>();
             byte[] buffer = new byte[1];
@@ -150,17 +150,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ParseContentLength(headerBytes);
         }
 
-        private static bool EndsWithHeaderSeparator(List<byte> headerBytes)
+        private bool EndsWithHeaderSeparator(List<byte> headerBytes)
         {
-            if (headerBytes.Count < HeaderSeparatorBytes.Length)
+            if (headerBytes.Count < _headerSeparatorBytes.Length)
             {
                 return false;
             }
 
-            int startIndex = headerBytes.Count - HeaderSeparatorBytes.Length;
-            for (int i = 0; i < HeaderSeparatorBytes.Length; i++)
+            int startIndex = headerBytes.Count - _headerSeparatorBytes.Length;
+            for (int i = 0; i < _headerSeparatorBytes.Length; i++)
             {
-                if (headerBytes[startIndex + i] != HeaderSeparatorBytes[i])
+                if (headerBytes[startIndex + i] != _headerSeparatorBytes[i])
                 {
                     return false;
                 }
@@ -169,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return true;
         }
 
-        internal static int ParseContentLength(List<byte> headerBytes)
+        internal int ParseContentLength(List<byte> headerBytes)
         {
             string headerText = Encoding.ASCII.GetString(headerBytes.ToArray());
             string[] lines = headerText.Split(new[] { "\r\n" }, StringSplitOptions.None);
@@ -192,7 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             throw new InvalidOperationException("Project IPC warmup response did not include Content-Length.");
         }
 
-        private static async Task WaitForConnectAsync(Task connectTask, Socket socket, CancellationToken ct)
+        private async Task WaitForConnectAsync(Task connectTask, Socket socket, CancellationToken ct)
         {
             System.Diagnostics.Debug.Assert(connectTask != null, "connectTask must not be null");
             System.Diagnostics.Debug.Assert(socket != null, "socket must not be null");
@@ -212,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ct.ThrowIfCancellationRequested();
         }
 
-        private static void ObserveConnectFault(Task connectTask)
+        private void ObserveConnectFault(Task connectTask)
         {
             _ = connectTask.ContinueWith(
                 completedTask => _ = completedTask.Exception,
@@ -221,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 TaskScheduler.Default);
         }
 
-        private static async Task ReadPayloadAsync(
+        private async Task ReadPayloadAsync(
             Stream stream,
             byte[] payload,
             CancellationToken ct)

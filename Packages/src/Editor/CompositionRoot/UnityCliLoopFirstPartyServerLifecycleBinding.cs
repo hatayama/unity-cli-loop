@@ -15,6 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
     /// </summary>
     internal sealed class UnityCliLoopFirstPartyServerLifecycleBinding
     {
+        private readonly ProjectIpcWarmupClient _projectIpcWarmupClient = new();
+
         internal void Initialize()
         {
             UnityCliLoopServerApplicationFacade.AddServerStartedHandler(OnServerStarted);
@@ -25,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             ResetServerScopedServicesAndWarmProjectIpcAsync(CancellationToken.None).Forget();
         }
 
-        private static async Task ResetServerScopedServicesAndWarmProjectIpcAsync(CancellationToken ct)
+        private async Task ResetServerScopedServicesAndWarmProjectIpcAsync(CancellationToken ct)
         {
             FirstPartyToolsEditorStartup.ResetServerScopedServices();
             string requestJson = CreateExecuteDynamicCodeReadinessRequestJson(
@@ -34,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             // Why: after server recovery, the next external CLI request otherwise pays the cold
             // project IPC and editor-thread wakeup cost. The composition root owns this transport
             // readiness work so execute-dynamic-code stays focused on executing user code.
-            await ProjectIpcWarmupClient.SendProjectIpcRequestAsync(
+            await _projectIpcWarmupClient.SendProjectIpcRequestAsync(
                 UnityEngine.Application.dataPath + "/..",
                 requestJson,
                 ct);
