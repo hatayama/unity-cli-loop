@@ -11,11 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class DynamicCodeServicesRegistry
     {
-        private const int StartupPrewarmDelayFrameCount = 1;
         private readonly object _serverScopedServicesLock = new();
         private Task _serverScopedDrainTask = Task.CompletedTask;
         private IDynamicCodeExecutionRuntime _runtimeFacade;
-        private DynamicCodeStartupPrewarmer _startupPrewarmer;
 
         private readonly Lazy<IDynamicCodeSourcePreparationService> _sourcePreparationServiceValue;
 
@@ -45,17 +43,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new ExecuteDynamicCodeUseCase(runtimeFacade);
         }
 
-        internal void RequestStartupPrewarm()
-        {
-            GetStartupPrewarmer().Request();
-        }
-
-        internal Task WarmAfterCompileAsync(CancellationToken ct)
-        {
-            DynamicCodePostCompileWarmup warmup = new(GetRuntimeFacade());
-            return warmup.WarmAsync(ct);
-        }
-
         internal void ResetServerScopedServices()
         {
             IDynamicCodeExecutionRuntime runtimeFacade;
@@ -64,7 +51,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 runtimeFacade = _runtimeFacade;
                 _runtimeFacade = null;
-                _startupPrewarmer = null;
                 _serverScopedDrainTask = ChainDrainTask(
                     _serverScopedDrainTask,
                     ShutdownRuntimeAsync(runtimeFacade));
@@ -82,21 +68,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 return _runtimeFacade;
-            }
-        }
-
-        private DynamicCodeStartupPrewarmer GetStartupPrewarmer()
-        {
-            lock (_serverScopedServicesLock)
-            {
-                if (_startupPrewarmer == null)
-                {
-                    _startupPrewarmer = new DynamicCodeStartupPrewarmer(
-                        GetRuntimeFacade(),
-                        StartupPrewarmDelayFrameCount);
-                }
-
-                return _startupPrewarmer;
             }
         }
 
@@ -204,16 +175,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static IExecuteDynamicCodeUseCase GetExecuteDynamicCodeUseCase()
         {
             return GetRegistry().GetExecuteDynamicCodeUseCase();
-        }
-
-        internal static void RequestStartupPrewarm()
-        {
-            GetRegistry().RequestStartupPrewarm();
-        }
-
-        internal static Task WarmAfterCompileAsync(CancellationToken ct)
-        {
-            return GetRegistry().WarmAfterCompileAsync(ct);
         }
 
         internal static void ResetServerScopedServices()

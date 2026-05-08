@@ -1,14 +1,14 @@
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
-    // Gives compile UI flows a shared gate for the dynamic-code post-compile warmup.
+    // Shares the return-string warmup shape with compile and server-recovery tool-path warmups.
     public static class ExecuteDynamicCodeWarmup
     {
-        public static Task WarmAfterCompileAsync(CancellationToken ct)
+        public static string[] CreateReturnStringWarmupCodes()
         {
-            return DynamicCodeServices.WarmAfterCompileAsync(ct);
+            string[] source = DynamicCodeForegroundWarmupSnippets.ReturnStringShapes;
+            string[] copy = new string[source.Length];
+            System.Array.Copy(source, copy, source.Length);
+            return copy;
         }
     }
 }

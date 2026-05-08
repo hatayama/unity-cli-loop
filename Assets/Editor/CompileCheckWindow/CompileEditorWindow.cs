@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -133,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 Repaint();
                 try
                 {
-                    await ExecuteDynamicCodeWarmup.WarmAfterCompileAsync(CancellationToken.None);
+                    await WarmExecuteDynamicCodeToolPathAfterCompileAsync(CancellationToken.None);
                 }
                 finally
                 {
@@ -161,6 +162,23 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         private static bool ShouldWarmExecuteDynamicCodeAfterCompile(CompileResult result)
         {
             return result.Success == true;
+        }
+
+        private static async Task WarmExecuteDynamicCodeToolPathAfterCompileAsync(CancellationToken ct)
+        {
+            foreach (string code in ExecuteDynamicCodeWarmup.CreateReturnStringWarmupCodes())
+            {
+                ct.ThrowIfCancellationRequested();
+                JObject parameters = new()
+                {
+                    ["Code"] = code,
+                    ["CompileOnly"] = false,
+                    ["YieldToForegroundRequests"] = false
+                };
+                await UnityCliLoopToolRegistrar.GetRegistry().ExecuteToolAsync(
+                    "execute-dynamic-code",
+                    parameters);
+            }
         }
 
         private bool IsCompileActionBusy()

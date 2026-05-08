@@ -23,5 +23,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ExecuteDynamicCodeEditorStartup.ResetServerScopedServices();
         }
+
+        public static string[] CreateExecuteDynamicCodeWarmupCodes()
+        {
+            return ExecuteDynamicCodeWarmup.CreateReturnStringWarmupCodes();
+        }
     }
 }

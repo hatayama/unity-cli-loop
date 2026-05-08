@@ -666,6 +666,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             _serverLifecycleRegistry.ServerStateChanged -= handler;
         }
+
+        public void AddServerStartedHandler(Action handler)
+        {
+            _serverLifecycleRegistry.ServerStarted += handler;
+        }
+
+        public void RemoveServerStartedHandler(Action handler)
+        {
+            _serverLifecycleRegistry.ServerStarted -= handler;
+        }
     }
 
 }
