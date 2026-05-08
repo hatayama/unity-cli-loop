@@ -18,7 +18,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             "Packages/src/Editor/Application/CLI/CliSetupApplicationService.cs",
             "Packages/src/Editor/Application/Config/ToolSettings.cs",
-            "Packages/src/Editor/Application/Config/SkillSetupApplicationFacade.cs",
             "Packages/src/Editor/Application/Config/UnityCliLoopEditorSettings.cs",
             "Packages/src/Editor/Domain/ULoopSettings.cs",
             "Packages/src/Editor/Application/Api/Tools/Core/UnityCliLoopToolRegistrar.cs",
@@ -49,7 +48,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static readonly string[] InstanceServicePaths = new string[]
         {
-            "Packages/src/Editor/Application/Core/ApplicationServices/SessionRecoveryService.cs"
+            "Packages/src/Editor/Application/Core/ApplicationServices/SessionRecoveryService.cs",
+            "Packages/src/Editor/Application/Config/SkillSetupUseCase.cs"
         };
 
         private static readonly Regex DirectMutableStaticFieldPattern = new Regex(

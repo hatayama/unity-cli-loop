@@ -203,9 +203,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private IVisualElementScheduledItem _resizeScheduledItem;
         private CancellationTokenSource _skillInstallStateRefreshCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
+        private SkillSetupUseCase _skillSetupUseCase;
 
         private void CreateGUI()
         {
+            InitializeApplicationServices();
             InitializeFirstInstallSkillsUiState();
             LoadLayout();
             BindElements();
@@ -214,6 +216,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ApplyInitialCheckingState();
             ScheduleInitialRefresh();
             ScheduleResizeToContent();
+        }
+
+        private void InitializeApplicationServices()
+        {
+            _skillSetupUseCase = PresentationEditorStartup.SkillSetupUseCase;
         }
 
         private void InitializeFirstInstallSkillsUiState()
@@ -446,12 +453,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private List<SkillSetupTargetInfo> DetectDisplayedSkillTargets(string projectRoot)
         {
-            return SkillSetupApplicationFacade.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat);
+            return _skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat);
         }
 
         private List<SkillSetupTargetInfo> DetectDisplayedSkillTargetsFast(string projectRoot)
         {
-            return SkillSetupApplicationFacade.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
+            return _skillSetupUseCase.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
         }
 
         private void BeginRefreshDisplayedSkillTargets(bool canManageSkills)
@@ -923,7 +930,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             try
             {
-                await SkillSetupApplicationFacade.InstallSkillFilesAsync(
+                await _skillSetupUseCase.InstallSkillFilesAsync(
                     installableTargets,
                     !_installSkillsFlat,
                     CancellationToken.None);

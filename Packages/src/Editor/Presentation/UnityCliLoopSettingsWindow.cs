@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private UnityCliLoopSettingsWindowUI _view;
         private UnityCliLoopSettingsModel _model;
         private UnityCliLoopSettingsWindowEventHandler _eventHandler;
+        private SkillSetupUseCase _skillSetupUseCase;
 
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private bool _installSkillsFlat;
@@ -73,6 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeAll()
         {
+            InitializeApplicationServices();
             InitializeModel();
             InitializeEventHandler();
             LoadSavedSettings();
@@ -83,6 +85,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void InitializeModel()
         {
             _model = new UnityCliLoopSettingsModel();
+        }
+
+        private void InitializeApplicationServices()
+        {
+            _skillSetupUseCase = PresentationEditorStartup.SkillSetupUseCase;
         }
 
         private void InitializeView()
@@ -496,16 +503,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (!enabled)
             {
-                SkillSetupApplicationFacade.RemoveSkillFiles(toolName);
+                _skillSetupUseCase.RemoveSkillFiles(toolName);
             }
             else
             {
-                await SkillSetupApplicationFacade.InstallSkillFilesForToolAsync(
+                await _skillSetupUseCase.InstallSkillFilesForToolAsync(
                     toolName,
                     !_installSkillsFlat,
                     CancellationToken.None);
 
-                if (!SkillSetupApplicationFacade.IsSkillInstalled(toolName))
+                if (!_skillSetupUseCase.IsSkillInstalled(toolName))
                 {
                     Debug.LogWarning(
                         $"[UnityCliLoop] Skill for '{toolName}' was not installed after enabling. " +
@@ -650,8 +657,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _skillsTarget,
                 !_installSkillsFlat);
             List<SkillSetupTargetInfo> targets = includeFreshnessCheck
-                ? SkillSetupApplicationFacade.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat)
-                : SkillSetupApplicationFacade.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
+                ? _skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat)
+                : _skillSetupUseCase.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
             SkillSetupTargetInfo targetInfo = targets
                 .FirstOrDefault(target => target.DirName == selection.DirectoryName);
 
@@ -801,7 +808,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     hasExistingSkills: false,
                     hasDifferentLayoutSkills: false,
                     SkillInstallState.Missing);
-                await SkillSetupApplicationFacade.InstallSkillFilesAsync(
+                await _skillSetupUseCase.InstallSkillFilesAsync(
                     new List<SkillSetupTargetInfo> { target },
                     !_installSkillsFlat,
                     CancellationToken.None);
