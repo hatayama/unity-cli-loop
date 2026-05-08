@@ -73,6 +73,8 @@ Scope(s): io.github.hatayama.uloopmcp
 
 Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので、**CLI** ボタンが青くなっていなければ **Install CLI** を押してください。
 
+v2系に戻したい場合は、Settings で **Uninstall CLI** を押し、Unity Package Manager か `manifest.json` で U-LOOP package を `2.1.1` などのv2系のバージョンへ下げてから、もう一度 Settings で **Install CLI** を押してください。
+
 <details>
 <summary>CLIだけをterminalからinstallする場合はこちら</summary>
 
@@ -93,6 +95,24 @@ Windows では `ULOOP_REMOVE_LEGACY=1` を設定すると、package-owned な古
 ```powershell
 $env:ULOOP_REMOVE_LEGACY = "1"
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```
+
+Unity UIから戻せない場合や、ターミナルの `uloop` がまだv3系のCLIを指している場合は、先にその `uloop` コマンドを削除してから、戻したいv2系のバージョンをインストールしてください。
+
+```bash
+rm -f "$HOME/.local/bin/uloop"
+npm install -g uloop-cli@2.1.1
+which uloop
+uloop --version
+```
+
+Windows PowerShell の場合:
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\Programs\uloop\bin\uloop.exe" -Force -ErrorAction SilentlyContinue
+npm install -g uloop-cli@2.1.1
+Get-Command uloop
+uloop --version
 ```
 
 </details>
@@ -619,7 +639,7 @@ description: "ツールの説明と使用タイミング"
 
 ### Unity CLI Loop 関連ファイル
 
-`UserSettings/UnityCliLoopSettings.json` はユーザー個別のエディタセッション状態を保持するため、常にローカル専用です。
+`UserSettings/UnityMcpSettings.json` はユーザー個別のエディタセッション状態を保持するため、常にローカル専用です。このファイル名は旧名称由来の互換名です。
 
 プロジェクトルートの `.uloop/` ディレクトリには、CLIキャッシュ、ツールレジストリ、ランタイム出力が格納されます。大半はローカル専用ですが、一部のファイルはチーム共有のためにオプションでgit管理できます。
 
