@@ -6,6 +6,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// </summary>
     public static class UnityCliLoopVersion
     {
-        public const string VERSION = "3.0.0-beta.1"; // x-release-please-version
+        public const string VERSION = "3.0.0-beta.2"; // x-release-please-version
     }
 }
