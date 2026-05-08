@@ -54,6 +54,10 @@ namespace io.github.hatayama.UnityCliLoop.Application
         void AddServerStateChangedHandler(Action handler);
 
         void RemoveServerStateChangedHandler(Action handler);
+
+        void AddServerStartedHandler(Action handler);
+
+        void RemoveServerStartedHandler(Action handler);
     }
 
     /// <summary>
@@ -243,6 +247,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             _controller.RemoveServerStateChangedHandler(handler);
         }
+
+        public void AddServerStartedHandler(Action handler)
+        {
+            _controller.AddServerStartedHandler(handler);
+        }
+
+        public void RemoveServerStartedHandler(Action handler)
+        {
+            _controller.RemoveServerStartedHandler(handler);
+        }
     }
 
     /// <summary>
@@ -278,6 +292,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public static void RemoveServerStateChangedHandler(Action handler)
         {
             GetService().RemoveServerStateChangedHandler(handler);
+        }
+
+        public static void AddServerStartedHandler(Action handler)
+        {
+            GetService().AddServerStartedHandler(handler);
+        }
+
+        public static void RemoveServerStartedHandler(Action handler)
+        {
+            GetService().RemoveServerStartedHandler(handler);
         }
 
         public static bool IsServerRunning => GetService().IsServerRunning;

@@ -155,7 +155,7 @@ func forwardedProjectLocalArgs(args []string, explicitProjectPath string, projec
 	if isLaunchCommand(forwardedArgs) {
 		return replaceLaunchPositionalProjectPath(forwardedArgs, projectRoot)
 	}
-	return forwardedArgs
+	return append(forwardedArgs, "--project-path", projectRoot)
 }
 
 func replaceLaunchPositionalProjectPath(args []string, projectRoot string) []string {

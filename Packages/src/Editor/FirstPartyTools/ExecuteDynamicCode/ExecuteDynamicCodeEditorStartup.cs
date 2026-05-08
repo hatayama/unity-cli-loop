@@ -12,13 +12,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AssemblyTypeIndex.InvalidateForEditorStartup();
             DynamicReferenceSetBuilder.InvalidateReferenceCacheForEditorStartup();
             SharedRoslynCompilerWorkerHost.RegisterLifecycleForEditorStartup();
-            DynamicCodeServices.RequestStartupPrewarm();
         }
 
         internal static void ResetServerScopedServices()
         {
             DynamicCodeServices.ResetServerScopedServices();
-            DynamicCodeServices.RequestStartupPrewarm();
         }
     }
 }

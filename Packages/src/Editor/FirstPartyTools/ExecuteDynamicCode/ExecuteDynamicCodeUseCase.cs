@@ -15,8 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class ExecuteDynamicCodeUseCase : IExecuteDynamicCodeUseCase
     {
-        private const string ForegroundWarmupCode =
-            "using UnityEngine; LogType previous = Debug.unityLogger.filterLogType; Debug.unityLogger.filterLogType = LogType.Warning; try { Debug.Log(\"Unity CLI Loop dynamic code prewarm\"); return \"Unity CLI Loop dynamic code prewarm\"; } finally { Debug.unityLogger.filterLogType = previous; }";
         private readonly IDynamicCodeExecutionRuntime _runtime;
         private readonly DynamicCodeFriendlyErrorConverter _friendlyErrorConverter;
 
@@ -38,7 +36,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editorLevel = FirstPartyDynamicCodeSettings.GetDynamicCodeSecurityLevel();
                 object[] parametersArray = ConvertParameters(parameters.Parameters);
                 string originalCode = parameters.Code ?? string.Empty;
-                bool shouldWarmForegroundExecutionPath = ShouldWarmForegroundExecutionPath(parameters);
 
                 LogExecutionStart(parameters, editorLevel, correlationId);
 
@@ -60,9 +57,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.YieldToForegroundRequests,
                     cancellationToken);
 
-                if (shouldWarmForegroundExecutionPath && finalResult.Success)
+                if (ShouldMarkExecutionPathWarm(parameters, finalResult))
                 {
-                    DynamicCodeForegroundWarmupState.MarkCompletedByForegroundExecution();
+                    DynamicCodeForegroundWarmupState.MarkCompletedBySuccessfulExecution();
                 }
 
                 if (IsCancelledResult(finalResult))
@@ -72,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     cancelledResponse.Timings = finalResult.Timings != null
                         ? new List<string>(finalResult.Timings)
                         : cancelledResponse.Timings;
+                    cancelledResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
                     return cancelledResponse;
                 }
 
@@ -79,16 +77,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     finalResult,
                     originalCode);
                 response.SecurityLevel = editorLevel.ToString();
+                response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
                 return response;
             }
             catch (OperationCanceledException)
             {
-                return CreateCancelledResponse(editorLevel);
+                ExecuteDynamicCodeResponse response = CreateCancelledResponse(editorLevel);
+                response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
+                return response;
             }
             catch (Exception ex)
             {
                 LogExecutionException(ex, correlationId);
-                return CreateExceptionResponse(ex, editorLevel);
+                ExecuteDynamicCodeResponse response = CreateExceptionResponse(ex, editorLevel);
+                response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
+                return response;
             }
         }
 
@@ -277,14 +280,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool completed = false;
             try
             {
-                DynamicCodeExecutionRequest warmupRequest = CreateExecutionRequest(
-                    ForegroundWarmupCode,
-                    null,
-                    compileOnly: false,
+                completed = await ExecuteForegroundWarmupSequenceAsync(
                     securityLevel,
-                    yieldToForegroundRequests: false);
-                ExecutionResult warmupResult = await ExecuteRequestAsync(warmupRequest, cancellationToken);
-                completed = warmupResult.Success;
+                    cancellationToken);
                 if (completed)
                 {
                     DynamicCodeForegroundWarmupState.MarkCompleted();
@@ -297,6 +295,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     DynamicCodeForegroundWarmupState.ResetAfterIncompleteAttempt();
                 }
             }
+        }
+
+        private async Task<bool> ExecuteForegroundWarmupSequenceAsync(
+            DynamicCodeSecurityLevel securityLevel,
+            CancellationToken ct)
+        {
+            return await DynamicCodeForegroundWarmupRunner.RunForegroundSequenceAsync(
+                _runtime,
+                securityLevel,
+                yieldToForegroundRequests: false,
+                ct);
         }
 
         private static bool ShouldWarmForegroundExecutionPath(ExecuteDynamicCodeSchema parameters)
@@ -312,6 +321,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // does not need the runtime hot path, and yield-based requests are background work
             // that must stay cancellable.
             return !parameters.CompileOnly && !parameters.YieldToForegroundRequests;
+        }
+
+        private static bool ShouldMarkExecutionPathWarm(
+            ExecuteDynamicCodeSchema parameters,
+            ExecutionResult executionResult)
+        {
+            return parameters != null
+                && !parameters.CompileOnly
+                && executionResult != null
+                && executionResult.Success;
         }
 
         private static bool IsCancelledResult(ExecutionResult executionResult)

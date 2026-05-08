@@ -39,12 +39,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal void MarkCompletedByForegroundExecution()
+        internal void MarkCompletedBySuccessfulExecution()
         {
             lock (_syncRoot)
             {
-                // Why: a real foreground execution succeeding after a transient hidden-warmup miss
-                // proves the user-visible path is already usable for the next request.
+                // Why: a successful runtime execution after startup or reload proves the next
+                // user-visible path is already usable, even when it came from tool readiness.
                 // Why not insist on the hidden warmup succeeding first: that keeps Pending alive
                 // after the exact success case we care about and injects another needless warmup.
                 _status = ForegroundWarmupStatus.Completed;
@@ -102,9 +102,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ServiceValue.MarkCompleted();
         }
 
-        internal static void MarkCompletedByForegroundExecution()
+        internal static void MarkCompletedBySuccessfulExecution()
         {
-            ServiceValue.MarkCompletedByForegroundExecution();
+            ServiceValue.MarkCompletedBySuccessfulExecution();
         }
 
         internal static void ResetAfterIncompleteAttempt()

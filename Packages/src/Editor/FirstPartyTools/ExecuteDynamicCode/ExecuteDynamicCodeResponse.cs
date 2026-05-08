@@ -9,10 +9,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
     /// Related classes: ExecuteDynamicCodeTool, ExecuteDynamicCodeSchema
     /// </summary>
-    public class ExecuteDynamicCodeResponse : UnityCliLoopToolResponse
+    public class ExecuteDynamicCodeResponse : UnityCliLoopToolResponse, IUnityCliLoopTimingResponse
     {
-        private const bool EmitTimingsInJsonResponses = false;
-
         /// <summary>Execution success flag</summary>
         public bool Success { get; set; }
         
@@ -60,11 +58,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public List<string> Timings { get; set; } = new();
 
+        public bool EmitTimingsInJsonResponse { get; set; } = false;
+
+        bool IUnityCliLoopTimingResponse.EmitsTimingsInJsonResponse => EmitTimingsInJsonResponse;
+
+        public void AddTiming(string timing)
+        {
+            if (Timings == null)
+            {
+                Timings = new List<string>();
+            }
+
+            Timings.Add(timing);
+        }
+
         // Keep timings available in memory for diagnostics and readiness decisions
         // while avoiding noisy default payloads for normal execute-dynamic-code users.
         public bool ShouldSerializeTimings()
         {
-            return EmitTimingsInJsonResponses;
+            return EmitTimingsInJsonResponse && Timings != null && Timings.Count > 0;
+        }
+
+        public bool ShouldSerializeEmitTimingsInJsonResponse()
+        {
+            return false;
         }
     }
     

@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -10,11 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class DynamicCodeServicesRegistry
     {
-        private const int StartupPrewarmDelayFrameCount = 1;
         private readonly object _serverScopedServicesLock = new();
         private Task _serverScopedDrainTask = Task.CompletedTask;
         private IDynamicCodeExecutionRuntime _runtimeFacade;
-        private DynamicCodeStartupPrewarmer _startupPrewarmer;
 
         private readonly Lazy<IDynamicCodeSourcePreparationService> _sourcePreparationServiceValue;
 
@@ -44,11 +43,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new ExecuteDynamicCodeUseCase(runtimeFacade);
         }
 
-        internal void RequestStartupPrewarm()
-        {
-            GetStartupPrewarmer().Request();
-        }
-
         internal void ResetServerScopedServices()
         {
             IDynamicCodeExecutionRuntime runtimeFacade;
@@ -57,7 +51,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 runtimeFacade = _runtimeFacade;
                 _runtimeFacade = null;
-                _startupPrewarmer = null;
                 _serverScopedDrainTask = ChainDrainTask(
                     _serverScopedDrainTask,
                     ShutdownRuntimeAsync(runtimeFacade));
@@ -75,21 +68,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 return _runtimeFacade;
-            }
-        }
-
-        private DynamicCodeStartupPrewarmer GetStartupPrewarmer()
-        {
-            lock (_serverScopedServicesLock)
-            {
-                if (_startupPrewarmer == null)
-                {
-                    _startupPrewarmer = new DynamicCodeStartupPrewarmer(
-                        GetRuntimeFacade(),
-                        StartupPrewarmDelayFrameCount);
-                }
-
-                return _startupPrewarmer;
             }
         }
 
@@ -137,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return drainTask.ContinueWith(
                 task => LogDrainFailure(task),
-                System.Threading.CancellationToken.None,
+                CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
         }
@@ -197,11 +175,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static IExecuteDynamicCodeUseCase GetExecuteDynamicCodeUseCase()
         {
             return GetRegistry().GetExecuteDynamicCodeUseCase();
-        }
-
-        internal static void RequestStartupPrewarm()
-        {
-            GetRegistry().RequestStartupPrewarm();
         }
 
         internal static void ResetServerScopedServices()

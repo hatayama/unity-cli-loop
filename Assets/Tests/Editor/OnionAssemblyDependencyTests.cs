@@ -39,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string SimulateMouseInputAssemblyName = "UnityCLILoop.FirstPartyTools.SimulateMouseInput.Editor";
         private const string SimulateMouseUiAssemblyName = "UnityCLILoop.FirstPartyTools.SimulateMouseUi.Editor";
         private const string InfrastructureAssemblyName = "UnityCLILoop.Infrastructure";
+        private const string InternalApiBridgeAssemblyName = "Unity.InternalAPIEditorBridge.024";
         private const string MetadataValidationAssemblyName =
             "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.MetadataValidation.Editor";
         private const string PresentationAssemblyName = "UnityCLILoop.Presentation";
@@ -66,18 +67,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ProjectRootIdentityValidator_WhenLoaded_CompilesUnderDomainAssembly()
-        {
-            // Tests that project identity safety policy lives in the domain layer.
-            string validatorAssemblyName = typeof(ProjectRootIdentityValidator).Assembly.GetName().Name;
-
-            Assert.That(validatorAssemblyName, Is.EqualTo(DomainAssemblyName));
-        }
-
-        [Test]
         public void ProjectRootCanonicalizer_WhenLoaded_CompilesUnderDomainAssembly()
         {
-            // Tests that project-root identity normalization stays with the domain policy.
+            // Tests that project-root endpoint normalization stays with the domain policy.
             string canonicalizerAssemblyName = typeof(ProjectRootCanonicalizer).Assembly.GetName().Name;
 
             Assert.That(canonicalizerAssemblyName, Is.EqualTo(DomainAssemblyName));
@@ -437,6 +429,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(references, Is.EquivalentTo(new[]
             {
+                InternalApiBridgeAssemblyName,
                 ApplicationAssemblyName,
                 DomainAssemblyName,
                 ToolContractsAssemblyName
@@ -496,6 +489,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "UnityCliLoopBridgeServer",
                 "BridgeTransportEndpoint",
                 "BridgeTransportListener",
+                "ProjectIpcWarmupClient",
                 "MessageReassembler",
                 "DynamicBufferManager",
                 "FrameParser"
@@ -614,6 +608,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "io.github.hatayama.UnityCliLoop.Infrastructure.BridgeTransportEndpoint, " + InfrastructureAssemblyName);
             Type listenerFactoryType = Type.GetType(
                 "io.github.hatayama.UnityCliLoop.Infrastructure.BridgeTransportListenerFactory, " + InfrastructureAssemblyName);
+            Type warmupClientType = Type.GetType(
+                "io.github.hatayama.UnityCliLoop.Infrastructure.ProjectIpcWarmupClient, " + InfrastructureAssemblyName);
             string bridgeAssemblyName = typeof(UnityCliLoopBridgeServer).Assembly.GetName().Name;
             string reassemblerAssemblyName = typeof(MessageReassembler).Assembly.GetName().Name;
             string bufferAssemblyName = typeof(DynamicBufferManager).Assembly.GetName().Name;
@@ -621,9 +617,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(endpointType, Is.Not.Null);
             Assert.That(listenerFactoryType, Is.Not.Null);
+            Assert.That(warmupClientType, Is.Not.Null);
             Assert.That(bridgeAssemblyName, Is.EqualTo(InfrastructureAssemblyName));
             Assert.That(endpointType.Assembly.GetName().Name, Is.EqualTo(InfrastructureAssemblyName));
             Assert.That(listenerFactoryType.Assembly.GetName().Name, Is.EqualTo(InfrastructureAssemblyName));
+            Assert.That(warmupClientType.Assembly.GetName().Name, Is.EqualTo(InfrastructureAssemblyName));
             Assert.That(reassemblerAssemblyName, Is.EqualTo(InfrastructureAssemblyName));
             Assert.That(bufferAssemblyName, Is.EqualTo(InfrastructureAssemblyName));
             Assert.That(parserAssemblyName, Is.EqualTo(InfrastructureAssemblyName));

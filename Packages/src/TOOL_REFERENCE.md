@@ -20,7 +20,7 @@ All tools automatically include the following property:
 - **Description**: Executes compilation after AssetDatabase.Refresh(). Returns compilation results with detailed timing information.
 - **Parameters**:
   - `ForceRecompile` (boolean): Whether to perform forced recompilation (default: false)
-  - `WaitForDomainReload` (boolean): Whether to wait for domain reload completion before returning (default: false)
+  - `WaitForDomainReload` (boolean): Whether to wait for domain reload completion before returning (default: true)
 - **Response**:
   - `Success` (boolean | null): Whether compilation was successful. Null when ForceRecompile=true because results are unavailable until domain reload completes
   - `ErrorCount` (number | null): Total number of errors. Null when ForceRecompile=true

@@ -15,17 +15,17 @@ import (
 )
 
 const (
-	launchCommandName       = "launch"
-	launchPathPollInterval  = 500 * time.Millisecond
-	launchCoreReadyTimeout  = 180 * time.Second
-	launchReadinessTimeout  = 180 * time.Second
-	launchReadinessPoll     = 1 * time.Second
-	launchProbeTimeout      = 5 * time.Second
-	launchLockfileTimeout   = 5 * time.Second
-	projectVersionFilePath  = "ProjectSettings/ProjectVersion.txt"
-	recoveryDirectoryPath   = "Assets/_Recovery"
-	launchTempDirectoryName = "Temp"
-	unityLockfileName       = "UnityLockfile"
+	launchCommandName         = "launch"
+	launchPathPollInterval    = 500 * time.Millisecond
+	launchCoreReadyTimeout    = 180 * time.Second
+	toolReadinessTimeout      = 180 * time.Second
+	toolReadinessPoll         = 1 * time.Second
+	toolReadinessProbeTimeout = 5 * time.Second
+	launchLockfileTimeout     = 5 * time.Second
+	projectVersionFilePath    = "ProjectSettings/ProjectVersion.txt"
+	recoveryDirectoryPath     = "Assets/_Recovery"
+	launchTempDirectoryName   = "Temp"
+	unityLockfileName         = "UnityLockfile"
 )
 
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
@@ -132,7 +132,7 @@ func runLaunchBootstrap(ctx context.Context, args []string, explicitProjectPath 
 		writeError(stderr, internalError(err.Error(), projectRoot))
 		return 1
 	}
-	if err := waitForLaunchReady(ctx, projectRoot); err != nil {
+	if err := waitForToolReadiness(ctx, projectRoot); err != nil {
 		writeError(stderr, internalError(err.Error(), projectRoot))
 		return 1
 	}

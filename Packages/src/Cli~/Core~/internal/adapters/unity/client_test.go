@@ -1,13 +1,20 @@
 package unity
 
 import (
+	"bufio"
+	"context"
+	"encoding/json"
 	"errors"
+	"net"
+	"runtime"
 	"testing"
 
+	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/adapters/framing"
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/domain"
 )
 
 func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t *testing.T) {
+	// Verifies that dial failures report connection attempts without implying a lost active connection.
 	connection := domain.Connection{
 		Endpoint: domain.Endpoint{
 			Network: "unix",
@@ -29,5 +36,73 @@ func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t
 	}
 	if connectionErr.Unwrap().Error() != "dial unix /tmp/uloop/UnityCliLoop-sample.sock: connect: no such file or directory" {
 		t.Fatalf("cause mismatch: %v", connectionErr.Unwrap())
+	}
+}
+
+func TestSendDoesNotIncludeProjectIdentityMetadata(t *testing.T) {
+	// Verifies that per-project endpoints do not need legacy project identity metadata.
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	captured := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		payload, err := framing.Read(bufio.NewReader(conn))
+		if err != nil {
+			serverErr <- err
+			return
+		}
+
+		var request map[string]any
+		if err := json.Unmarshal(payload, &request); err != nil {
+			serverErr <- err
+			return
+		}
+		captured <- request
+
+		response := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
+		if err := framing.Write(conn, response); err != nil {
+			serverErr <- err
+			return
+		}
+	}()
+
+	connection := domain.Connection{
+		Endpoint: domain.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: "/tmp/MyProject",
+	}
+	client := NewClient(connection)
+	if _, err := client.Send(context.Background(), "get-version", map[string]any{}); err != nil {
+		t.Fatalf("Send failed: %v", err)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	case request := <-captured:
+		if _, ok := request["x-uloop"]; ok {
+			t.Fatalf("request should not include x-uloop metadata: %#v", request["x-uloop"])
+		}
 	}
 }

@@ -185,8 +185,8 @@ uloop launch -r
 # Execute compilation
 uloop compile
 
-# Compile and wait for Domain Reload to complete
-uloop compile --wait-for-domain-reload
+# Compile without waiting for Domain Reload
+uloop compile --no-wait-for-domain-reload
 
 # Get logs
 uloop get-logs --max-count 10
@@ -242,9 +242,9 @@ Dedicated tools exist only for operations that dynamic code execution cannot han
 # Key Features
 ## Development Loop Tools
 ### 1. compile - Execute Compilation
-Performs AssetDatabase.Refresh() and then compiles, returning the results. Can detect errors and warnings that built-in linters cannot find.
+Performs AssetDatabase.Refresh() and then compiles, returning the results after Domain Reload completes. Can detect errors and warnings that built-in linters cannot find.
 You can choose between incremental compilation and forced full compilation.
-With `WaitForDomainReload=true`, results are returned after Domain Reload completes, regardless of the `ForceRecompile` value.
+Use `WaitForDomainReload=false` only when you need the fire-and-forget path.
 ```text
 → Execute compile, analyze error and warning content
 → Automatically fix relevant files

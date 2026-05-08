@@ -4,7 +4,8 @@
     "references": [
         "UnityCLILoop.Application",
         "UnityCLILoop.Domain",
-        "UnityCLILoop.ToolContracts"
+        "UnityCLILoop.ToolContracts",
+        "Unity.InternalAPIEditorBridge.024"
     ],
     "includePlatforms": [
         "Editor"
