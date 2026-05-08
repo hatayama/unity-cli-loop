@@ -30,10 +30,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(request != null, "request must not be null");
             Debug.Assert(!string.IsNullOrWhiteSpace(request.Code), "request.Code must not be empty");
 
-            return await _executionScheduler.RunForegroundAsync(
+            Stopwatch schedulerStopwatch = Stopwatch.StartNew();
+            ExecutionResult result = await _executionScheduler.RunForegroundAsync(
                 innerCancellationToken => ExecuteCoreAsync(request, innerCancellationToken),
                 CreateExecutionInProgressResult,
                 cancellationToken);
+            schedulerStopwatch.Stop();
+            AppendTiming(result, $"[Perf] SchedulerTotal: {schedulerStopwatch.Elapsed.TotalMilliseconds:F1}ms");
+            return result;
         }
 
         public async Task<(bool Entered, ExecutionResult Result)> TryExecuteIfIdleAsync(
@@ -43,10 +47,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(request != null, "request must not be null");
             Debug.Assert(!string.IsNullOrWhiteSpace(request.Code), "request.Code must not be empty");
 
-            return await _executionScheduler.TryRunIfIdleAsync(
+            Stopwatch schedulerStopwatch = Stopwatch.StartNew();
+            (bool entered, ExecutionResult result) = await _executionScheduler.TryRunIfIdleAsync(
                 request.YieldToForegroundRequests,
                 innerCancellationToken => ExecuteCoreAsync(request, innerCancellationToken),
                 cancellationToken);
+            schedulerStopwatch.Stop();
+            AppendTiming(result, $"[Perf] SchedulerTotal: {schedulerStopwatch.Elapsed.TotalMilliseconds:F1}ms");
+            return (entered, result);
         }
 
         private async Task<ExecutionResult> ExecuteCoreAsync(
@@ -74,6 +82,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             result.Timings.Add($"[Perf] ExecutorAcquire: {executorAcquireStopwatch.Elapsed.TotalMilliseconds:F1}ms");
             result.Timings.Add($"[Perf] ExecutorTotal: {executorTotalStopwatch.Elapsed.TotalMilliseconds:F1}ms");
             return result;
+        }
+
+        private static void AppendTiming(ExecutionResult result, string timing)
+        {
+            if (result == null)
+            {
+                return;
+            }
+
+            if (result.Timings == null)
+            {
+                result.Timings = new System.Collections.Generic.List<string>();
+            }
+
+            result.Timings.Add(timing);
         }
 
         private static ExecutionResult CreateExecutionInProgressResult()

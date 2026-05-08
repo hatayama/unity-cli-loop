@@ -6,4 +6,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     public abstract class UnityCliLoopToolResponse
     {
     }
+
+    public interface IUnityCliLoopTimingResponse
+    {
+        bool EmitsTimingsInJsonResponse { get; }
+
+        void AddTiming(string timing);
+    }
 }

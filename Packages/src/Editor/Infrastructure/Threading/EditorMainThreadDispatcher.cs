@@ -4,6 +4,7 @@ using System.Threading;
 using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -24,6 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             EditorApplication.update -= ProcessContinuationQueue;
             EditorApplication.update += ProcessContinuationQueue;
+            EditorApplicationTickBridge.RemoveTickHandler(ProcessContinuationQueue);
+            EditorApplicationTickBridge.AddTickHandler(ProcessContinuationQueue);
         }
 
         public void AddContinuation(Action continuation)
@@ -34,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             _continuationQueue.Enqueue(continuation);
+            EditorApplicationTickBridge.SignalTick();
         }
 
         private void ProcessContinuationQueue()

@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
@@ -112,9 +113,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             try
             {
+                Stopwatch requestStopwatch = Stopwatch.StartNew();
+                Stopwatch mainThreadSwitchStopwatch = Stopwatch.StartNew();
                 await MainThreadSwitcher.SwitchToMainThread();
+                mainThreadSwitchStopwatch.Stop();
 
+                Stopwatch executeMethodStopwatch = Stopwatch.StartNew();
                 UnityCliLoopToolResponse result = await ExecuteMethod(request.Method, request.Params);
+                executeMethodStopwatch.Stop();
+
+                AppendTimingIfRequested(
+                    result,
+                    $"[Perf] RpcSwitchToMainThread: {mainThreadSwitchStopwatch.Elapsed.TotalMilliseconds:F1}ms");
+                AppendTimingIfRequested(
+                    result,
+                    $"[Perf] RpcExecuteMethod: {executeMethodStopwatch.Elapsed.TotalMilliseconds:F1}ms");
+                AppendTimingIfRequested(
+                    result,
+                    $"[Perf] RpcBeforeSerializeTotal: {requestStopwatch.Elapsed.TotalMilliseconds:F1}ms");
 
                 string response = CreateSuccessResponse(request.Id, result);
                 return response;
@@ -134,6 +150,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
                 return CreateErrorResponse(request.Id, ex);
             }
+        }
+
+        private static void AppendTimingIfRequested(UnityCliLoopToolResponse result, string timing)
+        {
+            if (result is not IUnityCliLoopTimingResponse timingResponse)
+            {
+                return;
+            }
+
+            if (!timingResponse.EmitsTimingsInJsonResponse)
+            {
+                return;
+            }
+
+            timingResponse.AddTiming(timing);
         }
 
         private static void LogUnityCliLoopToolParameterValidationException(UnityCliLoopToolParameterValidationException exception)
