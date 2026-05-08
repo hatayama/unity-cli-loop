@@ -72,6 +72,8 @@ Scope(s): io.github.hatayama.uloopmcp
 
 Select Window > Unity CLI Loop > Settings. A dedicated window will open. If the **CLI** button is not highlighted in blue, press **Install CLI**.
 
+To return to the v2 line, press **Uninstall CLI** in Settings, downgrade the U-LOOP package to a v2 version such as `2.1.1`, then press **Install CLI** again from Settings.
+
 <details>
 <summary>CLI-only terminal install</summary>
 
@@ -92,6 +94,24 @@ On Windows, set `ULOOP_REMOVE_LEGACY=1` to remove package-owned legacy `uloop` l
 ```powershell
 $env:ULOOP_REMOVE_LEGACY = "1"
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```
+
+If the Unity UI path is not available or your terminal still resolves `uloop` to the v3 CLI, remove that command first, then install the v2 version you want:
+
+```bash
+rm -f "$HOME/.local/bin/uloop"
+npm install -g uloop-cli@2.1.1
+which uloop
+uloop --version
+```
+
+On Windows PowerShell:
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\Programs\uloop\bin\uloop.exe" -Force -ErrorAction SilentlyContinue
+npm install -g uloop-cli@2.1.1
+Get-Command uloop
+uloop --version
 ```
 
 </details>
@@ -634,7 +654,7 @@ scripts/build-go-cli.sh
 
 ### Unity CLI Loop Files
 
-`UserSettings/UnityCliLoopSettings.json` stores per-user editor session state and should always remain local-only.
+`UserSettings/UnityMcpSettings.json` stores per-user editor session state and should always remain local-only. The file name is a historical compatibility name.
 
 The `.uloop/` directory at the project root stores CLI cache, tool registry, and runtime outputs. Most of its contents are local-only, but some files can optionally be git-tracked for team sharing.
 
