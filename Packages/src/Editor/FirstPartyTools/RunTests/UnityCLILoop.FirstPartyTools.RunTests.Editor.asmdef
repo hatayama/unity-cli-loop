@@ -2,8 +2,8 @@
     "name": "UnityCLILoop.FirstPartyTools.RunTests.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
-        "UnityCLILoop.FirstPartyTools.Common.EditorUtility.Editor",
-        "UnityCLILoop.ToolContracts",
+        "GUID:d427b32aad9cb44fc8e962437c9dbcd8",
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
         "GUID:0acc523941302664db1f4e527237feb3"
     ],
     "includePlatforms": [
