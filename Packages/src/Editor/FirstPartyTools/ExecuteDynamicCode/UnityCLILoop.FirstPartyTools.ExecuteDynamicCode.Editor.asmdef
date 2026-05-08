@@ -2,8 +2,8 @@
     "name": "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
-        "UnityCLILoop.ToolContracts",
-        "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.MetadataValidation.Editor"
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:616b0fafa8621452d8d1ae18a41bab94"
     ],
     "includePlatforms": [
         "Editor"
