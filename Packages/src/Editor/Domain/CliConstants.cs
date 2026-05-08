@@ -1,8 +1,7 @@
-
-namespace io.github.hatayama.UnityCliLoop.Application
+namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
-    /// Centralizes constants used by CLI behavior.
+    /// Defines the CLI and skill layout contract used by Unity CLI Loop.
     /// </summary>
     public static class CliConstants
     {

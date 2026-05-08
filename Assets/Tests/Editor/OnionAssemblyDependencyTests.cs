@@ -85,6 +85,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void CliConstants_WhenLoaded_CompileUnderDomainAssembly()
+        {
+            // Tests that CLI and skill layout contracts stay with domain policy.
+            string constantsAssemblyName = typeof(CliConstants).Assembly.GetName().Name;
+
+            Assert.That(constantsAssemblyName, Is.EqualTo(DomainAssemblyName));
+        }
+
+        [Test]
         public void CompilationDiagnosticMessageParser_WhenLoaded_CompilesUnderDomainAssembly()
         {
             // Tests that first-party dynamic-code parsing stays inside the bundled tool assembly.
