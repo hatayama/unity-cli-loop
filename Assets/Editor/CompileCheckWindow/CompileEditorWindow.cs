@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         private CompileLogDisplay _logDisplay;
         private Vector2 _scrollPosition;
         private bool _forceRecompile = false;
-        private bool _isPostCompileWarmupRunning = false;
+        private bool _isPostCompileReadinessRunning = false;
 
         // Note: Compile window data is now managed via McpSessionManager
 
@@ -128,17 +128,17 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         private async Task ExecuteCompileAsync()
         {
             CompileResult result = await _compileController.TryCompileAsync(_forceRecompile, CancellationToken.None);
-            if (ShouldWarmExecuteDynamicCodeAfterCompile(result))
+            if (ShouldRunExecuteDynamicCodeReadinessAfterCompile(result))
             {
-                _isPostCompileWarmupRunning = true;
+                _isPostCompileReadinessRunning = true;
                 Repaint();
                 try
                 {
-                    await WarmExecuteDynamicCodeToolPathAfterCompileAsync(CancellationToken.None);
+                    await RunExecuteDynamicCodeReadinessProbesAfterCompileAsync(CancellationToken.None);
                 }
                 finally
                 {
-                    _isPostCompileWarmupRunning = false;
+                    _isPostCompileReadinessRunning = false;
                     Repaint();
                 }
             }
@@ -159,14 +159,16 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             UnityEngine.Debug.Log(logMessage);
         }
 
-        private static bool ShouldWarmExecuteDynamicCodeAfterCompile(CompileResult result)
+        private static bool ShouldRunExecuteDynamicCodeReadinessAfterCompile(CompileResult result)
         {
             return result.Success == true;
         }
 
-        private static async Task WarmExecuteDynamicCodeToolPathAfterCompileAsync(CancellationToken ct)
+        private static async Task RunExecuteDynamicCodeReadinessProbesAfterCompileAsync(CancellationToken ct)
         {
-            foreach (string code in ExecuteDynamicCodeWarmup.CreateReturnStringWarmupCodes())
+            // Why: the editor Compile Tool bypasses the native CLI's post-compile readiness wait,
+            // so it must run the same hidden probe path before handing control back to the user.
+            foreach (string code in ExecuteDynamicCodeReadinessProbe.CreateReturnStringProbeCodes())
             {
                 ct.ThrowIfCancellationRequested();
                 JObject parameters = new()
@@ -183,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
 
         private bool IsCompileActionBusy()
         {
-            return _compileController.IsCompiling || _isPostCompileWarmupRunning;
+            return _compileController.IsCompiling || _isPostCompileReadinessRunning;
         }
 
         private string CreateCompileButtonText()
@@ -193,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 return "Compiling...";
             }
 
-            if (_isPostCompileWarmupRunning)
+            if (_isPostCompileReadinessRunning)
             {
                 return "Preparing...";
             }

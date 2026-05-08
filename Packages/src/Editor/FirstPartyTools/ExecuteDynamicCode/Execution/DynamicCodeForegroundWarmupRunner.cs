@@ -16,7 +16,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             System.Diagnostics.Debug.Assert(runtime != null, "runtime must not be null");
 
-            foreach (string warmupCode in DynamicCodeForegroundWarmupSnippets.ReturnStringShapes)
+            // Why: foreground fallback and transport readiness must compile the same source shapes;
+            // otherwise one path can report warm while the user's first return-string shape is still cold.
+            foreach (string warmupCode in ExecuteDynamicCodeReadinessProbe.CreateReturnStringProbeCodes())
             {
                 DynamicCodeExecutionRequest request = CreateRequest(
                     warmupCode,
@@ -40,7 +42,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             System.Diagnostics.Debug.Assert(runtime != null, "runtime must not be null");
 
-            foreach (string warmupCode in DynamicCodeForegroundWarmupSnippets.ReturnStringShapes)
+            // Why: background probes must match the foreground sequence so whichever path succeeds
+            // first marks the same execution shape as ready.
+            foreach (string warmupCode in ExecuteDynamicCodeReadinessProbe.CreateReturnStringProbeCodes())
             {
                 DynamicCodeExecutionRequest request = CreateRequest(
                     warmupCode,

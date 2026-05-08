@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             lock (_syncRoot)
             {
                 // Why: a successful runtime execution after startup or reload proves the next
-                // user-visible path is already usable, even when it came from launch readiness.
+                // user-visible path is already usable, even when it came from tool readiness.
                 // Why not insist on the hidden warmup succeeding first: that keeps Pending alive
                 // after the exact success case we care about and injects another needless warmup.
                 _status = ForegroundWarmupStatus.Completed;

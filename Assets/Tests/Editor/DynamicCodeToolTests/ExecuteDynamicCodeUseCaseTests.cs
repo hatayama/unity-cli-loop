@@ -213,7 +213,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public async Task ExecuteAsync_WhenYieldingStartupProbeSucceeds_ShouldSkipNextForegroundWarmup()
         {
-            // Tests that launch readiness warmup prevents the next user request from paying hidden warmup cost.
+            // Tests that tool readiness warmup prevents the next user request from paying hidden warmup cost.
             FakeDynamicCodeExecutionRuntime runtime = new(
                 new ExecutionResult
                 {

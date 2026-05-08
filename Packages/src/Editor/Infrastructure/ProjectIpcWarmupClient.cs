@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// <summary>
     /// Sends a local bridge request through the same project IPC transport used by external CLI clients.
     /// </summary>
-    internal static class BridgeTransportWarmupClient
+    internal static class ProjectIpcWarmupClient
     {
         private const string ContentLengthHeader = "Content-Length:";
         private const int MaxHeaderByteCount = 8192;
@@ -27,6 +27,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(!string.IsNullOrWhiteSpace(requestJson), "requestJson must not be empty");
 
             BridgeTransportEndpoint endpoint = BridgeTransportEndpoint.CreateProjectIpc(projectRoot);
+            // Why: server lifecycle callbacks run on Unity's editor thread; connecting on a worker
+            // thread lets the local readiness request exercise the same IPC path as an external CLI
+            // command without blocking editor startup or recovery callbacks.
             return Task.Run(async () =>
             {
                 ct.ThrowIfCancellationRequested();

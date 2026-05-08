@@ -489,7 +489,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "UnityCliLoopBridgeServer",
                 "BridgeTransportEndpoint",
                 "BridgeTransportListener",
-                "BridgeTransportWarmupClient",
+                "ProjectIpcWarmupClient",
                 "MessageReassembler",
                 "DynamicBufferManager",
                 "FrameParser"
@@ -609,7 +609,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Type listenerFactoryType = Type.GetType(
                 "io.github.hatayama.UnityCliLoop.Infrastructure.BridgeTransportListenerFactory, " + InfrastructureAssemblyName);
             Type warmupClientType = Type.GetType(
-                "io.github.hatayama.UnityCliLoop.Infrastructure.BridgeTransportWarmupClient, " + InfrastructureAssemblyName);
+                "io.github.hatayama.UnityCliLoop.Infrastructure.ProjectIpcWarmupClient, " + InfrastructureAssemblyName);
             string bridgeAssemblyName = typeof(UnityCliLoopBridgeServer).Assembly.GetName().Name;
             string reassemblerAssemblyName = typeof(MessageReassembler).Assembly.GetName().Name;
             string bufferAssemblyName = typeof(DynamicBufferManager).Assembly.GetName().Name;

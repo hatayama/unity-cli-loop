@@ -203,7 +203,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 		return 1
 	}
 	spinner.Update("Warming execute-dynamic-code after compile...")
-	if err := waitForLaunchReady(ctx, connection.ProjectRoot); err != nil {
+	if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
 		spinner.Stop()
 		writeClassifiedError(stderr, err, errorContext{
 			projectRoot: connection.ProjectRoot,

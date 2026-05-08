@@ -103,11 +103,11 @@ func TestRunLaunchQuitDoesNotLaunchWhenUnityIsNotRunning(t *testing.T) {
 }
 
 // Verifies that readiness probes exercise the same foreground warmup path as user executions.
-func TestLaunchDynamicCodeProbeParamsUseForegroundWarmup(t *testing.T) {
-	params := launchDynamicCodeProbeParams()
+func TestExecuteDynamicCodeReadinessProbeParamsUseForegroundWarmup(t *testing.T) {
+	params := executeDynamicCodeReadinessProbeParams()
 
 	if params["YieldToForegroundRequests"] != false {
-		t.Fatalf("launch readiness probe should use foreground warmup: %#v", params["YieldToForegroundRequests"])
+		t.Fatalf("readiness probe should use foreground warmup: %#v", params["YieldToForegroundRequests"])
 	}
 }
 

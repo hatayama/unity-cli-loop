@@ -17,7 +17,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/adapters/project"
 )
 
-func TestWaitForLaunchReadyProbesUnityServer(t *testing.T) {
+func TestWaitForToolReadinessProbesUnityServer(t *testing.T) {
 	// Verifies that bootstrap launch waits for a real Unity RPC response before returning.
 	projectRoot := t.TempDir()
 	createUnityProject(t, projectRoot)
@@ -28,16 +28,16 @@ func TestWaitForLaunchReadyProbesUnityServer(t *testing.T) {
 		_ = os.Remove(endpointPath)
 	}()
 	served := make(chan error, 1)
-	go serveLaunchReadyProbes(listener, "get-version", map[string]any{"version": "test"}, launchReadyProbeCount, served)
+	go serveToolReadinessProbes(listener, "get-version", map[string]any{"version": "test"}, toolReadinessProbeCount, served)
 
-	if err := waitForLaunchReady(context.Background(), projectRoot); err != nil {
-		t.Fatalf("waitForLaunchReady failed: %v", err)
+	if err := waitForToolReadiness(context.Background(), projectRoot); err != nil {
+		t.Fatalf("waitForToolReadiness failed: %v", err)
 	}
 
-	assertLaunchReadyProbeServed(t, served)
+	assertToolReadinessProbeServed(t, served)
 }
 
-func TestWaitForLaunchReadyUsesVersionProbeWhenToolCacheIsMissing(t *testing.T) {
+func TestWaitForToolReadinessUsesVersionProbeWhenToolCacheIsMissing(t *testing.T) {
 	// Verifies that unknown core capabilities fall back to the always-supported version probe.
 	projectRoot := t.TempDir()
 	createUnityProject(t, projectRoot)
@@ -47,17 +47,17 @@ func TestWaitForLaunchReadyUsesVersionProbeWhenToolCacheIsMissing(t *testing.T) 
 		_ = os.Remove(endpointPath)
 	}()
 	served := make(chan error, 1)
-	go serveLaunchReadyProbes(listener, "get-version", map[string]any{"version": "test"}, launchReadyProbeCount, served)
+	go serveToolReadinessProbes(listener, "get-version", map[string]any{"version": "test"}, toolReadinessProbeCount, served)
 
-	if err := waitForLaunchReady(context.Background(), projectRoot); err != nil {
-		t.Fatalf("waitForLaunchReady failed: %v", err)
+	if err := waitForToolReadiness(context.Background(), projectRoot); err != nil {
+		t.Fatalf("waitForToolReadiness failed: %v", err)
 	}
 
-	assertLaunchReadyProbeServed(t, served)
+	assertToolReadinessProbeServed(t, served)
 }
 
-func TestWaitForLaunchReadyUsesDynamicCodeProbeWhenToolExists(t *testing.T) {
-	// Verifies that first-run launch mirrors core launch readiness when dynamic code is available.
+func TestWaitForToolReadinessUsesDynamicCodeProbeWhenToolExists(t *testing.T) {
+	// Verifies that first-run launch mirrors core tool readiness when dynamic code is available.
 	projectRoot := t.TempDir()
 	createUnityProject(t, projectRoot)
 	createDynamicCodeToolCache(t, projectRoot)
@@ -67,21 +67,21 @@ func TestWaitForLaunchReadyUsesDynamicCodeProbeWhenToolExists(t *testing.T) {
 		_ = os.Remove(endpointPath)
 	}()
 	served := make(chan error, 1)
-	go serveLaunchReadyProbes(listener, "execute-dynamic-code", map[string]any{"Success": true}, launchReadyProbeCount, served)
+	go serveToolReadinessProbes(listener, "execute-dynamic-code", map[string]any{"Success": true}, toolReadinessProbeCount, served)
 
-	if err := waitForLaunchReady(context.Background(), projectRoot); err != nil {
-		t.Fatalf("waitForLaunchReady failed: %v", err)
+	if err := waitForToolReadiness(context.Background(), projectRoot); err != nil {
+		t.Fatalf("waitForToolReadiness failed: %v", err)
 	}
 
-	assertLaunchReadyProbeServed(t, served)
+	assertToolReadinessProbeServed(t, served)
 }
 
 // Verifies that readiness probes exercise the same foreground warmup path as user executions.
-func TestLaunchDynamicCodeProbeParamsUseForegroundWarmup(t *testing.T) {
-	params := launchDynamicCodeProbeParams()
+func TestExecuteDynamicCodeReadinessProbeParamsUseForegroundWarmup(t *testing.T) {
+	params := executeDynamicCodeReadinessProbeParams()
 
 	if params["YieldToForegroundRequests"] != false {
-		t.Fatalf("launch readiness probe should use foreground warmup: %#v", params["YieldToForegroundRequests"])
+		t.Fatalf("readiness probe should use foreground warmup: %#v", params["YieldToForegroundRequests"])
 	}
 }
 
@@ -102,7 +102,7 @@ func listenOnProjectEndpoint(t *testing.T, projectRoot string) (net.Listener, st
 	return listener, connection.Endpoint.Address
 }
 
-func serveLaunchReadyProbes(
+func serveToolReadinessProbes(
 	listener net.Listener,
 	expectedMethod string,
 	result map[string]any,
@@ -110,7 +110,7 @@ func serveLaunchReadyProbes(
 	served chan<- error,
 ) {
 	for probeIndex := 0; probeIndex < probeCount; probeIndex++ {
-		if err := serveLaunchReadyProbe(listener, expectedMethod, result); err != nil {
+		if err := serveToolReadinessProbe(listener, expectedMethod, result); err != nil {
 			served <- err
 			return
 		}
@@ -119,7 +119,7 @@ func serveLaunchReadyProbes(
 	served <- nil
 }
 
-func serveLaunchReadyProbe(listener net.Listener, expectedMethod string, result map[string]any) error {
+func serveToolReadinessProbe(listener net.Listener, expectedMethod string, result map[string]any) error {
 	conn, err := listener.Accept()
 	if err != nil {
 		return err
@@ -154,7 +154,7 @@ func serveLaunchReadyProbe(listener net.Listener, expectedMethod string, result 
 	return framing.Write(conn, payload)
 }
 
-func assertLaunchReadyProbeServed(t *testing.T, served <-chan error) {
+func assertToolReadinessProbeServed(t *testing.T, served <-chan error) {
 	t.Helper()
 
 	select {

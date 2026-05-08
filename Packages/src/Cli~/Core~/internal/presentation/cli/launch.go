@@ -254,7 +254,7 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
-	if err := waitForLaunchReady(ctx, projectRoot); err != nil {
+	if err := waitForToolReadiness(ctx, projectRoot); err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}

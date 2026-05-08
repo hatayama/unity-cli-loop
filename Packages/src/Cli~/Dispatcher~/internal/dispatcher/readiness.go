@@ -13,41 +13,43 @@ import (
 )
 
 const (
-	launchDynamicCodeProbe = `return "Unity CLI Loop dynamic code prewarm";`
-	launchReadyProbeCount  = 3
+	executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`
+	toolReadinessProbeCount          = 3
 )
 
-type launchReadyRequest struct {
+type toolReadinessRequest struct {
 	JSONRPC string         `json:"jsonrpc"`
 	Method  string         `json:"method"`
 	Params  map[string]any `json:"params"`
 	ID      int            `json:"id"`
 }
 
-type launchReadyResponse struct {
-	Result json.RawMessage      `json:"result,omitempty"`
-	Error  *launchReadyRPCError `json:"error,omitempty"`
-	ID     int                  `json:"id"`
+type toolReadinessResponse struct {
+	Result json.RawMessage        `json:"result,omitempty"`
+	Error  *toolReadinessRPCError `json:"error,omitempty"`
+	ID     int                    `json:"id"`
 }
 
-type launchReadyRPCError struct {
+type toolReadinessRPCError struct {
 	Message string `json:"message"`
 }
 
-type launchDynamicCodeResponse struct {
+type executeDynamicCodeReadinessResponse struct {
 	Success      bool   `json:"Success"`
 	ErrorMessage string `json:"ErrorMessage"`
 }
 
-func waitForLaunchReady(ctx context.Context, projectRoot string) error {
-	timeoutContext, cancel := context.WithTimeout(ctx, launchReadinessTimeout)
+func waitForToolReadiness(ctx context.Context, projectRoot string) error {
+	// Why: dispatcher launch returns directly to the user; probing a real tool request
+	// prevents the first command after launch from paying the cold project IPC path.
+	timeoutContext, cancel := context.WithTimeout(ctx, toolReadinessTimeout)
 	defer cancel()
 
-	ticker := time.NewTicker(launchReadinessPoll)
+	ticker := time.NewTicker(toolReadinessPoll)
 	defer ticker.Stop()
 
 	for {
-		if err := probeLaunchReadySequence(timeoutContext, projectRoot); err == nil {
+		if err := probeToolReadinessSequence(timeoutContext, projectRoot); err == nil {
 			return nil
 		}
 
@@ -56,15 +58,15 @@ func waitForLaunchReady(ctx context.Context, projectRoot string) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			return fmt.Errorf("timed out waiting for Unity to become ready after launch")
+			return fmt.Errorf("timed out waiting for Unity tool readiness")
 		case <-ticker.C:
 		}
 	}
 }
 
-func probeLaunchReadySequence(ctx context.Context, projectRoot string) error {
-	for probeIndex := 0; probeIndex < launchReadyProbeCount; probeIndex++ {
-		if err := probeLaunchReady(ctx, projectRoot); err != nil {
+func probeToolReadinessSequence(ctx context.Context, projectRoot string) error {
+	for probeIndex := 0; probeIndex < toolReadinessProbeCount; probeIndex++ {
+		if err := probeToolReadiness(ctx, projectRoot); err != nil {
 			return err
 		}
 	}
@@ -72,8 +74,8 @@ func probeLaunchReadySequence(ctx context.Context, projectRoot string) error {
 	return nil
 }
 
-func probeLaunchReady(ctx context.Context, projectRoot string) error {
-	probeContext, cancel := context.WithTimeout(ctx, launchProbeTimeout)
+func probeToolReadiness(ctx context.Context, projectRoot string) error {
+	probeContext, cancel := context.WithTimeout(ctx, toolReadinessProbeTimeout)
 	defer cancel()
 
 	connection, err := project.ResolveConnection(projectRoot, projectRoot)
@@ -82,53 +84,53 @@ func probeLaunchReady(ctx context.Context, projectRoot string) error {
 	}
 
 	if isExecuteDynamicCodeAvailable(projectRoot) {
-		return probeLaunchDynamicCode(probeContext, connection)
+		return probeExecuteDynamicCodeReadiness(probeContext, connection)
 	}
-	return probeLaunchVersion(probeContext, connection)
+	return probeVersionReadiness(probeContext, connection)
 }
 
-func probeLaunchVersion(ctx context.Context, connection domain.Connection) error {
-	response, err := sendLaunchReadyRequest(ctx, connection, "get-version", map[string]any{})
+func probeVersionReadiness(ctx context.Context, connection domain.Connection) error {
+	response, err := sendToolReadinessRequest(ctx, connection, "get-version", map[string]any{})
 	if err != nil {
 		return err
 	}
 	if len(response.Result) == 0 {
-		return fmt.Errorf("launch readiness probe returned no result")
+		return fmt.Errorf("tool readiness probe returned no result")
 	}
 	return nil
 }
 
-func probeLaunchDynamicCode(ctx context.Context, connection domain.Connection) error {
-	response, err := sendLaunchReadyRequest(ctx, connection, "execute-dynamic-code", launchDynamicCodeProbeParams())
+func probeExecuteDynamicCodeReadiness(ctx context.Context, connection domain.Connection) error {
+	response, err := sendToolReadinessRequest(ctx, connection, "execute-dynamic-code", executeDynamicCodeReadinessProbeParams())
 	if err != nil {
 		return err
 	}
 
-	var payload launchDynamicCodeResponse
+	var payload executeDynamicCodeReadinessResponse
 	if err := json.Unmarshal(response.Result, &payload); err != nil {
 		return err
 	}
 	if !payload.Success {
 		if payload.ErrorMessage != "" {
-			return fmt.Errorf("execute-dynamic-code launch readiness probe failed: %s", payload.ErrorMessage)
+			return fmt.Errorf("execute-dynamic-code readiness probe failed: %s", payload.ErrorMessage)
 		}
-		return fmt.Errorf("execute-dynamic-code launch readiness probe failed")
+		return fmt.Errorf("execute-dynamic-code readiness probe failed")
 	}
 	return nil
 }
 
-func launchDynamicCodeProbeParams() map[string]any {
+func executeDynamicCodeReadinessProbeParams() map[string]any {
 	return map[string]any{
-		"Code":                      launchDynamicCodeProbe,
+		"Code":                      executeDynamicCodeReadinessProbe,
 		"CompileOnly":               false,
 		"YieldToForegroundRequests": false,
 	}
 }
 
-func sendLaunchReadyRequest(ctx context.Context, connection domain.Connection, method string, params map[string]any) (launchReadyResponse, error) {
-	conn, err := dialLaunchReadyEndpoint(ctx, connection.Endpoint)
+func sendToolReadinessRequest(ctx context.Context, connection domain.Connection, method string, params map[string]any) (toolReadinessResponse, error) {
+	conn, err := dialToolReadinessEndpoint(ctx, connection.Endpoint)
 	if err != nil {
-		return launchReadyResponse{}, err
+		return toolReadinessResponse{}, err
 	}
 	defer func() {
 		_ = conn.Close()
@@ -138,30 +140,30 @@ func sendLaunchReadyRequest(ctx context.Context, connection domain.Connection, m
 		_ = conn.SetDeadline(deadline)
 	}
 
-	payload, err := json.Marshal(launchReadyRequest{
+	payload, err := json.Marshal(toolReadinessRequest{
 		JSONRPC: "2.0",
 		Method:  method,
 		Params:  params,
 		ID:      1,
 	})
 	if err != nil {
-		return launchReadyResponse{}, err
+		return toolReadinessResponse{}, err
 	}
 	if err := framing.Write(conn, payload); err != nil {
-		return launchReadyResponse{}, err
+		return toolReadinessResponse{}, err
 	}
 
 	responsePayload, err := framing.Read(bufio.NewReader(conn))
 	if err != nil {
-		return launchReadyResponse{}, err
+		return toolReadinessResponse{}, err
 	}
 
-	var response launchReadyResponse
+	var response toolReadinessResponse
 	if err := json.Unmarshal(responsePayload, &response); err != nil {
-		return launchReadyResponse{}, err
+		return toolReadinessResponse{}, err
 	}
 	if response.Error != nil {
-		return launchReadyResponse{}, fmt.Errorf("launch readiness probe failed: %s", response.Error.Message)
+		return toolReadinessResponse{}, fmt.Errorf("tool readiness probe failed: %s", response.Error.Message)
 	}
 	return response, nil
 }
