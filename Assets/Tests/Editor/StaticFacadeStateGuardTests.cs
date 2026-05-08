@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static readonly string[] MigratedFacadePaths = new string[]
         {
             "Packages/src/Editor/Application/CliSetupApplicationService.cs",
-            "Packages/src/Editor/Application/SkillSetupUseCaseRegistry.cs",
+            "Packages/src/Editor/Application/UseCases/SkillSetupUseCaseRegistry.cs",
             "Packages/src/Editor/Domain/ULoopSettings.cs",
             "Packages/src/Editor/Application/UnityCliLoopToolRegistrar.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeServices.cs",
@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static readonly string[] InstanceServicePaths = new string[]
         {
             "Packages/src/Editor/Application/SessionRecoveryService.cs",
-            "Packages/src/Editor/Application/SkillSetupUseCase.cs",
+            "Packages/src/Editor/Application/UseCases/SkillSetupUseCase.cs",
             "Packages/src/Editor/Domain/UnityCliLoopEditorSettingsService.cs",
             "Packages/src/Editor/Domain/ToolSettingsService.cs",
             "Packages/src/Editor/Infrastructure/Server/DomainReloadDetectionFileService.cs"
