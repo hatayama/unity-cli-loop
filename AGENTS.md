@@ -15,6 +15,28 @@ Every test method must have a short comment that states what behavior the test v
 Do not directly edit skill files under the project-root `.agents/` or `.claude/` directories.
 These files are generated copies. Update the source skill definitions instead, then regenerate the copies through the normal workflow.
 
+## Dead Code Scanner
+
+Use the C# dead-code scanner before deleting apparently unreferenced C# code or before adding comments to explain why an apparently unreferenced type must stay.
+
+For type-level review, especially when checking classes that may be kept by Unity, serialization, reflection, release automation, or external package APIs, run:
+
+```bash
+dotnet run --project tools/UnityCliLoop.DeadCodeScanner -- --scope public --include-types true --include-members false --include-locals false --include-test-only true --include-kept true --format table
+```
+
+For a broader member/local-variable pass, run:
+
+```bash
+dotnet run --project tools/UnityCliLoop.DeadCodeScanner -- --scope public --include-types true --include-members true --include-locals true --include-test-only true --include-kept false --format table
+```
+
+Interpret scanner output conservatively:
+
+- `KeptByUnityOrReflection` usually means the symbol is intentionally reachable through Unity callbacks, attributes, serialization, or reflection-style discovery. Do not add explanatory comments for every such symbol when the attribute/base type already makes the reason obvious.
+- `PublicCandidate` means Roslyn found no direct references. Check non-C# references such as `release-please-config.json`, checked-in JSON contracts, Unity assets, generated files, and documented public APIs before removing or commenting the symbol.
+- If a symbol is kept only for a non-obvious non-C# tool, add a short why comment or XML `<remarks>` near the symbol. For example, `UnityCliLoopVersion` is rewritten by release-please through `release-please-config.json` even though runtime code should read `UnityCliLoopConstants.PackageInfo.version`.
+
 ## Native Go CLI Validation
 
 When changing Go CLI source files under `Packages/src/Cli~/Core~`, `Packages/src/Cli~/Dispatcher~`, or `Packages/src/Cli~/Shared~`, run `scripts/check-go-cli.sh` before manually rebuilding checked-in binaries.
