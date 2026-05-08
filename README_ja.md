@@ -186,8 +186,8 @@ uloop launch -r
 # コンパイルを実行
 uloop compile
 
-# コンパイルしてDomain Reload完了まで待つ
-uloop compile --wait-for-domain-reload
+# Domain Reloadを待たずにコンパイルを開始
+uloop compile --no-wait-for-domain-reload
 
 # ログを取得
 uloop get-logs --max-count 10
@@ -243,9 +243,9 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 # 主要機能
 ## 自律開発ループ系ツール
 ### 1. compile - コンパイルの実行
-AssetDatabase.Refresh()をした後、コンパイルして結果を返却します。内蔵のLinterでは発見できないエラー・警告を見つける事ができます。
+AssetDatabase.Refresh()をした後、Domain Reload完了まで待ってコンパイル結果を返却します。内蔵のLinterでは発見できないエラー・警告を見つける事ができます。
 差分コンパイルと強制全体コンパイルを選択できます。
-`WaitForDomainReload=true` を指定すると、`ForceRecompile` の値に関係なく Domain Reload完了後に結果を返せます。
+即時に戻したい場合だけ `WaitForDomainReload=false` を指定します。
 ```text
 → compile実行、エラー・警告内容を解析
 → 該当ファイルを自動修正

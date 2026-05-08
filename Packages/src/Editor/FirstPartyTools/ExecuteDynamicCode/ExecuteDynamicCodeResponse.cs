@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public bool EmitTimingsInJsonResponse { get; set; } = false;
 
-        public bool EmitsTimingsInJsonResponse => EmitTimingsInJsonResponse;
+        bool IUnityCliLoopTimingResponse.EmitsTimingsInJsonResponse => EmitTimingsInJsonResponse;
 
         public void AddTiming(string timing)
         {

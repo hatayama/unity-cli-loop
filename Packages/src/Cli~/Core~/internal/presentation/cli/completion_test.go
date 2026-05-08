@@ -50,7 +50,7 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 	}
 
 	output := stdout.String()
-	for _, option := range []string{"--force-recompile", "--wait-for-domain-reload"} {
+	for _, option := range []string{"--force-recompile", "--no-wait-for-domain-reload"} {
 		if !strings.Contains(output, option) {
 			t.Fatalf("option %s was not listed: %s", option, output)
 		}

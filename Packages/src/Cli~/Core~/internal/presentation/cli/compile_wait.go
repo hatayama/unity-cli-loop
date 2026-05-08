@@ -33,8 +33,22 @@ type compileCompletionOptions struct {
 	lockGrace    time.Duration
 }
 
-func shouldWaitForCompileDomainReload(command string, _ map[string]any) bool {
-	return command == compileCommandName
+func shouldWaitForCompileDomainReload(command string, params map[string]any) bool {
+	if command != compileCommandName {
+		return false
+	}
+	return compileDomainReloadWaitEnabled(params)
+}
+
+func compileDomainReloadWaitEnabled(params map[string]any) bool {
+	value, ok := params[compileWaitParam].(bool)
+	if ok {
+		return value
+	}
+
+	// Why: native CLI compile is a user-facing checkpoint; waiting by default
+	// ensures the post-compile readiness probe runs after the domain is usable.
+	return true
 }
 
 func prepareCompileWaitParams(params map[string]any) (string, error) {

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -21,6 +23,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void SetUp()
         {
             DynamicCodeForegroundWarmupState.Reset();
+        }
+
+        [Test]
+        public void ExecuteDynamicCodeResponse_WhenSerializedWithoutTimings_DoesNotExposeTimingControlFields()
+        {
+            // Tests that timing control remains an internal interface concern by default.
+            ExecuteDynamicCodeResponse response = new()
+            {
+                Success = true,
+                Result = "ok",
+                EmitTimingsInJsonResponse = false
+            };
+
+            JObject serializedResponse = JObject.Parse(JsonConvert.SerializeObject(response));
+
+            Assert.That(serializedResponse["Timings"], Is.Null);
+            Assert.That(serializedResponse["EmitTimingsInJsonResponse"], Is.Null);
+            Assert.That(serializedResponse["EmitsTimingsInJsonResponse"], Is.Null);
         }
 
         [Test]

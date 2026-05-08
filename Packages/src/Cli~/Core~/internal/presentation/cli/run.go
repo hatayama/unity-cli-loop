@@ -202,14 +202,16 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 		writeErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
 		return 1
 	}
-	spinner.Update("Warming execute-dynamic-code after compile...")
-	if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
-		spinner.Stop()
-		writeClassifiedError(stderr, err, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     compileCommandName,
-		})
-		return 1
+	if compileResultSucceeded(result) {
+		spinner.Update("Warming execute-dynamic-code after compile...")
+		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
+			spinner.Stop()
+			writeClassifiedError(stderr, err, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     compileCommandName,
+			})
+			return 1
+		}
 	}
 	spinner.Stop()
 	writeJSON(stdout, result)
@@ -280,4 +282,16 @@ func writeJSON(stdout io.Writer, result json.RawMessage) {
 	encoder := json.NewEncoder(stdout)
 	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(pretty)
+}
+
+type compileResultStatus struct {
+	Success *bool `json:"Success"`
+}
+
+func compileResultSucceeded(result json.RawMessage) bool {
+	var status compileResultStatus
+	if json.Unmarshal(result, &status) != nil {
+		return false
+	}
+	return status.Success != nil && *status.Success
 }

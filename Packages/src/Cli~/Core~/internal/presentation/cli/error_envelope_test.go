@@ -192,7 +192,7 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 	if cliErr.ProjectRoot != "/tmp/MyProject" {
 		t.Fatalf("project root mismatch: %#v", cliErr)
 	}
-	expectedRetryAction := "Retry `uloop compile --wait-for-domain-reload` after Unity becomes responsive."
+	expectedRetryAction := "Retry `uloop compile` after Unity becomes responsive."
 	if len(cliErr.NextActions) < 2 || cliErr.NextActions[1] != expectedRetryAction {
 		t.Fatalf("retry action mismatch: %#v", cliErr.NextActions)
 	}

@@ -54,6 +54,15 @@ func TestShouldWaitForCompileDomainReloadDefaultsToCompileCommands(t *testing.T)
 	}
 }
 
+// Verifies that the explicit compile no-wait flag preserves the fast fire-and-forget path.
+func TestShouldWaitForCompileDomainReloadRespectsExplicitFalse(t *testing.T) {
+	params := map[string]any{compileWaitParam: false}
+
+	if shouldWaitForCompileDomainReload(compileCommandName, params) {
+		t.Fatal("compile wait should be disabled by an explicit false flag")
+	}
+}
+
 // Verifies that compile wait preparation creates a request id and enables reload waiting.
 func TestPrepareCompileWaitParamsForcesDomainReloadWait(t *testing.T) {
 	params := map[string]any{}
@@ -170,5 +179,20 @@ func TestShouldWaitForCompileResultRequiresDispatchedTransportError(t *testing.T
 	outcome := domain.UnitySendOutcome{RequestDispatched: true}
 	if !shouldWaitForCompileResult(fmt.Errorf("EOF"), outcome) {
 		t.Fatal("dispatched transport error should wait")
+	}
+}
+
+// Verifies that post-compile readiness runs only after successful compile results.
+func TestCompileResultSucceededRequiresTrueSuccess(t *testing.T) {
+	if !compileResultSucceeded([]byte(`{"Success":true}`)) {
+		t.Fatal("successful compile result was not accepted")
+	}
+
+	if compileResultSucceeded([]byte(`{"Success":false,"Errors":[{"Message":"boom"}]}`)) {
+		t.Fatal("failed compile result should not trigger readiness")
+	}
+
+	if compileResultSucceeded([]byte(`{"Message":"indeterminate"}`)) {
+		t.Fatal("indeterminate compile result should not trigger readiness")
 	}
 }

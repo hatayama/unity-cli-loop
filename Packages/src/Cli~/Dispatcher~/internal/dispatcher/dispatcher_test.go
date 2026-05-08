@@ -691,7 +691,7 @@ func TestRunCompletionListsDefaultToolOptionsWithoutProject(t *testing.T) {
 		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
 	}
 	output := stdout.String()
-	for _, option := range []string{"--force-recompile", "--wait-for-domain-reload"} {
+	for _, option := range []string{"--force-recompile", "--no-wait-for-domain-reload"} {
 		if !strings.Contains(output, option) {
 			t.Fatalf("option %s was not listed: %s", option, output)
 		}
