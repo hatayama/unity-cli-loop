@@ -211,6 +211,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenYieldingStartupProbeSucceeds_ShouldSkipNextForegroundWarmup()
+        {
+            // Tests that launch readiness warmup prevents the next user request from paying hidden warmup cost.
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "probe"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "user"
+                });
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+
+            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
+            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
+
+            try
+            {
+                ExecuteDynamicCodeResponse probeResponse = await useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema
+                    {
+                        Code = "return \"probe\";",
+                        YieldToForegroundRequests = true
+                    },
+                    CancellationToken.None);
+                ExecuteDynamicCodeResponse userResponse = await useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema
+                    {
+                        Code = "return \"user\";"
+                    },
+                    CancellationToken.None);
+
+                Assert.That(probeResponse.Success, Is.True);
+                Assert.That(userResponse.Success, Is.True);
+                Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(1));
+                Assert.That(runtime.Requests, Has.Count.EqualTo(1));
+                Assert.That(runtime.Requests[0].Code, Is.EqualTo("return \"user\";"));
+            }
+            finally
+            {
+                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
+            }
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenInitialExecutionSucceeds_ShouldNotRetry()
         {
             MarkForegroundWarmupCompleted();

@@ -38,7 +38,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editorLevel = FirstPartyDynamicCodeSettings.GetDynamicCodeSecurityLevel();
                 object[] parametersArray = ConvertParameters(parameters.Parameters);
                 string originalCode = parameters.Code ?? string.Empty;
-                bool shouldWarmForegroundExecutionPath = ShouldWarmForegroundExecutionPath(parameters);
 
                 LogExecutionStart(parameters, editorLevel, correlationId);
 
@@ -60,9 +59,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.YieldToForegroundRequests,
                     cancellationToken);
 
-                if (shouldWarmForegroundExecutionPath && finalResult.Success)
+                if (ShouldMarkExecutionPathWarm(parameters, finalResult))
                 {
-                    DynamicCodeForegroundWarmupState.MarkCompletedByForegroundExecution();
+                    DynamicCodeForegroundWarmupState.MarkCompletedBySuccessfulExecution();
                 }
 
                 if (IsCancelledResult(finalResult))
@@ -312,6 +311,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // does not need the runtime hot path, and yield-based requests are background work
             // that must stay cancellable.
             return !parameters.CompileOnly && !parameters.YieldToForegroundRequests;
+        }
+
+        private static bool ShouldMarkExecutionPathWarm(
+            ExecuteDynamicCodeSchema parameters,
+            ExecutionResult executionResult)
+        {
+            return parameters != null
+                && !parameters.CompileOnly
+                && executionResult != null
+                && executionResult.Success;
         }
 
         private static bool IsCancelledResult(ExecutionResult executionResult)
