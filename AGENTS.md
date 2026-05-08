@@ -35,7 +35,7 @@ Interpret scanner output conservatively:
 
 - `KeptByUnityOrReflection` usually means the symbol is intentionally reachable through Unity callbacks, attributes, serialization, or reflection-style discovery. Do not add explanatory comments for every such symbol when the attribute/base type already makes the reason obvious.
 - `PublicCandidate` means Roslyn found no direct references. Check non-C# references such as `release-please-config.json`, checked-in JSON contracts, Unity assets, generated files, and documented public APIs before removing or commenting the symbol.
-- If a symbol is kept only for a non-obvious non-C# tool, add a short why comment or XML `<remarks>` near the symbol. For example, `UnityCliLoopVersion` is rewritten by release-please through `release-please-config.json` even though runtime code should read `UnityCliLoopConstants.PackageInfo.version`.
+- If a symbol is referenced only by non-C# tooling, verify that the tool reads it for runtime or release behavior. If the tool only rewrites the symbol and no code reads it, remove the marker instead of documenting it.
 
 ## Native Go CLI Validation
 

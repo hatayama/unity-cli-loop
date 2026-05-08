@@ -22,11 +22,6 @@
           "type": "json",
           "path": "Cli~/Dispatcher~/contract.json",
           "jsonpath": "$.dispatcherVersion"
-        },
-        {
-          "type": "generic",
-          "path": "Packages/src/Editor/Application/Config/UnityCliLoopVersion.cs",
-          "glob": "Packages/src/Editor/Application/Config/UnityCliLoopVersion.cs"
         }
       ]
     }
