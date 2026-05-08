@@ -81,9 +81,15 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
+	startedAt := time.Now()
+	timing := domain.UnitySendTiming{}
+
+	dialStartedAt := time.Now()
 	conn, err := dialEndpoint(ctx, client.connection.Endpoint)
+	timing.Dial = time.Since(dialStartedAt)
 	if err != nil {
-		return domain.UnitySendOutcome{}, formatConnectionAttemptError(client.connection, err)
+		timing.Total = time.Since(startedAt)
+		return domain.UnitySendOutcome{Timing: timing}, formatConnectionAttemptError(client.connection, err)
 	}
 	defer func() {
 		_ = conn.Close()
@@ -110,21 +116,36 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		_ = conn.SetDeadline(deadline)
 	}
 
+	writeStartedAt := time.Now()
 	if err := framing.Write(conn, payload); err != nil {
-		return domain.UnitySendOutcome{}, err
+		timing.Write = time.Since(writeStartedAt)
+		timing.Total = time.Since(startedAt)
+		return domain.UnitySendOutcome{Timing: timing}, err
 	}
+	timing.Write = time.Since(writeStartedAt)
 	outcome := domain.UnitySendOutcome{RequestDispatched: true}
 
+	readStartedAt := time.Now()
 	responsePayload, err := framing.Read(bufio.NewReader(conn))
+	timing.Read = time.Since(readStartedAt)
 	if err != nil {
+		timing.Total = time.Since(startedAt)
+		outcome.Timing = timing
 		return outcome, err
 	}
 
+	decodeStartedAt := time.Now()
 	var response rpcResponse
 	if err := json.Unmarshal(responsePayload, &response); err != nil {
+		timing.Decode = time.Since(decodeStartedAt)
+		timing.Total = time.Since(startedAt)
+		outcome.Timing = timing
 		return outcome, err
 	}
+	timing.Decode = time.Since(decodeStartedAt)
 	if response.Error != nil {
+		timing.Total = time.Since(startedAt)
+		outcome.Timing = timing
 		return outcome, &RPCError{
 			Code:    response.Error.Code,
 			Message: response.Error.Message,
@@ -132,10 +153,14 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		}
 	}
 	if len(response.Result) == 0 {
+		timing.Total = time.Since(startedAt)
+		outcome.Timing = timing
 		return outcome, fmt.Errorf("UNITY_NO_RESPONSE")
 	}
 
 	outcome.Result = response.Result
+	timing.Total = time.Since(startedAt)
+	outcome.Timing = timing
 	return outcome, nil
 }
 

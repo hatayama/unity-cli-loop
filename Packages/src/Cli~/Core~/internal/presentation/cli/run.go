@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	corecontract "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core"
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core/internal/adapters/unity"
@@ -123,6 +124,7 @@ func runTool(ctx context.Context, connection domain.Connection, command string, 
 		return runCompileWithDomainReloadWait(ctx, connection, params, stdout, stderr)
 	}
 
+	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, command)
 	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
 	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
@@ -134,6 +136,7 @@ func runTool(ctx context.Context, connection domain.Connection, command string, 
 	})
 	spinner.Stop()
 	if err != nil {
+		writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
 		writeToolFailure(stderr, err, outcome, errorContext{
 			projectRoot: connection.ProjectRoot,
 			command:     command,
@@ -141,6 +144,7 @@ func runTool(ctx context.Context, connection domain.Connection, command string, 
 		return 1
 	}
 	writeJSON(stdout, outcome.Result)
+	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
 	return 0
 }
 
@@ -154,6 +158,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 		return 1
 	}
 
+	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, compileCommandName)
 	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
 	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
@@ -207,6 +212,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 	}
 	spinner.Stop()
 	writeJSON(stdout, result)
+	writeDebugTiming(stderr, compileCommandName, time.Since(startedAt), outcome)
 	return 0
 }
 
