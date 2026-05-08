@@ -129,6 +129,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
+        public async Task WarmAfterCompileAsync_WhenForegroundWarmupWasCompleted_ShouldRewarmReturnShapes()
+        {
+            // Tests that post-compile warmup refreshes the return-string path even after startup warmup completed.
+            bool started = DynamicCodeForegroundWarmupState.TryBegin();
+            Assert.That(started, Is.True);
+            DynamicCodeForegroundWarmupState.MarkCompleted();
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "warm"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "warm"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "user"
+                });
+            DynamicCodePostCompileWarmup warmup = new(runtime);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+
+            await warmup.WarmAsync(CancellationToken.None);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;",
+                    CompileOnly = false
+                },
+                CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(3));
+            AssertPrewarmCodeMatchesLiteralReturnShape(
+                runtime.Requests[0].Code,
+                "return \"user value\";");
+            AssertPrewarmCodeMatchesLiteralReturnShape(
+                runtime.Requests[1].Code,
+                "return\n  \"user value\";");
+            Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 1;"));
+        }
+
+        [Test]
         public async Task RequestAsync_WhenIdleExecutionDoesNotEnter_ShouldAllowRetry()
         {
             // Tests that transient busy startup prewarm attempts do not permanently block later startup prewarm.

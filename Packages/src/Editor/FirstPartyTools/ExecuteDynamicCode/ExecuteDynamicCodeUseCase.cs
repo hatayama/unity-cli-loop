@@ -301,22 +301,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             DynamicCodeSecurityLevel securityLevel,
             CancellationToken ct)
         {
-            foreach (string warmupCode in DynamicCodeForegroundWarmupSnippets.ReturnStringShapes)
-            {
-                DynamicCodeExecutionRequest warmupRequest = CreateExecutionRequest(
-                    warmupCode,
-                    null,
-                    compileOnly: false,
-                    securityLevel,
-                    yieldToForegroundRequests: false);
-                ExecutionResult warmupResult = await ExecuteRequestAsync(warmupRequest, ct);
-                if (!warmupResult.Success)
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return await DynamicCodeForegroundWarmupRunner.RunForegroundSequenceAsync(
+                _runtime,
+                securityLevel,
+                yieldToForegroundRequests: false,
+                ct);
         }
 
         private static bool ShouldWarmForegroundExecutionPath(ExecuteDynamicCodeSchema parameters)

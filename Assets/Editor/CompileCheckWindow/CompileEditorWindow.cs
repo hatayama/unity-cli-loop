@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.Compilation;
+using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -18,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         private CompileLogDisplay _logDisplay;
         private Vector2 _scrollPosition;
         private bool _forceRecompile = false;
+        private bool _isPostCompileWarmupRunning = false;
 
         // Note: Compile window data is now managed via McpSessionManager
 
@@ -94,9 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             _forceRecompile = EditorGUILayout.Toggle("Force Recompile", _forceRecompile);
             GUILayout.Space(5);
 
-            EditorGUI.BeginDisabledGroup(_compileController.IsCompiling);
-            string buttonText = _compileController.IsCompiling ? "Compiling..." :
-                               (_forceRecompile ? "Run Force Compile" : "Run Compile");
+            EditorGUI.BeginDisabledGroup(IsCompileActionBusy());
+            string buttonText = CreateCompileButtonText();
             if (GUILayout.Button(buttonText, GUILayout.Height(30)))
             {
                 // Execute compilation using async/await
@@ -125,7 +126,21 @@ namespace io.github.hatayama.UnityCliLoop.Dev
 
         private async Task ExecuteCompileAsync()
         {
-            CompileResult result = await _compileController.TryCompileAsync(_forceRecompile);
+            CompileResult result = await _compileController.TryCompileAsync(_forceRecompile, CancellationToken.None);
+            if (ShouldWarmExecuteDynamicCodeAfterCompile(result))
+            {
+                _isPostCompileWarmupRunning = true;
+                Repaint();
+                try
+                {
+                    await ExecuteDynamicCodeWarmup.WarmAfterCompileAsync(CancellationToken.None);
+                }
+                finally
+                {
+                    _isPostCompileWarmupRunning = false;
+                    Repaint();
+                }
+            }
             
             // Output result to log (for debugging)
             string message = string.IsNullOrEmpty(result.Message) ? "(none)" : result.Message;
@@ -141,6 +156,31 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             }
 
             UnityEngine.Debug.Log(logMessage);
+        }
+
+        private static bool ShouldWarmExecuteDynamicCodeAfterCompile(CompileResult result)
+        {
+            return result.Success == true;
+        }
+
+        private bool IsCompileActionBusy()
+        {
+            return _compileController.IsCompiling || _isPostCompileWarmupRunning;
+        }
+
+        private string CreateCompileButtonText()
+        {
+            if (_compileController.IsCompiling)
+            {
+                return "Compiling...";
+            }
+
+            if (_isPostCompileWarmupRunning)
+            {
+                return "Preparing...";
+            }
+
+            return _forceRecompile ? "Run Force Compile" : "Run Compile";
         }
 
         private void OnCompileCompleted(CompileResult result)

@@ -13,6 +13,7 @@
         "UnityCLILoop.FirstPartyTools.Common.MouseUi.Editor",
         "UnityCLILoop.FirstPartyTools.Common.Overlay.Editor",
         "UnityCLILoop.FirstPartyTools.Compile.Editor",
+        "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor",
         "UnityCLILoop.FirstPartyTools.FindGameObjects.Editor",
         "UnityCLILoop.FirstPartyTools.GetLogs.Editor",
         "UnityCLILoop.FirstPartyTools.RunTests.Editor",

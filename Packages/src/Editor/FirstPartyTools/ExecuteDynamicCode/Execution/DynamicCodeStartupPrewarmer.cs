@@ -59,7 +59,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool completed = false;
             try
             {
-                completed = await ExecuteStartupWarmupSequenceAsync(ct);
+                completed = await DynamicCodeForegroundWarmupRunner.TryRunBackgroundSequenceAsync(
+                    _runtime,
+                    FirstPartyDynamicCodeSettings.GetDynamicCodeSecurityLevel(),
+                    yieldToForegroundRequests: true,
+                    ct);
                 if (completed)
                 {
                     DynamicCodeForegroundWarmupState.MarkCompleted();
@@ -73,29 +77,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ResetRequestStateAfterIncompleteAttempt();
                 }
             }
-        }
-
-        private async Task<bool> ExecuteStartupWarmupSequenceAsync(CancellationToken ct)
-        {
-            foreach (string warmupCode in DynamicCodeForegroundWarmupSnippets.ReturnStringShapes)
-            {
-                DynamicCodeExecutionRequest request = new()
-                {
-                    Code = warmupCode,
-                    ClassName = DynamicCodeConstants.DEFAULT_CLASS_NAME,
-                    CompileOnly = false,
-                    SecurityLevel = FirstPartyDynamicCodeSettings.GetDynamicCodeSecurityLevel(),
-                    YieldToForegroundRequests = true
-                };
-
-                (bool entered, ExecutionResult result) = await _runtime.TryExecuteIfIdleAsync(request, ct);
-                if (!entered || !result.Success)
-                {
-                    return false;
-                }
-            }
-
-            return true;
         }
 
         private void ResetRequestStateAfterIncompleteAttempt()

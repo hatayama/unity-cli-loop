@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -47,6 +48,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void RequestStartupPrewarm()
         {
             GetStartupPrewarmer().Request();
+        }
+
+        internal Task WarmAfterCompileAsync(CancellationToken ct)
+        {
+            DynamicCodePostCompileWarmup warmup = new(GetRuntimeFacade());
+            return warmup.WarmAsync(ct);
         }
 
         internal void ResetServerScopedServices()
@@ -137,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return drainTask.ContinueWith(
                 task => LogDrainFailure(task),
-                System.Threading.CancellationToken.None,
+                CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
         }
@@ -202,6 +209,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void RequestStartupPrewarm()
         {
             GetRegistry().RequestStartupPrewarm();
+        }
+
+        internal static Task WarmAfterCompileAsync(CancellationToken ct)
+        {
+            return GetRegistry().WarmAfterCompileAsync(ct);
         }
 
         internal static void ResetServerScopedServices()
