@@ -21,11 +21,10 @@ type Client struct {
 type ProgressFunc = func(message string)
 
 type rpcRequest struct {
-	JSONRPC string                  `json:"jsonrpc"`
-	Method  string                  `json:"method"`
-	Params  map[string]any          `json:"params"`
-	ID      int                     `json:"id"`
-	Uloop   *domain.RequestMetadata `json:"x-uloop,omitempty"`
+	JSONRPC string         `json:"jsonrpc"`
+	Method  string         `json:"method"`
+	Params  map[string]any `json:"params"`
+	ID      int            `json:"id"`
 }
 
 type rpcResponse struct {
@@ -100,7 +99,6 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		Method:  method,
 		Params:  params,
 		ID:      client.requestID,
-		Uloop:   client.connection.RequestMetadata,
 	}
 
 	payload, err := json.Marshal(request)

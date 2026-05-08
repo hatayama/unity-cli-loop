@@ -134,12 +134,6 @@ func assertProjectConnection(t *testing.T, connection domain.Connection, project
 	if connection.ProjectRoot != canonicalProjectRoot {
 		t.Fatalf("project root mismatch: %s", connection.ProjectRoot)
 	}
-	if connection.RequestMetadata == nil {
-		t.Fatal("request metadata should be present")
-	}
-	if connection.RequestMetadata.ExpectedProjectRoot != canonicalProjectRoot {
-		t.Fatalf("expected project root mismatch: %s", connection.RequestMetadata.ExpectedProjectRoot)
-	}
 	if connection.Endpoint != CreateEndpoint(canonicalProjectRoot) {
 		t.Fatalf("endpoint mismatch: %#v", connection.Endpoint)
 	}

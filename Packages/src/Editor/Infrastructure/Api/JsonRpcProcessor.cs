@@ -111,21 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 Method = request["method"]?.ToString(),
                 Params = request["params"],
-                Id = request["id"]?.ToObject<object>(),
-                UloopMetadata = ParseUloopMetadata(request["x-uloop"])
-            };
-        }
-
-        private static JsonRpcRequestUloopMetadata ParseUloopMetadata(JToken metadataToken)
-        {
-            if (metadataToken == null || metadataToken.Type == JTokenType.Null)
-            {
-                return null;
-            }
-
-            return new JsonRpcRequestUloopMetadata
-            {
-                ExpectedProjectRoot = metadataToken["expectedProjectRoot"]?.ToString()
+                Id = request["id"]?.ToObject<object>()
             };
         }
 
@@ -171,8 +157,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             try
             {
-                ValidateClientIdentityIfNeeded(request);
-
                 Stopwatch mainThreadWaitStopwatch = Stopwatch.StartNew();
                 await MainThreadSwitcher.SwitchToMainThread();
                 mainThreadWaitStopwatch.Stop();
@@ -200,19 +184,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
                 return CreateErrorResponse(request.Id, ex);
             }
-        }
-
-        private static void ValidateClientIdentityIfNeeded(JsonRpcRequest request)
-        {
-            JsonRpcRequestIdentityValidator.Validate(
-                request?.UloopMetadata,
-                GetCurrentProjectRoot());
-        }
-
-        private static string GetCurrentProjectRoot()
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            return ProjectRootCanonicalizer.Canonicalize(projectRoot);
         }
 
         private static void LogUnityCliLoopToolParameterValidationException(UnityCliLoopToolParameterValidationException exception)

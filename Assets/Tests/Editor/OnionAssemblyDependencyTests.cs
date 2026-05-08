@@ -66,18 +66,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ProjectRootIdentityValidator_WhenLoaded_CompilesUnderDomainAssembly()
-        {
-            // Tests that project identity safety policy lives in the domain layer.
-            string validatorAssemblyName = typeof(ProjectRootIdentityValidator).Assembly.GetName().Name;
-
-            Assert.That(validatorAssemblyName, Is.EqualTo(DomainAssemblyName));
-        }
-
-        [Test]
         public void ProjectRootCanonicalizer_WhenLoaded_CompilesUnderDomainAssembly()
         {
-            // Tests that project-root identity normalization stays with the domain policy.
+            // Tests that project-root endpoint normalization stays with the domain policy.
             string canonicalizerAssemblyName = typeof(ProjectRootCanonicalizer).Assembly.GetName().Name;
 
             Assert.That(canonicalizerAssemblyName, Is.EqualTo(DomainAssemblyName));

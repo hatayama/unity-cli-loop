@@ -15,11 +15,10 @@ import (
 const launchDynamicCodeProbe = `UnityEngine.LogType previous = UnityEngine.Debug.unityLogger.filterLogType; UnityEngine.Debug.unityLogger.filterLogType = UnityEngine.LogType.Warning; try { UnityEngine.Debug.Log("Unity CLI Loop dynamic code prewarm"); return "Unity CLI Loop dynamic code prewarm"; } finally { UnityEngine.Debug.unityLogger.filterLogType = previous; }`
 
 type launchReadyRequest struct {
-	JSONRPC string                  `json:"jsonrpc"`
-	Method  string                  `json:"method"`
-	Params  map[string]any          `json:"params"`
-	ID      int                     `json:"id"`
-	Uloop   *domain.RequestMetadata `json:"x-uloop,omitempty"`
+	JSONRPC string         `json:"jsonrpc"`
+	Method  string         `json:"method"`
+	Params  map[string]any `json:"params"`
+	ID      int            `json:"id"`
 }
 
 type launchReadyResponse struct {
@@ -127,7 +126,6 @@ func sendLaunchReadyRequest(ctx context.Context, connection domain.Connection, m
 		Method:  method,
 		Params:  params,
 		ID:      1,
-		Uloop:   connection.RequestMetadata,
 	})
 	if err != nil {
 		return launchReadyResponse{}, err
