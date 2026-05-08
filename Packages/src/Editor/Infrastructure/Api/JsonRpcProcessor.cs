@@ -1,6 +1,4 @@
 using System;
-using System.Diagnostics;
-using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -12,19 +10,6 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Current client context for JSON-RPC processing
-    /// </summary>
-    public class ClientExecutionContext
-    {
-        public string Endpoint { get; }
-        
-        public ClientExecutionContext(string endpoint)
-        {
-            Endpoint = endpoint;
-        }
-    }
-
-    /// <summary>
     /// Class specialized in handling JSON-RPC 2.0 processing
     /// 
     /// Design document reference: Packages/src/Editor/ARCHITECTURE.md
@@ -34,46 +19,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// - Project IPC server: Receives JSON-RPC messages from CLI clients
     /// - MainThreadSwitcher: Ensures Unity API calls run on the main thread
     /// - JsonRpcRequest: Request model for JSON-RPC 2.0 protocol
-    /// - ClientExecutionContext: Thread-local context for tracking current client
     /// 
     /// Processing flow:
     /// 1. Receives JSON message from the project IPC server
     /// 2. Parses and validates JSON-RPC 2.0 format
-    /// 3. Sets client context for the current thread
-    /// 4. Delegates to UnityApiHandler for command execution
-    /// 5. Formats response according to JSON-RPC 2.0 specification
-    /// 6. Returns JSON response to be sent back to client
+    /// 3. Delegates to UnityApiHandler for command execution
+    /// 4. Formats response according to JSON-RPC 2.0 specification
+    /// 5. Returns JSON response to be sent back to client
     /// </summary>
     public static class JsonRpcProcessor
     {
-        /// <summary>
-        /// Current client context for async operations
-        /// </summary>
-        private static readonly AsyncLocal<ClientExecutionContext> _currentClientContext = new();
-        
-        /// <summary>
-        /// Get current client context (ProcessID and Endpoint)
-        /// </summary>
-        public static ClientExecutionContext CurrentClientContext => _currentClientContext.Value;
-        
-        /// <summary>
-        /// Process JSON-RPC request and generate response with client context
-        /// </summary>
-        public static async Task<string> ProcessRequest(string jsonRequest, string clientEndpoint)
-        {
-            var context = new ClientExecutionContext(clientEndpoint);
-            _currentClientContext.Value = context;
-            
-            try
-            {
-                return await ProcessRequest(jsonRequest);
-            }
-            finally
-            {
-                _currentClientContext.Value = null;
-            }
-        }
-        
         /// <summary>
         /// Process JSON-RPC request and generate response
         /// </summary>
@@ -157,14 +112,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             try
             {
-                Stopwatch mainThreadWaitStopwatch = Stopwatch.StartNew();
                 await MainThreadSwitcher.SwitchToMainThread();
-                mainThreadWaitStopwatch.Stop();
 
-                Stopwatch toolStopwatch = Stopwatch.StartNew();
                 UnityCliLoopToolResponse result = await ExecuteMethod(request.Method, request.Params);
-                toolStopwatch.Stop();
-                result.SetVersion(UnityCliLoopVersion.VERSION);
 
                 string response = CreateSuccessResponse(request.Id, result);
                 return response;

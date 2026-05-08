@@ -282,9 +282,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             GetVersionResponse getVersionResponse = response as GetVersionResponse;
             Assert.That(getVersionResponse, Is.Not.Null);
-            Assert.That(getVersionResponse.Ver, Is.EqualTo(UnityCliLoopVersion.VERSION));
             Assert.That(getVersionResponse.UnityVersion, Is.Not.Empty);
-            Assert.That(getVersionResponse.IsEditor, Is.True);
+
+            JObject serializedResponse = JObject.FromObject(response);
+            Assert.That(serializedResponse["Ver"], Is.Null);
+            Assert.That(serializedResponse["Platform"], Is.Null);
+            Assert.That(serializedResponse["DataPath"], Is.Null);
+            Assert.That(serializedResponse["PersistentDataPath"], Is.Null);
+            Assert.That(serializedResponse["TemporaryCachePath"], Is.Null);
+            Assert.That(serializedResponse["IsEditor"], Is.Null);
+            Assert.That(serializedResponse["ProductName"], Is.Null);
+            Assert.That(serializedResponse["CompanyName"], Is.Null);
         }
 
         [Test]
@@ -297,7 +305,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             GetToolDetailsResponse getToolDetailsResponse = response as GetToolDetailsResponse;
             Assert.That(getToolDetailsResponse, Is.Not.Null);
-            Assert.That(getToolDetailsResponse.Ver, Is.EqualTo(UnityCliLoopVersion.VERSION));
+
+            JObject serializedResponse = JObject.FromObject(response);
+            Assert.That(serializedResponse["Ver"], Is.Null);
 
             string[] toolNames = getToolDetailsResponse.Tools
                 .Select(tool => tool.Name)
@@ -351,9 +361,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ExecuteToolAsync_WhenToolReturnsResponse_AssignsVersionToResponseInstance()
+        public async Task ExecuteToolAsync_WhenToolReturnsResponse_DoesNotAddProtocolVersionToResponseInstance()
         {
-            // Tests that response versioning is assigned per response instead of using global contract state.
+            // Tests that tool responses do not carry obsolete per-response protocol version metadata.
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
             JObject parameters = JObject.FromObject(new
             {
@@ -363,8 +373,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
 
             UnityCliLoopToolResponse response = await registry.ExecuteToolAsync("hello-world", parameters);
+            JObject serializedResponse = JObject.FromObject(response);
 
-            Assert.That(response.Ver, Is.EqualTo(UnityCliLoopVersion.VERSION));
+            Assert.That(serializedResponse["Ver"], Is.Null);
         }
 
         [Test]

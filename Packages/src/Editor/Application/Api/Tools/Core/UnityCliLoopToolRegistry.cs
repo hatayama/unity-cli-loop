@@ -5,7 +5,6 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -148,19 +147,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 throw new UnityCliLoopSecurityException(toolName, "Tool is blocked by security settings");
             }
 
-            Stopwatch mainThreadHopStopwatch = Stopwatch.StartNew();
             await MainThreadSwitcher.SwitchToMainThread();
-            mainThreadHopStopwatch.Stop();
 
-            Stopwatch toolBodyStopwatch = Stopwatch.StartNew();
             UnityCliLoopToolResponse response = await tool.ExecuteAsync(paramsToken);
-            toolBodyStopwatch.Stop();
             if (response == null)
             {
                 throw new InvalidOperationException($"Tool returned null response: {toolName}");
             }
-
-            response.SetVersion(UnityCliLoopVersion.VERSION);
 
             return response;
         }
