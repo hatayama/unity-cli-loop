@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -111,10 +112,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
+            UnityCliLoopEditorSettingsService editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateService();
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService());
+                new DomainReloadDetectionFileService(editorSettingsService),
+                editorSettingsService);
             string claimedLockPath = null;
             ServerStartingLockService.OnOwnedLockFileClaimedForDeletionForTests = path => claimedLockPath = path;
 
@@ -137,10 +141,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
+            UnityCliLoopEditorSettingsService editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateService();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService());
+                new DomainReloadDetectionFileService(editorSettingsService),
+                editorSettingsService);
         }
 
         /// <summary>

@@ -12,13 +12,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class DomainReloadDetectionServiceTests
     {
         private UnityCliLoopEditorSettingsData _originalSettings;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
         private IDomainReloadDetectionService _domainReloadDetectionService;
 
         [SetUp]
         public void SetUp()
         {
-            _originalSettings = CloneSettings(UnityCliLoopEditorSettings.GetSettings());
-            _domainReloadDetectionService = new DomainReloadDetectionFileService();
+            _editorSettingsService = UnityCliLoopEditorSettingsTestFactory.CreateService();
+            _originalSettings = CloneSettings(_editorSettingsService.GetSettings());
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
             _domainReloadDetectionService.DeleteLockFile();
         }
@@ -26,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TearDown]
         public void TearDown()
         {
-            UnityCliLoopEditorSettings.SaveSettings(_originalSettings);
+            _editorSettingsService.SaveSettings(_originalSettings);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
             _domainReloadDetectionService.DeleteLockFile();
         }
@@ -39,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             _domainReloadDetectionService.StartDomainReload(correlationId, true);
 
-            UnityCliLoopEditorSettingsData startedSettings = UnityCliLoopEditorSettings.GetSettings();
+            UnityCliLoopEditorSettingsData startedSettings = _editorSettingsService.GetSettings();
             Assert.That(startedSettings.isServerRunning, Is.True);
             Assert.That(startedSettings.isAfterCompile, Is.True);
             Assert.That(startedSettings.isDomainReloadInProgress, Is.True);
@@ -51,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             _domainReloadDetectionService.RollbackDomainReloadStart(correlationId);
 
-            UnityCliLoopEditorSettingsData rolledBackSettings = UnityCliLoopEditorSettings.GetSettings();
+            UnityCliLoopEditorSettingsData rolledBackSettings = _editorSettingsService.GetSettings();
             Assert.That(rolledBackSettings.isServerRunning, Is.True);
             Assert.That(rolledBackSettings.isAfterCompile, Is.False);
             Assert.That(rolledBackSettings.isDomainReloadInProgress, Is.False);

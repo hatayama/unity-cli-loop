@@ -1,3 +1,5 @@
+using io.github.hatayama.UnityCliLoop.Domain;
+
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
@@ -5,9 +7,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     internal static class PresentationEditorStartup
     {
-        internal static void Initialize()
+        internal static void Initialize(UnityCliLoopEditorSettingsService editorSettingsService)
         {
-            SetupWizardWindow.InitializeForEditorStartup();
+            UnityCliLoopSettingsWindow.InitializeEditorServices(editorSettingsService);
+            SetupWizardWindow.InitializeForEditorStartup(editorSettingsService);
         }
     }
 }

@@ -27,13 +27,24 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const int PreferredWrappedTextLineCount = 2;
         private const bool ForceFlatSkillInstall = true;
         private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
+        private static UnityCliLoopEditorSettingsService RegisteredEditorSettingsService;
 
-        internal static void InitializeForEditorStartup()
+        internal static void InitializeForEditorStartup(UnityCliLoopEditorSettingsService editorSettingsService)
         {
+            InitializeEditorServices(editorSettingsService);
+
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             if (UnityEngine.Application.isBatchMode) return;
 
             EditorApplication.delayCall += TryShowOnVersionChange;
+        }
+
+        internal static void InitializeEditorServices(UnityCliLoopEditorSettingsService editorSettingsService)
+        {
+            Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+
+            RegisteredEditorSettingsService = editorSettingsService
+                ?? throw new System.ArgumentNullException(nameof(editorSettingsService));
         }
 
         [MenuItem("Window/Unity CLI Loop/Setup Wizard", priority = 3)]
@@ -57,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (!shouldRecordVersion) return;
 
             Debug.Assert(!string.IsNullOrEmpty(version), "version must not be null or empty");
-            UnityCliLoopEditorSettings.SetLastSeenSetupWizardVersion(version);
+            GetEditorSettingsService().SetLastSeenSetupWizardVersion(version);
         }
 
         internal static void MaybeRecordSuppressedVersion(bool suppressAutoShow, string version)
@@ -65,15 +76,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (!suppressAutoShow) return;
 
             Debug.Assert(!string.IsNullOrEmpty(version), "version must not be null or empty");
-            UnityCliLoopEditorSettings.SetLastSeenSetupWizardVersion(version);
+            GetEditorSettingsService().SetLastSeenSetupWizardVersion(version);
         }
 
         private static void TryShowOnVersionChange()
         {
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
-            bool suppressAutoShow = UnityCliLoopEditorSettings.GetSuppressSetupWizardAutoShow();
+            UnityCliLoopEditorSettingsService editorSettingsService = GetEditorSettingsService();
+            bool suppressAutoShow = editorSettingsService.GetSuppressSetupWizardAutoShow();
             MaybeRecordSuppressedVersion(suppressAutoShow, currentVersion);
-            string lastSeenVersion = UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion();
+            string lastSeenVersion = editorSettingsService.GetLastSeenSetupWizardVersion();
             if (!ShouldAutoShowForVersion(currentVersion, lastSeenVersion, suppressAutoShow)) return;
 
             EditorApplication.delayCall += ShowWindowOnVersionChange;
@@ -96,7 +108,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            string lastSeenSetupWizardVersionBeforeOpen = UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion();
+            string lastSeenSetupWizardVersionBeforeOpen =
+                GetEditorSettingsService().GetLastSeenSetupWizardVersion();
             Rect windowPosition = CreateCenteredRect(EditorGUIUtility.GetMainWindowPosition(), MinimumWindowSize);
             SetupWizardWindow window = CreateInstance<SetupWizardWindow>();
             PrepareForOpen(window, WindowTitle, windowPosition, lastSeenSetupWizardVersionBeforeOpen);
@@ -160,6 +173,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             FocusWindowIfItsOpen<SetupWizardWindow>();
         }
 
+        private static UnityCliLoopEditorSettingsService GetEditorSettingsService()
+        {
+            if (RegisteredEditorSettingsService == null)
+            {
+                throw new System.InvalidOperationException("Unity CLI Loop editor settings service is not registered.");
+            }
+
+            return RegisteredEditorSettingsService;
+        }
+
         // Prerequisite
         private VisualElement _nodejsWarning;
         private VisualElement _nodejsOk;
@@ -204,6 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private CancellationTokenSource _skillInstallStateRefreshCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private SkillSetupUseCase _skillSetupUseCase;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
 
         private void CreateGUI()
         {
@@ -221,6 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void InitializeApplicationServices()
         {
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            _editorSettingsService = GetEditorSettingsService();
         }
 
         private void InitializeFirstInstallSkillsUiState()
@@ -350,7 +375,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void RefreshAutoShowToggle()
         {
-            _suppressAutoShowToggle.SetValueWithoutNotify(UnityCliLoopEditorSettings.GetSuppressSetupWizardAutoShow());
+            _suppressAutoShowToggle.SetValueWithoutNotify(_editorSettingsService.GetSuppressSetupWizardAutoShow());
         }
 
         private void ApplyInitialCheckingState()
@@ -950,7 +975,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void HandleSuppressAutoShowChanged(bool suppressAutoShow)
         {
-            UnityCliLoopEditorSettings.SetSuppressSetupWizardAutoShow(suppressAutoShow);
+            _editorSettingsService.SetSuppressSetupWizardAutoShow(suppressAutoShow);
             MaybeRecordSuppressedVersion(suppressAutoShow, UnityCliLoopConstants.PackageInfo.version);
             ScheduleResizeToContent();
         }
@@ -995,7 +1020,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             // Claude Code does not resolve nested skill folders, so setup keeps every editor target on the flat layout.
             _installSkillsFlat = ForceFlatSkillInstall;
-            UnityCliLoopEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
+            _editorSettingsService.SetInstallSkillsFlat(_installSkillsFlat);
         }
 
         private void ScheduleResizeToContent()

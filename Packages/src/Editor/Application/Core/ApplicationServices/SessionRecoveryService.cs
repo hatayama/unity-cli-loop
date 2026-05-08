@@ -23,26 +23,31 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private readonly IUnityCliLoopServerRecoveryCoordinator _recoveryCoordinator;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
+        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
 
         public SessionRecoveryService(
             IUnityCliLoopServerRecoveryCoordinator recoveryCoordinator,
-            IDomainReloadDetectionService domainReloadDetectionService)
+            IDomainReloadDetectionService domainReloadDetectionService,
+            UnityCliLoopEditorSettingsService editorSettingsService)
         {
             System.Diagnostics.Debug.Assert(recoveryCoordinator != null, "recoveryCoordinator must not be null");
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
+            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
 
             _recoveryCoordinator = recoveryCoordinator
                 ?? throw new System.ArgumentNullException(nameof(recoveryCoordinator));
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new System.ArgumentNullException(nameof(domainReloadDetectionService));
+            _editorSettingsService = editorSettingsService
+                ?? throw new System.ArgumentNullException(nameof(editorSettingsService));
         }
 
         public ValidationResult RestoreServerStateIfNeeded(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
-            bool wasRunning = UnityCliLoopEditorSettings.GetIsServerRunning();
-            bool isAfterCompile = UnityCliLoopEditorSettings.GetIsAfterCompile();
+            bool wasRunning = _editorSettingsService.GetIsServerRunning();
+            bool isAfterCompile = _editorSettingsService.GetIsAfterCompile();
 
             IUnityCliLoopServerInstance currentServer = _recoveryCoordinator.CurrentServer;
             if (currentServer?.IsRunning == true)
@@ -56,14 +61,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
                 if (isAfterCompile)
                 {
-                    UnityCliLoopEditorSettings.ClearAfterCompileFlag();
+                    _editorSettingsService.ClearAfterCompileFlag();
                 }
                 return ValidationResult.Success();
             }
 
             if (isAfterCompile)
             {
-                UnityCliLoopEditorSettings.ClearAfterCompileFlag();
+                _editorSettingsService.ClearAfterCompileFlag();
             }
 
             if (wasRunning && (currentServer == null || !currentServer.IsRunning))
@@ -87,10 +92,10 @@ namespace io.github.hatayama.UnityCliLoop.Application
             await EditorDelay.DelayFrame(timeoutFrames, ct);
             ct.ThrowIfCancellationRequested();
 
-            bool isStillShowingUI = UnityCliLoopEditorSettings.GetShowReconnectingUI();
+            bool isStillShowingUI = _editorSettingsService.GetShowReconnectingUI();
             if (isStillShowingUI)
             {
-                UnityCliLoopEditorSettings.ClearReconnectingFlags();
+                _editorSettingsService.ClearReconnectingFlags();
             }
         }
     }

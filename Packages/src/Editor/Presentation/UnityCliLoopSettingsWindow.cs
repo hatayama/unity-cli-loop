@@ -23,11 +23,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const double ToolSettingsRegistryWarmupMaxDelaySeconds = 0.8;
         private const int ToolSettingsRegistryWarmupMaxAttempts = 5;
 
+        private static UnityCliLoopEditorSettingsService RegisteredEditorSettingsService;
+
         private UnityCliLoopSettingsWindowUI _view;
         private UnityCliLoopSettingsModel _model;
         private UnityCliLoopSettingsWindowEventHandler _eventHandler;
         private SkillSetupUseCase _skillSetupUseCase;
         private ToolSettingsUseCase _toolSettingsUseCase;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
 
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private bool _installSkillsFlat;
@@ -49,6 +52,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             UnityCliLoopSettingsWindow window = GetWindow<UnityCliLoopSettingsWindow>("Unity CLI Loop");
             window.Show();
+        }
+
+        internal static void InitializeEditorServices(UnityCliLoopEditorSettingsService editorSettingsService)
+        {
+            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+
+            RegisteredEditorSettingsService = editorSettingsService
+                ?? throw new ArgumentNullException(nameof(editorSettingsService));
         }
 
         private void OnEnable()
@@ -85,13 +96,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeModel()
         {
-            _model = new UnityCliLoopSettingsModel(_toolSettingsUseCase);
+            _model = new UnityCliLoopSettingsModel(
+                _toolSettingsUseCase,
+                _editorSettingsService);
         }
 
         private void InitializeApplicationServices()
         {
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
             _toolSettingsUseCase = ToolSettingsUseCaseRegistry.GetRegisteredUseCase();
+            _editorSettingsService = GetEditorSettingsService();
         }
 
         private void InitializeView()
@@ -142,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private async void HandlePostCompileMode()
         {
             _model.EnablePostCompileMode();
-            UnityCliLoopEditorSettings.SetShowReconnectingUI(false);
+            _editorSettingsService.SetShowReconnectingUI(false);
 
             Task recoveryTask = UnityCliLoopServerApplicationFacade.RecoveryTask;
             if (recoveryTask != null && !recoveryTask.IsCompleted)
@@ -150,11 +164,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 await recoveryTask;
             }
 
-            bool isAfterCompile = UnityCliLoopEditorSettings.GetIsAfterCompile();
+            bool isAfterCompile = _editorSettingsService.GetIsAfterCompile();
 
             if (isAfterCompile)
             {
-                UnityCliLoopEditorSettings.ClearAfterCompileFlag();
+                _editorSettingsService.ClearAfterCompileFlag();
                 return;
             }
 
@@ -839,7 +853,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             // Claude Code does not resolve nested skill folders, so editor-driven installs stay flat for every target.
             _installSkillsFlat = ForceFlatSkillInstall;
-            UnityCliLoopEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
+            _editorSettingsService.SetInstallSkillsFlat(_installSkillsFlat);
+        }
+
+        private static UnityCliLoopEditorSettingsService GetEditorSettingsService()
+        {
+            if (RegisteredEditorSettingsService == null)
+            {
+                throw new InvalidOperationException("Unity CLI Loop editor settings service is not registered.");
+            }
+
+            return RegisteredEditorSettingsService;
         }
 
         private void HandleRefreshSkillsState()

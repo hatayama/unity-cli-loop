@@ -25,23 +25,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public event Action ServerStopping;
         public event Action ServerLoopExited;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
+        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
 
         public UnityCliLoopBridgeServerInstanceFactory()
-            : this(new DomainReloadDetectionFileService())
+            : this(CreateDefaultEditorSettingsService())
         {
         }
 
-        internal UnityCliLoopBridgeServerInstanceFactory(IDomainReloadDetectionService domainReloadDetectionService)
+        private UnityCliLoopBridgeServerInstanceFactory(UnityCliLoopEditorSettingsService editorSettingsService)
+            : this(new DomainReloadDetectionFileService(editorSettingsService), editorSettingsService)
+        {
+        }
+
+        internal UnityCliLoopBridgeServerInstanceFactory(
+            IDomainReloadDetectionService domainReloadDetectionService,
+            UnityCliLoopEditorSettingsService editorSettingsService)
         {
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
+            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
 
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
+            _editorSettingsService = editorSettingsService
+                ?? throw new ArgumentNullException(nameof(editorSettingsService));
         }
 
         public IUnityCliLoopServerInstance Create()
         {
-            UnityCliLoopBridgeServer server = new(_domainReloadDetectionService);
+            UnityCliLoopBridgeServer server = new(_domainReloadDetectionService, _editorSettingsService);
             server.ServerStarted += NotifyServerStarted;
             server.ServerStopping += NotifyServerStopping;
             server.ServerLoopExited += NotifyServerLoopExited;
@@ -63,6 +74,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             ServerLoopExited?.Invoke();
         }
+
+        private static UnityCliLoopEditorSettingsService CreateDefaultEditorSettingsService()
+        {
+            return new UnityCliLoopEditorSettingsService(new UnityCliLoopEditorSettingsRepository());
+        }
     }
 
     /// <summary>
@@ -78,6 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // Subscribers must marshal to main thread before accessing Unity APIs.
         public event Action ServerLoopExited;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
+        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
         
         // HResult error codes for normal disconnection detection
         private static readonly HashSet<int> NormalDisconnectionHResults = new()
@@ -100,16 +117,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly ConcurrentDictionary<string, Stream> _clientStreams = new();
 
         public UnityCliLoopBridgeServer()
-            : this(new DomainReloadDetectionFileService())
+            : this(CreateDefaultEditorSettingsService())
         {
         }
 
-        internal UnityCliLoopBridgeServer(IDomainReloadDetectionService domainReloadDetectionService)
+        private UnityCliLoopBridgeServer(UnityCliLoopEditorSettingsService editorSettingsService)
+            : this(new DomainReloadDetectionFileService(editorSettingsService), editorSettingsService)
+        {
+        }
+
+        internal UnityCliLoopBridgeServer(
+            IDomainReloadDetectionService domainReloadDetectionService,
+            UnityCliLoopEditorSettingsService editorSettingsService)
         {
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
+            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
 
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
+            _editorSettingsService = editorSettingsService
+                ?? throw new ArgumentNullException(nameof(editorSettingsService));
+        }
+
+        private static UnityCliLoopEditorSettingsService CreateDefaultEditorSettingsService()
+        {
+            return new UnityCliLoopEditorSettingsService(new UnityCliLoopEditorSettingsRepository());
         }
         
         /// <summary>
@@ -347,7 +379,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     catch (ThreadAbortException ex)
                     {
                         // Log and re-throw ThreadAbortException
-                        if (!UnityCliLoopEditorSettings.GetIsDomainReloadInProgress())
+                        if (!_editorSettingsService.GetIsDomainReloadInProgress())
                         {
                             OnError?.Invoke($"Unexpected thread abort: {ex.Message}");
                         }
@@ -391,7 +423,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             catch (ThreadAbortException ex)
             {
                 // Log and re-throw ThreadAbortException
-                if (!UnityCliLoopEditorSettings.GetIsDomainReloadInProgress())
+                if (!_editorSettingsService.GetIsDomainReloadInProgress())
                 {
                     OnError?.Invoke($"Unexpected thread abort: {ex.Message}");
                 }

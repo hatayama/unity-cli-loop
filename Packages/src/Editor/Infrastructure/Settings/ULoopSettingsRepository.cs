@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using UnityEngine;
 
-using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -17,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const string LEGACY_ALLOW_THIRD_PARTY_TOOLS_FIELD = "allowThirdPartyTools";
         private readonly ToolSettingsService _toolSettingsService;
+        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
 
         private string SettingsFilePath =>
             Path.Combine(UnityCliLoopConstants.ULOOP_DIR, UnityCliLoopConstants.ULOOP_SETTINGS_FILE_NAME);
@@ -26,11 +26,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private ULoopSettingsData _cachedSettings;
 
-        public ULoopSettingsRepository(ToolSettingsService toolSettingsService)
+        public ULoopSettingsRepository(
+            ToolSettingsService toolSettingsService,
+            UnityCliLoopEditorSettingsService editorSettingsService)
         {
             Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+            Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
 
             _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
+            _editorSettingsService = editorSettingsService ?? throw new ArgumentNullException(nameof(editorSettingsService));
         }
 
         public ULoopSettingsData GetSettings()
@@ -236,7 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // Re-save legacy file to purge security fields that are no longer in
             // UnityCliLoopEditorSettingsData — JsonUtility.ToJson only serializes defined fields,
             // so the 4 removed fields disappear from the JSON on re-serialization.
-            UnityCliLoopEditorSettings.SaveSettings(UnityCliLoopEditorSettings.GetSettings());
+            _editorSettingsService.SaveSettings(_editorSettingsService.GetSettings());
         }
 
         private bool NormalizeLegacyDisabledDynamicCode()

@@ -13,20 +13,26 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// - UnityCliLoopSettingsWindowState: State objects managed by this model
     /// - UnityCliLoopSettingsWindow: Presenter that uses this model
     /// - UnityCliLoopSettingsWindowUI: View layer for UI rendering
-    /// - UnityCliLoopEditorSettings: Persistent settings storage
+    /// - UnityCliLoopEditorSettingsService: Persistent settings storage boundary
     /// </summary>
     public class UnityCliLoopSettingsModel
     {
         public UIState UI { get; private set; }
         public RuntimeState Runtime { get; private set; }
         private readonly ToolSettingsUseCase _toolSettingsUseCase;
+        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
 
-        internal UnityCliLoopSettingsModel(ToolSettingsUseCase toolSettingsUseCase)
+        internal UnityCliLoopSettingsModel(
+            ToolSettingsUseCase toolSettingsUseCase,
+            UnityCliLoopEditorSettingsService editorSettingsService)
         {
             System.Diagnostics.Debug.Assert(toolSettingsUseCase != null, "toolSettingsUseCase must not be null");
+            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
 
             _toolSettingsUseCase = toolSettingsUseCase
                 ?? throw new ArgumentNullException(nameof(toolSettingsUseCase));
+            _editorSettingsService = editorSettingsService
+                ?? throw new ArgumentNullException(nameof(editorSettingsService));
             UI = new UIState();
             Runtime = new RuntimeState();
         }
@@ -54,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         /// </summary>
         public void LoadFromSettings()
         {
-            UnityCliLoopEditorSettingsData settings = UnityCliLoopEditorSettings.GetSettings();
+            UnityCliLoopEditorSettingsData settings = _editorSettingsService.GetSettings();
             
             UpdateUIState(ui => new UIState(
                 mainScrollPosition: ui.MainScrollPosition,
@@ -158,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 showUnityCliLoopSecuritySetting: show,
                 showToolSettings: ui.ShowToolSettings,
                 showConfiguration: ui.ShowConfiguration));
-            UnityCliLoopEditorSettings.SetShowUnityCliLoopSecuritySetting(show);
+            _editorSettingsService.SetShowUnityCliLoopSecuritySetting(show);
         }
 
         public void UpdateShowToolSettings(bool show)
@@ -168,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 showUnityCliLoopSecuritySetting: ui.ShowUnityCliLoopSecuritySetting,
                 showToolSettings: show,
                 showConfiguration: ui.ShowConfiguration));
-            UnityCliLoopEditorSettings.SetShowToolSettings(show);
+            _editorSettingsService.SetShowToolSettings(show);
         }
 
         public void UpdateToolEnabled(string toolName, bool enabled)

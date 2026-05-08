@@ -47,6 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private bool[] _sidecarExisted;
         private string[] _sidecarContents;
         private ToolSettingsService _toolSettingsService;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
 
         [SetUp]
         public void SetUp()
@@ -60,6 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _legacyFileExisted = File.Exists(LegacySettingsFilePath);
             _legacyFileContent = _legacyFileExisted ? File.ReadAllText(LegacySettingsFilePath) : null;
             _toolSettingsService = new ToolSettingsService(new ToolSettingsRepository());
+            _editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateServiceWithRepository(out _editorSettingsRepository);
+            ULoopSettings.RegisterService(new ULoopSettingsRepository(_toolSettingsService, _editorSettingsService));
 
             _sidecarExisted = new bool[AllSidecarPaths.Length];
             _sidecarContents = new string[AllSidecarPaths.Length];
@@ -402,7 +407,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private void InvalidateBothCaches()
         {
             ULoopSettings.InvalidateCache();
-            UnityCliLoopEditorSettings.InvalidateCache();
+            _editorSettingsRepository.InvalidateCache();
             _toolSettingsService.InvalidateCache();
         }
 

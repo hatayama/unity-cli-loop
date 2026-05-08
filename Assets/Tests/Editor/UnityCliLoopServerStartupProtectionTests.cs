@@ -31,8 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that assembly-reload recovery clears the startup protection window before shutdown.
             UnityCliLoopServerControllerService service = CreateControllerService();
+            UnityCliLoopEditorSettingsService editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateService();
 
-            UnityCliLoopEditorSettingsData originalSettings = CloneSettings(UnityCliLoopEditorSettings.GetSettings());
+            UnityCliLoopEditorSettingsData originalSettings = CloneSettings(editorSettingsService.GetSettings());
 
             try
             {
@@ -50,8 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                UnityCliLoopEditorSettings.SaveSettings(originalSettings);
-                new DomainReloadDetectionFileService().DeleteLockFile();
+                editorSettingsService.SaveSettings(originalSettings);
+                new DomainReloadDetectionFileService(editorSettingsService).DeleteLockFile();
                 service.ClearStartupProtection();
             }
         }
@@ -85,10 +87,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
+            UnityCliLoopEditorSettingsService editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateService();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService());
+                new DomainReloadDetectionFileService(editorSettingsService),
+                editorSettingsService);
         }
 
         /// <summary>

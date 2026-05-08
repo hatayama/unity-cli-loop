@@ -15,21 +15,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class DomainReloadRecoveryUseCaseTests
     {
         private bool _originalIsServerRunning;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
         private IDomainReloadDetectionService _domainReloadDetectionService;
 
         [SetUp]
         public void SetUp()
         {
             // Save original session state
-            _originalIsServerRunning = UnityCliLoopEditorSettings.GetIsServerRunning();
-            _domainReloadDetectionService = new DomainReloadDetectionFileService();
+            _editorSettingsService = UnityCliLoopEditorSettingsTestFactory.CreateService();
+            _originalIsServerRunning = _editorSettingsService.GetIsServerRunning();
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService);
         }
 
         [TearDown]
         public void TearDown()
         {
             // Restore original session state
-            UnityCliLoopEditorSettings.UpdateSettings(s => s with
+            _editorSettingsService.UpdateSettings(s => s with
             {
                 isServerRunning = _originalIsServerRunning,
                 isAfterCompile = false,
@@ -47,49 +49,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ExecuteBeforeDomainReload_ShouldUseSessionState_WhenServerInstanceIsNull()
         {
             // Arrange
-            UnityCliLoopEditorSettings.SetIsServerRunning(true);
+            _editorSettingsService.SetIsServerRunning(true);
 
-            DomainReloadRecoveryUseCase useCase = CreateUseCase(_domainReloadDetectionService);
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(
+                _domainReloadDetectionService,
+                _editorSettingsService);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
 
             // Assert
             Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
-            Assert.IsTrue(UnityCliLoopEditorSettings.GetIsAfterCompile(), "IsAfterCompile should be set to true");
+            Assert.IsTrue(_editorSettingsService.GetIsAfterCompile(), "IsAfterCompile should be set to true");
         }
 
         [Test]
         public void ExecuteBeforeDomainReload_ShouldNotSaveState_WhenBothInstanceAndSessionAreNotRunning()
         {
             // Arrange
-            UnityCliLoopEditorSettings.SetIsServerRunning(false);
-            UnityCliLoopEditorSettings.UpdateSettings(s => s with { isAfterCompile = false });
+            _editorSettingsService.SetIsServerRunning(false);
+            _editorSettingsService.UpdateSettings(s => s with { isAfterCompile = false });
 
-            DomainReloadRecoveryUseCase useCase = CreateUseCase(_domainReloadDetectionService);
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(
+                _domainReloadDetectionService,
+                _editorSettingsService);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
 
             // Assert
             Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
-            Assert.IsFalse(UnityCliLoopEditorSettings.GetIsAfterCompile(), "IsAfterCompile should remain false when server was not running");
+            Assert.IsFalse(_editorSettingsService.GetIsAfterCompile(), "IsAfterCompile should remain false when server was not running");
         }
 
         [Test]
         public void ExecuteBeforeDomainReload_ShouldPreferInstanceState_WhenInstanceIsRunning()
         {
             // Arrange
-            UnityCliLoopEditorSettings.SetIsServerRunning(true);
+            _editorSettingsService.SetIsServerRunning(true);
 
             // Create a running server instance
             UnityCliLoopBridgeServer server = null;
             try
             {
-                server = new UnityCliLoopBridgeServer(_domainReloadDetectionService);
+                server = new UnityCliLoopBridgeServer(
+                    _domainReloadDetectionService,
+                    _editorSettingsService);
                 server.StartServer();
 
-                DomainReloadRecoveryUseCase useCase = CreateUseCase(_domainReloadDetectionService);
+                DomainReloadRecoveryUseCase useCase = CreateUseCase(
+                    _domainReloadDetectionService,
+                    _editorSettingsService);
 
                 // Act
                 ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(server);
@@ -105,14 +115,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         private static DomainReloadRecoveryUseCase CreateUseCase(
-            IDomainReloadDetectionService domainReloadDetectionService)
+            IDomainReloadDetectionService domainReloadDetectionService,
+            UnityCliLoopEditorSettingsService editorSettingsService)
         {
             TestRecoveryCoordinator recoveryCoordinator = new();
             SessionRecoveryService sessionRecoveryService =
-                new SessionRecoveryService(recoveryCoordinator, domainReloadDetectionService);
+                new SessionRecoveryService(
+                    recoveryCoordinator,
+                    domainReloadDetectionService,
+                    editorSettingsService);
             return new DomainReloadRecoveryUseCase(
                 sessionRecoveryService,
-                domainReloadDetectionService);
+                domainReloadDetectionService,
+                editorSettingsService);
         }
 
         /// <summary>

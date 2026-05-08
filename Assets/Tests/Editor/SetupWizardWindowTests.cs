@@ -24,6 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private bool _settingsFileExisted;
         private string _settingsFileContent;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
 
         [SetUp]
         public void SetUp()
@@ -37,14 +39,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             DeleteIfExists(SettingsFilePath);
-            UnityCliLoopEditorSettings.InvalidateCache();
+            _editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateServiceWithRepository(out _editorSettingsRepository);
+            SetupWizardWindow.InitializeEditorServices(_editorSettingsService);
+            _editorSettingsRepository.InvalidateCache();
         }
 
         [TearDown]
         public void TearDown()
         {
             RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
-            UnityCliLoopEditorSettings.InvalidateCache();
+            _editorSettingsRepository.InvalidateCache();
         }
 
         [TestCase("", "1.7.3", false, true)]
@@ -68,60 +73,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void MaybeRecordLastSeenVersion_WhenAutoShow_UpdatesStoredVersion()
         {
-            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
 
             SetupWizardWindow.MaybeRecordLastSeenVersion(true, "1.7.3");
 
-            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
         }
 
         [Test]
         public void MaybeRecordLastSeenVersion_WhenManualShow_KeepsStoredVersion()
         {
-            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
 
             SetupWizardWindow.MaybeRecordLastSeenVersion(false, "1.7.3");
 
-            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
         }
 
         [Test]
         public void MaybeRecordSuppressedVersion_WhenAutoShowSuppressed_UpdatesStoredVersion()
         {
-            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
 
             SetupWizardWindow.MaybeRecordSuppressedVersion(true, "1.7.3");
 
-            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
         }
 
         [Test]
         public void MaybeRecordSuppressedVersion_WhenAutoShowAllowed_KeepsStoredVersion()
         {
-            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
 
             SetupWizardWindow.MaybeRecordSuppressedVersion(false, "1.7.3");
 
-            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
         }
 
         [Test]
         public void TryReuseOpenWindow_WhenExistingWindowAndAutoShow_FocusesWindowAndRecordsVersion()
         {
             bool focusedExistingWindow = false;
-            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
@@ -134,14 +139,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(reused, Is.True);
             Assert.That(focusedExistingWindow, Is.True);
-            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
         }
 
         [Test]
         public void TryReuseOpenWindow_WhenExistingWindowAndManualShow_FocusesWindowWithoutRecordingVersion()
         {
             bool focusedExistingWindow = false;
-            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
@@ -154,14 +159,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(reused, Is.True);
             Assert.That(focusedExistingWindow, Is.True);
-            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
         }
 
         [Test]
         public void TryReuseOpenWindow_WhenNoExistingWindow_DoesNotFocusOrRecordVersion()
         {
             bool focusedExistingWindow = false;
-            UnityCliLoopEditorSettings.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2"
             });
@@ -174,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(reused, Is.False);
             Assert.That(focusedExistingWindow, Is.False);
-            Assert.That(UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
         }
 
         [Test]

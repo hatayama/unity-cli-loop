@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using UnityEditor;
 
@@ -8,13 +9,24 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Application service responsible for Domain Reload detection and state management
-    /// Single responsibility: Domain Reload lifecycle management
-    /// Related classes: UnityCliLoopEditorSettings, UnityCliLoopServerController
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
+    /// Infrastructure implementation that persists Domain Reload detection state through files and editor settings.
     /// </summary>
     public sealed class DomainReloadDetectionFileService : IDomainReloadDetectionService
     {
+        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
+
+        public DomainReloadDetectionFileService()
+            : this(new UnityCliLoopEditorSettingsService(new UnityCliLoopEditorSettingsRepository()))
+        {
+        }
+
+        internal DomainReloadDetectionFileService(UnityCliLoopEditorSettingsService editorSettingsService)
+        {
+            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+
+            _editorSettingsService = editorSettingsService ?? throw new ArgumentNullException(nameof(editorSettingsService));
+        }
+
         private static bool IsBackgroundUnityProcess()
         {
             bool isAssetImportWorker = AssetDatabase.IsAssetImportWorkerProcess();
@@ -74,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // Save session state if server is running
             if (serverIsRunning)
             {
-                UnityCliLoopEditorSettings.UpdateSettings(s =>
+                _editorSettingsService.UpdateSettings(s =>
                 {
                     UnityCliLoopEditorSettingsData updatedSettings = s with
                     {
@@ -91,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             else
             {
-                UnityCliLoopEditorSettings.SetIsDomainReloadInProgress(true);
+                _editorSettingsService.SetIsDomainReloadInProgress(true);
             }
 
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(true);
@@ -124,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // to avoid a gap between domain reload completion and server ready
 
             // Clear Domain Reload completion flag
-            UnityCliLoopEditorSettings.ClearDomainReloadFlag();
+            _editorSettingsService.ClearDomainReloadFlag();
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
 
             // Log recording
@@ -144,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            UnityCliLoopEditorSettings.UpdateSettings(s => s with
+            _editorSettingsService.UpdateSettings(s => s with
             {
                 isDomainReloadInProgress = false,
                 isAfterCompile = false,
@@ -168,7 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <returns>True if reconnection UI display is required</returns>
         public bool ShouldShowReconnectingUI()
         {
-            return UnityCliLoopEditorSettings.GetShowReconnectingUI();
+            return _editorSettingsService.GetShowReconnectingUI();
         }
 
         private static void CreateLockFile()

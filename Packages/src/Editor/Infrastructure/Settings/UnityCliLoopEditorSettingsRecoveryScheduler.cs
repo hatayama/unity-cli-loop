@@ -1,6 +1,6 @@
 using UnityEditor;
 
-using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -10,14 +10,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class UnityCliLoopEditorSettingsRecoveryScheduler
     {
-        internal static void ScheduleForEditorStartup()
+        internal static void ScheduleForEditorStartup(UnityCliLoopEditorSettingsService editorSettingsService)
         {
+            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+
             if (AssetDatabase.IsAssetImportWorkerProcess())
             {
                 return;
             }
 
-            EditorApplication.delayCall += UnityCliLoopEditorSettings.RecoverSettingsFileIfNeeded;
+            EditorApplication.delayCall += editorSettingsService.RecoverSettingsFileIfNeeded;
         }
     }
 }
