@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Whether to wait for domain reload completion before the caller returns.
         /// </summary>
-        public bool WaitForDomainReload { get; set; } = false;
+        public bool WaitForDomainReload { get; set; } = true;
 
         /// <summary>
         /// Internal request identifier used for delayed result recovery across domain reload.

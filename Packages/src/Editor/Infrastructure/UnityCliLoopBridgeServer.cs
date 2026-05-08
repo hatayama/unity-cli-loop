@@ -95,11 +95,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         public event Action<string> OnError;
 
-        private string GenerateClientKey(string endpoint)
-        {
-            return endpoint;
-        }
-
         public void StartServer(bool clearServerStartingLockWhenReady = true)
         {
             if (_isRunning)
@@ -384,8 +379,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         private async Task HandleClientAsync(BridgeClientConnection client, CancellationToken cancellationToken)
         {
-            string clientEndpoint = client.Endpoint;
-            string clientKey = GenerateClientKey(clientEndpoint);
+            string clientKey = client.Endpoint;
             
             // Initialize new components for Content-Length framing
             DynamicBufferManager bufferManager = null;
@@ -431,8 +425,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         {
                             if (string.IsNullOrWhiteSpace(requestJson)) continue;
                             
-                            // JSON-RPC processing and response sending with client context
-                            string responseJson = await JsonRpcProcessor.ProcessRequest(requestJson, clientEndpoint);
+                            string responseJson = await JsonRpcProcessor.ProcessRequest(requestJson);
                             
                             if (!string.IsNullOrEmpty(responseJson))
                             {

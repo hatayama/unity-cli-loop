@@ -5,15 +5,12 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// </summary>
     public abstract class UnityCliLoopToolResponse
     {
-        /// <summary>
-        /// Unity package version for CLI compatibility checks.
-        /// </summary>
-        public string Ver { get; private set; } = string.Empty;
+    }
 
-        public void SetVersion(string version)
-        {
-            System.Diagnostics.Debug.Assert(version != null, "version must not be null.");
-            Ver = version;
-        }
+    public interface IUnityCliLoopTimingResponse
+    {
+        bool EmitsTimingsInJsonResponse { get; }
+
+        void AddTiming(string timing);
     }
 }

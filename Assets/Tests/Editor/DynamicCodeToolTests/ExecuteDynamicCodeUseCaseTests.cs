@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -21,6 +23,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void SetUp()
         {
             DynamicCodeForegroundWarmupState.Reset();
+        }
+
+        [Test]
+        public void ExecuteDynamicCodeResponse_WhenSerializedWithoutTimings_DoesNotExposeTimingControlFields()
+        {
+            // Tests that timing control remains an internal interface concern by default.
+            ExecuteDynamicCodeResponse response = new()
+            {
+                Success = true,
+                Result = "ok",
+                EmitTimingsInJsonResponse = false
+            };
+
+            JObject serializedResponse = JObject.Parse(JsonConvert.SerializeObject(response));
+
+            Assert.That(serializedResponse["Timings"], Is.Null);
+            Assert.That(serializedResponse["EmitTimingsInJsonResponse"], Is.Null);
+            Assert.That(serializedResponse["EmitsTimingsInJsonResponse"], Is.Null);
         }
 
         [Test]
@@ -211,6 +231,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenYieldingStartupProbeSucceeds_ShouldSkipNextForegroundWarmup()
+        {
+            // Tests that tool readiness warmup prevents the next user request from paying hidden warmup cost.
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "probe"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "user"
+                });
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+
+            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
+            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
+
+            try
+            {
+                ExecuteDynamicCodeResponse probeResponse = await useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema
+                    {
+                        Code = "return \"probe\";",
+                        YieldToForegroundRequests = true
+                    },
+                    CancellationToken.None);
+                ExecuteDynamicCodeResponse userResponse = await useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema
+                    {
+                        Code = "return \"user\";"
+                    },
+                    CancellationToken.None);
+
+                Assert.That(probeResponse.Success, Is.True);
+                Assert.That(userResponse.Success, Is.True);
+                Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(1));
+                Assert.That(runtime.Requests, Has.Count.EqualTo(1));
+                Assert.That(runtime.Requests[0].Code, Is.EqualTo("return \"user\";"));
+            }
+            finally
+            {
+                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
+            }
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenInitialExecutionSucceeds_ShouldNotRetry()
         {
             MarkForegroundWarmupCompleted();
@@ -256,6 +324,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 new ExecutionResult
                 {
                     Success = true,
+                    Result = "warm"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
                     Result = "ok"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
@@ -273,9 +346,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     CancellationToken.None);
 
                 Assert.That(response.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(2));
-                Assert.That(runtime.Requests[0].Code, Does.Contain("Unity CLI Loop dynamic code prewarm"));
-                Assert.That(runtime.Requests[1].Code, Is.EqualTo("return 1;"));
+                Assert.That(runtime.Requests, Has.Count.EqualTo(3));
+                AssertPrewarmCodeMatchesLiteralReturnShape(
+                    runtime.Requests[0].Code,
+                    "return \"user value\";");
+                AssertPrewarmCodeMatchesLiteralReturnShape(
+                    runtime.Requests[1].Code,
+                    "return\n  \"user value\";");
+                Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 1;"));
             }
             finally
             {
@@ -287,6 +365,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public async Task ExecuteAsync_WhenForegroundWarmupAlreadyCompleted_ShouldNotRepeatIt()
         {
             FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "warm"
+                },
                 new ExecutionResult
                 {
                     Success = true,
@@ -324,8 +407,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
                 Assert.That(firstResponse.Success, Is.True);
                 Assert.That(secondResponse.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(3));
-                Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 2;"));
+                Assert.That(runtime.Requests, Has.Count.EqualTo(4));
+                Assert.That(runtime.Requests[3].Code, Is.EqualTo("return 2;"));
             }
             finally
             {
@@ -375,7 +458,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Assert.That(firstResponse.Success, Is.True);
                 Assert.That(secondResponse.Success, Is.True);
                 Assert.That(runtime.Requests, Has.Count.EqualTo(3));
-                Assert.That(runtime.Requests[0].Code, Does.Contain("Unity CLI Loop dynamic code prewarm"));
+                AssertPrewarmCodeMatchesLiteralReturnShape(
+                    runtime.Requests[0].Code,
+                    "return \"user value\";");
                 Assert.That(runtime.Requests[1].Code, Is.EqualTo("return 1;"));
                 Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 2;"));
             }
@@ -775,6 +860,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             }
 
             DynamicCodeForegroundWarmupState.MarkCompleted();
+        }
+
+        private static void AssertPrewarmCodeMatchesLiteralReturnShape(
+            string prewarmCode,
+            string userCode)
+        {
+            PreparedDynamicCode prewarm = DynamicCodeSourcePreparer.Prepare(
+                prewarmCode,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+            PreparedDynamicCode userReturn = DynamicCodeSourcePreparer.Prepare(
+                userCode,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.That(prewarm.PreparedSource, Is.EqualTo(userReturn.PreparedSource));
         }
 
         /// <summary>

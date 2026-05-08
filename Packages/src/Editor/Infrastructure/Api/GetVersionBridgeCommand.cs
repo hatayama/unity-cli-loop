@@ -9,15 +9,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         public static GetVersionResponse Execute()
         {
-            GetVersionResponse response = new()            {
-                UnityVersion = UnityEngine.Application.unityVersion,
-                Platform = UnityEngine.Application.platform.ToString(),
-                DataPath = UnityEngine.Application.dataPath,
-                PersistentDataPath = UnityEngine.Application.persistentDataPath,
-                TemporaryCachePath = UnityEngine.Application.temporaryCachePath,
-                IsEditor = UnityEngine.Application.isEditor,
-                ProductName = UnityEngine.Application.productName,
-                CompanyName = UnityEngine.Application.companyName
+            GetVersionResponse response = new()
+            {
+                UnityVersion = UnityEngine.Application.unityVersion
             };
 
             Debug.Assert(!string.IsNullOrWhiteSpace(response.UnityVersion), "Unity version must be available.");

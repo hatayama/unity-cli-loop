@@ -37,18 +37,27 @@ func shouldWaitForCompileDomainReload(command string, params map[string]any) boo
 	if command != compileCommandName {
 		return false
 	}
-	return boolParam(params[compileWaitParam])
+	return compileDomainReloadWaitEnabled(params)
 }
 
-func boolParam(value any) bool {
-	switch typed := value.(type) {
-	case bool:
-		return typed
-	case string:
-		return strings.EqualFold(typed, "true")
-	default:
-		return false
+func compileDomainReloadWaitEnabled(params map[string]any) bool {
+	value, ok := params[compileWaitParam].(bool)
+	if ok {
+		return value
 	}
+
+	// Why: native CLI compile is a user-facing checkpoint; waiting by default
+	// ensures the post-compile readiness probe runs after the domain is usable.
+	return true
+}
+
+func prepareCompileWaitParams(params map[string]any) (string, error) {
+	requestID, err := ensureCompileRequestID(params)
+	if err != nil {
+		return "", err
+	}
+	params[compileWaitParam] = true
+	return requestID, nil
 }
 
 func ensureCompileRequestID(params map[string]any) (string, error) {

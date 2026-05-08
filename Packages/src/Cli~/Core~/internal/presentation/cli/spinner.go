@@ -8,7 +8,10 @@ import (
 	"time"
 )
 
-const spinnerFrameInterval = 80 * time.Millisecond
+const (
+	spinnerFrameInterval          = 80 * time.Millisecond
+	executeDynamicCodeCommandName = "execute-dynamic-code"
+)
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
@@ -24,7 +27,7 @@ type terminalSpinner struct {
 }
 
 func newToolSpinner(stderr io.Writer, command string) *terminalSpinner {
-	return newSpinner(stderr, isTerminalWriter(stderr), "Connecting to Unity...")
+	return newSpinner(stderr, shouldShowToolFeedback(command) && isTerminalWriter(stderr), "Connecting to Unity...")
 }
 
 func newLaunchSpinner(stdout io.Writer, stderr io.Writer) *terminalSpinner {
@@ -114,4 +117,8 @@ func isTerminalWriter(writer io.Writer) bool {
 	}
 
 	return info.Mode()&os.ModeCharDevice != 0
+}
+
+func shouldShowToolFeedback(command string) bool {
+	return command != executeDynamicCodeCommandName
 }

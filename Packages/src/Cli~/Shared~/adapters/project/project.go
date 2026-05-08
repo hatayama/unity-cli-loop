@@ -44,9 +44,8 @@ func ResolveConnection(startPath string, explicitProjectPath string) (domain.Con
 	canonicalProjectRoot = trimTrailingSeparators(canonicalProjectRoot)
 
 	return domain.Connection{
-		Endpoint:        CreateEndpoint(canonicalProjectRoot),
-		ProjectRoot:     canonicalProjectRoot,
-		RequestMetadata: createRequestMetadata(canonicalProjectRoot),
+		Endpoint:    CreateEndpoint(canonicalProjectRoot),
+		ProjectRoot: canonicalProjectRoot,
 	}, nil
 }
 
@@ -182,12 +181,6 @@ func resolveProjectRoot(startPath string, explicitProjectPath string) (string, e
 	}
 
 	return projectRoot, nil
-}
-
-func createRequestMetadata(projectRoot string) *domain.RequestMetadata {
-	return &domain.RequestMetadata{
-		ExpectedProjectRoot: projectRoot,
-	}
 }
 
 func createEndpointName(canonicalProjectRoot string) string {

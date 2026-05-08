@@ -1,7 +1,9 @@
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.Compilation;
+using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -18,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         private CompileLogDisplay _logDisplay;
         private Vector2 _scrollPosition;
         private bool _forceRecompile = false;
+        private bool _isPostCompileReadinessRunning = false;
 
         // Note: Compile window data is now managed via McpSessionManager
 
@@ -94,9 +97,8 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             _forceRecompile = EditorGUILayout.Toggle("Force Recompile", _forceRecompile);
             GUILayout.Space(5);
 
-            EditorGUI.BeginDisabledGroup(_compileController.IsCompiling);
-            string buttonText = _compileController.IsCompiling ? "Compiling..." :
-                               (_forceRecompile ? "Run Force Compile" : "Run Compile");
+            EditorGUI.BeginDisabledGroup(IsCompileActionBusy());
+            string buttonText = CreateCompileButtonText();
             if (GUILayout.Button(buttonText, GUILayout.Height(30)))
             {
                 // Execute compilation using async/await
@@ -125,7 +127,21 @@ namespace io.github.hatayama.UnityCliLoop.Dev
 
         private async Task ExecuteCompileAsync()
         {
-            CompileResult result = await _compileController.TryCompileAsync(_forceRecompile);
+            CompileResult result = await _compileController.TryCompileAsync(_forceRecompile, CancellationToken.None);
+            if (ShouldRunExecuteDynamicCodeReadinessAfterCompile(result))
+            {
+                _isPostCompileReadinessRunning = true;
+                Repaint();
+                try
+                {
+                    await RunExecuteDynamicCodeReadinessProbesAfterCompileAsync(CancellationToken.None);
+                }
+                finally
+                {
+                    _isPostCompileReadinessRunning = false;
+                    Repaint();
+                }
+            }
             
             // Output result to log (for debugging)
             string message = string.IsNullOrEmpty(result.Message) ? "(none)" : result.Message;
@@ -141,6 +157,50 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             }
 
             UnityEngine.Debug.Log(logMessage);
+        }
+
+        private static bool ShouldRunExecuteDynamicCodeReadinessAfterCompile(CompileResult result)
+        {
+            return result.Success == true;
+        }
+
+        private static async Task RunExecuteDynamicCodeReadinessProbesAfterCompileAsync(CancellationToken ct)
+        {
+            // Why: the editor Compile Tool bypasses the native CLI's post-compile readiness wait,
+            // so it must run the same hidden probe path before handing control back to the user.
+            foreach (string code in ExecuteDynamicCodeReadinessProbe.CreateReturnStringProbeCodes())
+            {
+                ct.ThrowIfCancellationRequested();
+                JObject parameters = new()
+                {
+                    ["Code"] = code,
+                    ["CompileOnly"] = false,
+                    ["YieldToForegroundRequests"] = false
+                };
+                await UnityCliLoopToolRegistrar.GetRegistry().ExecuteToolAsync(
+                    "execute-dynamic-code",
+                    parameters);
+            }
+        }
+
+        private bool IsCompileActionBusy()
+        {
+            return _compileController.IsCompiling || _isPostCompileReadinessRunning;
+        }
+
+        private string CreateCompileButtonText()
+        {
+            if (_compileController.IsCompiling)
+            {
+                return "Compiling...";
+            }
+
+            if (_isPostCompileReadinessRunning)
+            {
+                return "Preparing...";
+            }
+
+            return _forceRecompile ? "Run Force Compile" : "Run Compile";
         }
 
         private void OnCompileCompleted(CompileResult result)

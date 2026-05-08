@@ -1,6 +1,5 @@
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
-using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -50,18 +49,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (InternalBridgeCommandRouter.IsInternalCommand(commandName))
             {
                 response = InternalBridgeCommandRouter.Execute(commandName, paramsToken);
-                response.SetVersion(UnityCliLoopVersion.VERSION);
                 return response;
             }
 
-            Stopwatch registryAcquireStopwatch = Stopwatch.StartNew();
             UnityCliLoopToolRegistry registry = UnityCliLoopToolRegistrar.GetRegistry();
-            registryAcquireStopwatch.Stop();
 
-            Stopwatch registryExecuteStopwatch = Stopwatch.StartNew();
             response = await registry.ExecuteToolAsync(commandName, paramsToken);
-            registryExecuteStopwatch.Stop();
-            response.SetVersion(UnityCliLoopVersion.VERSION);
             return response;
         }
     }

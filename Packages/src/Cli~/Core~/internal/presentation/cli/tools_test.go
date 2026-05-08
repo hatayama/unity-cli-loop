@@ -124,6 +124,54 @@ internal: true
 	}
 }
 
+func TestFindToolForCommandUsesEmbeddedExecuteDynamicCodeDefinition(t *testing.T) {
+	// Verifies that execute-dynamic-code avoids project tool-cache loading on the hot path.
+	projectRoot := t.TempDir()
+	writeToolCache(t, projectRoot, `{
+  "version": "test",
+  "tools": []
+}`)
+
+	tool, _, ok, err := findToolForCommand(projectRoot, executeDynamicCodeCommandName)
+	if err != nil {
+		t.Fatalf("findToolForCommand failed: %v", err)
+	}
+
+	if !ok {
+		t.Fatal("execute-dynamic-code was not loaded from embedded definitions")
+	}
+	if tool.Name != executeDynamicCodeCommandName {
+		t.Fatalf("tool name mismatch: %s", tool.Name)
+	}
+}
+
+func TestFindToolForCommandUsesProjectCacheForRegularTools(t *testing.T) {
+	// Verifies that non-hot-path tools still come from the project tool cache.
+	projectRoot := t.TempDir()
+	writeToolCache(t, projectRoot, `{
+  "version": "test",
+  "tools": [
+    {
+      "name": "cached-tool",
+      "description": "cached",
+      "inputSchema": {"type": "object", "properties": {}}
+    }
+  ]
+}`)
+
+	tool, _, ok, err := findToolForCommand(projectRoot, "cached-tool")
+	if err != nil {
+		t.Fatalf("findToolForCommand failed: %v", err)
+	}
+
+	if !ok {
+		t.Fatal("cached tool was not loaded")
+	}
+	if tool.Name != "cached-tool" {
+		t.Fatalf("tool name mismatch: %s", tool.Name)
+	}
+}
+
 // Tests that internal skills without frontmatter names are filtered by their directory-derived tool names.
 func TestLoadToolsFiltersDerivedInternalSkillToolNameFromCache(t *testing.T) {
 	projectRoot := t.TempDir()

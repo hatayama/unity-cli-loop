@@ -5,12 +5,7 @@ type Endpoint struct {
 	Address string
 }
 
-type RequestMetadata struct {
-	ExpectedProjectRoot string `json:"expectedProjectRoot"`
-}
-
 type Connection struct {
-	Endpoint        Endpoint
-	ProjectRoot     string
-	RequestMetadata *RequestMetadata
+	Endpoint    Endpoint
+	ProjectRoot string
 }

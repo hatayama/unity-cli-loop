@@ -50,7 +50,7 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 	}
 
 	output := stdout.String()
-	for _, option := range []string{"--force-recompile", "--wait-for-domain-reload"} {
+	for _, option := range []string{"--force-recompile", "--no-wait-for-domain-reload"} {
 		if !strings.Contains(output, option) {
 			t.Fatalf("option %s was not listed: %s", option, output)
 		}
@@ -107,6 +107,26 @@ func TestCompletionPrintsShellScriptWithoutProject(t *testing.T) {
 	output := stdout.String()
 	if !strings.Contains(output, "complete -F _uloop_completions uloop") {
 		t.Fatalf("bash completion script mismatch: %s", output)
+	}
+}
+
+func TestCompletionDetectionSkipsRegularToolCommands(t *testing.T) {
+	// Verifies that normal tool execution avoids completion cache loading.
+	if shouldHandleCompletionRequest([]string{executeDynamicCodeCommandName, "--code", "return 1;"}) {
+		t.Fatal("execute-dynamic-code should not enter completion handling")
+	}
+}
+
+func TestCompletionDetectionHandlesCompletionCommands(t *testing.T) {
+	// Verifies that completion-specific commands still load completion metadata.
+	for _, args := range [][]string{
+		{completionCommand, "--shell", "bash"},
+		{listCommandsFlag},
+		{listOptionsFlag, "compile"},
+	} {
+		if !shouldHandleCompletionRequest(args) {
+			t.Fatalf("completion request was not detected: %#v", args)
+		}
 	}
 }
 

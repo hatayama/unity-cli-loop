@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	corecontract "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core"
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core/internal/adapters/unity"
@@ -44,9 +45,11 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 1
 	}
 
-	completionTools := loadCompletionTools(startPath, projectPath)
-	if handled, code := tryHandleCompletionRequest(remainingArgs, completionTools, stdout, stderr); handled {
-		return code
+	if shouldHandleCompletionRequest(remainingArgs) {
+		completionTools := loadCompletionTools(startPath, projectPath)
+		if handled, code := tryHandleCompletionRequest(remainingArgs, completionTools, stdout, stderr); handled {
+			return code
+		}
 	}
 	if handled, code := tryHandleUpdateRequest(ctx, remainingArgs, stdout, stderr); handled {
 		return code
@@ -71,12 +74,6 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 1
 	}
 
-	cache, err := loadTools(connection.ProjectRoot)
-	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: command})
-		return 1
-	}
-
 	switch command {
 	case "list":
 		return runList(ctx, connection, stdout, stderr)
@@ -87,7 +84,11 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	case "fix":
 		return runFix(connection.ProjectRoot, stdout, stderr)
 	default:
-		tool, ok := findTool(cache, command)
+		tool, cache, ok, err := findToolForCommand(connection.ProjectRoot, command)
+		if err != nil {
+			writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: command})
+			return 1
+		}
 		if !ok {
 			writeErrorEnvelope(stderr, unknownCommandError(command, cache, errorContext{
 				projectRoot: connection.ProjectRoot,
@@ -123,6 +124,8 @@ func runTool(ctx context.Context, connection domain.Connection, command string, 
 		return runCompileWithDomainReloadWait(ctx, connection, params, stdout, stderr)
 	}
 
+	applyDebugTimingParams(command, params)
+	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, command)
 	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
 	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
@@ -134,18 +137,20 @@ func runTool(ctx context.Context, connection domain.Connection, command string, 
 	})
 	spinner.Stop()
 	if err != nil {
+		writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
 		writeToolFailure(stderr, err, outcome, errorContext{
 			projectRoot: connection.ProjectRoot,
 			command:     command,
 		})
 		return 1
 	}
-	writeJSON(stdout, outcome.Result)
+	writeJSON(stdout, stripDebugTimingResult(command, outcome.Result))
+	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
 	return 0
 }
 
 func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
-	requestID, err := ensureCompileRequestID(params)
+	requestID, err := prepareCompileWaitParams(params)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{
 			projectRoot: connection.ProjectRoot,
@@ -154,6 +159,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 		return 1
 	}
 
+	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, compileCommandName)
 	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
 	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
@@ -183,8 +189,8 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 		pollInterval: compileWaitPollInterval,
 		lockGrace:    compileLockGracePeriod,
 	})
-	spinner.Stop()
 	if waitErr != nil {
+		spinner.Stop()
 		writeClassifiedError(stderr, waitErr, errorContext{
 			projectRoot: connection.ProjectRoot,
 			command:     compileCommandName,
@@ -192,11 +198,30 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 		return 1
 	}
 	if !completed {
+		spinner.Stop()
 		writeErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
 		return 1
 	}
+	if compileResultSucceeded(result) {
+		spinner.Update("Warming execute-dynamic-code after compile...")
+		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
+			spinner.Stop()
+			writePostCompileWarmupWarning(stderr, err)
+		}
+	}
+	spinner.Stop()
 	writeJSON(stdout, result)
+	writeDebugTiming(stderr, compileCommandName, time.Since(startedAt), outcome)
 	return 0
+}
+
+func writePostCompileWarmupWarning(stderr io.Writer, err error) {
+	if err == nil {
+		return
+	}
+	// Why: this warmup is a hidden optimization, so it must not turn a
+	// successful compile result into a user-visible command failure.
+	_, _ = fmt.Fprintf(stderr, "warning: post-compile warmup skipped: %v\n", err)
 }
 
 func runList(ctx context.Context, connection domain.Connection, stdout io.Writer, stderr io.Writer) int {
@@ -262,4 +287,16 @@ func writeJSON(stdout io.Writer, result json.RawMessage) {
 	encoder := json.NewEncoder(stdout)
 	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(pretty)
+}
+
+type compileResultStatus struct {
+	Success *bool `json:"Success"`
+}
+
+func compileResultSucceeded(result json.RawMessage) bool {
+	var status compileResultStatus
+	if json.Unmarshal(result, &status) != nil {
+		return false
+	}
+	return status.Success != nil && *status.Success
 }

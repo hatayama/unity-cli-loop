@@ -7,60 +7,6 @@ using Microsoft.Win32.SafeHandles;
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
-    /// Carries the result data produced by Project Root Identity Validation behavior.
-    /// </summary>
-    public sealed class ProjectRootIdentityValidationResult
-    {
-        public bool IsValid { get; }
-
-        public string ErrorMessage { get; }
-
-        private ProjectRootIdentityValidationResult(bool isValid, string errorMessage)
-        {
-            IsValid = isValid;
-            ErrorMessage = errorMessage;
-        }
-
-        public static ProjectRootIdentityValidationResult Success()
-        {
-            return new ProjectRootIdentityValidationResult(true, null);
-        }
-
-        public static ProjectRootIdentityValidationResult Failure(string errorMessage)
-        {
-            return new ProjectRootIdentityValidationResult(false, errorMessage);
-        }
-    }
-
-    /// <summary>
-    /// Validates Project Root Identity data before the owning workflow continues.
-    /// </summary>
-    public static class ProjectRootIdentityValidator
-    {
-        public static ProjectRootIdentityValidationResult Validate(
-            string expectedProjectRoot,
-            string actualProjectRoot)
-        {
-            if (string.IsNullOrWhiteSpace(expectedProjectRoot))
-            {
-                return ProjectRootIdentityValidationResult.Failure("Invalid x-uloop metadata: expectedProjectRoot is required.");
-            }
-
-            if (string.IsNullOrWhiteSpace(actualProjectRoot))
-            {
-                return ProjectRootIdentityValidationResult.Failure("Fast project validation is unavailable. Restart Unity CLI Loop and retry.");
-            }
-
-            if (!string.Equals(expectedProjectRoot, actualProjectRoot, StringComparison.Ordinal))
-            {
-                return ProjectRootIdentityValidationResult.Failure("Connected Unity instance belongs to a different project.");
-            }
-
-            return ProjectRootIdentityValidationResult.Success();
-        }
-    }
-
-    /// <summary>
     /// Provides Project Root Canonicalizer behavior for Unity CLI Loop.
     /// </summary>
     public static class ProjectRootCanonicalizer

@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +42,43 @@ func TestEnsureCompileRequestIDReplacesUnsafeValue(t *testing.T) {
 	}
 	if !isSafeCompileRequestID(requestID) {
 		t.Fatalf("generated request id is unsafe: %s", requestID)
+	}
+}
+
+// Verifies that compile commands wait for domain reload even without an explicit flag.
+func TestShouldWaitForCompileDomainReloadDefaultsToCompileCommands(t *testing.T) {
+	if !shouldWaitForCompileDomainReload(compileCommandName, map[string]any{}) {
+		t.Fatal("compile should wait for domain reload by default")
+	}
+
+	if shouldWaitForCompileDomainReload("get-logs", map[string]any{}) {
+		t.Fatal("non-compile commands should not use compile wait")
+	}
+}
+
+// Verifies that the explicit compile no-wait flag preserves the fast fire-and-forget path.
+func TestShouldWaitForCompileDomainReloadRespectsExplicitFalse(t *testing.T) {
+	params := map[string]any{compileWaitParam: false}
+
+	if shouldWaitForCompileDomainReload(compileCommandName, params) {
+		t.Fatal("compile wait should be disabled by an explicit false flag")
+	}
+}
+
+// Verifies that compile wait preparation creates a request id and enables reload waiting.
+func TestPrepareCompileWaitParamsForcesDomainReloadWait(t *testing.T) {
+	params := map[string]any{}
+
+	requestID, err := prepareCompileWaitParams(params)
+	if err != nil {
+		t.Fatalf("prepareCompileWaitParams failed: %v", err)
+	}
+
+	if requestID == "" {
+		t.Fatal("request id was not generated")
+	}
+	if params[compileWaitParam] != true {
+		t.Fatalf("compile wait flag was not forced: %#v", params[compileWaitParam])
 	}
 }
 
@@ -142,5 +181,31 @@ func TestShouldWaitForCompileResultRequiresDispatchedTransportError(t *testing.T
 	outcome := domain.UnitySendOutcome{RequestDispatched: true}
 	if !shouldWaitForCompileResult(fmt.Errorf("EOF"), outcome) {
 		t.Fatal("dispatched transport error should wait")
+	}
+}
+
+// Verifies that post-compile readiness runs only after successful compile results.
+func TestCompileResultSucceededRequiresTrueSuccess(t *testing.T) {
+	if !compileResultSucceeded([]byte(`{"Success":true}`)) {
+		t.Fatal("successful compile result was not accepted")
+	}
+
+	if compileResultSucceeded([]byte(`{"Success":false,"Errors":[{"Message":"boom"}]}`)) {
+		t.Fatal("failed compile result should not trigger readiness")
+	}
+
+	if compileResultSucceeded([]byte(`{"Message":"indeterminate"}`)) {
+		t.Fatal("indeterminate compile result should not trigger readiness")
+	}
+}
+
+// Verifies that failed best-effort warmup reports a warning without taking over compile output.
+func TestWritePostCompileWarmupWarningReportsNonFatalFailure(t *testing.T) {
+	var stderr bytes.Buffer
+
+	writePostCompileWarmupWarning(&stderr, fmt.Errorf("probe failed"))
+
+	if !strings.Contains(stderr.String(), "warning: post-compile warmup skipped: probe failed") {
+		t.Fatalf("warning mismatch: %s", stderr.String())
 	}
 }

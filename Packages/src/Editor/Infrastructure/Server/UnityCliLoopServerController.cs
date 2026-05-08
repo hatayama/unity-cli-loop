@@ -522,7 +522,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     5000,
                     250,
                     cancellationToken,
-                    clearServerStartingLockWhenReady: true);
+                    // Why: the endpoint can bind before recovery warmup finishes, and deleting
+                    // the lock at bind time lets the next CLI request block on the main thread.
+                    clearServerStartingLockWhenReady: false);
 
                 if (!started)
                 {
@@ -542,6 +544,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 UnityCliLoopToolRegistrar.WarmupRegistry();
 
                 ActivateStartupProtection(5000);
+                // Why: external CLI waiters should observe readiness only after recovery
+                // warmup has finished on the Unity main thread.
+                ServerStartingLockService.DeleteOwnedLockFile(serverStartingLockToken);
             }
             catch
             {
@@ -660,6 +665,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void RemoveServerStateChangedHandler(Action handler)
         {
             _serverLifecycleRegistry.ServerStateChanged -= handler;
+        }
+
+        public void AddServerStartedHandler(Action handler)
+        {
+            _serverLifecycleRegistry.ServerStarted += handler;
+        }
+
+        public void RemoveServerStartedHandler(Action handler)
+        {
+            _serverLifecycleRegistry.ServerStarted -= handler;
         }
     }
 

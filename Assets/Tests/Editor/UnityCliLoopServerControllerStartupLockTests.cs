@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -103,6 +104,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(service.RecoveryTask, Is.Null);
         }
 
+        [Test]
+        public async Task StartRecoveryIfNeededAsync_WhenStartupLockExists_ShouldReleaseLockAfterWarmup()
+        {
+            // Tests that recovery keeps the startup lock until post-bind warmup has completed.
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            UnityCliLoopServerControllerService service = new(
+                serverInstanceFactory,
+                lifecycleRegistry);
+            string claimedLockPath = null;
+            ServerStartingLockService.OnOwnedLockFileClaimedForDeletionForTests = path => claimedLockPath = path;
+
+            try
+            {
+                await service.StartRecoveryIfNeededAsync(isAfterCompile: true, CancellationToken.None);
+
+                Assert.That(serverInstanceFactory.LastCreated.ClearServerStartingLockWhenReady, Is.False);
+                Assert.That(claimedLockPath, Is.Not.Null);
+            }
+            finally
+            {
+                ServerStartingLockService.OnOwnedLockFileClaimedForDeletionForTests = null;
+                ServerStartingLockService.DeleteLockFile();
+            }
+        }
+
         private static UnityCliLoopServerControllerService CreateControllerService()
         {
             TestServerInstanceFactory serverInstanceFactory = new();
@@ -118,9 +146,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestServerInstanceFactory : IUnityCliLoopServerInstanceFactory
         {
+            public TestServerInstance LastCreated { get; private set; }
+
             public IUnityCliLoopServerInstance Create()
             {
-                return new TestServerInstance();
+                LastCreated = new TestServerInstance();
+                return LastCreated;
             }
         }
 
@@ -129,20 +160,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestServerInstance : IUnityCliLoopServerInstance
         {
-            public bool IsRunning => false;
+            public bool IsRunning { get; private set; }
+
+            public bool? ClearServerStartingLockWhenReady { get; private set; }
 
             public string Endpoint => "test";
 
             public void StartServer(bool clearServerStartingLockWhenReady = true)
             {
+                ClearServerStartingLockWhenReady = clearServerStartingLockWhenReady;
+                IsRunning = true;
             }
 
             public void StopServer()
             {
+                IsRunning = false;
             }
 
             public void Dispose()
             {
+                IsRunning = false;
             }
         }
     }
