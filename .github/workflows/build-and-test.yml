@@ -18,6 +18,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Test native release target resolver
+        run: scripts/test-resolve-native-cli-release-target.sh
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
