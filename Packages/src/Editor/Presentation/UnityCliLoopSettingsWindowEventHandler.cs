@@ -3,6 +3,7 @@ using Unity.Profiling;
 using UnityEditor;
 using UnityEngine;
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 [assembly: InternalsVisibleTo("uLoopMCP.Tests.Editor")]
 

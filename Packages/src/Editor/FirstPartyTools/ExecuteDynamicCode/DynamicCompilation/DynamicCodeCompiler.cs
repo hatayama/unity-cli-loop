@@ -6,6 +6,7 @@ using Debug = UnityEngine.Debug;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {

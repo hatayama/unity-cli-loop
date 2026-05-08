@@ -1,13 +1,10 @@
 using System;
 using System.Diagnostics;
 
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-
-namespace io.github.hatayama.UnityCliLoop.Application
+namespace io.github.hatayama.UnityCliLoop.Domain
 {
-    // Port for persisted Unity CLI Loop permission settings.
     /// <summary>
-    /// Defines the ULoop settings boundary required by the application layer.
+    /// Defines the persistence boundary for Unity CLI Loop permission settings.
     /// </summary>
     public interface IULoopSettingsPort
     {
@@ -19,9 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
         void InvalidateCache();
     }
 
-    // Static facade retained for Unity callbacks and legacy call sites outside constructor control.
     /// <summary>
-    /// Holds U Loop settings used by Unity CLI Loop.
+    /// Holds Unity CLI Loop settings that define project-level tool behavior.
     /// </summary>
     public static class ULoopSettings
     {

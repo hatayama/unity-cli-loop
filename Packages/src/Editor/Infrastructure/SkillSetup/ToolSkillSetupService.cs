@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ToolSkillSynchronizer.DetectTargetsForLayoutAtProjectRoot(
                     projectRoot,
                     groupSkillsUnderUnityCliLoop);
-            return targets.Select(ToApplicationInfo).ToList();
+            return targets.Select(ToDomainInfo).ToList();
         }
 
         public List<SkillSetupTargetInfo> DetectSkillTargetsForLayoutFastAtProjectRoot(
@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ToolSkillSynchronizer.DetectTargetsForLayoutFastAtProjectRoot(
                     projectRoot,
                     groupSkillsUnderUnityCliLoop);
-            return targets.Select(ToApplicationInfo).ToList();
+            return targets.Select(ToDomainInfo).ToList();
         }
 
         public async Task InstallSkillFilesAsync(
@@ -77,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ct.ThrowIfCancellationRequested();
         }
 
-        private static SkillSetupTargetInfo ToApplicationInfo(ToolSkillSynchronizer.SkillTargetInfo target)
+        private static SkillSetupTargetInfo ToDomainInfo(ToolSkillSynchronizer.SkillTargetInfo target)
         {
             return new SkillSetupTargetInfo(
                 target.DisplayName,

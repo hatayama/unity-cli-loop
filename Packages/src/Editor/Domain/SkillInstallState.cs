@@ -1,5 +1,5 @@
 
-namespace io.github.hatayama.UnityCliLoop.Application
+namespace io.github.hatayama.UnityCliLoop.Domain
 {
     public enum SkillInstallState
     {

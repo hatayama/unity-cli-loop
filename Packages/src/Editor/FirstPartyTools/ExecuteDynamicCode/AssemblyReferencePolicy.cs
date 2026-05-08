@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {

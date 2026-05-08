@@ -1,8 +1,6 @@
 using System;
 
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-
-namespace io.github.hatayama.UnityCliLoop.Application
+namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
     /// Security settings stored in .uloop/settings.permissions.json.

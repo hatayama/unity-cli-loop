@@ -114,12 +114,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void DynamicCodeSecurityValues_WhenLoaded_CompileUnderDomainAssembly()
         {
-            // Tests that public dynamic-code security values stay in the tool contract assembly.
+            // Tests that dynamic-code security levels stay with domain policy while scan results stay public.
+            string levelAssemblyName = typeof(DynamicCodeSecurityLevel).Assembly.GetName().Name;
             string resultAssemblyName = typeof(SecurityValidationResult).Assembly.GetName().Name;
             string violationAssemblyName = typeof(SecurityViolation).Assembly.GetName().Name;
 
+            Assert.That(levelAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(resultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
             Assert.That(violationAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
+        }
+
+        [Test]
+        public void ULoopSettings_WhenLoaded_CompileUnderDomainAssembly()
+        {
+            // Tests that tool-specific settings concepts stay in the domain layer.
+            string settingsAssemblyName = typeof(ULoopSettings).Assembly.GetName().Name;
+            string settingsDataAssemblyName = typeof(ULoopSettingsData).Assembly.GetName().Name;
+
+            Assert.That(settingsAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(settingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
+        }
+
+        [Test]
+        public void SkillSetupPolicy_WhenLoaded_CompilesUnderDomainAssembly()
+        {
+            // Tests that skill setup targets and policy services stay in the domain layer.
+            string serviceAssemblyName = typeof(SkillSetupService).Assembly.GetName().Name;
+            string targetAssemblyName = typeof(SkillSetupTargetInfo).Assembly.GetName().Name;
+            string stateAssemblyName = typeof(SkillInstallState).Assembly.GetName().Name;
+
+            Assert.That(serviceAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(targetAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(stateAssemblyName, Is.EqualTo(DomainAssemblyName));
         }
 
         [Test]

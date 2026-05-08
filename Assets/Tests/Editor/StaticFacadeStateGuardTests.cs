@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -17,8 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             "Packages/src/Editor/Application/CLI/CliSetupApplicationService.cs",
             "Packages/src/Editor/Application/Config/ToolSettings.cs",
-            "Packages/src/Editor/Application/Config/ULoopSettings.cs",
+            "Packages/src/Editor/Application/Config/SkillSetupApplicationFacade.cs",
             "Packages/src/Editor/Application/Config/UnityCliLoopEditorSettings.cs",
+            "Packages/src/Editor/Domain/ULoopSettings.cs",
             "Packages/src/Editor/Application/Api/Tools/Core/UnityCliLoopToolRegistrar.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeServices.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/DynamicCodeForegroundWarmupState.cs",

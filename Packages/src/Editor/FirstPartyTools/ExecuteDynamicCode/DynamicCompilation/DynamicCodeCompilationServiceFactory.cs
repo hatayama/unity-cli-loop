@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 [assembly: InternalsVisibleTo("uLoopMCP.Tests.Editor")]
 

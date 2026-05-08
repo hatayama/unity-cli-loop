@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
@@ -648,10 +649,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
                 _skillsTarget,
                 !_installSkillsFlat);
-            List<SkillSetupApplicationFacade.SkillTargetInfo> targets = includeFreshnessCheck
+            List<SkillSetupTargetInfo> targets = includeFreshnessCheck
                 ? SkillSetupApplicationFacade.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat)
                 : SkillSetupApplicationFacade.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
-            SkillSetupApplicationFacade.SkillTargetInfo targetInfo = targets
+            SkillSetupTargetInfo targetInfo = targets
                 .FirstOrDefault(target => target.DirName == selection.DirectoryName);
 
             return string.IsNullOrEmpty(targetInfo.DirName)
@@ -792,14 +793,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
                     _skillsTarget,
                     !_installSkillsFlat);
-                SkillSetupApplicationFacade.SkillTargetInfo target = new(
+                SkillSetupTargetInfo target = new(
                     selection.DisplayName,
                     selection.DirectoryName,
                     selection.InstallFlag,
                     hasSkillsDirectory: true,
-                    hasExistingSkills: false);
+                    hasExistingSkills: false,
+                    hasDifferentLayoutSkills: false,
+                    SkillInstallState.Missing);
                 await SkillSetupApplicationFacade.InstallSkillFilesAsync(
-                    new List<SkillSetupApplicationFacade.SkillTargetInfo> { target },
+                    new List<SkillSetupTargetInfo> { target },
                     !_installSkillsFlat,
                     CancellationToken.None);
                 EditorDialogHelper.ShowSkillsInstalledDialog();

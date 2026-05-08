@@ -1,8 +1,7 @@
-namespace io.github.hatayama.UnityCliLoop.ToolContracts
+namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
-    /// Security level definitions for ExecuteDynamicCodeTool
-    /// Related classes: DynamicCodeSecurityManager, AssemblyReferencePolicy, RoslynCompiler
+    /// Security levels are a project policy, so infrastructure stores only their values.
     /// </summary>
     public enum DynamicCodeSecurityLevel
     {

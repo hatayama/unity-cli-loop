@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Application
 {
