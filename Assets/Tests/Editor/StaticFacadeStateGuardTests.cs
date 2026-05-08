@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static readonly string[] MigratedFacadePaths = new string[]
         {
             "Packages/src/Editor/Application/CLI/CliSetupApplicationService.cs",
+            "Packages/src/Editor/Application/Config/SkillSetupUseCaseRegistry.cs",
             "Packages/src/Editor/Application/Config/ToolSettings.cs",
             "Packages/src/Editor/Application/Config/UnityCliLoopEditorSettings.cs",
             "Packages/src/Editor/Domain/ULoopSettings.cs",
@@ -216,7 +217,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             return line.Contains("ServiceValue")
                    || line.Contains("RepositoryValue")
-                   || line.Contains("RegistryValue");
+                   || line.Contains("RegistryValue")
+                   || line.Contains("RegisteredUseCase");
         }
     }
 }

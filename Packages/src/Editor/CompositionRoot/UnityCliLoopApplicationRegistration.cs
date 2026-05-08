@@ -1,7 +1,6 @@
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
-using io.github.hatayama.UnityCliLoop.Presentation;
 
 namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 {
@@ -24,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             UnityCliLoopToolRegistrar.RegisterService(new UnityCliLoopToolRegistrarService(
                 new SkillInstallLayoutInternalToolNameProvider()));
             SkillSetupUseCase skillSetupUseCase = new(new SkillSetupService(new ToolSkillSetupService()));
-            PresentationEditorStartup.RegisterApplicationServices(new PresentationApplicationServices(skillSetupUseCase));
+            SkillSetupUseCaseRegistry.Register(skillSetupUseCase);
             CliSetupApplicationFacade.RegisterService(new CliSetupApplicationService(
                 new CliInstallationDetector(),
                 new ProjectLocalCliInstallerService(),

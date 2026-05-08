@@ -220,7 +220,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeApplicationServices()
         {
-            _skillSetupUseCase = PresentationEditorStartup.SkillSetupUseCase;
+            _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
         }
 
         private void InitializeFirstInstallSkillsUiState()
