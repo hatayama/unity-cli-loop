@@ -347,11 +347,7 @@ func probeLaunchReady(ctx context.Context, projectRoot string) error {
 		return err
 	}
 
-	response, err := unity.NewClient(connection).Send(probeContext, "execute-dynamic-code", map[string]any{
-		"Code":                      launchDynamicCodeProbe,
-		"CompileOnly":               false,
-		"YieldToForegroundRequests": true,
-	})
+	response, err := unity.NewClient(connection).Send(probeContext, "execute-dynamic-code", launchDynamicCodeProbeParams())
 	if err != nil {
 		return err
 	}
@@ -367,6 +363,14 @@ func probeLaunchReady(ctx context.Context, projectRoot string) error {
 		return fmt.Errorf("execute-dynamic-code launch readiness probe failed")
 	}
 	return nil
+}
+
+func launchDynamicCodeProbeParams() map[string]any {
+	return map[string]any{
+		"Code":                      launchDynamicCodeProbe,
+		"CompileOnly":               false,
+		"YieldToForegroundRequests": false,
+	}
 }
 
 type executeDynamicCodeLaunchResponse struct {

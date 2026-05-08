@@ -43,6 +43,34 @@ func TestEnsureCompileRequestIDReplacesUnsafeValue(t *testing.T) {
 	}
 }
 
+// Verifies that compile commands wait for domain reload even without an explicit flag.
+func TestShouldWaitForCompileDomainReloadDefaultsToCompileCommands(t *testing.T) {
+	if !shouldWaitForCompileDomainReload(compileCommandName, map[string]any{}) {
+		t.Fatal("compile should wait for domain reload by default")
+	}
+
+	if shouldWaitForCompileDomainReload("get-logs", map[string]any{}) {
+		t.Fatal("non-compile commands should not use compile wait")
+	}
+}
+
+// Verifies that compile wait preparation creates a request id and enables reload waiting.
+func TestPrepareCompileWaitParamsForcesDomainReloadWait(t *testing.T) {
+	params := map[string]any{}
+
+	requestID, err := prepareCompileWaitParams(params)
+	if err != nil {
+		t.Fatalf("prepareCompileWaitParams failed: %v", err)
+	}
+
+	if requestID == "" {
+		t.Fatal("request id was not generated")
+	}
+	if params[compileWaitParam] != true {
+		t.Fatalf("compile wait flag was not forced: %#v", params[compileWaitParam])
+	}
+}
+
 func TestWaitForCompileCompletionReadsResultAfterLocksClear(t *testing.T) {
 	projectRoot := t.TempDir()
 	requestID := "compile_test"

@@ -33,22 +33,17 @@ type compileCompletionOptions struct {
 	lockGrace    time.Duration
 }
 
-func shouldWaitForCompileDomainReload(command string, params map[string]any) bool {
-	if command != compileCommandName {
-		return false
-	}
-	return boolParam(params[compileWaitParam])
+func shouldWaitForCompileDomainReload(command string, _ map[string]any) bool {
+	return command == compileCommandName
 }
 
-func boolParam(value any) bool {
-	switch typed := value.(type) {
-	case bool:
-		return typed
-	case string:
-		return strings.EqualFold(typed, "true")
-	default:
-		return false
+func prepareCompileWaitParams(params map[string]any) (string, error) {
+	requestID, err := ensureCompileRequestID(params)
+	if err != nil {
+		return "", err
 	}
+	params[compileWaitParam] = true
+	return requestID, nil
 }
 
 func ensureCompileRequestID(params map[string]any) (string, error) {

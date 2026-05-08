@@ -86,11 +86,7 @@ func probeLaunchVersion(ctx context.Context, connection domain.Connection) error
 }
 
 func probeLaunchDynamicCode(ctx context.Context, connection domain.Connection) error {
-	response, err := sendLaunchReadyRequest(ctx, connection, "execute-dynamic-code", map[string]any{
-		"Code":                      launchDynamicCodeProbe,
-		"CompileOnly":               false,
-		"YieldToForegroundRequests": true,
-	})
+	response, err := sendLaunchReadyRequest(ctx, connection, "execute-dynamic-code", launchDynamicCodeProbeParams())
 	if err != nil {
 		return err
 	}
@@ -106,6 +102,14 @@ func probeLaunchDynamicCode(ctx context.Context, connection domain.Connection) e
 		return fmt.Errorf("execute-dynamic-code launch readiness probe failed")
 	}
 	return nil
+}
+
+func launchDynamicCodeProbeParams() map[string]any {
+	return map[string]any{
+		"Code":                      launchDynamicCodeProbe,
+		"CompileOnly":               false,
+		"YieldToForegroundRequests": false,
+	}
 }
 
 func sendLaunchReadyRequest(ctx context.Context, connection domain.Connection, method string, params map[string]any) (launchReadyResponse, error) {

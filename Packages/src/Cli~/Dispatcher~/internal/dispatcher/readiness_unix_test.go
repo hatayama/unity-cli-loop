@@ -76,6 +76,15 @@ func TestWaitForLaunchReadyUsesDynamicCodeProbeWhenToolExists(t *testing.T) {
 	assertLaunchReadyProbeServed(t, served)
 }
 
+// Verifies that readiness probes exercise the same foreground warmup path as user executions.
+func TestLaunchDynamicCodeProbeParamsUseForegroundWarmup(t *testing.T) {
+	params := launchDynamicCodeProbeParams()
+
+	if params["YieldToForegroundRequests"] != false {
+		t.Fatalf("launch readiness probe should use foreground warmup: %#v", params["YieldToForegroundRequests"])
+	}
+}
+
 func listenOnProjectEndpoint(t *testing.T, projectRoot string) (net.Listener, string) {
 	t.Helper()
 

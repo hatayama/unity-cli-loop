@@ -145,7 +145,7 @@ func runTool(ctx context.Context, connection domain.Connection, command string, 
 }
 
 func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
-	requestID, err := ensureCompileRequestID(params)
+	requestID, err := prepareCompileWaitParams(params)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{
 			projectRoot: connection.ProjectRoot,
@@ -183,8 +183,8 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 		pollInterval: compileWaitPollInterval,
 		lockGrace:    compileLockGracePeriod,
 	})
-	spinner.Stop()
 	if waitErr != nil {
+		spinner.Stop()
 		writeClassifiedError(stderr, waitErr, errorContext{
 			projectRoot: connection.ProjectRoot,
 			command:     compileCommandName,
@@ -192,9 +192,20 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 		return 1
 	}
 	if !completed {
+		spinner.Stop()
 		writeErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
 		return 1
 	}
+	spinner.Update("Warming execute-dynamic-code after compile...")
+	if err := waitForLaunchReady(ctx, connection.ProjectRoot); err != nil {
+		spinner.Stop()
+		writeClassifiedError(stderr, err, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     compileCommandName,
+		})
+		return 1
+	}
+	spinner.Stop()
 	writeJSON(stdout, result)
 	return 0
 }
