@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -194,5 +196,16 @@ func TestCompileResultSucceededRequiresTrueSuccess(t *testing.T) {
 
 	if compileResultSucceeded([]byte(`{"Message":"indeterminate"}`)) {
 		t.Fatal("indeterminate compile result should not trigger readiness")
+	}
+}
+
+// Verifies that failed best-effort warmup reports a warning without taking over compile output.
+func TestWritePostCompileWarmupWarningReportsNonFatalFailure(t *testing.T) {
+	var stderr bytes.Buffer
+
+	writePostCompileWarmupWarning(&stderr, fmt.Errorf("probe failed"))
+
+	if !strings.Contains(stderr.String(), "warning: post-compile warmup skipped: probe failed") {
+		t.Fatalf("warning mismatch: %s", stderr.String())
 	}
 }

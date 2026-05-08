@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -15,7 +16,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal static class ProjectIpcWarmupClient
     {
         private const string ContentLengthHeader = "Content-Length:";
+        private const int EndpointConnectTimeoutMilliseconds = 5000;
         private const int MaxHeaderByteCount = 8192;
+        private const int MaxPayloadByteCount = BufferConfig.MAX_MESSAGE_SIZE;
         private static readonly byte[] HeaderSeparatorBytes = { 13, 10, 13, 10 };
 
         internal static Task SendProjectIpcRequestAsync(
@@ -33,13 +36,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return Task.Run(async () =>
             {
                 ct.ThrowIfCancellationRequested();
-                using Stream stream = ConnectToEndpoint(endpoint, ct);
+                using Stream stream = await ConnectToEndpointAsync(endpoint, ct);
                 await WriteFrameAsync(stream, requestJson, ct);
                 await ReadResponseFrameAsync(stream, ct);
             }, ct);
         }
 
-        private static Stream ConnectToEndpoint(BridgeTransportEndpoint endpoint, CancellationToken ct)
+        private static async Task<Stream> ConnectToEndpointAsync(BridgeTransportEndpoint endpoint, CancellationToken ct)
         {
             System.Diagnostics.Debug.Assert(endpoint != null, "endpoint must not be null");
 
@@ -47,7 +50,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             switch (endpoint.Kind)
             {
                 case BridgeTransportKind.UnixDomainSocket:
-                    return ConnectToUnixDomainSocket(endpoint);
+                    using (CancellationTokenSource connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                    {
+                        connectCts.CancelAfter(EndpointConnectTimeoutMilliseconds);
+                        return await ConnectToUnixDomainSocketAsync(endpoint, connectCts.Token);
+                    }
                 case BridgeTransportKind.WindowsNamedPipe:
                     return ConnectToWindowsNamedPipe(endpoint);
                 default:
@@ -55,13 +62,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static Stream ConnectToUnixDomainSocket(BridgeTransportEndpoint endpoint)
+        private static async Task<Stream> ConnectToUnixDomainSocketAsync(BridgeTransportEndpoint endpoint, CancellationToken ct)
         {
             Socket socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             bool connected = false;
             try
             {
-                socket.Connect(new UnixDomainSocketEndPoint(endpoint.Path));
+                Task connectTask = Task.Factory.FromAsync<EndPoint>(
+                    socket.BeginConnect,
+                    socket.EndConnect,
+                    new UnixDomainSocketEndPoint(endpoint.Path),
+                    null);
+                await WaitForConnectAsync(connectTask, socket, ct);
                 connected = true;
                 return new NetworkStream(socket, ownsSocket: true);
             }
@@ -157,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return true;
         }
 
-        private static int ParseContentLength(List<byte> headerBytes)
+        internal static int ParseContentLength(List<byte> headerBytes)
         {
             string headerText = Encoding.ASCII.GetString(headerBytes.ToArray());
             string[] lines = headerText.Split(new[] { "\r\n" }, StringSplitOptions.None);
@@ -169,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string value = line.Substring(ContentLengthHeader.Length).Trim();
-                if (int.TryParse(value, out int contentLength) && contentLength >= 0)
+                if (int.TryParse(value, out int contentLength) && contentLength >= 0 && contentLength <= MaxPayloadByteCount)
                 {
                     return contentLength;
                 }
@@ -178,6 +190,35 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             throw new InvalidOperationException("Project IPC warmup response did not include Content-Length.");
+        }
+
+        private static async Task WaitForConnectAsync(Task connectTask, Socket socket, CancellationToken ct)
+        {
+            System.Diagnostics.Debug.Assert(connectTask != null, "connectTask must not be null");
+            System.Diagnostics.Debug.Assert(socket != null, "socket must not be null");
+
+            Task cancellationTask = Task.Delay(Timeout.Infinite, ct);
+            Task completedTask = await Task.WhenAny(connectTask, cancellationTask);
+            if (completedTask == connectTask)
+            {
+                await connectTask;
+                return;
+            }
+
+            // Why: Unity 2022 does not expose a cancellable Unix socket connect API,
+            // so disposing the socket is the only reliable way to release the pending OS connect.
+            socket.Dispose();
+            ObserveConnectFault(connectTask);
+            ct.ThrowIfCancellationRequested();
+        }
+
+        private static void ObserveConnectFault(Task connectTask)
+        {
+            _ = connectTask.ContinueWith(
+                completedTask => _ = completedTask.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
         }
 
         private static async Task ReadPayloadAsync(

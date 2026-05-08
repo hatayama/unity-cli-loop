@@ -32,10 +32,17 @@ func waitForToolReadiness(ctx context.Context, projectRoot string) error {
 
 		select {
 		case <-timeoutContext.Done():
-			return fmt.Errorf("timed out waiting for Unity tool readiness")
+			return toolReadinessDoneError(ctx)
 		case <-time.After(toolReadinessPoll):
 		}
 	}
+}
+
+func toolReadinessDoneError(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fmt.Errorf("timed out waiting for Unity tool readiness")
 }
 
 func probeToolReadinessSequence(ctx context.Context, projectRoot string) error {

@@ -206,17 +206,22 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 		spinner.Update("Warming execute-dynamic-code after compile...")
 		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
 			spinner.Stop()
-			writeClassifiedError(stderr, err, errorContext{
-				projectRoot: connection.ProjectRoot,
-				command:     compileCommandName,
-			})
-			return 1
+			writePostCompileWarmupWarning(stderr, err)
 		}
 	}
 	spinner.Stop()
 	writeJSON(stdout, result)
 	writeDebugTiming(stderr, compileCommandName, time.Since(startedAt), outcome)
 	return 0
+}
+
+func writePostCompileWarmupWarning(stderr io.Writer, err error) {
+	if err == nil {
+		return
+	}
+	// Why: this warmup is a hidden optimization, so it must not turn a
+	// successful compile result into a user-visible command failure.
+	_, _ = fmt.Fprintf(stderr, "warning: post-compile warmup skipped: %v\n", err)
 }
 
 func runList(ctx context.Context, connection domain.Connection, stdout io.Writer, stderr io.Writer) int {
