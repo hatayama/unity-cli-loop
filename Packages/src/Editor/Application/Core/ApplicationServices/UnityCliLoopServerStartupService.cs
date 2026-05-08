@@ -17,12 +17,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
         }
 
         public ServiceResult<IUnityCliLoopServerInstance> StartServer(
-            bool clearServerStartingLockWhenReady = true)
+            ServerInitializationRequest request)
         {
             try
             {
                 IUnityCliLoopServerInstance server = _serverInstanceFactory.Create();
-                server.StartServer(clearServerStartingLockWhenReady);
+                server.StartServer(request.ClearStartupLockWhenReady);
                 return ServiceResult<IUnityCliLoopServerInstance>.SuccessResult(server);
             }
             catch (System.Exception ex)

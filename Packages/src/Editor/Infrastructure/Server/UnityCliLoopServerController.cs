@@ -188,13 +188,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new UnityCliLoopServerInitializationUseCase(
                     new EditorSecurityValidationService(),
                     startupService);
-            ServerInitializationSchema schema = new()
-            {
-                PreserveStartupLockUntilExplicitRelease = false
-            };
+            ServerInitializationRequest request =
+                ServerInitializationRequest.ReleaseStartupLockWhenReady();
             System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
 
-            ServerInitializationResponse result = await useCase.ExecuteAsync(schema, cancellationToken);
+            ServerInitializationResult<IUnityCliLoopServerInstance> result =
+                await useCase.ExecuteAsync(request, cancellationToken);
 
             if (!result.Success)
             {
@@ -235,10 +234,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new UnityCliLoopServerStartupService(_serverInstanceFactory);
             UnityCliLoopServerShutdownUseCase useCase =
                 new UnityCliLoopServerShutdownUseCase(startupService, this);
-            ServerShutdownSchema schema = new() { ForceShutdown = false };
             System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
 
-            ServerShutdownResponse result = await useCase.ExecuteAsync(schema, cancellationToken);
+            ServerShutdownResult result = await useCase.ExecuteAsync(cancellationToken);
 
             if (result.Success)
             {
