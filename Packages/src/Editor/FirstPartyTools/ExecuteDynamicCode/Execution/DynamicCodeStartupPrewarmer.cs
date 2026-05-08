@@ -11,9 +11,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class DynamicCodeStartupPrewarmer
     {
-        private const string StartupPrewarmCode =
-            "using UnityEngine; LogType previous = Debug.unityLogger.filterLogType; Debug.unityLogger.filterLogType = LogType.Warning; try { Debug.Log(\"Unity CLI Loop dynamic code prewarm\"); return \"Unity CLI Loop dynamic code prewarm\"; } finally { Debug.unityLogger.filterLogType = previous; }";
-
         private readonly object _syncRoot = new();
         private readonly IDynamicCodeExecutionRuntime _runtime;
         private readonly int _delayFrameCount;
@@ -62,17 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool completed = false;
             try
             {
-                DynamicCodeExecutionRequest request = new()
-                {
-                    Code = StartupPrewarmCode,
-                    ClassName = DynamicCodeConstants.DEFAULT_CLASS_NAME,
-                    CompileOnly = false,
-                    SecurityLevel = FirstPartyDynamicCodeSettings.GetDynamicCodeSecurityLevel(),
-                    YieldToForegroundRequests = true
-                };
-
-                (bool entered, ExecutionResult result) = await _runtime.TryExecuteIfIdleAsync(request, ct);
-                completed = entered && result.Success;
+                completed = await ExecuteStartupWarmupSequenceAsync(ct);
                 if (completed)
                 {
                     DynamicCodeForegroundWarmupState.MarkCompleted();
@@ -86,6 +73,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ResetRequestStateAfterIncompleteAttempt();
                 }
             }
+        }
+
+        private async Task<bool> ExecuteStartupWarmupSequenceAsync(CancellationToken ct)
+        {
+            foreach (string warmupCode in DynamicCodeForegroundWarmupSnippets.ReturnStringShapes)
+            {
+                DynamicCodeExecutionRequest request = new()
+                {
+                    Code = warmupCode,
+                    ClassName = DynamicCodeConstants.DEFAULT_CLASS_NAME,
+                    CompileOnly = false,
+                    SecurityLevel = FirstPartyDynamicCodeSettings.GetDynamicCodeSecurityLevel(),
+                    YieldToForegroundRequests = true
+                };
+
+                (bool entered, ExecutionResult result) = await _runtime.TryExecuteIfIdleAsync(request, ct);
+                if (!entered || !result.Success)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void ResetRequestStateAfterIncompleteAttempt()

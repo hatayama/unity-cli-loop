@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core/internal/adapters/unity"
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/adapters/project"
 )
 
@@ -22,9 +20,6 @@ const (
 	launchCommandName       = "launch"
 	launchLockfilePoll      = 100 * time.Millisecond
 	launchLockfileTimeout   = 5 * time.Second
-	launchReadinessTimeout  = 180 * time.Second
-	launchReadinessPoll     = 1 * time.Second
-	launchProbeTimeout      = 5 * time.Second
 	projectVersionFilePath  = "ProjectSettings/ProjectVersion.txt"
 	recoveryDirectoryPath   = "Assets/_Recovery"
 	launchTempDirectoryName = "Temp"
@@ -32,8 +27,6 @@ const (
 )
 
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
-
-const launchDynamicCodeProbe = `UnityEngine.LogType previous = UnityEngine.Debug.unityLogger.filterLogType; UnityEngine.Debug.unityLogger.filterLogType = UnityEngine.LogType.Warning; try { UnityEngine.Debug.Log("Unity CLI Loop dynamic code prewarm"); return "Unity CLI Loop dynamic code prewarm"; } finally { UnityEngine.Debug.unityLogger.filterLogType = previous; }`
 
 type launchOptions struct {
 	projectPath    string
@@ -314,77 +307,6 @@ func waitForUnityLockfile(ctx context.Context, lockfilePath string, pollInterval
 
 func unityLockfilePath(projectRoot string) string {
 	return filepath.Join(projectRoot, launchTempDirectoryName, unityLockfileName)
-}
-
-func waitForLaunchReady(ctx context.Context, projectRoot string) error {
-	timeoutContext, cancel := context.WithTimeout(ctx, launchReadinessTimeout)
-	defer cancel()
-
-	for {
-		if err := probeLaunchReady(timeoutContext, projectRoot); err == nil {
-			return nil
-		}
-
-		select {
-		case <-timeoutContext.Done():
-			return fmt.Errorf("timed out waiting for Unity to become ready after launch")
-		case <-time.After(launchReadinessPoll):
-		}
-	}
-}
-
-func probeLaunchReady(ctx context.Context, projectRoot string) error {
-	probeContext, cancel := context.WithTimeout(ctx, launchProbeTimeout)
-	defer cancel()
-
-	connection, err := project.ResolveConnection(projectRoot, projectRoot)
-	if err != nil {
-		return err
-	}
-
-	if !isExecuteDynamicCodeAvailable(projectRoot) {
-		_, err := unity.NewClient(connection).Send(probeContext, "get-version", map[string]any{})
-		return err
-	}
-
-	response, err := unity.NewClient(connection).Send(probeContext, "execute-dynamic-code", launchDynamicCodeProbeParams())
-	if err != nil {
-		return err
-	}
-
-	var payload executeDynamicCodeLaunchResponse
-	if err := json.Unmarshal(response, &payload); err != nil {
-		return err
-	}
-	if !payload.Success {
-		if payload.ErrorMessage != "" {
-			return fmt.Errorf("execute-dynamic-code launch readiness probe failed: %s", payload.ErrorMessage)
-		}
-		return fmt.Errorf("execute-dynamic-code launch readiness probe failed")
-	}
-	return nil
-}
-
-func launchDynamicCodeProbeParams() map[string]any {
-	return map[string]any{
-		"Code":                      launchDynamicCodeProbe,
-		"CompileOnly":               false,
-		"YieldToForegroundRequests": false,
-	}
-}
-
-type executeDynamicCodeLaunchResponse struct {
-	Success      bool   `json:"Success"`
-	ErrorMessage string `json:"ErrorMessage"`
-}
-
-func isExecuteDynamicCodeAvailable(projectRoot string) bool {
-	cache, err := loadTools(projectRoot)
-	if err != nil {
-		return true
-	}
-	_, ok := findTool(cache, "execute-dynamic-code")
-	return ok
 }
 
 func resolveLaunchProjectRoot(startPath string, options launchOptions) (string, error) {

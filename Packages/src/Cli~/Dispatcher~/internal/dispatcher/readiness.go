@@ -12,7 +12,10 @@ import (
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/domain"
 )
 
-const launchDynamicCodeProbe = `UnityEngine.LogType previous = UnityEngine.Debug.unityLogger.filterLogType; UnityEngine.Debug.unityLogger.filterLogType = UnityEngine.LogType.Warning; try { UnityEngine.Debug.Log("Unity CLI Loop dynamic code prewarm"); return "Unity CLI Loop dynamic code prewarm"; } finally { UnityEngine.Debug.unityLogger.filterLogType = previous; }`
+const (
+	launchDynamicCodeProbe = `return "Unity CLI Loop dynamic code prewarm";`
+	launchReadyProbeCount  = 3
+)
 
 type launchReadyRequest struct {
 	JSONRPC string         `json:"jsonrpc"`
@@ -44,7 +47,7 @@ func waitForLaunchReady(ctx context.Context, projectRoot string) error {
 	defer ticker.Stop()
 
 	for {
-		if err := probeLaunchReady(timeoutContext, projectRoot); err == nil {
+		if err := probeLaunchReadySequence(timeoutContext, projectRoot); err == nil {
 			return nil
 		}
 
@@ -57,6 +60,16 @@ func waitForLaunchReady(ctx context.Context, projectRoot string) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+func probeLaunchReadySequence(ctx context.Context, projectRoot string) error {
+	for probeIndex := 0; probeIndex < launchReadyProbeCount; probeIndex++ {
+		if err := probeLaunchReady(ctx, projectRoot); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func probeLaunchReady(ctx context.Context, projectRoot string) error {

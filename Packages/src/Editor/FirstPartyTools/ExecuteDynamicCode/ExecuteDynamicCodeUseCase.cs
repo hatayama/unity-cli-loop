@@ -15,8 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class ExecuteDynamicCodeUseCase : IExecuteDynamicCodeUseCase
     {
-        private const string ForegroundWarmupCode =
-            "using UnityEngine; LogType previous = Debug.unityLogger.filterLogType; Debug.unityLogger.filterLogType = LogType.Warning; try { Debug.Log(\"Unity CLI Loop dynamic code prewarm\"); return \"Unity CLI Loop dynamic code prewarm\"; } finally { Debug.unityLogger.filterLogType = previous; }";
         private readonly IDynamicCodeExecutionRuntime _runtime;
         private readonly DynamicCodeFriendlyErrorConverter _friendlyErrorConverter;
 
@@ -282,14 +280,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool completed = false;
             try
             {
-                DynamicCodeExecutionRequest warmupRequest = CreateExecutionRequest(
-                    ForegroundWarmupCode,
-                    null,
-                    compileOnly: false,
+                completed = await ExecuteForegroundWarmupSequenceAsync(
                     securityLevel,
-                    yieldToForegroundRequests: false);
-                ExecutionResult warmupResult = await ExecuteRequestAsync(warmupRequest, cancellationToken);
-                completed = warmupResult.Success;
+                    cancellationToken);
                 if (completed)
                 {
                     DynamicCodeForegroundWarmupState.MarkCompleted();
@@ -302,6 +295,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     DynamicCodeForegroundWarmupState.ResetAfterIncompleteAttempt();
                 }
             }
+        }
+
+        private async Task<bool> ExecuteForegroundWarmupSequenceAsync(
+            DynamicCodeSecurityLevel securityLevel,
+            CancellationToken ct)
+        {
+            foreach (string warmupCode in DynamicCodeForegroundWarmupSnippets.ReturnStringShapes)
+            {
+                DynamicCodeExecutionRequest warmupRequest = CreateExecutionRequest(
+                    warmupCode,
+                    null,
+                    compileOnly: false,
+                    securityLevel,
+                    yieldToForegroundRequests: false);
+                ExecutionResult warmupResult = await ExecuteRequestAsync(warmupRequest, ct);
+                if (!warmupResult.Success)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool ShouldWarmForegroundExecutionPath(ExecuteDynamicCodeSchema parameters)

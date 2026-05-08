@@ -28,7 +28,7 @@ func TestWaitForLaunchReadyProbesUnityServer(t *testing.T) {
 		_ = os.Remove(endpointPath)
 	}()
 	served := make(chan error, 1)
-	go serveLaunchReadyProbe(listener, "get-version", map[string]any{"version": "test"}, served)
+	go serveLaunchReadyProbes(listener, "get-version", map[string]any{"version": "test"}, launchReadyProbeCount, served)
 
 	if err := waitForLaunchReady(context.Background(), projectRoot); err != nil {
 		t.Fatalf("waitForLaunchReady failed: %v", err)
@@ -47,7 +47,7 @@ func TestWaitForLaunchReadyUsesVersionProbeWhenToolCacheIsMissing(t *testing.T) 
 		_ = os.Remove(endpointPath)
 	}()
 	served := make(chan error, 1)
-	go serveLaunchReadyProbe(listener, "get-version", map[string]any{"version": "test"}, served)
+	go serveLaunchReadyProbes(listener, "get-version", map[string]any{"version": "test"}, launchReadyProbeCount, served)
 
 	if err := waitForLaunchReady(context.Background(), projectRoot); err != nil {
 		t.Fatalf("waitForLaunchReady failed: %v", err)
@@ -67,7 +67,7 @@ func TestWaitForLaunchReadyUsesDynamicCodeProbeWhenToolExists(t *testing.T) {
 		_ = os.Remove(endpointPath)
 	}()
 	served := make(chan error, 1)
-	go serveLaunchReadyProbe(listener, "execute-dynamic-code", map[string]any{"Success": true}, served)
+	go serveLaunchReadyProbes(listener, "execute-dynamic-code", map[string]any{"Success": true}, launchReadyProbeCount, served)
 
 	if err := waitForLaunchReady(context.Background(), projectRoot); err != nil {
 		t.Fatalf("waitForLaunchReady failed: %v", err)
@@ -102,11 +102,27 @@ func listenOnProjectEndpoint(t *testing.T, projectRoot string) (net.Listener, st
 	return listener, connection.Endpoint.Address
 }
 
-func serveLaunchReadyProbe(listener net.Listener, expectedMethod string, result map[string]any, served chan<- error) {
+func serveLaunchReadyProbes(
+	listener net.Listener,
+	expectedMethod string,
+	result map[string]any,
+	probeCount int,
+	served chan<- error,
+) {
+	for probeIndex := 0; probeIndex < probeCount; probeIndex++ {
+		if err := serveLaunchReadyProbe(listener, expectedMethod, result); err != nil {
+			served <- err
+			return
+		}
+	}
+
+	served <- nil
+}
+
+func serveLaunchReadyProbe(listener net.Listener, expectedMethod string, result map[string]any) error {
 	conn, err := listener.Accept()
 	if err != nil {
-		served <- err
-		return
+		return err
 	}
 	defer func() {
 		_ = conn.Close()
@@ -114,19 +130,16 @@ func serveLaunchReadyProbe(listener net.Listener, expectedMethod string, result 
 
 	requestPayload, err := framing.Read(bufio.NewReader(conn))
 	if err != nil {
-		served <- err
-		return
+		return err
 	}
 	var request struct {
 		Method string `json:"method"`
 	}
 	if err := json.Unmarshal(requestPayload, &request); err != nil {
-		served <- err
-		return
+		return err
 	}
 	if request.Method != expectedMethod {
-		served <- fmt.Errorf("method mismatch: %s", request.Method)
-		return
+		return fmt.Errorf("method mismatch: %s", request.Method)
 	}
 
 	response := map[string]any{
@@ -136,10 +149,9 @@ func serveLaunchReadyProbe(listener net.Listener, expectedMethod string, result 
 	}
 	payload, err := json.Marshal(response)
 	if err != nil {
-		served <- err
-		return
+		return err
 	}
-	served <- framing.Write(conn, payload)
+	return framing.Write(conn, payload)
 }
 
 func assertLaunchReadyProbeServed(t *testing.T, served <-chan error) {

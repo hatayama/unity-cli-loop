@@ -40,6 +40,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 new ExecutionResult
                 {
                     Success = true,
+                    Result = "warm"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
                     Result = "user"
                 });
             DynamicCodeStartupPrewarmer prewarmer = new(runtime, 0);
@@ -60,8 +65,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     CancellationToken.None);
 
                 Assert.That(response.Success, Is.True);
-                Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(1));
+                Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(2));
                 Assert.That(runtime.TryExecuteRequests[0].YieldToForegroundRequests, Is.True);
+                Assert.That(runtime.TryExecuteRequests[1].YieldToForegroundRequests, Is.True);
                 Assert.That(runtime.Requests, Has.Count.EqualTo(1));
                 Assert.That(runtime.Requests[0].Code, Is.EqualTo("return 1;"));
             }
@@ -80,13 +86,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 {
                     Success = true,
                     Result = "warm"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "warm"
                 });
             DynamicCodeStartupPrewarmer prewarmer = new(runtime, 0);
 
             await prewarmer.RequestAsync(CancellationToken.None);
             await prewarmer.RequestAsync(CancellationToken.None);
 
-            Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(1));
+            Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(2));
+        }
+
+        [Test]
+        public async Task RequestAsync_WhenStartupPrewarmRuns_ShouldUseLiteralReturnShape()
+        {
+            // Tests that startup prewarm warms the same literal-hoisted shape as common return-string requests.
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "warm"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "warm"
+                });
+            DynamicCodeStartupPrewarmer prewarmer = new(runtime, 0);
+
+            await prewarmer.RequestAsync(CancellationToken.None);
+
+            Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(2));
+            AssertPrewarmCodeMatchesLiteralReturnShape(
+                runtime.TryExecuteRequests[0].Code,
+                "return \"user value\";");
+            AssertPrewarmCodeMatchesLiteralReturnShape(
+                runtime.TryExecuteRequests[1].Code,
+                "return\n  \"user value\";");
         }
 
         [Test]
@@ -98,14 +137,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 {
                     Success = true,
                     Result = "warm"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "warm"
                 });
-            runtime.EnqueueIdleEntryResults(false, true);
+            runtime.EnqueueIdleEntryResults(false, true, true);
             DynamicCodeStartupPrewarmer prewarmer = new(runtime, 0);
 
             await prewarmer.RequestAsync(CancellationToken.None);
             await prewarmer.RequestAsync(CancellationToken.None);
 
-            Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(2));
+            Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(3));
         }
 
         [Test]
@@ -121,13 +165,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 {
                     Success = true,
                     Result = "warm"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "warm"
                 });
             DynamicCodeStartupPrewarmer prewarmer = new(runtime, 0);
 
             await prewarmer.RequestAsync(CancellationToken.None);
             await prewarmer.RequestAsync(CancellationToken.None);
 
-            Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(2));
+            Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(3));
         }
 
         [Test]
@@ -201,6 +250,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     YieldToForegroundRequests = request.YieldToForegroundRequests
                 };
             }
+        }
+
+        private static void AssertPrewarmCodeMatchesLiteralReturnShape(
+            string prewarmCode,
+            string userCode)
+        {
+            PreparedDynamicCode prewarm = DynamicCodeSourcePreparer.Prepare(
+                prewarmCode,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+            PreparedDynamicCode userReturn = DynamicCodeSourcePreparer.Prepare(
+                userCode,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.That(prewarm.PreparedSource, Is.EqualTo(userReturn.PreparedSource));
         }
     }
 }

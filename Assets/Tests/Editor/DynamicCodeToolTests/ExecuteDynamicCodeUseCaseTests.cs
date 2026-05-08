@@ -304,6 +304,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 new ExecutionResult
                 {
                     Success = true,
+                    Result = "warm"
+                },
+                new ExecutionResult
+                {
+                    Success = true,
                     Result = "ok"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
@@ -321,9 +326,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     CancellationToken.None);
 
                 Assert.That(response.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(2));
-                Assert.That(runtime.Requests[0].Code, Does.Contain("Unity CLI Loop dynamic code prewarm"));
-                Assert.That(runtime.Requests[1].Code, Is.EqualTo("return 1;"));
+                Assert.That(runtime.Requests, Has.Count.EqualTo(3));
+                AssertPrewarmCodeMatchesLiteralReturnShape(
+                    runtime.Requests[0].Code,
+                    "return \"user value\";");
+                AssertPrewarmCodeMatchesLiteralReturnShape(
+                    runtime.Requests[1].Code,
+                    "return\n  \"user value\";");
+                Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 1;"));
             }
             finally
             {
@@ -335,6 +345,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public async Task ExecuteAsync_WhenForegroundWarmupAlreadyCompleted_ShouldNotRepeatIt()
         {
             FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = true,
+                    Result = "warm"
+                },
                 new ExecutionResult
                 {
                     Success = true,
@@ -372,8 +387,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
                 Assert.That(firstResponse.Success, Is.True);
                 Assert.That(secondResponse.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(3));
-                Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 2;"));
+                Assert.That(runtime.Requests, Has.Count.EqualTo(4));
+                Assert.That(runtime.Requests[3].Code, Is.EqualTo("return 2;"));
             }
             finally
             {
@@ -423,7 +438,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Assert.That(firstResponse.Success, Is.True);
                 Assert.That(secondResponse.Success, Is.True);
                 Assert.That(runtime.Requests, Has.Count.EqualTo(3));
-                Assert.That(runtime.Requests[0].Code, Does.Contain("Unity CLI Loop dynamic code prewarm"));
+                AssertPrewarmCodeMatchesLiteralReturnShape(
+                    runtime.Requests[0].Code,
+                    "return \"user value\";");
                 Assert.That(runtime.Requests[1].Code, Is.EqualTo("return 1;"));
                 Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 2;"));
             }
@@ -823,6 +840,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             }
 
             DynamicCodeForegroundWarmupState.MarkCompleted();
+        }
+
+        private static void AssertPrewarmCodeMatchesLiteralReturnShape(
+            string prewarmCode,
+            string userCode)
+        {
+            PreparedDynamicCode prewarm = DynamicCodeSourcePreparer.Prepare(
+                prewarmCode,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+            PreparedDynamicCode userReturn = DynamicCodeSourcePreparer.Prepare(
+                userCode,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.That(prewarm.PreparedSource, Is.EqualTo(userReturn.PreparedSource));
         }
 
         /// <summary>
