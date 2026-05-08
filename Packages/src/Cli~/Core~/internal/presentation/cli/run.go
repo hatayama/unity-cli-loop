@@ -124,6 +124,7 @@ func runTool(ctx context.Context, connection domain.Connection, command string, 
 		return runCompileWithDomainReloadWait(ctx, connection, params, stdout, stderr)
 	}
 
+	applyDebugTimingParams(command, params)
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, command)
 	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
@@ -143,7 +144,7 @@ func runTool(ctx context.Context, connection domain.Connection, command string, 
 		})
 		return 1
 	}
-	writeJSON(stdout, outcome.Result)
+	writeJSON(stdout, stripDebugTimingResult(command, outcome.Result))
 	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
 	return 0
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +11,10 @@ import (
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/domain"
 )
 
-const debugTimingEnvName = "ULOOP_DEBUG_TIMING"
+const (
+	debugTimingEnvName                 = "ULOOP_DEBUG_TIMING"
+	dynamicCodeIncludeTimingsParamName = "IncludeTimings"
+)
 
 func writeDebugTiming(writer io.Writer, command string, total time.Duration, outcome domain.UnitySendOutcome) {
 	if !isDebugTimingEnabled() {
@@ -29,6 +33,49 @@ func writeDebugTiming(writer io.Writer, command string, total time.Duration, out
 		formatDebugDuration(timing.Read),
 		formatDebugDuration(timing.Decode),
 	)
+	for _, unityTiming := range extractUnityDebugTimings(command, outcome.Result) {
+		_, _ = fmt.Fprintf(writer, "[uloop timing] unity %s\n", unityTiming)
+	}
+}
+
+func applyDebugTimingParams(command string, params map[string]any) {
+	if command != executeDynamicCodeCommandName || !isDebugTimingEnabled() {
+		return
+	}
+
+	params[dynamicCodeIncludeTimingsParamName] = true
+}
+
+func stripDebugTimingResult(command string, result json.RawMessage) json.RawMessage {
+	if command != executeDynamicCodeCommandName || !isDebugTimingEnabled() {
+		return result
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(result, &payload); err != nil {
+		return result
+	}
+
+	delete(payload, "Timings")
+	sanitized, err := json.Marshal(payload)
+	if err != nil {
+		return result
+	}
+	return sanitized
+}
+
+func extractUnityDebugTimings(command string, result json.RawMessage) []string {
+	if command != executeDynamicCodeCommandName {
+		return nil
+	}
+
+	var payload struct {
+		Timings []string `json:"Timings"`
+	}
+	if err := json.Unmarshal(result, &payload); err != nil {
+		return nil
+	}
+	return payload.Timings
 }
 
 func isDebugTimingEnabled() bool {

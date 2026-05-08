@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -20,5 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool CompileOnly { get; set; } = false;
 
         public bool YieldToForegroundRequests { get; set; } = false;
+
+        [Browsable(false)]
+        public bool IncludeTimings { get; set; } = false;
     }
 }

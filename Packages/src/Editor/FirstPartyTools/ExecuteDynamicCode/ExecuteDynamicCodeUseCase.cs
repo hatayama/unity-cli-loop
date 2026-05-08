@@ -71,6 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     cancelledResponse.Timings = finalResult.Timings != null
                         ? new List<string>(finalResult.Timings)
                         : cancelledResponse.Timings;
+                    cancelledResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
                     return cancelledResponse;
                 }
 
@@ -78,16 +79,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     finalResult,
                     originalCode);
                 response.SecurityLevel = editorLevel.ToString();
+                response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
                 return response;
             }
             catch (OperationCanceledException)
             {
-                return CreateCancelledResponse(editorLevel);
+                ExecuteDynamicCodeResponse response = CreateCancelledResponse(editorLevel);
+                response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
+                return response;
             }
             catch (Exception ex)
             {
                 LogExecutionException(ex, correlationId);
-                return CreateExceptionResponse(ex, editorLevel);
+                ExecuteDynamicCodeResponse response = CreateExceptionResponse(ex, editorLevel);
+                response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
+                return response;
             }
         }
 
