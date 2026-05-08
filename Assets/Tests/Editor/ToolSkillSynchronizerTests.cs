@@ -94,6 +94,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        // Tests that the public install path preserves disabled tool settings.
+        [Test]
+        public async Task InstallSkillFiles_WhenToolIsDisabledInSettings_DoesNotRecreateSkill()
+        {
+            Directory.CreateDirectory(UnityCliLoopConstants.ULOOP_DIR);
+            File.WriteAllText(ToolSettingsFilePath, "{\"disabledTools\":[\"compile\"]}");
+
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            string disabledSkillDir = Path.Combine(skillsRoot, "uloop-compile");
+            WriteSkillFile(disabledSkillDir);
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                targetRoot,
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFiles(
+                    new List<ToolSkillSynchronizer.SkillTargetInfo> { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(Directory.Exists(disabledSkillDir), Is.False);
+        }
+
         [Test]
         public async Task InstallSkillFilesAtProjectRoot_WhenManagedSkillWasDeleted_RestoresIt()
         {

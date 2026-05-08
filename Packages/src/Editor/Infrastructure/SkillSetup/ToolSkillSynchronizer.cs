@@ -388,7 +388,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return await InstallSkillFilesForTool(
                 toolName,
                 groupSkillsUnderUnityCliLoop,
-                Array.Empty<string>());
+                GetCurrentDisabledTools());
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFilesForTool(
@@ -421,7 +421,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return await InstallSkillFiles(
                 targets,
                 groupSkillsUnderUnityCliLoop,
-                Array.Empty<string>());
+                GetCurrentDisabledTools());
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFiles(
@@ -649,6 +649,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return disabledTools.Contains(toolName);
+        }
+
+        private static string[] GetCurrentDisabledTools()
+        {
+            ToolSettingsRepository repository = new ToolSettingsRepository();
+            return repository.GetDisabledTools();
         }
 
         private static bool IsSkillForTool(
