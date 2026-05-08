@@ -16,10 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private static readonly string[] MigratedFacadePaths = new string[]
         {
-            "Packages/src/Editor/Application/CLI/CliSetupApplicationService.cs",
-            "Packages/src/Editor/Application/Config/SkillSetupUseCaseRegistry.cs",
+            "Packages/src/Editor/Application/CliSetupApplicationService.cs",
+            "Packages/src/Editor/Application/SkillSetupUseCaseRegistry.cs",
             "Packages/src/Editor/Domain/ULoopSettings.cs",
-            "Packages/src/Editor/Application/Api/Core/UnityCliLoopToolRegistrar.cs",
+            "Packages/src/Editor/Application/UnityCliLoopToolRegistrar.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeServices.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/DynamicCodeForegroundWarmupState.cs",
             "Packages/src/Editor/ToolContracts/EditorDelayManager.cs",
@@ -30,9 +30,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/Application/MouseInputState.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateMouseUi/Application/MouseDragState.cs",
             "Packages/src/Editor/FirstPartyTools/Common/Overlay/OverlayCanvasFactory.cs",
-            "Packages/src/Editor/Application/Core/CoreTools/Util/MainThreadSwitcher.cs",
+            "Packages/src/Editor/Application/MainThreadSwitcher.cs",
             "Packages/src/Editor/ToolContracts/VibeLogger.cs",
-            "Packages/src/Editor/Application/Server/UnityCliLoopServerApplicationService.cs",
+            "Packages/src/Editor/Application/UnityCliLoopServerApplicationService.cs",
             "Packages/src/Runtime/RecordInput/RecordInputOverlayState.cs",
             "Packages/src/Runtime/ReplayInput/ReplayInputOverlayState.cs",
             "Packages/src/Runtime/SimulateKeyboard/SimulateKeyboardOverlayState.cs",
@@ -47,8 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static readonly string[] InstanceServicePaths = new string[]
         {
-            "Packages/src/Editor/Application/Core/ApplicationServices/SessionRecoveryService.cs",
-            "Packages/src/Editor/Application/Config/SkillSetupUseCase.cs",
+            "Packages/src/Editor/Application/SessionRecoveryService.cs",
+            "Packages/src/Editor/Application/SkillSetupUseCase.cs",
             "Packages/src/Editor/Domain/UnityCliLoopEditorSettingsService.cs",
             "Packages/src/Editor/Domain/ToolSettingsService.cs",
             "Packages/src/Editor/Infrastructure/Server/DomainReloadDetectionFileService.cs"

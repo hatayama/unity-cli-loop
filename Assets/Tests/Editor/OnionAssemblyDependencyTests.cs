@@ -522,7 +522,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ApplicationToolSources_WhenLoaded_DoNotDeclarePublicToolEntryPoints()
         {
             // Tests that bundled tool entry points stay outside the application layer.
-            string[] sourcePaths = Directory.GetFiles("Packages/src/Editor/Application/Api", "*.cs", SearchOption.AllDirectories);
+            string[] sourcePaths = Directory.GetFiles("Packages/src/Editor/Application", "*.cs", SearchOption.AllDirectories);
             string[] offendingFiles = sourcePaths
                 .Where(path =>
                 {
@@ -764,7 +764,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that the application registry creates tools through their public parameterless contract.
             string registrySource = File.ReadAllText(
-                "Packages/src/Editor/Application/Api/Core/UnityCliLoopToolRegistry.cs");
+                "Packages/src/Editor/Application/UnityCliLoopToolRegistry.cs");
 
             Assert.That(registrySource, Does.Not.Contain("new UnityCliLoopToolHostServices"));
             Assert.That(registrySource, Does.Not.Contain("IUnityCliLoopToolHostServices"));
@@ -821,7 +821,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that provider registration does not force settings JSON load during Editor startup.
             string registrationSource = ReadProductionSource(
-                "Packages/src/Editor/Application/Config/UnityCliLoopEditorDomainReloadStateProvider.cs");
+                "Packages/src/Editor/Application/UnityCliLoopEditorDomainReloadStateProvider.cs");
 
             Assert.That(registrationSource, Does.Not.Contain("GetIsDomainReloadInProgress"));
         }
