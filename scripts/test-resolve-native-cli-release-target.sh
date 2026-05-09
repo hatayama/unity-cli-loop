@@ -46,6 +46,20 @@ case "$1" in
             ;;
         esac
         ;;
+      *:Packages/src/Cli~/Core~/contract.json)
+        case "$2" in
+          target-sha:*)
+            if [ "$CORE_REQUIRED_CHANGED" = "true" ]; then
+              printf '{"schemaVersion":1,"coreVersion":"%s","minimumRequiredDispatcherVersion":"%s"}\n' "$CURRENT_VERSION" "$CURRENT_VERSION"
+            else
+              printf '{"schemaVersion":1,"coreVersion":"%s","minimumRequiredDispatcherVersion":"0.0.0"}\n' "$CURRENT_VERSION"
+            fi
+            ;;
+          *)
+            printf '{"schemaVersion":1,"coreVersion":"0.0.0","minimumRequiredDispatcherVersion":"0.0.0"}\n'
+            ;;
+        esac
+        ;;
       *)
         echo "unexpected git show target: $2" >&2
         exit 1
@@ -153,8 +167,9 @@ run_success_case() {
   previous_release_has_assets=$8
   dispatcher_changed=$9
   contract_changed=${10}
-  expected_publish=${11}
-  expected_release=${12}
+  core_required_changed=${11}
+  expected_publish=${12}
+  expected_release=${13}
 
   work_dir="$TMP_DIR/$name"
   mock_bin="$work_dir/bin"
@@ -172,6 +187,7 @@ run_success_case() {
       PREVIOUS_RELEASE_HAS_ASSETS="$previous_release_has_assets" \
       DISPATCHER_CHANGED="$dispatcher_changed" \
       CONTRACT_CHANGED="$contract_changed" \
+      CORE_REQUIRED_CHANGED="$core_required_changed" \
       EVENT_NAME="$event_name" \
       EVENT_REF_NAME="$branch_name" \
       BEFORE_SHA=before \
@@ -212,6 +228,7 @@ run_failure_case() {
       PREVIOUS_RELEASE_HAS_ASSETS=true \
       DISPATCHER_CHANGED=false \
       CONTRACT_CHANGED=false \
+      CORE_REQUIRED_CHANGED=false \
       EVENT_NAME="$event_name" \
       EVENT_REF_NAME="$branch_name" \
       BEFORE_SHA=before \
@@ -232,32 +249,37 @@ run_failure_case() {
 
 # Verifies already published complete Dispatcher assets are not rebuilt.
 test_complete_current_release_skips() {
-  run_success_case current-complete 3.0.0-beta.2 push v3-beta published true v3.0.0-beta.1 true true false false false
+  run_success_case current-complete 3.0.0-beta.2 push v3-beta published true v3.0.0-beta.1 true true false false false false
 }
 
 # Verifies package-only version changes do not publish Dispatcher assets.
 test_package_version_change_without_dispatcher_change_skips() {
-  run_success_case package-only 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false false false true
+  run_success_case package-only 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false false false false true
 }
 
 # Verifies Dispatcher source changes publish assets on the current release tag.
 test_dispatcher_change_publishes() {
-  run_success_case dispatcher-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true true false true true
+  run_success_case dispatcher-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true true false false true true
 }
 
 # Verifies missing Dispatcher assets can be uploaded to an already published package release.
 test_published_current_release_can_receive_dispatcher_assets() {
-  run_success_case published-missing-assets 3.0.0-beta.3 push v3-beta published false v3.0.0-beta.1 true true false true false
+  run_success_case published-missing-assets 3.0.0-beta.3 push v3-beta published false v3.0.0-beta.1 true true false false true false
 }
 
 # Verifies non-version Dispatcher contract changes publish assets.
 test_dispatcher_contract_change_publishes() {
-  run_success_case contract-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false true true true
+  run_success_case contract-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false true false true true
+}
+
+# Verifies Core-required Dispatcher version bumps publish assets for that required tag.
+test_core_required_dispatcher_change_publishes() {
+  run_success_case core-required-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false false true true true
 }
 
 # Verifies the first Dispatcher asset release is published when no previous asset tag exists.
 test_missing_previous_dispatcher_release_publishes() {
-  run_success_case bootstrap 3.0.0-beta.0 push v3-beta missing false "" false false false true true
+  run_success_case bootstrap 3.0.0-beta.0 push v3-beta missing false "" false false false false true true
 }
 
 # Verifies main refuses prerelease versions.
@@ -275,6 +297,7 @@ test_package_version_change_without_dispatcher_change_skips
 test_dispatcher_change_publishes
 test_published_current_release_can_receive_dispatcher_assets
 test_dispatcher_contract_change_publishes
+test_core_required_dispatcher_change_publishes
 test_missing_previous_dispatcher_release_publishes
 test_main_prerelease_fails
 test_v3_beta_stable_fails

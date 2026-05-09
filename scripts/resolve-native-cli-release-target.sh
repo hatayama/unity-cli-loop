@@ -9,6 +9,7 @@ EVENT_REF_NAME=${EVENT_REF_NAME:-}
 INPUT_RELEASE_TAG=${INPUT_RELEASE_TAG:-}
 INPUT_DRY_RUN=${INPUT_DRY_RUN:-false}
 DISPATCHER_CONTRACT_PATH="Packages/src/Cli~/Dispatcher~/contract.json"
+CORE_CONTRACT_PATH="Packages/src/Cli~/Core~/contract.json"
 DISPATCHER_RELEASE_INPUT_PATHS="
 Packages/src/Cli~/.go-version
 Packages/src/Cli~/layout-contract.json
@@ -105,6 +106,20 @@ dispatcher_contract_changed_except_version() {
   [ "$base_contract" != "$head_contract" ]
 }
 
+core_required_dispatcher_version() {
+  git_ref=$1
+  git show "$git_ref:$CORE_CONTRACT_PATH" | jq -r '.minimumRequiredDispatcherVersion'
+}
+
+core_required_dispatcher_version_changed() {
+  base_ref=$1
+  head_ref=$2
+  base_required_version=$(core_required_dispatcher_version "$base_ref") || return 0
+  head_required_version=$(core_required_dispatcher_version "$head_ref") || return 0
+
+  [ "$base_required_version" != "$head_required_version" ]
+}
+
 dispatcher_release_inputs_changed() {
   base_ref=$1
   head_ref=$2
@@ -113,7 +128,8 @@ dispatcher_release_inputs_changed() {
     return 0
   fi
 
-  dispatcher_contract_changed_except_version "$base_ref" "$head_ref"
+  dispatcher_contract_changed_except_version "$base_ref" "$head_ref" \
+    || core_required_dispatcher_version_changed "$base_ref" "$head_ref"
 }
 
 VERSION=$(jq -r '.["Packages/src"]' .release-please-manifest.json)
