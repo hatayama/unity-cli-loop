@@ -98,7 +98,6 @@ func TestLayoutContractMatchesRepositoryPaths(t *testing.T) {
 	assertPathExists(t, filepath.Join(cliRoot, contract.Layout.DispatcherDir))
 	assertPathExists(t, filepath.Join(cliRoot, contract.Layout.SharedDir))
 	assertPathExists(t, filepath.Join(cliRoot, contract.Layout.CoreDir, contract.Layout.DistDir))
-	assertPathExists(t, filepath.Join(cliRoot, contract.Layout.DispatcherDir, contract.Layout.DistDir))
 	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "build-go-cli.sh"), packagePath(contract, contract.Layout.CoreDir))
 	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "build-go-cli.sh"), packagePath(contract, contract.Layout.DispatcherDir))
 	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "verify-go-cli-dist.sh"), filepath.ToSlash(filepath.Join(packagePath(contract, contract.Layout.CoreDir), contract.Layout.DistDir, "darwin-arm64", contract.Binaries.Core.Unix)))

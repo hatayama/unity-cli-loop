@@ -148,8 +148,9 @@ test_stale_dist_commits_and_pushes() {
 
   assert_contains "$TMP_DIR/stale-dist/script.log" "build"
   assert_contains "$TMP_DIR/stale-dist/script.log" "check"
-  assert_contains "$TMP_DIR/stale-dist/git.log" "add Packages/src/Cli~/Core~/dist Packages/src/Cli~/Dispatcher~/dist"
-  assert_contains "$TMP_DIR/stale-dist/git.log" "commit -m chore(v3-beta): update native CLI binaries"
+  assert_contains "$TMP_DIR/stale-dist/git.log" "add Packages/src/Cli~/Core~/dist"
+  assert_not_contains "$TMP_DIR/stale-dist/git.log" "Packages/src/Cli~/Dispatcher~/dist"
+  assert_contains "$TMP_DIR/stale-dist/git.log" "commit -m chore(v3-beta): update bundled core CLI binaries"
   assert_contains "$TMP_DIR/stale-dist/git.log" "push origin HEAD:release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp"
 }
 
@@ -159,9 +160,10 @@ test_untracked_dist_commits_and_pushes() {
 
   assert_contains "$TMP_DIR/untracked-dist/script.log" "build"
   assert_contains "$TMP_DIR/untracked-dist/script.log" "check"
-  assert_contains "$TMP_DIR/untracked-dist/git.log" "ls-files --others --exclude-standard -- Packages/src/Cli~/Core~/dist Packages/src/Cli~/Dispatcher~/dist"
-  assert_contains "$TMP_DIR/untracked-dist/git.log" "add Packages/src/Cli~/Core~/dist Packages/src/Cli~/Dispatcher~/dist"
-  assert_contains "$TMP_DIR/untracked-dist/git.log" "commit -m chore(v3-beta): update native CLI binaries"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "ls-files --others --exclude-standard -- Packages/src/Cli~/Core~/dist"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "add Packages/src/Cli~/Core~/dist"
+  assert_not_contains "$TMP_DIR/untracked-dist/git.log" "Packages/src/Cli~/Dispatcher~/dist"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "commit -m chore(v3-beta): update bundled core CLI binaries"
   assert_contains "$TMP_DIR/untracked-dist/git.log" "push origin HEAD:release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp"
 }
 

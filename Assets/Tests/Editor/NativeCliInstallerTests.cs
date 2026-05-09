@@ -1,5 +1,5 @@
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Threading;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -29,6 +29,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
+        }
+
+        [Test]
+        public void GetInstallCommand_OnMacPropagatesInstallerDownloadFailure()
+        {
+            // Verifies that automatic editor installs do not report success when curl fails before script execution.
+            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+                RuntimePlatform.OSXEditor,
+                "3.0.0-beta.0",
+                false);
+
+            Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
+            Assert.That(command.ManualCommand, Does.Contain(" -o "));
+            Assert.That(command.ManualCommand, Does.Contain(" && "));
+            Assert.That(command.ManualCommand, Does.Not.Contain("|"));
         }
 
         [Test]
@@ -75,218 +90,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetGlobalCliBundlePath_OnMacArm64UsesPackagedDispatcher()
+        public void RunInstallCommand_WhenInstallerExecutableIsMissingReturnsFailure()
         {
-            // Verifies that the editor installer reads the bundled macOS dispatcher from the package.
-            string result = NativeCliInstaller.GetGlobalCliBundlePath(
-                "/package",
-                RuntimePlatform.OSXEditor,
-                Architecture.Arm64);
+            // Verifies that release installer startup failure stays inside the install result contract.
+            NativeCliInstallCommand command = new(
+                "missing-uloop-release-installer",
+                "--version",
+                "missing-uloop-release-installer --version");
 
-            Assert.That(result, Is.EqualTo(Path.Combine(
-                "/package",
-                "Cli~",
-                "Dispatcher~",
-                "dist",
-                "darwin-arm64",
-                "uloop-dispatcher")));
+            CliInstallResult result = NativeCliInstaller.RunInstallCommand(command, CancellationToken.None, 1000);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorOutput, Does.Contain("Failed to start release CLI dispatcher installer"));
         }
 
         [Test]
-        public void GetGlobalCliBundlePath_OnWindowsUsesPackagedDispatcher()
+        public void RunInstallCommand_WhenInstallerDoesNotExitReturnsFailure()
         {
-            // Verifies that the editor installer reads the bundled Windows dispatcher from the package.
-            string result = NativeCliInstaller.GetGlobalCliBundlePath(
-                "C:\\package",
-                RuntimePlatform.WindowsEditor,
-                Architecture.X64);
+            // Verifies that release installer stalls cannot leave the editor setup task alive forever.
+            NativeCliInstallCommand command = BuildLongRunningInstallCommand();
 
-            Assert.That(result, Is.EqualTo(Path.Combine(
-                "C:\\package",
-                "Cli~",
-                "Dispatcher~",
-                "dist",
-                "windows-amd64",
-                "uloop-dispatcher.exe")));
-        }
+            CliInstallResult result = NativeCliInstaller.RunInstallCommand(command, CancellationToken.None, 50);
 
-        [Test]
-        public void InstallGlobalCliFromBundle_OnWindowsCopiesDispatcherAsUloopExe()
-        {
-            // Verifies that editor install copies the bundled dispatcher as the user-facing uloop command.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string sourceDir = Path.Combine(tempRoot, "source");
-            string sourcePath = Path.Combine(sourceDir, "uloop-dispatcher.exe");
-            string installDir = Path.Combine(tempRoot, "install");
-
-            Directory.CreateDirectory(sourceDir);
-            File.WriteAllText(sourcePath, "fake-binary");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.InstallGlobalCliFromBundle(
-                    sourcePath,
-                    installDir,
-                    RuntimePlatform.WindowsEditor);
-
-                string installedPath = NativeCliInstaller.GetGlobalCliInstallPath(
-                    installDir,
-                    RuntimePlatform.WindowsEditor);
-                Assert.That(result.Success, Is.True);
-                Assert.That(result.ErrorOutput, Is.Empty);
-                Assert.That(Path.GetFileName(installedPath), Is.EqualTo("uloop.exe"));
-                Assert.That(File.ReadAllText(installedPath), Is.EqualTo("fake-binary"));
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void InstallGlobalCliFromBundle_WhenInstallPathExistsReplacesPreviousCommand()
-        {
-            // Verifies that editor install swaps the staged dispatcher into the final command path.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string sourceDir = Path.Combine(tempRoot, "source");
-            string sourcePath = Path.Combine(sourceDir, "uloop-dispatcher.exe");
-            string installDir = Path.Combine(tempRoot, "install");
-            string installPath = NativeCliInstaller.GetGlobalCliInstallPath(
-                installDir,
-                RuntimePlatform.WindowsEditor);
-
-            Directory.CreateDirectory(sourceDir);
-            Directory.CreateDirectory(installDir);
-            File.WriteAllText(sourcePath, "new-binary");
-            File.WriteAllText(installPath, "old-binary");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.InstallGlobalCliFromBundle(
-                    sourcePath,
-                    installDir,
-                    RuntimePlatform.WindowsEditor);
-
-                Assert.That(result.Success, Is.True);
-                Assert.That(File.ReadAllText(installPath), Is.EqualTo("new-binary"));
-                Assert.That(Directory.GetFiles(installDir, ".uloop.exe.install-*"), Is.Empty);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void InstallGlobalCliFromBundle_WhenBundleIsMissingReturnsFailure()
-        {
-            // Verifies that editor install reports a missing packaged dispatcher without creating the install dir.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string sourcePath = Path.Combine(tempRoot, "missing", "uloop-dispatcher.exe");
-            string installDir = Path.Combine(tempRoot, "install");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.InstallGlobalCliFromBundle(
-                    sourcePath,
-                    installDir,
-                    RuntimePlatform.WindowsEditor);
-
-                Assert.That(result.Success, Is.False);
-                Assert.That(result.ErrorOutput, Does.Contain("Global CLI dispatcher binary was not found"));
-                Assert.That(Directory.Exists(installDir), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void InstallGlobalCliFromBundle_WhenInstallDirectoryIsFileReturnsFailure()
-        {
-            // Verifies that expected filesystem setup failures stay inside the installer result contract.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string sourceDir = Path.Combine(tempRoot, "source");
-            string sourcePath = Path.Combine(sourceDir, "uloop-dispatcher.exe");
-            string installDir = Path.Combine(tempRoot, "install-as-file");
-
-            Directory.CreateDirectory(sourceDir);
-            File.WriteAllText(sourcePath, "fake-binary");
-            File.WriteAllText(installDir, "not-a-directory");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.InstallGlobalCliFromBundle(
-                    sourcePath,
-                    installDir,
-                    RuntimePlatform.WindowsEditor);
-
-                Assert.That(result.Success, Is.False);
-                Assert.That(result.ErrorOutput, Does.Contain("Failed to install bundled CLI dispatcher"));
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void InstallGlobalCliFromBundle_WhenInstallDirectoryContainsNullCharacterReturnsFailure()
-        {
-            // Verifies that invalid user-provided install paths stay inside the installer result contract.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string sourceDir = Path.Combine(tempRoot, "source");
-            string sourcePath = Path.Combine(sourceDir, "uloop-dispatcher.exe");
-            string installDir = tempRoot + Path.DirectorySeparatorChar + "bad\0path";
-
-            Directory.CreateDirectory(sourceDir);
-            File.WriteAllText(sourcePath, "fake-binary");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.InstallGlobalCliFromBundle(
-                    sourcePath,
-                    installDir,
-                    RuntimePlatform.WindowsEditor);
-
-                Assert.That(result.Success, Is.False);
-                Assert.That(result.ErrorOutput, Does.Contain("Failed to install bundled CLI dispatcher"));
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorOutput, Does.Contain("timed out"));
         }
 
         [Test]
@@ -299,6 +126,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 RuntimePlatform.WindowsEditor);
 
             Assert.That(result, Is.EqualTo("C:\\Users\\masamichi\\Programs\\uloop\\bin;C:\\npm"));
+        }
+
+        private static NativeCliInstallCommand BuildLongRunningInstallCommand()
+        {
+            if (UnityEngine.Application.platform == RuntimePlatform.WindowsEditor)
+            {
+                return new NativeCliInstallCommand(
+                    "powershell",
+                    "-NoProfile -ExecutionPolicy Bypass -Command \"Start-Sleep -Seconds 5\"",
+                    "Start-Sleep -Seconds 5");
+            }
+
+            return new NativeCliInstallCommand(
+                "/bin/sh",
+                "-c \"sleep 5\"",
+                "sleep 5");
         }
 
         [Test]
@@ -743,12 +586,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void FinishSuccessfulBundleInstall_WhenPathPersistenceFailsReturnsPathFailure()
+        public void FinishSuccessfulInstall_WhenPathPersistenceFailsReturnsPathFailure()
         {
             // Verifies that PATH persistence failure is reported after the current process PATH is updated.
             bool appliedCurrentPath = false;
 
-            CliInstallResult result = NativeCliInstaller.FinishSuccessfulBundleInstall(
+            CliInstallResult result = NativeCliInstaller.FinishSuccessfulInstall(
                 new CliInstallResult(true, ""),
                 "C:\\Users\\masamichi\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor,

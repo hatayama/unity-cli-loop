@@ -7,7 +7,6 @@ REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 RELEASE_PR_PREFIX="release-please--branches--$TARGET_BRANCH--"
 DIST_PATHS="
 Packages/src/Cli~/Core~/dist
-Packages/src/Cli~/Dispatcher~/dist
 "
 
 RELEASE_PRS=$(gh pr list \
@@ -63,7 +62,7 @@ fi
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 git add $DIST_PATHS
-git commit -m "chore($TARGET_BRANCH): update native CLI binaries"
+git commit -m "chore($TARGET_BRANCH): update bundled core CLI binaries"
 
 scripts/check-go-cli.sh
 git push origin "HEAD:$RELEASE_PR_HEAD_REF"

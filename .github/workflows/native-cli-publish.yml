@@ -99,7 +99,7 @@ jobs:
           if-no-files-found: error
 
       - name: Write release notes
-        if: steps.release.outputs.publish == 'true'
+        if: steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true'
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
@@ -130,7 +130,7 @@ jobs:
 
       - name: Create or reuse draft release
         id: draft
-        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
@@ -210,7 +210,7 @@ jobs:
           done
 
       - name: Publish draft release
-        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true' && steps.draft.outputs.release_published != 'true'
+        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true' && steps.draft.outputs.release_published != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
