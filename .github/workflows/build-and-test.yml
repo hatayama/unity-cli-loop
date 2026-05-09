@@ -18,6 +18,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Test release automation shell helpers
+        run: |
+          scripts/test-resolve-native-cli-release-target.sh
+          scripts/test-sync-release-please-go-cli-dist.sh
+          scripts/test-notify-release-workflow-failure.sh
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
