@@ -196,8 +196,9 @@ release_commit_sha_for_version() {
           return 0
         }
 
+        scope_end = index(subject, ")")
         marker_index = index(subject, scoped_marker)
-        if (marker_index == 0) {
+        if (scope_end == 0 || marker_index != scope_end) {
           return 0
         }
 

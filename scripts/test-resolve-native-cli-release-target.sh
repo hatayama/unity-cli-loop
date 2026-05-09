@@ -325,6 +325,11 @@ test_recovery_ignores_non_release_subject_mentions() {
   run_success_case recovery-non-release-subject 3.0.0-beta.2 push v3-beta missing false v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: keep release 3.0.0-beta.2 on the release commit"
 }
 
+# Verifies recovery ignores non-release subjects with a later release marker.
+test_recovery_requires_release_marker_after_scope() {
+  run_success_case recovery-scoped-marker 3.0.0-beta.2 push v3-beta missing false v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta) follow-up): release 3.0.0-beta.2"
+}
+
 # Verifies version matching does not confuse beta.2 with beta.20.
 test_recovery_target_uses_exact_version_boundary() {
   run_success_case recovery-boundary 3.0.0-beta.2 push v3-beta missing false v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta): release 3.0.0-beta.20"
@@ -354,6 +359,7 @@ test_core_required_dispatcher_change_publishes
 test_missing_previous_dispatcher_release_publishes
 test_recovery_targets_release_commit
 test_recovery_ignores_non_release_subject_mentions
+test_recovery_requires_release_marker_after_scope
 test_recovery_target_uses_exact_version_boundary
 test_main_prerelease_fails
 test_v3_beta_stable_fails
