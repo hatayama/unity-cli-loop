@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Security;
 using System.Text;
 using System.Threading;
@@ -15,12 +14,10 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Installs the package-owned global dispatcher while keeping release-script commands available for CLI-only users.
+    /// Installs the package-owned global dispatcher through GitHub Release assets.
     /// </summary>
     public static class NativeCliInstaller
     {
-        private const int CHMOD_TIMEOUT_MS = 5000;
-
         public static NativeCliInstallCommand GetInstallCommand(
             RuntimePlatform platform,
             string packageVersion,
@@ -54,9 +51,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public static async Task<CliInstallResult> InstallAsync(
             RuntimePlatform platform,
-            string packageVersion)
+            string dispatcherVersion,
+            CancellationToken ct)
         {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(packageVersion), "packageVersion must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(dispatcherVersion), "dispatcherVersion must not be null or empty");
+            ct.ThrowIfCancellationRequested();
 
             string installDirectory = GetInstallDirectoryForCurrentUser(platform);
             if (string.IsNullOrWhiteSpace(installDirectory))
@@ -66,19 +65,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Could not resolve the global CLI install directory. Set {CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE} and try again.");
             }
 
-            string sourceBinaryPath = GetGlobalCliBundlePath(
-                UnityCliLoopConstants.PackageResolvedPath,
-                platform,
-                RuntimeInformation.ProcessArchitecture);
-
-            CliInstallResult result = await Task.Run(() => InstallGlobalCliFromBundle(
-                sourceBinaryPath,
-                installDirectory,
-                platform));
+            NativeCliInstallCommand command = GetInstallCommand(platform, dispatcherVersion, true);
+            CliInstallResult result = await Task.Run(() => RunInstallCommand(command), ct);
 
             if (result.Success)
             {
-                result = FinishSuccessfulBundleInstall(
+                result = FinishSuccessfulInstall(
                     result,
                     installDirectory,
                     platform,
@@ -123,54 +115,37 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Environment.SetEnvironmentVariable);
         }
 
-        internal static CliInstallResult InstallGlobalCliFromBundle(
-            string sourceBinaryPath,
-            string installDirectory,
-            RuntimePlatform platform)
+        internal static CliInstallResult RunInstallCommand(NativeCliInstallCommand command)
         {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(sourceBinaryPath), "sourceBinaryPath must not be null or empty");
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installDirectory), "installDirectory must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.FileName), "command.FileName must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.Arguments), "command.Arguments must not be null or empty");
 
-            if (!File.Exists(sourceBinaryPath))
+            ProcessStartInfo startInfo = new()            {
+                FileName = command.FileName,
+                Arguments = command.Arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            Process process = ProcessStartHelper.TryStart(startInfo);
+            if (process == null)
             {
                 return new CliInstallResult(
                     false,
-                    $"Global CLI dispatcher binary was not found for {platform}/{RuntimeInformation.ProcessArchitecture}: {sourceBinaryPath}");
+                    $"Failed to start release CLI dispatcher installer: {command.FileName}");
             }
 
-            try
-            {
-                string installPath = GetGlobalCliInstallPath(installDirectory, platform);
-                string stagedInstallPath = GetStagedGlobalCliInstallPath(installDirectory, platform);
-                Directory.CreateDirectory(installDirectory);
-                File.Copy(sourceBinaryPath, stagedInstallPath, overwrite: true);
+            process.WaitForExit();
+            string standardOutput = process.StandardOutput.ReadToEnd();
+            string errorOutput = process.StandardError.ReadToEnd();
+            bool success = process.ExitCode == 0;
+            process.Dispose();
 
-                CliInstallResult executableResult = MakeGlobalCliExecutable(stagedInstallPath, platform);
-                if (!executableResult.Success)
-                {
-                    File.Delete(stagedInstallPath);
-                    return executableResult;
-                }
-
-                ReplaceInstalledCliFromStaged(stagedInstallPath, installPath);
-                return executableResult;
-            }
-            catch (IOException ex)
-            {
-                return BuildBundledCliInstallFailure(ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return BuildBundledCliInstallFailure(ex);
-            }
-            catch (ArgumentException ex)
-            {
-                return BuildBundledCliInstallFailure(ex);
-            }
-            catch (NotSupportedException ex)
-            {
-                return BuildBundledCliInstallFailure(ex);
-            }
+            return success
+                ? new CliInstallResult(true, standardOutput)
+                : new CliInstallResult(false, BuildReleaseCliInstallFailure(errorOutput, standardOutput));
         }
 
         internal static CliInstallResult UninstallGlobalCli(string installDirectory, RuntimePlatform platform)
@@ -191,40 +166,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             catch (IOException ex)
             {
-                return BuildBundledCliUninstallFailure(ex);
+                return BuildCliUninstallFailure(ex);
             }
             catch (UnauthorizedAccessException ex)
             {
-                return BuildBundledCliUninstallFailure(ex);
+                return BuildCliUninstallFailure(ex);
             }
             catch (ArgumentException ex)
             {
-                return BuildBundledCliUninstallFailure(ex);
+                return BuildCliUninstallFailure(ex);
             }
             catch (NotSupportedException ex)
             {
-                return BuildBundledCliUninstallFailure(ex);
+                return BuildCliUninstallFailure(ex);
             }
             catch (SecurityException ex)
             {
-                return BuildBundledCliUninstallFailure(ex);
+                return BuildCliUninstallFailure(ex);
             }
-        }
-
-        internal static string GetGlobalCliBundlePath(
-            string packageResolvedPath,
-            RuntimePlatform platform,
-            Architecture architecture)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(packageResolvedPath), "packageResolvedPath must not be null or empty");
-
-            return Path.Combine(
-                packageResolvedPath,
-                CliConstants.CLI_PACKAGE_DIR_NAME,
-                CliConstants.GO_CLI_DISPATCHER_DIR_NAME,
-                CliConstants.DIST_DIR_NAME,
-                GetNativeCliPlatformDir(platform, architecture),
-                GetGlobalCliBundleFileName(platform));
         }
 
         internal static string GetGlobalCliInstallPath(string installDirectory, RuntimePlatform platform)
@@ -310,7 +269,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        internal static CliInstallResult FinishSuccessfulBundleInstall(
+        internal static CliInstallResult FinishSuccessfulInstall(
             CliInstallResult installResult,
             string installDirectory,
             RuntimePlatform platform,
@@ -485,16 +444,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 return BuildUnusedLegacyBinPathCleanupFailure(ex);
             }
-        }
-
-        private static string GetStagedGlobalCliInstallPath(string installDirectory, RuntimePlatform platform)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installDirectory), "installDirectory must not be null or empty");
-
-            string fileName = GetGlobalCliInstallFileName(platform);
-            return Path.Combine(
-                installDirectory,
-                $".{fileName}.install-{Guid.NewGuid():N}");
         }
 
         internal static string BuildPathWithInstallDirectory(
@@ -777,20 +726,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return normalizedPath.TrimEnd('\\', '/').Replace('/', '\\');
         }
 
-        private static void ReplaceInstalledCliFromStaged(string stagedInstallPath, string installPath)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(stagedInstallPath), "stagedInstallPath must not be null or empty");
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installPath), "installPath must not be null or empty");
-
-            if (!File.Exists(installPath))
-            {
-                File.Move(stagedInstallPath, installPath);
-                return;
-            }
-
-            File.Replace(stagedInstallPath, installPath, null, true);
-        }
-
         private static CliInstallResult BuildUserPathPersistenceFailure(Exception ex)
         {
             UnityEngine.Debug.Assert(ex != null, "ex must not be null");
@@ -833,27 +768,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new CliInstallResult(false, errorOutput);
         }
 
-        private static CliInstallResult BuildBundledCliUninstallFailure(Exception ex)
+        private static CliInstallResult BuildCliUninstallFailure(Exception ex)
         {
             UnityEngine.Debug.Assert(ex != null, "ex must not be null");
 
-            string errorOutput = $"Failed to uninstall bundled CLI dispatcher: {ex.Message}";
+            string errorOutput = $"Failed to uninstall CLI dispatcher: {ex.Message}";
             return new CliInstallResult(false, errorOutput);
         }
 
-        private static CliInstallResult BuildBundledCliInstallFailure(Exception ex)
+        private static string BuildReleaseCliInstallFailure(string errorOutput, string standardOutput)
         {
-            UnityEngine.Debug.Assert(ex != null, "ex must not be null");
+            if (!string.IsNullOrWhiteSpace(errorOutput))
+            {
+                return errorOutput;
+            }
 
-            string errorOutput = $"Failed to install bundled CLI dispatcher: {ex.Message}";
-            return new CliInstallResult(false, errorOutput);
-        }
+            if (!string.IsNullOrWhiteSpace(standardOutput))
+            {
+                return standardOutput;
+            }
 
-        private static string GetGlobalCliBundleFileName(RuntimePlatform platform)
-        {
-            return platform == RuntimePlatform.WindowsEditor
-                ? CliConstants.GLOBAL_DISPATCHER_WINDOWS_BUNDLE_NAME
-                : CliConstants.GLOBAL_DISPATCHER_UNIX_BUNDLE_NAME;
+            return "Release CLI dispatcher installer failed without output.";
         }
 
         private static string GetGlobalCliInstallFileName(RuntimePlatform platform)
@@ -1036,71 +971,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
-        private static string GetNativeCliPlatformDir(RuntimePlatform platform, Architecture architecture)
-        {
-            if (platform == RuntimePlatform.OSXEditor)
-            {
-                return architecture == Architecture.Arm64 ? "darwin-arm64" : "darwin-amd64";
-            }
-
-            if (platform == RuntimePlatform.WindowsEditor)
-            {
-                return "windows-amd64";
-            }
-
-            return "unsupported";
-        }
-
-        private static CliInstallResult MakeGlobalCliExecutable(string installPath, RuntimePlatform platform)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installPath), "installPath must not be null or empty");
-
-            if (platform == RuntimePlatform.WindowsEditor)
-            {
-                return new CliInstallResult(true, "");
-            }
-
-            ProcessStartInfo startInfo = new()            {
-                FileName = "/bin/chmod",
-                Arguments = $"+x {QuoteProcessArgument(installPath)}",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            Process process = ProcessStartHelper.TryStart(startInfo);
-            if (process == null)
-            {
-                return new CliInstallResult(false, "Failed to start chmod process");
-            }
-
-            bool exited = process.WaitForExit(CHMOD_TIMEOUT_MS);
-            if (!exited)
-            {
-                if (!process.HasExited)
-                {
-                    process.Kill();
-                }
-
-                process.Dispose();
-                return new CliInstallResult(false, "Making global CLI executable timed out");
-            }
-
-            process.WaitForExit();
-            string errorOutput = process.StandardError.ReadToEnd();
-            bool success = process.ExitCode == 0;
-            process.Dispose();
-
-            return new CliInstallResult(success, errorOutput);
-        }
-
-        private static string QuoteProcessArgument(string value)
-        {
-            UnityEngine.Debug.Assert(value != null, "value must not be null");
-            return $"\"{value.Replace("\"", "\\\"")}\"";
-        }
-
         private static string BuildWindowsRemoveLegacyAssignment(bool removeLegacyLaunchers)
         {
             if (!removeLegacyLaunchers)
@@ -1141,11 +1011,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public Task<CliInstallResult> InstallGlobalCliAsync(
             RuntimePlatform platform,
-            string packageVersion,
+            string dispatcherVersion,
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            return NativeCliInstaller.InstallAsync(platform, packageVersion);
+            return NativeCliInstaller.InstallAsync(platform, dispatcherVersion, ct);
         }
 
         public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
