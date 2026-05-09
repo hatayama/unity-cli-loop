@@ -1093,7 +1093,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return "tmp_script=$(mktemp) && "
                 + "trap 'rm -f \"$tmp_script\"' EXIT && "
                 + $"curl -fsSL '{scriptUrl}' -o \"$tmp_script\" && "
-                + $"exec env {CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}' sh \"$tmp_script\"";
+                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}' sh \"$tmp_script\"";
         }
 
         private static string QuoteProcessArgument(string value)
