@@ -9,8 +9,32 @@ $InstallDir = if ($env:ULOOP_INSTALL_DIR) {
 }
 $AssetName = "uloop-windows-amd64.zip"
 
+function Find-LatestAssetUrl {
+    $Page = 1
+
+    while ($true) {
+        $Releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository/releases?per_page=100&page=$Page"
+        foreach ($Release in $Releases) {
+            foreach ($Asset in $Release.assets) {
+                if ([string]::Equals($Asset.name, $AssetName, [System.StringComparison]::Ordinal)) {
+                    return $Asset.browser_download_url
+                }
+            }
+        }
+
+        if ($Releases.Count -lt 100) {
+            return $null
+        }
+
+        $Page += 1
+    }
+}
+
 if ($Version -eq "latest") {
-    $DownloadUrl = "https://github.com/$Repository/releases/latest/download/$AssetName"
+    $DownloadUrl = Find-LatestAssetUrl
+    if (-not $DownloadUrl) {
+        throw "Could not find a latest release asset named $AssetName. Set ULOOP_VERSION to a release tag that provides this asset."
+    }
 } else {
     $DownloadUrl = "https://github.com/$Repository/releases/download/$Version/$AssetName"
 }
