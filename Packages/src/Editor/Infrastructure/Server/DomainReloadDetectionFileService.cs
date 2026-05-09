@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal DomainReloadDetectionFileService(UnityCliLoopEditorSettingsService editorSettingsService)
         {
-            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            UnityEngine.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
 
             _editorSettingsService = editorSettingsService ?? throw new ArgumentNullException(nameof(editorSettingsService));
         }

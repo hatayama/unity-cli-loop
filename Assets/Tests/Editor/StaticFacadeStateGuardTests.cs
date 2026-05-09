@@ -70,6 +70,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             @"\b(public|internal|private|protected)\s+static\s+class\b",
             RegexOptions.Compiled);
 
+        private static readonly Regex AllowedStaticIdentifierPattern = new Regex(
+            @"\b(ServiceValue|RepositoryValue|RegistryValue|RegisteredUseCase)\b",
+            RegexOptions.Compiled);
+
         [Test]
         public void MigratedFacadeFiles_WhenScanned_DoNotOwnMutableStaticState()
         {
@@ -115,6 +119,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 !IsAllowedStaticLine(line)
                 && (DirectMutableStaticFieldPattern.IsMatch(line)
                     || ReadonlyMutableStaticFieldPattern.IsMatch(line));
+
+            Assert.That(isViolation, Is.True);
+        }
+
+        [Test]
+        public void MutableStaticFieldLine_WhenIdentifierOnlyContainsAllowedName_IsReported()
+        {
+            // Tests that the allowlist only accepts exact static facade backing-field identifiers.
+            string line = "private static int RegisteredUseCaseCount = 0;";
+            bool isViolation =
+                !IsAllowedStaticLine(line)
+                && DirectMutableStaticFieldPattern.IsMatch(line);
 
             Assert.That(isViolation, Is.True);
         }
@@ -216,10 +232,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return true;
             }
 
-            return line.Contains("ServiceValue")
-                   || line.Contains("RepositoryValue")
-                   || line.Contains("RegistryValue")
-                   || line.Contains("RegisteredUseCase");
+            return AllowedStaticIdentifierPattern.IsMatch(line);
         }
     }
 }
