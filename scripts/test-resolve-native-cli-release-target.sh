@@ -90,6 +90,12 @@ release_json() {
   state=$1
   has_assets=$2
   if [ "$state" = "missing" ]; then
+    echo "release not found" >&2
+    exit 1
+  fi
+
+  if [ "$state" = "error" ]; then
+    echo "gh auth failed" >&2
     exit 1
   fi
 
@@ -210,6 +216,7 @@ run_failure_case() {
   event_name=$3
   branch_name=$4
   expected_error=$5
+  current_release_state=${6:-missing}
 
   work_dir="$TMP_DIR/$name"
   mock_bin="$work_dir/bin"
@@ -222,7 +229,7 @@ run_failure_case() {
     set +e
     PATH="$mock_bin:$ORIGINAL_PATH" \
       CURRENT_VERSION="$current_version" \
-      CURRENT_RELEASE_STATE=missing \
+      CURRENT_RELEASE_STATE="$current_release_state" \
       CURRENT_RELEASE_HAS_ASSETS=false \
       PREVIOUS_RELEASE_TAG=v3.0.0-beta.1 \
       PREVIOUS_RELEASE_HAS_ASSETS=true \
@@ -292,6 +299,11 @@ test_v3_beta_stable_fails() {
   run_failure_case v3-beta-stable 3.0.0 push v3-beta "Refusing to publish stable version 3.0.0 from v3-beta."
 }
 
+# Verifies release lookup failures other than not-found are not treated as missing releases.
+test_release_lookup_error_fails() {
+  run_failure_case release-lookup-error 3.0.0-beta.3 push v3-beta "gh auth failed" error
+}
+
 test_complete_current_release_skips
 test_package_version_change_without_dispatcher_change_skips
 test_dispatcher_change_publishes
@@ -301,3 +313,4 @@ test_core_required_dispatcher_change_publishes
 test_missing_previous_dispatcher_release_publishes
 test_main_prerelease_fails
 test_v3_beta_stable_fails
+test_release_lookup_error_fails

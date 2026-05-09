@@ -15,6 +15,10 @@ function Find-LatestAssetUrl {
     while ($true) {
         $Releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository/releases?per_page=100&page=$Page"
         foreach ($Release in $Releases) {
+            if ($Release.draft -or $Release.prerelease) {
+                continue
+            }
+
             foreach ($Asset in $Release.assets) {
                 if ([string]::Equals($Asset.name, $AssetName, [System.StringComparison]::Ordinal)) {
                     return $Asset.browser_download_url

@@ -10,6 +10,7 @@ INPUT_RELEASE_TAG=${INPUT_RELEASE_TAG:-}
 INPUT_DRY_RUN=${INPUT_DRY_RUN:-false}
 DISPATCHER_CONTRACT_PATH="Packages/src/Cli~/Dispatcher~/contract.json"
 CORE_CONTRACT_PATH="Packages/src/Cli~/Core~/contract.json"
+RELEASE_DATA=""
 DISPATCHER_RELEASE_INPUT_PATHS="
 Packages/src/Cli~/.go-version
 Packages/src/Cli~/layout-contract.json
@@ -30,12 +31,50 @@ scripts/verify-native-cli-release-assets.sh
 
 release_json() {
   release_tag=$1
-  gh release view "$release_tag" --json isDraft,assets 2>/dev/null || true
+  release_error_file=$(mktemp)
+  if gh release view "$release_tag" --json isDraft,assets 2>"$release_error_file"; then
+    rm -f "$release_error_file"
+    return 0
+  fi
+
+  release_error=$(cat "$release_error_file")
+  rm -f "$release_error_file"
+
+  case "$release_error" in
+    *"release not found"*|*"HTTP 404"*|*"Not Found"*)
+      return 1
+      ;;
+  esac
+
+  printf '%s\n' "$release_error" >&2
+  return 2
+}
+
+release_json_or_exit() {
+  release_tag=$1
+
+  set +e
+  RELEASE_DATA=$(release_json "$release_tag")
+  release_status=$?
+  set -e
+
+  case "$release_status" in
+    0)
+      return 0
+      ;;
+    1)
+      return 1
+      ;;
+    *)
+      exit "$release_status"
+      ;;
+  esac
 }
 
 release_has_all_dispatcher_assets() {
   release_tag=$1
-  release_data=$(release_json "$release_tag")
+  release_json_or_exit "$release_tag" || return 1
+  release_data=$RELEASE_DATA
   if [ -z "$release_data" ]; then
     return 1
   fi
@@ -52,7 +91,8 @@ release_has_all_dispatcher_assets() {
 
 release_is_published_with_dispatcher_assets() {
   release_tag=$1
-  release_data=$(release_json "$release_tag")
+  release_json_or_exit "$release_tag" || return 1
+  release_data=$RELEASE_DATA
   if [ -z "$release_data" ]; then
     return 1
   fi
@@ -67,7 +107,8 @@ release_is_published_with_dispatcher_assets() {
 
 release_is_published() {
   release_tag=$1
-  release_data=$(release_json "$release_tag")
+  release_json_or_exit "$release_tag" || return 1
+  release_data=$RELEASE_DATA
   if [ -z "$release_data" ]; then
     return 1
   fi

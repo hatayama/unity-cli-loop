@@ -887,12 +887,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             UnityEngine.Debug.Assert(process != null, "process must not be null");
 
-            if (process.HasExited)
+            try
             {
-                return;
-            }
+                if (process.HasExited)
+                {
+                    return;
+                }
 
-            process.Kill();
+                process.Kill();
+            }
+            catch (InvalidOperationException)
+            {
+                // Process exit can race with Kill, and timeout/cancel still needs to return a CliInstallResult.
+            }
         }
 
         private static string GetGlobalCliInstallFileName(RuntimePlatform platform)
