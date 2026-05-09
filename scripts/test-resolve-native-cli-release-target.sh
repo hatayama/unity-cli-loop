@@ -154,6 +154,7 @@ run_success_case() {
   dispatcher_changed=$9
   contract_changed=${10}
   expected_publish=${11}
+  expected_release=${12}
 
   work_dir="$TMP_DIR/$name"
   mock_bin="$work_dir/bin"
@@ -179,6 +180,7 @@ run_success_case() {
       "$SCRIPT" > output.txt 2> stderr.txt
 
     assert_contains output.txt "publish=$expected_publish"
+    assert_contains output.txt "release=$expected_release"
     assert_contains output.txt "tag=v$current_version"
     assert_contains output.txt "version=$current_version"
     assert_contains output.txt "sha=target-sha"
@@ -230,27 +232,32 @@ run_failure_case() {
 
 # Verifies already published complete Dispatcher assets are not rebuilt.
 test_complete_current_release_skips() {
-  run_success_case current-complete 3.0.0-beta.2 push v3-beta published true v3.0.0-beta.1 true true false false
+  run_success_case current-complete 3.0.0-beta.2 push v3-beta published true v3.0.0-beta.1 true true false false false
 }
 
 # Verifies package-only version changes do not publish Dispatcher assets.
 test_package_version_change_without_dispatcher_change_skips() {
-  run_success_case package-only 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false false false
+  run_success_case package-only 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false false false true
 }
 
 # Verifies Dispatcher source changes publish assets on the current release tag.
 test_dispatcher_change_publishes() {
-  run_success_case dispatcher-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true true false true
+  run_success_case dispatcher-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true true false true true
+}
+
+# Verifies missing Dispatcher assets can be uploaded to an already published package release.
+test_published_current_release_can_receive_dispatcher_assets() {
+  run_success_case published-missing-assets 3.0.0-beta.3 push v3-beta published false v3.0.0-beta.1 true true false true false
 }
 
 # Verifies non-version Dispatcher contract changes publish assets.
 test_dispatcher_contract_change_publishes() {
-  run_success_case contract-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false true true
+  run_success_case contract-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false true true true
 }
 
 # Verifies the first Dispatcher asset release is published when no previous asset tag exists.
 test_missing_previous_dispatcher_release_publishes() {
-  run_success_case bootstrap 3.0.0-beta.0 push v3-beta missing false "" false false false true
+  run_success_case bootstrap 3.0.0-beta.0 push v3-beta missing false "" false false false true true
 }
 
 # Verifies main refuses prerelease versions.
@@ -266,6 +273,7 @@ test_v3_beta_stable_fails() {
 test_complete_current_release_skips
 test_package_version_change_without_dispatcher_change_skips
 test_dispatcher_change_publishes
+test_published_current_release_can_receive_dispatcher_assets
 test_dispatcher_contract_change_publishes
 test_missing_previous_dispatcher_release_publishes
 test_main_prerelease_fails

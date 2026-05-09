@@ -40,12 +40,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             string posixScriptUrl = BuildReleaseAssetUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME);
-            string posixCommand =
-                $"curl -fsSL '{posixScriptUrl}' | " +
-                $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}' sh";
+            string posixCommand = BuildPosixInstallScriptCommand(posixScriptUrl, releaseTag);
             return new NativeCliInstallCommand(
                 "/bin/sh",
-                $"-c \"{posixCommand}\"",
+                $"-c {QuoteProcessArgument(posixCommand)}",
                 posixCommand);
         }
 
@@ -979,6 +977,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return $"$env:{CliConstants.REMOVE_LEGACY_ENVIRONMENT_VARIABLE}='{CliConstants.REMOVE_LEGACY_ENABLED_VALUE}'; ";
+        }
+
+        private static string BuildPosixInstallScriptCommand(string scriptUrl, string releaseTag)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
+
+            return "tmp_script=$(mktemp) && "
+                + "trap 'rm -f \"$tmp_script\"' EXIT && "
+                + $"curl -fsSL '{scriptUrl}' -o \"$tmp_script\" && "
+                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}' sh \"$tmp_script\"";
+        }
+
+        private static string QuoteProcessArgument(string value)
+        {
+            UnityEngine.Debug.Assert(value != null, "value must not be null");
+            return $"\"{value.Replace("\"", "\\\"")}\"";
         }
 
         private static string BuildReleaseTag(string packageVersion)

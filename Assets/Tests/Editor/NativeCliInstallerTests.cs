@@ -31,6 +31,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetInstallCommand_OnMacPropagatesInstallerDownloadFailure()
+        {
+            // Verifies that automatic editor installs do not report success when curl fails before script execution.
+            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+                RuntimePlatform.OSXEditor,
+                "3.0.0-beta.0",
+                false);
+
+            Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
+            Assert.That(command.ManualCommand, Does.Contain(" -o "));
+            Assert.That(command.ManualCommand, Does.Contain(" && "));
+            Assert.That(command.ManualCommand, Does.Not.Contain("|"));
+        }
+
+        [Test]
         public void GetInstallCommand_OnWindowsKeepsCliOnlyPowerShellInstallerAvailable()
         {
             // Verifies that CLI-only Windows users still have the direct release script, not npm.

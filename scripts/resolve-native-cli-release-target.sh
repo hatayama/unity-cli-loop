@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+
 : "${EVENT_NAME:?EVENT_NAME is required}"
 
 EVENT_REF_NAME=${EVENT_REF_NAME:-}
@@ -37,7 +39,7 @@ release_has_all_dispatcher_assets() {
     return 1
   fi
 
-  for asset_name in $(scripts/verify-native-cli-release-assets.sh --list); do
+  for asset_name in $("$ROOT_DIR/scripts/verify-native-cli-release-assets.sh" --list); do
     asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length')
     if [ "$asset_count" -eq 0 ]; then
       return 1
@@ -60,6 +62,17 @@ release_is_published_with_dispatcher_assets() {
   fi
 
   release_has_all_dispatcher_assets "$release_tag"
+}
+
+release_is_published() {
+  release_tag=$1
+  release_data=$(release_json "$release_tag")
+  if [ -z "$release_data" ]; then
+    return 1
+  fi
+
+  is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
+  [ "$is_draft" = "false" ]
 }
 
 latest_dispatcher_asset_release_tag() {
@@ -134,6 +147,7 @@ case "$VERSION" in
 esac
 
 SHOULD_PUBLISH=false
+SHOULD_RELEASE=false
 CAN_EVALUATE_DISPATCHER_RELEASE=true
 if [ "$EVENT_NAME" = "push" ]; then
   case "$EVENT_REF_NAME" in
@@ -159,6 +173,15 @@ fi
 TARGET_SHA=$(git rev-parse HEAD)
 if [ "$CAN_EVALUATE_DISPATCHER_RELEASE" != "true" ]; then
   SHOULD_PUBLISH=false
+  SHOULD_RELEASE=false
+elif release_is_published "$RELEASE_TAG"; then
+  SHOULD_RELEASE=false
+else
+  SHOULD_RELEASE=true
+fi
+
+if [ "$CAN_EVALUATE_DISPATCHER_RELEASE" != "true" ]; then
+  SHOULD_PUBLISH=false
 elif release_is_published_with_dispatcher_assets "$RELEASE_TAG"; then
   SHOULD_PUBLISH=false
 else
@@ -180,6 +203,7 @@ if [ "$INPUT_DRY_RUN" = "true" ]; then
 fi
 
 printf 'publish=%s\n' "$SHOULD_PUBLISH"
+printf 'release=%s\n' "$SHOULD_RELEASE"
 printf 'tag=%s\n' "$RELEASE_TAG"
 printf 'version=%s\n' "$VERSION"
 printf 'sha=%s\n' "$TARGET_SHA"
