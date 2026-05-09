@@ -179,12 +179,33 @@ release_commit_sha_for_version() {
 
   git log --format='%H	%s' "$build_sha" \
     | awk -F '	' -v version="$version" '
-      {
-        marker = "release " version
-        marker_index = index($2, marker)
-        next_character = substr($2, marker_index + length(marker), 1)
+      function version_boundary_matches(subject, prefix) {
+        next_character = substr(subject, length(prefix) + 1, 1)
+        return next_character == "" || next_character == " "
       }
-      marker_index > 0 && (next_character == "" || next_character == " ") {
+
+      function is_release_please_subject(subject) {
+        plain_prefix = "chore: release " version
+        scoped_marker = "): release " version
+
+        if (index(subject, plain_prefix) == 1) {
+          return version_boundary_matches(subject, plain_prefix)
+        }
+
+        if (index(subject, "chore(") != 1) {
+          return 0
+        }
+
+        marker_index = index(subject, scoped_marker)
+        if (marker_index == 0) {
+          return 0
+        }
+
+        scoped_prefix = substr(subject, 1, marker_index + length(scoped_marker) - 1)
+        return version_boundary_matches(subject, scoped_prefix)
+      }
+
+      is_release_please_subject($2) {
         print $1
         exit
       }
