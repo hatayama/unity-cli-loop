@@ -164,7 +164,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Debug.Assert(!string.IsNullOrEmpty(packageVersion), "packageVersion must not be null or empty");
             ct.ThrowIfCancellationRequested();
 
-            CliInstallResult result = await _nativeCliInstaller.InstallGlobalCliAsync(platform, packageVersion, ct);
+            string requiredDispatcherVersion = GetRequiredDispatcherVersion(packageVersion);
+            CliInstallResult result = await _nativeCliInstaller.InstallGlobalCliAsync(platform, requiredDispatcherVersion, ct);
             _cliInstallationDetector.InvalidateCache();
             return result;
         }
@@ -185,7 +186,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             Debug.Assert(!string.IsNullOrEmpty(packageVersion), "packageVersion must not be null or empty");
 
-            return _nativeCliInstaller.GetGlobalCliInstallCommand(platform, packageVersion, removeLegacyLaunchers);
+            string requiredDispatcherVersion = GetRequiredDispatcherVersion(packageVersion);
+            return _nativeCliInstaller.GetGlobalCliInstallCommand(platform, requiredDispatcherVersion, removeLegacyLaunchers);
         }
     }
 

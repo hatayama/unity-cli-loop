@@ -23,6 +23,7 @@ jobs:
           scripts/test-resolve-native-cli-release-target.sh
           scripts/test-sync-release-please-go-cli-dist.sh
           scripts/test-notify-release-workflow-failure.sh
+          scripts/test-install-release-filter.sh
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -59,9 +60,7 @@ jobs:
           test -d "Packages/src/Cli~/Dispatcher~" || exit 1
           test -d "Packages/src/Cli~/Shared~" || exit 1
           test -f "Packages/src/Cli~/Core~/dist/darwin-arm64/uloop-core" || exit 1
-          test -f "Packages/src/Cli~/Dispatcher~/dist/darwin-arm64/uloop-dispatcher" || exit 1
           test -f "Packages/src/Cli~/Core~/dist/windows-amd64/uloop-core.exe" || exit 1
-          test -f "Packages/src/Cli~/Dispatcher~/dist/windows-amd64/uloop-dispatcher.exe" || exit 1
 
           echo "✅ Unity Package structure is valid"
 

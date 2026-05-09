@@ -65,7 +65,17 @@ find_latest_asset_url() {
   while :; do
     releases_json=$(curl -fsSL "https://api.github.com/repos/$REPOSITORY/releases?per_page=100&page=$page")
     asset_url=$(printf '%s\n' "$releases_json" | awk -v asset_name="$asset_name" '
+      /"draft":/ {
+        draft = ($0 ~ /true/)
+      }
+      /"prerelease":/ {
+        prerelease = ($0 ~ /true/)
+      }
       /"browser_download_url":/ {
+        if (draft || prerelease) {
+          next
+        }
+
         line = $0
         sub(/^[[:space:]]*"browser_download_url": "/, "", line)
         sub(/",?[[:space:]]*$/, "", line)
