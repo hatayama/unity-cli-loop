@@ -28,7 +28,13 @@ case "$1" in
     exit 0
     ;;
   rev-parse)
-    printf '%s\n' target-sha
+    printf '%s\n' "${BUILD_SHA_VALUE:-target-sha}"
+    ;;
+  log)
+    printf '%s\t%s\n' "${BUILD_SHA_VALUE:-target-sha}" "$BUILD_COMMIT_SUBJECT"
+    if [ -n "${RELEASE_COMMIT_SHA:-}" ] && [ "$RELEASE_COMMIT_SHA" != "${BUILD_SHA_VALUE:-target-sha}" ]; then
+      printf '%s\t%s\n' "$RELEASE_COMMIT_SHA" "$RELEASE_COMMIT_SUBJECT"
+    fi
     ;;
   show)
     case "$2" in
@@ -176,6 +182,17 @@ run_success_case() {
   core_required_changed=${11}
   expected_publish=${12}
   expected_release=${13}
+  expected_sha=${14:-target-sha}
+  build_sha_value=${15:-target-sha}
+  release_commit_sha=${16:-target-sha}
+  release_commit_subject=${17:-}
+  build_commit_subject=${18:-}
+  if [ -z "$release_commit_subject" ]; then
+    release_commit_subject="chore(v3-beta): release $current_version"
+  fi
+  if [ -z "$build_commit_subject" ]; then
+    build_commit_subject=$release_commit_subject
+  fi
 
   work_dir="$TMP_DIR/$name"
   mock_bin="$work_dir/bin"
@@ -189,6 +206,10 @@ run_success_case() {
       CURRENT_VERSION="$current_version" \
       CURRENT_RELEASE_STATE="$current_release_state" \
       CURRENT_RELEASE_HAS_ASSETS="$current_release_has_assets" \
+      BUILD_SHA_VALUE="$build_sha_value" \
+      BUILD_COMMIT_SUBJECT="$build_commit_subject" \
+      RELEASE_COMMIT_SHA="$release_commit_sha" \
+      RELEASE_COMMIT_SUBJECT="$release_commit_subject" \
       PREVIOUS_RELEASE_TAG="$previous_release_tag" \
       PREVIOUS_RELEASE_HAS_ASSETS="$previous_release_has_assets" \
       DISPATCHER_CHANGED="$dispatcher_changed" \
@@ -205,7 +226,8 @@ run_success_case() {
     assert_contains output.txt "release=$expected_release"
     assert_contains output.txt "tag=v$current_version"
     assert_contains output.txt "version=$current_version"
-    assert_contains output.txt "sha=target-sha"
+    assert_contains output.txt "sha=$expected_sha"
+    assert_contains output.txt "build_sha=$build_sha_value"
     assert_contains output.txt "dry_run=false"
   )
 }
@@ -231,6 +253,10 @@ run_failure_case() {
       CURRENT_VERSION="$current_version" \
       CURRENT_RELEASE_STATE="$current_release_state" \
       CURRENT_RELEASE_HAS_ASSETS=false \
+      BUILD_SHA_VALUE=target-sha \
+      BUILD_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
+      RELEASE_COMMIT_SHA=target-sha \
+      RELEASE_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
       PREVIOUS_RELEASE_TAG=v3.0.0-beta.1 \
       PREVIOUS_RELEASE_HAS_ASSETS=true \
       DISPATCHER_CHANGED=false \
@@ -289,6 +315,16 @@ test_missing_previous_dispatcher_release_publishes() {
   run_success_case bootstrap 3.0.0-beta.0 push v3-beta missing false "" false false false false true true
 }
 
+# Verifies a recovered release still tags the original release PR merge commit.
+test_recovery_targets_release_commit() {
+  run_success_case recovery-target 3.0.0-beta.2 push v3-beta missing false v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: follow-up change"
+}
+
+# Verifies version matching does not confuse beta.2 with beta.20.
+test_recovery_target_uses_exact_version_boundary() {
+  run_success_case recovery-boundary 3.0.0-beta.2 push v3-beta missing false v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta): release 3.0.0-beta.20"
+}
+
 # Verifies main refuses prerelease versions.
 test_main_prerelease_fails() {
   run_failure_case main-prerelease 3.0.0-beta.2 push main "Refusing to publish prerelease version 3.0.0-beta.2 from main."
@@ -311,6 +347,8 @@ test_published_current_release_can_receive_dispatcher_assets
 test_dispatcher_contract_change_publishes
 test_core_required_dispatcher_change_publishes
 test_missing_previous_dispatcher_release_publishes
+test_recovery_targets_release_commit
+test_recovery_target_uses_exact_version_boundary
 test_main_prerelease_fails
 test_v3_beta_stable_fails
 test_release_lookup_error_fails
