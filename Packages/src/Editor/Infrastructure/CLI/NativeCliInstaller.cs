@@ -169,25 +169,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (!exited)
             {
                 KillProcessIfRunning(process);
+                process.WaitForExit(INSTALL_PROCESS_WAIT_SLICE_MS);
+                string timedOutStandardOutput = standardOutputBuilder.ToString();
+                string timedOutErrorOutput = errorOutputBuilder.ToString();
+                process.Dispose();
+
+                if (canceled)
+                {
+                    return new CliInstallResult(false, "Release CLI dispatcher installer was canceled.");
+                }
+
+                return new CliInstallResult(
+                    false,
+                    BuildReleaseCliInstallTimeoutFailure(timeoutMs, timedOutErrorOutput, timedOutStandardOutput));
             }
 
             process.WaitForExit();
             string standardOutput = standardOutputBuilder.ToString();
             string errorOutput = errorOutputBuilder.ToString();
-            if (canceled)
-            {
-                process.Dispose();
-                return new CliInstallResult(false, "Release CLI dispatcher installer was canceled.");
-            }
-
-            if (!exited)
-            {
-                process.Dispose();
-                return new CliInstallResult(
-                    false,
-                    BuildReleaseCliInstallTimeoutFailure(timeoutMs, errorOutput, standardOutput));
-            }
-
             bool success = process.ExitCode == 0;
             process.Dispose();
 
@@ -1094,7 +1093,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return "tmp_script=$(mktemp) && "
                 + "trap 'rm -f \"$tmp_script\"' EXIT && "
                 + $"curl -fsSL '{scriptUrl}' -o \"$tmp_script\" && "
-                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}' sh \"$tmp_script\"";
+                + $"exec env {CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}' sh \"$tmp_script\"";
         }
 
         private static string QuoteProcessArgument(string value)
