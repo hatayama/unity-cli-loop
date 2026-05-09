@@ -70,7 +70,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 synchronizerTargets,
                 groupSkillsUnderUnityCliLoop,
                 _toolSettingsService.GetDisabledTools());
-            ct.ThrowIfCancellationRequested();
         }
 
         public async Task InstallSkillFilesForToolAsync(
@@ -85,7 +84,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 toolName,
                 groupSkillsUnderUnityCliLoop,
                 _toolSettingsService.GetDisabledTools());
-            ct.ThrowIfCancellationRequested();
         }
 
         private static SkillSetupTargetInfo ToDomainInfo(ToolSkillSynchronizer.SkillTargetInfo target)

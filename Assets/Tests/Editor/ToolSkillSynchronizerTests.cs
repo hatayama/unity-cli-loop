@@ -383,6 +383,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo("old-unrelated-reference"));
         }
 
+        // Tests that per-tool installation skips disabled tools.
+        [Test]
+        public async Task InstallSkillFilesForToolAtProjectRoot_WhenRequestedToolIsDisabled_DoesNotInstallSkill()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-disabled-skill",
+                "DisabledTool",
+                "reference.md",
+                "disabled-reference");
+            string[] disabledTools = { "disabled-skill" };
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            Directory.CreateDirectory(skillsRoot);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesForToolAtProjectRoot(
+                    temporaryRoot,
+                    "disabled-skill",
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools);
+
+            string disabledSkillDir = Path.Combine(skillsRoot, "uloop-disabled-skill");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(result.AttemptedTargets, Is.EqualTo(0));
+            Assert.That(Directory.Exists(disabledSkillDir), Is.False);
+        }
+
         [Test]
         public async Task InstallSkillFilesForToolAtProjectRoot_RemovesDisabledAndDeprecatedSkillsWithoutUpdatingUnrelatedSkills()
         {

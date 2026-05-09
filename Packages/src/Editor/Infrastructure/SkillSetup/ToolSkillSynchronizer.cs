@@ -512,6 +512,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
 
+            if (disabledTools.Contains(toolName))
+            {
+                return new SkillInstallResult(0, 0);
+            }
+
             SkillTargetInfo[] targetArray = DetectTargetsWithSkillsDirectory(projectRoot).ToArray();
             return await Task.Run(() =>
             {
