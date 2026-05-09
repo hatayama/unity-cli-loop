@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.3](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.2...v3.0.0-beta.3) (2026-05-09)
+
+
+### Features
+
+* Setup keeps packages smaller while installing Dispatcher on demand ([#1081](https://github.com/hatayama/unity-cli-loop/issues/1081)) ([2896147](https://github.com/hatayama/unity-cli-loop/commit/289614797c011f0c545bfbaf3eeab5dbb51c1e13))
+
 ## [3.0.0-beta.2](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.1...v3.0.0-beta.2) (2026-05-08)
 
 
