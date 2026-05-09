@@ -173,6 +173,46 @@ dispatcher_release_inputs_changed() {
     || core_required_dispatcher_version_changed "$base_ref" "$head_ref"
 }
 
+release_commit_sha_for_version() {
+  version=$1
+  build_sha=$2
+
+  git log --format='%H	%s' "$build_sha" \
+    | awk -F '	' -v version="$version" '
+      function version_boundary_matches(subject, prefix) {
+        next_character = substr(subject, length(prefix) + 1, 1)
+        return next_character == "" || next_character == " "
+      }
+
+      function is_release_please_subject(subject) {
+        plain_prefix = "chore: release " version
+        scoped_marker = "): release " version
+
+        if (index(subject, plain_prefix) == 1) {
+          return version_boundary_matches(subject, plain_prefix)
+        }
+
+        if (index(subject, "chore(") != 1) {
+          return 0
+        }
+
+        scope_end = index(subject, ")")
+        marker_index = index(subject, scoped_marker)
+        if (scope_end == 0 || marker_index != scope_end) {
+          return 0
+        }
+
+        scoped_prefix = substr(subject, 1, marker_index + length(scoped_marker) - 1)
+        return version_boundary_matches(subject, scoped_prefix)
+      }
+
+      is_release_please_subject($2) {
+        print $1
+        exit
+      }
+    '
+}
+
 VERSION=$(jq -r '.["Packages/src"]' .release-please-manifest.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
   echo "Could not resolve Packages/src version from .release-please-manifest.json." >&2
@@ -228,6 +268,12 @@ if [ "$EVENT_NAME" = "push" ]; then
 fi
 
 TARGET_SHA=$(git rev-parse HEAD)
+BUILD_SHA=$TARGET_SHA
+RELEASE_TARGET_SHA=$(release_commit_sha_for_version "$VERSION" "$BUILD_SHA")
+if [ -z "$RELEASE_TARGET_SHA" ]; then
+  RELEASE_TARGET_SHA=$BUILD_SHA
+fi
+
 if [ "$CAN_EVALUATE_DISPATCHER_RELEASE" != "true" ]; then
   SHOULD_PUBLISH=false
   SHOULD_RELEASE=false
@@ -263,9 +309,11 @@ printf 'publish=%s\n' "$SHOULD_PUBLISH"
 printf 'release=%s\n' "$SHOULD_RELEASE"
 printf 'tag=%s\n' "$RELEASE_TAG"
 printf 'version=%s\n' "$VERSION"
-printf 'sha=%s\n' "$TARGET_SHA"
+printf 'sha=%s\n' "$RELEASE_TARGET_SHA"
+printf 'build_sha=%s\n' "$BUILD_SHA"
 printf 'dry_run=%s\n' "$DRY_RUN"
 
 echo "Publish: $SHOULD_PUBLISH" >&2
 echo "Release tag: $RELEASE_TAG" >&2
-echo "Target SHA: $TARGET_SHA" >&2
+echo "Target SHA: $RELEASE_TARGET_SHA" >&2
+echo "Build SHA: $BUILD_SHA" >&2
