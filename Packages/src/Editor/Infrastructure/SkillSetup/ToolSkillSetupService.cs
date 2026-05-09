@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -14,6 +14,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class ToolSkillSetupService : ISkillSetupPort
     {
+        private readonly ToolSettingsService _toolSettingsService;
+
+        public ToolSkillSetupService(ToolSettingsService toolSettingsService)
+        {
+            Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+
+            _toolSettingsService = toolSettingsService ?? throw new System.ArgumentNullException(nameof(toolSettingsService));
+        }
+
         public void RemoveSkillFiles(string toolName)
         {
             ToolSkillSynchronizer.RemoveSkillFiles(toolName);
@@ -32,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ToolSkillSynchronizer.DetectTargetsForLayoutAtProjectRoot(
                     projectRoot,
                     groupSkillsUnderUnityCliLoop);
-            return targets.Select(ToApplicationInfo).ToList();
+            return targets.Select(ToDomainInfo).ToList();
         }
 
         public List<SkillSetupTargetInfo> DetectSkillTargetsForLayoutFastAtProjectRoot(
@@ -43,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ToolSkillSynchronizer.DetectTargetsForLayoutFastAtProjectRoot(
                     projectRoot,
                     groupSkillsUnderUnityCliLoop);
-            return targets.Select(ToApplicationInfo).ToList();
+            return targets.Select(ToDomainInfo).ToList();
         }
 
         public async Task InstallSkillFilesAsync(
@@ -59,8 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 .ToList();
             await ToolSkillSynchronizer.InstallSkillFiles(
                 synchronizerTargets,
-                groupSkillsUnderUnityCliLoop);
-            ct.ThrowIfCancellationRequested();
+                groupSkillsUnderUnityCliLoop,
+                _toolSettingsService.GetDisabledTools());
         }
 
         public async Task InstallSkillFilesForToolAsync(
@@ -73,11 +82,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             await ToolSkillSynchronizer.InstallSkillFilesForTool(
                 toolName,
-                groupSkillsUnderUnityCliLoop);
-            ct.ThrowIfCancellationRequested();
+                groupSkillsUnderUnityCliLoop,
+                _toolSettingsService.GetDisabledTools());
         }
 
-        private static SkillSetupTargetInfo ToApplicationInfo(ToolSkillSynchronizer.SkillTargetInfo target)
+        private static SkillSetupTargetInfo ToDomainInfo(ToolSkillSynchronizer.SkillTargetInfo target)
         {
             return new SkillSetupTargetInfo(
                 target.DisplayName,

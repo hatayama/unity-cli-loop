@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
@@ -22,9 +23,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const double ToolSettingsRegistryWarmupMaxDelaySeconds = 0.8;
         private const int ToolSettingsRegistryWarmupMaxAttempts = 5;
 
+        private static UnityCliLoopEditorSettingsService RegisteredEditorSettingsService;
+
         private UnityCliLoopSettingsWindowUI _view;
         private UnityCliLoopSettingsModel _model;
         private UnityCliLoopSettingsWindowEventHandler _eventHandler;
+        private SkillSetupUseCase _skillSetupUseCase;
+        private ToolSettingsUseCase _toolSettingsUseCase;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
 
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private bool _installSkillsFlat;
@@ -46,6 +52,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             UnityCliLoopSettingsWindow window = GetWindow<UnityCliLoopSettingsWindow>("Unity CLI Loop");
             window.Show();
+        }
+
+        internal static void InitializeEditorServices(UnityCliLoopEditorSettingsService editorSettingsService)
+        {
+            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+
+            RegisteredEditorSettingsService = editorSettingsService
+                ?? throw new ArgumentNullException(nameof(editorSettingsService));
         }
 
         private void OnEnable()
@@ -72,6 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeAll()
         {
+            InitializeApplicationServices();
             InitializeModel();
             InitializeEventHandler();
             LoadSavedSettings();
@@ -81,7 +96,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeModel()
         {
-            _model = new UnityCliLoopSettingsModel();
+            _model = new UnityCliLoopSettingsModel(
+                _toolSettingsUseCase,
+                _editorSettingsService);
+        }
+
+        private void InitializeApplicationServices()
+        {
+            _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            _toolSettingsUseCase = ToolSettingsUseCaseRegistry.GetRegisteredUseCase();
+            _editorSettingsService = GetEditorSettingsService();
         }
 
         private void InitializeView()
@@ -111,7 +135,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeEventHandler()
         {
-            _eventHandler = new UnityCliLoopSettingsWindowEventHandler(_model, this);
+            _eventHandler = new UnityCliLoopSettingsWindowEventHandler(
+                _model,
+                this,
+                _toolSettingsUseCase);
             _eventHandler.Initialize();
         }
 
@@ -129,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private async void HandlePostCompileMode()
         {
             _model.EnablePostCompileMode();
-            UnityCliLoopEditorSettings.SetShowReconnectingUI(false);
+            _editorSettingsService.SetShowReconnectingUI(false);
 
             Task recoveryTask = UnityCliLoopServerApplicationFacade.RecoveryTask;
             if (recoveryTask != null && !recoveryTask.IsCompleted)
@@ -137,11 +164,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 await recoveryTask;
             }
 
-            bool isAfterCompile = UnityCliLoopEditorSettings.GetIsAfterCompile();
+            bool isAfterCompile = _editorSettingsService.GetIsAfterCompile();
 
             if (isAfterCompile)
             {
-                UnityCliLoopEditorSettings.ClearAfterCompileFlag();
+                _editorSettingsService.ClearAfterCompileFlag();
                 return;
             }
 
@@ -348,7 +375,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             return new ToolSettingsSectionData(
                 _model.UI.ShowToolSettings,
-                ToolSettingsApplicationFacade.GetDynamicCodeSecurityLevel(),
+                _toolSettingsUseCase.GetDynamicCodeSecurityLevel(),
                 System.Array.Empty<ToolToggleItem>(),
                 System.Array.Empty<ToolToggleItem>(),
                 true,
@@ -358,13 +385,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private ToolSettingsSectionData CreateToolSettingsData()
         {
             bool isRegistryAvailable =
-                ToolSettingsApplicationFacade.TryGetToolCatalog(
-                    out ToolSettingsApplicationFacade.ToolCatalogItem[] allTools);
+                _toolSettingsUseCase.TryGetToolCatalog(
+                    out ToolSettingsUseCase.ToolCatalogItem[] allTools);
             if (!isRegistryAvailable)
             {
                 return new ToolSettingsSectionData(
                     _model.UI.ShowToolSettings,
-                    ToolSettingsApplicationFacade.GetDynamicCodeSecurityLevel(),
+                    _toolSettingsUseCase.GetDynamicCodeSecurityLevel(),
                     System.Array.Empty<ToolToggleItem>(),
                     System.Array.Empty<ToolToggleItem>(),
                     false,
@@ -374,14 +401,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             List<ToolToggleItem> builtIn = new();
             List<ToolToggleItem> thirdParty = new();
 
-            foreach (ToolSettingsApplicationFacade.ToolCatalogItem tool in allTools)
+            foreach (ToolSettingsUseCase.ToolCatalogItem tool in allTools)
             {
                 if (tool.DisplayDevelopmentOnly)
                 {
                     continue;
                 }
 
-                bool isEnabled = ToolSettingsApplicationFacade.IsToolEnabled(tool.Name);
+                bool isEnabled = _toolSettingsUseCase.IsToolEnabled(tool.Name);
                 bool isThirdPartyTool = tool.IsThirdParty;
 
                 ToolToggleItem item = new(tool.Name, isEnabled, isThirdPartyTool);
@@ -401,7 +428,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             return new ToolSettingsSectionData(
                 _model.UI.ShowToolSettings,
-                ToolSettingsApplicationFacade.GetDynamicCodeSecurityLevel(),
+                _toolSettingsUseCase.GetDynamicCodeSecurityLevel(),
                 builtIn.ToArray(),
                 thirdParty.ToArray(),
                 true,
@@ -461,7 +488,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            ToolSettingsApplicationFacade.WarmupRegistry();
+            _toolSettingsUseCase.WarmupRegistry();
             InvalidateToolSettingsCatalog();
             RefreshToolSettingsCatalogIfNeeded();
         }
@@ -495,16 +522,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (!enabled)
             {
-                SkillSetupApplicationFacade.RemoveSkillFiles(toolName);
+                _skillSetupUseCase.RemoveSkillFiles(toolName);
             }
             else
             {
-                await SkillSetupApplicationFacade.InstallSkillFilesForToolAsync(
+                await _skillSetupUseCase.InstallSkillFilesForToolAsync(
                     toolName,
                     !_installSkillsFlat,
                     CancellationToken.None);
 
-                if (!SkillSetupApplicationFacade.IsSkillInstalled(toolName))
+                if (!_skillSetupUseCase.IsSkillInstalled(toolName))
                 {
                     Debug.LogWarning(
                         $"[UnityCliLoop] Skill for '{toolName}' was not installed after enabling. " +
@@ -522,7 +549,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateDynamicCodeSecurityLevel(DynamicCodeSecurityLevel level)
         {
-            ToolSettingsApplicationFacade.SetDynamicCodeSecurityLevel(level);
+            _toolSettingsUseCase.SetDynamicCodeSecurityLevel(level);
         }
 
         private void RefreshCliSetupSection(bool includeSkillDirectoryChecks = true)
@@ -648,10 +675,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
                 _skillsTarget,
                 !_installSkillsFlat);
-            List<SkillSetupApplicationFacade.SkillTargetInfo> targets = includeFreshnessCheck
-                ? SkillSetupApplicationFacade.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat)
-                : SkillSetupApplicationFacade.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
-            SkillSetupApplicationFacade.SkillTargetInfo targetInfo = targets
+            List<SkillSetupTargetInfo> targets = includeFreshnessCheck
+                ? _skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat)
+                : _skillSetupUseCase.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
+            SkillSetupTargetInfo targetInfo = targets
                 .FirstOrDefault(target => target.DirName == selection.DirectoryName);
 
             return string.IsNullOrEmpty(targetInfo.DirName)
@@ -792,14 +819,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
                     _skillsTarget,
                     !_installSkillsFlat);
-                SkillSetupApplicationFacade.SkillTargetInfo target = new(
+                SkillSetupTargetInfo target = new(
                     selection.DisplayName,
                     selection.DirectoryName,
                     selection.InstallFlag,
                     hasSkillsDirectory: true,
-                    hasExistingSkills: false);
-                await SkillSetupApplicationFacade.InstallSkillFilesAsync(
-                    new List<SkillSetupApplicationFacade.SkillTargetInfo> { target },
+                    hasExistingSkills: false,
+                    hasDifferentLayoutSkills: false,
+                    SkillInstallState.Missing);
+                await _skillSetupUseCase.InstallSkillFilesAsync(
+                    new List<SkillSetupTargetInfo> { target },
                     !_installSkillsFlat,
                     CancellationToken.None);
                 EditorDialogHelper.ShowSkillsInstalledDialog();
@@ -824,7 +853,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             // Claude Code does not resolve nested skill folders, so editor-driven installs stay flat for every target.
             _installSkillsFlat = ForceFlatSkillInstall;
-            UnityCliLoopEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
+            _editorSettingsService.SetInstallSkillsFlat(_installSkillsFlat);
+        }
+
+        private static UnityCliLoopEditorSettingsService GetEditorSettingsService()
+        {
+            if (RegisteredEditorSettingsService == null)
+            {
+                throw new InvalidOperationException("Unity CLI Loop editor settings service is not registered.");
+            }
+
+            return RegisteredEditorSettingsService;
         }
 
         private void HandleRefreshSkillsState()

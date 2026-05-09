@@ -47,12 +47,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string RemovedSharedAssemblyGuidReference = "GUID:290394860909340b7835eb7cc215ee75";
 
         [Test]
-        public void DomainAsmdef_WhenLoaded_HasNoProjectAssemblyReferences()
+        public void DomainAsmdef_WhenLoaded_ReferencesOnlyPublicToolContracts()
         {
-            // Tests that the domain layer stays independent from outer project assemblies.
+            // Tests that the domain layer can model tools through public contracts without depending on outer layers.
             string[] references = ReadResolvedReferences("Packages/src/Editor/Domain/UnityCLILoop.Domain.asmdef");
 
-            Assert.That(references, Is.Empty);
+            Assert.That(references, Is.EquivalentTo(new[] { ToolContractsAssemblyName }));
         }
 
         [Test]
@@ -85,6 +85,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void CliConstants_WhenLoaded_CompileUnderDomainAssembly()
+        {
+            // Tests that CLI and skill layout contracts stay with domain policy.
+            string constantsAssemblyName = typeof(CliConstants).Assembly.GetName().Name;
+
+            Assert.That(constantsAssemblyName, Is.EqualTo(DomainAssemblyName));
+        }
+
+        [Test]
         public void CompilationDiagnosticMessageParser_WhenLoaded_CompilesUnderDomainAssembly()
         {
             // Tests that first-party dynamic-code parsing stays inside the bundled tool assembly.
@@ -114,12 +123,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void DynamicCodeSecurityValues_WhenLoaded_CompileUnderDomainAssembly()
         {
-            // Tests that public dynamic-code security values stay in the tool contract assembly.
+            // Tests that dynamic-code security levels stay with domain policy while scan results stay public.
+            string levelAssemblyName = typeof(DynamicCodeSecurityLevel).Assembly.GetName().Name;
             string resultAssemblyName = typeof(SecurityValidationResult).Assembly.GetName().Name;
             string violationAssemblyName = typeof(SecurityViolation).Assembly.GetName().Name;
 
+            Assert.That(levelAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(resultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
             Assert.That(violationAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
+        }
+
+        [Test]
+        public void ULoopSettings_WhenLoaded_CompileUnderDomainAssembly()
+        {
+            // Tests that tool-specific settings concepts stay in the domain layer.
+            string settingsAssemblyName = typeof(ULoopSettings).Assembly.GetName().Name;
+            string settingsDataAssemblyName = typeof(ULoopSettingsData).Assembly.GetName().Name;
+            string toolSettingsDataAssemblyName = typeof(ToolSettingsData).Assembly.GetName().Name;
+            string editorSettingsDataAssemblyName = typeof(UnityCliLoopEditorSettingsData).Assembly.GetName().Name;
+            string toolSettingsServiceAssemblyName = typeof(ToolSettingsService).Assembly.GetName().Name;
+            string editorSettingsServiceAssemblyName = typeof(UnityCliLoopEditorSettingsService).Assembly.GetName().Name;
+
+            Assert.That(settingsAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(settingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(toolSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(editorSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(toolSettingsServiceAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(editorSettingsServiceAssemblyName, Is.EqualTo(DomainAssemblyName));
+        }
+
+        [Test]
+        public void ToolCorePolicy_WhenLoaded_CompilesUnderDomainAssembly()
+        {
+            // Tests that tool catalog and assembly classification rules stay in the domain layer.
+            string registryAssemblyName = typeof(UnityCliLoopToolRegistry).Assembly.GetName().Name;
+            string internalToolNameProviderAssemblyName = typeof(IInternalToolNameProvider).Assembly.GetName().Name;
+            string classifierAssemblyName = typeof(ToolAssemblyClassifier).Assembly.GetName().Name;
+            string catalogItemAssemblyName = typeof(ToolSettingsCatalogItem).Assembly.GetName().Name;
+            string domainReloadServiceAssemblyName = typeof(IDomainReloadDetectionService).Assembly.GetName().Name;
+
+            Assert.That(registryAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(internalToolNameProviderAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(classifierAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(catalogItemAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(domainReloadServiceAssemblyName, Is.EqualTo(DomainAssemblyName));
+        }
+
+        [Test]
+        public void SkillSetupPolicy_WhenLoaded_CompilesUnderDomainAssembly()
+        {
+            // Tests that skill setup targets and policy services stay in the domain layer.
+            string serviceAssemblyName = typeof(SkillSetupService).Assembly.GetName().Name;
+            string targetAssemblyName = typeof(SkillSetupTargetInfo).Assembly.GetName().Name;
+            string stateAssemblyName = typeof(SkillInstallState).Assembly.GetName().Name;
+
+            Assert.That(serviceAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(targetAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(stateAssemblyName, Is.EqualTo(DomainAssemblyName));
         }
 
         [Test]
@@ -466,7 +526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ApplicationToolSources_WhenLoaded_DoNotDeclarePublicToolEntryPoints()
         {
             // Tests that bundled tool entry points stay outside the application layer.
-            string[] sourcePaths = Directory.GetFiles("Packages/src/Editor/Application/Api/Tools", "*.cs", SearchOption.AllDirectories);
+            string[] sourcePaths = Directory.GetFiles("Packages/src/Editor/Application", "*.cs", SearchOption.AllDirectories);
             string[] offendingFiles = sourcePaths
                 .Where(path =>
                 {
@@ -706,9 +766,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ToolRegistry_WhenLoaded_DoesNotCreateOrReceiveConcreteHostServices()
         {
-            // Tests that the application registry creates tools through their public parameterless contract.
+            // Tests that the domain registry creates tools through their public parameterless contract.
             string registrySource = File.ReadAllText(
-                "Packages/src/Editor/Application/Api/Tools/Core/UnityCliLoopToolRegistry.cs");
+                "Packages/src/Editor/Domain/UnityCliLoopToolRegistry.cs");
 
             Assert.That(registrySource, Does.Not.Contain("new UnityCliLoopToolHostServices"));
             Assert.That(registrySource, Does.Not.Contain("IUnityCliLoopToolHostServices"));
@@ -756,7 +816,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 startupSource,
-                Does.Contain("UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup();"));
+                Does.Contain("UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsService);"));
             Assert.That(startupSource, Does.Not.Contain("RecoverSettingsFileForEditorStartup"));
         }
 
@@ -765,7 +825,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that provider registration does not force settings JSON load during Editor startup.
             string registrationSource = ReadProductionSource(
-                "Packages/src/Editor/Application/Config/UnityCliLoopEditorDomainReloadStateProvider.cs");
+                "Packages/src/Editor/Application/UnityCliLoopEditorDomainReloadStateProvider.cs");
 
             Assert.That(registrationSource, Does.Not.Contain("GetIsDomainReloadInProgress"));
         }
@@ -797,7 +857,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void EditorUiFiles_WhenLoaded_DoNotReferenceFacadeInternalsDirectly()
         {
-            // Tests that presentation-facing UI code uses Application facades for setup and tool settings workflows.
+            // Tests that presentation-facing UI code reaches workflows through application use cases/facades.
             string[] forbiddenReferences =
             {
                 "CliInstallationDetector",

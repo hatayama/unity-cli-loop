@@ -95,8 +95,8 @@ sequenceDiagram
 システムは**Domain-Driven Design**を統合した**UseCase + ツールパターン**を中心としています。各アクションはDDDの原則に従って構造化され、UseCase層でビジネスワークフローを統制し、Application Service層で単一機能を実装しています。
 
 #### UseCase層（ドメインワークフロー統制）
-- **`AbstractUseCase<TSchema, TResponse>`**: すべてのUseCaseの基底クラス、単一の`ExecuteAsync`メソッドでワークフローを統制
-- **具体的UseCase**: 複雑なワークフローを管理（例：`McpServerInitializationUseCase`、`DomainReloadRecoveryUseCase`）
+- **具体的UseCase**: 明示的なメソッドでワークフローを統制（例：`UnityCliLoopServerInitializationUseCase`、`DomainReloadRecoveryUseCase`）
+- **Domain/ApplicationのRequestとResult**: UseCaseはtransport層のtool DTOではなく、DomainまたはApplication境界が所有するrequest/result値を受け渡す
 - **時間的結合の分離**: Martin Fowlerのリファクタリング原則に従い、時間的結合をUseCaseクラスに分離
 
 #### Application Service層（単一機能実装）
@@ -137,22 +137,27 @@ sequenceDiagram
 
 ```mermaid
 classDiagram
-    class AbstractUseCase {
-        <<abstract>>
-        +ExecuteAsync(TSchema, CancellationToken): Task~TResponse~
-    }
-
     class CompileUseCase {
         -compilationStateService: CompilationStateValidationService
         -executionService: CompilationExecutionService
-        +ExecuteAsync(CompileSchema, CancellationToken): Task~CompileResponse~
+        +CompileAsync(UnityCliLoopCompileRequest, CancellationToken): Task~UnityCliLoopCompileResult~
     }
 
-    class McpServerInitializationUseCase {
-        -configService: McpServerConfigurationService
-        -portService: PortAllocationService
-        -startupService: McpServerStartupService
-        +ExecuteAsync(ServerInitializationSchema, CancellationToken): Task~ServerInitializationResponse~
+    class UnityCliLoopServerInitializationUseCase {
+        -securityService: ISecurityValidationService
+        -startupService: UnityCliLoopServerStartupService
+        +ExecuteAsync(ServerInitializationRequest, CancellationToken): Task~ServerInitializationResult~
+    }
+
+    class ServerInitializationRequest {
+        +StartupLockReleasePolicy: ServerStartupLockReleasePolicy
+        +ClearStartupLockWhenReady: bool
+    }
+
+    class ServerInitializationResult {
+        +Success: bool
+        +IsRunning: bool
+        +Message: string
     }
 
     class CompilationStateValidationService {
@@ -183,11 +188,10 @@ classDiagram
         +RequiredSecuritySetting: SecuritySettings
     }
 
-    AbstractUseCase <|-- CompileUseCase : extends
-    AbstractUseCase <|-- McpServerInitializationUseCase : extends
     CompileUseCase --> CompilationStateValidationService : uses
     CompileUseCase --> CompilationExecutionService : uses
-    McpServerInitializationUseCase --> CompilationStateValidationService : uses
+    UnityCliLoopServerInitializationUseCase --> ServerInitializationRequest : accepts
+    UnityCliLoopServerInitializationUseCase --> ServerInitializationResult : returns
     IUnityTool <|.. CompileTool : implements
     CompileTool --> CompileUseCase : delegates to
     CompileTool ..|> McpToolAttribute : uses
@@ -353,11 +357,11 @@ Unity Editorの重要な課題は、アプリケーションの状態をリセ�
 - **未知のツール**: 明示的に設定されない限りデフォルトでブロック
 
 ### 3.6. サーバーライフサイクルUseCase
-- **`McpServerInitializationUseCase`**: サーバー初期化の複雑なワークフローを統制
-- **`McpServerShutdownUseCase`**: サーバー終了の適切な処理を管理
+- **`UnityCliLoopServerInitializationUseCase`**: Domainのライフサイクルrequest/result値を使ってサーバー初期化を統制
+- **`UnityCliLoopServerShutdownUseCase`**: Domainのライフサイクルresult値を使ってサーバー終了を管理
 - **`DomainReloadRecoveryUseCase`**: ドメインリロード前後の状態管理を完全に統制
 
-これらのUseCaseはCLI向けツールコマンドとして直接公開されず、`McpServerController`の内部で呼び出されてシステムのライフサイクルを管理しています。
+これらのUseCaseはCLI向けツールコマンドとして直接公開されず、`UnityCliLoopServerController`の内部で呼び出されてシステムのライフサイクルを管理しています。
 
 ## 4. 主要コンポーネント（ディレクトリ別）
 

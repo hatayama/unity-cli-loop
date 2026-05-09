@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             ["System.Environment"] = new() { "Exit", "FailFast" },
             ["System.Threading.Thread"] = new() { "Abort", "Suspend", "Resume" },
             ["io.github.hatayama.UnityCliLoop.DynamicCodeSecurityManager"] = new() { "InitializeFromSettings" },
-            ["io.github.hatayama.UnityCliLoop.ULoopSettings"] = new() { "SetDynamicCodeSecurityLevel" }
+            ["io.github.hatayama.UnityCliLoop.Domain.ULoopSettings"] = new() { "SetDynamicCodeSecurityLevel" }
         };
 
         public static bool IsDangerousType(string fullTypeName)

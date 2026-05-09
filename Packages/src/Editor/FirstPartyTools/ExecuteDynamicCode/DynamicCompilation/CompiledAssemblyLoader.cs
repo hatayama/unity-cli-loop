@@ -4,6 +4,7 @@ using Assembly = System.Reflection.Assembly;
 using Debug = UnityEngine.Debug;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {

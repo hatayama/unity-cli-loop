@@ -1,6 +1,8 @@
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -9,37 +11,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class DomainReloadDetectionServiceTests
     {
-        private bool _originalIsServerRunning;
-        private bool _originalIsAfterCompile;
-        private bool _originalIsDomainReloadInProgress;
-        private bool _originalIsReconnecting;
-        private bool _originalShowReconnectingUI;
-        private bool _originalShowPostCompileReconnectingUI;
+        private UnityCliLoopEditorSettingsData _originalSettings;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private IDomainReloadDetectionService _domainReloadDetectionService;
 
         [SetUp]
         public void SetUp()
         {
-            _originalIsServerRunning = UnityCliLoopEditorSettings.GetIsServerRunning();
-            _originalIsAfterCompile = UnityCliLoopEditorSettings.GetIsAfterCompile();
-            _originalIsDomainReloadInProgress = UnityCliLoopEditorSettings.GetIsDomainReloadInProgress();
-            _originalIsReconnecting = UnityCliLoopEditorSettings.GetIsReconnecting();
-            _originalShowReconnectingUI = UnityCliLoopEditorSettings.GetShowReconnectingUI();
-            _originalShowPostCompileReconnectingUI = UnityCliLoopEditorSettings.GetShowPostCompileReconnectingUI();
+            _editorSettingsService = UnityCliLoopEditorSettingsTestFactory.CreateService();
+            _originalSettings = CloneSettings(_editorSettingsService.GetSettings());
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
-            DomainReloadDetectionService.DeleteLockFile();
+            _domainReloadDetectionService.DeleteLockFile();
         }
 
         [TearDown]
         public void TearDown()
         {
-            UnityCliLoopEditorSettings.SetIsServerRunning(_originalIsServerRunning);
-            UnityCliLoopEditorSettings.SetIsAfterCompile(_originalIsAfterCompile);
-            UnityCliLoopEditorSettings.SetIsDomainReloadInProgress(_originalIsDomainReloadInProgress);
-            UnityCliLoopEditorSettings.SetIsReconnecting(_originalIsReconnecting);
-            UnityCliLoopEditorSettings.SetShowReconnectingUI(_originalShowReconnectingUI);
-            UnityCliLoopEditorSettings.SetShowPostCompileReconnectingUI(_originalShowPostCompileReconnectingUI);
+            _editorSettingsService.SaveSettings(_originalSettings);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
-            DomainReloadDetectionService.DeleteLockFile();
+            _domainReloadDetectionService.DeleteLockFile();
         }
 
         [Test]
@@ -48,27 +39,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             const string correlationId = "test-correlation";
             UnityCliLoopEditorDomainReloadStateProvider provider = new();
 
-            DomainReloadDetectionService.StartDomainReload(correlationId, true);
+            _domainReloadDetectionService.StartDomainReload(correlationId, true);
 
-            Assert.That(UnityCliLoopEditorSettings.GetIsServerRunning(), Is.True);
-            Assert.That(UnityCliLoopEditorSettings.GetIsAfterCompile(), Is.True);
-            Assert.That(UnityCliLoopEditorSettings.GetIsDomainReloadInProgress(), Is.True);
-            Assert.That(UnityCliLoopEditorSettings.GetIsReconnecting(), Is.True);
-            Assert.That(UnityCliLoopEditorSettings.GetShowReconnectingUI(), Is.True);
-            Assert.That(UnityCliLoopEditorSettings.GetShowPostCompileReconnectingUI(), Is.True);
+            UnityCliLoopEditorSettingsData startedSettings = _editorSettingsService.GetSettings();
+            Assert.That(startedSettings.isServerRunning, Is.True);
+            Assert.That(startedSettings.isAfterCompile, Is.True);
+            Assert.That(startedSettings.isDomainReloadInProgress, Is.True);
+            Assert.That(startedSettings.isReconnecting, Is.True);
+            Assert.That(startedSettings.showReconnectingUI, Is.True);
+            Assert.That(startedSettings.showPostCompileReconnectingUI, Is.True);
             Assert.That(provider.IsDomainReloadInProgress(), Is.True);
-            Assert.That(DomainReloadDetectionService.IsLockFilePresent(), Is.True);
+            Assert.That(_domainReloadDetectionService.IsLockFilePresent(), Is.True);
 
-            DomainReloadDetectionService.RollbackDomainReloadStart(correlationId);
+            _domainReloadDetectionService.RollbackDomainReloadStart(correlationId);
 
-            Assert.That(UnityCliLoopEditorSettings.GetIsServerRunning(), Is.True);
-            Assert.That(UnityCliLoopEditorSettings.GetIsAfterCompile(), Is.False);
-            Assert.That(UnityCliLoopEditorSettings.GetIsDomainReloadInProgress(), Is.False);
-            Assert.That(UnityCliLoopEditorSettings.GetIsReconnecting(), Is.False);
-            Assert.That(UnityCliLoopEditorSettings.GetShowReconnectingUI(), Is.False);
-            Assert.That(UnityCliLoopEditorSettings.GetShowPostCompileReconnectingUI(), Is.False);
+            UnityCliLoopEditorSettingsData rolledBackSettings = _editorSettingsService.GetSettings();
+            Assert.That(rolledBackSettings.isServerRunning, Is.True);
+            Assert.That(rolledBackSettings.isAfterCompile, Is.False);
+            Assert.That(rolledBackSettings.isDomainReloadInProgress, Is.False);
+            Assert.That(rolledBackSettings.isReconnecting, Is.False);
+            Assert.That(rolledBackSettings.showReconnectingUI, Is.False);
+            Assert.That(rolledBackSettings.showPostCompileReconnectingUI, Is.False);
             Assert.That(provider.IsDomainReloadInProgress(), Is.False);
-            Assert.That(DomainReloadDetectionService.IsLockFilePresent(), Is.False);
+            Assert.That(_domainReloadDetectionService.IsLockFilePresent(), Is.False);
+        }
+
+        private static UnityCliLoopEditorSettingsData CloneSettings(UnityCliLoopEditorSettingsData settings)
+        {
+            string json = UnityEngine.JsonUtility.ToJson(settings);
+            return UnityEngine.JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(json);
         }
     }
 }

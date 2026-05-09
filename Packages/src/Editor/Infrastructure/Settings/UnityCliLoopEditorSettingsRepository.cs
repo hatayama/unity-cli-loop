@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
-using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -107,24 +107,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SaveSettings(updated);
         }
 
-        /// <summary>
-        /// Gets the Developer Tools display setting.
-        /// </summary>
-        public bool GetShowDeveloperTools()
-        {
-            return GetSettings().showDeveloperTools;
-        }
-
-        /// <summary>
-        /// Saves the Developer Tools display setting.
-        /// </summary>
-        public void SetShowDeveloperTools(bool show)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData updatedSettings = settings with { showDeveloperTools = show };
-            SaveSettings(updatedSettings);
-        }
-
         public string GetLastSeenSetupWizardVersion()
         {
             return GetSettings().lastSeenSetupWizardVersion ?? string.Empty;
@@ -150,17 +132,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SaveSettings(updatedSettings);
         }
 
-        /// <summary>
-        /// Gets the show security settings flag.
-        /// </summary>
-        public bool GetShowUnityCliLoopSecuritySetting()
-        {
-            return GetSettings().showUnityCliLoopSecuritySetting;
-        }
-
-        /// <summary>
-        /// Sets the show security settings flag.
-        /// </summary>
         public void SetShowUnityCliLoopSecuritySetting(bool showUnityCliLoopSecuritySetting)
         {
             UnityCliLoopEditorSettingsData settings = GetSettings();
@@ -168,21 +139,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SaveSettings(newSettings);
         }
 
-        public bool GetShowToolSettings()
-        {
-            return GetSettings().showToolSettings;
-        }
-
         public void SetShowToolSettings(bool showToolSettings)
         {
             UnityCliLoopEditorSettingsData settings = GetSettings();
             UnityCliLoopEditorSettingsData newSettings = settings with { showToolSettings = showToolSettings };
             SaveSettings(newSettings);
-        }
-
-        public bool GetInstallSkillsFlat()
-        {
-            return GetSettings().installSkillsFlat;
         }
 
         public void SetInstallSkillsFlat(bool installSkillsFlat)
@@ -219,16 +180,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Sets the after compile flag.
-        /// </summary>
-        public void SetIsAfterCompile(bool isAfterCompile)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { isAfterCompile = isAfterCompile };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
         /// Gets the domain reload in progress flag.
         /// </summary>
         public bool GetIsDomainReloadInProgress()
@@ -244,14 +195,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopEditorSettingsData settings = GetSettings();
             UnityCliLoopEditorSettingsData newSettings = settings with { isDomainReloadInProgress = isDomainReloadInProgress };
             SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Gets the reconnecting flag.
-        /// </summary>
-        public bool GetIsReconnecting()
-        {
-            return GetSettings().isReconnecting;
         }
 
         /// <summary>
@@ -283,42 +226,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Gets the show post compile reconnecting UI flag.
-        /// </summary>
-        public bool GetShowPostCompileReconnectingUI()
-        {
-            return GetSettings().showPostCompileReconnectingUI;
-        }
-
-        /// <summary>
-        /// Sets the show post compile reconnecting UI flag.
-        /// </summary>
-        public void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { showPostCompileReconnectingUI = showPostCompileReconnectingUI };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Gets the compile window has data flag.
-        /// </summary>
-        public bool GetCompileWindowHasData()
-        {
-            return GetSettings().compileWindowHasData;
-        }
-
-        /// <summary>
-        /// Sets the compile window has data flag.
-        /// </summary>
-        public void SetCompileWindowHasData(bool compileWindowHasData)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { compileWindowHasData = compileWindowHasData };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
         /// Clear server session.
         /// </summary>
         public void ClearServerSession()
@@ -334,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         public void ClearAfterCompileFlag()
         {
-            SetIsAfterCompile(false);
+            UpdateSettings(s => s with { isAfterCompile = false });
         }
 
         /// <summary>
@@ -354,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         public void ClearPostCompileReconnectingUI()
         {
-            SetShowPostCompileReconnectingUI(false);
+            UpdateSettings(s => s with { showPostCompileReconnectingUI = false });
         }
 
         /// <summary>
@@ -363,125 +270,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void ClearDomainReloadFlag()
         {
             SetIsDomainReloadInProgress(false);
-        }
-
-        /// <summary>
-        /// Clear compile window data.
-        /// </summary>
-        public void ClearCompileWindowData()
-        {
-            SetCompileWindowHasData(false);
-        }
-
-        // Compile request management methods
-
-        /// <summary>
-        /// Gets the pending compile request IDs.
-        /// </summary>
-        public string[] GetPendingCompileRequestIds()
-        {
-            return GetSettings().pendingCompileRequestIds;
-        }
-
-        /// <summary>
-        /// Sets the pending compile request IDs.
-        /// </summary>
-        public void SetPendingCompileRequestIds(string[] pendingCompileRequestIds)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { pendingCompileRequestIds = pendingCompileRequestIds };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Gets the compile requests.
-        /// </summary>
-        public CompileRequestData[] GetCompileRequests()
-        {
-            return GetSettings().compileRequests;
-        }
-
-        /// <summary>
-        /// Sets the compile requests.
-        /// </summary>
-        public void SetCompileRequests(CompileRequestData[] compileRequests)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { compileRequests = compileRequests };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Gets the compile request JSON by request ID.
-        /// </summary>
-        public string GetCompileRequestJson(string requestId)
-        {
-            CompileRequestData[] requests = GetCompileRequests();
-            CompileRequestData request = System.Array.Find(requests, r => r.requestId == requestId);
-            return request?.json;
-        }
-
-        /// <summary>
-        /// Sets the compile request JSON for a specific request ID.
-        /// </summary>
-        public void SetCompileRequestJson(string requestId, string json)
-        {
-            CompileRequestData[] requests = GetCompileRequests();
-            CompileRequestData existingRequest = System.Array.Find(requests, r => r.requestId == requestId);
-            
-            if (existingRequest != null)
-            {
-                existingRequest.json = json;
-            }
-            else
-            {
-                CompileRequestData[] newRequests = new CompileRequestData[requests.Length + 1];
-                System.Array.Copy(requests, newRequests, requests.Length);
-                newRequests[requests.Length] = new CompileRequestData { requestId = requestId, json = json };
-                requests = newRequests;
-            }
-            
-            SetCompileRequests(requests);
-        }
-
-        /// <summary>
-        /// Clears all compile requests.
-        /// </summary>
-        public void ClearAllCompileRequests()
-        {
-            SetCompileRequests(new CompileRequestData[0]);
-            SetPendingCompileRequestIds(new string[0]);
-        }
-
-        /// <summary>
-        /// Adds a pending compile request.
-        /// </summary>
-        public void AddPendingCompileRequest(string requestId)
-        {
-            string[] pendingIds = GetPendingCompileRequestIds();
-            if (System.Array.IndexOf(pendingIds, requestId) == -1)
-            {
-                string[] newPendingIds = new string[pendingIds.Length + 1];
-                System.Array.Copy(pendingIds, newPendingIds, pendingIds.Length);
-                newPendingIds[pendingIds.Length] = requestId;
-                SetPendingCompileRequestIds(newPendingIds);
-            }
-        }
-
-        /// <summary>
-        /// Removes a pending compile request.
-        /// </summary>
-        public void RemovePendingCompileRequest(string requestId)
-        {
-            string[] pendingIds = GetPendingCompileRequestIds();
-            int index = System.Array.IndexOf(pendingIds, requestId);
-            if (index != -1)
-            {
-                string[] newPendingIds = new string[pendingIds.Length - 1];
-                System.Array.Copy(pendingIds, 0, newPendingIds, 0, index);
-                System.Array.Copy(pendingIds, index + 1, newPendingIds, index, pendingIds.Length - index - 1);
-                SetPendingCompileRequestIds(newPendingIds);
-            }
         }
 
         /// <summary>

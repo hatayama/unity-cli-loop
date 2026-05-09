@@ -22,12 +22,12 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 
         internal void Initialize()
         {
-            _applicationRegistration.Register();
-            ApplicationEditorStartup.Initialize();
+            UnityCliLoopApplicationServices applicationServices = _applicationRegistration.Register();
+            ApplicationEditorStartup.Initialize(applicationServices.DomainReloadDetectionService);
             FirstPartyToolsEditorStartup.Initialize();
             _firstPartyServerLifecycleBinding.Initialize();
-            InfrastructureEditorStartup.Initialize();
-            PresentationEditorStartup.Initialize();
+            InfrastructureEditorStartup.Initialize(applicationServices.EditorSettingsService);
+            PresentationEditorStartup.Initialize(applicationServices.EditorSettingsService);
         }
     }
 }

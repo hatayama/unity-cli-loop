@@ -1,6 +1,7 @@
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -30,8 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that assembly-reload recovery clears the startup protection window before shutdown.
             UnityCliLoopServerControllerService service = CreateControllerService();
+            UnityCliLoopEditorSettingsService editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateService();
 
-            UnityCliLoopEditorSettingsData originalSettings = CloneSettings(UnityCliLoopEditorSettings.GetSettings());
+            UnityCliLoopEditorSettingsData originalSettings = CloneSettings(editorSettingsService.GetSettings());
 
             try
             {
@@ -49,8 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                UnityCliLoopEditorSettings.SaveSettings(originalSettings);
-                DomainReloadDetectionService.DeleteLockFile();
+                editorSettingsService.SaveSettings(originalSettings);
+                new DomainReloadDetectionFileService(editorSettingsService).DeleteLockFile();
                 service.ClearStartupProtection();
             }
         }
@@ -84,9 +87,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
+            UnityCliLoopEditorSettingsService editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateService();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
-                lifecycleRegistry);
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService(editorSettingsService),
+                editorSettingsService);
         }
 
         /// <summary>

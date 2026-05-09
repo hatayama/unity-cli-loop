@@ -1,10 +1,12 @@
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -17,7 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         public static UnityCliLoopToolRegistry Create()
         {
-            return new UnityCliLoopToolRegistry();
+            return new UnityCliLoopToolRegistry(
+                new ToolSettingsService(new ToolSettingsRepository()));
         }
     }
 
@@ -73,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(GetLogsAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("get-logs"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -86,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(CompileAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("compile"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -99,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(ExecuteDynamicCodeAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("execute-dynamic-code"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -112,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(ControlPlayModeAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("control-play-mode"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -125,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(ClearConsoleAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("clear-console"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -138,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(GetHierarchyAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("get-hierarchy"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -151,7 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(RunTestsAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("run-tests"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -164,7 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(FindGameObjectsAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("find-game-objects"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -177,7 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(ScreenshotAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("screenshot"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -190,7 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(RecordInputAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("record-input"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -203,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(ReplayInputAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("replay-input"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -216,7 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(SimulateKeyboardAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("simulate-keyboard"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -229,7 +232,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(SimulateMouseInputAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("simulate-mouse-input"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -242,7 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(SimulateMouseUiAssemblyName));
-            Assert.That(registry.IsThirdPartyTool("simulate-mouse-ui"), Is.False);
+            AssertThirdPartyTool(toolType, false);
         }
 
         [Test]
@@ -338,7 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
 
             Assert.That(registry.IsToolRegistered("hello-world"), Is.True);
-            Assert.That(registry.IsThirdPartyTool("hello-world"), Is.True);
+            AssertThirdPartyTool(registry.GetToolType("hello-world"), true);
         }
 
         [Test]
@@ -361,10 +364,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteCommandAsync_WhenParamsAreOmitted_UsesDefaultSchema()
+        {
+            // Tests that JSON-RPC requests may omit params and still use schema defaults.
+            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync("hello-world", null);
+            JObject serializedResponse = JObject.FromObject(response);
+
+            Assert.That(serializedResponse.Value<string>("Message"), Is.EqualTo("Hello, World!"));
+            Assert.That(serializedResponse.Value<string>("Language"), Is.EqualTo("english"));
+        }
+
+        [Test]
         public async Task ExecuteToolAsync_WhenToolReturnsResponse_DoesNotAddProtocolVersionToResponseInstance()
         {
             // Tests that tool responses do not carry obsolete per-response protocol version metadata.
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            UnityCliLoopToolExecutionService executionService = new();
             JObject parameters = JObject.FromObject(new
             {
                 name = "Masamichi",
@@ -372,10 +387,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 includeTimestamp = false
             });
 
-            UnityCliLoopToolResponse response = await registry.ExecuteToolAsync("hello-world", parameters);
+            UnityCliLoopToolResponse response = await executionService.ExecuteToolAsync(
+                registry,
+                "hello-world",
+                parameters,
+                CancellationToken.None);
             JObject serializedResponse = JObject.FromObject(response);
 
             Assert.That(serializedResponse["Ver"], Is.Null);
+        }
+
+        [Test]
+        public void StaticRegistrarCustomToolMethods_RegisterAndUnregisterManualTool()
+        {
+            // Tests that extension-facing static registrar APIs still delegate to the shared registry.
+            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            ManualRegistrationTool tool = new();
+
+            UnityCliLoopToolRegistrar.RegisterService(service);
+            try
+            {
+                UnityCliLoopToolRegistrar.RegisterCustomTool(tool);
+
+                string[] toolNames = UnityCliLoopToolRegistrar.GetRegisteredCustomTools()
+                    .Select(toolInfo => toolInfo.Name)
+                    .ToArray();
+                Assert.That(UnityCliLoopToolRegistrar.IsCustomToolRegistered(tool.ToolName), Is.True);
+                Assert.That(toolNames, Does.Contain(tool.ToolName));
+
+                UnityCliLoopToolRegistrar.UnregisterCustomTool(tool.ToolName);
+
+                Assert.That(UnityCliLoopToolRegistrar.IsCustomToolRegistered(tool.ToolName), Is.False);
+            }
+            finally
+            {
+                UnityCliLoopToolRegistrar.RegisterService(previousService);
+            }
         }
 
         [Test]
@@ -388,8 +440,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "Editor",
                 "CustomCommandSamples",
                 "UnityCLILoop.CustomCommandSamples.Editor.asmdef");
-            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
-            string[] references = asmdef["references"]?.Values<string>().ToArray() ?? new string[0];
+            string[] references = ReadResolvedReferences(asmdefPath);
 
             Assert.That(references, Does.Contain("UnityCLILoop.ToolContracts"));
             Assert.That(references, Does.Not.Contain("UnityCLILoop.Application"));
@@ -409,8 +460,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "Editor",
                 "FirstPartyTools",
                 "UnityCLILoop.FirstPartyTools.Editor.asmdef");
-            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
-            string[] references = asmdef["references"]?.Values<string>().ToArray() ?? new string[0];
+            string[] references = ReadResolvedReferences(asmdefPath);
 
             Assert.That(references, Does.Contain(ClearConsoleAssemblyName));
             Assert.That(references, Does.Contain(CompileAssemblyName));
@@ -430,6 +480,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(references, Does.Not.Contain("UnityCLILoop.Domain"));
             Assert.That(references, Does.Not.Contain("UnityCLILoop.Infrastructure"));
             Assert.That(references, Does.Not.Contain("UnityCLILoop.Presentation"));
+        }
+
+        private static string[] ReadResolvedReferences(string asmdefPath)
+        {
+            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
+            string[] references = asmdef["references"]?.Values<string>().ToArray() ?? new string[0];
+            return references.Select(ResolveAsmdefReference).ToArray();
+        }
+
+        private static void AssertThirdPartyTool(System.Type toolType, bool expected)
+        {
+            Assert.That(toolType, Is.Not.Null);
+            string assemblyName = toolType.Assembly.GetName().Name;
+            Assert.That(ToolAssemblyClassifier.IsThirdPartyAssembly(assemblyName), Is.EqualTo(expected));
+        }
+
+        private static string ResolveAsmdefReference(string reference)
+        {
+            const string guidPrefix = "GUID:";
+            if (!reference.StartsWith(guidPrefix, System.StringComparison.Ordinal))
+            {
+                return reference;
+            }
+
+            string guid = reference.Substring(guidPrefix.Length);
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            foreach (string metaPath in Directory.GetFiles(projectRoot, "*.asmdef.meta", SearchOption.AllDirectories))
+            {
+                string meta = File.ReadAllText(metaPath);
+                if (!meta.Contains($"guid: {guid}"))
+                {
+                    continue;
+                }
+
+                string resolvedAsmdefPath = metaPath.Substring(0, metaPath.Length - ".meta".Length);
+                JObject asmdef = JObject.Parse(File.ReadAllText(resolvedAsmdefPath));
+                return asmdef["name"]?.Value<string>() ?? reference;
+            }
+
+            return reference;
         }
 
         [Test]
@@ -454,6 +544,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject serializedTool = JObject.FromObject(tool);
 
             Assert.That(serializedTool.ContainsKey("Description"), Is.False);
+        }
+
+        private sealed class ManualRegistrationTool : IUnityCliLoopTool
+        {
+            public string ToolName => "manual-registration-test";
+            public ToolParameterSchema ParameterSchema { get; } = new();
+
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken)
+            {
+                UnityCliLoopToolResponse response = new ManualRegistrationResponse();
+                return Task.FromResult(response);
+            }
+        }
+
+        private sealed class ManualRegistrationResponse : UnityCliLoopToolResponse
+        {
         }
     }
 }

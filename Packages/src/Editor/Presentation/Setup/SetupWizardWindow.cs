@@ -10,6 +10,7 @@ using UnityEngine.UIElements;
 using RuntimePlatform = UnityEngine.RuntimePlatform;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
@@ -26,13 +27,24 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const int PreferredWrappedTextLineCount = 2;
         private const bool ForceFlatSkillInstall = true;
         private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
+        private static UnityCliLoopEditorSettingsService RegisteredEditorSettingsService;
 
-        internal static void InitializeForEditorStartup()
+        internal static void InitializeForEditorStartup(UnityCliLoopEditorSettingsService editorSettingsService)
         {
+            InitializeEditorServices(editorSettingsService);
+
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             if (UnityEngine.Application.isBatchMode) return;
 
             EditorApplication.delayCall += TryShowOnVersionChange;
+        }
+
+        internal static void InitializeEditorServices(UnityCliLoopEditorSettingsService editorSettingsService)
+        {
+            Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+
+            RegisteredEditorSettingsService = editorSettingsService
+                ?? throw new System.ArgumentNullException(nameof(editorSettingsService));
         }
 
         [MenuItem("Window/Unity CLI Loop/Setup Wizard", priority = 3)]
@@ -56,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (!shouldRecordVersion) return;
 
             Debug.Assert(!string.IsNullOrEmpty(version), "version must not be null or empty");
-            UnityCliLoopEditorSettings.SetLastSeenSetupWizardVersion(version);
+            GetEditorSettingsService().SetLastSeenSetupWizardVersion(version);
         }
 
         internal static void MaybeRecordSuppressedVersion(bool suppressAutoShow, string version)
@@ -64,15 +76,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (!suppressAutoShow) return;
 
             Debug.Assert(!string.IsNullOrEmpty(version), "version must not be null or empty");
-            UnityCliLoopEditorSettings.SetLastSeenSetupWizardVersion(version);
+            GetEditorSettingsService().SetLastSeenSetupWizardVersion(version);
         }
 
         private static void TryShowOnVersionChange()
         {
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
-            bool suppressAutoShow = UnityCliLoopEditorSettings.GetSuppressSetupWizardAutoShow();
+            UnityCliLoopEditorSettingsService editorSettingsService = GetEditorSettingsService();
+            bool suppressAutoShow = editorSettingsService.GetSuppressSetupWizardAutoShow();
             MaybeRecordSuppressedVersion(suppressAutoShow, currentVersion);
-            string lastSeenVersion = UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion();
+            string lastSeenVersion = editorSettingsService.GetLastSeenSetupWizardVersion();
             if (!ShouldAutoShowForVersion(currentVersion, lastSeenVersion, suppressAutoShow)) return;
 
             EditorApplication.delayCall += ShowWindowOnVersionChange;
@@ -95,7 +108,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            string lastSeenSetupWizardVersionBeforeOpen = UnityCliLoopEditorSettings.GetLastSeenSetupWizardVersion();
+            string lastSeenSetupWizardVersionBeforeOpen =
+                GetEditorSettingsService().GetLastSeenSetupWizardVersion();
             Rect windowPosition = CreateCenteredRect(EditorGUIUtility.GetMainWindowPosition(), MinimumWindowSize);
             SetupWizardWindow window = CreateInstance<SetupWizardWindow>();
             PrepareForOpen(window, WindowTitle, windowPosition, lastSeenSetupWizardVersionBeforeOpen);
@@ -159,6 +173,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             FocusWindowIfItsOpen<SetupWizardWindow>();
         }
 
+        private static UnityCliLoopEditorSettingsService GetEditorSettingsService()
+        {
+            if (RegisteredEditorSettingsService == null)
+            {
+                throw new System.InvalidOperationException("Unity CLI Loop editor settings service is not registered.");
+            }
+
+            return RegisteredEditorSettingsService;
+        }
+
         // Prerequisite
         private VisualElement _nodejsWarning;
         private VisualElement _nodejsOk;
@@ -202,9 +226,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private IVisualElementScheduledItem _resizeScheduledItem;
         private CancellationTokenSource _skillInstallStateRefreshCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
+        private SkillSetupUseCase _skillSetupUseCase;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
 
         private void CreateGUI()
         {
+            InitializeApplicationServices();
             InitializeFirstInstallSkillsUiState();
             LoadLayout();
             BindElements();
@@ -213,6 +240,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ApplyInitialCheckingState();
             ScheduleInitialRefresh();
             ScheduleResizeToContent();
+        }
+
+        private void InitializeApplicationServices()
+        {
+            _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            _editorSettingsService = GetEditorSettingsService();
         }
 
         private void InitializeFirstInstallSkillsUiState()
@@ -342,7 +375,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void RefreshAutoShowToggle()
         {
-            _suppressAutoShowToggle.SetValueWithoutNotify(UnityCliLoopEditorSettings.GetSuppressSetupWizardAutoShow());
+            _suppressAutoShowToggle.SetValueWithoutNotify(_editorSettingsService.GetSuppressSetupWizardAutoShow());
         }
 
         private void ApplyInitialCheckingState()
@@ -385,7 +418,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             EnsureProjectLocalCliCurrent(projectRoot);
             bool cliInstalled = IsCliInstalled(cachedCliVersion);
-            List<SkillSetupApplicationFacade.SkillTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
+            List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
             bool canManageSkills = CanManageSkills(cliInstalled);
             UpdateSkillsStep(canManageSkills, targets);
             BeginRefreshDisplayedSkillTargets(canManageSkills);
@@ -436,21 +469,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            List<SkillSetupApplicationFacade.SkillTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
+            List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
             bool canManageSkills = CanManageSkills(cliInstalled);
             UpdateSkillsStep(canManageSkills, targets);
             BeginRefreshDisplayedSkillTargets(canManageSkills);
             ScheduleResizeToContent();
         }
 
-        private List<SkillSetupApplicationFacade.SkillTargetInfo> DetectDisplayedSkillTargets(string projectRoot)
+        private List<SkillSetupTargetInfo> DetectDisplayedSkillTargets(string projectRoot)
         {
-            return SkillSetupApplicationFacade.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat);
+            return _skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat);
         }
 
-        private List<SkillSetupApplicationFacade.SkillTargetInfo> DetectDisplayedSkillTargetsFast(string projectRoot)
+        private List<SkillSetupTargetInfo> DetectDisplayedSkillTargetsFast(string projectRoot)
         {
-            return SkillSetupApplicationFacade.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
+            return _skillSetupUseCase.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
         }
 
         private void BeginRefreshDisplayedSkillTargets(bool canManageSkills)
@@ -469,7 +502,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private async void RefreshDisplayedSkillTargetsAsync(CancellationToken ct)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            List<SkillSetupApplicationFacade.SkillTargetInfo> targets =
+            List<SkillSetupTargetInfo> targets =
                 await Task.Run(() => DetectDisplayedSkillTargets(projectRoot));
             if (ct.IsCancellationRequested)
             {
@@ -492,8 +525,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillInstallStateRefreshCts = null;
         }
 
-        internal static List<SkillSetupApplicationFacade.SkillTargetInfo> FilterInstallableSkillTargets(
-            IEnumerable<SkillSetupApplicationFacade.SkillTargetInfo> targets)
+        internal static List<SkillSetupTargetInfo> FilterInstallableSkillTargets(
+            IEnumerable<SkillSetupTargetInfo> targets)
         {
             Debug.Assert(targets != null, "targets must not be null");
             return targets
@@ -511,7 +544,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return cliInstalled;
         }
 
-        internal static SkillSetupApplicationFacade.SkillTargetInfo CreateFirstInstallSkillTarget(
+        internal static SkillSetupTargetInfo CreateFirstInstallSkillTarget(
             SkillsTarget target,
             bool groupSkillsUnderUnityCliLoop)
         {
@@ -523,11 +556,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 selection.DirectoryName,
                 selection.InstallFlag,
                 hasSkillsDirectory: false,
-                hasExistingSkills: false);
+                hasExistingSkills: false,
+                hasDifferentLayoutSkills: false,
+                SkillInstallState.Missing);
         }
 
-        internal static SkillSetupApplicationFacade.SkillTargetInfo GetSelectedSkillTargetInfo(
-            IEnumerable<SkillSetupApplicationFacade.SkillTargetInfo> targets,
+        internal static SkillSetupTargetInfo GetSelectedSkillTargetInfo(
+            IEnumerable<SkillSetupTargetInfo> targets,
             SkillsTarget target,
             bool groupSkillsUnderUnityCliLoop)
         {
@@ -536,26 +571,26 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
                 target,
                 groupSkillsUnderUnityCliLoop);
-            SkillSetupApplicationFacade.SkillTargetInfo selectedTargetInfo = targets
+            SkillSetupTargetInfo selectedTargetInfo = targets
                 .FirstOrDefault(info => info.DirName == selection.DirectoryName);
             return string.IsNullOrEmpty(selectedTargetInfo.DirName)
                 ? CreateFirstInstallSkillTarget(target, groupSkillsUnderUnityCliLoop)
                 : selectedTargetInfo;
         }
 
-        internal static List<SkillSetupApplicationFacade.SkillTargetInfo> GetFirstInstallableSkillTargets(
-            IEnumerable<SkillSetupApplicationFacade.SkillTargetInfo> targets,
+        internal static List<SkillSetupTargetInfo> GetFirstInstallableSkillTargets(
+            IEnumerable<SkillSetupTargetInfo> targets,
             SkillsTarget target,
             bool groupSkillsUnderUnityCliLoop)
         {
-            SkillSetupApplicationFacade.SkillTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
+            SkillSetupTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
                 targets,
                 target,
                 groupSkillsUnderUnityCliLoop);
             return selectedTargetInfo.InstallState == SkillInstallState.Installed
                    || selectedTargetInfo.InstallState == SkillInstallState.Checking
-                ? new List<SkillSetupApplicationFacade.SkillTargetInfo>()
-                : new List<SkillSetupApplicationFacade.SkillTargetInfo> { selectedTargetInfo };
+                ? new List<SkillSetupTargetInfo>()
+                : new List<SkillSetupTargetInfo> { selectedTargetInfo };
         }
 
         private void UpdateCliStep(
@@ -682,7 +717,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateSkillsStep(
             bool canManageSkills,
-            List<SkillSetupApplicationFacade.SkillTargetInfo> targets)
+            List<SkillSetupTargetInfo> targets)
         {
             _skillsTargetList.Clear();
 
@@ -708,7 +743,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (useFirstInstallSkillsUi)
             {
-                SkillSetupApplicationFacade.SkillTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
+                SkillSetupTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
                     targets,
                     _skillsTarget,
                     !_installSkillsFlat);
@@ -725,9 +760,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            List<SkillSetupApplicationFacade.SkillTargetInfo> installableTargets = FilterInstallableSkillTargets(targets);
+            List<SkillSetupTargetInfo> installableTargets = FilterInstallableSkillTargets(targets);
 
-            foreach (SkillSetupApplicationFacade.SkillTargetInfo target in installableTargets)
+            foreach (SkillSetupTargetInfo target in installableTargets)
             {
                 VisualElement item = new();
                 item.AddToClassList("setup-target-item");
@@ -909,8 +944,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             CancelSkillInstallStateRefresh();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            List<SkillSetupApplicationFacade.SkillTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
-            List<SkillSetupApplicationFacade.SkillTargetInfo> installableTargets = _shouldUseFirstInstallSkillsUi
+            List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
+            List<SkillSetupTargetInfo> installableTargets = _shouldUseFirstInstallSkillsUi
                 ? GetFirstInstallableSkillTargets(targets, _skillsTarget, !_installSkillsFlat)
                 : FilterInstallableSkillTargets(targets);
             if (installableTargets.Count == 0) return;
@@ -920,7 +955,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             try
             {
-                await SkillSetupApplicationFacade.InstallSkillFilesAsync(
+                await _skillSetupUseCase.InstallSkillFilesAsync(
                     installableTargets,
                     !_installSkillsFlat,
                     CancellationToken.None);
@@ -940,7 +975,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void HandleSuppressAutoShowChanged(bool suppressAutoShow)
         {
-            UnityCliLoopEditorSettings.SetSuppressSetupWizardAutoShow(suppressAutoShow);
+            _editorSettingsService.SetSuppressSetupWizardAutoShow(suppressAutoShow);
             MaybeRecordSuppressedVersion(suppressAutoShow, UnityCliLoopConstants.PackageInfo.version);
             ScheduleResizeToContent();
         }
@@ -985,7 +1020,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             // Claude Code does not resolve nested skill folders, so setup keeps every editor target on the flat layout.
             _installSkillsFlat = ForceFlatSkillInstall;
-            UnityCliLoopEditorSettings.SetInstallSkillsFlat(_installSkillsFlat);
+            _editorSettingsService.SetInstallSkillsFlat(_installSkillsFlat);
         }
 
         private void ScheduleResizeToContent()

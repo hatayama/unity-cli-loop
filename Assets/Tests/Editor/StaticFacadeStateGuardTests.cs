@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -15,11 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private static readonly string[] MigratedFacadePaths = new string[]
         {
-            "Packages/src/Editor/Application/CLI/CliSetupApplicationService.cs",
-            "Packages/src/Editor/Application/Config/ToolSettings.cs",
-            "Packages/src/Editor/Application/Config/ULoopSettings.cs",
-            "Packages/src/Editor/Application/Config/UnityCliLoopEditorSettings.cs",
-            "Packages/src/Editor/Application/Api/Tools/Core/UnityCliLoopToolRegistrar.cs",
+            "Packages/src/Editor/Application/CliSetupApplicationService.cs",
+            "Packages/src/Editor/Application/UseCases/SkillSetupUseCaseRegistry.cs",
+            "Packages/src/Editor/Domain/ULoopSettings.cs",
+            "Packages/src/Editor/Application/UnityCliLoopToolRegistrar.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeServices.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/DynamicCodeForegroundWarmupState.cs",
             "Packages/src/Editor/ToolContracts/EditorDelayManager.cs",
@@ -30,9 +30,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/Application/MouseInputState.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateMouseUi/Application/MouseDragState.cs",
             "Packages/src/Editor/FirstPartyTools/Common/Overlay/OverlayCanvasFactory.cs",
-            "Packages/src/Editor/Application/Core/CoreTools/Util/MainThreadSwitcher.cs",
+            "Packages/src/Editor/Application/MainThreadSwitcher.cs",
             "Packages/src/Editor/ToolContracts/VibeLogger.cs",
-            "Packages/src/Editor/Application/Server/UnityCliLoopServerApplicationService.cs",
+            "Packages/src/Editor/Application/UnityCliLoopServerApplicationService.cs",
             "Packages/src/Runtime/RecordInput/RecordInputOverlayState.cs",
             "Packages/src/Runtime/ReplayInput/ReplayInputOverlayState.cs",
             "Packages/src/Runtime/SimulateKeyboard/SimulateKeyboardOverlayState.cs",
@@ -47,7 +47,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static readonly string[] InstanceServicePaths = new string[]
         {
-            "Packages/src/Editor/Application/Core/ApplicationServices/SessionRecoveryService.cs"
+            "Packages/src/Editor/Application/SessionRecoveryService.cs",
+            "Packages/src/Editor/Application/UseCases/SkillSetupUseCase.cs",
+            "Packages/src/Editor/Domain/UnityCliLoopEditorSettingsService.cs",
+            "Packages/src/Editor/Domain/ToolSettingsService.cs",
+            "Packages/src/Editor/Infrastructure/Server/DomainReloadDetectionFileService.cs"
         };
 
         private static readonly Regex DirectMutableStaticFieldPattern = new Regex(
@@ -64,6 +68,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static readonly Regex StaticClassPattern = new Regex(
             @"\b(public|internal|private|protected)\s+static\s+class\b",
+            RegexOptions.Compiled);
+
+        private static readonly Regex AllowedStaticIdentifierPattern = new Regex(
+            @"\b(ServiceValue|RepositoryValue|RegistryValue|RegisteredUseCase)\b",
             RegexOptions.Compiled);
 
         [Test]
@@ -111,6 +119,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 !IsAllowedStaticLine(line)
                 && (DirectMutableStaticFieldPattern.IsMatch(line)
                     || ReadonlyMutableStaticFieldPattern.IsMatch(line));
+
+            Assert.That(isViolation, Is.True);
+        }
+
+        [Test]
+        public void MutableStaticFieldLine_WhenIdentifierOnlyContainsAllowedName_IsReported()
+        {
+            // Tests that the allowlist only accepts exact static facade backing-field identifiers.
+            string line = "private static int RegisteredUseCaseCount = 0;";
+            bool isViolation =
+                !IsAllowedStaticLine(line)
+                && DirectMutableStaticFieldPattern.IsMatch(line);
 
             Assert.That(isViolation, Is.True);
         }
@@ -212,9 +232,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return true;
             }
 
-            return line.Contains("ServiceValue")
-                   || line.Contains("RepositoryValue")
-                   || line.Contains("RegistryValue");
+            return AllowedStaticIdentifierPattern.IsMatch(line);
         }
     }
 }
