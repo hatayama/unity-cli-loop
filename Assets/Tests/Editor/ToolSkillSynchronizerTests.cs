@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -33,7 +34,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             _toolSettingsFileExisted = File.Exists(ToolSettingsFilePath);
             _toolSettingsFileContent = _toolSettingsFileExisted ? File.ReadAllText(ToolSettingsFilePath) : null;
-            ToolSettings.InvalidateCache();
 
             _nonExistentDirsBefore = ToolSkillSynchronizer.SkillTargetDirs
                 .Where(dir => !Directory.Exists(Path.Combine(_projectRoot, dir)))
@@ -73,7 +73,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             RestoreToolSettingsFile();
-            ToolSettings.InvalidateCache();
         }
 
         [Test]
@@ -93,6 +92,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.IsFalse(Directory.Exists(fullPath),
                     $"Directory '{dir}' should not be created by InstallSkillFiles when '{dir}' did not exist");
             }
+        }
+
+        // Tests that the public install path preserves disabled tool settings.
+        [Test]
+        public async Task InstallSkillFiles_WhenToolIsDisabledInSettings_DoesNotRecreateSkill()
+        {
+            Directory.CreateDirectory(UnityCliLoopConstants.ULOOP_DIR);
+            File.WriteAllText(ToolSettingsFilePath, "{\"disabledTools\":[\"compile\"]}");
+
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            string disabledSkillDir = Path.Combine(skillsRoot, "uloop-compile");
+            WriteSkillFile(disabledSkillDir);
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                targetRoot,
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFiles(
+                    new List<ToolSkillSynchronizer.SkillTargetInfo> { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(Directory.Exists(disabledSkillDir), Is.False);
         }
 
         [Test]
@@ -356,6 +383,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo("old-unrelated-reference"));
         }
 
+        // Tests that per-tool installation skips disabled tools.
+        [Test]
+        public async Task InstallSkillFilesForToolAtProjectRoot_WhenRequestedToolIsDisabled_DoesNotInstallSkill()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-disabled-skill",
+                "DisabledTool",
+                "reference.md",
+                "disabled-reference");
+            string[] disabledTools = { "disabled-skill" };
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            Directory.CreateDirectory(skillsRoot);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesForToolAtProjectRoot(
+                    temporaryRoot,
+                    "disabled-skill",
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools);
+
+            string disabledSkillDir = Path.Combine(skillsRoot, "uloop-disabled-skill");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(result.AttemptedTargets, Is.EqualTo(0));
+            Assert.That(Directory.Exists(disabledSkillDir), Is.False);
+        }
+
         [Test]
         public async Task InstallSkillFilesForToolAtProjectRoot_RemovesDisabledAndDeprecatedSkillsWithoutUpdatingUnrelatedSkills()
         {
@@ -378,10 +436,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "UnrelatedTool",
                 "reference.md",
                 "new-unrelated-reference");
-            ToolSettings.SaveSettings(new ToolSettingsData
-            {
-                disabledTools = new[] { "disabled-skill" }
-            });
+            string[] disabledTools = { "disabled-skill" };
 
             string targetRoot = Path.Combine(temporaryRoot, ".claude");
             string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
@@ -402,7 +457,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesForToolAtProjectRoot(
                     temporaryRoot,
                     "enabled-skill",
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools);
 
             string enabledSkillDir = Path.Combine(skillsRoot, "uloop-enabled-skill");
 
@@ -432,10 +488,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "DisabledTool",
                 "reference.md",
                 "disabled-reference");
-            ToolSettings.SaveSettings(new ToolSettingsData
-            {
-                disabledTools = new[] { "disabled-skill" }
-            });
+            string[] disabledTools = { "disabled-skill" };
 
             string targetRoot = Path.Combine(temporaryRoot, ".claude");
             string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
@@ -453,7 +506,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesForToolAtProjectRoot(
                     temporaryRoot,
                     "enabled-skill",
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools);
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(flatDisabledSkillDir), Is.False);
@@ -1177,6 +1231,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isInternal: true);
 
             UnityCliLoopToolRegistry registry = new UnityCliLoopToolRegistry(
+                new ToolSettingsService(new ToolSettingsRepository()),
                 new SkillInstallLayoutInternalToolNameProvider());
             registry.RegisterTool(new FakeUnityTool("internal-tool"));
             registry.RegisterTool(new FakeUnityTool("public-tool"));
@@ -1187,16 +1242,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string[] registeredToolNames = registry.GetRegisteredToolsForProjectRoot(temporaryRoot)
                 .Select(tool => tool.Name)
                 .ToArray();
-            string[] allToolNames = registry.GetAllRegisteredToolInfosForProjectRoot(temporaryRoot)
-                .Select(tool => tool.Name)
-                .ToArray();
 
             Assert.That(catalogNames, Does.Not.Contain("internal-tool"));
             Assert.That(catalogNames, Does.Contain("public-tool"));
             Assert.That(registeredToolNames, Does.Not.Contain("internal-tool"));
             Assert.That(registeredToolNames, Does.Contain("public-tool"));
-            Assert.That(allToolNames, Does.Not.Contain("internal-tool"));
-            Assert.That(allToolNames, Does.Contain("public-tool"));
         }
 
         [Test]

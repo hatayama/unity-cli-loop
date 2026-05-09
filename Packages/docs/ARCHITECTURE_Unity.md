@@ -206,8 +206,8 @@ The architecture is built upon several key design principles to ensure robustnes
 The system is centered around **Domain-Driven Design** integrated **UseCase + Tool Pattern**. Each action is structured according to DDD principles, with UseCase layer orchestrating business workflows and Application Service layer implementing single functions.
 
 #### UseCase Layer (Domain Workflow Orchestration)
-- **`AbstractUseCase<TSchema, TResponse>`**: Base class for all UseCases, orchestrating workflows through a single `ExecuteAsync` method
-- **Concrete UseCases**: Manage complex workflows (e.g., `McpServerInitializationUseCase`, `DomainReloadRecoveryUseCase`)
+- **Concrete UseCases**: Coordinate workflows through explicit methods (e.g., `UnityCliLoopServerInitializationUseCase`, `DomainReloadRecoveryUseCase`)
+- **Domain/Application Request and Result Values**: UseCases accept request values and return result values owned by the domain or application boundary instead of transport-layer tool DTOs
 - **Temporal Cohesion Separation**: Following Martin Fowler's refactoring principles, temporal cohesion is separated into UseCase classes
 
 #### Application Service Layer (Single Function Implementation)
@@ -248,22 +248,27 @@ The system maintains robust session management to handle client connections and 
 
 ```mermaid
 classDiagram
-    class AbstractUseCase {
-        <<abstract>>
-        +ExecuteAsync(TSchema, CancellationToken): Task~TResponse~
-    }
-
     class CompileUseCase {
         -compilationStateService: CompilationStateValidationService
         -executionService: CompilationExecutionService
-        +ExecuteAsync(CompileSchema, CancellationToken): Task~CompileResponse~
+        +CompileAsync(UnityCliLoopCompileRequest, CancellationToken): Task~UnityCliLoopCompileResult~
     }
 
-    class McpServerInitializationUseCase {
-        -configService: McpServerConfigurationService
-        -portService: PortAllocationService
-        -startupService: McpServerStartupService
-        +ExecuteAsync(ServerInitializationSchema, CancellationToken): Task~ServerInitializationResponse~
+    class UnityCliLoopServerInitializationUseCase {
+        -securityService: ISecurityValidationService
+        -startupService: UnityCliLoopServerStartupService
+        +ExecuteAsync(ServerInitializationRequest, CancellationToken): Task~ServerInitializationResult~
+    }
+
+    class ServerInitializationRequest {
+        +StartupLockReleasePolicy: ServerStartupLockReleasePolicy
+        +ClearStartupLockWhenReady: bool
+    }
+
+    class ServerInitializationResult {
+        +Success: bool
+        +IsRunning: bool
+        +Message: string
     }
 
     class CompilationStateValidationService {
@@ -294,11 +299,10 @@ classDiagram
         +RequiredSecuritySetting: SecuritySettings
     }
 
-    AbstractUseCase <|-- CompileUseCase : extends
-    AbstractUseCase <|-- McpServerInitializationUseCase : extends
     CompileUseCase --> CompilationStateValidationService : uses
     CompileUseCase --> CompilationExecutionService : uses
-    McpServerInitializationUseCase --> CompilationStateValidationService : uses
+    UnityCliLoopServerInitializationUseCase --> ServerInitializationRequest : accepts
+    UnityCliLoopServerInitializationUseCase --> ServerInitializationResult : returns
     IUnityTool <|.. CompileTool : implements
     CompileTool --> CompileUseCase : delegates to
     CompileTool ..|> McpToolAttribute : uses
@@ -464,11 +468,11 @@ Several UseCases and Tools are subject to security restrictions and can be disab
 - **Unknown Tools**: Blocked by default unless explicitly configured
 
 ### 3.6. Server Lifecycle UseCases
-- **`McpServerInitializationUseCase`**: Orchestrates complex server initialization workflow
-- **`McpServerShutdownUseCase`**: Manages proper server shutdown processing
+- **`UnityCliLoopServerInitializationUseCase`**: Orchestrates server initialization through domain lifecycle request and result values
+- **`UnityCliLoopServerShutdownUseCase`**: Manages server shutdown through domain lifecycle result values
 - **`DomainReloadRecoveryUseCase`**: Completely orchestrates state management before/after domain reloads
 
-These UseCases are not directly exposed as CLI tools but are called internally by `McpServerController` to manage the system lifecycle.
+These UseCases are not directly exposed as CLI tools but are called internally by `UnityCliLoopServerController` to manage the system lifecycle.
 
 ## 4. Key Components (Directory Breakdown)
 

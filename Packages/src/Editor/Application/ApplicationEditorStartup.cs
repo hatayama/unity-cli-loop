@@ -1,3 +1,6 @@
+using System.Diagnostics;
+
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Application
@@ -8,12 +11,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// </summary>
     internal static class ApplicationEditorStartup
     {
-        internal static void Initialize()
+        internal static void Initialize(IDomainReloadDetectionService domainReloadDetectionService)
         {
+            Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
+
             UnityCliLoopEditorDomainReloadStateRegistration.RegisterForEditorStartup();
             MainThreadSwitcher.InitializeForEditorStartup();
             EditorDelayManager.InitializeForEditorStartup();
-            DomainReloadDetectionService.RegisterForEditorStartup();
+            domainReloadDetectionService.RegisterForEditorStartup();
         }
     }
 }

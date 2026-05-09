@@ -21,6 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private readonly IUnityCliLoopServerInstanceFactory _serverInstanceFactory;
         private readonly UnityCliLoopServerLifecycleRegistryService _serverLifecycleRegistry;
+        private readonly IDomainReloadDetectionService _domainReloadDetectionService;
+        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
         private readonly SessionRecoveryService _sessionRecoveryService;
         private IUnityCliLoopServerInstance _bridgeServer;
         private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
@@ -29,14 +31,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal UnityCliLoopServerControllerService(
             IUnityCliLoopServerInstanceFactory serverInstanceFactory,
-            UnityCliLoopServerLifecycleRegistryService serverLifecycleRegistry)
+            UnityCliLoopServerLifecycleRegistryService serverLifecycleRegistry,
+            IDomainReloadDetectionService domainReloadDetectionService,
+            UnityCliLoopEditorSettingsService editorSettingsService)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
+            System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
+            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
 
             _serverInstanceFactory = serverInstanceFactory ?? throw new ArgumentNullException(nameof(serverInstanceFactory));
             _serverLifecycleRegistry = serverLifecycleRegistry ?? throw new ArgumentNullException(nameof(serverLifecycleRegistry));
-            _sessionRecoveryService = new SessionRecoveryService(this);
+            _domainReloadDetectionService = domainReloadDetectionService ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
+            _editorSettingsService = editorSettingsService ?? throw new ArgumentNullException(nameof(editorSettingsService));
+            _sessionRecoveryService = new SessionRecoveryService(
+                this,
+                _domainReloadDetectionService,
+                _editorSettingsService);
         }
 
         private bool IsBackgroundUnityProcess()
@@ -183,18 +194,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             UnityCliLoopServerStartupService startupService =
-                new UnityCliLoopServerStartupService(_serverInstanceFactory);
+                new UnityCliLoopServerStartupService(_serverInstanceFactory, _editorSettingsService);
             UnityCliLoopServerInitializationUseCase useCase =
                 new UnityCliLoopServerInitializationUseCase(
                     new EditorSecurityValidationService(),
                     startupService);
-            ServerInitializationSchema schema = new()
-            {
-                PreserveStartupLockUntilExplicitRelease = false
-            };
+            ServerInitializationRequest request =
+                ServerInitializationRequest.ReleaseStartupLockWhenReady();
             System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
 
-            ServerInitializationResponse result = await useCase.ExecuteAsync(schema, cancellationToken);
+            ServerInitializationResult<IUnityCliLoopServerInstance> result =
+                await useCase.ExecuteAsync(request, cancellationToken);
 
             if (!result.Success)
             {
@@ -232,13 +242,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             PrepareForServerShutdown();
 
             UnityCliLoopServerStartupService startupService =
-                new UnityCliLoopServerStartupService(_serverInstanceFactory);
+                new UnityCliLoopServerStartupService(_serverInstanceFactory, _editorSettingsService);
             UnityCliLoopServerShutdownUseCase useCase =
                 new UnityCliLoopServerShutdownUseCase(startupService, this);
-            ServerShutdownSchema schema = new() { ForceShutdown = false };
             System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
 
-            ServerShutdownResponse result = await useCase.ExecuteAsync(schema, cancellationToken);
+            ServerShutdownResult result = await useCase.ExecuteAsync(cancellationToken);
 
             if (result.Success)
             {
@@ -246,7 +255,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 _bridgeServer = null;
 
                 // Clear session state to reflect server stopped
-                UnityCliLoopEditorSettings.ClearServerSession();
+                _editorSettingsService.ClearServerSession();
             }
             else
             {
@@ -263,7 +272,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ClearStartupProtection();
 
             DomainReloadRecoveryUseCase useCase =
-                new DomainReloadRecoveryUseCase(_sessionRecoveryService);
+                new DomainReloadRecoveryUseCase(
+                    _sessionRecoveryService,
+                    _domainReloadDetectionService,
+                    _editorSettingsService);
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(_bridgeServer);
             
             // Clear instance if server shutdown succeeded
@@ -280,7 +292,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private void OnAfterAssemblyReload()
         {
             DomainReloadRecoveryUseCase useCase =
-                new DomainReloadRecoveryUseCase(_sessionRecoveryService);
+                new DomainReloadRecoveryUseCase(
+                    _sessionRecoveryService,
+                    _domainReloadDetectionService,
+                    _editorSettingsService);
             _ = useCase.ExecuteAfterDomainReloadAsync(System.Threading.CancellationToken.None).ContinueWith(task =>
             {
                 if (task.IsFaulted)
@@ -302,13 +317,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return Task.CompletedTask;
             }
 
-            bool isAfterCompile = UnityCliLoopEditorSettings.GetIsAfterCompile();
+            bool isAfterCompile = _editorSettingsService.GetIsAfterCompile();
 
             if (_bridgeServer?.IsRunning == true)
             {
                 if (isAfterCompile)
                 {
-                    UnityCliLoopEditorSettings.ClearAfterCompileFlag();
+                    _editorSettingsService.ClearAfterCompileFlag();
                 }
 
                 return Task.CompletedTask;
@@ -316,7 +331,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (isAfterCompile)
             {
-                UnityCliLoopEditorSettings.ClearAfterCompileFlag();
+                _editorSettingsService.ClearAfterCompileFlag();
             }
 
             // Centralized, coalesced startup request
@@ -343,7 +358,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 // Clear server-side reconnecting flag on successful restoration
                 // NOTE: Do NOT clear UI display flag here - let it be cleared by timeout or client connection
-                UnityCliLoopEditorSettings.SetIsReconnecting(false);
+                _editorSettingsService.SetIsReconnecting(false);
 
             }
             catch (System.Exception)
@@ -356,7 +371,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 else
                 {
                     // If it ultimately fails, clear the SessionState.
-                    UnityCliLoopEditorSettings.ClearServerSession();
+                    _editorSettingsService.ClearServerSession();
                 }
             }
         }
@@ -379,7 +394,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     _bridgeServer = null;
                 }
             }
-            UnityCliLoopEditorSettings.ClearServerSession();
+            _editorSettingsService.ClearServerSession();
         }
 
         /// <summary>
@@ -420,7 +435,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                             "server_auto_recovery_failed",
                             $"Automatic recovery after unexpected exit failed: {task.Exception?.GetBaseException().Message}"
                         );
-                        UnityCliLoopEditorSettings.ClearServerSession();
+                        _editorSettingsService.ClearServerSession();
                     }
                 }, TaskScheduler.FromCurrentSynchronizationContext());
             };
@@ -476,7 +491,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // Ensure stale reload locks are cleaned up before recovery.
             // Why not clear serverstarting.lock here: a previous generation may still be finishing
             // and ownership is now tracked per startup token below.
-            DomainReloadDetectionService.DeleteLockFile();
+            _domainReloadDetectionService.DeleteLockFile();
             CompilationLockService.DeleteLockFile();
 
             VibeLogger.LogInfo("startup_request", "transport=project_ipc");
@@ -529,8 +544,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (!started)
                 {
                     // Ensure session reflects stopped state on failure
-                    UnityCliLoopEditorSettings.ClearServerSession();
-                    UnityCliLoopEditorSettings.ClearReconnectingFlags();
+                    _editorSettingsService.ClearServerSession();
+                    _editorSettingsService.ClearReconnectingFlags();
                     Debug.LogError($"[{UnityCliLoopConstants.PROJECT_NAME}] Recovery failed: no project IPC endpoint to bind.");
                     throw new InvalidOperationException("Failed to bind recovery endpoint.");
                 }
@@ -539,8 +554,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 SaveRunningServerState();
 
                 // Clear reconnection-related flags on successful recovery
-                UnityCliLoopEditorSettings.ClearReconnectingFlags();
-                UnityCliLoopEditorSettings.ClearPostCompileReconnectingUI();
+                _editorSettingsService.ClearReconnectingFlags();
+                _editorSettingsService.ClearPostCompileReconnectingUI();
                 UnityCliLoopToolRegistrar.WarmupRegistry();
 
                 ActivateStartupProtection(5000);
@@ -628,9 +643,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static void SaveRunningServerState()
+        private void SaveRunningServerState()
         {
-            UnityCliLoopEditorSettings.SetIsServerRunning(true);
+            _editorSettingsService.SetIsServerRunning(true);
         }
 
         internal string CreateOptionalServerStartingLock(Func<string> createLockFile = null)

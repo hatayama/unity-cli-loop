@@ -1,0 +1,204 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using Newtonsoft.Json;
+
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Domain
+{
+    /// <summary>
+    /// Registry for Unity CLI tool implementations and their catalog metadata.
+    /// </summary>
+    public class UnityCliLoopToolRegistry
+    {
+        private readonly Dictionary<string, IUnityCliLoopTool> _tools = new();
+        private readonly IInternalToolNameProvider _internalToolNameProvider;
+        private readonly ToolSettingsService _toolSettingsService;
+
+        internal UnityCliLoopToolRegistry(
+            ToolSettingsService toolSettingsService,
+            IInternalToolNameProvider internalToolNameProvider = null)
+        {
+            System.Diagnostics.Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+
+            _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
+            _internalToolNameProvider = internalToolNameProvider ?? new EmptyInternalToolNameProvider();
+            RegisterDefaultTools();
+        }
+
+        private void RegisterDefaultTools()
+        {
+            RegisterToolsWithAttributes();
+        }
+
+        private void RegisterToolsWithAttributes()
+        {
+            Assembly[] assemblies = System.AppDomain.CurrentDomain.GetAssemblies();
+            List<Type> toolTypes = new();
+
+            foreach (Assembly assembly in assemblies)
+            {
+                Type[] types = assembly.GetTypes()
+                    .Where(type => type.GetCustomAttribute<UnityCliLoopToolAttribute>() != null)
+                    .Where(type => typeof(IUnityCliLoopTool).IsAssignableFrom(type))
+                    .Where(type => !type.IsAbstract && !type.IsInterface)
+                    .ToArray();
+
+                toolTypes.AddRange(types);
+            }
+
+            foreach (Type type in toolTypes)
+            {
+                if (!IsValidToolType(type))
+                {
+                    UnityEngine.Debug.LogWarning($"{UnityCliLoopConstants.SECURITY_LOG_PREFIX} Skipping invalid tool type: {type.FullName}");
+                    continue;
+                }
+
+                IUnityCliLoopTool tool = CreateTool(type);
+                RegisterTool(tool);
+            }
+        }
+
+        private IUnityCliLoopTool CreateTool(Type type)
+        {
+            IUnityCliLoopTool tool = (IUnityCliLoopTool)Activator.CreateInstance(type);
+            return tool;
+        }
+
+        private bool IsValidToolType(Type type)
+        {
+            if (!typeof(IUnityCliLoopTool).IsAssignableFrom(type))
+            {
+                return false;
+            }
+
+            if (type.IsAbstract || type.IsInterface)
+            {
+                return false;
+            }
+
+            if (type.GetCustomAttribute<UnityCliLoopToolAttribute>() == null)
+            {
+                return false;
+            }
+
+            return type.GetConstructor(Type.EmptyTypes) != null;
+        }
+
+        public void RegisterTool(IUnityCliLoopTool tool)
+        {
+            if (tool == null)
+            {
+                throw new ArgumentNullException(nameof(tool));
+            }
+
+            if (string.IsNullOrWhiteSpace(tool.ToolName))
+            {
+                throw new ArgumentException("Tool name cannot be null or empty", nameof(tool));
+            }
+
+            _tools[tool.ToolName] = tool;
+        }
+
+        public void UnregisterTool(string toolName)
+        {
+            _tools.Remove(toolName);
+        }
+
+        public bool TryGetTool(string toolName, out IUnityCliLoopTool tool)
+        {
+            return _tools.TryGetValue(toolName, out tool);
+        }
+
+        public bool IsToolEnabled(string toolName)
+        {
+            return _toolSettingsService.IsToolEnabled(toolName);
+        }
+
+        public ToolInfo[] GetRegisteredTools()
+        {
+            return GetRegisteredToolsForProjectRoot(UnityCliLoopPathResolver.GetProjectRoot());
+        }
+
+        internal ToolInfo[] GetRegisteredToolsForProjectRoot(string projectRoot)
+        {
+            HashSet<string> internalToolNames = _internalToolNameProvider.GetInternalToolNames(projectRoot);
+            return _tools.Values
+                .Where(tool => _toolSettingsService.IsToolEnabled(tool.ToolName))
+                .Where(tool => !internalToolNames.Contains(tool.ToolName))
+                .Select(tool =>
+            {
+                bool displayDevelopmentOnly = false;
+                UnityCliLoopToolAttribute attribute = tool.GetType().GetCustomAttribute<UnityCliLoopToolAttribute>();
+                if (attribute != null)
+                {
+                    displayDevelopmentOnly = attribute.DisplayDevelopmentOnly;
+                }
+
+                return new ToolInfo(tool.ToolName, tool.ParameterSchema, displayDevelopmentOnly);
+            }).ToArray();
+        }
+
+        public ToolSettingsCatalogItem[] GetToolSettingsCatalog()
+        {
+            return GetToolSettingsCatalogForProjectRoot(UnityCliLoopPathResolver.GetProjectRoot());
+        }
+
+        internal ToolSettingsCatalogItem[] GetToolSettingsCatalogForProjectRoot(string projectRoot)
+        {
+            HashSet<string> internalToolNames = _internalToolNameProvider.GetInternalToolNames(projectRoot);
+            return _tools.Values
+                .Where(tool => !internalToolNames.Contains(tool.ToolName))
+                .Select(tool =>
+            {
+                Type toolType = tool.GetType();
+                UnityCliLoopToolAttribute attribute = toolType.GetCustomAttribute<UnityCliLoopToolAttribute>();
+                bool displayDevelopmentOnly = attribute?.DisplayDevelopmentOnly ?? false;
+                bool isThirdParty = ToolAssemblyClassifier.IsThirdPartyAssembly(toolType.Assembly.GetName().Name);
+
+                return new ToolSettingsCatalogItem(
+                    tool.ToolName,
+                    displayDevelopmentOnly,
+                    isThirdParty);
+            }).ToArray();
+        }
+
+        public Type GetToolType(string toolName)
+        {
+            if (_tools.TryGetValue(toolName, out IUnityCliLoopTool tool))
+            {
+                return tool.GetType();
+            }
+            return null;
+        }
+
+        public bool IsToolRegistered(string toolName)
+        {
+            return _tools.ContainsKey(toolName);
+        }
+
+    }
+
+    /// <summary>
+    /// Catalog DTO returned by the CLI tool-details command.
+    /// </summary>
+    public class ToolInfo
+    {
+        [JsonProperty("name")] public string Name { get; }
+
+        [JsonProperty("parameterSchema")] public ToolParameterSchema ParameterSchema { get; }
+
+        [JsonProperty("displayDevelopmentOnly")] public bool DisplayDevelopmentOnly { get; }
+
+        public ToolInfo(string name, ToolParameterSchema parameterSchema, bool displayDevelopmentOnly = false)
+        {
+            Name = name;
+            ParameterSchema = parameterSchema;
+            DisplayDevelopmentOnly = displayDevelopmentOnly;
+        }
+    }
+
+}

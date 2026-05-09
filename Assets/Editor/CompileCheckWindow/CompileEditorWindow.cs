@@ -177,9 +177,10 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                     ["CompileOnly"] = false,
                     ["YieldToForegroundRequests"] = false
                 };
-                await UnityCliLoopToolRegistrar.GetRegistry().ExecuteToolAsync(
+                await UnityCliLoopToolRegistrar.ExecuteToolAsync(
                     "execute-dynamic-code",
-                    parameters);
+                    parameters,
+                    ct);
             }
         }
 
@@ -206,7 +207,6 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         private void OnCompileCompleted(CompileResult result)
         {
             _logDisplay.AppendCompletionMessage(result);
-            UnityCliLoopEditorSettings.SetCompileWindowHasData(true);
             Repaint();
         }
 
@@ -233,9 +233,6 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         {
             _logDisplay.Clear();
             _compileController.ClearMessages();
-
-            // Also clear McpSessionManager data
-            UnityCliLoopEditorSettings.ClearCompileWindowData();
 
             Repaint();
         }

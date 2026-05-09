@@ -4,7 +4,7 @@ using System.Linq;
 
 using UnityEngine;
 
-using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private ToolSettingsData _cachedSettings;
 
-        public ToolSettingsData GetSettings()
+        private ToolSettingsData GetSettings()
         {
             if (_cachedSettings == null)
             {
@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return _cachedSettings;
         }
 
-        public void SaveSettings(ToolSettingsData settings)
+        private void SaveSettings(ToolSettingsData settings)
         {
             Debug.Assert(settings != null, "settings must not be null");
 

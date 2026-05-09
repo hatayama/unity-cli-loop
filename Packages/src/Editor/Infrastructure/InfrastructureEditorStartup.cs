@@ -1,4 +1,5 @@
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -8,9 +9,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class InfrastructureEditorStartup
     {
-        internal static void Initialize()
+        internal static void Initialize(UnityCliLoopEditorSettingsService editorSettingsService)
         {
-            UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup();
+            UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsService);
             CompilationLockService.RegisterForEditorStartup();
             ProjectLocalCliAutoInstaller.ScheduleForEditorStartup();
         }

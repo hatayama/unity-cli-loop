@@ -6,6 +6,7 @@ using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -27,6 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _backupFileContent;
         private bool _tempFileExisted;
         private string _tempFileContent;
+        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
 
         [SetUp]
         public void SetUp()
@@ -48,7 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             DeleteIfExists(SettingsFilePath);
             DeleteIfExists(BackupFilePath);
             DeleteIfExists(TempFilePath);
-            UnityCliLoopEditorSettings.InvalidateCache();
+            _editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateServiceWithRepository(out _editorSettingsRepository);
+            _editorSettingsRepository.InvalidateCache();
         }
 
         [TearDown]
@@ -57,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
             RestoreFile(BackupFilePath, _backupFileExisted, _backupFileContent);
             RestoreFile(TempFilePath, _tempFileExisted, _tempFileContent);
-            UnityCliLoopEditorSettings.InvalidateCache();
+            _editorSettingsRepository.InvalidateCache();
         }
 
         [Test]
@@ -66,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorSettingsData backupData = new() { showDeveloperTools = true };
             File.WriteAllText(BackupFilePath, JsonUtility.ToJson(backupData, true));
 
-            UnityCliLoopEditorSettings.RecoverSettingsFileIfNeeded();
+            _editorSettingsService.RecoverSettingsFileIfNeeded();
 
             Assert.IsTrue(File.Exists(SettingsFilePath), "Primary settings file should be restored from backup");
             Assert.IsFalse(File.Exists(BackupFilePath), "Backup should be consumed after recovery");
@@ -84,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             File.WriteAllText(BackupFilePath, JsonUtility.ToJson(oldData, true));
             File.WriteAllText(TempFilePath, JsonUtility.ToJson(newData, true));
 
-            UnityCliLoopEditorSettings.RecoverSettingsFileIfNeeded();
+            _editorSettingsService.RecoverSettingsFileIfNeeded();
 
             Assert.IsTrue(File.Exists(SettingsFilePath), "Primary settings file should be restored from temp");
             Assert.IsFalse(File.Exists(BackupFilePath), "Backup should be removed after temp recovery");
@@ -103,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             File.WriteAllText(BackupFilePath, JsonUtility.ToJson(new UnityCliLoopEditorSettingsData { showDeveloperTools = false }, true));
             File.WriteAllText(TempFilePath, JsonUtility.ToJson(new UnityCliLoopEditorSettingsData { showDeveloperTools = false }, true));
 
-            UnityCliLoopEditorSettings.RecoverSettingsFileIfNeeded();
+            _editorSettingsService.RecoverSettingsFileIfNeeded();
 
             Assert.IsFalse(File.Exists(BackupFilePath), "Backup should not linger once primary exists");
             Assert.IsFalse(File.Exists(TempFilePath), "Temp should not linger once primary exists");
@@ -117,9 +122,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallSkillsFlat_WhenMissingFromSettings_DefaultsToTrue()
         {
             File.WriteAllText(SettingsFilePath, "{\"showDeveloperTools\":true}");
-            UnityCliLoopEditorSettings.InvalidateCache();
+            _editorSettingsRepository.InvalidateCache();
 
-            bool installSkillsFlat = UnityCliLoopEditorSettings.GetInstallSkillsFlat();
+            bool installSkillsFlat = _editorSettingsService.GetSettings().installSkillsFlat;
 
             Assert.IsTrue(installSkillsFlat);
         }
@@ -138,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "\"connectedLLMTools\":[{\"Name\":\"codex\",\"Endpoint\":\"/tmp/uloop/test.sock#1\",\"Port\":18449}]" +
                 "}");
 
-            UnityCliLoopEditorSettings.RecoverSettingsFileIfNeeded();
+            _editorSettingsService.RecoverSettingsFileIfNeeded();
 
             string recoveredJson = File.ReadAllText(SettingsFilePath);
             StringAssert.DoesNotContain("customPort", recoveredJson);
@@ -155,16 +160,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             File.WriteAllText(SettingsFilePath, new string(' ', UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES + 1));
 
-            Assert.Throws<SecurityException>(() => UnityCliLoopEditorSettings.RecoverSettingsFileIfNeeded());
+            Assert.Throws<SecurityException>(() => _editorSettingsService.RecoverSettingsFileIfNeeded());
         }
 
         [Test]
         public void SetInstallSkillsFlat_PersistsValue()
         {
-            UnityCliLoopEditorSettings.SetInstallSkillsFlat(true);
-            UnityCliLoopEditorSettings.InvalidateCache();
+            _editorSettingsService.SetInstallSkillsFlat(true);
+            _editorSettingsRepository.InvalidateCache();
 
-            bool installSkillsFlat = UnityCliLoopEditorSettings.GetInstallSkillsFlat();
+            bool installSkillsFlat = _editorSettingsService.GetSettings().installSkillsFlat;
 
             Assert.IsTrue(installSkillsFlat);
         }
@@ -173,12 +178,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void UpdateSessionState_WhenStartingServer_ShouldNotPersistRuntimeIdentity()
         {
             UnityCliLoopServerStartupService service =
-                new UnityCliLoopServerStartupService(new TestServerInstanceFactory());
+                new UnityCliLoopServerStartupService(
+                    new TestServerInstanceFactory(),
+                    _editorSettingsService);
 
             ServiceResult<bool> result = service.UpdateSessionState(true);
 
             Assert.IsTrue(result.Success, "Session update should succeed");
-            Assert.IsTrue(UnityCliLoopEditorSettings.GetIsServerRunning(), "Server running state should be persisted");
+            Assert.IsTrue(_editorSettingsService.GetIsServerRunning(), "Server running state should be persisted");
             string savedJson = File.ReadAllText(SettingsFilePath);
             StringAssert.DoesNotContain("projectRootPath", savedJson);
             StringAssert.DoesNotContain("serverSessionId", savedJson);
