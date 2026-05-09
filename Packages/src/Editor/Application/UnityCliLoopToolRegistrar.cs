@@ -52,6 +52,34 @@ namespace io.github.hatayama.UnityCliLoop.Application
             }
         }
 
+        public void RegisterCustomTool(IUnityCliLoopTool tool)
+        {
+            UnityEngine.Debug.Assert(tool != null, "tool must not be null");
+
+            SharedRegistry.RegisterTool(tool);
+            NotifyToolChanges();
+        }
+
+        public void UnregisterCustomTool(string toolName)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(toolName), "toolName must not be null or whitespace");
+
+            SharedRegistry.UnregisterTool(toolName);
+            NotifyToolChanges();
+        }
+
+        public ToolInfo[] GetRegisteredCustomTools()
+        {
+            return SharedRegistry.GetRegisteredTools();
+        }
+
+        public bool IsCustomToolRegistered(string toolName)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(toolName), "toolName must not be null or whitespace");
+
+            return SharedRegistry.IsToolRegistered(toolName);
+        }
+
         /// <summary>
         /// Get internal registry for the Unity CLI bridge.
         /// </summary>
@@ -75,6 +103,18 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             _ = SharedRegistry;
         }
+
+        public string GetDebugInfo()
+        {
+            ToolInfo[] tools = SharedRegistry.GetRegisteredTools();
+            string[] toolNames = new string[tools.Length];
+            for (int i = 0; i < tools.Length; i++)
+            {
+                toolNames[i] = tools[i].Name;
+            }
+
+            return $"Registry instance: {SharedRegistry.GetHashCode()}, Tools: [{string.Join(", ", toolNames)}]";
+        }
         
         public void NotifyToolChanges()
         {
@@ -96,6 +136,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
             ServiceValue = service ?? throw new ArgumentNullException(nameof(service));
         }
 
+        internal static void AddToolsChangedHandler(Action handler)
+        {
+            Service.OnToolsChanged += handler;
+        }
+
+        internal static void RemoveToolsChangedHandler(Action handler)
+        {
+            Service.OnToolsChanged -= handler;
+        }
+
         public static UnityCliLoopToolRegistrarService Service
         {
             get
@@ -109,9 +159,34 @@ namespace io.github.hatayama.UnityCliLoop.Application
             }
         }
 
+        public static void RegisterCustomTool(IUnityCliLoopTool tool)
+        {
+            Service.RegisterCustomTool(tool);
+        }
+
+        public static void UnregisterCustomTool(string toolName)
+        {
+            Service.UnregisterCustomTool(toolName);
+        }
+
+        public static ToolInfo[] GetRegisteredCustomTools()
+        {
+            return Service.GetRegisteredCustomTools();
+        }
+
+        public static bool IsCustomToolRegistered(string toolName)
+        {
+            return Service.IsCustomToolRegistered(toolName);
+        }
+
         public static UnityCliLoopToolRegistry GetRegistry()
         {
             return Service.GetRegistry();
+        }
+
+        public static UnityCliLoopToolRegistry TryGetRegistry()
+        {
+            return Service.TryGetRegistry();
         }
 
         public static Task<UnityCliLoopToolResponse> ExecuteToolAsync(string toolName, JToken paramsToken, CancellationToken ct)
@@ -122,6 +197,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public static void WarmupRegistry()
         {
             Service.WarmupRegistry();
+        }
+
+        public static string GetDebugInfo()
+        {
+            return Service.GetDebugInfo();
+        }
+
+        public static void NotifyToolChanges()
+        {
+            Service.NotifyToolChanges();
         }
     }
 }

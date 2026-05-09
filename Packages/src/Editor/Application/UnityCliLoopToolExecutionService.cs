@@ -22,7 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             Debug.Assert(registry != null, "registry must not be null");
             Debug.Assert(!string.IsNullOrWhiteSpace(toolName), "toolName must not be null or whitespace");
-            Debug.Assert(paramsToken != null, "paramsToken must not be null");
 
             ct.ThrowIfCancellationRequested();
 

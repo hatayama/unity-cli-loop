@@ -364,6 +364,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteCommandAsync_WhenParamsAreOmitted_UsesDefaultSchema()
+        {
+            // Tests that JSON-RPC requests may omit params and still use schema defaults.
+            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync("hello-world", null);
+            JObject serializedResponse = JObject.FromObject(response);
+
+            Assert.That(serializedResponse.Value<string>("Message"), Is.EqualTo("Hello, World!"));
+            Assert.That(serializedResponse.Value<string>("Language"), Is.EqualTo("english"));
+        }
+
+        [Test]
         public async Task ExecuteToolAsync_WhenToolReturnsResponse_DoesNotAddProtocolVersionToResponseInstance()
         {
             // Tests that tool responses do not carry obsolete per-response protocol version metadata.
@@ -384,6 +395,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject serializedResponse = JObject.FromObject(response);
 
             Assert.That(serializedResponse["Ver"], Is.Null);
+        }
+
+        [Test]
+        public void StaticRegistrarCustomToolMethods_RegisterAndUnregisterManualTool()
+        {
+            // Tests that extension-facing static registrar APIs still delegate to the shared registry.
+            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            ManualRegistrationTool tool = new();
+
+            UnityCliLoopToolRegistrar.RegisterService(service);
+            try
+            {
+                UnityCliLoopToolRegistrar.RegisterCustomTool(tool);
+
+                string[] toolNames = UnityCliLoopToolRegistrar.GetRegisteredCustomTools()
+                    .Select(toolInfo => toolInfo.Name)
+                    .ToArray();
+                Assert.That(UnityCliLoopToolRegistrar.IsCustomToolRegistered(tool.ToolName), Is.True);
+                Assert.That(toolNames, Does.Contain(tool.ToolName));
+
+                UnityCliLoopToolRegistrar.UnregisterCustomTool(tool.ToolName);
+
+                Assert.That(UnityCliLoopToolRegistrar.IsCustomToolRegistered(tool.ToolName), Is.False);
+            }
+            finally
+            {
+                UnityCliLoopToolRegistrar.RegisterService(previousService);
+            }
         }
 
         [Test]
@@ -500,6 +544,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject serializedTool = JObject.FromObject(tool);
 
             Assert.That(serializedTool.ContainsKey("Description"), Is.False);
+        }
+
+        private sealed class ManualRegistrationTool : IUnityCliLoopTool
+        {
+            public string ToolName => "manual-registration-test";
+            public ToolParameterSchema ParameterSchema { get; } = new();
+
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken)
+            {
+                UnityCliLoopToolResponse response = new ManualRegistrationResponse();
+                return Task.FromResult(response);
+            }
+        }
+
+        private sealed class ManualRegistrationResponse : UnityCliLoopToolResponse
+        {
         }
     }
 }
