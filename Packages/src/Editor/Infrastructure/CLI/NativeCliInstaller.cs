@@ -18,6 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public static class NativeCliInstaller
     {
+        private const int INSTALL_PROCESS_TIMEOUT_MS = 300000;
+        private const int INSTALL_PROCESS_WAIT_SLICE_MS = 250;
+
         public static NativeCliInstallCommand GetInstallCommand(
             RuntimePlatform platform,
             string packageVersion,
@@ -64,7 +67,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             NativeCliInstallCommand command = GetInstallCommand(platform, dispatcherVersion, true);
-            CliInstallResult result = await Task.Run(() => RunInstallCommand(command), ct);
+            CliInstallResult result = await Task.Run(
+                () => RunInstallCommand(command, ct, INSTALL_PROCESS_TIMEOUT_MS),
+                ct);
 
             if (result.Success)
             {
@@ -113,10 +118,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Environment.SetEnvironmentVariable);
         }
 
-        internal static CliInstallResult RunInstallCommand(NativeCliInstallCommand command)
+        internal static CliInstallResult RunInstallCommand(
+            NativeCliInstallCommand command,
+            CancellationToken ct,
+            int timeoutMs)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.FileName), "command.FileName must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.Arguments), "command.Arguments must not be null or empty");
+            UnityEngine.Debug.Assert(timeoutMs > 0, "timeoutMs must be greater than zero");
+            ct.ThrowIfCancellationRequested();
 
             ProcessStartInfo startInfo = new()            {
                 FileName = command.FileName,
@@ -135,9 +145,49 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Failed to start release CLI dispatcher installer: {command.FileName}");
             }
 
+            StringBuilder standardOutputBuilder = new();
+            StringBuilder errorOutputBuilder = new();
+            process.OutputDataReceived += (sender, e) =>
+            {
+                if (e.Data != null)
+                {
+                    standardOutputBuilder.AppendLine(e.Data);
+                }
+            };
+            process.ErrorDataReceived += (sender, e) =>
+            {
+                if (e.Data != null)
+                {
+                    errorOutputBuilder.AppendLine(e.Data);
+                }
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            bool canceled;
+            bool exited = WaitForInstallProcessExit(process, ct, timeoutMs, out canceled);
+            if (!exited)
+            {
+                KillProcessIfRunning(process);
+            }
+
             process.WaitForExit();
-            string standardOutput = process.StandardOutput.ReadToEnd();
-            string errorOutput = process.StandardError.ReadToEnd();
+            string standardOutput = standardOutputBuilder.ToString();
+            string errorOutput = errorOutputBuilder.ToString();
+            if (canceled)
+            {
+                process.Dispose();
+                return new CliInstallResult(false, "Release CLI dispatcher installer was canceled.");
+            }
+
+            if (!exited)
+            {
+                process.Dispose();
+                return new CliInstallResult(
+                    false,
+                    BuildReleaseCliInstallTimeoutFailure(timeoutMs, errorOutput, standardOutput));
+            }
+
             bool success = process.ExitCode == 0;
             process.Dispose();
 
@@ -787,6 +837,63 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return "Release CLI dispatcher installer failed without output.";
+        }
+
+        private static string BuildReleaseCliInstallTimeoutFailure(
+            int timeoutMs,
+            string errorOutput,
+            string standardOutput)
+        {
+            string capturedOutput = BuildReleaseCliInstallFailure(errorOutput, standardOutput);
+            if (string.Equals(capturedOutput, "Release CLI dispatcher installer failed without output.", StringComparison.Ordinal))
+            {
+                return $"Release CLI dispatcher installer timed out after {timeoutMs} ms.";
+            }
+
+            return $"Release CLI dispatcher installer timed out after {timeoutMs} ms.\n{capturedOutput}";
+        }
+
+        private static bool WaitForInstallProcessExit(
+            Process process,
+            CancellationToken ct,
+            int timeoutMs,
+            out bool canceled)
+        {
+            UnityEngine.Debug.Assert(process != null, "process must not be null");
+            UnityEngine.Debug.Assert(timeoutMs > 0, "timeoutMs must be greater than zero");
+
+            canceled = false;
+            int remainingMs = timeoutMs;
+            while (remainingMs > 0)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    canceled = true;
+                    return false;
+                }
+
+                int waitMs = Math.Min(INSTALL_PROCESS_WAIT_SLICE_MS, remainingMs);
+                if (process.WaitForExit(waitMs))
+                {
+                    return true;
+                }
+
+                remainingMs -= waitMs;
+            }
+
+            return false;
+        }
+
+        private static void KillProcessIfRunning(Process process)
+        {
+            UnityEngine.Debug.Assert(process != null, "process must not be null");
+
+            if (process.HasExited)
+            {
+                return;
+            }
+
+            process.Kill();
         }
 
         private static string GetGlobalCliInstallFileName(RuntimePlatform platform)

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -97,10 +98,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "--version",
                 "missing-uloop-release-installer --version");
 
-            CliInstallResult result = NativeCliInstaller.RunInstallCommand(command);
+            CliInstallResult result = NativeCliInstaller.RunInstallCommand(command, CancellationToken.None, 1000);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain("Failed to start release CLI dispatcher installer"));
+        }
+
+        [Test]
+        public void RunInstallCommand_WhenInstallerDoesNotExitReturnsFailure()
+        {
+            // Verifies that release installer stalls cannot leave the editor setup task alive forever.
+            NativeCliInstallCommand command = BuildLongRunningInstallCommand();
+
+            CliInstallResult result = NativeCliInstaller.RunInstallCommand(command, CancellationToken.None, 50);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorOutput, Does.Contain("timed out"));
         }
 
         [Test]
@@ -113,6 +126,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 RuntimePlatform.WindowsEditor);
 
             Assert.That(result, Is.EqualTo("C:\\Users\\masamichi\\Programs\\uloop\\bin;C:\\npm"));
+        }
+
+        private static NativeCliInstallCommand BuildLongRunningInstallCommand()
+        {
+            if (UnityEngine.Application.platform == RuntimePlatform.WindowsEditor)
+            {
+                return new NativeCliInstallCommand(
+                    "powershell",
+                    "-NoProfile -ExecutionPolicy Bypass -Command \"Start-Sleep -Seconds 5\"",
+                    "Start-Sleep -Seconds 5");
+            }
+
+            return new NativeCliInstallCommand(
+                "/bin/sh",
+                "-c \"sleep 5\"",
+                "sleep 5");
         }
 
         [Test]
