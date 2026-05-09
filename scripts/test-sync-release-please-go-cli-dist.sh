@@ -46,6 +46,12 @@ case "$1" in
     fi
     exit 0
     ;;
+  ls-files)
+    if [ "$DIST_UNTRACKED" = "true" ]; then
+      printf '%s\n' "Packages/src/Cli~/Core~/dist/linux-amd64/uloop-core"
+    fi
+    exit 0
+    ;;
   *)
     echo "unexpected git command: $*" >&2
     exit 1
@@ -94,6 +100,7 @@ run_case() {
   name=$1
   pr_json=$2
   dist_dirty=$3
+  dist_untracked=$4
 
   work_dir="$TMP_DIR/$name"
   mkdir -p "$work_dir"
@@ -107,6 +114,7 @@ run_case() {
       GIT_LOG="$work_dir/git.log" \
       SCRIPT_LOG="$work_dir/script.log" \
       DIST_DIRTY="$dist_dirty" \
+      DIST_UNTRACKED="$dist_untracked" \
       TARGET_BRANCH=v3-beta \
       GITHUB_REPOSITORY=hatayama/unity-cli-loop \
       "$SCRIPT" > output.txt 2> stderr.txt
@@ -115,7 +123,7 @@ run_case() {
 
 # Verifies the sync exits cleanly when no release PR exists.
 test_no_release_pr_exits() {
-  run_case no-release-pr '[]' false
+  run_case no-release-pr '[]' false false
 
   assert_contains "$TMP_DIR/no-release-pr/output.txt" "No pending release-please PR found for v3-beta."
   assert_not_contains "$TMP_DIR/no-release-pr/script.log" "build"
@@ -124,7 +132,7 @@ test_no_release_pr_exits() {
 
 # Verifies current dist files run validation without an extra commit.
 test_current_dist_checks_without_commit() {
-  run_case current-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp","url":"https://example.test/pr/1043"}]' false
+  run_case current-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp","url":"https://example.test/pr/1043"}]' false false
 
   assert_contains "$TMP_DIR/current-dist/script.log" "build"
   assert_contains "$TMP_DIR/current-dist/script.log" "check"
@@ -136,7 +144,7 @@ test_current_dist_checks_without_commit() {
 
 # Verifies stale dist files are committed and pushed to the release PR branch.
 test_stale_dist_commits_and_pushes() {
-  run_case stale-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp","url":"https://example.test/pr/1043"}]' true
+  run_case stale-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp","url":"https://example.test/pr/1043"}]' true false
 
   assert_contains "$TMP_DIR/stale-dist/script.log" "build"
   assert_contains "$TMP_DIR/stale-dist/script.log" "check"
@@ -145,6 +153,19 @@ test_stale_dist_commits_and_pushes() {
   assert_contains "$TMP_DIR/stale-dist/git.log" "push origin HEAD:release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp"
 }
 
+# Verifies newly generated untracked dist files are committed and pushed to the release PR branch.
+test_untracked_dist_commits_and_pushes() {
+  run_case untracked-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp","url":"https://example.test/pr/1043"}]' false true
+
+  assert_contains "$TMP_DIR/untracked-dist/script.log" "build"
+  assert_contains "$TMP_DIR/untracked-dist/script.log" "check"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "ls-files --others --exclude-standard -- Packages/src/Cli~/Core~/dist Packages/src/Cli~/Dispatcher~/dist"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "add Packages/src/Cli~/Core~/dist Packages/src/Cli~/Dispatcher~/dist"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "commit -m chore(v3-beta): update native CLI binaries"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "push origin HEAD:release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp"
+}
+
 test_no_release_pr_exits
 test_current_dist_checks_without_commit
 test_stale_dist_commits_and_pushes
+test_untracked_dist_commits_and_pushes

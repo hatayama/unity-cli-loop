@@ -34,12 +34,15 @@ gh label create "$LABEL_NAME" \
   --color B60205 \
   --force >/dev/null
 
-EXISTING_ISSUE_NUMBER=$(gh issue list \
+ISSUES_JSON=$(gh issue list \
   --state open \
   --label "$LABEL_NAME" \
-  --json number,title \
-  | jq -r --arg title "$TITLE" '.[] | select(.title == $title) | .number' \
-  | head -n 1)
+  --limit 1000 \
+  --json number,title) || {
+    echo "Could not list existing release failure issues." >&2
+    exit 1
+  }
+EXISTING_ISSUE_NUMBER=$(printf '%s\n' "$ISSUES_JSON" | jq -r --arg title "$TITLE" 'map(select(.title == $title)) | .[0].number // empty')
 
 if [ -n "$EXISTING_ISSUE_NUMBER" ]; then
   gh issue comment "$EXISTING_ISSUE_NUMBER" --body-file "$BODY_FILE" >/dev/null

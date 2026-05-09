@@ -22,6 +22,9 @@ set -eu
 
 case "$1" in
   show)
+    if [ "$GIT_SHOW_FAIL" = "true" ]; then
+      exit 1
+    fi
     printf '{\n  "Packages/src": "%s"\n}\n' "$PREVIOUS_VERSION"
     ;;
   rev-parse)
@@ -98,6 +101,7 @@ run_success_case() {
     write_manifest "$current_version"
     PATH="$mock_bin:$ORIGINAL_PATH" \
       PREVIOUS_VERSION="$previous_version" \
+      GIT_SHOW_FAIL=false \
       GH_RELEASE_STATE="$release_state" \
       EVENT_NAME="$event_name" \
       EVENT_REF_NAME="$branch_name" \
@@ -134,10 +138,47 @@ run_failure_case() {
     set +e
     PATH="$mock_bin:$ORIGINAL_PATH" \
       PREVIOUS_VERSION="$previous_version" \
+      GIT_SHOW_FAIL=false \
       GH_RELEASE_STATE="$release_state" \
       EVENT_NAME="$event_name" \
       EVENT_REF_NAME="$branch_name" \
       BEFORE_SHA=before \
+      INPUT_RELEASE_TAG= \
+      INPUT_DRY_RUN=false \
+      "$SCRIPT" > output.txt 2> stderr.txt
+    status=$?
+    set -e
+
+    if [ "$status" -eq 0 ]; then
+      echo "Expected $name to fail." >&2
+      exit 1
+    fi
+
+    assert_contains stderr.txt "$expected_error"
+  )
+}
+
+run_git_show_failure_case() {
+  name=$1
+  current_version=$2
+  expected_error=$3
+
+  work_dir="$TMP_DIR/$name"
+  mock_bin="$work_dir/bin"
+  mkdir -p "$work_dir"
+  write_mock_commands "$mock_bin"
+
+  (
+    cd "$work_dir"
+    write_manifest "$current_version"
+    set +e
+    PATH="$mock_bin:$ORIGINAL_PATH" \
+      PREVIOUS_VERSION=unused \
+      GIT_SHOW_FAIL=true \
+      GH_RELEASE_STATE=published \
+      EVENT_NAME=push \
+      EVENT_REF_NAME=v3-beta \
+      BEFORE_SHA=missing \
       INPUT_RELEASE_TAG= \
       INPUT_DRY_RUN=false \
       "$SCRIPT" > output.txt 2> stderr.txt
@@ -183,9 +224,15 @@ test_v3_beta_stable_fails() {
   run_failure_case v3-beta-stable 3.0.0 2.1.1 push v3-beta missing "Refusing to publish stable version 3.0.0 from v3-beta."
 }
 
+# Verifies missing previous release manifest content fails instead of forcing a publish retry.
+test_missing_previous_manifest_fails() {
+  run_git_show_failure_case missing-previous-manifest 3.0.0-beta.2 "Could not read release manifest from push before SHA: missing"
+}
+
 test_same_version_published_release_skips
 test_same_version_missing_release_retries
 test_same_version_draft_release_retries
 test_version_change_publishes
 test_main_prerelease_fails
 test_v3_beta_stable_fails
+test_missing_previous_manifest_fails

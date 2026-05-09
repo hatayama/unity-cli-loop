@@ -74,7 +74,11 @@ if [ "$EVENT_NAME" = "push" ]; then
         ;;
     esac
 
-    PREVIOUS_VERSION=$(git show "$BEFORE_SHA:.release-please-manifest.json" | jq -r '.["Packages/src"]')
+    PREVIOUS_MANIFEST=$(git show "$BEFORE_SHA:.release-please-manifest.json") || {
+      echo "Could not read release manifest from push before SHA: $BEFORE_SHA" >&2
+      exit 1
+    }
+    PREVIOUS_VERSION=$(printf '%s\n' "$PREVIOUS_MANIFEST" | jq -r '.["Packages/src"]')
     if [ "$PREVIOUS_VERSION" = "$VERSION" ]; then
       if release_is_published "$RELEASE_TAG"; then
         SHOULD_PUBLISH=false

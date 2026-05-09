@@ -53,7 +53,8 @@ git checkout -B "$RELEASE_PR_HEAD_REF" FETCH_HEAD
 
 scripts/build-go-cli.sh
 
-if git diff --quiet -- $DIST_PATHS; then
+UNTRACKED_DIST_FILES=$(git ls-files --others --exclude-standard -- $DIST_PATHS)
+if git diff --quiet -- $DIST_PATHS && [ -z "$UNTRACKED_DIST_FILES" ]; then
   echo "Native CLI dist files are already current."
   scripts/check-go-cli.sh
   exit 0
