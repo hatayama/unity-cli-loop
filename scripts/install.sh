@@ -123,14 +123,14 @@ try_remove_legacy_npm_package() {
     return
   fi
 
-  if ! command -v npm >/dev/null 2>&1; then
-    print_legacy_npm_manual_removal "$legacy_uloop" ""
-    return
-  fi
-
   legacy_prefix=""
   if [ -n "$legacy_uloop" ] && is_legacy_npm_uloop_path "$legacy_uloop"; then
     legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
+  fi
+
+  if ! command -v npm >/dev/null 2>&1; then
+    print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
+    return
   fi
 
   if [ -n "$legacy_prefix" ]; then
@@ -260,9 +260,9 @@ extract_asset() {
 asset_name=$(detect_asset_name)
 installed_command_name=$(detect_installed_command_name)
 legacy_uloop_before_install=$(command -v uloop 2>/dev/null || true)
-legacy_uloop_command_detected_before_install=0
-if [ -n "$legacy_uloop_before_install" ]; then
-  legacy_uloop_command_detected_before_install=1
+legacy_npm_uloop_detected_before_install=0
+if is_legacy_npm_uloop_path "$legacy_uloop_before_install"; then
+  legacy_npm_uloop_detected_before_install=1
 fi
 download_url=""
 checksum_url=""
@@ -309,7 +309,7 @@ install -m 0755 "$tmp_dir/$installed_command_name" "$staged_uloop_path"
 final_uloop_path="$INSTALL_DIR/$installed_command_name"
 legacy_npm_removed_before_install=0
 if [ "$legacy_uloop_before_install" = "$final_uloop_path" ] || [ "$legacy_uloop_before_install.exe" = "$final_uloop_path" ]; then
-  if is_legacy_npm_uloop_path "$legacy_uloop_before_install"; then
+  if [ "$legacy_npm_uloop_detected_before_install" -eq 1 ]; then
     try_remove_legacy_npm_package "$legacy_uloop_before_install" ""
     legacy_npm_removed_before_install=1
   fi
@@ -317,7 +317,7 @@ if [ "$legacy_uloop_before_install" = "$final_uloop_path" ] || [ "$legacy_uloop_
 fi
 mv -f "$staged_uloop_path" "$final_uloop_path"
 staged_uloop_path=""
-if [ "$legacy_npm_removed_before_install" -eq 0 ] && [ "$legacy_uloop_command_detected_before_install" -eq 1 ]; then
+if [ "$legacy_npm_removed_before_install" -eq 0 ] && [ "$legacy_npm_uloop_detected_before_install" -eq 1 ]; then
   try_remove_legacy_npm_package "$legacy_uloop_before_install" "$final_uloop_path"
 fi
 
