@@ -73,6 +73,27 @@ infer_npm_prefix_from_uloop_path() {
   esac
 }
 
+is_legacy_npm_uloop_path() {
+  command_path=$1
+
+  if [ -z "$command_path" ]; then
+    return 1
+  fi
+
+  if [ -L "$command_path" ]; then
+    link_target=$(readlink "$command_path" 2>/dev/null || true)
+    case "$link_target" in
+      *node_modules/uloop-cli*|*node_modules\\uloop-cli*) return 0 ;;
+    esac
+  fi
+
+  if [ -f "$command_path" ] && grep -F "node_modules/uloop-cli" "$command_path" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
 print_legacy_npm_manual_removal() {
   legacy_uloop=$1
   legacy_prefix=$2
@@ -264,13 +285,19 @@ fi
 install -m 0755 "$tmp_dir/$installed_command_name" "$staged_uloop_path"
 "$staged_uloop_path" --version >/dev/null
 final_uloop_path="$INSTALL_DIR/$installed_command_name"
+legacy_npm_removed_before_install=0
 if [ "$legacy_uloop_before_install" = "$final_uloop_path" ] || [ "$legacy_uloop_before_install.exe" = "$final_uloop_path" ]; then
-  try_remove_legacy_npm_package "$legacy_uloop_before_install" ""
+  if is_legacy_npm_uloop_path "$legacy_uloop_before_install"; then
+    try_remove_legacy_npm_package "$legacy_uloop_before_install" ""
+    legacy_npm_removed_before_install=1
+  fi
   legacy_uloop_before_install=""
 fi
 mv -f "$staged_uloop_path" "$final_uloop_path"
 staged_uloop_path=""
-try_remove_legacy_npm_package "$legacy_uloop_before_install" "$final_uloop_path"
+if [ "$legacy_npm_removed_before_install" -eq 0 ]; then
+  try_remove_legacy_npm_package "$legacy_uloop_before_install" "$final_uloop_path"
+fi
 
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;

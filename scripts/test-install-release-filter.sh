@@ -270,6 +270,7 @@ test_posix_removes_npm_package_even_when_native_command_is_first() {
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
   assert_contains "$npm_log" "uninstall -g uloop-cli"
+  assert_not_contains "$npm_log" "uninstall -g --prefix $install_dir uloop-cli"
   if [ -e "$legacy_uloop" ]; then
     echo "Expected default npm uninstall to remove the hidden legacy Node uloop shim: $legacy_uloop" >&2
     exit 1
@@ -313,8 +314,10 @@ test_posix_removes_npm_package_before_replacing_same_bin_path() {
 
 test_powershell_latest_skips_prerelease_assets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($Release.draft -or $Release.prerelease) {'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Test-LegacyNpmUloopPath'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '"uninstall", "-g", "--prefix", $LegacyPrefix, "uloop-cli"'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$NpmArgs = @("uninstall", "-g", "uloop-cli")'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if (Test-LegacyNpmUloopPath -CommandPath $LegacyUloopBeforeInstallPath) {'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "ULOOP_REMOVE_LEGACY"
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Remove-LegacyUloopShims"
 }

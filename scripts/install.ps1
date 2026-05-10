@@ -84,6 +84,26 @@ function Get-NpmPrefixFromUloopPath {
     return $CommandDirectory
 }
 
+function Test-LegacyNpmUloopPath {
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$CommandPath
+    )
+
+    if (-not $CommandPath) {
+        return $false
+    }
+
+    if (-not (Test-Path $CommandPath -PathType Leaf)) {
+        return $false
+    }
+
+    $CommandContent = Get-Content -Path $CommandPath -Raw
+    return $CommandContent.Contains("node_modules/uloop-cli") `
+        -or $CommandContent.Contains("node_modules\uloop-cli")
+}
+
 function Write-LegacyNpmManualRemoval {
     param(
         [AllowNull()]
@@ -198,9 +218,14 @@ try {
     Assert-UloopVersionSucceeds -UloopPath $StagedUloopPath -Quiet
     $FinalUloopPath = Join-Path $InstallDir "uloop.exe"
     $LegacyUloopBeforeInstallPath = $LegacyUloopBeforeInstallCommand.Source
+    $LegacyNpmRemovedBeforeInstall = $false
     if ($LegacyUloopBeforeInstallPath `
         -and [string]::Equals($LegacyUloopBeforeInstallPath, $FinalUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-        Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopBeforeInstallPath -ExpectedUloopPath ""
+        if (Test-LegacyNpmUloopPath -CommandPath $LegacyUloopBeforeInstallPath) {
+            Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopBeforeInstallPath -ExpectedUloopPath ""
+            $LegacyNpmRemovedBeforeInstall = $true
+        }
+
         $LegacyUloopBeforeInstallPath = $null
     }
     Copy-Item -Path $StagedUloopPath -Destination $FinalUloopPath -Force
@@ -221,7 +246,10 @@ try {
     }
 
     Assert-UloopVersionSucceeds -UloopPath $FinalUloopPath
-    Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopBeforeInstallPath -ExpectedUloopPath $FinalUloopPath
+    if (-not $LegacyNpmRemovedBeforeInstall) {
+        Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopBeforeInstallPath -ExpectedUloopPath $FinalUloopPath
+    }
+
     Report-PathShadowing
 }
 finally {
