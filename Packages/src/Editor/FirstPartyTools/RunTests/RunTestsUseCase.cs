@@ -52,6 +52,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ct.ThrowIfCancellationRequested();
             return await Task.FromResult(CreateTestFrameworkUnavailableResponse());
 #else
+            if (!IsSupportedTestMode(parameters.TestMode))
+            {
+                return CreateFailureResponse("Unsupported test mode: " + parameters.TestMode);
+            }
+
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
             if (!validation.IsValid)
             {
@@ -119,6 +124,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public Task<UnityCliLoopTestExecutionResult> RunTestsAsync(UnityCliLoopTestExecutionRequest request, CancellationToken ct)
         {
             return ExecuteAsync(request, ct);
+        }
+
+        private static bool IsSupportedTestMode(UnityCliLoopTestMode testMode)
+        {
+            return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);
         }
 
         private static UnityCliLoopTestExecutionResult CreateTestFrameworkUnavailableResponse()

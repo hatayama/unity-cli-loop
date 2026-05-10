@@ -42,6 +42,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(validationService.SaveBeforeRun, Is.True);
         }
 
+        [Test]
+        public async Task ExecuteAsync_WithUnknownTestMode_ShouldFailFastWithoutRunningTests()
+        {
+            // Verifies unknown enum values do not bypass the EditMode play-state guard.
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService
+            );
+            UnityCliLoopTestExecutionRequest parameters = new()
+            {
+                TestMode = (UnityCliLoopTestMode)999
+            };
+
+            UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Unsupported test mode"));
+            Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.WasCalled, Is.False);
+        }
+
         /// <summary>
         /// Test support type used by editor and play mode fixtures.
         /// </summary>
@@ -50,6 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             private readonly ValidationResult _result;
 
             public bool SaveBeforeRun { get; private set; }
+            public bool WasCalled { get; private set; }
 
             public StubTestExecutionStateValidationService(ValidationResult result)
             {
@@ -58,6 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public override ValidationResult Validate(UnityCliLoopTestMode testMode, bool saveBeforeRun)
             {
+                WasCalled = true;
                 SaveBeforeRun = saveBeforeRun;
                 return _result;
             }
