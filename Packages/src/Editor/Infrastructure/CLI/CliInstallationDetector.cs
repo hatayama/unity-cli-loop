@@ -107,11 +107,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static CliInstallationDetection DetectCliInstallationBlocking(RuntimePlatform platform, CancellationToken ct)
         {
             CliInstallationDetection packageOwnedDetection = DetectPackageOwnedCliInstallationBlocking(platform, ct);
-            if (!string.IsNullOrEmpty(packageOwnedDetection.Version))
-            {
-                return SelectPreferredDetection(packageOwnedDetection, default);
-            }
-
             CliInstallationDetection shellDetection = DetectShellCliInstallationBlocking(platform, ct);
             return SelectPreferredDetection(packageOwnedDetection, shellDetection);
         }
@@ -120,9 +115,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CliInstallationDetection packageOwnedDetection,
             CliInstallationDetection shellDetection)
         {
-            return !string.IsNullOrEmpty(packageOwnedDetection.Version)
-                ? packageOwnedDetection
-                : shellDetection;
+            return !string.IsNullOrEmpty(shellDetection.Version)
+                ? shellDetection
+                : packageOwnedDetection;
         }
 
         private static CliInstallationDetection DetectPackageOwnedCliInstallationBlocking(

@@ -10,15 +10,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class CliInstallationDetectorTests
     {
         [Test]
-        public void SelectPreferredDetection_WhenPackageOwnedDispatcherExistsUsesItBeforeShellPath()
+        public void SelectPreferredDetection_WhenShellCommandShadowsPackageOwnedDispatcherUsesShellPath()
         {
-            // Verifies that a stale shell shim cannot hide the installed native Dispatcher.
+            // Verifies that the settings UI reports the same CLI command the user's terminal runs.
             CliInstallationDetection packageOwnedDetection = new(
                 "3.0.0-beta.3",
                 "/Users/masamichi/.local/bin/uloop");
             CliInstallationDetection shellDetection = new(
                 "2.1.0",
                 "/Users/masamichi/.npm-global/bin/uloop");
+
+            CliInstallationDetection result = CliInstallationDetector.SelectPreferredDetection(
+                packageOwnedDetection,
+                shellDetection);
+
+            Assert.That(result.Version, Is.EqualTo("2.1.0"));
+            Assert.That(result.ExecutablePath, Is.EqualTo("/Users/masamichi/.npm-global/bin/uloop"));
+        }
+
+        [Test]
+        public void SelectPreferredDetection_WhenShellCommandMissingUsesPackageOwnedDispatcher()
+        {
+            // Verifies that package-owned installs still count when the shell cannot resolve uloop.
+            CliInstallationDetection packageOwnedDetection = new(
+                "3.0.0-beta.3",
+                "/Users/masamichi/.local/bin/uloop");
+            CliInstallationDetection shellDetection = new(
+                null,
+                null);
 
             CliInstallationDetection result = CliInstallationDetector.SelectPreferredDetection(
                 packageOwnedDetection,
