@@ -155,7 +155,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateRefreshSkillsButton(CliSetupData data)
         {
-            bool enabled = data.IsCliInstalled && !data.IsChecking && !data.IsInstallingSkills;
+            bool enabled = IsRefreshSkillsButtonEnabled(
+                data.IsCliInstalled,
+                data.IsInstallingSkills,
+                data.SelectedTargetInstallState);
             _refreshSkillsStateButton.SetEnabled(enabled);
             ViewDataBinder.ToggleClass(_refreshSkillsStateButton, "unity-cli-loop-button--disabled", !enabled);
         }
@@ -169,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateSkillsSubsection(CliSetupData data)
         {
-            bool enabled = data.IsCliInstalled && !data.IsChecking;
+            bool enabled = IsSkillsSubsectionEnabled(data.IsCliInstalled);
             _skillsSubsection.SetEnabled(enabled);
         }
 
@@ -182,7 +185,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool enabled = IsInstallSkillsButtonEnabled(
                 data.IsCliInstalled,
                 data.IsInstallingSkills,
-                data.IsChecking,
                 data.SelectedTargetInstallState);
             SetSkillsButton(label, enabled);
         }
@@ -276,10 +278,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool IsInstallSkillsButtonEnabled(
             bool isCliInstalled,
             bool isInstallingSkills,
-            bool isChecking,
             SkillInstallState installState)
         {
-            if (!isCliInstalled || isInstallingSkills || isChecking)
+            if (!isCliInstalled || isInstallingSkills)
             {
                 return false;
             }
@@ -290,6 +291,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 SkillInstallState.Installed => false,
                 _ => true
             };
+        }
+
+        internal static bool IsRefreshSkillsButtonEnabled(
+            bool isCliInstalled,
+            bool isInstallingSkills,
+            SkillInstallState installState)
+        {
+            return isCliInstalled
+                && !isInstallingSkills
+                && installState != SkillInstallState.Checking;
+        }
+
+        internal static bool IsSkillsSubsectionEnabled(bool isCliInstalled)
+        {
+            return isCliInstalled;
         }
 
         private void HandleGroupSkillsRowClicked(ClickEvent evt)

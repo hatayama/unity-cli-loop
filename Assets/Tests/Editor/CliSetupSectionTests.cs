@@ -99,25 +99,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(text, Is.EqualTo(expectedText));
         }
 
-        [TestCase(false, false, false, SkillInstallState.Missing, false)]
-        [TestCase(true, true, false, SkillInstallState.Missing, false)]
-        [TestCase(true, false, true, SkillInstallState.Missing, false)]
-        [TestCase(true, false, false, SkillInstallState.Checking, false)]
-        [TestCase(true, false, false, SkillInstallState.Installed, false)]
-        [TestCase(true, false, false, SkillInstallState.Outdated, true)]
-        [TestCase(true, false, false, SkillInstallState.Missing, true)]
+        [TestCase(false, false, SkillInstallState.Missing, false)]
+        [TestCase(true, true, SkillInstallState.Missing, false)]
+        [TestCase(true, false, SkillInstallState.Checking, false)]
+        [TestCase(true, false, SkillInstallState.Installed, false)]
+        [TestCase(true, false, SkillInstallState.Outdated, true)]
+        [TestCase(true, false, SkillInstallState.Missing, true)]
         public void IsInstallSkillsButtonEnabled_ReturnsExpectedValue(
             bool isCliInstalled,
             bool isInstallingSkills,
-            bool isChecking,
             SkillInstallState installState,
             bool expectedEnabled)
         {
+            // Verifies that the Skills install button ignores CLI-only refresh work.
             bool enabled = CliSetupSection.IsInstallSkillsButtonEnabled(
                 isCliInstalled,
                 isInstallingSkills,
-                isChecking,
                 installState);
+
+            Assert.That(enabled, Is.EqualTo(expectedEnabled));
+        }
+
+        [TestCase(false, false, SkillInstallState.Missing, false)]
+        [TestCase(true, true, SkillInstallState.Missing, false)]
+        [TestCase(true, false, SkillInstallState.Checking, false)]
+        [TestCase(true, false, SkillInstallState.Missing, true)]
+        [TestCase(true, false, SkillInstallState.Installed, true)]
+        public void IsRefreshSkillsButtonEnabled_ReturnsExpectedValue(
+            bool isCliInstalled,
+            bool isInstallingSkills,
+            SkillInstallState installState,
+            bool expectedEnabled)
+        {
+            // Verifies that the Skills reload button ignores CLI-only refresh work.
+            bool enabled = CliSetupSection.IsRefreshSkillsButtonEnabled(
+                isCliInstalled,
+                isInstallingSkills,
+                installState);
+
+            Assert.That(enabled, Is.EqualTo(expectedEnabled));
+        }
+
+        [TestCase(false, false)]
+        [TestCase(true, true)]
+        public void IsSkillsSubsectionEnabled_ReturnsExpectedValue(
+            bool isCliInstalled,
+            bool expectedEnabled)
+        {
+            // Verifies that CLI-only refresh work does not disable the Skills section.
+            bool enabled = CliSetupSection.IsSkillsSubsectionEnabled(isCliInstalled);
 
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }
