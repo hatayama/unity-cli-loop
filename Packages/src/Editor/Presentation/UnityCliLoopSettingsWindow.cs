@@ -319,7 +319,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 _isRefreshingVersion = false;
                 RefreshCliSetupSection();
-                RefreshSelectedTargetInstallStateInBackground();
             }
         }
 
