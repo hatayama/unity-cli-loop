@@ -58,6 +58,13 @@ jobs:
         run: |
           test -f Packages/src/package.json && echo "✅ Unity package.json OK"
 
+      - name: 🏷️ Sync published release PR labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ steps.target.outputs.branch }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: scripts/sync-published-release-pr-labels.sh
+
       # ── Execute release-please ───────────────────────────
       - name: 🚀 Run release‑please
         id: release

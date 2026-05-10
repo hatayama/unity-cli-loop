@@ -22,6 +22,8 @@ on:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   publish:
@@ -224,6 +226,16 @@ jobs:
               gh release edit "${RELEASE_TAG}" --draft=false
               ;;
           esac
+
+      - name: Mark release PR as tagged
+        if: github.event_name == 'push' && (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          TARGET_SHA: ${{ steps.release.outputs.sha }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: scripts/mark-release-pr-tagged.sh
 
       - name: Dry run summary
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run == 'true'
