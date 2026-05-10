@@ -213,9 +213,9 @@ release_commit_sha_for_version() {
     '
 }
 
-VERSION=$(jq -r '.["Packages/src"]' .release-please-manifest.json)
+VERSION=$(jq -r '.["."]' .release-please-manifest.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
-  echo "Could not resolve Packages/src version from .release-please-manifest.json." >&2
+  echo "Could not resolve release version from .release-please-manifest.json." >&2
   exit 1
 fi
 

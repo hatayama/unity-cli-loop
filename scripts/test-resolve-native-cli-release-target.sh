@@ -151,7 +151,7 @@ write_manifest() {
   version=$1
   cat > .release-please-manifest.json <<EOF_MANIFEST
 {
-  "Packages/src": "$version"
+  ".": "$version"
 }
 EOF_MANIFEST
 }

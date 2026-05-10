@@ -130,33 +130,42 @@ test_no_release_pr_exits() {
   assert_not_contains "$TMP_DIR/no-release-pr/git.log" "checkout"
 }
 
+# Verifies unrelated pending PRs are ignored even if they use the release-please label.
+test_ignores_non_release_pending_pr() {
+  run_case non-release-pr '[{"number":1042,"headRefName":"feature/example","title":"fix: unrelated change","url":"https://example.test/pr/1042"}]' false false
+
+  assert_contains "$TMP_DIR/non-release-pr/output.txt" "No pending release-please PR found for v3-beta."
+  assert_not_contains "$TMP_DIR/non-release-pr/script.log" "build"
+  assert_not_contains "$TMP_DIR/non-release-pr/git.log" "checkout"
+}
+
 # Verifies current dist files run validation without an extra commit.
 test_current_dist_checks_without_commit() {
-  run_case current-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp","url":"https://example.test/pr/1043"}]' false false
+  run_case current-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]' false false
 
   assert_contains "$TMP_DIR/current-dist/script.log" "build"
   assert_contains "$TMP_DIR/current-dist/script.log" "check"
-  assert_contains "$TMP_DIR/current-dist/git.log" "fetch origin release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp"
-  assert_contains "$TMP_DIR/current-dist/git.log" "checkout -B release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp FETCH_HEAD"
+  assert_contains "$TMP_DIR/current-dist/git.log" "fetch origin release-please--branches--v3-beta"
+  assert_contains "$TMP_DIR/current-dist/git.log" "checkout -B release-please--branches--v3-beta FETCH_HEAD"
   assert_not_contains "$TMP_DIR/current-dist/git.log" "commit -m"
   assert_not_contains "$TMP_DIR/current-dist/git.log" "push origin"
 }
 
 # Verifies stale dist files are committed and pushed to the release PR branch.
 test_stale_dist_commits_and_pushes() {
-  run_case stale-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp","url":"https://example.test/pr/1043"}]' true false
+  run_case stale-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]' true false
 
   assert_contains "$TMP_DIR/stale-dist/script.log" "build"
   assert_contains "$TMP_DIR/stale-dist/script.log" "check"
   assert_contains "$TMP_DIR/stale-dist/git.log" "add Packages/src/Cli~/Core~/dist"
   assert_not_contains "$TMP_DIR/stale-dist/git.log" "Packages/src/Cli~/Dispatcher~/dist"
   assert_contains "$TMP_DIR/stale-dist/git.log" "commit -m chore(v3-beta): update bundled core CLI binaries"
-  assert_contains "$TMP_DIR/stale-dist/git.log" "push origin HEAD:release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp"
+  assert_contains "$TMP_DIR/stale-dist/git.log" "push origin HEAD:release-please--branches--v3-beta"
 }
 
 # Verifies newly generated untracked dist files are committed and pushed to the release PR branch.
 test_untracked_dist_commits_and_pushes() {
-  run_case untracked-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp","url":"https://example.test/pr/1043"}]' false true
+  run_case untracked-dist '[{"number":1043,"headRefName":"release-please--branches--v3-beta","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]' false true
 
   assert_contains "$TMP_DIR/untracked-dist/script.log" "build"
   assert_contains "$TMP_DIR/untracked-dist/script.log" "check"
@@ -164,10 +173,11 @@ test_untracked_dist_commits_and_pushes() {
   assert_contains "$TMP_DIR/untracked-dist/git.log" "add Packages/src/Cli~/Core~/dist"
   assert_not_contains "$TMP_DIR/untracked-dist/git.log" "Packages/src/Cli~/Dispatcher~/dist"
   assert_contains "$TMP_DIR/untracked-dist/git.log" "commit -m chore(v3-beta): update bundled core CLI binaries"
-  assert_contains "$TMP_DIR/untracked-dist/git.log" "push origin HEAD:release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "push origin HEAD:release-please--branches--v3-beta"
 }
 
 test_no_release_pr_exits
+test_ignores_non_release_pending_pr
 test_current_dist_checks_without_commit
 test_stale_dist_commits_and_pushes
 test_untracked_dist_commits_and_pushes
