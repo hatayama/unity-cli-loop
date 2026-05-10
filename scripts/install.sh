@@ -59,6 +59,79 @@ detect_installed_command_name() {
   esac
 }
 
+infer_npm_prefix_from_uloop_path() {
+  command_path=$1
+
+  case "$command_path" in
+    */bin/uloop|*/bin/uloop.exe)
+      bin_dir=${command_path%/*}
+      echo "${bin_dir%/bin}"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+print_legacy_npm_manual_removal() {
+  legacy_uloop=$1
+  legacy_prefix=$2
+
+  echo "Could not remove the legacy npm package automatically."
+  if [ -n "$legacy_uloop" ]; then
+    echo "Legacy uloop command: $legacy_uloop"
+  fi
+
+  if [ -n "$legacy_prefix" ]; then
+    echo "Run this manually if that command still shadows the native dispatcher:"
+    echo "  npm uninstall -g --prefix \"$legacy_prefix\" uloop-cli"
+    return
+  fi
+
+  echo "Run this manually if the old npm command still shadows the native dispatcher:"
+  echo "  npm uninstall -g uloop-cli"
+}
+
+try_remove_legacy_npm_package() {
+  legacy_uloop=$1
+  expected_uloop=$2
+
+  if [ -z "$legacy_uloop" ] || [ "$legacy_uloop" = "$expected_uloop" ] || [ "$legacy_uloop.exe" = "$expected_uloop" ]; then
+    return
+  fi
+
+  if ! command -v npm >/dev/null 2>&1; then
+    print_legacy_npm_manual_removal "$legacy_uloop" ""
+    return
+  fi
+
+  legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
+  if [ -n "$legacy_prefix" ]; then
+    if npm uninstall -g --prefix "$legacy_prefix" uloop-cli; then
+      if [ -e "$legacy_uloop" ] || [ -L "$legacy_uloop" ]; then
+        print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
+      else
+        echo "Removed legacy npm package: uloop-cli"
+      fi
+      return
+    fi
+
+    print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
+    return
+  fi
+
+  if npm uninstall -g uloop-cli; then
+    if [ -e "$legacy_uloop" ] || [ -L "$legacy_uloop" ]; then
+      print_legacy_npm_manual_removal "$legacy_uloop" ""
+    else
+      echo "Removed legacy npm package: uloop-cli"
+    fi
+    return
+  fi
+
+  print_legacy_npm_manual_removal "$legacy_uloop" ""
+}
+
 find_latest_asset_url() {
   page=1
 
@@ -143,6 +216,7 @@ extract_asset() {
 
 asset_name=$(detect_asset_name)
 installed_command_name=$(detect_installed_command_name)
+legacy_uloop_before_install=$(command -v uloop 2>/dev/null || true)
 download_url=""
 checksum_url=""
 set_download_urls
@@ -187,6 +261,7 @@ install -m 0755 "$tmp_dir/$installed_command_name" "$staged_uloop_path"
 "$staged_uloop_path" --version >/dev/null
 mv -f "$staged_uloop_path" "$INSTALL_DIR/$installed_command_name"
 staged_uloop_path=""
+try_remove_legacy_npm_package "$legacy_uloop_before_install" "$INSTALL_DIR/$installed_command_name"
 
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;

@@ -77,16 +77,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetInstallCommand_OnWindowsCliOnlyInstallerCanOptIntoLegacyLauncherCleanup()
+        public void GetInstallCommand_OnWindowsDoesNotNeedLegacyCleanupFlag()
         {
-            // Verifies that CLI-only Windows installs can opt into removing package-owned legacy launchers.
+            // Verifies that Windows installs rely on the installer script's npm uninstall attempt.
             NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
                 RuntimePlatform.WindowsEditor,
                 "3.0.0-beta.0",
                 true);
 
-            Assert.That(command.Arguments, Does.Contain("$env:ULOOP_REMOVE_LEGACY='1'"));
-            Assert.That(command.ManualCommand, Does.Contain("$env:ULOOP_REMOVE_LEGACY='1'"));
+            Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
+            Assert.That(command.ManualCommand, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
         }
 
         [Test]
@@ -317,275 +317,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenOrphanedTypeScriptLauncherShimsExistDeletesThem()
-        {
-            // Verifies that orphaned TypeScript launchers no longer remain earlier in PATH.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeDirectory = Path.Combine(tempRoot, "native");
-            string nativeUloopPath = Path.Combine(nativeDirectory, "uloop.exe");
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(nativeDirectory);
-            File.WriteAllText(nativeUloopPath, "native-binary");
-            File.WriteAllText(Path.Combine(legacyBinDirectory, "uloop.ps1"), "node_modules/uloop-cli/dist/cli.bundle.cjs");
-            File.WriteAllText(Path.Combine(legacyBinDirectory, "uloop.cmd"), "node_modules\\uloop-cli\\dist\\cli.bundle.cjs");
-            File.WriteAllText(Path.Combine(legacyBinDirectory, "uloop"), "node_modules/uloop-cli/dist/cli.bundle.cjs");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.Exists(Path.Combine(legacyBinDirectory, "uloop.ps1")), Is.False);
-                Assert.That(File.Exists(Path.Combine(legacyBinDirectory, "uloop.cmd")), Is.False);
-                Assert.That(File.Exists(Path.Combine(legacyBinDirectory, "uloop")), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenForwardingShimsExistDeletesThem()
-        {
-            // Verifies that forwarders written by older native installs are treated as package-owned cleanup targets.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeDirectory = Path.Combine(tempRoot, "native");
-            string nativeUloopPath = Path.Combine(nativeDirectory, "uloop.exe");
-            string powerShellShimPath = Path.Combine(legacyBinDirectory, "uloop.ps1");
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(nativeDirectory);
-            File.WriteAllText(nativeUloopPath, "native-binary");
-            File.WriteAllText(powerShellShimPath, $"& '{nativeUloopPath}' @args");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.Exists(powerShellShimPath), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenForwardingShimTargetsPreviousDefaultInstallDeletesIt()
-        {
-            // Verifies that stale forwarders are cleaned even when they reference an older native install path.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeUloopPath = Path.Combine(tempRoot, "custom", "uloop.exe");
-            string oldNativeUloopPath = Path.Combine(
-                "C:\\Users\\masamichi\\AppData\\Local",
-                CliConstants.WINDOWS_PROGRAMS_DIR_NAME,
-                CliConstants.NATIVE_INSTALL_DIR_NAME,
-                CliConstants.NATIVE_INSTALL_BIN_DIR_NAME,
-                CliConstants.GLOBAL_WINDOWS_COMMAND_NAME);
-            string commandShimPath = Path.Combine(legacyBinDirectory, "uloop.cmd");
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(Path.GetDirectoryName(nativeUloopPath));
-            File.WriteAllText(commandShimPath, $"@\"{oldNativeUloopPath}\" %*");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.Exists(commandShimPath), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenLegacyGoCliDispatcherShimExistsDeletesIt()
-        {
-            // Verifies that stale package-owned GoCli dispatcher shims do not remain earlier in PATH.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeUloopPath = Path.Combine(tempRoot, "native", "uloop.exe");
-            string commandShimPath = Path.Combine(legacyBinDirectory, "uloop.cmd");
-            string legacyDispatcherPath = Path.Combine(
-                "Packages",
-                "src",
-                CliConstants.LEGACY_GO_CLI_PACKAGE_DIR_NAME,
-                CliConstants.DIST_DIR_NAME,
-                "windows-amd64",
-                CliConstants.GLOBAL_DISPATCHER_WINDOWS_BUNDLE_NAME);
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(Path.GetDirectoryName(nativeUloopPath));
-            File.WriteAllText(commandShimPath, $"@\"{legacyDispatcherPath}\" %*");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.Exists(commandShimPath), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenCommandIsNotPackageOwnedPreservesFile()
-        {
-            // Verifies that unrelated user commands are not overwritten by legacy cleanup.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeUloopPath = Path.Combine(tempRoot, "native", "uloop.exe");
-            string commandPath = Path.Combine(legacyBinDirectory, "uloop.ps1");
-            string customCommand = "Write-Host 'custom'";
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(Path.GetDirectoryName(nativeUloopPath));
-            File.WriteAllText(nativeUloopPath, "native-binary");
-            File.WriteAllText(commandPath, customCommand);
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.ReadAllText(commandPath), Is.EqualTo(customCommand));
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void RemoveUnusedLegacyBinDirectoryFromPath_WhenOnlyNodeModulesRemainRemovesPath()
-        {
-            // Verifies that the legacy bin directory is removed from PATH only after command shims are gone.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string userPath = $"C:\\Tools;{legacyBinDirectory};C:\\Other";
-            string processPath = $"{legacyBinDirectory};C:\\ProcessTools";
-            string capturedUserPath = null;
-            string capturedProcessPath = null;
-
-            Directory.CreateDirectory(Path.Combine(legacyBinDirectory, "node_modules"));
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.RemoveUnusedLegacyBinDirectoryFromPath(
-                    legacyBinDirectory,
-                    RuntimePlatform.WindowsEditor,
-                    (name, target) => userPath,
-                    (name, value, target) => { capturedUserPath = value; },
-                    name => processPath,
-                    (name, value) => { capturedProcessPath = value; });
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(capturedUserPath, Is.EqualTo("C:\\Tools;C:\\Other"));
-                Assert.That(capturedProcessPath, Is.EqualTo("C:\\ProcessTools"));
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void RemoveUnusedLegacyBinDirectoryFromPath_WhenOtherCommandsRemainKeepsPath()
-        {
-            // Verifies that other global command shims keep the legacy bin directory in PATH.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string capturedUserPath = null;
-            string capturedProcessPath = null;
-
-            Directory.CreateDirectory(Path.Combine(legacyBinDirectory, "node_modules"));
-            File.WriteAllText(Path.Combine(legacyBinDirectory, "npm.cmd"), "npm");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.RemoveUnusedLegacyBinDirectoryFromPath(
-                    legacyBinDirectory,
-                    RuntimePlatform.WindowsEditor,
-                    (name, target) => legacyBinDirectory,
-                    (name, value, target) => { capturedUserPath = value; },
-                    name => legacyBinDirectory,
-                    (name, value) => { capturedProcessPath = value; });
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(capturedUserPath, Is.Null);
-                Assert.That(capturedProcessPath, Is.Null);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
         public void FinishSuccessfulInstall_WhenPathPersistenceFailsReturnsPathFailure()
         {
             // Verifies that PATH persistence failure is reported after the current process PATH is updated.
@@ -596,7 +327,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "C:\\Users\\masamichi\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor,
                 platform => { appliedCurrentPath = true; },
-                (installDirectory, platform) => new CliInstallResult(true, ""),
                 (installDirectory, platform) => new CliInstallResult(false, "path failed"));
 
             Assert.That(result.Success, Is.False);

@@ -175,34 +175,66 @@ ULOOP
 chmod +x "$extract_dir/uloop"
 MOCK_TAR
 
-  chmod +x "$mock_bin/uname" "$mock_bin/curl" "$mock_bin/sha256sum" "$mock_bin/tar"
+  cat > "$mock_bin/npm" <<'MOCK_NPM'
+#!/bin/sh
+set -eu
+
+printf '%s\n' "$*" >> "$NPM_LOG"
+if [ "$1" = "uninstall" ] && [ "$2" = "-g" ] && [ "$3" = "--prefix" ] && [ "$5" = "uloop-cli" ]; then
+  rm -f "$LEGACY_ULOOP"
+  exit 0
+fi
+
+echo "unexpected npm arguments: $*" >&2
+exit 1
+MOCK_NPM
+
+  chmod +x "$mock_bin/uname" "$mock_bin/curl" "$mock_bin/sha256sum" "$mock_bin/tar" "$mock_bin/npm"
 }
 
 test_posix_latest_skips_prerelease_assets() {
   work_dir="$TMP_DIR/posix-latest"
   mock_bin="$work_dir/bin"
+  legacy_bin="$work_dir/npm-global/bin"
+  legacy_package_dist="$work_dir/npm-global/lib/node_modules/uloop-cli/dist"
   install_dir="$work_dir/install"
   releases_json="$work_dir/releases.json"
   curl_log="$work_dir/curl.log"
-  mkdir -p "$work_dir"
+  npm_log="$work_dir/npm.log"
+  legacy_uloop="$legacy_bin/uloop"
+  mkdir -p "$work_dir" "$legacy_bin" "$legacy_package_dist"
   : > "$curl_log"
+  : > "$npm_log"
+  printf '%s\n' 'legacy node cli bundle' > "$legacy_package_dist/cli.bundle.cjs"
+  chmod +x "$legacy_package_dist/cli.bundle.cjs"
+  ln -s "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs" "$legacy_uloop"
   write_releases_json "$releases_json"
   write_mock_commands "$mock_bin"
 
-  PATH="$mock_bin:$ORIGINAL_PATH" \
+  PATH="$legacy_bin:$mock_bin:$ORIGINAL_PATH" \
     ULOOP_VERSION=latest \
     ULOOP_INSTALL_DIR="$install_dir" \
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    LEGACY_ULOOP="$legacy_uloop" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
   assert_contains "$curl_log" "v2.0.0/uloop-darwin-arm64.tar.gz"
   assert_contains "$curl_log" "v2.0.0/uloop-darwin-arm64.tar.gz.sha256"
   assert_not_contains "$curl_log" "v3.0.0-beta.2"
+  assert_contains "$npm_log" "uninstall -g --prefix $work_dir/npm-global uloop-cli"
+  if [ -e "$legacy_uloop" ]; then
+    echo "Expected mocked npm uninstall to remove the legacy Node uloop shim: $legacy_uloop" >&2
+    exit 1
+  fi
 }
 
 test_powershell_latest_skips_prerelease_assets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($Release.draft -or $Release.prerelease) {'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '"uninstall", "-g", "--prefix", $LegacyPrefix, "uloop-cli"'
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" "ULOOP_REMOVE_LEGACY"
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Remove-LegacyUloopShims"
 }
 
 test_posix_latest_skips_prerelease_assets
