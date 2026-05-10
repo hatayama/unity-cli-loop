@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using System.Threading;
-using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -49,8 +48,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <returns>Test execution result</returns>
         public async Task<UnityCliLoopTestExecutionResult> ExecuteAsync(UnityCliLoopTestExecutionRequest parameters, CancellationToken ct)
         {
-            TestMode testMode = ToUnityTestMode(parameters.TestMode);
-            ValidationResult validation = _validationService.Validate(testMode, parameters.SaveBeforeRun);
+#if !ULOOP_HAS_TEST_FRAMEWORK
+            ct.ThrowIfCancellationRequested();
+            return await Task.FromResult(CreateTestFrameworkUnavailableResponse());
+#else
+            if (!IsSupportedTestMode(parameters.TestMode))
+            {
+                return CreateFailureResponse("Unsupported test mode: " + parameters.TestMode);
+            }
+
+            ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
             if (!validation.IsValid)
             {
                 return CreateFailureResponse(validation.ErrorMessage);
@@ -69,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             
             try
             {
-                if (testMode == TestMode.PlayMode)
+                if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
                 {
                     // TODO: Add cancellationToken parameter when TestExecutionService supports it
                     result = await _executionService.ExecutePlayModeTestAsync(filter);
@@ -92,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 VibeLogger.LogError(
                     "test_execution_failed", 
                     "Test execution encountered an error", 
-                    new { testMode, filterType = parameters.FilterType, filterValue = parameters.FilterValue, error = ex.Message }
+                    new { testMode = parameters.TestMode, filterType = parameters.FilterType, filterValue = parameters.FilterValue, error = ex.Message }
                 );
                 
                 // Create a minimal error result
@@ -111,6 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SkippedCount = result.skippedCount,
                 XmlPath = result.xmlPath
             };
+#endif
         }
 
         public Task<UnityCliLoopTestExecutionResult> RunTestsAsync(UnityCliLoopTestExecutionRequest request, CancellationToken ct)
@@ -118,14 +126,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ExecuteAsync(request, ct);
         }
 
-        private static TestMode ToUnityTestMode(UnityCliLoopTestMode testMode)
+        private static bool IsSupportedTestMode(UnityCliLoopTestMode testMode)
         {
-            if (testMode == UnityCliLoopTestMode.PlayMode)
-            {
-                return TestMode.PlayMode;
-            }
+            return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);
+        }
 
-            return TestMode.EditMode;
+        private static UnityCliLoopTestExecutionResult CreateTestFrameworkUnavailableResponse()
+        {
+            return new UnityCliLoopTestExecutionResult
+            {
+                Success = false,
+                Message = RunTestsResponse.TestFrameworkUnavailableMessage,
+                CompletedAt = DateTime.UtcNow.ToString("o"),
+                TestCount = 0,
+                PassedCount = 0,
+                FailedCount = 0,
+                SkippedCount = 0,
+                XmlPath = null
+            };
         }
 
         private static UnityCliLoopTestExecutionResult CreateFailureResponse(string message)

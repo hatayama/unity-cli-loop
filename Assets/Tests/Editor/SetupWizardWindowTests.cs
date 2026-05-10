@@ -236,16 +236,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 Rect position = new(12f, 34f, 360f, 380f);
 
-                SetupWizardWindow.PrepareForOpen(window, "Unity CLI Loop Setup", position, "1.9.0");
+                SetupWizardWindow.PrepareForOpen(
+                    window,
+                    "Unity CLI Loop Setup",
+                    position,
+                    "1.9.0",
+                    true);
 
                 SerializedObject serializedWindow = new(window);
                 SerializedProperty lastSeenVersionProperty =
                     serializedWindow.FindProperty("_lastSeenSetupWizardVersionBeforeOpen");
+                SerializedProperty recordVersionProperty =
+                    serializedWindow.FindProperty("_shouldRecordLastSeenVersionAfterCreateGui");
 
                 Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Setup"));
                 Assert.That(window.position, Is.EqualTo(position));
                 Assert.That(lastSeenVersionProperty, Is.Not.Null);
                 Assert.That(lastSeenVersionProperty.stringValue, Is.EqualTo("1.9.0"));
+                Assert.That(recordVersionProperty, Is.Not.Null);
+                Assert.That(recordVersionProperty.boolValue, Is.True);
             }
             finally
             {

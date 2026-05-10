@@ -14,7 +14,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Installs the package-owned global dispatcher through GitHub Release assets.
+    /// Installs the package-owned global dispatcher through the same installer scripts used by CLI commands.
     /// </summary>
     public static class NativeCliInstaller
     {
@@ -26,28 +26,69 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string packageVersion,
             bool removeLegacyLaunchers)
         {
+            return BuildInstallCommand(
+                platform,
+                packageVersion,
+                removeLegacyLaunchers,
+                NodeEnvironmentResolver.GetUserShell(),
+                UnityCliLoopConstants.PackageResolvedPath);
+        }
+
+        internal static NativeCliInstallCommand BuildInstallCommand(
+            RuntimePlatform platform,
+            string packageVersion,
+            bool removeLegacyLaunchers,
+            string posixShellPath)
+        {
+            return BuildInstallCommand(
+                platform,
+                packageVersion,
+                removeLegacyLaunchers,
+                posixShellPath,
+                null);
+        }
+
+        internal static NativeCliInstallCommand BuildInstallCommand(
+            RuntimePlatform platform,
+            string packageVersion,
+            bool removeLegacyLaunchers,
+            string posixShellPath,
+            string packageResolvedPath)
+        {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(packageVersion), "packageVersion must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(posixShellPath), "posixShellPath must not be null or empty");
+            _ = removeLegacyLaunchers;
 
             string releaseTag = BuildReleaseTag(packageVersion);
             if (platform == RuntimePlatform.WindowsEditor)
             {
-                string scriptUrl = BuildReleaseAssetUrl(releaseTag, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
-                string command =
-                    $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}'; " +
-                    BuildWindowsRemoveLegacyAssignment(removeLegacyLaunchers) +
-                    $"irm '{scriptUrl}' | iex";
+                string localScriptPath = ResolvePackageLocalInstallerScriptPath(
+                    packageResolvedPath,
+                    CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
+                string command = string.IsNullOrEmpty(localScriptPath)
+                    ? BuildWindowsRemoteInstallScriptCommand(
+                        BuildInstallerScriptUrl(releaseTag, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME),
+                        releaseTag)
+                    : BuildWindowsLocalInstallScriptCommand(localScriptPath, releaseTag);
                 return new NativeCliInstallCommand(
                     "powershell",
                     $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"",
                     command);
             }
 
-            string posixScriptUrl = BuildReleaseAssetUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME);
-            string posixCommand = BuildPosixInstallScriptCommand(posixScriptUrl, releaseTag);
+            string posixLocalScriptPath = ResolvePackageLocalInstallerScriptPath(
+                packageResolvedPath,
+                CliConstants.POSIX_INSTALL_SCRIPT_NAME);
+            string posixCommand = string.IsNullOrEmpty(posixLocalScriptPath)
+                ? BuildPosixRemoteInstallScriptCommand(
+                    BuildInstallerScriptUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME),
+                    releaseTag)
+                : BuildPosixLocalInstallScriptCommand(posixLocalScriptPath, releaseTag);
+            string loginShellCommand = BuildLoginShellPosixInstallScriptCommand(posixCommand);
             return new NativeCliInstallCommand(
-                "/bin/sh",
-                $"-c {QuoteProcessArgument(posixCommand)}",
-                posixCommand);
+                posixShellPath,
+                $"-l -i -c {QuoteProcessArgument(loginShellCommand)}",
+                loginShellCommand);
         }
 
         public static async Task<CliInstallResult> InstallAsync(
@@ -78,7 +119,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     installDirectory,
                     platform,
                     ApplyInstallDirectoryToCurrentProcessPath,
-                    CleanupLegacyCommandShims,
                     (currentInstallDirectory, currentPlatform) => PersistInstallDirectoryToUserPath(
                         currentInstallDirectory,
                         currentPlatform,
@@ -321,176 +361,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string installDirectory,
             RuntimePlatform platform,
             Action<RuntimePlatform> applyInstallDirectoryToCurrentProcessPath,
-            Func<string, RuntimePlatform, CliInstallResult> cleanupLegacyCommandShims,
             Func<string, RuntimePlatform, CliInstallResult> persistInstallDirectoryToUserPath)
         {
             UnityEngine.Debug.Assert(installResult.Success, "installResult must be successful");
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installDirectory), "installDirectory must not be null or empty");
             UnityEngine.Debug.Assert(applyInstallDirectoryToCurrentProcessPath != null, "applyInstallDirectoryToCurrentProcessPath must not be null");
-            UnityEngine.Debug.Assert(cleanupLegacyCommandShims != null, "cleanupLegacyCommandShims must not be null");
             UnityEngine.Debug.Assert(persistInstallDirectoryToUserPath != null, "persistInstallDirectoryToUserPath must not be null");
 
             applyInstallDirectoryToCurrentProcessPath(platform);
-            CliInstallResult cleanupResult = cleanupLegacyCommandShims(installDirectory, platform);
             CliInstallResult persistResult = persistInstallDirectoryToUserPath(installDirectory, platform);
             if (!persistResult.Success)
             {
                 return persistResult;
             }
 
-            if (!cleanupResult.Success)
-            {
-                return cleanupResult;
-            }
-
             return installResult;
-        }
-
-        internal static CliInstallResult CleanupLegacyCommandShims(string installDirectory, RuntimePlatform platform)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installDirectory), "installDirectory must not be null or empty");
-
-            if (platform != RuntimePlatform.WindowsEditor)
-            {
-                return new CliInstallResult(true, "");
-            }
-
-            string applicationData = Environment.GetEnvironmentVariable(CliConstants.WINDOWS_APPDATA_ENVIRONMENT_VARIABLE);
-            if (string.IsNullOrWhiteSpace(applicationData))
-            {
-                return new CliInstallResult(true, "");
-            }
-
-            string legacyBinDirectory = Path.Combine(applicationData, CliConstants.WINDOWS_NODE_GLOBAL_BIN_DIR_NAME);
-            string nativeUloopPath = GetGlobalCliInstallPath(installDirectory, platform);
-            CliInstallResult cleanupResult = CleanupLegacyCommandShimsInDirectory(legacyBinDirectory, nativeUloopPath);
-            if (!cleanupResult.Success)
-            {
-                return cleanupResult;
-            }
-
-            return RemoveUnusedLegacyBinDirectoryFromPath(
-                legacyBinDirectory,
-                platform,
-                Environment.GetEnvironmentVariable,
-                Environment.SetEnvironmentVariable,
-                name => Environment.GetEnvironmentVariable(name),
-                (name, value) => Environment.SetEnvironmentVariable(name, value));
-        }
-
-        internal static CliInstallResult CleanupLegacyCommandShimsInDirectory(
-            string legacyBinDirectory,
-            string nativeUloopPath)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(legacyBinDirectory), "legacyBinDirectory must not be null or empty");
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(nativeUloopPath), "nativeUloopPath must not be null or empty");
-
-            if (!Directory.Exists(legacyBinDirectory))
-            {
-                return new CliInstallResult(true, "");
-            }
-
-            try
-            {
-                string[] shimPaths =
-                {
-                    Path.Combine(legacyBinDirectory, CliConstants.EXECUTABLE_NAME),
-                    Path.Combine(legacyBinDirectory, CliConstants.WINDOWS_CMD_SHIM_NAME),
-                    Path.Combine(legacyBinDirectory, CliConstants.WINDOWS_POWERSHELL_SHIM_NAME)
-                };
-
-                foreach (string shimPath in shimPaths)
-                {
-                    DeletePackageOwnedCommandShim(shimPath, nativeUloopPath);
-                }
-            }
-            catch (IOException ex)
-            {
-                return BuildLegacyShimCleanupFailure(ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return BuildLegacyShimCleanupFailure(ex);
-            }
-            catch (SecurityException ex)
-            {
-                return BuildLegacyShimCleanupFailure(ex);
-            }
-            catch (ArgumentException ex)
-            {
-                return BuildLegacyShimCleanupFailure(ex);
-            }
-            catch (NotSupportedException ex)
-            {
-                return BuildLegacyShimCleanupFailure(ex);
-            }
-
-            return new CliInstallResult(true, "");
-        }
-
-        internal static CliInstallResult RemoveUnusedLegacyBinDirectoryFromPath(
-            string legacyBinDirectory,
-            RuntimePlatform platform,
-            Func<string, EnvironmentVariableTarget, string> getUserEnvironmentVariable,
-            Action<string, string, EnvironmentVariableTarget> setUserEnvironmentVariable,
-            Func<string, string> getProcessEnvironmentVariable,
-            Action<string, string> setProcessEnvironmentVariable)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(legacyBinDirectory), "legacyBinDirectory must not be null or empty");
-            UnityEngine.Debug.Assert(getUserEnvironmentVariable != null, "getUserEnvironmentVariable must not be null");
-            UnityEngine.Debug.Assert(setUserEnvironmentVariable != null, "setUserEnvironmentVariable must not be null");
-            UnityEngine.Debug.Assert(getProcessEnvironmentVariable != null, "getProcessEnvironmentVariable must not be null");
-            UnityEngine.Debug.Assert(setProcessEnvironmentVariable != null, "setProcessEnvironmentVariable must not be null");
-
-            if (platform != RuntimePlatform.WindowsEditor)
-            {
-                return new CliInstallResult(true, "");
-            }
-
-            try
-            {
-                if (HasCommandEntriesBesidesNodeModules(legacyBinDirectory))
-                {
-                    return new CliInstallResult(true, "");
-                }
-
-                string pathVariableName = GetPathEnvironmentVariableName(platform);
-                string currentUserPath = getUserEnvironmentVariable(pathVariableName, EnvironmentVariableTarget.User);
-                string updatedUserPath = BuildPathWithoutInstallDirectory(currentUserPath, legacyBinDirectory, platform);
-                if (!string.Equals(currentUserPath, updatedUserPath, GetPathComparison(platform)))
-                {
-                    setUserEnvironmentVariable(pathVariableName, updatedUserPath, EnvironmentVariableTarget.User);
-                }
-
-                string currentProcessPath = getProcessEnvironmentVariable(pathVariableName);
-                string updatedProcessPath = BuildPathWithoutInstallDirectory(currentProcessPath, legacyBinDirectory, platform);
-                if (!string.Equals(currentProcessPath, updatedProcessPath, GetPathComparison(platform)))
-                {
-                    setProcessEnvironmentVariable(pathVariableName, updatedProcessPath);
-                }
-
-                return new CliInstallResult(true, "");
-            }
-            catch (IOException ex)
-            {
-                return BuildUnusedLegacyBinPathCleanupFailure(ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return BuildUnusedLegacyBinPathCleanupFailure(ex);
-            }
-            catch (SecurityException ex)
-            {
-                return BuildUnusedLegacyBinPathCleanupFailure(ex);
-            }
-            catch (ArgumentException ex)
-            {
-                return BuildUnusedLegacyBinPathCleanupFailure(ex);
-            }
-            catch (NotSupportedException ex)
-            {
-                return BuildUnusedLegacyBinPathCleanupFailure(ex);
-            }
         }
 
         internal static string BuildPathWithInstallDirectory(
@@ -721,6 +606,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 GetPathComparison(platform));
         }
 
+        internal static string GetCurrentUserGlobalCliInstallPath(RuntimePlatform platform)
+        {
+            string installDirectory = GetInstallDirectoryForCurrentUser(platform);
+            return string.IsNullOrWhiteSpace(installDirectory)
+                ? null
+                : GetGlobalCliInstallPath(installDirectory, platform);
+        }
+
         private static string GetInstallDirectoryForCurrentUser(RuntimePlatform platform)
         {
             string configuredInstallDirectory = Environment.GetEnvironmentVariable(CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE);
@@ -790,28 +683,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string errorOutput =
                 "Removed the uLoop CLI binary, but failed to remove the uLoop CLI install directory from the Windows User PATH. "
                 + $"Update {CliConstants.WINDOWS_PATH_ENVIRONMENT_VARIABLE} manually.\n{ex.Message}";
-            return new CliInstallResult(false, errorOutput);
-        }
-
-        private static CliInstallResult BuildLegacyShimCleanupFailure(Exception ex)
-        {
-            UnityEngine.Debug.Assert(ex != null, "ex must not be null");
-
-            string errorOutput =
-                "Installed the uLoop CLI binary, but failed to remove a package-owned legacy uloop launcher. "
-                + "Remove the stale launcher manually from the Windows Node.js global bin directory.\n"
-                + ex.Message;
-            return new CliInstallResult(false, errorOutput);
-        }
-
-        private static CliInstallResult BuildUnusedLegacyBinPathCleanupFailure(Exception ex)
-        {
-            UnityEngine.Debug.Assert(ex != null, "ex must not be null");
-
-            string errorOutput =
-                "Installed the uLoop CLI binary, but failed to remove an unused legacy command bin directory from the Windows User PATH. "
-                + "Remove the unused legacy command bin directory manually if it no longer contains command shims.\n"
-                + ex.Message;
             return new CliInstallResult(false, errorOutput);
         }
 
@@ -960,147 +831,89 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Directory.Delete(directoryPath);
         }
 
-        private static void DeletePackageOwnedCommandShim(string shimPath, string nativeUloopPath)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(shimPath), "shimPath must not be null or empty");
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(nativeUloopPath), "nativeUloopPath must not be null or empty");
-
-            if (!File.Exists(shimPath))
-            {
-                return;
-            }
-
-            string content = File.ReadAllText(shimPath);
-            if (!IsPackageOwnedCommandShimContent(content, nativeUloopPath))
-            {
-                return;
-            }
-
-            File.Delete(shimPath);
-        }
-
-        internal static bool IsLegacyTypeScriptPackageShimContent(string content)
-        {
-            if (string.IsNullOrEmpty(content))
-            {
-                return false;
-            }
-
-            string unixPackagePath = $"node_modules/{CliConstants.LEGACY_TYPESCRIPT_PACKAGE_NAME}";
-            string windowsPackagePath = $"node_modules\\{CliConstants.LEGACY_TYPESCRIPT_PACKAGE_NAME}";
-            return content.IndexOf(unixPackagePath, StringComparison.OrdinalIgnoreCase) >= 0
-                || content.IndexOf(windowsPackagePath, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        internal static bool IsNativeForwardingShimContent(string content, string nativeUloopPath)
-        {
-            if (string.IsNullOrEmpty(content))
-            {
-                return false;
-            }
-
-            return ContainsIgnoreCase(content, nativeUloopPath)
-                || ContainsDefaultWindowsInstallCommandReference(content)
-                || ContainsPackagedDispatcherReference(content);
-        }
-
-        private static bool IsPackageOwnedCommandShimContent(string content, string nativeUloopPath)
-        {
-            return IsLegacyTypeScriptPackageShimContent(content)
-                || IsNativeForwardingShimContent(content, nativeUloopPath);
-        }
-
-        private static bool ContainsDefaultWindowsInstallCommandReference(string content)
-        {
-            string commandPath = Path.Combine(
-                CliConstants.WINDOWS_PROGRAMS_DIR_NAME,
-                CliConstants.NATIVE_INSTALL_DIR_NAME,
-                CliConstants.NATIVE_INSTALL_BIN_DIR_NAME,
-                CliConstants.GLOBAL_WINDOWS_COMMAND_NAME);
-            return ContainsPathWithEitherSeparator(content, commandPath);
-        }
-
-        private static bool ContainsPackagedDispatcherReference(string content)
-        {
-            string dispatcherDirectory = Path.Combine(
-                CliConstants.CLI_PACKAGE_DIR_NAME,
-                CliConstants.GO_CLI_DISPATCHER_DIR_NAME,
-                CliConstants.DIST_DIR_NAME);
-            string legacyDispatcherDirectory = Path.Combine(
-                CliConstants.LEGACY_GO_CLI_PACKAGE_DIR_NAME,
-                CliConstants.DIST_DIR_NAME);
-            bool containsDispatcherPath = ContainsPathWithEitherSeparator(content, dispatcherDirectory)
-                || ContainsPathWithEitherSeparator(content, legacyDispatcherDirectory);
-            return containsDispatcherPath
-                && (ContainsIgnoreCase(content, CliConstants.GLOBAL_DISPATCHER_WINDOWS_BUNDLE_NAME)
-                    || ContainsIgnoreCase(content, CliConstants.GLOBAL_DISPATCHER_UNIX_BUNDLE_NAME));
-        }
-
-        private static bool ContainsPathWithEitherSeparator(string content, string path)
-        {
-            UnityEngine.Debug.Assert(content != null, "content must not be null");
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(path), "path must not be null or empty");
-
-            string windowsPath = path.Replace('/', '\\');
-            string unixPath = path.Replace('\\', '/');
-            return ContainsIgnoreCase(content, windowsPath)
-                || ContainsIgnoreCase(content, unixPath);
-        }
-
-        private static bool ContainsIgnoreCase(string content, string value)
-        {
-            if (string.IsNullOrEmpty(content) || string.IsNullOrEmpty(value))
-            {
-                return false;
-            }
-
-            return content.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static bool HasCommandEntriesBesidesNodeModules(string legacyBinDirectory)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(legacyBinDirectory), "legacyBinDirectory must not be null or empty");
-
-            if (!Directory.Exists(legacyBinDirectory))
-            {
-                return false;
-            }
-
-            string[] entries = Directory.GetFileSystemEntries(legacyBinDirectory);
-            foreach (string entry in entries)
-            {
-                string entryName = Path.GetFileName(entry);
-                if (string.Equals(entryName, "node_modules", StringComparison.OrdinalIgnoreCase)
-                    && Directory.Exists(entry))
-                {
-                    continue;
-                }
-
-                return true;
-            }
-
-            return false;
-        }
-
-        private static string BuildWindowsRemoveLegacyAssignment(bool removeLegacyLaunchers)
-        {
-            if (!removeLegacyLaunchers)
-            {
-                return "";
-            }
-
-            return $"$env:{CliConstants.REMOVE_LEGACY_ENVIRONMENT_VARIABLE}='{CliConstants.REMOVE_LEGACY_ENABLED_VALUE}'; ";
-        }
-
-        private static string BuildPosixInstallScriptCommand(string scriptUrl, string releaseTag)
+        private static string BuildPosixRemoteInstallScriptCommand(string scriptUrl, string releaseTag)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
 
             return "tmp_script=$(mktemp) && "
                 + "trap 'rm -f \"$tmp_script\"' EXIT && "
-                + $"curl -fsSL '{scriptUrl}' -o \"$tmp_script\" && "
-                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}' sh \"$tmp_script\"";
+                + $"curl -fsSL {QuotePosixShellValue(scriptUrl)} -o \"$tmp_script\" && "
+                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} sh \"$tmp_script\"";
+        }
+
+        private static string BuildPosixLocalInstallScriptCommand(string scriptPath, string releaseTag)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptPath), "scriptPath must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
+
+            return $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} sh {QuotePosixShellValue(scriptPath)}";
+        }
+
+        internal static string BuildLoginShellPosixInstallScriptCommand(string posixCommand)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(posixCommand), "posixCommand must not be null or empty");
+            return $"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c {QuotePosixShellValue(posixCommand)}";
+        }
+
+        private static string BuildWindowsRemoteInstallScriptCommand(string scriptUrl, string releaseTag)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
+
+            return $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePowerShellSingleQuotedValue(releaseTag)}; "
+                + $"irm {QuotePowerShellSingleQuotedValue(scriptUrl)} | iex";
+        }
+
+        private static string BuildWindowsLocalInstallScriptCommand(string scriptPath, string releaseTag)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptPath), "scriptPath must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
+
+            return $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePowerShellSingleQuotedValue(releaseTag)}; "
+                + $"& {QuotePowerShellSingleQuotedValue(scriptPath)}";
+        }
+
+        internal static string ResolvePackageLocalInstallerScriptPath(string packageResolvedPath, string assetName)
+        {
+            if (string.IsNullOrWhiteSpace(packageResolvedPath) || string.IsNullOrWhiteSpace(assetName))
+            {
+                return null;
+            }
+
+            DirectoryInfo packageDirectory = new(packageResolvedPath);
+            DirectoryInfo packagesDirectory = packageDirectory.Parent;
+            DirectoryInfo repositoryDirectory = packagesDirectory?.Parent;
+            if (repositoryDirectory == null)
+            {
+                return null;
+            }
+
+            if (!string.Equals(packageDirectory.Name, CliConstants.PACKAGE_SOURCE_DIR_NAME, StringComparison.Ordinal)
+                || !string.Equals(packagesDirectory.Name, CliConstants.UNITY_PACKAGES_DIR_NAME, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            string scriptPath = Path.Combine(repositoryDirectory.FullName, CliConstants.SCRIPTS_DIR_NAME, assetName);
+            if (!File.Exists(scriptPath))
+            {
+                return null;
+            }
+
+            return scriptPath;
+        }
+
+        private static string QuotePosixShellValue(string value)
+        {
+            UnityEngine.Debug.Assert(value != null, "value must not be null");
+            return $"'{value.Replace("'", "'\"'\"'")}'";
+        }
+
+        private static string QuotePowerShellSingleQuotedValue(string value)
+        {
+            UnityEngine.Debug.Assert(value != null, "value must not be null");
+            return $"'{value.Replace("'", "''")}'";
         }
 
         private static string QuoteProcessArgument(string value)
@@ -1118,12 +931,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return $"{CliConstants.RELEASE_TAG_PREFIX}{packageVersion}";
         }
 
-        private static string BuildReleaseAssetUrl(string releaseTag, string assetName)
+        internal static string BuildInstallerScriptUrl(string releaseTag, string assetName)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(assetName), "assetName must not be null or empty");
 
-            return $"{CliConstants.RELEASE_DOWNLOAD_BASE_URL}/{releaseTag}/{assetName}";
+            return $"{CliConstants.RAW_CONTENT_BASE_URL}/{SelectInstallerSourceRef(releaseTag)}/{CliConstants.SCRIPTS_DIR_NAME}/{assetName}";
+        }
+
+        internal static string SelectInstallerSourceRef(string releaseTag)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
+
+            return releaseTag.IndexOf(CliConstants.BETA_VERSION_MARKER, StringComparison.OrdinalIgnoreCase) >= 0
+                ? CliConstants.BETA_INSTALLER_SOURCE_REF
+                : CliConstants.STABLE_INSTALLER_SOURCE_REF;
         }
     }
 

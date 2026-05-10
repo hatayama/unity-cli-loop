@@ -19,11 +19,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private static readonly string SettingsFilePath =
             Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
+        private static readonly string LegacySettingsFilePath =
+            Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.LEGACY_SETTINGS_FILE_NAME);
         private static readonly string BackupFilePath = SettingsFilePath + ".bak";
         private static readonly string TempFilePath = SettingsFilePath + ".tmp";
 
         private bool _settingsFileExisted;
         private string _settingsFileContent;
+        private bool _legacySettingsFileExisted;
+        private string _legacySettingsFileContent;
         private bool _backupFileExisted;
         private string _backupFileContent;
         private bool _tempFileExisted;
@@ -37,6 +41,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _settingsFileExisted = File.Exists(SettingsFilePath);
             _settingsFileContent = _settingsFileExisted ? File.ReadAllText(SettingsFilePath) : null;
 
+            _legacySettingsFileExisted = File.Exists(LegacySettingsFilePath);
+            _legacySettingsFileContent = _legacySettingsFileExisted ? File.ReadAllText(LegacySettingsFilePath) : null;
+
             _backupFileExisted = File.Exists(BackupFilePath);
             _backupFileContent = _backupFileExisted ? File.ReadAllText(BackupFilePath) : null;
 
@@ -49,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             DeleteIfExists(SettingsFilePath);
+            DeleteIfExists(LegacySettingsFilePath);
             DeleteIfExists(BackupFilePath);
             DeleteIfExists(TempFilePath);
             _editorSettingsService =
@@ -60,6 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void TearDown()
         {
             RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
+            RestoreFile(LegacySettingsFilePath, _legacySettingsFileExisted, _legacySettingsFileContent);
             RestoreFile(BackupFilePath, _backupFileExisted, _backupFileContent);
             RestoreFile(TempFilePath, _tempFileExisted, _tempFileContent);
             _editorSettingsRepository.InvalidateCache();
@@ -116,6 +125,94 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorSettingsData restored = JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(
                 File.ReadAllText(SettingsFilePath));
             Assert.AreEqual(primaryData.showDeveloperTools, restored.showDeveloperTools);
+        }
+
+        [Test]
+        public void GetSettings_WhenLegacySetupWizardStateExists_ShouldMigrateVersionState()
+        {
+            // Verifies that v2 upgrade users still get the update wizard instead of a first-install state.
+            UnityCliLoopEditorSettingsData legacyData = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "2.1.1",
+                suppressSetupWizardAutoShow = false
+            };
+            File.WriteAllText(LegacySettingsFilePath, JsonUtility.ToJson(legacyData, true));
+
+            string lastSeenVersion = _editorSettingsService.GetLastSeenSetupWizardVersion();
+            bool suppressAutoShow = _editorSettingsService.GetSuppressSetupWizardAutoShow();
+
+            Assert.That(lastSeenVersion, Is.EqualTo("2.1.1"));
+            Assert.That(suppressAutoShow, Is.False);
+            Assert.That(File.Exists(SettingsFilePath), Is.True);
+            Assert.That(File.Exists(LegacySettingsFilePath), Is.False);
+        }
+
+        [Test]
+        public void GetSettings_WhenLegacySetupWizardAutoShowWasSuppressed_ShouldMigrateSuppressChoice()
+        {
+            // Verifies that the legacy "don't show after updates" choice is preserved.
+            UnityCliLoopEditorSettingsData legacyData = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "2.1.1",
+                suppressSetupWizardAutoShow = true
+            };
+            File.WriteAllText(LegacySettingsFilePath, JsonUtility.ToJson(legacyData, true));
+
+            bool suppressAutoShow = _editorSettingsService.GetSuppressSetupWizardAutoShow();
+
+            Assert.That(suppressAutoShow, Is.True);
+            Assert.That(File.Exists(LegacySettingsFilePath), Is.False);
+        }
+
+        [Test]
+        public void GetSettings_WhenCurrentSetupWizardVersionExistsBeforeMigration_ShouldRestoreLegacyVersionState()
+        {
+            // Verifies that a failed pre-migration auto-show can retry from the legacy upgrade version.
+            UnityCliLoopEditorSettingsData currentData = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "3.0.0-beta.3",
+                suppressSetupWizardAutoShow = false
+            };
+            UnityCliLoopEditorSettingsData legacyData = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "2.1.1",
+                suppressSetupWizardAutoShow = false
+            };
+            File.WriteAllText(SettingsFilePath, JsonUtility.ToJson(currentData, true));
+            File.WriteAllText(LegacySettingsFilePath, JsonUtility.ToJson(legacyData, true));
+
+            string lastSeenVersion = _editorSettingsService.GetLastSeenSetupWizardVersion();
+            bool suppressAutoShow = _editorSettingsService.GetSuppressSetupWizardAutoShow();
+
+            Assert.That(lastSeenVersion, Is.EqualTo("2.1.1"));
+            Assert.That(suppressAutoShow, Is.False);
+            Assert.That(File.Exists(LegacySettingsFilePath), Is.False);
+        }
+
+        [Test]
+        public void GetSettings_WhenLegacySetupWizardStateAlreadyMigrated_ShouldKeepCurrentVersionState()
+        {
+            // Verifies that legacy setup state is applied only once.
+            UnityCliLoopEditorSettingsData currentData = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "3.0.0-beta.3",
+                suppressSetupWizardAutoShow = false,
+                legacySetupWizardStateMigrated = true
+            };
+            UnityCliLoopEditorSettingsData legacyData = new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "2.1.1",
+                suppressSetupWizardAutoShow = true
+            };
+            File.WriteAllText(SettingsFilePath, JsonUtility.ToJson(currentData, true));
+            File.WriteAllText(LegacySettingsFilePath, JsonUtility.ToJson(legacyData, true));
+
+            string lastSeenVersion = _editorSettingsService.GetLastSeenSetupWizardVersion();
+            bool suppressAutoShow = _editorSettingsService.GetSuppressSetupWizardAutoShow();
+
+            Assert.That(lastSeenVersion, Is.EqualTo("3.0.0-beta.3"));
+            Assert.That(suppressAutoShow, Is.False);
+            Assert.That(File.Exists(LegacySettingsFilePath), Is.False);
         }
 
         [Test]

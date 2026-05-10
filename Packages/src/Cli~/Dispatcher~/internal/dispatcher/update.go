@@ -8,11 +8,12 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	dispatchercontract "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Dispatcher"
+	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/adapters/installer"
 )
 
 const (
-	installerScriptURL          = "https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh"
-	windowsInstallerScriptURL   = "https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1"
 	updateCommandName           = "update"
 	updateUnsupportedOSMessage  = "native update is only supported on macOS and Windows"
 	updateUnsupportedArgMessage = "update does not accept options yet"
@@ -53,17 +54,21 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 }
 
 func updateCommandForOS(goos string) (string, []string, error) {
+	version := dispatchercontract.Current.DispatcherVersion
+	updateSelector := installer.UpdateSelectorForVersion(version)
 	switch goos {
 	case "darwin":
-		script := fmt.Sprintf(`tmp=$(mktemp) && curl -fSL %s -o "$tmp" && sh "$tmp"; ec=$?; rm -f "$tmp"; exit $ec`, shellQuote(installerScriptURL))
+		scriptURL := installer.ScriptURL(version, installer.PosixScriptName)
+		script := fmt.Sprintf(`tmp=$(mktemp) && curl -fSL %s -o "$tmp" && ULOOP_VERSION=%s sh "$tmp"; ec=$?; rm -f "$tmp"; exit $ec`, shellQuote(scriptURL), shellQuote(updateSelector))
 		return "sh", []string{"-c", script}, nil
 	case "windows":
+		scriptURL := installer.ScriptURL(version, installer.WindowsScriptName)
 		return windowsPowerShellCommand, []string{
 			"-NoProfile",
 			"-ExecutionPolicy",
 			"Bypass",
 			"-Command",
-			fmt.Sprintf("irm %s | iex", shellQuote(windowsInstallerScriptURL)),
+			fmt.Sprintf("$env:ULOOP_VERSION=%s; irm %s | iex", shellQuote(updateSelector), shellQuote(scriptURL)),
 		}, nil
 	default:
 		return "", nil, errors.New(updateUnsupportedOSMessage)

@@ -17,7 +17,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <returns>Test execution result</returns>
         public virtual async Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter)
         {
+#if !ULOOP_HAS_TEST_FRAMEWORK
+            return await Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());
+#else
             return await PlayModeTestExecuter.ExecutePlayModeTest(filter);
+#endif
         }
 
         /// <summary>
@@ -27,7 +31,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <returns>Test execution result</returns>
         public virtual async Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter)
         {
+#if !ULOOP_HAS_TEST_FRAMEWORK
+            return await Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());
+#else
             return await PlayModeTestExecuter.ExecuteEditModeTest(filter);
+#endif
         }
     }
 }

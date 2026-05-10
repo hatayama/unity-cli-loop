@@ -3,18 +3,26 @@
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
         "GUID:d427b32aad9cb44fc8e962437c9dbcd8",
-        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
-        "GUID:0acc523941302664db1f4e527237feb3"
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b"
     ],
     "includePlatforms": [
         "Editor"
     ],
     "excludePlatforms": [],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "ULOOP_HAS_TEST_FRAMEWORK"
+        }
+    ],
     "noEngineReferences": false
 }

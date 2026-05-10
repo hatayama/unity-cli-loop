@@ -66,6 +66,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 > [!NOTE]
 > `com.unity.inputsystem` は optional dependency になりました。`simulate-keyboard`、`simulate-mouse-input`、`record-input`、`replay-input`、Recordings ウィンドウを使いたい場合だけ追加してください。
+> `com.unity.test-framework` も optional dependency です。`run-tests` で Unity Test Runner を実行したい場合だけ追加してください。
 
 # クイックスタート
 
@@ -90,11 +91,11 @@ Windows PowerShell の場合:
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-Windows では `ULOOP_REMOVE_LEGACY=1` を設定すると、package-owned な古い `uloop` launcher shim と、未使用の legacy command bin directory を User PATH から削除できます。
+native dispatcher のインストール後、installer は古い npm package を `npm uninstall -g uloop-cli` で自動削除しようとします。
+npm が見つからない場合や、古い command が別の Node prefix に属している場合は、手動で実行する command を表示します。
 
-```powershell
-$env:ULOOP_REMOVE_LEGACY = "1"
-irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```bash
+npm uninstall -g uloop-cli
 ```
 
 Unity UIから戻せない場合や、ターミナルの `uloop` がまだv3系のCLIを指している場合は、先にその `uloop` コマンドを削除してから、戻したいv2系のバージョンをインストールしてください。

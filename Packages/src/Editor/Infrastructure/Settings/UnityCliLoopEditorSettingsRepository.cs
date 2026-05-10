@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     public sealed class UnityCliLoopEditorSettingsRepository : IUnityCliLoopEditorSettingsPort
     {
         private string SettingsFilePath => Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
+        private string LegacySettingsFilePath => Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.LEGACY_SETTINGS_FILE_NAME);
         private readonly string[] _legacyTransientSettingKeys =
         {
             "customPort",
@@ -315,6 +316,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     _cachedSettings = new UnityCliLoopEditorSettingsData();
                 }
+
+                bool migratedLegacySetupWizardState = ApplyLegacySetupWizardStateIfNeeded();
+                if (migratedLegacySetupWizardState)
+                {
+                    SaveSettings(_cachedSettings);
+                }
             }
             catch (Exception ex)
             {
@@ -322,6 +329,80 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 throw new InvalidOperationException(
                     $"Failed to load Unity CLI Loop Editor settings from: {SettingsFilePath}. Settings file may be corrupted.", ex);
             }
+        }
+
+        private bool ApplyLegacySetupWizardStateIfNeeded()
+        {
+            Debug.Assert(_cachedSettings != null, "_cachedSettings must not be null");
+
+            if (_cachedSettings.legacySetupWizardStateMigrated)
+            {
+                DeleteLegacySettingsFileIfExists();
+                return false;
+            }
+
+            if (!File.Exists(LegacySettingsFilePath))
+            {
+                return false;
+            }
+
+            if (!IsValidLegacySettingsPath(LegacySettingsFilePath))
+            {
+                throw new SecurityException($"Invalid legacy settings file path: {LegacySettingsFilePath}");
+            }
+
+            FileInfo fileInfo = new(LegacySettingsFilePath);
+            if (fileInfo.Length > UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES)
+            {
+                throw new SecurityException("Legacy settings file exceeds size limit");
+            }
+
+            string legacyJson = File.ReadAllText(LegacySettingsFilePath);
+            if (string.IsNullOrWhiteSpace(legacyJson))
+            {
+                DeleteLegacySettingsFileIfExists();
+                return false;
+            }
+
+            LegacySetupWizardSettingsProbe legacySettings =
+                JsonUtility.FromJson<LegacySetupWizardSettingsProbe>(legacyJson);
+            if (legacySettings == null)
+            {
+                DeleteLegacySettingsFileIfExists();
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(legacySettings.lastSeenSetupWizardVersion)
+                && !legacySettings.suppressSetupWizardAutoShow)
+            {
+                DeleteLegacySettingsFileIfExists();
+                return false;
+            }
+
+            _cachedSettings = _cachedSettings with
+            {
+                lastSeenSetupWizardVersion = legacySettings.lastSeenSetupWizardVersion ?? string.Empty,
+                suppressSetupWizardAutoShow =
+                    _cachedSettings.suppressSetupWizardAutoShow || legacySettings.suppressSetupWizardAutoShow,
+                legacySetupWizardStateMigrated = true
+            };
+            DeleteLegacySettingsFileIfExists();
+            return true;
+        }
+
+        private void DeleteLegacySettingsFileIfExists()
+        {
+            if (!File.Exists(LegacySettingsFilePath))
+            {
+                return;
+            }
+
+            if (!IsValidLegacySettingsPath(LegacySettingsFilePath))
+            {
+                throw new SecurityException($"Invalid legacy settings file path: {LegacySettingsFilePath}");
+            }
+
+            File.Delete(LegacySettingsFilePath);
         }
 
         private void RemoveLegacyTransientFieldsIfNeeded(string settingsPath)
@@ -383,13 +464,32 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return removed;
         }
 
+        [Serializable]
+        private sealed class LegacySetupWizardSettingsProbe
+        {
+            public string lastSeenSetupWizardVersion = string.Empty;
+            public bool suppressSetupWizardAutoShow = false;
+        }
+
         /// <summary>
         /// Security: Validate if the settings file path is safe
         /// </summary>
         private static bool IsValidSettingsPath(string path)
         {
+            return IsValidSettingsPathForFileName(path, UnityCliLoopConstants.SETTINGS_FILE_NAME);
+        }
+
+        private static bool IsValidLegacySettingsPath(string path)
+        {
+            return IsValidSettingsPathForFileName(path, UnityCliLoopConstants.LEGACY_SETTINGS_FILE_NAME);
+        }
+
+        private static bool IsValidSettingsPathForFileName(string path, string settingsFileName)
+        {
             try
             {
+                Debug.Assert(!string.IsNullOrEmpty(settingsFileName), "settingsFileName must not be null or empty");
+
                 // Normalize the path to prevent path traversal
                 string normalizedPath = Path.GetFullPath(path);
                 
@@ -398,7 +498,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 
                 // Check if path is within the expected directory
                 return normalizedPath.StartsWith(expectedUserSettingsPath, StringComparison.OrdinalIgnoreCase) &&
-                       normalizedPath.EndsWith(UnityCliLoopConstants.SETTINGS_FILE_NAME, StringComparison.OrdinalIgnoreCase);
+                       normalizedPath.EndsWith(settingsFileName, StringComparison.OrdinalIgnoreCase);
             }
             catch (Exception ex)
             {

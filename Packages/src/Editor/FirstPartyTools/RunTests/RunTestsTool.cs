@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [UnityCliLoopTool]
     public class RunTestsTool : UnityCliLoopTool<RunTestsSchema, RunTestsResponse>
     {
-        public override string ToolName => "run-tests";
+        public override string ToolName => UnityCliLoopConstants.TOOL_NAME_RUN_TESTS;
 
         protected override async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken ct)
         {
@@ -29,21 +29,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return new UnityCliLoopTestExecutionRequest
             {
-                TestMode = ToContractTestMode(parameters.TestMode),
+                TestMode = parameters.TestMode,
                 FilterType = parameters.FilterType,
                 FilterValue = parameters.FilterValue,
                 SaveBeforeRun = parameters.SaveBeforeRun,
             };
-        }
-
-        private static UnityCliLoopTestMode ToContractTestMode(UnityEditor.TestTools.TestRunner.Api.TestMode testMode)
-        {
-            if (testMode == UnityEditor.TestTools.TestRunner.Api.TestMode.PlayMode)
-            {
-                return UnityCliLoopTestMode.PlayMode;
-            }
-
-            return UnityCliLoopTestMode.EditMode;
         }
 
         private static RunTestsResponse ToResponse(UnityCliLoopTestExecutionResult result)

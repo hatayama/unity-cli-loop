@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -412,6 +413,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(result.AttemptedTargets, Is.EqualTo(0));
             Assert.That(Directory.Exists(disabledSkillDir), Is.False);
+        }
+
+        [Test]
+        public void IsSkillDisabledByToolSettings_WhenRunTestsIsDisabled_ReturnsTrue()
+        {
+            // Tests that explicit tool settings disable run-tests skill installation.
+            SkillInstallLayout.SkillSourceInfo skill = new(
+                "uloop-run-tests",
+                UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
+                new Dictionary<string, byte[]>());
+            string[] disabledTools = { UnityCliLoopConstants.TOOL_NAME_RUN_TESTS };
+
+            bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
+                skill,
+                disabledTools);
+
+            Assert.That(isDisabled, Is.True);
+        }
+
+        [Test]
+        public void IsSkillDisabledByToolSettings_WhenRunTestsIsNotDisabled_ReturnsFalse()
+        {
+            // Tests that run-tests skill installation remains enabled without an explicit setting.
+            SkillInstallLayout.SkillSourceInfo skill = new(
+                "uloop-run-tests",
+                UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
+                new Dictionary<string, byte[]>());
+            string[] disabledTools = Array.Empty<string>();
+
+            bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
+                skill,
+                disabledTools);
+
+            Assert.That(isDisabled, Is.False);
         }
 
         [Test]
