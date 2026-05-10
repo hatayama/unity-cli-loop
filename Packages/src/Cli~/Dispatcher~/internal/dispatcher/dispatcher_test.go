@@ -1048,7 +1048,7 @@ func TestUpdateCommandForDarwinDownloadsBeforeExecutingInstaller(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	for _, expected := range []string{"mktemp", "curl -fSL", "-o \"$tmp\"", "sh \"$tmp\"", "exit $ec"} {
+	for _, expected := range []string{"mktemp", "curl -fSL", "-o \"$tmp\"", "ULOOP_VERSION=", "sh \"$tmp\"", "exit $ec", "v3-beta/scripts/install.sh"} {
 		if !strings.Contains(joinedArgs, expected) {
 			t.Fatalf("update command missing %q: %s", expected, joinedArgs)
 		}

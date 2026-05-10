@@ -14,7 +14,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Installs the package-owned global dispatcher through GitHub Release assets.
+    /// Installs the package-owned global dispatcher through the same installer scripts used by CLI commands.
     /// </summary>
     public static class NativeCliInstaller
     {
@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string releaseTag = BuildReleaseTag(packageVersion);
             if (platform == RuntimePlatform.WindowsEditor)
             {
-                string scriptUrl = BuildReleaseAssetUrl(releaseTag, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
+                string scriptUrl = BuildInstallerScriptUrl(releaseTag, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
                 string command =
                     $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}'; " +
                     $"irm '{scriptUrl}' | iex";
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     command);
             }
 
-            string posixScriptUrl = BuildReleaseAssetUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME);
+            string posixScriptUrl = BuildInstallerScriptUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME);
             string posixCommand = BuildPosixInstallScriptCommand(posixScriptUrl, releaseTag);
             return new NativeCliInstallCommand(
                 "/bin/sh",
@@ -816,12 +816,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return $"{CliConstants.RELEASE_TAG_PREFIX}{packageVersion}";
         }
 
-        private static string BuildReleaseAssetUrl(string releaseTag, string assetName)
+        internal static string BuildInstallerScriptUrl(string releaseTag, string assetName)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(assetName), "assetName must not be null or empty");
 
-            return $"{CliConstants.RELEASE_DOWNLOAD_BASE_URL}/{releaseTag}/{assetName}";
+            return $"{CliConstants.RAW_CONTENT_BASE_URL}/{SelectInstallerSourceRef(releaseTag)}/{CliConstants.SCRIPTS_DIR_NAME}/{assetName}";
+        }
+
+        internal static string SelectInstallerSourceRef(string releaseTag)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
+
+            return releaseTag.IndexOf(CliConstants.BETA_VERSION_MARKER, StringComparison.OrdinalIgnoreCase) >= 0
+                ? CliConstants.BETA_INSTALLER_SOURCE_REF
+                : CliConstants.STABLE_INSTALLER_SOURCE_REF;
         }
     }
 

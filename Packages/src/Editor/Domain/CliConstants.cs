@@ -8,7 +8,10 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string EXECUTABLE_NAME = "uloop";
         public const string VERSION_FLAG = "--version";
         public const string REQUIRED_DISPATCHER_VERSION_FLAG = "--required-dispatcher-version";
-        public const string RELEASE_DOWNLOAD_BASE_URL = "https://github.com/hatayama/unity-cli-loop/releases/download";
+        public const string RAW_CONTENT_BASE_URL = "https://raw.githubusercontent.com/hatayama/unity-cli-loop";
+        public const string STABLE_INSTALLER_SOURCE_REF = "main";
+        public const string BETA_INSTALLER_SOURCE_REF = "v3-beta";
+        public const string SCRIPTS_DIR_NAME = "scripts";
         public const string POSIX_INSTALL_SCRIPT_NAME = "install.sh";
         public const string WINDOWS_INSTALL_SCRIPT_NAME = "install.ps1";
         public const string INSTALL_DIR_ENVIRONMENT_VARIABLE = "ULOOP_INSTALL_DIR";
@@ -24,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string POSIX_PATH_SEPARATOR = ":";
         public const string WINDOWS_PATH_SEPARATOR = ";";
         public const string RELEASE_TAG_PREFIX = "v";
+        public const string BETA_VERSION_MARKER = "-beta.";
         public const string SKILL_DIR_PREFIX = "uloop-";
         public const string CLI_PACKAGE_DIR_NAME = "Cli~";
         public const string LEGACY_GO_CLI_PACKAGE_DIR_NAME = "GoCli~";
