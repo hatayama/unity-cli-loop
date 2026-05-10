@@ -30,3 +30,21 @@ func TestReleaseTagAddsMissingPrefix(t *testing.T) {
 		t.Fatalf("release tag mismatch: %s", tag)
 	}
 }
+
+func TestUpdateSelectorForBetaVersionUsesLatestBeta(t *testing.T) {
+	// Verifies dispatcher self-update advances within the beta release channel.
+	selector := UpdateSelectorForVersion("3.0.0-beta.3")
+
+	if selector != LatestBeta {
+		t.Fatalf("selector mismatch: %s", selector)
+	}
+}
+
+func TestUpdateSelectorForStableVersionUsesLatestStable(t *testing.T) {
+	// Verifies stable dispatcher self-update advances within the stable release channel.
+	selector := UpdateSelectorForVersion("3.0.0")
+
+	if selector != LatestStable {
+		t.Fatalf("selector mismatch: %s", selector)
+	}
+}

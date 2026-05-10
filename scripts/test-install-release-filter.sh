@@ -125,9 +125,19 @@ case "$url" in
   *v2.0.0/uloop-darwin-arm64.tar.gz.sha256)
     printf 'fakehash  uloop-darwin-arm64.tar.gz\n' > "$output_file"
     ;;
-  *v3.0.0-beta.2*)
-    echo "Prerelease asset should not be downloaded: $url" >&2
-    exit 1
+  *v3.0.0-beta.2/uloop-darwin-arm64.tar.gz)
+    if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
+      echo "Prerelease asset should not be downloaded: $url" >&2
+      exit 1
+    fi
+    : > "$output_file"
+    ;;
+  *v3.0.0-beta.2/uloop-darwin-arm64.tar.gz.sha256)
+    if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
+      echo "Prerelease checksum should not be downloaded: $url" >&2
+      exit 1
+    fi
+    printf 'fakehash  uloop-darwin-arm64.tar.gz\n' > "$output_file"
     ;;
   *)
     echo "unexpected curl url: $url" >&2
@@ -237,6 +247,33 @@ test_posix_latest_skips_prerelease_assets() {
   fi
 }
 
+test_posix_latest_beta_selects_prerelease_assets() {
+  work_dir="$TMP_DIR/posix-latest-beta"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    ULOOP_VERSION=latest-beta \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$curl_log" "v3.0.0-beta.2/uloop-darwin-arm64.tar.gz"
+  assert_contains "$curl_log" "v3.0.0-beta.2/uloop-darwin-arm64.tar.gz.sha256"
+  assert_not_contains "$curl_log" "v2.0.0/uloop-darwin-arm64.tar.gz"
+}
+
 test_posix_removes_npm_package_even_when_native_command_is_first() {
   work_dir="$TMP_DIR/posix-native-first"
   mock_bin="$work_dir/bin"
@@ -313,16 +350,20 @@ test_posix_removes_npm_package_before_replacing_same_bin_path() {
 }
 
 test_powershell_latest_skips_prerelease_assets() {
-  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($Release.draft -or $Release.prerelease) {'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$LatestBetaVersion = "latest-beta"'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($ReleaseChannel -eq "stable" -and $Release.prerelease) {'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($ReleaseChannel -eq "beta" `'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Test-LegacyNpmUloopPath'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '"uninstall", "-g", "--prefix", $LegacyPrefix, "uloop-cli"'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$NpmArgs = @("uninstall", "-g", "uloop-cli")'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$ReleaseChannel = if ($Version -eq $LatestBetaVersion) { "beta" } else { "stable" }'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if (Test-LegacyNpmUloopPath -CommandPath $LegacyUloopBeforeInstallPath) {'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "ULOOP_REMOVE_LEGACY"
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Remove-LegacyUloopShims"
 }
 
 test_posix_latest_skips_prerelease_assets
+test_posix_latest_beta_selects_prerelease_assets
 test_posix_removes_npm_package_even_when_native_command_is_first
 test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets

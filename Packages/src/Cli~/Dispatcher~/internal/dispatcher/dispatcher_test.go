@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	dispatchercontract "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Dispatcher"
+	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/adapters/installer"
 )
 
 func TestRunVersionPrintsDispatcherVersion(t *testing.T) {
@@ -1048,10 +1049,13 @@ func TestUpdateCommandForDarwinDownloadsBeforeExecutingInstaller(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	for _, expected := range []string{"mktemp", "curl -fSL", "-o \"$tmp\"", "ULOOP_VERSION=", "sh \"$tmp\"", "exit $ec", "v3-beta/scripts/install.sh"} {
+	for _, expected := range []string{"mktemp", "curl -fSL", "-o \"$tmp\"", "ULOOP_VERSION='latest-beta'", "sh \"$tmp\"", "exit $ec", "v3-beta/scripts/install.sh"} {
 		if !strings.Contains(joinedArgs, expected) {
 			t.Fatalf("update command missing %q: %s", expected, joinedArgs)
 		}
+	}
+	if strings.Contains(joinedArgs, "ULOOP_VERSION='"+installer.ReleaseTag(dispatchercontract.Current.DispatcherVersion)+"'") {
+		t.Fatalf("self-update should not pin the current dispatcher version: %s", joinedArgs)
 	}
 	if strings.Contains(joinedArgs, "curl -fsSL") || strings.Contains(joinedArgs, "| sh") {
 		t.Fatalf("update command still hides curl failures: %s", joinedArgs)

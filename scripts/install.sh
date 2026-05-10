@@ -4,6 +4,8 @@ set -eu
 REPOSITORY="hatayama/unity-cli-loop"
 INSTALL_DIR="${ULOOP_INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${ULOOP_VERSION:-latest}"
+LATEST_VERSION="latest"
+LATEST_BETA_VERSION="latest-beta"
 
 report_path_shadowing() {
   resolved_uloop=$(command -v uloop 2>/dev/null || true)
@@ -158,11 +160,17 @@ try_remove_legacy_npm_package() {
 }
 
 find_latest_asset_url() {
+  release_channel=$1
   page=1
 
   while :; do
     releases_json=$(curl -fsSL "https://api.github.com/repos/$REPOSITORY/releases?per_page=100&page=$page")
-    asset_url=$(printf '%s\n' "$releases_json" | awk -v asset_name="$asset_name" '
+    asset_url=$(printf '%s\n' "$releases_json" | awk -v asset_name="$asset_name" -v release_channel="$release_channel" '
+      /"tag_name":/ {
+        tag_name = $0
+        sub(/^[[:space:]]*"tag_name": "/, "", tag_name)
+        sub(/",?[[:space:]]*$/, "", tag_name)
+      }
       /"draft":/ {
         draft = ($0 ~ /true/)
       }
@@ -170,7 +178,13 @@ find_latest_asset_url() {
         prerelease = ($0 ~ /true/)
       }
       /"browser_download_url":/ {
-        if (draft || prerelease) {
+        if (draft) {
+          next
+        }
+        if (release_channel == "stable" && prerelease) {
+          next
+        }
+        if (release_channel == "beta" && (!prerelease || index(tolower(tag_name), "-beta.") == 0)) {
           next
         }
 
@@ -204,15 +218,19 @@ find_latest_asset_url() {
 }
 
 set_download_urls() {
-  if [ "$VERSION" != "latest" ]; then
+  if [ "$VERSION" != "$LATEST_VERSION" ] && [ "$VERSION" != "$LATEST_BETA_VERSION" ]; then
     download_url="https://github.com/$REPOSITORY/releases/download/$VERSION/$asset_name"
     checksum_url="$download_url.sha256"
     return
   fi
 
-  download_url=$(find_latest_asset_url)
+  if [ "$VERSION" = "$LATEST_BETA_VERSION" ]; then
+    download_url=$(find_latest_asset_url "beta")
+  else
+    download_url=$(find_latest_asset_url "stable")
+  fi
   if [ -z "$download_url" ]; then
-    echo "Could not find a latest release asset named $asset_name." >&2
+    echo "Could not find a $VERSION release asset named $asset_name." >&2
     echo "Set ULOOP_VERSION to a release tag that provides this asset." >&2
     exit 1
   fi

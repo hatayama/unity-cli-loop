@@ -2,6 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $Repository = "hatayama/unity-cli-loop"
 $Version = if ($env:ULOOP_VERSION) { $env:ULOOP_VERSION } else { "latest" }
+$LatestVersion = "latest"
+$LatestBetaVersion = "latest-beta"
 $InstallDir = if ($env:ULOOP_INSTALL_DIR) {
     $env:ULOOP_INSTALL_DIR
 } else {
@@ -10,12 +12,26 @@ $InstallDir = if ($env:ULOOP_INSTALL_DIR) {
 $AssetName = "uloop-windows-amd64.zip"
 
 function Find-LatestAssetUrl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ReleaseChannel
+    )
+
     $Page = 1
 
     while ($true) {
         $Releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository/releases?per_page=100&page=$Page"
         foreach ($Release in $Releases) {
-            if ($Release.draft -or $Release.prerelease) {
+            if ($Release.draft) {
+                continue
+            }
+
+            if ($ReleaseChannel -eq "stable" -and $Release.prerelease) {
+                continue
+            }
+
+            if ($ReleaseChannel -eq "beta" `
+                -and (-not $Release.prerelease -or -not $Release.tag_name.ToLowerInvariant().Contains("-beta."))) {
                 continue
             }
 
@@ -34,10 +50,11 @@ function Find-LatestAssetUrl {
     }
 }
 
-if ($Version -eq "latest") {
-    $DownloadUrl = Find-LatestAssetUrl
+if ($Version -eq $LatestVersion -or $Version -eq $LatestBetaVersion) {
+    $ReleaseChannel = if ($Version -eq $LatestBetaVersion) { "beta" } else { "stable" }
+    $DownloadUrl = Find-LatestAssetUrl -ReleaseChannel $ReleaseChannel
     if (-not $DownloadUrl) {
-        throw "Could not find a latest release asset named $AssetName. Set ULOOP_VERSION to a release tag that provides this asset."
+        throw "Could not find a $Version release asset named $AssetName. Set ULOOP_VERSION to a release tag that provides this asset."
     }
 } else {
     $DownloadUrl = "https://github.com/$Repository/releases/download/$Version/$AssetName"

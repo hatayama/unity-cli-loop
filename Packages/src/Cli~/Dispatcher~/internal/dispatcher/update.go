@@ -55,11 +55,11 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 
 func updateCommandForOS(goos string) (string, []string, error) {
 	version := dispatchercontract.Current.DispatcherVersion
-	releaseTag := installer.ReleaseTag(version)
+	updateSelector := installer.UpdateSelectorForVersion(version)
 	switch goos {
 	case "darwin":
 		scriptURL := installer.ScriptURL(version, installer.PosixScriptName)
-		script := fmt.Sprintf(`tmp=$(mktemp) && curl -fSL %s -o "$tmp" && ULOOP_VERSION=%s sh "$tmp"; ec=$?; rm -f "$tmp"; exit $ec`, shellQuote(scriptURL), shellQuote(releaseTag))
+		script := fmt.Sprintf(`tmp=$(mktemp) && curl -fSL %s -o "$tmp" && ULOOP_VERSION=%s sh "$tmp"; ec=$?; rm -f "$tmp"; exit $ec`, shellQuote(scriptURL), shellQuote(updateSelector))
 		return "sh", []string{"-c", script}, nil
 	case "windows":
 		scriptURL := installer.ScriptURL(version, installer.WindowsScriptName)
@@ -68,7 +68,7 @@ func updateCommandForOS(goos string) (string, []string, error) {
 			"-ExecutionPolicy",
 			"Bypass",
 			"-Command",
-			fmt.Sprintf("$env:ULOOP_VERSION=%s; irm %s | iex", shellQuote(releaseTag), shellQuote(scriptURL)),
+			fmt.Sprintf("$env:ULOOP_VERSION=%s; irm %s | iex", shellQuote(updateSelector), shellQuote(scriptURL)),
 		}, nil
 	default:
 		return "", nil, errors.New(updateUnsupportedOSMessage)

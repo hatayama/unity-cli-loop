@@ -5,6 +5,8 @@ import "strings"
 const (
 	PosixScriptName   = "install.sh"
 	WindowsScriptName = "install.ps1"
+	LatestStable      = "latest"
+	LatestBeta        = "latest-beta"
 
 	repositoryRawBaseURL = "https://raw.githubusercontent.com/hatayama/unity-cli-loop"
 	stableSourceRef      = "main"
@@ -26,9 +28,21 @@ func ReleaseTag(version string) string {
 }
 
 func SourceRefForVersion(version string) string {
-	if strings.Contains(strings.ToLower(version), betaVersionMarker) {
+	if IsBetaVersion(version) {
 		return betaSourceRef
 	}
 
 	return stableSourceRef
+}
+
+func UpdateSelectorForVersion(version string) string {
+	if IsBetaVersion(version) {
+		return LatestBeta
+	}
+
+	return LatestStable
+}
+
+func IsBetaVersion(version string) bool {
+	return strings.Contains(strings.ToLower(version), betaVersionMarker)
 }
