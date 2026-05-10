@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.5](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.4...v3.0.0-beta.5) (2026-05-10)
+
+
+### Bug Fixes
+
+* Release PRs no longer include old changelog entries after publishing ([#1088](https://github.com/hatayama/unity-cli-loop/issues/1088)) ([1a0922b](https://github.com/hatayama/unity-cli-loop/commit/1a0922bea7b28a35833f2e3330a9522a2c4fc50d))
+* Repository-level fixes now create beta release PRs ([#1089](https://github.com/hatayama/unity-cli-loop/issues/1089)) ([ca4888a](https://github.com/hatayama/unity-cli-loop/commit/ca4888ae8409fbea4aee22c00d91e05166fb5d26))
+
 ## [3.0.0-beta.4](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.3...v3.0.0-beta.4) (2026-05-10)
 
 
