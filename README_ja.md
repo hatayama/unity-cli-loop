@@ -66,6 +66,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 > [!NOTE]
 > `com.unity.inputsystem` は optional dependency になりました。`simulate-keyboard`、`simulate-mouse-input`、`record-input`、`replay-input`、Recordings ウィンドウを使いたい場合だけ追加してください。
+> `com.unity.test-framework` も optional dependency です。`run-tests` で Unity Test Runner を実行したい場合だけ追加してください。
 
 # クイックスタート
 

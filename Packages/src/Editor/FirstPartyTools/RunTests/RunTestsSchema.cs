@@ -1,5 +1,3 @@
-using UnityEditor.TestTools.TestRunner.Api;
-
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -13,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Test mode - EditMode(0), PlayMode(1)
         /// </summary>
-        public TestMode TestMode { get; set; } = TestMode.EditMode;
+        public UnityCliLoopTestMode TestMode { get; set; } = UnityCliLoopTestMode.EditMode;
 
         /// <summary>
         /// Type of test filter - all(0), exact(1), regex(2), assembly(3)

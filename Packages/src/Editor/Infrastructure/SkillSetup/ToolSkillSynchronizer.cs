@@ -468,7 +468,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabled(skill, disabledTools))
+                    .Where(skill => IsSkillDisabledByToolSettings(
+                        skill,
+                        disabledTools,
+                        ToolExecutionAvailability.IsTestFrameworkAvailable))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> enabledSkills = allSkills
                     .Except(disabledSkills)
@@ -512,7 +515,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
 
-            if (disabledTools.Contains(toolName))
+            if (disabledTools.Contains(toolName)
+                && !ToolExecutionAvailability.ShouldReportDependencyUnavailableBeforeDisabled(toolName))
             {
                 return new SkillInstallResult(0, 0);
             }
@@ -522,7 +526,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabled(skill, disabledTools))
+                    .Where(skill => IsSkillDisabledByToolSettings(
+                        skill,
+                        disabledTools,
+                        ToolExecutionAvailability.IsTestFrameworkAvailable))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> toolSkills = allSkills
                     .Where(skill => IsSkillForTool(skill, toolName))
@@ -638,9 +645,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static bool IsSkillDisabled(
+        internal static bool IsSkillDisabledByToolSettings(
             SkillInstallLayout.SkillSourceInfo skill,
-            IReadOnlyCollection<string> disabledTools)
+            IReadOnlyCollection<string> disabledTools,
+            bool isTestFrameworkAvailable)
         {
             if (disabledTools.Count == 0)
             {
@@ -653,7 +661,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            return disabledTools.Contains(toolName);
+            return disabledTools.Contains(toolName)
+                && !ToolExecutionAvailability.ShouldReportDependencyUnavailableBeforeDisabled(
+                    toolName,
+                    isTestFrameworkAvailable);
         }
 
         private static string[] GetCurrentDisabledTools()

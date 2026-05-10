@@ -39,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         
         // Scripting define symbols
         public const string SCRIPTING_DEFINE_ULOOP_DEBUG = "ULOOP_DEBUG";
+        public const string SCRIPTING_DEFINE_HAS_TEST_FRAMEWORK = "ULOOP_HAS_TEST_FRAMEWORK";
         
         // Environment variable keys for development mode
         public const string ENV_KEY_ULOOP_DEBUG = "ULOOP_DEBUG";
@@ -61,6 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string TOOL_NAME_RUN_TESTS = "run-tests";
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";
         public const string COMMAND_NAME_GET_VERSION = "get-version";
+
+        // Optional package names
+        public const string PACKAGE_NAME_TEST_FRAMEWORK = "com.unity.test-framework";
 
         // File output directories
         public const string OUTPUT_ROOT_DIR = ".uloop/outputs";

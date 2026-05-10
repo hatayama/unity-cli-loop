@@ -1,6 +1,7 @@
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -40,12 +41,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // instead of JSON parameter parsing. The parsing is handled by the tool dispatch layer.
             
             // Arrange - Test the Schema object directly
-            RunTestsSchema schema = new()            {
+            RunTestsSchema schema = new()
+            {
+                TestMode = UnityCliLoopTestMode.PlayMode,
                 FilterType = TestFilterType.regex,
                 FilterValue = "TestClass"
             };
 
             // Assert - Schema properties should match what we set
+            Assert.That(schema.TestMode, Is.EqualTo(UnityCliLoopTestMode.PlayMode));
             Assert.That(schema.FilterType, Is.EqualTo(TestFilterType.regex));
             Assert.That(schema.FilterValue, Is.EqualTo("TestClass"));
         }
@@ -63,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsSchema schema = new();
 
             // Assert - Schema should have default values
+            Assert.That(schema.TestMode, Is.EqualTo(UnityCliLoopTestMode.EditMode));
             Assert.That(schema.FilterType, Is.EqualTo(TestFilterType.all));
             Assert.That(schema.FilterValue ?? string.Empty, Is.EqualTo(string.Empty));
             Assert.That(schema.SaveBeforeRun, Is.False);
@@ -102,6 +107,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 filterService.CreateFilter((TestFilterType)999, "value");
             });
+        }
+
+        [Test]
+        public void CreateTestFrameworkUnavailable_ShouldReturnUnsupportedResponse()
+        {
+            // Verifies that run-tests reports the optional dependency requirement in-band.
+            RunTestsResponse response = RunTestsResponse.CreateTestFrameworkUnavailable();
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain(UnityCliLoopConstants.PACKAGE_NAME_TEST_FRAMEWORK));
+            Assert.That(response.CompletedAt, Is.Not.Empty);
+            Assert.That(response.TestCount, Is.EqualTo(0));
+            Assert.That(response.PassedCount, Is.EqualTo(0));
+            Assert.That(response.FailedCount, Is.EqualTo(0));
+            Assert.That(response.SkippedCount, Is.EqualTo(0));
+            Assert.That(response.XmlPath, Is.Null);
         }
     }
 } 

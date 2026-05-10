@@ -415,6 +415,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void IsSkillDisabledByToolSettings_WhenRunTestsDependencyIsMissing_ReturnsFalse()
+        {
+            // Tests that run-tests skill remains available so it can report the missing dependency.
+            SkillInstallLayout.SkillSourceInfo skill = new(
+                "uloop-run-tests",
+                UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
+                new Dictionary<string, byte[]>());
+            string[] disabledTools = { UnityCliLoopConstants.TOOL_NAME_RUN_TESTS };
+
+            bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
+                skill,
+                disabledTools,
+                isTestFrameworkAvailable: false);
+
+            Assert.That(isDisabled, Is.False);
+        }
+
+        [Test]
+        public void IsSkillDisabledByToolSettings_WhenRunTestsDependencyExists_ReturnsTrue()
+        {
+            // Tests that run-tests follows disabled tool settings after its dependency is installed.
+            SkillInstallLayout.SkillSourceInfo skill = new(
+                "uloop-run-tests",
+                UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
+                new Dictionary<string, byte[]>());
+            string[] disabledTools = { UnityCliLoopConstants.TOOL_NAME_RUN_TESTS };
+
+            bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
+                skill,
+                disabledTools,
+                isTestFrameworkAvailable: true);
+
+            Assert.That(isDisabled, Is.True);
+        }
+
+        [Test]
         public async Task InstallSkillFilesForToolAtProjectRoot_RemovesDisabledAndDeprecatedSkillsWithoutUpdatingUnrelatedSkills()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();

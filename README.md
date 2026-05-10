@@ -65,6 +65,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 > [!NOTE]
 > `com.unity.inputsystem` is now an optional dependency. Install it only if you want Input System features such as `simulate-keyboard`, `simulate-mouse-input`, `record-input`, `replay-input`, and the Recordings window.
+> `com.unity.test-framework` is also optional. Install it only if you want the `run-tests` tool to execute Unity Test Runner.
 
 # Quickstart
 

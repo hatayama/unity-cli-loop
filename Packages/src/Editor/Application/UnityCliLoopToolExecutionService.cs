@@ -30,7 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 throw new ArgumentException($"Unknown tool: {toolName}");
             }
 
-            if (!registry.IsToolEnabled(toolName))
+            if (!registry.IsToolEnabled(toolName)
+                && !ToolExecutionAvailability.ShouldReportDependencyUnavailableBeforeDisabled(toolName))
             {
                 throw new ToolDisabledException(toolName);
             }

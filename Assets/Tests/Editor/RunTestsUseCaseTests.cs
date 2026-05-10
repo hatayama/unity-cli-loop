@@ -1,7 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
-using UnityEditor.TestTools.TestRunner.Api;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -57,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _result = result;
             }
 
-            public override ValidationResult Validate(TestMode testMode, bool saveBeforeRun)
+            public override ValidationResult Validate(UnityCliLoopTestMode testMode, bool saveBeforeRun)
             {
                 SaveBeforeRun = saveBeforeRun;
                 return _result;
