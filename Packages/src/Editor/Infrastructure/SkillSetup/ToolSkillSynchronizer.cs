@@ -470,8 +470,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
                     .Where(skill => IsSkillDisabledByToolSettings(
                         skill,
-                        disabledTools,
-                        ToolExecutionAvailability.IsTestFrameworkAvailable))
+                        disabledTools))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> enabledSkills = allSkills
                     .Except(disabledSkills)
@@ -515,8 +514,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
 
-            if (disabledTools.Contains(toolName)
-                && !ToolExecutionAvailability.ShouldReportDependencyUnavailableBeforeDisabled(toolName))
+            if (disabledTools.Contains(toolName))
             {
                 return new SkillInstallResult(0, 0);
             }
@@ -528,8 +526,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
                     .Where(skill => IsSkillDisabledByToolSettings(
                         skill,
-                        disabledTools,
-                        ToolExecutionAvailability.IsTestFrameworkAvailable))
+                        disabledTools))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> toolSkills = allSkills
                     .Where(skill => IsSkillForTool(skill, toolName))
@@ -647,8 +644,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static bool IsSkillDisabledByToolSettings(
             SkillInstallLayout.SkillSourceInfo skill,
-            IReadOnlyCollection<string> disabledTools,
-            bool isTestFrameworkAvailable)
+            IReadOnlyCollection<string> disabledTools)
         {
             if (disabledTools.Count == 0)
             {
@@ -661,10 +657,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            return disabledTools.Contains(toolName)
-                && !ToolExecutionAvailability.ShouldReportDependencyUnavailableBeforeDisabled(
-                    toolName,
-                    isTestFrameworkAvailable);
+            return disabledTools.Contains(toolName);
         }
 
         private static string[] GetCurrentDisabledTools()

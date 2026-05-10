@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -415,9 +416,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void IsSkillDisabledByToolSettings_WhenRunTestsDependencyIsMissing_ReturnsFalse()
+        public void IsSkillDisabledByToolSettings_WhenRunTestsIsDisabled_ReturnsTrue()
         {
-            // Tests that run-tests skill remains available so it can report the missing dependency.
+            // Tests that explicit tool settings disable run-tests skill installation.
             SkillInstallLayout.SkillSourceInfo skill = new(
                 "uloop-run-tests",
                 UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
@@ -426,28 +427,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
                 skill,
-                disabledTools,
-                isTestFrameworkAvailable: false);
+                disabledTools);
 
-            Assert.That(isDisabled, Is.False);
+            Assert.That(isDisabled, Is.True);
         }
 
         [Test]
-        public void IsSkillDisabledByToolSettings_WhenRunTestsDependencyExists_ReturnsTrue()
+        public void IsSkillDisabledByToolSettings_WhenRunTestsIsNotDisabled_ReturnsFalse()
         {
-            // Tests that run-tests follows disabled tool settings after its dependency is installed.
+            // Tests that run-tests skill installation remains enabled without an explicit setting.
             SkillInstallLayout.SkillSourceInfo skill = new(
                 "uloop-run-tests",
                 UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
                 new Dictionary<string, byte[]>());
-            string[] disabledTools = { UnityCliLoopConstants.TOOL_NAME_RUN_TESTS };
+            string[] disabledTools = Array.Empty<string>();
 
             bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
                 skill,
-                disabledTools,
-                isTestFrameworkAvailable: true);
+                disabledTools);
 
-            Assert.That(isDisabled, Is.True);
+            Assert.That(isDisabled, Is.False);
         }
 
         [Test]

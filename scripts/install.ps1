@@ -170,15 +170,17 @@ function Invoke-LegacyNpmPackageRemoval {
         $LegacyPrefix = Get-NpmPrefixFromUloopPath -CommandPath $LegacyUloopPath
     }
 
+    if (-not $LegacyPrefix) {
+        Write-LegacyNpmManualRemoval -LegacyUloopPath $LegacyUloopPath -LegacyPrefix $LegacyPrefix
+        return
+    }
+
     if (-not $NpmCommand) {
         Write-LegacyNpmManualRemoval -LegacyUloopPath $LegacyUloopPath -LegacyPrefix $LegacyPrefix
         return
     }
 
-    $NpmArgs = @("uninstall", "-g", "uloop-cli")
-    if ($LegacyPrefix) {
-        $NpmArgs = @("uninstall", "-g", "--prefix", $LegacyPrefix, "uloop-cli")
-    }
+    $NpmArgs = @("uninstall", "-g", "--prefix", $LegacyPrefix, "uloop-cli")
 
     & $NpmCommand.Source @NpmArgs
     if ($LASTEXITCODE -ne 0) {

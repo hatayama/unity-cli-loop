@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
@@ -28,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 string absolutePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), startupPath);
                 string source = File.ReadAllText(absolutePath);
-                if (source.TrimStart().StartsWith("#if ULOOP_HAS_INPUT_SYSTEM"))
+                if (source.TrimStart().StartsWith("#if ULOOP_HAS_INPUT_SYSTEM", StringComparison.Ordinal))
                 {
                     continue;
                 }

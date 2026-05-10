@@ -128,6 +128,11 @@ try_remove_legacy_npm_package() {
     legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
   fi
 
+  if [ -z "$legacy_prefix" ]; then
+    print_legacy_npm_manual_removal "$legacy_uloop" ""
+    return
+  fi
+
   if ! command -v npm >/dev/null 2>&1; then
     print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
     return
@@ -146,17 +151,6 @@ try_remove_legacy_npm_package() {
     print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
     return
   fi
-
-  if npm uninstall -g uloop-cli; then
-    if [ -n "$legacy_uloop" ] && [ "$legacy_uloop" != "$expected_uloop" ] && [ "$legacy_uloop.exe" != "$expected_uloop" ] && { [ -e "$legacy_uloop" ] || [ -L "$legacy_uloop" ]; }; then
-      print_legacy_npm_manual_removal "$legacy_uloop" ""
-    else
-      echo "Removed legacy npm package: uloop-cli"
-    fi
-    return
-  fi
-
-  print_legacy_npm_manual_removal "$legacy_uloop" ""
 }
 
 find_latest_asset_url() {
