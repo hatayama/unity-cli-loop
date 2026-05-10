@@ -4,6 +4,7 @@ set -eu
 : "${TARGET_BRANCH:?TARGET_BRANCH is required}"
 
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
+RELEASE_PR_BRANCH="release-please--branches--$TARGET_BRANCH"
 DIST_PATHS="
 Packages/src/Cli~/Core~/dist
 "
@@ -15,7 +16,16 @@ RELEASE_PRS=$(gh pr list \
   --label "autorelease: pending" \
   --json number,headRefName,title,url)
 
-MATCHING_RELEASE_PRS=$(printf '%s' "$RELEASE_PRS" | jq '[.[] | select((.title // "") | test("^chore(\\([^)]*\\))?: release [0-9]"))]')
+MATCHING_RELEASE_PRS=$(printf '%s' "$RELEASE_PRS" | jq --arg release_branch "$RELEASE_PR_BRANCH" '
+  [
+    .[]
+    | select((.title // "") | test("^chore(\\([^)]*\\))?: release [0-9]"))
+    | select(
+        (.headRefName // "") == $release_branch
+        or ((.headRefName // "") | startswith($release_branch + "--components--"))
+      )
+  ]
+')
 MATCHING_RELEASE_PR_COUNT=$(printf '%s' "$MATCHING_RELEASE_PRS" | jq 'length')
 
 case "$MATCHING_RELEASE_PR_COUNT" in
