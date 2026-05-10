@@ -260,6 +260,10 @@ extract_asset() {
 asset_name=$(detect_asset_name)
 installed_command_name=$(detect_installed_command_name)
 legacy_uloop_before_install=$(command -v uloop 2>/dev/null || true)
+legacy_uloop_command_detected_before_install=0
+if [ -n "$legacy_uloop_before_install" ]; then
+  legacy_uloop_command_detected_before_install=1
+fi
 download_url=""
 checksum_url=""
 set_download_urls
@@ -313,7 +317,7 @@ if [ "$legacy_uloop_before_install" = "$final_uloop_path" ] || [ "$legacy_uloop_
 fi
 mv -f "$staged_uloop_path" "$final_uloop_path"
 staged_uloop_path=""
-if [ "$legacy_npm_removed_before_install" -eq 0 ]; then
+if [ "$legacy_npm_removed_before_install" -eq 0 ] && [ "$legacy_uloop_command_detected_before_install" -eq 1 ]; then
   try_remove_legacy_npm_package "$legacy_uloop_before_install" "$final_uloop_path"
 fi
 

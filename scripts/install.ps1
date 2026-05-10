@@ -216,6 +216,7 @@ function Assert-UloopVersionSucceeds {
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("uloop-install-" + [System.Guid]::NewGuid().ToString("N"))
 $StagedUloopPath = $null
 $LegacyUloopBeforeInstallCommand = Get-Command uloop -ErrorAction SilentlyContinue | Select-Object -First 1
+$LegacyUloopCommandDetectedBeforeInstall = $null -ne $LegacyUloopBeforeInstallCommand
 New-Item -ItemType Directory -Path $TempDir | Out-Null
 
 try {
@@ -265,7 +266,7 @@ try {
     }
 
     Assert-UloopVersionSucceeds -UloopPath $FinalUloopPath
-    if (-not $LegacyNpmRemovedBeforeInstall) {
+    if ($LegacyUloopCommandDetectedBeforeInstall -and -not $LegacyNpmRemovedBeforeInstall) {
         Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopBeforeInstallPath -ExpectedUloopPath $FinalUloopPath
     }
 

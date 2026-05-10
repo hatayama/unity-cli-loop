@@ -272,6 +272,7 @@ test_posix_latest_beta_selects_prerelease_assets() {
   assert_contains "$curl_log" "v3.0.0-beta.2/uloop-darwin-arm64.tar.gz"
   assert_contains "$curl_log" "v3.0.0-beta.2/uloop-darwin-arm64.tar.gz.sha256"
   assert_not_contains "$curl_log" "v2.0.0/uloop-darwin-arm64.tar.gz"
+  assert_not_contains "$npm_log" "uninstall -g uloop-cli"
 }
 
 test_posix_removes_npm_package_even_when_native_command_is_first() {
@@ -394,6 +395,8 @@ test_powershell_latest_skips_prerelease_assets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$LegacyCommandIsNpmShim = $LegacyCommandShadowsNative `'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$ReleaseChannel = if ($Version -eq $LatestBetaVersion) { "beta" } else { "stable" }'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if (Test-LegacyNpmUloopPath -CommandPath $LegacyUloopBeforeInstallPath) {'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$LegacyUloopCommandDetectedBeforeInstall = $null -ne $LegacyUloopBeforeInstallCommand'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($LegacyUloopCommandDetectedBeforeInstall -and -not $LegacyNpmRemovedBeforeInstall) {'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "ULOOP_REMOVE_LEGACY"
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Remove-LegacyUloopShims"
 }
