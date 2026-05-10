@@ -1,3 +1,4 @@
+#if ULOOP_HAS_TEST_FRAMEWORK
 using System;
 using System.IO;
 using System.Text;
@@ -259,3 +260,4 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
     }
 }
+#endif

@@ -10,6 +10,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class RunTestsResponse : UnityCliLoopToolResponse
     {
+        public static readonly string TestFrameworkUnavailableMessage =
+            $"run-tests requires the Unity Test Framework package ({UnityCliLoopConstants.PACKAGE_NAME_TEST_FRAMEWORK}). Install it via Package Manager to use test execution.";
+
         /// <summary>
         /// Whether test execution was successful
         /// </summary>
@@ -75,5 +78,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CompletedAt = string.Empty;
             XmlPath = string.Empty;
         }
+
+        public static RunTestsResponse CreateTestFrameworkUnavailable()
+        {
+            return new RunTestsResponse(
+                success: false,
+                message: TestFrameworkUnavailableMessage,
+                completedAt: DateTime.UtcNow.ToString("o"),
+                testCount: 0,
+                passedCount: 0,
+                failedCount: 0,
+                skippedCount: 0,
+                xmlPath: null);
+        }
     }
-} 
+}

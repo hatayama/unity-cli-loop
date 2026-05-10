@@ -17,28 +17,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetInstallCommand_OnMacKeepsCliOnlyCurlInstallerAvailable()
         {
-            // Verifies that CLI-only macOS users still have the direct release script, not npm.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            // Verifies that editor and CLI installs use the same channel installer script, not npm.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
-                "3.0.0-beta.0",
-                false);
+                "3.0.0-beta.3",
+                false,
+                "/bin/zsh");
 
-            Assert.That(command.FileName, Is.EqualTo("/bin/sh"));
-            Assert.That(command.Arguments, Does.Contain("https://github.com/hatayama/unity-cli-loop/releases/download/v3.0.0-beta.0/install.sh"));
-            Assert.That(command.Arguments, Does.Contain("ULOOP_VERSION='v3.0.0-beta.0'"));
+            Assert.That(command.FileName, Is.EqualTo("/bin/zsh"));
+            Assert.That(command.Arguments, Does.Contain("-l -i -c"));
+            Assert.That(command.Arguments, Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.sh"));
+            Assert.That(command.Arguments, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
+            Assert.That(command.Arguments, Does.Contain("ULOOP_VERSION"));
+            Assert.That(command.Arguments, Does.Contain("v3.0.0-beta.3"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
         }
 
         [Test]
+        public void GetInstallCommand_OnMacDelegatesPosixSnippetThroughSh()
+        {
+            // Verifies that fish or other login shells only load environment before POSIX script execution.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
+                RuntimePlatform.OSXEditor,
+                "3.0.0-beta.3",
+                false,
+                "/opt/homebrew/bin/fish");
+
+            Assert.That(command.FileName, Is.EqualTo("/opt/homebrew/bin/fish"));
+            Assert.That(command.Arguments, Does.Contain("-l -i -c"));
+            Assert.That(command.ManualCommand, Does.StartWith($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c "));
+            Assert.That(command.ManualCommand, Does.Contain("tmp_script=$(mktemp)"));
+            Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
+        }
+
+        [Test]
         public void GetInstallCommand_OnMacPropagatesInstallerDownloadFailure()
         {
-            // Verifies that automatic editor installs do not report success when curl fails before script execution.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            // Verifies that editor installs do not report success when curl fails before script execution.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
-                "3.0.0-beta.0",
-                false);
+                "3.0.0-beta.3",
+                false,
+                "/bin/zsh");
 
             Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
             Assert.That(command.ManualCommand, Does.Contain(" -o "));
@@ -49,15 +71,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetInstallCommand_OnWindowsKeepsCliOnlyPowerShellInstallerAvailable()
         {
-            // Verifies that CLI-only Windows users still have the direct release script, not npm.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            // Verifies that editor and CLI installs use the same channel PowerShell installer script.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.WindowsEditor,
-                "3.0.0-beta.0",
-                false);
+                "3.0.0-beta.3",
+                false,
+                "/bin/zsh");
 
             Assert.That(command.FileName, Is.EqualTo("powershell"));
-            Assert.That(command.Arguments, Does.Contain("https://github.com/hatayama/unity-cli-loop/releases/download/v3.0.0-beta.0/install.ps1"));
-            Assert.That(command.Arguments, Does.Contain("$env:ULOOP_VERSION='v3.0.0-beta.0'"));
+            Assert.That(command.Arguments, Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.ps1"));
+            Assert.That(command.Arguments, Does.Contain("$env:ULOOP_VERSION='v3.0.0-beta.3'"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Contain("irm"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
@@ -66,27 +89,140 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetInstallCommand_OnMacCliOnlyInstallerDoesNotAdvertiseWindowsLegacyCleanup()
         {
-            // Verifies that macOS manual commands do not expose the Windows-only legacy cleanup flag.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            // Verifies that macOS manual commands do not expose old cleanup flags.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
-                "3.0.0-beta.0",
-                true);
+                "3.0.0-beta.3",
+                true,
+                "/bin/zsh");
 
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
         }
 
         [Test]
-        public void GetInstallCommand_OnWindowsCliOnlyInstallerCanOptIntoLegacyLauncherCleanup()
+        public void GetInstallCommand_OnWindowsDoesNotNeedLegacyCleanupFlag()
         {
-            // Verifies that CLI-only Windows installs can opt into removing package-owned legacy launchers.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            // Verifies that Windows installs rely on the installer script's npm uninstall attempt.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.WindowsEditor,
-                "3.0.0-beta.0",
-                true);
+                "3.0.0-beta.3",
+                true,
+                "/bin/zsh");
 
-            Assert.That(command.Arguments, Does.Contain("$env:ULOOP_REMOVE_LEGACY='1'"));
-            Assert.That(command.ManualCommand, Does.Contain("$env:ULOOP_REMOVE_LEGACY='1'"));
+            Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
+            Assert.That(command.ManualCommand, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
+        }
+
+        [Test]
+        public void GetInstallCommand_WhenLocalPackageOnMacUsesPackageLocalInstaller()
+        {
+            // Verifies that local package development tests exercise the checked-out installer script.
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-native-local-installer-tests",
+                System.Guid.NewGuid().ToString("N"));
+            string packageResolvedPath = Path.Combine(
+                tempRoot,
+                CliConstants.UNITY_PACKAGES_DIR_NAME,
+                CliConstants.PACKAGE_SOURCE_DIR_NAME);
+            string scriptsDirectory = Path.Combine(tempRoot, CliConstants.SCRIPTS_DIR_NAME);
+            string scriptPath = Path.Combine(scriptsDirectory, CliConstants.POSIX_INSTALL_SCRIPT_NAME);
+
+            Directory.CreateDirectory(packageResolvedPath);
+            Directory.CreateDirectory(scriptsDirectory);
+            File.WriteAllText(scriptPath, string.Empty);
+
+            try
+            {
+                NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
+                    RuntimePlatform.OSXEditor,
+                    "3.0.0-beta.3",
+                    false,
+                    "/bin/zsh",
+                    packageResolvedPath);
+
+                Assert.That(command.FileName, Is.EqualTo("/bin/zsh"));
+                Assert.That(command.Arguments, Does.Contain("-l -i -c"));
+                Assert.That(command.ManualCommand, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
+                Assert.That(command.ManualCommand, Does.Contain(scriptPath));
+                Assert.That(command.ManualCommand, Does.Contain("ULOOP_VERSION"));
+                Assert.That(command.ManualCommand, Does.Contain("v3.0.0-beta.3"));
+                Assert.That(command.ManualCommand, Does.Not.Contain("curl -fsSL"));
+                Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, true);
+                }
+            }
+        }
+
+        [Test]
+        public void GetInstallCommand_WhenLocalPackageOnWindowsUsesPackageLocalInstaller()
+        {
+            // Verifies that local package development tests use the checked-out PowerShell installer.
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-native-local-installer-tests",
+                System.Guid.NewGuid().ToString("N"));
+            string packageResolvedPath = Path.Combine(
+                tempRoot,
+                CliConstants.UNITY_PACKAGES_DIR_NAME,
+                CliConstants.PACKAGE_SOURCE_DIR_NAME);
+            string scriptsDirectory = Path.Combine(tempRoot, CliConstants.SCRIPTS_DIR_NAME);
+            string scriptPath = Path.Combine(scriptsDirectory, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
+
+            Directory.CreateDirectory(packageResolvedPath);
+            Directory.CreateDirectory(scriptsDirectory);
+            File.WriteAllText(scriptPath, string.Empty);
+
+            try
+            {
+                NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
+                    RuntimePlatform.WindowsEditor,
+                    "3.0.0-beta.3",
+                    false,
+                    "/bin/zsh",
+                    packageResolvedPath);
+
+                Assert.That(command.FileName, Is.EqualTo("powershell"));
+                Assert.That(command.ManualCommand, Does.Contain($"& '{scriptPath}'"));
+                Assert.That(command.ManualCommand, Does.Contain("$env:ULOOP_VERSION='v3.0.0-beta.3'"));
+                Assert.That(command.ManualCommand, Does.Not.Contain("irm"));
+                Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, true);
+                }
+            }
+        }
+
+        [Test]
+        public void BuildInstallerScriptUrl_WhenBetaVersionUsesV3BetaInstallerScript()
+        {
+            // Verifies that beta editor installs call the same beta installer script as CLI commands.
+            string url = NativeCliInstaller.BuildInstallerScriptUrl(
+                "v3.0.0-beta.3",
+                CliConstants.POSIX_INSTALL_SCRIPT_NAME);
+
+            Assert.That(url, Is.EqualTo("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.sh"));
+        }
+
+        [Test]
+        public void BuildInstallerScriptUrl_WhenStableVersionUsesMainInstallerScript()
+        {
+            // Verifies that stable editor installs call the stable installer script.
+            string url = NativeCliInstaller.BuildInstallerScriptUrl(
+                "v3.0.0",
+                CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
+
+            Assert.That(url, Is.EqualTo("https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1"));
         }
 
         [Test]
@@ -317,275 +453,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenOrphanedTypeScriptLauncherShimsExistDeletesThem()
-        {
-            // Verifies that orphaned TypeScript launchers no longer remain earlier in PATH.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeDirectory = Path.Combine(tempRoot, "native");
-            string nativeUloopPath = Path.Combine(nativeDirectory, "uloop.exe");
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(nativeDirectory);
-            File.WriteAllText(nativeUloopPath, "native-binary");
-            File.WriteAllText(Path.Combine(legacyBinDirectory, "uloop.ps1"), "node_modules/uloop-cli/dist/cli.bundle.cjs");
-            File.WriteAllText(Path.Combine(legacyBinDirectory, "uloop.cmd"), "node_modules\\uloop-cli\\dist\\cli.bundle.cjs");
-            File.WriteAllText(Path.Combine(legacyBinDirectory, "uloop"), "node_modules/uloop-cli/dist/cli.bundle.cjs");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.Exists(Path.Combine(legacyBinDirectory, "uloop.ps1")), Is.False);
-                Assert.That(File.Exists(Path.Combine(legacyBinDirectory, "uloop.cmd")), Is.False);
-                Assert.That(File.Exists(Path.Combine(legacyBinDirectory, "uloop")), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenForwardingShimsExistDeletesThem()
-        {
-            // Verifies that forwarders written by older native installs are treated as package-owned cleanup targets.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeDirectory = Path.Combine(tempRoot, "native");
-            string nativeUloopPath = Path.Combine(nativeDirectory, "uloop.exe");
-            string powerShellShimPath = Path.Combine(legacyBinDirectory, "uloop.ps1");
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(nativeDirectory);
-            File.WriteAllText(nativeUloopPath, "native-binary");
-            File.WriteAllText(powerShellShimPath, $"& '{nativeUloopPath}' @args");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.Exists(powerShellShimPath), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenForwardingShimTargetsPreviousDefaultInstallDeletesIt()
-        {
-            // Verifies that stale forwarders are cleaned even when they reference an older native install path.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeUloopPath = Path.Combine(tempRoot, "custom", "uloop.exe");
-            string oldNativeUloopPath = Path.Combine(
-                "C:\\Users\\masamichi\\AppData\\Local",
-                CliConstants.WINDOWS_PROGRAMS_DIR_NAME,
-                CliConstants.NATIVE_INSTALL_DIR_NAME,
-                CliConstants.NATIVE_INSTALL_BIN_DIR_NAME,
-                CliConstants.GLOBAL_WINDOWS_COMMAND_NAME);
-            string commandShimPath = Path.Combine(legacyBinDirectory, "uloop.cmd");
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(Path.GetDirectoryName(nativeUloopPath));
-            File.WriteAllText(commandShimPath, $"@\"{oldNativeUloopPath}\" %*");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.Exists(commandShimPath), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenLegacyGoCliDispatcherShimExistsDeletesIt()
-        {
-            // Verifies that stale package-owned GoCli dispatcher shims do not remain earlier in PATH.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeUloopPath = Path.Combine(tempRoot, "native", "uloop.exe");
-            string commandShimPath = Path.Combine(legacyBinDirectory, "uloop.cmd");
-            string legacyDispatcherPath = Path.Combine(
-                "Packages",
-                "src",
-                CliConstants.LEGACY_GO_CLI_PACKAGE_DIR_NAME,
-                CliConstants.DIST_DIR_NAME,
-                "windows-amd64",
-                CliConstants.GLOBAL_DISPATCHER_WINDOWS_BUNDLE_NAME);
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(Path.GetDirectoryName(nativeUloopPath));
-            File.WriteAllText(commandShimPath, $"@\"{legacyDispatcherPath}\" %*");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.Exists(commandShimPath), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void CleanupLegacyCommandShimsInDirectory_WhenCommandIsNotPackageOwnedPreservesFile()
-        {
-            // Verifies that unrelated user commands are not overwritten by legacy cleanup.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string nativeUloopPath = Path.Combine(tempRoot, "native", "uloop.exe");
-            string commandPath = Path.Combine(legacyBinDirectory, "uloop.ps1");
-            string customCommand = "Write-Host 'custom'";
-
-            Directory.CreateDirectory(legacyBinDirectory);
-            Directory.CreateDirectory(Path.GetDirectoryName(nativeUloopPath));
-            File.WriteAllText(nativeUloopPath, "native-binary");
-            File.WriteAllText(commandPath, customCommand);
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.CleanupLegacyCommandShimsInDirectory(
-                    legacyBinDirectory,
-                    nativeUloopPath);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.ReadAllText(commandPath), Is.EqualTo(customCommand));
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void RemoveUnusedLegacyBinDirectoryFromPath_WhenOnlyNodeModulesRemainRemovesPath()
-        {
-            // Verifies that the legacy bin directory is removed from PATH only after command shims are gone.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string userPath = $"C:\\Tools;{legacyBinDirectory};C:\\Other";
-            string processPath = $"{legacyBinDirectory};C:\\ProcessTools";
-            string capturedUserPath = null;
-            string capturedProcessPath = null;
-
-            Directory.CreateDirectory(Path.Combine(legacyBinDirectory, "node_modules"));
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.RemoveUnusedLegacyBinDirectoryFromPath(
-                    legacyBinDirectory,
-                    RuntimePlatform.WindowsEditor,
-                    (name, target) => userPath,
-                    (name, value, target) => { capturedUserPath = value; },
-                    name => processPath,
-                    (name, value) => { capturedProcessPath = value; });
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(capturedUserPath, Is.EqualTo("C:\\Tools;C:\\Other"));
-                Assert.That(capturedProcessPath, Is.EqualTo("C:\\ProcessTools"));
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void RemoveUnusedLegacyBinDirectoryFromPath_WhenOtherCommandsRemainKeepsPath()
-        {
-            // Verifies that other global command shims keep the legacy bin directory in PATH.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string legacyBinDirectory = Path.Combine(tempRoot, "npm");
-            string capturedUserPath = null;
-            string capturedProcessPath = null;
-
-            Directory.CreateDirectory(Path.Combine(legacyBinDirectory, "node_modules"));
-            File.WriteAllText(Path.Combine(legacyBinDirectory, "npm.cmd"), "npm");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.RemoveUnusedLegacyBinDirectoryFromPath(
-                    legacyBinDirectory,
-                    RuntimePlatform.WindowsEditor,
-                    (name, target) => legacyBinDirectory,
-                    (name, value, target) => { capturedUserPath = value; },
-                    name => legacyBinDirectory,
-                    (name, value) => { capturedProcessPath = value; });
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(capturedUserPath, Is.Null);
-                Assert.That(capturedProcessPath, Is.Null);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
         public void FinishSuccessfulInstall_WhenPathPersistenceFailsReturnsPathFailure()
         {
             // Verifies that PATH persistence failure is reported after the current process PATH is updated.
@@ -596,7 +463,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "C:\\Users\\masamichi\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor,
                 platform => { appliedCurrentPath = true; },
-                (installDirectory, platform) => new CliInstallResult(true, ""),
                 (installDirectory, platform) => new CliInstallResult(false, "path failed"));
 
             Assert.That(result.Success, Is.False);

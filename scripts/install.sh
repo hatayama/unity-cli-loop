@@ -4,6 +4,8 @@ set -eu
 REPOSITORY="hatayama/unity-cli-loop"
 INSTALL_DIR="${ULOOP_INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${ULOOP_VERSION:-latest}"
+LATEST_VERSION="latest"
+LATEST_BETA_VERSION="latest-beta"
 
 report_path_shadowing() {
   resolved_uloop=$(command -v uloop 2>/dev/null || true)
@@ -59,12 +61,110 @@ detect_installed_command_name() {
   esac
 }
 
+infer_npm_prefix_from_uloop_path() {
+  command_path=$1
+
+  case "$command_path" in
+    */bin/uloop|*/bin/uloop.exe)
+      bin_dir=${command_path%/*}
+      echo "${bin_dir%/bin}"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+is_legacy_npm_uloop_path() {
+  command_path=$1
+
+  if [ -z "$command_path" ]; then
+    return 1
+  fi
+
+  if [ -L "$command_path" ]; then
+    link_target=$(readlink "$command_path" 2>/dev/null || true)
+    case "$link_target" in
+      *node_modules/uloop-cli*|*node_modules\\uloop-cli*) return 0 ;;
+    esac
+  fi
+
+  if [ -f "$command_path" ] && grep -F "node_modules/uloop-cli" "$command_path" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
+print_legacy_npm_manual_removal() {
+  legacy_uloop=$1
+  legacy_prefix=$2
+
+  echo "Could not remove the legacy npm package automatically."
+  if [ -n "$legacy_uloop" ]; then
+    echo "Legacy uloop command: $legacy_uloop"
+  fi
+
+  if [ -n "$legacy_prefix" ]; then
+    echo "Run this manually if that command still shadows the native dispatcher:"
+    echo "  npm uninstall -g --prefix \"$legacy_prefix\" uloop-cli"
+    return
+  fi
+
+  echo "Run this manually if the old npm command still shadows the native dispatcher:"
+  echo "  npm uninstall -g uloop-cli"
+}
+
+try_remove_legacy_npm_package() {
+  legacy_uloop=$1
+  expected_uloop=$2
+
+  if [ -n "$expected_uloop" ] && { [ "$legacy_uloop" = "$expected_uloop" ] || [ "$legacy_uloop.exe" = "$expected_uloop" ]; }; then
+    return
+  fi
+
+  legacy_prefix=""
+  if [ -n "$legacy_uloop" ] && is_legacy_npm_uloop_path "$legacy_uloop"; then
+    legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
+  fi
+
+  if [ -z "$legacy_prefix" ]; then
+    print_legacy_npm_manual_removal "$legacy_uloop" ""
+    return
+  fi
+
+  if ! command -v npm >/dev/null 2>&1; then
+    print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
+    return
+  fi
+
+  if [ -n "$legacy_prefix" ]; then
+    if npm uninstall -g --prefix "$legacy_prefix" uloop-cli; then
+      if [ -e "$legacy_uloop" ] || [ -L "$legacy_uloop" ]; then
+        print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
+      else
+        echo "Removed legacy npm package: uloop-cli"
+      fi
+      return
+    fi
+
+    print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
+    return
+  fi
+}
+
 find_latest_asset_url() {
+  release_channel=$1
   page=1
 
   while :; do
     releases_json=$(curl -fsSL "https://api.github.com/repos/$REPOSITORY/releases?per_page=100&page=$page")
-    asset_url=$(printf '%s\n' "$releases_json" | awk -v asset_name="$asset_name" '
+    asset_url=$(printf '%s\n' "$releases_json" | awk -v asset_name="$asset_name" -v release_channel="$release_channel" '
+      /"tag_name":/ {
+        tag_name = $0
+        sub(/^[[:space:]]*"tag_name": "/, "", tag_name)
+        sub(/",?[[:space:]]*$/, "", tag_name)
+      }
       /"draft":/ {
         draft = ($0 ~ /true/)
       }
@@ -72,7 +172,13 @@ find_latest_asset_url() {
         prerelease = ($0 ~ /true/)
       }
       /"browser_download_url":/ {
-        if (draft || prerelease) {
+        if (draft) {
+          next
+        }
+        if (release_channel == "stable" && prerelease) {
+          next
+        }
+        if (release_channel == "beta" && (!prerelease || index(tolower(tag_name), "-beta.") == 0)) {
           next
         }
 
@@ -106,15 +212,19 @@ find_latest_asset_url() {
 }
 
 set_download_urls() {
-  if [ "$VERSION" != "latest" ]; then
+  if [ "$VERSION" != "$LATEST_VERSION" ] && [ "$VERSION" != "$LATEST_BETA_VERSION" ]; then
     download_url="https://github.com/$REPOSITORY/releases/download/$VERSION/$asset_name"
     checksum_url="$download_url.sha256"
     return
   fi
 
-  download_url=$(find_latest_asset_url)
+  if [ "$VERSION" = "$LATEST_BETA_VERSION" ]; then
+    download_url=$(find_latest_asset_url "beta")
+  else
+    download_url=$(find_latest_asset_url "stable")
+  fi
   if [ -z "$download_url" ]; then
-    echo "Could not find a latest release asset named $asset_name." >&2
+    echo "Could not find a $VERSION release asset named $asset_name." >&2
     echo "Set ULOOP_VERSION to a release tag that provides this asset." >&2
     exit 1
   fi
@@ -143,6 +253,11 @@ extract_asset() {
 
 asset_name=$(detect_asset_name)
 installed_command_name=$(detect_installed_command_name)
+legacy_uloop_before_install=$(command -v uloop 2>/dev/null || true)
+legacy_npm_uloop_detected_before_install=0
+if is_legacy_npm_uloop_path "$legacy_uloop_before_install"; then
+  legacy_npm_uloop_detected_before_install=1
+fi
 download_url=""
 checksum_url=""
 set_download_urls
@@ -185,8 +300,20 @@ if [ "$installed_command_name" = "uloop.exe" ]; then
 fi
 install -m 0755 "$tmp_dir/$installed_command_name" "$staged_uloop_path"
 "$staged_uloop_path" --version >/dev/null
-mv -f "$staged_uloop_path" "$INSTALL_DIR/$installed_command_name"
+final_uloop_path="$INSTALL_DIR/$installed_command_name"
+legacy_npm_removed_before_install=0
+if [ "$legacy_uloop_before_install" = "$final_uloop_path" ] || [ "$legacy_uloop_before_install.exe" = "$final_uloop_path" ]; then
+  if [ "$legacy_npm_uloop_detected_before_install" -eq 1 ]; then
+    try_remove_legacy_npm_package "$legacy_uloop_before_install" ""
+    legacy_npm_removed_before_install=1
+  fi
+  legacy_uloop_before_install=""
+fi
+mv -f "$staged_uloop_path" "$final_uloop_path"
 staged_uloop_path=""
+if [ "$legacy_npm_removed_before_install" -eq 0 ] && [ "$legacy_npm_uloop_detected_before_install" -eq 1 ]; then
+  try_remove_legacy_npm_package "$legacy_uloop_before_install" "$final_uloop_path"
+fi
 
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;

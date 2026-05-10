@@ -1,4 +1,4 @@
-
+#if ULOOP_HAS_INPUT_SYSTEM
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     // Keeps mouse input simulation state recovery inside the simulate-mouse-input tool module.
@@ -13,3 +13,4 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
     }
 }
+#endif

@@ -468,7 +468,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabled(skill, disabledTools))
+                    .Where(skill => IsSkillDisabledByToolSettings(
+                        skill,
+                        disabledTools))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> enabledSkills = allSkills
                     .Except(disabledSkills)
@@ -522,7 +524,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabled(skill, disabledTools))
+                    .Where(skill => IsSkillDisabledByToolSettings(
+                        skill,
+                        disabledTools))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> toolSkills = allSkills
                     .Where(skill => IsSkillForTool(skill, toolName))
@@ -638,7 +642,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static bool IsSkillDisabled(
+        internal static bool IsSkillDisabledByToolSettings(
             SkillInstallLayout.SkillSourceInfo skill,
             IReadOnlyCollection<string> disabledTools)
         {

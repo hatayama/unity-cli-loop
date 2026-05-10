@@ -65,6 +65,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 > [!NOTE]
 > `com.unity.inputsystem` is now an optional dependency. Install it only if you want Input System features such as `simulate-keyboard`, `simulate-mouse-input`, `record-input`, `replay-input`, and the Recordings window.
+> `com.unity.test-framework` is also optional. Install it only if you want the `run-tests` tool to execute Unity Test Runner.
 
 # Quickstart
 
@@ -89,11 +90,11 @@ On Windows PowerShell:
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-On Windows, set `ULOOP_REMOVE_LEGACY=1` to remove package-owned legacy `uloop` launcher shims and an unused legacy command bin directory from User PATH:
+After installing the native dispatcher, the installer automatically tries to remove the old npm package with `npm uninstall -g uloop-cli`.
+If npm is unavailable or the old command belongs to a different Node prefix, the installer prints the manual command to run:
 
-```powershell
-$env:ULOOP_REMOVE_LEGACY = "1"
-irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```bash
+npm uninstall -g uloop-cli
 ```
 
 If the Unity UI path is not available or your terminal still resolves `uloop` to the v3 CLI, remove that command first, then install the v2 version you want:

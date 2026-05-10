@@ -251,7 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // .zshrc/.bashrc, so version-manager paths may be missed — but $SHELL being unset
         // is extremely rare on macOS/Linux and there is no reliable way to detect the user's
         // preferred shell without it.
-        private static string GetUserShell()
+        internal static string GetUserShell()
         {
             string shell = System.Environment.GetEnvironmentVariable("SHELL");
             // $SHELL is external input — validate the path exists to avoid Process.Start exceptions

@@ -127,7 +127,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         {
             HashSet<string> internalToolNames = _internalToolNameProvider.GetInternalToolNames(projectRoot);
             return _tools.Values
-                .Where(tool => _toolSettingsService.IsToolEnabled(tool.ToolName))
+                .Where(tool => ToolExecutionAvailability.ShouldExposeInRegisteredTools(
+                    tool.ToolName,
+                    _toolSettingsService.IsToolEnabled(tool.ToolName)))
                 .Where(tool => !internalToolNames.Contains(tool.ToolName))
                 .Select(tool =>
             {

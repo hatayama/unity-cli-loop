@@ -1,5 +1,7 @@
 using System;
+#if ULOOP_HAS_TEST_FRAMEWORK
 using UnityEditor.TestTools.TestRunner.Api;
+#endif
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -18,7 +20,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         [SerializeField] public int failedCount;
         [SerializeField] public int skippedCount;
         [SerializeField] public string xmlPath;
+
+        public static SerializableTestResult CreateTestFrameworkUnavailable()
+        {
+            return new SerializableTestResult
+            {
+                success = false,
+                message = RunTestsResponse.TestFrameworkUnavailableMessage,
+                completedAt = DateTime.UtcNow.ToString("o"),
+                testCount = 0,
+                passedCount = 0,
+                failedCount = 0,
+                skippedCount = 0,
+                xmlPath = null
+            };
+        }
         
+#if ULOOP_HAS_TEST_FRAMEWORK
         /// <summary>
         /// Convert from ITestResultAdaptor to SerializableTestResult
         /// </summary>
@@ -133,5 +151,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
         }
+#endif
     }
 }

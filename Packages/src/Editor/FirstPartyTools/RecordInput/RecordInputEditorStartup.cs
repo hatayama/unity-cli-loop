@@ -1,4 +1,4 @@
-
+#if ULOOP_HAS_INPUT_SYSTEM
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     // Keeps recording state recovery inside the record-input tool module.
@@ -13,3 +13,4 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
     }
 }
+#endif
