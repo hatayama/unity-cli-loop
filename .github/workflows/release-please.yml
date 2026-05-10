@@ -46,6 +46,17 @@ jobs:
           echo "branch=${TARGET_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
 
+      - name: 🧭 Detect release commit
+        id: release_commit
+        run: |
+          COMMIT_SUBJECT="$(git log -1 --format=%s)"
+          if scripts/is-release-please-release-commit.sh "${COMMIT_SUBJECT}"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Release commit detected; release-please will wait for the next non-release commit."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # ── Debug: Show repository structure ─────────────────────────
       - name: 🕵️ Show file tree
         run: |
@@ -59,6 +70,7 @@ jobs:
           test -f Packages/src/package.json && echo "✅ Unity package.json OK"
 
       - name: 🏷️ Sync published release PR labels
+        if: steps.release_commit.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_BRANCH: ${{ steps.target.outputs.branch }}
@@ -67,6 +79,7 @@ jobs:
 
       # ── Execute release-please ───────────────────────────
       - name: 🚀 Run release‑please
+        if: steps.release_commit.outputs.skip != 'true'
         id: release
         uses: googleapis/release-please-action@v4
         with:
@@ -77,20 +90,20 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Go for release PR binary sync
-        if: steps.target.outputs.branch == 'v3-beta'
+        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true'
         uses: actions/setup-go@v6
         with:
           go-version-file: Packages/src/Cli~/.go-version
           cache-dependency-path: Packages/src/Cli~/**/go.sum
 
       - name: Install golangci-lint for release PR binary sync
-        if: steps.target.outputs.branch == 'v3-beta'
+        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true'
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Sync native CLI binaries into release PR
-        if: steps.target.outputs.branch == 'v3-beta'
+        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_BRANCH: ${{ steps.target.outputs.branch }}
