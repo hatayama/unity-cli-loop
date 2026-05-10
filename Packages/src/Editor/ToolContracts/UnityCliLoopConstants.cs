@@ -35,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         
         // Editor settings
         public const string SETTINGS_FILE_NAME = "UnityCliLoopSettings.json";
+        public const string LEGACY_SETTINGS_FILE_NAME = "UnityMcpSettings.json";
         public const string USER_SETTINGS_FOLDER = "UserSettings";
         
         // Scripting define symbols

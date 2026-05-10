@@ -112,10 +112,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 GetEditorSettingsService().GetLastSeenSetupWizardVersion();
             Rect windowPosition = CreateCenteredRect(EditorGUIUtility.GetMainWindowPosition(), MinimumWindowSize);
             SetupWizardWindow window = CreateInstance<SetupWizardWindow>();
-            PrepareForOpen(window, WindowTitle, windowPosition, lastSeenSetupWizardVersionBeforeOpen);
+            PrepareForOpen(
+                window,
+                WindowTitle,
+                windowPosition,
+                lastSeenSetupWizardVersionBeforeOpen,
+                shouldRecordVersion);
             window.ShowUtility();
             window.ScheduleResizeToContent();
-            MaybeRecordLastSeenVersion(shouldRecordVersion, currentVersion);
         }
 
         internal static Rect WithContentSize(Rect currentRect, Vector2 contentSize, Vector2 frameSize)
@@ -157,7 +161,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SetupWizardWindow window,
             string title,
             Rect position,
-            string lastSeenSetupWizardVersionBeforeOpen)
+            string lastSeenSetupWizardVersionBeforeOpen,
+            bool shouldRecordVersionAfterCreateGui)
         {
             Debug.Assert(window != null, "window must not be null");
             Debug.Assert(!string.IsNullOrEmpty(title), "title must not be null or empty");
@@ -166,6 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             window.position = position;
             window._lastSeenSetupWizardVersionBeforeOpen =
                 lastSeenSetupWizardVersionBeforeOpen ?? string.Empty;
+            window._shouldRecordLastSeenVersionAfterCreateGui = shouldRecordVersionAfterCreateGui;
         }
 
         private static void FocusExistingWindow()
@@ -222,6 +228,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private bool _installSkillsFlat;
         [SerializeField]
         private string _lastSeenSetupWizardVersionBeforeOpen = string.Empty;
+        [SerializeField]
+        private bool _shouldRecordLastSeenVersionAfterCreateGui;
         private IVisualElementScheduledItem _initialRefreshScheduledItem;
         private IVisualElementScheduledItem _resizeScheduledItem;
         private CancellationTokenSource _skillInstallStateRefreshCts;
@@ -240,6 +248,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ApplyInitialCheckingState();
             ScheduleInitialRefresh();
             ScheduleResizeToContent();
+            RecordLastSeenVersionAfterSuccessfulCreateGui();
         }
 
         private void InitializeApplicationServices()
@@ -252,6 +261,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _shouldUseFirstInstallSkillsUi = ShouldUseFirstInstallSkillsUi(
                 _lastSeenSetupWizardVersionBeforeOpen);
+        }
+
+        private void RecordLastSeenVersionAfterSuccessfulCreateGui()
+        {
+            MaybeRecordLastSeenVersion(
+                _shouldRecordLastSeenVersionAfterCreateGui,
+                UnityCliLoopConstants.PackageInfo.version);
+            _shouldRecordLastSeenVersionAfterCreateGui = false;
         }
 
         private void OnDisable()
