@@ -84,10 +84,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     BuildInstallerScriptUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME),
                     releaseTag)
                 : BuildPosixLocalInstallScriptCommand(posixLocalScriptPath, releaseTag);
+            string loginShellCommand = BuildLoginShellPosixInstallScriptCommand(posixCommand);
             return new NativeCliInstallCommand(
                 posixShellPath,
-                $"-l -i -c {QuoteProcessArgument(posixCommand)}",
-                posixCommand);
+                $"-l -i -c {QuoteProcessArgument(loginShellCommand)}",
+                loginShellCommand);
         }
 
         public static async Task<CliInstallResult> InstallAsync(
@@ -847,6 +848,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
 
             return $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} sh {QuotePosixShellValue(scriptPath)}";
+        }
+
+        internal static string BuildLoginShellPosixInstallScriptCommand(string posixCommand)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(posixCommand), "posixCommand must not be null or empty");
+            return $"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c {QuotePosixShellValue(posixCommand)}";
         }
 
         private static string BuildWindowsRemoteInstallScriptCommand(string scriptUrl, string releaseTag)

@@ -118,6 +118,11 @@ function Invoke-LegacyNpmPackageRemoval {
         [string]$ExpectedUloopPath
     )
 
+    if ($LegacyUloopPath `
+        -and [string]::Equals($LegacyUloopPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+
     $NpmCommand = Get-Command npm -ErrorAction SilentlyContinue | Select-Object -First 1
     $LegacyPrefix = $null
     $LegacyCommandShadowsNative = $LegacyUloopPath `
@@ -192,6 +197,12 @@ try {
     Copy-Item -Path (Join-Path $TempDir "uloop.exe") -Destination $StagedUloopPath -Force
     Assert-UloopVersionSucceeds -UloopPath $StagedUloopPath -Quiet
     $FinalUloopPath = Join-Path $InstallDir "uloop.exe"
+    $LegacyUloopBeforeInstallPath = $LegacyUloopBeforeInstallCommand.Source
+    if ($LegacyUloopBeforeInstallPath `
+        -and [string]::Equals($LegacyUloopBeforeInstallPath, $FinalUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopBeforeInstallPath -ExpectedUloopPath ""
+        $LegacyUloopBeforeInstallPath = $null
+    }
     Copy-Item -Path $StagedUloopPath -Destination $FinalUloopPath -Force
     Remove-Item -Path $StagedUloopPath -Force
     $StagedUloopPath = $null
@@ -210,7 +221,7 @@ try {
     }
 
     Assert-UloopVersionSucceeds -UloopPath $FinalUloopPath
-    Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopBeforeInstallCommand.Source -ExpectedUloopPath $FinalUloopPath
+    Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopBeforeInstallPath -ExpectedUloopPath $FinalUloopPath
     Report-PathShadowing
 }
 finally {

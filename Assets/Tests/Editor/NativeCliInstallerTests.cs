@@ -27,10 +27,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(command.FileName, Is.EqualTo("/bin/zsh"));
             Assert.That(command.Arguments, Does.Contain("-l -i -c"));
             Assert.That(command.Arguments, Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.sh"));
-            Assert.That(command.Arguments, Does.Contain("ULOOP_VERSION='v3.0.0-beta.3'"));
+            Assert.That(command.Arguments, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
+            Assert.That(command.Arguments, Does.Contain("ULOOP_VERSION"));
+            Assert.That(command.Arguments, Does.Contain("v3.0.0-beta.3"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
+        }
+
+        [Test]
+        public void GetInstallCommand_OnMacDelegatesPosixSnippetThroughSh()
+        {
+            // Verifies that fish or other login shells only load environment before POSIX script execution.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
+                RuntimePlatform.OSXEditor,
+                "3.0.0-beta.3",
+                false,
+                "/opt/homebrew/bin/fish");
+
+            Assert.That(command.FileName, Is.EqualTo("/opt/homebrew/bin/fish"));
+            Assert.That(command.Arguments, Does.Contain("-l -i -c"));
+            Assert.That(command.ManualCommand, Does.StartWith($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c "));
+            Assert.That(command.ManualCommand, Does.Contain("tmp_script=$(mktemp)"));
+            Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
         }
 
         [Test]
@@ -125,8 +144,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(command.FileName, Is.EqualTo("/bin/zsh"));
                 Assert.That(command.Arguments, Does.Contain("-l -i -c"));
-                Assert.That(command.ManualCommand, Does.Contain($"sh '{scriptPath}'"));
-                Assert.That(command.ManualCommand, Does.Contain("ULOOP_VERSION='v3.0.0-beta.3'"));
+                Assert.That(command.ManualCommand, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
+                Assert.That(command.ManualCommand, Does.Contain(scriptPath));
+                Assert.That(command.ManualCommand, Does.Contain("ULOOP_VERSION"));
+                Assert.That(command.ManualCommand, Does.Contain("v3.0.0-beta.3"));
                 Assert.That(command.ManualCommand, Does.Not.Contain("curl -fsSL"));
                 Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
             }

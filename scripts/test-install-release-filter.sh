@@ -276,6 +276,41 @@ test_posix_removes_npm_package_even_when_native_command_is_first() {
   fi
 }
 
+test_posix_removes_npm_package_before_replacing_same_bin_path() {
+  work_dir="$TMP_DIR/posix-same-bin"
+  mock_bin="$work_dir/bin"
+  legacy_bin="$work_dir/npm-global/bin"
+  legacy_package_dist="$work_dir/npm-global/lib/node_modules/uloop-cli/dist"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  legacy_uloop="$legacy_bin/uloop"
+  mkdir -p "$work_dir" "$legacy_bin" "$legacy_package_dist"
+  : > "$curl_log"
+  : > "$npm_log"
+  printf '%s\n' 'legacy node cli bundle' > "$legacy_package_dist/cli.bundle.cjs"
+  chmod +x "$legacy_package_dist/cli.bundle.cjs"
+  ln -s "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs" "$legacy_uloop"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$legacy_bin:$mock_bin:$ORIGINAL_PATH" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$legacy_bin" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    LEGACY_ULOOP="$legacy_uloop" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$npm_log" "uninstall -g --prefix $work_dir/npm-global uloop-cli"
+  if [ ! -x "$legacy_uloop" ]; then
+    echo "Expected native uloop to remain installed after same-bin npm removal: $legacy_uloop" >&2
+    exit 1
+  fi
+  assert_contains "$work_dir/output.txt" "uloop mock version"
+}
+
 test_powershell_latest_skips_prerelease_assets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($Release.draft -or $Release.prerelease) {'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '"uninstall", "-g", "--prefix", $LegacyPrefix, "uloop-cli"'
@@ -286,4 +321,5 @@ test_powershell_latest_skips_prerelease_assets() {
 
 test_posix_latest_skips_prerelease_assets
 test_posix_removes_npm_package_even_when_native_command_is_first
+test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets

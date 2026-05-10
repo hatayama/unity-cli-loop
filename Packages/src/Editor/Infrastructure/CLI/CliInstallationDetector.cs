@@ -115,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CliInstallationDetection packageOwnedDetection,
             CliInstallationDetection shellDetection)
         {
-            return !string.IsNullOrEmpty(shellDetection.Version)
+            return !string.IsNullOrEmpty(shellDetection.ExecutablePath)
                 ? shellDetection
                 : packageOwnedDetection;
         }

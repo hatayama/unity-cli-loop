@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string POSIX_PATH_ENVIRONMENT_VARIABLE = "PATH";
         public const string WINDOWS_LOCAL_APPDATA_ENVIRONMENT_VARIABLE = "LOCALAPPDATA";
         public const string WINDOWS_PATH_ENVIRONMENT_VARIABLE = "Path";
+        public const string POSIX_SHELL_EXECUTABLE_PATH = "/bin/sh";
         public const string POSIX_LOCAL_DIR_NAME = ".local";
         public const string WINDOWS_PROGRAMS_DIR_NAME = "Programs";
         public const string NATIVE_INSTALL_DIR_NAME = "uloop";

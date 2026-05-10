@@ -48,6 +48,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void SelectPreferredDetection_WhenShellCommandExistsButVersionFailsUsesShellPath()
+        {
+            // Verifies that a broken PATH command is surfaced instead of hidden by the package-owned binary.
+            CliInstallationDetection packageOwnedDetection = new(
+                "3.0.0-beta.3",
+                "/Users/masamichi/.local/bin/uloop");
+            CliInstallationDetection shellDetection = new(
+                null,
+                "/Users/masamichi/.npm-global/bin/uloop");
+
+            CliInstallationDetection result = CliInstallationDetector.SelectPreferredDetection(
+                packageOwnedDetection,
+                shellDetection);
+
+            Assert.That(result.Version, Is.Null);
+            Assert.That(result.ExecutablePath, Is.EqualTo("/Users/masamichi/.npm-global/bin/uloop"));
+        }
+
+        [Test]
         public void SelectPreferredDetection_WhenPackageOwnedDispatcherMissingUsesShellPath()
         {
             // Verifies that legacy CLI installs still surface as update candidates.
