@@ -721,6 +721,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 GetPathComparison(platform));
         }
 
+        internal static string GetCurrentUserGlobalCliInstallPath(RuntimePlatform platform)
+        {
+            string installDirectory = GetInstallDirectoryForCurrentUser(platform);
+            return string.IsNullOrWhiteSpace(installDirectory)
+                ? null
+                : GetGlobalCliInstallPath(installDirectory, platform);
+        }
+
         private static string GetInstallDirectoryForCurrentUser(RuntimePlatform platform)
         {
             string configuredInstallDirectory = Environment.GetEnvironmentVariable(CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE);

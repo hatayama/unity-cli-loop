@@ -106,10 +106,50 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static CliInstallationDetection DetectCliInstallationBlocking(RuntimePlatform platform, CancellationToken ct)
         {
+            CliInstallationDetection packageOwnedDetection = DetectPackageOwnedCliInstallationBlocking(platform, ct);
+            if (!string.IsNullOrEmpty(packageOwnedDetection.Version))
+            {
+                return SelectPreferredDetection(packageOwnedDetection, default);
+            }
+
+            CliInstallationDetection shellDetection = DetectShellCliInstallationBlocking(platform, ct);
+            return SelectPreferredDetection(packageOwnedDetection, shellDetection);
+        }
+
+        internal static CliInstallationDetection SelectPreferredDetection(
+            CliInstallationDetection packageOwnedDetection,
+            CliInstallationDetection shellDetection)
+        {
+            return !string.IsNullOrEmpty(packageOwnedDetection.Version)
+                ? packageOwnedDetection
+                : shellDetection;
+        }
+
+        private static CliInstallationDetection DetectPackageOwnedCliInstallationBlocking(
+            RuntimePlatform platform,
+            CancellationToken ct)
+        {
+            string executablePath = NativeCliInstaller.GetCurrentUserGlobalCliInstallPath(platform);
+            if (string.IsNullOrEmpty(executablePath) || !File.Exists(executablePath))
+            {
+                return new CliInstallationDetection(null, executablePath);
+            }
+
+            return DetectCliInstallationAtExecutablePath(executablePath, ct);
+        }
+
+        private static CliInstallationDetection DetectShellCliInstallationBlocking(RuntimePlatform platform, CancellationToken ct)
+        {
             string executablePath = NodeEnvironmentResolver.FindExecutablePathAtPlatform(
                 CliConstants.EXECUTABLE_NAME,
                 platform);
-            // FindExecutablePath resolves .cmd shims on Windows via 'where' command
+            return DetectCliInstallationAtExecutablePath(executablePath, ct);
+        }
+
+        private static CliInstallationDetection DetectCliInstallationAtExecutablePath(
+            string executablePath,
+            CancellationToken ct)
+        {
             string fileName = executablePath ?? CliConstants.EXECUTABLE_NAME;
 
             ProcessStartInfo startInfo = new()            {
