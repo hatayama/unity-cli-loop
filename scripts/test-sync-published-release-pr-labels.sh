@@ -29,6 +29,11 @@ if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
 fi
 
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
+  if [ -n "$GH_RELEASE_VIEW_ERROR" ]; then
+    printf '%s\n' "$GH_RELEASE_VIEW_ERROR" >&2
+    exit 1
+  fi
+
   release_tag=$3
   release_json=$(printf '%s\n' "$GH_RELEASES_JSON" | jq -c --arg tag "$release_tag" '.[$tag] // empty')
   if [ -z "$release_json" ]; then
@@ -77,6 +82,7 @@ run_case() {
   name=$1
   pr_list_json=$2
   releases_json=$3
+  release_view_error=${4:-}
 
   work_dir="$TMP_DIR/$name"
   mkdir -p "$work_dir"
@@ -90,6 +96,7 @@ run_case() {
       GH_LOG="$work_dir/gh.log" \
       GH_PR_LIST_JSON="$pr_list_json" \
       GH_RELEASES_JSON="$releases_json" \
+      GH_RELEASE_VIEW_ERROR="$release_view_error" \
       TARGET_BRANCH=v3-beta \
       GITHUB_REPOSITORY=hatayama/unity-cli-loop \
       "$SCRIPT" > output.txt 2> stderr.txt
@@ -142,7 +149,20 @@ test_exits_when_no_pending_release_pr_exists() {
   assert_not_contains "$TMP_DIR/no-pending/gh.log" "pr edit"
 }
 
+# Verifies release API failures stop the sync instead of hiding stale labels.
+test_fails_when_release_lookup_fails_unexpectedly() {
+  run_case release-api-failure \
+    '[{"number":1082,"title":"chore(v3-beta): release 3.0.0-beta.3","mergeCommit":{"oid":"abc123"}}]' \
+    '{}' \
+    'GraphQL: Resource not accessible by integration'
+
+  assert_contains "$TMP_DIR/release-api-failure/status.txt" "2"
+  assert_contains "$TMP_DIR/release-api-failure/stderr.txt" "GraphQL: Resource not accessible by integration"
+  assert_not_contains "$TMP_DIR/release-api-failure/gh.log" "pr edit"
+}
+
 test_marks_stale_pending_release_pr
 test_keeps_draft_release_pending
 test_keeps_mismatched_release_pending
 test_exits_when_no_pending_release_pr_exists
+test_fails_when_release_lookup_fails_unexpectedly

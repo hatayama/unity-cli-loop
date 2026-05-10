@@ -67,14 +67,25 @@ printf '%s\n' "$PENDING_RELEASE_PRS" | jq -c '.[]' | while IFS= read -r release_
   fi
 
   release_tag="v$release_version"
-  if release_is_published_at_sha "$release_tag" "$release_pr_sha"; then
-    gh pr edit "$release_pr_number" \
-      --repo "$REPO_FULL_NAME" \
-      --remove-label "$PENDING_LABEL" \
-      --add-label "$TAGGED_LABEL"
-    echo "Marked release PR #$release_pr_number as tagged for $release_tag."
-    continue
-  fi
+  set +e
+  release_is_published_at_sha "$release_tag" "$release_pr_sha"
+  release_status=$?
+  set -e
 
-  echo "Pending release PR #$release_pr_number does not have a matching published release yet: $release_tag"
+  case "$release_status" in
+    0)
+      gh pr edit "$release_pr_number" \
+        --repo "$REPO_FULL_NAME" \
+        --remove-label "$PENDING_LABEL" \
+        --add-label "$TAGGED_LABEL"
+      echo "Marked release PR #$release_pr_number as tagged for $release_tag."
+      ;;
+    1)
+      echo "Pending release PR #$release_pr_number does not have a matching published release yet: $release_tag"
+      continue
+      ;;
+    *)
+      exit "$release_status"
+      ;;
+  esac
 done
