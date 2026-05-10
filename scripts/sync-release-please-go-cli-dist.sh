@@ -4,7 +4,7 @@ set -eu
 : "${TARGET_BRANCH:?TARGET_BRANCH is required}"
 
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
-RELEASE_PR_PREFIX="release-please--branches--$TARGET_BRANCH--"
+RELEASE_PR_BRANCH="release-please--branches--$TARGET_BRANCH"
 DIST_PATHS="
 Packages/src/Cli~/Core~/dist
 "
@@ -14,9 +14,18 @@ RELEASE_PRS=$(gh pr list \
   --state open \
   --base "$TARGET_BRANCH" \
   --label "autorelease: pending" \
-  --json number,headRefName,url)
+  --json number,headRefName,title,url)
 
-MATCHING_RELEASE_PRS=$(printf '%s' "$RELEASE_PRS" | jq --arg prefix "$RELEASE_PR_PREFIX" '[.[] | select(.headRefName | startswith($prefix))]')
+MATCHING_RELEASE_PRS=$(printf '%s' "$RELEASE_PRS" | jq --arg release_branch "$RELEASE_PR_BRANCH" '
+  [
+    .[]
+    | select((.title // "") | test("^chore(\\([^)]*\\))?: release [0-9]"))
+    | select(
+        (.headRefName // "") == $release_branch
+        or ((.headRefName // "") | startswith($release_branch + "--components--"))
+      )
+  ]
+')
 MATCHING_RELEASE_PR_COUNT=$(printf '%s' "$MATCHING_RELEASE_PRS" | jq 'length')
 
 case "$MATCHING_RELEASE_PR_COUNT" in
@@ -35,15 +44,6 @@ esac
 RELEASE_PR_NUMBER=$(printf '%s' "$MATCHING_RELEASE_PRS" | jq -r '.[0].number')
 RELEASE_PR_HEAD_REF=$(printf '%s' "$MATCHING_RELEASE_PRS" | jq -r '.[0].headRefName')
 RELEASE_PR_URL=$(printf '%s' "$MATCHING_RELEASE_PRS" | jq -r '.[0].url')
-
-case "$RELEASE_PR_HEAD_REF" in
-  "$RELEASE_PR_PREFIX"*)
-    ;;
-  *)
-    echo "Unexpected release PR head branch: $RELEASE_PR_HEAD_REF" >&2
-    exit 1
-    ;;
-esac
 
 echo "Syncing native CLI dist files for release PR #$RELEASE_PR_NUMBER: $RELEASE_PR_URL"
 
