@@ -26,7 +26,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string packageVersion,
             bool removeLegacyLaunchers)
         {
+            return BuildInstallCommand(
+                platform,
+                packageVersion,
+                removeLegacyLaunchers,
+                NodeEnvironmentResolver.GetUserShell());
+        }
+
+        internal static NativeCliInstallCommand BuildInstallCommand(
+            RuntimePlatform platform,
+            string packageVersion,
+            bool removeLegacyLaunchers,
+            string posixShellPath)
+        {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(packageVersion), "packageVersion must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(posixShellPath), "posixShellPath must not be null or empty");
             _ = removeLegacyLaunchers;
 
             string releaseTag = BuildReleaseTag(packageVersion);
@@ -45,8 +59,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string posixScriptUrl = BuildInstallerScriptUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME);
             string posixCommand = BuildPosixInstallScriptCommand(posixScriptUrl, releaseTag);
             return new NativeCliInstallCommand(
-                "/bin/sh",
-                $"-c {QuoteProcessArgument(posixCommand)}",
+                posixShellPath,
+                $"-l -i -c {QuoteProcessArgument(posixCommand)}",
                 posixCommand);
         }
 

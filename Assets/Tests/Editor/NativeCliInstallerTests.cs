@@ -18,12 +18,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnMacKeepsCliOnlyCurlInstallerAvailable()
         {
             // Verifies that editor and CLI installs use the same channel installer script, not npm.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
                 "3.0.0-beta.3",
-                false);
+                false,
+                "/bin/zsh");
 
-            Assert.That(command.FileName, Is.EqualTo("/bin/sh"));
+            Assert.That(command.FileName, Is.EqualTo("/bin/zsh"));
+            Assert.That(command.Arguments, Does.Contain("-l -i -c"));
             Assert.That(command.Arguments, Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.sh"));
             Assert.That(command.Arguments, Does.Contain("ULOOP_VERSION='v3.0.0-beta.3'"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
@@ -35,10 +37,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnMacPropagatesInstallerDownloadFailure()
         {
             // Verifies that editor installs do not report success when curl fails before script execution.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
                 "3.0.0-beta.3",
-                false);
+                false,
+                "/bin/zsh");
 
             Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
             Assert.That(command.ManualCommand, Does.Contain(" -o "));
@@ -67,10 +70,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnMacCliOnlyInstallerDoesNotAdvertiseWindowsLegacyCleanup()
         {
             // Verifies that macOS manual commands do not expose old cleanup flags.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
                 "3.0.0-beta.3",
-                true);
+                true,
+                "/bin/zsh");
 
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
