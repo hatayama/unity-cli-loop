@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.4](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.3...v3.0.0-beta.4) (2026-05-10)
+
+
+### Bug Fixes
+
+* Setup now upgrades to the native CLI cleanly ([#1084](https://github.com/hatayama/unity-cli-loop/issues/1084)) ([5d43688](https://github.com/hatayama/unity-cli-loop/commit/5d43688fd3272bd1bfad109dd217762b1077b67a))
+
 ## [3.0.0-beta.3](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.2...v3.0.0-beta.3) (2026-05-09)
 
 
