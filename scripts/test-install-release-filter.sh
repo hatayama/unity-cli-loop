@@ -15,7 +15,7 @@ assert_contains() {
   file=$1
   expected=$2
 
-  if ! grep -F "$expected" "$file" >/dev/null; then
+  if ! grep -F -- "$expected" "$file" >/dev/null; then
     echo "Expected $file to contain: $expected" >&2
     echo "Actual content:" >&2
     cat "$file" >&2
@@ -27,7 +27,7 @@ assert_not_contains() {
   file=$1
   unexpected=$2
 
-  if grep -F "$unexpected" "$file" >/dev/null; then
+  if grep -F -- "$unexpected" "$file" >/dev/null; then
     echo "Expected $file not to contain: $unexpected" >&2
     echo "Actual content:" >&2
     cat "$file" >&2
@@ -314,6 +314,41 @@ test_posix_removes_npm_package_even_when_native_command_is_first() {
   fi
 }
 
+test_posix_does_not_infer_npm_prefix_from_non_npm_command() {
+  work_dir="$TMP_DIR/posix-non-npm-first"
+  mock_bin="$work_dir/bin"
+  non_npm_prefix="$work_dir/homebrew"
+  non_npm_bin="$non_npm_prefix/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  non_npm_uloop="$non_npm_bin/uloop"
+  mkdir -p "$work_dir" "$non_npm_bin"
+  : > "$curl_log"
+  : > "$npm_log"
+  printf '%s\n' '#!/bin/sh' 'echo non npm uloop' > "$non_npm_uloop"
+  chmod +x "$non_npm_uloop"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$non_npm_bin:$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$npm_log" "uninstall -g uloop-cli"
+  assert_not_contains "$npm_log" "--prefix $non_npm_prefix"
+  if [ ! -x "$non_npm_uloop" ]; then
+    echo "Expected non-npm uloop command to remain untouched: $non_npm_uloop" >&2
+    exit 1
+  fi
+}
+
 test_posix_removes_npm_package_before_replacing_same_bin_path() {
   work_dir="$TMP_DIR/posix-same-bin"
   mock_bin="$work_dir/bin"
@@ -356,6 +391,7 @@ test_powershell_latest_skips_prerelease_assets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Test-LegacyNpmUloopPath'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '"uninstall", "-g", "--prefix", $LegacyPrefix, "uloop-cli"'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$NpmArgs = @("uninstall", "-g", "uloop-cli")'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$LegacyCommandIsNpmShim = $LegacyCommandShadowsNative `'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$ReleaseChannel = if ($Version -eq $LatestBetaVersion) { "beta" } else { "stable" }'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if (Test-LegacyNpmUloopPath -CommandPath $LegacyUloopBeforeInstallPath) {'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "ULOOP_REMOVE_LEGACY"
@@ -365,5 +401,6 @@ test_powershell_latest_skips_prerelease_assets() {
 test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
 test_posix_removes_npm_package_even_when_native_command_is_first
+test_posix_does_not_infer_npm_prefix_from_non_npm_command
 test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets

@@ -164,7 +164,9 @@ function Invoke-LegacyNpmPackageRemoval {
     $LegacyPrefix = $null
     $LegacyCommandShadowsNative = $LegacyUloopPath `
         -and -not [string]::Equals($LegacyUloopPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)
-    if ($LegacyCommandShadowsNative) {
+    $LegacyCommandIsNpmShim = $LegacyCommandShadowsNative `
+        -and (Test-LegacyNpmUloopPath -CommandPath $LegacyUloopPath)
+    if ($LegacyCommandIsNpmShim) {
         $LegacyPrefix = Get-NpmPrefixFromUloopPath -CommandPath $LegacyUloopPath
     }
 

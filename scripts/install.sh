@@ -129,7 +129,7 @@ try_remove_legacy_npm_package() {
   fi
 
   legacy_prefix=""
-  if [ -n "$legacy_uloop" ]; then
+  if [ -n "$legacy_uloop" ] && is_legacy_npm_uloop_path "$legacy_uloop"; then
     legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
   fi
 
