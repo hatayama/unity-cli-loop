@@ -67,6 +67,19 @@ assert_contains() {
   fi
 }
 
+assert_file_equals() {
+  file=$1
+  expected=$2
+  actual=$(cat "$file")
+
+  if [ "$actual" != "$expected" ]; then
+    echo "Expected $file to equal: $expected" >&2
+    echo "Actual content:" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+}
+
 assert_not_contains() {
   file=$1
   unexpected=$2
@@ -113,7 +126,7 @@ test_marks_stale_pending_release_pr() {
     '[{"number":1082,"title":"chore(v3-beta): release 3.0.0-beta.3","mergeCommit":{"oid":"abc123"}}]' \
     '{"v3.0.0-beta.3":{"isDraft":false,"targetCommitish":"abc123"}}'
 
-  assert_contains "$TMP_DIR/marks-stale/status.txt" "0"
+  assert_file_equals "$TMP_DIR/marks-stale/status.txt" "0"
   assert_contains "$TMP_DIR/marks-stale/gh.log" "pr edit 1082 --repo hatayama/unity-cli-loop --remove-label autorelease: pending --add-label autorelease: tagged"
   assert_contains "$TMP_DIR/marks-stale/output.txt" "Marked release PR #1082 as tagged for v3.0.0-beta.3."
 }
@@ -124,7 +137,7 @@ test_keeps_draft_release_pending() {
     '[{"number":1082,"title":"chore(v3-beta): release 3.0.0-beta.3","mergeCommit":{"oid":"abc123"}}]' \
     '{"v3.0.0-beta.3":{"isDraft":true,"targetCommitish":"abc123"}}'
 
-  assert_contains "$TMP_DIR/draft-release/status.txt" "0"
+  assert_file_equals "$TMP_DIR/draft-release/status.txt" "0"
   assert_contains "$TMP_DIR/draft-release/output.txt" "Pending release PR #1082 does not have a matching published release yet: v3.0.0-beta.3"
   assert_not_contains "$TMP_DIR/draft-release/gh.log" "pr edit"
 }
@@ -135,7 +148,7 @@ test_keeps_mismatched_release_pending() {
     '[{"number":1082,"title":"chore(v3-beta): release 3.0.0-beta.3","mergeCommit":{"oid":"abc123"}}]' \
     '{"v3.0.0-beta.3":{"isDraft":false,"targetCommitish":"different"}}'
 
-  assert_contains "$TMP_DIR/target-mismatch/status.txt" "0"
+  assert_file_equals "$TMP_DIR/target-mismatch/status.txt" "0"
   assert_contains "$TMP_DIR/target-mismatch/output.txt" "Pending release PR #1082 does not have a matching published release yet: v3.0.0-beta.3"
   assert_not_contains "$TMP_DIR/target-mismatch/gh.log" "pr edit"
 }
@@ -144,7 +157,7 @@ test_keeps_mismatched_release_pending() {
 test_exits_when_no_pending_release_pr_exists() {
   run_case no-pending '[]' '{}'
 
-  assert_contains "$TMP_DIR/no-pending/status.txt" "0"
+  assert_file_equals "$TMP_DIR/no-pending/status.txt" "0"
   assert_contains "$TMP_DIR/no-pending/output.txt" "No pending merged release PR labels found for v3-beta."
   assert_not_contains "$TMP_DIR/no-pending/gh.log" "pr edit"
 }
@@ -156,7 +169,7 @@ test_fails_when_release_lookup_fails_unexpectedly() {
     '{}' \
     'GraphQL: Resource not accessible by integration'
 
-  assert_contains "$TMP_DIR/release-api-failure/status.txt" "2"
+  assert_file_equals "$TMP_DIR/release-api-failure/status.txt" "2"
   assert_contains "$TMP_DIR/release-api-failure/stderr.txt" "GraphQL: Resource not accessible by integration"
   assert_not_contains "$TMP_DIR/release-api-failure/gh.log" "pr edit"
 }

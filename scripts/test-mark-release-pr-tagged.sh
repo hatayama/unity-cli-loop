@@ -55,6 +55,19 @@ assert_contains() {
   fi
 }
 
+assert_file_equals() {
+  file=$1
+  expected=$2
+  actual=$(cat "$file")
+
+  if [ "$actual" != "$expected" ]; then
+    echo "Expected $file to equal: $expected" >&2
+    echo "Actual content:" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+}
+
 assert_not_contains() {
   file=$1
   unexpected=$2
@@ -101,7 +114,7 @@ test_marks_matching_release_pr() {
     '{"isDraft":false,"targetCommitish":"abc123"}' \
     '[{"number":1082,"title":"chore(v3-beta): release 3.0.0-beta.3","mergeCommit":{"oid":"abc123"}}]'
 
-  assert_contains "$TMP_DIR/marks-pr/status.txt" "0"
+  assert_file_equals "$TMP_DIR/marks-pr/status.txt" "0"
   assert_contains "$TMP_DIR/marks-pr/gh.log" "pr edit 1082 --repo hatayama/unity-cli-loop --remove-label autorelease: pending --add-label autorelease: tagged"
   assert_contains "$TMP_DIR/marks-pr/output.txt" "Marked release PR #1082 as tagged for v3.0.0-beta.3."
 }
@@ -112,7 +125,7 @@ test_skips_draft_release() {
     '{"isDraft":true,"targetCommitish":"abc123"}' \
     '[{"number":1082,"title":"chore(v3-beta): release 3.0.0-beta.3","mergeCommit":{"oid":"abc123"}}]'
 
-  assert_contains "$TMP_DIR/draft-release/status.txt" "0"
+  assert_file_equals "$TMP_DIR/draft-release/status.txt" "0"
   assert_contains "$TMP_DIR/draft-release/output.txt" "Release v3.0.0-beta.3 is still draft; leaving release PR labels unchanged."
   assert_not_contains "$TMP_DIR/draft-release/gh.log" "pr edit"
 }
@@ -123,7 +136,7 @@ test_fails_on_release_target_mismatch() {
     '{"isDraft":false,"targetCommitish":"different"}' \
     '[{"number":1082,"title":"chore(v3-beta): release 3.0.0-beta.3","mergeCommit":{"oid":"abc123"}}]'
 
-  assert_contains "$TMP_DIR/target-mismatch/status.txt" "1"
+  assert_file_equals "$TMP_DIR/target-mismatch/status.txt" "1"
   assert_contains "$TMP_DIR/target-mismatch/stderr.txt" "Release v3.0.0-beta.3 points at different, expected abc123."
   assert_not_contains "$TMP_DIR/target-mismatch/gh.log" "pr edit"
 }
@@ -134,7 +147,7 @@ test_skips_when_pending_release_pr_is_missing() {
     '{"isDraft":false,"targetCommitish":"abc123"}' \
     '[]'
 
-  assert_contains "$TMP_DIR/missing-pr/status.txt" "0"
+  assert_file_equals "$TMP_DIR/missing-pr/status.txt" "0"
   assert_contains "$TMP_DIR/missing-pr/output.txt" "No pending release PR found for v3.0.0-beta.3 at abc123."
   assert_not_contains "$TMP_DIR/missing-pr/gh.log" "pr edit"
 }
