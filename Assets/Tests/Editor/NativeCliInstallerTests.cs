@@ -53,10 +53,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnWindowsKeepsCliOnlyPowerShellInstallerAvailable()
         {
             // Verifies that editor and CLI installs use the same channel PowerShell installer script.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.WindowsEditor,
                 "3.0.0-beta.3",
-                false);
+                false,
+                "/bin/zsh");
 
             Assert.That(command.FileName, Is.EqualTo("powershell"));
             Assert.That(command.Arguments, Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.ps1"));
@@ -84,13 +85,101 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnWindowsDoesNotNeedLegacyCleanupFlag()
         {
             // Verifies that Windows installs rely on the installer script's npm uninstall attempt.
-            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.WindowsEditor,
                 "3.0.0-beta.3",
-                true);
+                true,
+                "/bin/zsh");
 
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
+        }
+
+        [Test]
+        public void GetInstallCommand_WhenLocalPackageOnMacUsesPackageLocalInstaller()
+        {
+            // Verifies that local package development tests exercise the checked-out installer script.
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-native-local-installer-tests",
+                System.Guid.NewGuid().ToString("N"));
+            string packageResolvedPath = Path.Combine(
+                tempRoot,
+                CliConstants.UNITY_PACKAGES_DIR_NAME,
+                CliConstants.PACKAGE_SOURCE_DIR_NAME);
+            string scriptsDirectory = Path.Combine(tempRoot, CliConstants.SCRIPTS_DIR_NAME);
+            string scriptPath = Path.Combine(scriptsDirectory, CliConstants.POSIX_INSTALL_SCRIPT_NAME);
+
+            Directory.CreateDirectory(packageResolvedPath);
+            Directory.CreateDirectory(scriptsDirectory);
+            File.WriteAllText(scriptPath, string.Empty);
+
+            try
+            {
+                NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
+                    RuntimePlatform.OSXEditor,
+                    "3.0.0-beta.3",
+                    false,
+                    "/bin/zsh",
+                    packageResolvedPath);
+
+                Assert.That(command.FileName, Is.EqualTo("/bin/zsh"));
+                Assert.That(command.Arguments, Does.Contain("-l -i -c"));
+                Assert.That(command.ManualCommand, Does.Contain($"sh '{scriptPath}'"));
+                Assert.That(command.ManualCommand, Does.Contain("ULOOP_VERSION='v3.0.0-beta.3'"));
+                Assert.That(command.ManualCommand, Does.Not.Contain("curl -fsSL"));
+                Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, true);
+                }
+            }
+        }
+
+        [Test]
+        public void GetInstallCommand_WhenLocalPackageOnWindowsUsesPackageLocalInstaller()
+        {
+            // Verifies that local package development tests use the checked-out PowerShell installer.
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-native-local-installer-tests",
+                System.Guid.NewGuid().ToString("N"));
+            string packageResolvedPath = Path.Combine(
+                tempRoot,
+                CliConstants.UNITY_PACKAGES_DIR_NAME,
+                CliConstants.PACKAGE_SOURCE_DIR_NAME);
+            string scriptsDirectory = Path.Combine(tempRoot, CliConstants.SCRIPTS_DIR_NAME);
+            string scriptPath = Path.Combine(scriptsDirectory, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
+
+            Directory.CreateDirectory(packageResolvedPath);
+            Directory.CreateDirectory(scriptsDirectory);
+            File.WriteAllText(scriptPath, string.Empty);
+
+            try
+            {
+                NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
+                    RuntimePlatform.WindowsEditor,
+                    "3.0.0-beta.3",
+                    false,
+                    "/bin/zsh",
+                    packageResolvedPath);
+
+                Assert.That(command.FileName, Is.EqualTo("powershell"));
+                Assert.That(command.ManualCommand, Does.Contain($"& '{scriptPath}'"));
+                Assert.That(command.ManualCommand, Does.Contain("$env:ULOOP_VERSION='v3.0.0-beta.3'"));
+                Assert.That(command.ManualCommand, Does.Not.Contain("irm"));
+                Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, true);
+                }
+            }
         }
 
         [Test]

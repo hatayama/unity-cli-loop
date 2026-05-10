@@ -30,7 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 platform,
                 packageVersion,
                 removeLegacyLaunchers,
-                NodeEnvironmentResolver.GetUserShell());
+                NodeEnvironmentResolver.GetUserShell(),
+                UnityCliLoopConstants.PackageResolvedPath);
         }
 
         internal static NativeCliInstallCommand BuildInstallCommand(
@@ -39,6 +40,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool removeLegacyLaunchers,
             string posixShellPath)
         {
+            return BuildInstallCommand(
+                platform,
+                packageVersion,
+                removeLegacyLaunchers,
+                posixShellPath,
+                null);
+        }
+
+        internal static NativeCliInstallCommand BuildInstallCommand(
+            RuntimePlatform platform,
+            string packageVersion,
+            bool removeLegacyLaunchers,
+            string posixShellPath,
+            string packageResolvedPath)
+        {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(packageVersion), "packageVersion must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(posixShellPath), "posixShellPath must not be null or empty");
             _ = removeLegacyLaunchers;
@@ -46,18 +62,28 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string releaseTag = BuildReleaseTag(packageVersion);
             if (platform == RuntimePlatform.WindowsEditor)
             {
-                string scriptUrl = BuildInstallerScriptUrl(releaseTag, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
-                string command =
-                    $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}'; " +
-                    $"irm '{scriptUrl}' | iex";
+                string localScriptPath = ResolvePackageLocalInstallerScriptPath(
+                    packageResolvedPath,
+                    CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
+                string command = string.IsNullOrEmpty(localScriptPath)
+                    ? BuildWindowsRemoteInstallScriptCommand(
+                        BuildInstallerScriptUrl(releaseTag, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME),
+                        releaseTag)
+                    : BuildWindowsLocalInstallScriptCommand(localScriptPath, releaseTag);
                 return new NativeCliInstallCommand(
                     "powershell",
                     $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"",
                     command);
             }
 
-            string posixScriptUrl = BuildInstallerScriptUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME);
-            string posixCommand = BuildPosixInstallScriptCommand(posixScriptUrl, releaseTag);
+            string posixLocalScriptPath = ResolvePackageLocalInstallerScriptPath(
+                packageResolvedPath,
+                CliConstants.POSIX_INSTALL_SCRIPT_NAME);
+            string posixCommand = string.IsNullOrEmpty(posixLocalScriptPath)
+                ? BuildPosixRemoteInstallScriptCommand(
+                    BuildInstallerScriptUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME),
+                    releaseTag)
+                : BuildPosixLocalInstallScriptCommand(posixLocalScriptPath, releaseTag);
             return new NativeCliInstallCommand(
                 posixShellPath,
                 $"-l -i -c {QuoteProcessArgument(posixCommand)}",
@@ -804,15 +830,83 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Directory.Delete(directoryPath);
         }
 
-        private static string BuildPosixInstallScriptCommand(string scriptUrl, string releaseTag)
+        private static string BuildPosixRemoteInstallScriptCommand(string scriptUrl, string releaseTag)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
 
             return "tmp_script=$(mktemp) && "
                 + "trap 'rm -f \"$tmp_script\"' EXIT && "
-                + $"curl -fsSL '{scriptUrl}' -o \"$tmp_script\" && "
-                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}='{releaseTag}' sh \"$tmp_script\"";
+                + $"curl -fsSL {QuotePosixShellValue(scriptUrl)} -o \"$tmp_script\" && "
+                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} sh \"$tmp_script\"";
+        }
+
+        private static string BuildPosixLocalInstallScriptCommand(string scriptPath, string releaseTag)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptPath), "scriptPath must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
+
+            return $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} sh {QuotePosixShellValue(scriptPath)}";
+        }
+
+        private static string BuildWindowsRemoteInstallScriptCommand(string scriptUrl, string releaseTag)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
+
+            return $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePowerShellSingleQuotedValue(releaseTag)}; "
+                + $"irm {QuotePowerShellSingleQuotedValue(scriptUrl)} | iex";
+        }
+
+        private static string BuildWindowsLocalInstallScriptCommand(string scriptPath, string releaseTag)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptPath), "scriptPath must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
+
+            return $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePowerShellSingleQuotedValue(releaseTag)}; "
+                + $"& {QuotePowerShellSingleQuotedValue(scriptPath)}";
+        }
+
+        internal static string ResolvePackageLocalInstallerScriptPath(string packageResolvedPath, string assetName)
+        {
+            if (string.IsNullOrWhiteSpace(packageResolvedPath) || string.IsNullOrWhiteSpace(assetName))
+            {
+                return null;
+            }
+
+            DirectoryInfo packageDirectory = new(packageResolvedPath);
+            DirectoryInfo packagesDirectory = packageDirectory.Parent;
+            DirectoryInfo repositoryDirectory = packagesDirectory?.Parent;
+            if (repositoryDirectory == null)
+            {
+                return null;
+            }
+
+            if (!string.Equals(packageDirectory.Name, CliConstants.PACKAGE_SOURCE_DIR_NAME, StringComparison.Ordinal)
+                || !string.Equals(packagesDirectory.Name, CliConstants.UNITY_PACKAGES_DIR_NAME, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            string scriptPath = Path.Combine(repositoryDirectory.FullName, CliConstants.SCRIPTS_DIR_NAME, assetName);
+            if (!File.Exists(scriptPath))
+            {
+                return null;
+            }
+
+            return scriptPath;
+        }
+
+        private static string QuotePosixShellValue(string value)
+        {
+            UnityEngine.Debug.Assert(value != null, "value must not be null");
+            return $"'{value.Replace("'", "'\"'\"'")}'";
+        }
+
+        private static string QuotePowerShellSingleQuotedValue(string value)
+        {
+            UnityEngine.Debug.Assert(value != null, "value must not be null");
+            return $"'{value.Replace("'", "''")}'";
         }
 
         private static string QuoteProcessArgument(string value)

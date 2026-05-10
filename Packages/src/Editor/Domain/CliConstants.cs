@@ -29,6 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string RELEASE_TAG_PREFIX = "v";
         public const string BETA_VERSION_MARKER = "-beta.";
         public const string SKILL_DIR_PREFIX = "uloop-";
+        public const string UNITY_PACKAGES_DIR_NAME = "Packages";
+        public const string PACKAGE_SOURCE_DIR_NAME = "src";
         public const string CLI_PACKAGE_DIR_NAME = "Cli~";
         public const string LEGACY_GO_CLI_PACKAGE_DIR_NAME = "GoCli~";
         public const string GO_CLI_CORE_DIR_NAME = "Core~";

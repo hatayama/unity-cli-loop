@@ -118,13 +118,14 @@ function Invoke-LegacyNpmPackageRemoval {
         [string]$ExpectedUloopPath
     )
 
-    if (-not $LegacyUloopPath `
-        -or [string]::Equals($LegacyUloopPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-        return
+    $NpmCommand = Get-Command npm -ErrorAction SilentlyContinue | Select-Object -First 1
+    $LegacyPrefix = $null
+    $LegacyCommandShadowsNative = $LegacyUloopPath `
+        -and -not [string]::Equals($LegacyUloopPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)
+    if ($LegacyCommandShadowsNative) {
+        $LegacyPrefix = Get-NpmPrefixFromUloopPath -CommandPath $LegacyUloopPath
     }
 
-    $NpmCommand = Get-Command npm -ErrorAction SilentlyContinue | Select-Object -First 1
-    $LegacyPrefix = Get-NpmPrefixFromUloopPath -CommandPath $LegacyUloopPath
     if (-not $NpmCommand) {
         Write-LegacyNpmManualRemoval -LegacyUloopPath $LegacyUloopPath -LegacyPrefix $LegacyPrefix
         return
@@ -141,7 +142,7 @@ function Invoke-LegacyNpmPackageRemoval {
         return
     }
 
-    if (Test-Path $LegacyUloopPath -PathType Leaf) {
+    if ($LegacyCommandShadowsNative -and (Test-Path $LegacyUloopPath -PathType Leaf)) {
         Write-LegacyNpmManualRemoval -LegacyUloopPath $LegacyUloopPath -LegacyPrefix $LegacyPrefix
         return
     }

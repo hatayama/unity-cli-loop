@@ -96,16 +96,16 @@ try_remove_legacy_npm_package() {
   legacy_uloop=$1
   expected_uloop=$2
 
-  if [ -z "$legacy_uloop" ] || [ "$legacy_uloop" = "$expected_uloop" ] || [ "$legacy_uloop.exe" = "$expected_uloop" ]; then
-    return
-  fi
-
   if ! command -v npm >/dev/null 2>&1; then
     print_legacy_npm_manual_removal "$legacy_uloop" ""
     return
   fi
 
-  legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
+  legacy_prefix=""
+  if [ -n "$legacy_uloop" ] && [ "$legacy_uloop" != "$expected_uloop" ] && [ "$legacy_uloop.exe" != "$expected_uloop" ]; then
+    legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
+  fi
+
   if [ -n "$legacy_prefix" ]; then
     if npm uninstall -g --prefix "$legacy_prefix" uloop-cli; then
       if [ -e "$legacy_uloop" ] || [ -L "$legacy_uloop" ]; then
@@ -121,7 +121,7 @@ try_remove_legacy_npm_package() {
   fi
 
   if npm uninstall -g uloop-cli; then
-    if [ -e "$legacy_uloop" ] || [ -L "$legacy_uloop" ]; then
+    if [ -n "$legacy_uloop" ] && [ "$legacy_uloop" != "$expected_uloop" ] && [ "$legacy_uloop.exe" != "$expected_uloop" ] && { [ -e "$legacy_uloop" ] || [ -L "$legacy_uloop" ]; }; then
       print_legacy_npm_manual_removal "$legacy_uloop" ""
     else
       echo "Removed legacy npm package: uloop-cli"
