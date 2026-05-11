@@ -31,12 +31,12 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "Packages/src/Cli~/internal/tools/default-tools.json",
+          "path": "internal/tools/default-tools.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "Packages/src/Cli~/contract.json",
+          "path": "contract.json",
           "jsonpath": "$.cliVersion"
         }
       ]

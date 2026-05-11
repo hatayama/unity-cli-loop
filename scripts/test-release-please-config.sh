@@ -31,7 +31,7 @@ assert_manifest_semver() {
   fi
 }
 
-assert_path_exists() {
+assert_repository_path_exists() {
   path=$1
 
   if [ ! -e "$ROOT_DIR/$path" ]; then
@@ -40,16 +40,30 @@ assert_path_exists() {
   fi
 }
 
+assert_package_path_exists() {
+  package_path=$1
+  path=$2
+
+  if [ "$package_path" = "." ]; then
+    assert_repository_path_exists "$path"
+    return
+  fi
+
+  case "$path" in
+    /*)
+      assert_repository_path_exists "${path#/}"
+      ;;
+    *)
+      assert_repository_path_exists "$package_path/$path"
+      ;;
+  esac
+}
+
 assert_changelog_exists() {
   package_path=$1
   changelog_path=$2
 
-  if [ "$package_path" = "." ]; then
-    assert_path_exists "$changelog_path"
-    return
-  fi
-
-  assert_path_exists "$package_path/$changelog_path"
+  assert_package_path_exists "$package_path" "$changelog_path"
 }
 
 assert_json_value '.packages["."].["changelog-path"]' 'Packages/src/CHANGELOG.md'
@@ -59,8 +73,8 @@ assert_json_value '.packages["."].["exclude-paths"][0]' 'Packages/src/Cli~'
 assert_json_value '.packages["Packages/src/Cli~"].component' 'cli'
 assert_json_value '.packages["Packages/src/Cli~"].["include-component-in-tag"]' 'true'
 assert_json_value '.packages["Packages/src/Cli~"].["changelog-path"]' 'CHANGELOG.md'
-assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][0].path' 'Packages/src/Cli~/internal/tools/default-tools.json'
-assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][1].path' 'Packages/src/Cli~/contract.json'
+assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][0].path' 'internal/tools/default-tools.json'
+assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][1].path' 'contract.json'
 
 assert_manifest_semver '.["."]'
 assert_manifest_semver '.["Packages/src/Cli~"]'
@@ -70,7 +84,7 @@ while IFS='	' read -r package_path changelog_path; do
   assert_changelog_exists "$package_path" "$changelog_path"
 done
 
-jq -r '.packages | to_entries[] | .value["extra-files"][]?.path' "$CONFIG" |
-while IFS= read -r extra_file_path; do
-  assert_path_exists "$extra_file_path"
+jq -r '.packages | to_entries[] | .key as $package_path | .value["extra-files"][]?.path as $extra_file_path | [$package_path, $extra_file_path] | @tsv' "$CONFIG" |
+while IFS='	' read -r package_path extra_file_path; do
+  assert_package_path_exists "$package_path" "$extra_file_path"
 done
