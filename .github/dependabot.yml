@@ -16,25 +16,7 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "gomod"
-    directory: "/Packages/src/Cli~/Core~"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "go"
-
-  - package-ecosystem: "gomod"
-    directory: "/Packages/src/Cli~/Dispatcher~"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "go"
-
-  - package-ecosystem: "gomod"
-    directory: "/Packages/src/Cli~/Shared~"
+    directory: "/Packages/src/Cli~"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3

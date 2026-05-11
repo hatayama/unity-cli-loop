@@ -12,7 +12,7 @@ on:
         required: false
         default: ""
       release-tag:
-        description: "Release tag to upload assets to. Defaults to the package version."
+        description: "CLI release tag to upload assets to. Defaults to cli-v{CLI version}."
         required: false
         default: ""
       dry-run:
@@ -97,7 +97,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: native-cli-release-assets-${{ steps.release.outputs.tag }}
-          path: Packages/src/Cli~/Dispatcher~/release/*
+          path: Packages/src/Cli~/release/*
           if-no-files-found: error
 
       - name: Write release notes
@@ -126,7 +126,7 @@ jobs:
                 exit 1
               }
             }
-          ' Packages/src/CHANGELOG.md > "${NOTES_FILE}"
+          ' Packages/src/Cli~/CHANGELOG.md > "${NOTES_FILE}"
 
           echo "RELEASE_NOTES_FILE=${NOTES_FILE}" >> "$GITHUB_ENV"
 
@@ -187,7 +187,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          gh release upload "${RELEASE_TAG}" Packages/src/Cli~/Dispatcher~/release/* --clobber
+          gh release upload "${RELEASE_TAG}" Packages/src/Cli~/release/* --clobber
 
       - name: Verify remote release assets
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
@@ -240,4 +240,4 @@ jobs:
       - name: Dry run summary
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run == 'true'
         run: |
-          ls -lh Packages/src/Cli~/Dispatcher~/release
+          ls -lh Packages/src/Cli~/release

@@ -119,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 data.NeedsDowngrade,
                 data.CanUninstallCli,
                 data.CliVersion,
-                data.RequiredDispatcherVersion);
+                data.RequiredCliVersion);
             bool enabled = IsInstallCliButtonEnabled(
                 data.IsInstallingCli,
                 data.IsChecking);
@@ -204,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsDowngrade,
             bool canUninstallCli,
             string cliVersion,
-            string requiredDispatcherVersion)
+            string requiredCliVersion)
         {
             if (isChecking)
             {
@@ -224,12 +224,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (needsUpdate)
             {
-                return $"Update CLI (v{cliVersion} \u2192 v{requiredDispatcherVersion})";
+                return $"Update CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
             }
 
             if (needsDowngrade)
             {
-                return $"Downgrade CLI (v{cliVersion} \u2192 v{requiredDispatcherVersion})";
+                return $"Downgrade CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
             }
 
             return canUninstallCli ? "Uninstall CLI" : "Install CLI";

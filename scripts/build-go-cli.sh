@@ -2,8 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-CORE_DIR="$ROOT_DIR/Packages/src/Cli~/Core~"
-DISPATCHER_DIR="$ROOT_DIR/Packages/src/Cli~/Dispatcher~"
+CLI_DIR="$ROOT_DIR/Packages/src/Cli~"
 
 . "$ROOT_DIR/scripts/go-cli-toolchain.sh"
 require_go_cli_toolchain "$ROOT_DIR"
@@ -20,7 +19,7 @@ build_binary() {
     extension=".exe"
   fi
 
-  output_dir="$module_dir/dist/$os-$arch"
+  output_dir="$CLI_DIR/dist/$os-$arch"
   mkdir -p "$output_dir"
 
   (
@@ -29,10 +28,6 @@ build_binary() {
   )
 }
 
-build_binary darwin arm64 uloop-core "$CORE_DIR" ./cmd/uloop-core
-build_binary darwin amd64 uloop-core "$CORE_DIR" ./cmd/uloop-core
-build_binary windows amd64 uloop-core "$CORE_DIR" ./cmd/uloop-core
-
-build_binary darwin arm64 uloop-dispatcher "$DISPATCHER_DIR" ./cmd/uloop-dispatcher
-build_binary darwin amd64 uloop-dispatcher "$DISPATCHER_DIR" ./cmd/uloop-dispatcher
-build_binary windows amd64 uloop-dispatcher "$DISPATCHER_DIR" ./cmd/uloop-dispatcher
+build_binary darwin arm64 uloop "$CLI_DIR" ./cmd/uloop
+build_binary darwin amd64 uloop "$CLI_DIR" ./cmd/uloop
+build_binary windows amd64 uloop "$CLI_DIR" ./cmd/uloop

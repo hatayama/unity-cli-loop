@@ -1,0 +1,115 @@
+package unity
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"errors"
+	"net"
+	"runtime"
+	"testing"
+
+	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/internal/adapters/framing"
+	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/internal/domain"
+)
+
+func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t *testing.T) {
+	// Verifies that dial failures report connection attempts without implying a lost active connection.
+	connection := domain.Connection{
+		Endpoint: domain.Endpoint{
+			Network: "unix",
+			Address: "/tmp/uloop/UnityCliLoop-sample.sock",
+		},
+		ProjectRoot: "/tmp/MyProject",
+	}
+
+	err := formatConnectionAttemptError(connection, errors.New("dial unix /tmp/uloop/UnityCliLoop-sample.sock: connect: no such file or directory"))
+	connectionErr, ok := err.(*ConnectionAttemptError)
+	if !ok {
+		t.Fatalf("expected ConnectionAttemptError, got %T", err)
+	}
+	if connectionErr.ProjectRoot != "/tmp/MyProject" {
+		t.Fatalf("project root mismatch: %s", connectionErr.ProjectRoot)
+	}
+	if connectionErr.Endpoint != "/tmp/uloop/UnityCliLoop-sample.sock" {
+		t.Fatalf("endpoint mismatch: %s", connectionErr.Endpoint)
+	}
+	if connectionErr.Unwrap().Error() != "dial unix /tmp/uloop/UnityCliLoop-sample.sock: connect: no such file or directory" {
+		t.Fatalf("cause mismatch: %v", connectionErr.Unwrap())
+	}
+}
+
+func TestSendIncludesCliVersionWithoutProjectIdentityMetadata(t *testing.T) {
+	// Verifies that requests carry CLI compatibility metadata without reviving legacy project identity metadata.
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	captured := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		payload, err := framing.Read(bufio.NewReader(conn))
+		if err != nil {
+			serverErr <- err
+			return
+		}
+
+		var request map[string]any
+		if err := json.Unmarshal(payload, &request); err != nil {
+			serverErr <- err
+			return
+		}
+		captured <- request
+
+		response := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
+		if err := framing.Write(conn, response); err != nil {
+			serverErr <- err
+			return
+		}
+	}()
+
+	connection := domain.Connection{
+		Endpoint: domain.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: "/tmp/MyProject",
+	}
+	client := NewClient(connection, "3.0.0-beta.6")
+	if _, err := client.Send(context.Background(), "get-version", map[string]any{}); err != nil {
+		t.Fatalf("Send failed: %v", err)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	case request := <-captured:
+		if _, ok := request["x-uloop"]; ok {
+			t.Fatalf("request should not include x-uloop metadata: %#v", request["x-uloop"])
+		}
+		metadata, ok := request["uloop"].(map[string]any)
+		if !ok {
+			t.Fatalf("request should include uloop metadata: %#v", request)
+		}
+		if metadata["cliVersion"] != "3.0.0-beta.6" {
+			t.Fatalf("cli version metadata mismatch: %#v", metadata)
+		}
+	}
+}

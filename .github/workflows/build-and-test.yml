@@ -2,7 +2,7 @@ name: Build and Test Unity CLI Loop
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "cli-v*"]
   pull_request:
     branches: [main, v3-beta]
   workflow_dispatch:
@@ -59,11 +59,12 @@ jobs:
 
           test -f "Packages/src/package.json" || exit 1
           test -d "Packages/src/Editor" || exit 1
-          test -d "Packages/src/Cli~/Core~" || exit 1
-          test -d "Packages/src/Cli~/Dispatcher~" || exit 1
-          test -d "Packages/src/Cli~/Shared~" || exit 1
-          test -f "Packages/src/Cli~/Core~/dist/darwin-arm64/uloop-core" || exit 1
-          test -f "Packages/src/Cli~/Core~/dist/windows-amd64/uloop-core.exe" || exit 1
+          test -d "Packages/src/Cli~" || exit 1
+          test -f "Packages/src/Cli~/go.mod" || exit 1
+          test -d "Packages/src/Cli~/cmd" || exit 1
+          test -d "Packages/src/Cli~/internal" || exit 1
+          test -f "Packages/src/Cli~/dist/darwin-arm64/uloop" || exit 1
+          test -f "Packages/src/Cli~/dist/windows-amd64/uloop.exe" || exit 1
 
           echo "✅ Unity Package structure is valid"
 

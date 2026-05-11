@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         public readonly bool IsCliInstalled;
         public readonly string CliVersion;
-        public readonly string RequiredDispatcherVersion;
+        public readonly string RequiredCliVersion;
         public readonly bool NeedsUpdate;
         public readonly bool NeedsDowngrade;
         public readonly bool CanUninstallCli;
@@ -99,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public CliSetupData(
             bool isCliInstalled,
             string cliVersion,
-            string requiredDispatcherVersion,
+            string requiredCliVersion,
             bool needsUpdate,
             bool needsDowngrade,
             bool canUninstallCli,
@@ -118,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             IsCliInstalled = isCliInstalled;
             CliVersion = cliVersion;
-            RequiredDispatcherVersion = requiredDispatcherVersion;
+            RequiredCliVersion = requiredCliVersion;
             NeedsUpdate = needsUpdate;
             NeedsDowngrade = needsDowngrade;
             CanUninstallCli = canUninstallCli;

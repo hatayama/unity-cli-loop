@@ -91,7 +91,7 @@ Windows PowerShell の場合:
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-native dispatcher のインストール後、installer は古い npm package を `npm uninstall -g uloop-cli` で自動削除しようとします。
+native CLI のインストール後、installer は古い npm package を `npm uninstall -g uloop-cli` で自動削除しようとします。
 npm が見つからない場合や、古い command が別の Node prefix に属している場合は、手動で実行する command を表示します。
 
 ```bash

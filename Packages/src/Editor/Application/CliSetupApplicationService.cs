@@ -41,25 +41,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
-    /// Defines the project-local CLI installation operations required by CLI setup.
-    /// </summary>
-    public interface IProjectLocalCliInstaller
-    {
-        string DetectBundledRequiredDispatcherVersion();
-        CliInstallResult EnsureProjectLocalCliCurrent(string projectRoot, string packageVersion);
-    }
-
-    /// <summary>
     /// Defines the native CLI installation operations required by CLI setup.
     /// </summary>
     public interface INativeCliInstaller
     {
         bool IsPackageOwnedCurrentUserInstallPath(string cliExecutablePath, RuntimePlatform platform);
-        Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, string packageVersion, CancellationToken ct);
+        Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, string cliReleaseTag, CancellationToken ct);
         Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct);
         NativeCliInstallCommand GetGlobalCliInstallCommand(
             RuntimePlatform platform,
-            string packageVersion,
+            string cliReleaseTag,
             bool removeLegacyLaunchers);
     }
 
@@ -69,20 +60,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
     public sealed class CliSetupApplicationService
     {
         private readonly ICliInstallationDetector _cliInstallationDetector;
-        private readonly IProjectLocalCliInstaller _projectLocalCliInstaller;
         private readonly INativeCliInstaller _nativeCliInstaller;
 
         public CliSetupApplicationService(
             ICliInstallationDetector cliInstallationDetector,
-            IProjectLocalCliInstaller projectLocalCliInstaller,
             INativeCliInstaller nativeCliInstaller)
         {
             Debug.Assert(cliInstallationDetector != null, "cliInstallationDetector must not be null");
-            Debug.Assert(projectLocalCliInstaller != null, "projectLocalCliInstaller must not be null");
             Debug.Assert(nativeCliInstaller != null, "nativeCliInstaller must not be null");
 
             _cliInstallationDetector = cliInstallationDetector;
-            _projectLocalCliInstaller = projectLocalCliInstaller;
             _nativeCliInstaller = nativeCliInstaller;
         }
 
@@ -121,22 +108,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
             _cliInstallationDetector.InvalidateCache();
         }
 
-        public string GetRequiredDispatcherVersion(string packageVersion)
+        public string GetMinimumRequiredCliVersion()
         {
-            Debug.Assert(!string.IsNullOrEmpty(packageVersion), "packageVersion must not be null or empty");
-
-            string requiredDispatcherVersion = _projectLocalCliInstaller.DetectBundledRequiredDispatcherVersion();
-            return string.IsNullOrEmpty(requiredDispatcherVersion)
-                ? packageVersion
-                : requiredDispatcherVersion;
+            return CliConstants.MINIMUM_REQUIRED_CLI_VERSION;
         }
 
-        public CliInstallResult EnsureProjectLocalCliCurrent(string projectRoot, string packageVersion)
+        public string GetMinimumRequiredCliReleaseTag()
         {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(!string.IsNullOrEmpty(packageVersion), "packageVersion must not be null or empty");
-
-            return _projectLocalCliInstaller.EnsureProjectLocalCliCurrent(projectRoot, packageVersion);
+            return CliConstants.CLI_RELEASE_TAG_PREFIX + GetMinimumRequiredCliVersion();
         }
 
         public bool IsPackageOwnedCurrentUserInstallPath(
@@ -156,17 +135,38 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return CliVersionComparer.IsVersionGreaterThanOrEqual(leftVersion, rightVersion);
         }
 
-        public async Task<CliInstallResult> InstallGlobalCliAsync(
-            RuntimePlatform platform,
-            string packageVersion,
-            CancellationToken ct)
+        public async Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
         {
-            Debug.Assert(!string.IsNullOrEmpty(packageVersion), "packageVersion must not be null or empty");
             ct.ThrowIfCancellationRequested();
 
-            string requiredDispatcherVersion = GetRequiredDispatcherVersion(packageVersion);
-            CliInstallResult result = await _nativeCliInstaller.InstallGlobalCliAsync(platform, requiredDispatcherVersion, ct);
+            CliInstallResult result = await _nativeCliInstaller.InstallGlobalCliAsync(
+                platform,
+                GetMinimumRequiredCliReleaseTag(),
+                ct);
             _cliInstallationDetector.InvalidateCache();
+            return result;
+        }
+
+        public async Task<CliInstallResult> EnsureGlobalCliCurrentAsync(RuntimePlatform platform, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            await _cliInstallationDetector.ForceRefreshCliVersionAsync(ct);
+            string cliVersion = _cliInstallationDetector.GetCachedCliVersion();
+            string minimumRequiredCliVersion = GetMinimumRequiredCliVersion();
+            if (!string.IsNullOrEmpty(cliVersion)
+                && IsCliVersionGreaterThanOrEqual(cliVersion, minimumRequiredCliVersion))
+            {
+                return new CliInstallResult(true, "");
+            }
+
+            CliInstallResult result = await InstallGlobalCliAsync(platform, ct);
+            if (!result.Success)
+            {
+                return result;
+            }
+
+            await _cliInstallationDetector.ForceRefreshCliVersionAsync(ct);
             return result;
         }
 
@@ -181,13 +181,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         public NativeCliInstallCommand GetGlobalCliInstallCommand(
             RuntimePlatform platform,
-            string packageVersion,
             bool removeLegacyLaunchers)
         {
-            Debug.Assert(!string.IsNullOrEmpty(packageVersion), "packageVersion must not be null or empty");
-
-            string requiredDispatcherVersion = GetRequiredDispatcherVersion(packageVersion);
-            return _nativeCliInstaller.GetGlobalCliInstallCommand(platform, requiredDispatcherVersion, removeLegacyLaunchers);
+            return _nativeCliInstaller.GetGlobalCliInstallCommand(
+                platform,
+                GetMinimumRequiredCliReleaseTag(),
+                removeLegacyLaunchers);
         }
     }
 
@@ -250,14 +249,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
             GetService().InvalidateCliCache();
         }
 
-        public static string GetRequiredDispatcherVersion(string packageVersion)
+        public static string GetMinimumRequiredCliVersion()
         {
-            return GetService().GetRequiredDispatcherVersion(packageVersion);
+            return GetService().GetMinimumRequiredCliVersion();
         }
 
-        public static CliInstallResult EnsureProjectLocalCliCurrent(string projectRoot, string packageVersion)
+        public static string GetMinimumRequiredCliReleaseTag()
         {
-            return GetService().EnsureProjectLocalCliCurrent(projectRoot, packageVersion);
+            return GetService().GetMinimumRequiredCliReleaseTag();
         }
 
         public static bool IsPackageOwnedCurrentUserInstallPath(
@@ -277,12 +276,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return GetService().IsCliVersionGreaterThanOrEqual(leftVersion, rightVersion);
         }
 
-        public static Task<CliInstallResult> InstallGlobalCliAsync(
-            RuntimePlatform platform,
-            string packageVersion,
-            CancellationToken ct)
+        public static Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
         {
-            return GetService().InstallGlobalCliAsync(platform, packageVersion, ct);
+            return GetService().InstallGlobalCliAsync(platform, ct);
+        }
+
+        public static Task<CliInstallResult> EnsureGlobalCliCurrentAsync(RuntimePlatform platform, CancellationToken ct)
+        {
+            return GetService().EnsureGlobalCliCurrentAsync(platform, ct);
         }
 
         public static Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
@@ -292,10 +293,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         public static NativeCliInstallCommand GetGlobalCliInstallCommand(
             RuntimePlatform platform,
-            string packageVersion,
             bool removeLegacyLaunchers)
         {
-            return GetService().GetGlobalCliInstallCommand(platform, packageVersion, removeLegacyLaunchers);
+            return GetService().GetGlobalCliInstallCommand(platform, removeLegacyLaunchers);
         }
     }
 }

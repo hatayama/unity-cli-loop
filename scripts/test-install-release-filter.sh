@@ -392,7 +392,7 @@ test_posix_prints_prefix_manual_cleanup_when_npm_is_unavailable() {
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
   assert_contains "$work_dir/output.txt" "npm uninstall -g --prefix \"$work_dir/npm-global\" uloop-cli"
-  assert_not_contains "$work_dir/output.txt" "Run this manually if the old npm command still shadows the native dispatcher:"
+  assert_not_contains "$work_dir/output.txt" "Run this manually if the old npm command still shadows the native CLI:"
 }
 
 test_posix_prints_manual_cleanup_when_npm_prefix_cannot_be_inferred() {
@@ -425,7 +425,7 @@ test_posix_prints_manual_cleanup_when_npm_prefix_cannot_be_inferred() {
   assert_not_contains "$npm_log" "uninstall -g --prefix"
   assert_contains "$work_dir/output.txt" "Could not remove the legacy npm package automatically."
   assert_contains "$work_dir/output.txt" "Legacy uloop command: $legacy_uloop"
-  assert_contains "$work_dir/output.txt" "Run this manually if the old npm command still shadows the native dispatcher:"
+  assert_contains "$work_dir/output.txt" "Run this manually if the old npm command still shadows the native CLI:"
 }
 
 test_posix_removes_npm_package_before_replacing_same_bin_path() {

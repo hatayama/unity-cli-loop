@@ -568,17 +568,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
             string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
-            string packageVersion = UnityCliLoopConstants.PackageInfo.version;
-            string requiredDispatcherVersion = GetRequiredDispatcherVersion();
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            CliInstallResult projectLocalResult = CliSetupApplicationFacade.EnsureProjectLocalCliCurrent(
-                projectRoot,
-                packageVersion);
-            if (!projectLocalResult.Success)
-            {
-                Debug.LogWarning(
-                    $"[{UnityCliLoopConstants.PROJECT_NAME}] Failed to update project-local uLoop CLI: {projectLocalResult.ErrorOutput}");
-            }
+            string requiredCliVersion = GetMinimumRequiredCliVersion();
 
             bool isCliInstalled = cliVersion != null;
             bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
@@ -587,7 +577,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isChecking = !CliSetupApplicationFacade.IsCliCheckCompleted()
                 || _isRefreshingVersion
                 || !includeSkillDirectoryChecks;
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredDispatcherVersion);
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredCliVersion);
             bool needsDowngrade = false;
             bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
             SkillInstallState selectedTargetInstallState = includeSkillDirectoryChecks
@@ -597,7 +587,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return new CliSetupData(
                 isCliInstalled,
                 cliVersion,
-                requiredDispatcherVersion,
+                requiredCliVersion,
                 needsUpdate,
                 needsDowngrade,
                 canUninstallCli,
@@ -615,12 +605,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _isInstallingSkills);
         }
 
-        private static string GetRequiredDispatcherVersion()
+        private static string GetMinimumRequiredCliVersion()
         {
-            string requiredDispatcherVersion = CliSetupApplicationFacade.GetRequiredDispatcherVersion(UnityCliLoopConstants.PackageInfo.version);
-            return string.IsNullOrEmpty(requiredDispatcherVersion)
-                ? UnityCliLoopConstants.PackageInfo.version
-                : requiredDispatcherVersion;
+            return CliSetupApplicationFacade.GetMinimumRequiredCliVersion();
         }
 
         private void RefreshSelectedTargetInstallStateFast()
@@ -729,14 +716,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 CliInstallResult result = await CliSetupApplicationFacade.InstallGlobalCliAsync(
                     UnityEngine.Application.platform,
-                    UnityCliLoopConstants.PackageInfo.version,
                     CancellationToken.None);
 
                 if (!result.Success)
                 {
                     NativeCliInstallCommand command = CliSetupApplicationFacade.GetGlobalCliInstallCommand(
                         UnityEngine.Application.platform,
-                        UnityCliLoopConstants.PackageInfo.version,
                         true);
                     EditorUtility.DisplayDialog(
                         "Installation Failed",
@@ -763,24 +748,24 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 UnityEngine.Application.platform);
             return ShouldUninstallCliFromPrimaryButton(
                 cliVersion,
-                GetRequiredDispatcherVersion(),
+                GetMinimumRequiredCliVersion(),
                 canUninstallCli);
         }
 
         internal static bool ShouldUninstallCliFromPrimaryButton(
             string cliVersion,
-            string requiredDispatcherVersion,
+            string requiredCliVersion,
             bool canUninstallCli)
         {
             bool isCliInstalled = cliVersion != null;
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredDispatcherVersion);
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredCliVersion);
             return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade: false, canUninstallCli);
         }
 
-        internal static bool IsCliUpdateNeeded(string cliVersion, string requiredDispatcherVersion)
+        internal static bool IsCliUpdateNeeded(string cliVersion, string requiredCliVersion)
         {
             return cliVersion != null
-                && CliSetupApplicationFacade.IsCliVersionLessThan(cliVersion, requiredDispatcherVersion);
+                && CliSetupApplicationFacade.IsCliVersionLessThan(cliVersion, requiredCliVersion);
         }
 
         private async Task HandleUninstallCli()

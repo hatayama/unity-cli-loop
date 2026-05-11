@@ -821,6 +821,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GlobalCliAutoInstaller_WhenLoaded_DoesNotSkipBatchModeStartup()
+        {
+            // Tests that batch Unity sessions still run minimum CLI version enforcement.
+            string autoInstallerSource = ReadProductionSource(
+                "Packages/src/Editor/Infrastructure/CLI/GlobalCliAutoInstaller.cs");
+
+            Assert.That(autoInstallerSource, Does.Not.Contain("Application.isBatchMode"));
+        }
+
+        [Test]
         public void DomainReloadStateRegistration_WhenLoaded_DoesNotReadSettingsSynchronously()
         {
             // Tests that provider registration does not force settings JSON load during Editor startup.
@@ -861,8 +871,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string[] forbiddenReferences =
             {
                 "CliInstallationDetector",
-                "ProjectLocalCliAutoInstaller",
-                "ProjectLocalCliInstaller",
                 "NativeCliInstaller",
                 "CliVersionComparer",
                 "ToolSkillSynchronizer",
