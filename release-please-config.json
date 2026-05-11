@@ -28,7 +28,7 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "Packages/src/Cli~/internal/presentation/cli/default-tools.json",
+          "path": "Packages/src/Cli~/internal/presentation/default-tools.json",
           "jsonpath": "$.version"
         },
         {
