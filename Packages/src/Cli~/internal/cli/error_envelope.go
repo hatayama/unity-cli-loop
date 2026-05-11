@@ -104,7 +104,7 @@ func classifyError(err error, context errorContext) cliError {
 			},
 			Details: map[string]any{
 				"endpoint": connectionErr.Endpoint,
-				"cause":    connectionErr.Unwrap().Error(),
+				"cause":    connectionAttemptCause(connectionErr),
 			},
 		}
 	}
@@ -179,6 +179,17 @@ func classifyError(err error, context errorContext) cliError {
 	}
 
 	return internalCLIError(message, context)
+}
+
+func connectionAttemptCause(err *unityipc.ConnectionAttemptError) string {
+	if err == nil {
+		return ""
+	}
+	cause := err.Unwrap()
+	if cause == nil {
+		return ""
+	}
+	return cause.Error()
 }
 
 func rpcDataType(data map[string]any) string {

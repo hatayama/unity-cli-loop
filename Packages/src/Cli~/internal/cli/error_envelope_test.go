@@ -91,6 +91,22 @@ func TestClassifyConnectionAttemptError(t *testing.T) {
 	}
 }
 
+func TestClassifyConnectionAttemptAllowsNilCause(t *testing.T) {
+	// Verifies connection classification handles a missing low-level cause.
+	err := &unityipc.ConnectionAttemptError{
+		ProjectRoot: "/tmp/MyProject",
+		Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+	}
+
+	cliErr := classifyError(err, errorContext{command: "get-logs"})
+	if cliErr.ErrorCode != errorCodeUnityNotReachable {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if cliErr.Details["cause"] != "" {
+		t.Fatalf("cause should be empty for nil unwrap: %#v", cliErr.Details)
+	}
+}
+
 func TestClassifyRPCErrorKeepsData(t *testing.T) {
 	err := &unityipc.RPCError{
 		Code:    -32000,
