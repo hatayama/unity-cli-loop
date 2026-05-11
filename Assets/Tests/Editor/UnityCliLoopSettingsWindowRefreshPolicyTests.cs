@@ -67,6 +67,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldRefresh, Is.True);
         }
 
+        [TestCase(true, true, false, false, false)]
+        [TestCase(true, true, false, true, true)]
+        [TestCase(true, false, false, false, true)]
+        [TestCase(false, true, false, true, false)]
+        [TestCase(true, true, true, true, false)]
+        public void ShouldStartSkillInstallStateRefresh_ReturnsExpectedValue(
+            bool isCliInstalled,
+            bool isRefreshingVersion,
+            bool isInstallingSkills,
+            bool allowDuringCliRefresh,
+            bool expected)
+        {
+            // Verifies that manual Skills refresh can run during CLI refresh while automatic refresh remains gated.
+            bool shouldStart = UnityCliLoopSettingsWindowRefreshPolicy.ShouldStartSkillInstallStateRefresh(
+                isCliInstalled,
+                isRefreshingVersion,
+                isInstallingSkills,
+                allowDuringCliRefresh);
+
+            Assert.That(shouldStart, Is.EqualTo(expected));
+        }
+
         [Test]
         public void ShouldKeepToolSettingsCatalogDirty_WhenOpenRegistryUnavailable_ReturnsTrue()
         {

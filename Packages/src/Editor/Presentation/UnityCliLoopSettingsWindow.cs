@@ -634,10 +634,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             RefreshCliSetupSection();
         }
 
-        private void RefreshSelectedTargetInstallStateInBackground()
+        private void RefreshSelectedTargetInstallStateInBackground(bool allowDuringCliRefresh = false)
         {
             CancelSkillInstallStateRefresh();
-            if (!CliSetupApplicationFacade.IsCliInstalled() || _isRefreshingVersion || _isInstallingSkills)
+            if (!UnityCliLoopSettingsWindowRefreshPolicy.ShouldStartSkillInstallStateRefresh(
+                    CliSetupApplicationFacade.IsCliInstalled(),
+                    _isRefreshingVersion,
+                    _isInstallingSkills,
+                    allowDuringCliRefresh))
             {
                 return;
             }
@@ -868,7 +872,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void HandleRefreshSkillsState()
         {
             RefreshSelectedTargetInstallStateFast();
-            RefreshSelectedTargetInstallStateInBackground();
+            RefreshSelectedTargetInstallStateInBackground(allowDuringCliRefresh: true);
         }
 
     }

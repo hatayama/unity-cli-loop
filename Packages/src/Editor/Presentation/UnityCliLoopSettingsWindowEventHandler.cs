@@ -140,6 +140,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return refreshRequested && ShouldRunExpensiveChecks(refreshMode);
         }
 
+        public static bool ShouldStartSkillInstallStateRefresh(
+            bool isCliInstalled,
+            bool isRefreshingVersion,
+            bool isInstallingSkills,
+            bool allowDuringCliRefresh)
+        {
+            if (!isCliInstalled || isInstallingSkills)
+            {
+                return false;
+            }
+
+            return allowDuringCliRefresh || !isRefreshingVersion;
+        }
+
         public static bool ShouldKeepToolSettingsCatalogDirty(ToolSettingsSectionData toolSettingsData)
         {
             Debug.Assert(toolSettingsData != null, "toolSettingsData must not be null");
