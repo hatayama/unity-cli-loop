@@ -840,7 +840,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 _isInstallingSkills = false;
                 RefreshSelectedTargetInstallStateFast();
-                RefreshSelectedTargetInstallStateInBackground();
+                RefreshSelectedTargetInstallStateInBackground(allowDuringCliRefresh: true);
                 RefreshCliSetupSection();
             }
         }
