@@ -124,7 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 _skillsTarget = value;
                 RefreshSelectedTargetInstallStateFast();
-                RefreshSelectedTargetInstallStateInBackground();
+                RefreshSelectedTargetInstallStateInBackground(allowDuringCliRefresh: true);
             };
             _view.OnGroupSkillsChanged += HandleGroupSkillsChanged;
             _view.OnConfigurationFoldoutChanged += UpdateShowConfiguration;
