@@ -155,9 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateRefreshSkillsButton(CliSetupData data)
         {
-            bool enabled = IsRefreshSkillsButtonEnabled(
-                data.IsCliInstalled,
-                data.IsInstallingSkills);
+            bool enabled = data.IsCliInstalled && !data.IsInstallingSkills;
             _refreshSkillsStateButton.SetEnabled(enabled);
             ViewDataBinder.ToggleClass(_refreshSkillsStateButton, "unity-cli-loop-button--disabled", !enabled);
         }
@@ -171,8 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateSkillsSubsection(CliSetupData data)
         {
-            bool enabled = IsSkillsSubsectionEnabled(data.IsCliInstalled);
-            _skillsSubsection.SetEnabled(enabled);
+            _skillsSubsection.SetEnabled(data.IsCliInstalled);
         }
 
         private void UpdateInstallSkillsButton(CliSetupData data)
@@ -290,18 +287,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 SkillInstallState.Installed => false,
                 _ => true
             };
-        }
-
-        internal static bool IsRefreshSkillsButtonEnabled(
-            bool isCliInstalled,
-            bool isInstallingSkills)
-        {
-            return isCliInstalled && !isInstallingSkills;
-        }
-
-        internal static bool IsSkillsSubsectionEnabled(bool isCliInstalled)
-        {
-            return isCliInstalled;
         }
 
         private void HandleGroupSkillsRowClicked(ClickEvent evt)

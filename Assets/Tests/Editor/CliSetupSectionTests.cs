@@ -122,34 +122,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }
 
-        [TestCase(false, false, false)]
-        [TestCase(true, true, false)]
-        [TestCase(true, false, true)]
-        public void IsRefreshSkillsButtonEnabled_ReturnsExpectedValue(
-            bool isCliInstalled,
-            bool isInstallingSkills,
-            bool expectedEnabled)
-        {
-            // Verifies that the Skills reload button ignores CLI-only refresh work.
-            bool enabled = CliSetupSection.IsRefreshSkillsButtonEnabled(
-                isCliInstalled,
-                isInstallingSkills);
-
-            Assert.That(enabled, Is.EqualTo(expectedEnabled));
-        }
-
-        [TestCase(false, false)]
-        [TestCase(true, true)]
-        public void IsSkillsSubsectionEnabled_ReturnsExpectedValue(
-            bool isCliInstalled,
-            bool expectedEnabled)
-        {
-            // Verifies that CLI-only refresh work does not disable the Skills section.
-            bool enabled = CliSetupSection.IsSkillsSubsectionEnabled(isCliInstalled);
-
-            Assert.That(enabled, Is.EqualTo(expectedEnabled));
-        }
-
         [Test]
         public void Update_WhenCliRefreshIsChecking_KeepsSkillsReloadButtonEnabled()
         {
