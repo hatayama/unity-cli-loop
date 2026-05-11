@@ -145,6 +145,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(installSkillsButton.enabledSelf, Is.True);
         }
 
+        [Test]
+        public void Update_WhenSkillsStateIsChecking_DisablesSkillsTargetField()
+        {
+            // Verifies that the Skills target cannot change while the selected target state is being checked.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Checking);
+
+            section.Update(data);
+
+            EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
+            Assert.That(skillsTargetField.enabledSelf, Is.False);
+        }
+
         private static VisualElement CreateRootElement()
         {
             VisualElement root = new();

@@ -152,7 +152,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ViewDataBinder.UpdateEnumField(_skillsTargetField, data.SelectedTarget);
             }
 
-            _skillsTargetField.SetEnabled(data.IsCliInstalled);
+            _skillsTargetField.SetEnabled(
+                data.IsCliInstalled
+                && data.SelectedTargetInstallState != SkillInstallState.Checking);
         }
 
         private void UpdateRefreshSkillsButton(CliSetupData data)
