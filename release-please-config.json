@@ -7,6 +7,9 @@
       "prerelease-type": "beta",
       "include-v-in-tag": true,
       "include-component-in-tag": false,
+      "exclude-paths": [
+        "Packages/src/Cli~"
+      ],
       "changelog-path": "Packages/src/CHANGELOG.md",
       "extra-files": [
         {
@@ -24,11 +27,11 @@
       "prerelease-type": "beta",
       "include-v-in-tag": true,
       "include-component-in-tag": true,
-      "changelog-path": "Packages/src/Cli~/CHANGELOG.md",
+      "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {
           "type": "json",
-          "path": "Packages/src/Cli~/internal/cli/default-tools.json",
+          "path": "Packages/src/Cli~/internal/tools/default-tools.json",
           "jsonpath": "$.version"
         },
         {
