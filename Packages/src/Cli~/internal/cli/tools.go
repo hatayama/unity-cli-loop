@@ -41,7 +41,19 @@ func findTool(cache toolsCache, name string) (toolDefinition, bool) {
 }
 
 func findToolForCommand(projectRoot string, command string) (toolDefinition, toolsCache, bool, error) {
-	return tools.FindForCommand(projectRoot, command, collectInternalSkillToolNames(projectRoot))
+	return findToolForCommandWithInternalToolNames(projectRoot, command, collectInternalSkillToolNames)
+}
+
+func findToolForCommandWithInternalToolNames(
+	projectRoot string,
+	command string,
+	collectInternalToolNames func(string) map[string]bool,
+) (toolDefinition, toolsCache, bool, error) {
+	if command == executeDynamicCodeCommandName {
+		return tools.FindForCommand(projectRoot, command, nil)
+	}
+
+	return tools.FindForCommand(projectRoot, command, collectInternalToolNames(projectRoot))
 }
 
 func buildToolParams(args []string, tool toolDefinition) (map[string]any, string, error) {

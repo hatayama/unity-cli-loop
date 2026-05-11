@@ -208,7 +208,7 @@ release_commit_sha_for_version() {
         }
 
         if (index(subject, "chore(") != 1) {
-          return 0
+          return ""
         }
 
         scope_end = index(subject, ")")

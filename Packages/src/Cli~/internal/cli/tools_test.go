@@ -184,6 +184,32 @@ func TestFindToolForCommandUsesEmbeddedExecuteDynamicCodeDefinition(t *testing.T
 	}
 }
 
+func TestFindToolForCommandSkipsInternalSkillScanForExecuteDynamicCode(t *testing.T) {
+	// Verifies that execute-dynamic-code does not scan project skills before using the embedded hot-path definition.
+	collectorCalled := false
+
+	tool, _, ok, err := findToolForCommandWithInternalToolNames(
+		t.TempDir(),
+		executeDynamicCodeCommandName,
+		func(string) map[string]bool {
+			collectorCalled = true
+			return map[string]bool{}
+		})
+	if err != nil {
+		t.Fatalf("findToolForCommandWithInternalToolNames failed: %v", err)
+	}
+
+	if collectorCalled {
+		t.Fatal("execute-dynamic-code should not collect internal skill names")
+	}
+	if !ok {
+		t.Fatal("execute-dynamic-code was not loaded from embedded definitions")
+	}
+	if tool.Name != executeDynamicCodeCommandName {
+		t.Fatalf("tool name mismatch: %s", tool.Name)
+	}
+}
+
 func TestFindToolForCommandUsesProjectCacheForRegularTools(t *testing.T) {
 	// Verifies that non-hot-path tools still come from the project tool cache.
 	projectRoot := t.TempDir()

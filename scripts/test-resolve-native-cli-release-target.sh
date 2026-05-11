@@ -339,6 +339,11 @@ test_recovery_ignores_non_release_subject_mentions() {
   run_success_case recovery-non-release-subject 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: keep release 3.0.0-beta.2 on the release commit"
 }
 
+# Verifies recovery ignores metadata-touching commits unless their subject is a release commit.
+test_recovery_ignores_non_release_metadata_commit() {
+  run_success_case recovery-non-release-metadata 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: repair release metadata" true false
+}
+
 # Verifies recovery ignores non-release subjects with a later release marker.
 test_recovery_requires_release_marker_after_scope() {
   run_success_case recovery-scoped-marker 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta) follow-up): release 3.0.0-beta.2"
@@ -377,6 +382,7 @@ test_recovery_targets_release_commit
 test_recovery_targets_grouped_release_commit
 test_recovery_ignores_grouped_package_only_release_commit
 test_recovery_ignores_non_release_subject_mentions
+test_recovery_ignores_non_release_metadata_commit
 test_recovery_requires_release_marker_after_scope
 test_recovery_target_uses_exact_version_boundary
 test_main_prerelease_fails
