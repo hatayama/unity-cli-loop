@@ -151,11 +151,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 ViewDataBinder.UpdateEnumField(_skillsTargetField, data.SelectedTarget);
             }
+
+            _skillsTargetField.SetEnabled(
+                data.IsCliInstalled
+                && data.SelectedTargetInstallState != SkillInstallState.Checking);
         }
 
         private void UpdateRefreshSkillsButton(CliSetupData data)
         {
-            bool enabled = data.IsCliInstalled && !data.IsChecking && !data.IsInstallingSkills;
+            bool enabled = data.IsCliInstalled && !data.IsInstallingSkills;
             _refreshSkillsStateButton.SetEnabled(enabled);
             ViewDataBinder.ToggleClass(_refreshSkillsStateButton, "unity-cli-loop-button--disabled", !enabled);
         }
@@ -164,13 +168,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             ViewDataBinder.SetVisible(_groupSkillsRow, false);
             ViewDataBinder.UpdateToggle(_groupSkillsToggle, data.GroupSkillsUnderUnityCliLoop);
-            _groupSkillsToggle.SetEnabled(data.IsCliInstalled && !data.IsChecking && !data.IsInstallingSkills);
+            _groupSkillsToggle.SetEnabled(data.IsCliInstalled && !data.IsInstallingSkills);
         }
 
         private void UpdateSkillsSubsection(CliSetupData data)
         {
-            bool enabled = data.IsCliInstalled && !data.IsChecking;
-            _skillsSubsection.SetEnabled(enabled);
+            _skillsSubsection.SetEnabled(data.IsCliInstalled);
         }
 
         private void UpdateInstallSkillsButton(CliSetupData data)
@@ -182,7 +185,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool enabled = IsInstallSkillsButtonEnabled(
                 data.IsCliInstalled,
                 data.IsInstallingSkills,
-                data.IsChecking,
                 data.SelectedTargetInstallState);
             SetSkillsButton(label, enabled);
         }
@@ -276,10 +278,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool IsInstallSkillsButtonEnabled(
             bool isCliInstalled,
             bool isInstallingSkills,
-            bool isChecking,
             SkillInstallState installState)
         {
-            if (!isCliInstalled || isInstallingSkills || isChecking)
+            if (!isCliInstalled || isInstallingSkills)
             {
                 return false;
             }
