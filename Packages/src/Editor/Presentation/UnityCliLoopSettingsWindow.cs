@@ -199,7 +199,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void ScheduleDeferredInitialRefresh()
         {
-            if (_isDeferredInitialRefreshScheduled)
+            if (!UnityCliLoopSettingsWindowRefreshPolicy.ShouldScheduleDeferredInitialRefresh(
+                    _isDeferredInitialRefreshScheduled,
+                    _hasCompletedDeferredInitialRefresh))
             {
                 return;
             }

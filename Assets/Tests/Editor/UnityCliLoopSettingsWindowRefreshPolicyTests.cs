@@ -67,6 +67,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldRefresh, Is.True);
         }
 
+        [TestCase(false, false, true)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, false)]
+        [TestCase(true, true, false)]
+        public void ShouldScheduleDeferredInitialRefresh_ReturnsExpectedValue(
+            bool isAlreadyScheduled,
+            bool hasCompleted,
+            bool expected)
+        {
+            // Verifies that focus changes do not rerun the initial Skills freshness check.
+            bool shouldSchedule = UnityCliLoopSettingsWindowRefreshPolicy.ShouldScheduleDeferredInitialRefresh(
+                isAlreadyScheduled,
+                hasCompleted);
+
+            Assert.That(shouldSchedule, Is.EqualTo(expected));
+        }
+
         [TestCase(true, true, false, false, false)]
         [TestCase(true, true, false, true, true)]
         [TestCase(true, false, false, false, true)]

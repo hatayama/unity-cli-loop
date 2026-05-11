@@ -140,6 +140,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return refreshRequested && ShouldRunExpensiveChecks(refreshMode);
         }
 
+        public static bool ShouldScheduleDeferredInitialRefresh(
+            bool isAlreadyScheduled,
+            bool hasCompleted)
+        {
+            return !isAlreadyScheduled && !hasCompleted;
+        }
+
         public static bool ShouldStartSkillInstallStateRefresh(
             bool isCliInstalled,
             bool isRefreshingVersion,
