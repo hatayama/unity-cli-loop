@@ -6,7 +6,7 @@ set -eu
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 RELEASE_PR_BRANCH="release-please--branches--$TARGET_BRANCH"
 DIST_PATHS="
-Packages/src/Cli~/Core~/dist
+Packages/src/Cli~/dist
 "
 
 RELEASE_PRS=$(gh pr list \
@@ -17,9 +17,12 @@ RELEASE_PRS=$(gh pr list \
   --json number,headRefName,title,url)
 
 MATCHING_RELEASE_PRS=$(printf '%s' "$RELEASE_PRS" | jq --arg release_branch "$RELEASE_PR_BRANCH" '
+  def is_release_please_title:
+    (. // "") | test("^chore(\\([^)]*\\))?: release( |$)");
+
   [
     .[]
-    | select((.title // "") | test("^chore(\\([^)]*\\))?: release [0-9]"))
+    | select(.title | is_release_please_title)
     | select(
         (.headRefName // "") == $release_branch
         or ((.headRefName // "") | startswith($release_branch + "--components--"))
@@ -62,7 +65,7 @@ fi
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 git add $DIST_PATHS
-git commit -m "chore($TARGET_BRANCH): update bundled core CLI binaries"
+git commit -m "chore($TARGET_BRANCH): update native CLI binaries"
 
 scripts/check-go-cli.sh
 git push origin "HEAD:$RELEASE_PR_HEAD_REF"

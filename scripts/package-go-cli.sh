@@ -2,9 +2,9 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-DISPATCHER_DIR="$ROOT_DIR/Packages/src/Cli~/Dispatcher~"
-DIST_DIR="$DISPATCHER_DIR/dist"
-RELEASE_DIR="$DISPATCHER_DIR/release"
+CLI_DIR="$ROOT_DIR/Packages/src/Cli~"
+DIST_DIR="$CLI_DIR/dist"
+RELEASE_DIR="$CLI_DIR/release"
 
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
@@ -13,7 +13,7 @@ package_unix() {
   platform="$1"
   tmp_dir="$RELEASE_DIR/tmp-$platform"
   mkdir -p "$tmp_dir"
-  cp "$DIST_DIR/$platform/uloop-dispatcher" "$tmp_dir/uloop"
+  cp "$DIST_DIR/$platform/uloop" "$tmp_dir/uloop"
   chmod +x "$tmp_dir/uloop"
   (
     cd "$tmp_dir"
@@ -26,7 +26,7 @@ package_windows() {
   platform="windows-amd64"
   tmp_dir="$RELEASE_DIR/tmp-$platform"
   mkdir -p "$tmp_dir"
-  cp "$DIST_DIR/$platform/uloop-dispatcher.exe" "$tmp_dir/uloop.exe"
+  cp "$DIST_DIR/$platform/uloop.exe" "$tmp_dir/uloop.exe"
   (
     cd "$tmp_dir"
     zip -q "$RELEASE_DIR/uloop-$platform.zip" uloop.exe

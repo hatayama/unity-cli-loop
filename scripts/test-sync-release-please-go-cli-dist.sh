@@ -48,7 +48,7 @@ case "$1" in
     ;;
   ls-files)
     if [ "$DIST_UNTRACKED" = "true" ]; then
-      printf '%s\n' "Packages/src/Cli~/Core~/dist/linux-amd64/uloop-core"
+      printf '%s\n' "Packages/src/Cli~/dist/linux-amd64/uloop"
     fi
     exit 0
     ;;
@@ -160,6 +160,14 @@ test_current_dist_checks_without_commit() {
   assert_not_contains "$TMP_DIR/current-dist/git.log" "push origin"
 }
 
+# Verifies grouped manifest release PR titles are still matched by branch and label.
+test_grouped_release_title_matches() {
+  run_case grouped-release-title '[{"number":1043,"headRefName":"release-please--branches--v3-beta","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]' false false
+
+  assert_contains "$TMP_DIR/grouped-release-title/script.log" "build"
+  assert_contains "$TMP_DIR/grouped-release-title/git.log" "checkout -B release-please--branches--v3-beta FETCH_HEAD"
+}
+
 # Verifies older component release-please branches remain supported during configuration transitions.
 test_component_release_branch_still_matches() {
   run_case component-release '[{"number":1043,"headRefName":"release-please--branches--v3-beta--components--io.github.hatayama.uloopmcp","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]' false false
@@ -174,9 +182,8 @@ test_stale_dist_commits_and_pushes() {
 
   assert_contains "$TMP_DIR/stale-dist/script.log" "build"
   assert_contains "$TMP_DIR/stale-dist/script.log" "check"
-  assert_contains "$TMP_DIR/stale-dist/git.log" "add Packages/src/Cli~/Core~/dist"
-  assert_not_contains "$TMP_DIR/stale-dist/git.log" "Packages/src/Cli~/Dispatcher~/dist"
-  assert_contains "$TMP_DIR/stale-dist/git.log" "commit -m chore(v3-beta): update bundled core CLI binaries"
+  assert_contains "$TMP_DIR/stale-dist/git.log" "add Packages/src/Cli~/dist"
+  assert_contains "$TMP_DIR/stale-dist/git.log" "commit -m chore(v3-beta): update native CLI binaries"
   assert_contains "$TMP_DIR/stale-dist/git.log" "push origin HEAD:release-please--branches--v3-beta"
 }
 
@@ -186,10 +193,9 @@ test_untracked_dist_commits_and_pushes() {
 
   assert_contains "$TMP_DIR/untracked-dist/script.log" "build"
   assert_contains "$TMP_DIR/untracked-dist/script.log" "check"
-  assert_contains "$TMP_DIR/untracked-dist/git.log" "ls-files --others --exclude-standard -- Packages/src/Cli~/Core~/dist"
-  assert_contains "$TMP_DIR/untracked-dist/git.log" "add Packages/src/Cli~/Core~/dist"
-  assert_not_contains "$TMP_DIR/untracked-dist/git.log" "Packages/src/Cli~/Dispatcher~/dist"
-  assert_contains "$TMP_DIR/untracked-dist/git.log" "commit -m chore(v3-beta): update bundled core CLI binaries"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "ls-files --others --exclude-standard -- Packages/src/Cli~/dist"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "add Packages/src/Cli~/dist"
+  assert_contains "$TMP_DIR/untracked-dist/git.log" "commit -m chore(v3-beta): update native CLI binaries"
   assert_contains "$TMP_DIR/untracked-dist/git.log" "push origin HEAD:release-please--branches--v3-beta"
 }
 
@@ -197,6 +203,7 @@ test_no_release_pr_exits
 test_ignores_non_release_pending_pr
 test_ignores_release_title_without_release_please_branch
 test_current_dist_checks_without_commit
+test_grouped_release_title_matches
 test_component_release_branch_still_matches
 test_stale_dist_commits_and_pushes
 test_untracked_dist_commits_and_pushes

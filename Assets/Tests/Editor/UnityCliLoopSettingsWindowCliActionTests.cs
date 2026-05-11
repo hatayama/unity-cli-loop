@@ -16,14 +16,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase("3.0.0", "3.0.0", false, false)]
         public void ShouldUninstallCliFromPrimaryButton_ReturnsExpectedAction(
             string cliVersion,
-            string requiredDispatcherVersion,
+            string requiredCliVersion,
             bool canUninstallCli,
             bool expected)
         {
-            // Verifies that package-owned installs route to uninstall when the dispatcher satisfies core requirements.
+            // Verifies that package-owned installs route to uninstall when the CLI satisfies the package minimum.
             bool result = UnityCliLoopSettingsWindow.ShouldUninstallCliFromPrimaryButton(
                 cliVersion,
-                requiredDispatcherVersion,
+                requiredCliVersion,
                 canUninstallCli);
 
             Assert.That(result, Is.EqualTo(expected));
@@ -32,13 +32,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase("3.0.0-beta.0", "3.0.0-beta.1", true)]
         [TestCase("3.0.0-beta.1", "3.0.0-beta.1", false)]
         [TestCase("3.0.0", "3.0.0-beta.1", false)]
-        public void IsCliUpdateNeeded_UsesRequiredDispatcherVersion(
+        public void IsCliUpdateNeeded_UsesMinimumRequiredCliVersion(
             string cliVersion,
-            string requiredDispatcherVersion,
+            string requiredCliVersion,
             bool expected)
         {
-            // Verifies that the settings UI ignores package version drift and only updates old dispatchers.
-            bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, requiredDispatcherVersion);
+            // Verifies that the settings UI ignores package version drift and only updates old CLIs.
+            bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, requiredCliVersion);
 
             Assert.That(result, Is.EqualTo(expected));
         }

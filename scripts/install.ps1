@@ -137,12 +137,12 @@ function Write-LegacyNpmManualRemoval {
     }
 
     if ($LegacyPrefix) {
-        Write-Host "Run this manually if that command still shadows the native dispatcher:"
+        Write-Host "Run this manually if that command still shadows the native CLI:"
         Write-Host "  npm uninstall -g --prefix `"$LegacyPrefix`" uloop-cli"
         return
     }
 
-    Write-Host "Run this manually if the old npm command still shadows the native dispatcher:"
+    Write-Host "Run this manually if the old npm command still shadows the native CLI:"
     Write-Host "  npm uninstall -g uloop-cli"
 }
 

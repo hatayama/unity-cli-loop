@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsService);
             CompilationLockService.RegisterForEditorStartup();
-            ProjectLocalCliAutoInstaller.ScheduleForEditorStartup();
+            GlobalCliAutoInstaller.ScheduleForEditorStartup();
         }
     }
 }

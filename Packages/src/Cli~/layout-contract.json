@@ -2,20 +2,12 @@
   "schemaVersion": 1,
   "layout": {
     "cliDir": "Cli~",
-    "coreDir": "Core~",
-    "dispatcherDir": "Dispatcher~",
-    "sharedDir": "Shared~",
-    "distDir": "dist",
-    "projectLocalBinDir": "bin"
+    "distDir": "dist"
   },
   "binaries": {
-    "core": {
-      "unix": "uloop-core",
-      "windows": "uloop-core.exe"
-    },
-    "dispatcher": {
-      "unix": "uloop-dispatcher",
-      "windows": "uloop-dispatcher.exe"
+    "cli": {
+      "unix": "uloop",
+      "windows": "uloop.exe"
     }
   }
 }
