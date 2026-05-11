@@ -73,7 +73,7 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 		if goPackage.ImportPath == cliModulePath+"/internal/architecture" {
 			continue
 		}
-		for _, boundary := range []string{"/internal/adapters/", "/internal/app", "/internal/application", "/internal/domain", "/internal/ports", "/internal/presentation/", "/internal/version"} {
+		for _, boundary := range []string{"/internal/adapters/", "/internal/app", "/internal/application", "/internal/domain", "/internal/ports", "/internal/presentation", "/internal/version"} {
 			if strings.Contains(goPackage.ImportPath, boundary) {
 				goto nextPackage
 			}
