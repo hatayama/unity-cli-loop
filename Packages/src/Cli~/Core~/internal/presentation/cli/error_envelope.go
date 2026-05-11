@@ -209,13 +209,13 @@ func cliUpdateRequiredError(rpcErr *unity.RPCError, details map[string]any, data
 
 func cliUpdateRequiredNextActions(data map[string]any) []string {
 	updateCommand, _ := data["updateCommand"].(string)
-	fallbackCommand, _ := data["fallbackUpdateCommand"].(string)
+	targetCommand, _ := data["targetUpdateCommand"].(string)
 	actions := []string{}
 	if updateCommand != "" {
 		actions = append(actions, "Run `"+updateCommand+"`.")
 	}
-	if fallbackCommand != "" && fallbackCommand != updateCommand {
-		actions = append(actions, "If that is unavailable, run `"+fallbackCommand+"`.")
+	if targetCommand != "" && targetCommand != updateCommand {
+		actions = append(actions, "If your CLI supports exact updates, run `"+targetCommand+"` instead.")
 	}
 	actions = append(actions, "Retry the original command after the update completes.")
 	return actions

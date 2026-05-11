@@ -15,6 +15,7 @@ Packages/src/Cli~/layout-contract.json
 Packages/src/Cli~/Core~/cmd
 Packages/src/Cli~/Core~/internal
 Packages/src/Cli~/Core~/contract.go
+Packages/src/Cli~/Core~/contract.json
 Packages/src/Cli~/Core~/contract_test.go
 Packages/src/Cli~/Core~/go.mod
 Packages/src/Cli~/Core~/go.sum

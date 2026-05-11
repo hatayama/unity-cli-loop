@@ -194,8 +194,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     new CliUpdateRequiredErrorData(
                         currentCliVersion,
                         requiredCliVersion,
-                        $"{CliConstants.EXECUTABLE_NAME} update --to-version {requiredCliVersion}",
-                        $"{CliConstants.EXECUTABLE_NAME} update")));
+                        $"{CliConstants.EXECUTABLE_NAME} update",
+                        $"{CliConstants.EXECUTABLE_NAME} update --to-version {requiredCliVersion}")));
 
             JsonSerializerSettings settings = new()
             {
@@ -382,7 +382,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public string updateCommand { get; }
 
-        public string fallbackUpdateCommand { get; }
+        public string targetUpdateCommand { get; }
 
         public bool retryableAfterUpdate { get; }
 
@@ -390,12 +390,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string currentCliVersion,
             string requiredCliVersion,
             string updateCommand,
-            string fallbackUpdateCommand) : base("Update the uloop CLI and retry the original command.")
+            string targetUpdateCommand) : base("Update the uloop CLI and retry the original command.")
         {
             this.currentCliVersion = string.IsNullOrWhiteSpace(currentCliVersion) ? null : currentCliVersion;
             this.requiredCliVersion = requiredCliVersion;
             this.updateCommand = updateCommand;
-            this.fallbackUpdateCommand = fallbackUpdateCommand;
+            this.targetUpdateCommand = targetUpdateCommand;
             retryableAfterUpdate = true;
         }
     }

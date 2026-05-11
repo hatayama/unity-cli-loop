@@ -118,7 +118,7 @@ func TestClassifyCliUpdateRequiredRPCError(t *testing.T) {
 		Code:    -32603,
 		Message: "The installed uloop CLI is too old for this Unity package.",
 		Data: json.RawMessage(
-			`{"type":"cli_update_required","currentCliVersion":"3.0.0-beta.5","requiredCliVersion":"3.0.0-beta.6","updateCommand":"uloop update --to-version 3.0.0-beta.6","fallbackUpdateCommand":"uloop update","retryableAfterUpdate":true}`),
+			`{"type":"cli_update_required","currentCliVersion":"3.0.0-beta.5","requiredCliVersion":"3.0.0-beta.6","updateCommand":"uloop update","targetUpdateCommand":"uloop update --to-version 3.0.0-beta.6","retryableAfterUpdate":true}`),
 	}
 
 	cliErr := classifyError(err, errorContext{projectRoot: "/tmp/MyProject", command: "compile"})
@@ -128,7 +128,7 @@ func TestClassifyCliUpdateRequiredRPCError(t *testing.T) {
 	if !cliErr.Retryable || !cliErr.SafeToRetry {
 		t.Fatalf("retry flags mismatch: %#v", cliErr)
 	}
-	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != "Run `uloop update --to-version 3.0.0-beta.6`." {
+	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != "Run `uloop update`." {
 		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
 	}
 }

@@ -36,8 +36,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(data["requiredCliVersion"]?.ToString(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_VERSION));
             Assert.That(
                 data["updateCommand"]?.ToString(),
+                Is.EqualTo("uloop update"));
+            Assert.That(
+                data["targetUpdateCommand"]?.ToString(),
                 Is.EqualTo($"uloop update --to-version {CliConstants.MINIMUM_REQUIRED_CLI_VERSION}"));
-            Assert.That(data["fallbackUpdateCommand"]?.ToString(), Is.EqualTo("uloop update"));
             Assert.That(data["retryableAfterUpdate"]?.ToObject<bool>(), Is.True);
         }
 

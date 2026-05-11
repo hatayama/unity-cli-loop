@@ -132,6 +132,15 @@ assert_contains() {
   fi
 }
 
+assert_script_contains() {
+  expected=$1
+
+  if ! grep -F "$expected" "$SCRIPT" >/dev/null; then
+    echo "Expected $SCRIPT to contain: $expected" >&2
+    exit 1
+  fi
+}
+
 run_success_case() {
   name=$1
   current_version=$2
@@ -314,6 +323,7 @@ test_release_lookup_error_fails() {
   run_failure_case release-lookup-error 3.0.0-beta.3 push v3-beta "gh auth failed" error
 }
 
+assert_script_contains "Packages/src/Cli~/Core~/contract.json"
 test_complete_current_release_skips
 test_package_version_change_without_dispatcher_change_skips
 test_dispatcher_change_publishes
