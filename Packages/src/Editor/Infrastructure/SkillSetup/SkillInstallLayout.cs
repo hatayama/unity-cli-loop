@@ -29,7 +29,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string CliPackageDirName = "Cli~";
         private const string CliInternalDirName = "internal";
         private const string CliPresentationDirName = "presentation";
-        private const string CliPresentationPackageDirName = "cli";
         private const string CliSkillDefinitionsDirName = "skill-definitions";
         private const string CliOnlySkillDefinitionsDirName = "cli-only";
         private static readonly HashSet<string> ExcludedFileNames = new()
@@ -674,7 +673,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CliPackageDirName,
                 CliInternalDirName,
                 CliPresentationDirName,
-                CliPresentationPackageDirName,
                 CliSkillDefinitionsDirName,
                 CliOnlySkillDefinitionsDirName);
         }

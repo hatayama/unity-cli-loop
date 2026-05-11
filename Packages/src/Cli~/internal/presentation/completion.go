@@ -242,6 +242,10 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 		writeLine(stdout, strings.Join(options, "\n"))
 		return
 	}
+	if isNativeCommandName(command) {
+		writeLine(stdout, "")
+		return
+	}
 
 	tool, ok := findTool(cache, command)
 	if !ok {

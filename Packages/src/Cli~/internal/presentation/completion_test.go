@@ -128,6 +128,41 @@ func TestCompletionCommandListOptionsUsesNativeCompletionOptions(t *testing.T) {
 	}
 }
 
+func TestCompletionListOptionsIgnoresCachedToolSchemaForNativeCommand(t *testing.T) {
+	// Verifies native commands keep priority when a cached Unity tool has the same name.
+	var stdout bytes.Buffer
+	cache := toolsCache{
+		Tools: []toolDefinition{
+			{
+				Name: "focus-window",
+				InputSchema: inputSchema{
+					Type: "object",
+					Properties: map[string]toolProperty{
+						"ProjectPath": {Type: "string"},
+					},
+				},
+			},
+		},
+	}
+
+	handled, code := tryHandleCompletionRequest(
+		[]string{"--list-options", "focus-window"},
+		cache,
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+	if stdout.String() != "\n" {
+		t.Fatalf("native command should not use cached tool options: %s", stdout.String())
+	}
+}
+
 // Tests that completion lists default-enabled boolean arguments as --no-* flags.
 func TestCompletionListOptionsUsesNegatedDefaultTrueBooleanFlags(t *testing.T) {
 	var stdout bytes.Buffer
