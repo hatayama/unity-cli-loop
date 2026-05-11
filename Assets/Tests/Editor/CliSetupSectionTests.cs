@@ -101,34 +101,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(text, Is.EqualTo(expectedText));
         }
 
-        [TestCase(false, false, false, SkillInstallState.Missing, false)]
-        [TestCase(true, true, false, SkillInstallState.Missing, false)]
-        [TestCase(true, false, true, SkillInstallState.Missing, false)]
-        [TestCase(true, false, false, SkillInstallState.Checking, false)]
-        [TestCase(true, false, false, SkillInstallState.Installed, false)]
-        [TestCase(true, false, false, SkillInstallState.Outdated, true)]
-        [TestCase(true, false, false, SkillInstallState.Missing, true)]
+        [TestCase(false, false, SkillInstallState.Missing, false)]
+        [TestCase(true, true, SkillInstallState.Missing, false)]
+        [TestCase(true, false, SkillInstallState.Checking, false)]
+        [TestCase(true, false, SkillInstallState.Installed, false)]
+        [TestCase(true, false, SkillInstallState.Outdated, true)]
+        [TestCase(true, false, SkillInstallState.Missing, true)]
         public void IsInstallSkillsButtonEnabled_ReturnsExpectedValue(
             bool isCliInstalled,
             bool isInstallingSkills,
-            bool isChecking,
             SkillInstallState installState,
             bool expectedEnabled)
         {
-            // Verifies that the Skills install button stays gated during CLI refresh work.
+            // Verifies that the Skills install button follows only Skills state.
             bool enabled = CliSetupSection.IsInstallSkillsButtonEnabled(
                 isCliInstalled,
                 isInstallingSkills,
-                isChecking,
                 installState);
 
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }
 
         [Test]
-        public void Update_WhenCliRefreshIsChecking_KeepsSkillsReloadButtonEnabled()
+        public void Update_WhenCliRefreshIsChecking_KeepsSkillsControlsEnabled()
         {
-            // Verifies that a CLI-only refresh does not block manual Skills reload.
+            // Verifies that a CLI-only refresh does not gray out Skills controls.
             VisualElement root = CreateRootElement();
             CliSetupSection section = new(root);
             CliSetupData data = CreateData(
@@ -144,8 +141,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Button installSkillsButton = root.Q<Button>("install-skills-button");
             Assert.That(refreshSkillsButton.enabledSelf, Is.True);
             Assert.That(skillsSubsection.enabledSelf, Is.True);
-            Assert.That(skillsTargetField.enabledSelf, Is.False);
-            Assert.That(installSkillsButton.enabledSelf, Is.False);
+            Assert.That(skillsTargetField.enabledSelf, Is.True);
+            Assert.That(installSkillsButton.enabledSelf, Is.True);
         }
 
         private static VisualElement CreateRootElement()
