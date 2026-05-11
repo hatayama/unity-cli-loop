@@ -112,7 +112,8 @@ func parseUpdateOptions(args []string) (updateOptions, error) {
 				nextActions: []string{"Pass `--to-version` only once."},
 			}
 		}
-		if !isValidUpdateTargetVersion(value) {
+		normalizedValue := normalizeUpdateTargetVersion(value)
+		if !isValidUpdateTargetVersion(normalizedValue) {
 			return updateOptions{}, &argumentError{
 				message:      "Invalid CLI version for --" + updateToVersionFlagName + ": " + value,
 				option:       "--" + updateToVersionFlagName,
@@ -122,7 +123,7 @@ func parseUpdateOptions(args []string) (updateOptions, error) {
 				nextActions:  []string{"Pass a semantic version such as `3.0.0-beta.6`."},
 			}
 		}
-		options.targetVersion = value
+		options.targetVersion = normalizedValue
 		if consumedNext {
 			index++
 		}
@@ -135,16 +136,24 @@ func isValidUpdateTargetVersion(value string) bool {
 	return ok
 }
 
+func normalizeUpdateTargetVersion(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "v") || strings.HasPrefix(trimmed, "V") {
+		return trimmed[1:]
+	}
+	return trimmed
+}
+
 func updateScriptVersion(options updateOptions) string {
 	if options.targetVersion != "" {
-		return options.targetVersion
+		return normalizeUpdateTargetVersion(options.targetVersion)
 	}
 	return corecontract.Current.CliVersion
 }
 
 func updateSelector(options updateOptions) string {
 	if options.targetVersion != "" {
-		return installer.ReleaseTag(options.targetVersion)
+		return installer.ReleaseTag(normalizeUpdateTargetVersion(options.targetVersion))
 	}
 	return installer.UpdateSelectorForVersion(corecontract.Current.CliVersion)
 }

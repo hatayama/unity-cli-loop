@@ -32,12 +32,8 @@ type (
 )
 
 func loadTools(projectRoot string) (toolsCache, error) {
-	cachePath := filepath.Join(projectRoot, cacheDirectoryName, cacheFileName)
-	if content, err := os.ReadFile(cachePath); err == nil {
-		var cache toolsCache
-		if json.Unmarshal(content, &cache) == nil {
-			return filterInternalSkillTools(projectRoot, cache), nil
-		}
+	if cache, ok := loadProjectToolCache(projectRoot); ok {
+		return cache, nil
 	}
 
 	content, err := embeddedTools.ReadFile(defaultToolsFile)
@@ -50,6 +46,20 @@ func loadTools(projectRoot string) (toolsCache, error) {
 		return toolsCache{}, err
 	}
 	return filterInternalSkillTools(projectRoot, cache), nil
+}
+
+func loadProjectToolCache(projectRoot string) (toolsCache, bool) {
+	cachePath := filepath.Join(projectRoot, cacheDirectoryName, cacheFileName)
+	content, err := os.ReadFile(cachePath)
+	if err != nil {
+		return toolsCache{}, false
+	}
+
+	var cache toolsCache
+	if json.Unmarshal(content, &cache) != nil {
+		return toolsCache{}, false
+	}
+	return filterInternalSkillTools(projectRoot, cache), true
 }
 
 func loadDefaultTools() toolsCache {

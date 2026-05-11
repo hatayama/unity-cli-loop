@@ -20,8 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 {
                     showedDialog = true;
                     Assert.That(title, Does.Contain("Uninstall"));
-                    Assert.That(message, Does.Contain("Project-local"));
-                    Assert.That(message, Does.Not.Contain("Windows User PATH"));
+                    Assert.That(message, Does.Contain("native uLoop CLI command"));
+                    Assert.That(message, Does.Contain("package-owned PATH entries"));
                     Assert.That(ok, Is.EqualTo("OK"));
                     Assert.That(cancel, Is.EqualTo("Cancel"));
                     return true;

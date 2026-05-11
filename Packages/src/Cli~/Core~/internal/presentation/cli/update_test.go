@@ -80,6 +80,27 @@ func TestUpdateCommandForDarwinUsesRequestedVersion(t *testing.T) {
 	}
 }
 
+func TestUpdateCommandForDarwinNormalizesRequestedVersionPrefix(t *testing.T) {
+	// Verifies accepted v-prefixed semantic versions still resolve to valid CLI release tags.
+	commandName, args, err := updateCommandForOSWithOptions("darwin", updateOptions{
+		targetVersion: "v3.0.0-beta.6",
+	})
+	if err != nil {
+		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
+	}
+
+	if commandName != "sh" {
+		t.Fatalf("command mismatch: %s", commandName)
+	}
+	joinedArgs := strings.Join(args, " ")
+	if !strings.Contains(joinedArgs, "ULOOP_VERSION='cli-v3.0.0-beta.6'") {
+		t.Fatalf("installer version should not contain a doubled v prefix: %s", joinedArgs)
+	}
+	if strings.Contains(joinedArgs, "cli-vv3.0.0-beta.6") {
+		t.Fatalf("installer version contains doubled v prefix: %s", joinedArgs)
+	}
+}
+
 func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
 	// Verifies Windows CLI update can target the minimum release version requested by Unity.
 	commandName, args, err := updateCommandForOSWithOptions("windows", updateOptions{
@@ -98,6 +119,18 @@ func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
 	}
 	if !strings.Contains(joinedArgs, "$env:ULOOP_VERSION='cli-v3.0.0'") {
 		t.Fatalf("installer version missing: %s", joinedArgs)
+	}
+}
+
+func TestParseUpdateOptionsNormalizesVersionPrefix(t *testing.T) {
+	// Verifies parsed target versions are normalized before installer tag selection.
+	options, err := parseUpdateOptions([]string{"--to-version", "v3.0.0-beta.6"})
+	if err != nil {
+		t.Fatalf("parseUpdateOptions failed: %v", err)
+	}
+
+	if options.targetVersion != "3.0.0-beta.6" {
+		t.Fatalf("target version mismatch: %#v", options)
 	}
 }
 

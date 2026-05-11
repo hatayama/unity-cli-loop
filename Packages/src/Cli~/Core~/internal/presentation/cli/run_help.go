@@ -2,10 +2,13 @@ package cli
 
 import (
 	"io"
+	"os"
 	"strings"
 
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/adapters/project"
 )
+
+const nativeCLIDescription = "Native CLI. Runs uloop commands and dispatches live Unity tool commands."
 
 func isVersionRequest(args []string) bool {
 	return len(args) == 1 && (args[0] == "--version" || args[0] == "-v")
@@ -18,9 +21,26 @@ func isHelpRequest(args []string) bool {
 func printHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
-		"Native CLI. Runs uloop commands and dispatches live Unity tool commands.",
+		nativeCLIDescription,
 		toolsCache{},
 		false)
+}
+
+func printHelpForResolvedProject(stdout io.Writer, explicitProjectPath string) {
+	startPath, err := os.Getwd()
+	if err != nil {
+		printHelp(stdout)
+		return
+	}
+
+	connection, err := project.ResolveConnection(startPath, explicitProjectPath)
+	if err != nil {
+		printHelp(stdout)
+		return
+	}
+
+	cache, ok := loadProjectToolCache(connection.ProjectRoot)
+	printMainHelp(stdout, nativeCLIDescription, cache, ok)
 }
 
 func printLauncherHelp(stdout io.Writer) {

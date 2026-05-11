@@ -23,7 +23,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	}
 
 	if len(remainingArgs) == 0 || isHelpRequest(remainingArgs) {
-		printHelp(stdout)
+		printHelpForResolvedProject(stdout, projectPath)
 		return 0
 	}
 	if isVersionRequest(remainingArgs) {
