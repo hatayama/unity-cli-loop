@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -257,23 +258,42 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 }
 
 func detectShell() string {
-	return detectShellFromEnvironment(runtime.GOOS, os.Getenv("SHELL"), os.Getenv("MSYSTEM"))
+	return detectShellForPlatform(runtime.GOOS, os.Getenv("SHELL"), os.Getenv("MSYSTEM"), exec.LookPath)
 }
 
 func detectShellFromEnvironment(goos string, shellPath string, msystem string) string {
-	posixShell := detectPosixShell(shellPath)
-	if goos == "windows" {
-		if posixShell != "" && msystem != "" {
-			return posixShell
-		}
-		return "powershell"
-	}
-
-	return posixShell
+	return detectShellForPlatform(goos, shellPath, msystem, exec.LookPath)
 }
 
-func detectPosixShell(shellPath string) string {
+func detectShellForPlatform(goos string, shellPath string, msystem string, lookPath func(string) (string, error)) string {
+	shellName := detectShellName(shellPath)
+	if goos == "windows" {
+		if isPosixShell(shellName) && msystem != "" {
+			return shellName
+		}
+		if shellName == "pwsh" || shellName == "powershell" {
+			return shellName
+		}
+		if _, err := lookPath("pwsh"); err == nil {
+			return "pwsh"
+		}
+		if _, err := lookPath("powershell"); err == nil {
+			return "powershell"
+		}
+		return ""
+	}
+
+	return shellName
+}
+
+func detectShellName(shellPath string) string {
 	shellPath = strings.ToLower(shellPath)
+	if strings.Contains(shellPath, "pwsh") {
+		return "pwsh"
+	}
+	if strings.Contains(shellPath, "powershell") {
+		return "powershell"
+	}
 	if strings.Contains(shellPath, "zsh") {
 		return "zsh"
 	}

@@ -210,9 +210,28 @@ func TestDetectShellOnWindowsGitBashUsesBash(t *testing.T) {
 	}
 }
 
+func TestDetectShellOnWindowsPrefersPwshWhenAvailable(t *testing.T) {
+	// Verifies Windows completion install targets PowerShell 7 when it is available.
+	shellName := detectShellForPlatform("windows", "", "", func(name string) (string, error) {
+		if name == "pwsh" {
+			return filepath.Join("bin", "pwsh"), nil
+		}
+		return "", os.ErrNotExist
+	})
+
+	if shellName != "pwsh" {
+		t.Fatalf("windows shell mismatch: %s", shellName)
+	}
+}
+
 // Tests that regular Windows terminals still get the native PowerShell completion default.
 func TestDetectShellOnWindowsPowerShellDefaultsToPowerShell(t *testing.T) {
-	shellName := detectShellFromEnvironment("windows", "", "")
+	shellName := detectShellForPlatform("windows", "", "", func(name string) (string, error) {
+		if name == "powershell" {
+			return filepath.Join("bin", "powershell"), nil
+		}
+		return "", os.ErrNotExist
+	})
 
 	if shellName != "powershell" {
 		t.Fatalf("windows default shell mismatch: %s", shellName)

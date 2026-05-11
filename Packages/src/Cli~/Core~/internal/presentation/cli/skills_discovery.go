@@ -254,7 +254,7 @@ func parseSkillFrontmatter(content string) map[string]string {
 		if !ok {
 			continue
 		}
-		result[strings.TrimSpace(key)] = strings.Trim(strings.TrimSpace(value), `"`)
+		result[strings.TrimSpace(key)] = strings.Trim(strings.TrimSpace(value), `"'`)
 	}
 	return result
 }

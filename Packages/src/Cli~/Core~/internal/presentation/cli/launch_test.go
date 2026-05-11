@@ -49,6 +49,15 @@ func TestParseLaunchOptionsRejectsUnityHubRegistration(t *testing.T) {
 	}
 }
 
+func TestParseLaunchOptionsRejectsEmptyPlatformEqualsValue(t *testing.T) {
+	// Verifies --platform= cannot silently drop the requested build target.
+	_, err := parseLaunchOptions([]string{"--platform="}, "")
+
+	if err == nil {
+		t.Fatal("expected empty platform value error")
+	}
+}
+
 func TestReadUnityEditorVersion(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	projectSettings := filepath.Join(projectRoot, "ProjectSettings")

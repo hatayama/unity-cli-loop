@@ -95,7 +95,11 @@ func parseLaunchOptions(args []string, globalProjectPath string) (launchOptions,
 				index++
 			}
 		case strings.HasPrefix(arg, "--platform="):
-			options.platform = strings.TrimPrefix(arg, "--platform=")
+			value, _, err := readLaunchOptionValue(arg, args, index)
+			if err != nil {
+				return launchOptions{}, err
+			}
+			options.platform = value
 		case arg == "--max-depth":
 			value, consumed, err := readLaunchOptionValue(arg, args, index)
 			if err != nil {

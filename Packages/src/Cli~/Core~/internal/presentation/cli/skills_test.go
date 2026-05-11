@@ -40,6 +40,26 @@ internal: true
 	}
 }
 
+func TestCollectSkillDefinitionsSkipsSingleQuotedInternalSkill(t *testing.T) {
+	// Verifies YAML single quotes do not expose internal skills.
+	projectRoot := t.TempDir()
+	writeTestSkill(t, projectRoot, "Assets/Editor/InternalTool/Skill", `---
+name: uloop-internal-tool
+internal: 'true'
+---
+
+# internal
+`)
+
+	skills, err := collectSkillDefinitions(projectRoot)
+	if err != nil {
+		t.Fatalf("collectSkillDefinitions failed: %v", err)
+	}
+	if len(skills) != 0 {
+		t.Fatalf("internal skill should be hidden: %#v", skills)
+	}
+}
+
 // Tests that skill discovery includes package, CLI-only, project-local, and cached package skill roots.
 func TestCollectSkillDefinitionsIncludesProjectAndPackageRoots(t *testing.T) {
 	projectRoot := t.TempDir()
