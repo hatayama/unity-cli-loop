@@ -21,11 +21,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            if (UnityEngine.Application.isBatchMode)
-            {
-                return;
-            }
-
             EditorApplication.delayCall += EnsureGlobalCliForCurrentProject;
         }
 
