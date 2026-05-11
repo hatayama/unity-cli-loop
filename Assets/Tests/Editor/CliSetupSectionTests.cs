@@ -101,22 +101,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(text, Is.EqualTo(expectedText));
         }
 
-        [TestCase(false, false, SkillInstallState.Missing, false)]
-        [TestCase(true, true, SkillInstallState.Missing, false)]
-        [TestCase(true, false, SkillInstallState.Checking, false)]
-        [TestCase(true, false, SkillInstallState.Installed, false)]
-        [TestCase(true, false, SkillInstallState.Outdated, true)]
-        [TestCase(true, false, SkillInstallState.Missing, true)]
+        [TestCase(false, false, false, SkillInstallState.Missing, false)]
+        [TestCase(true, true, false, SkillInstallState.Missing, false)]
+        [TestCase(true, false, true, SkillInstallState.Missing, false)]
+        [TestCase(true, false, false, SkillInstallState.Checking, false)]
+        [TestCase(true, false, false, SkillInstallState.Installed, false)]
+        [TestCase(true, false, false, SkillInstallState.Outdated, true)]
+        [TestCase(true, false, false, SkillInstallState.Missing, true)]
         public void IsInstallSkillsButtonEnabled_ReturnsExpectedValue(
             bool isCliInstalled,
             bool isInstallingSkills,
+            bool isChecking,
             SkillInstallState installState,
             bool expectedEnabled)
         {
-            // Verifies that the Skills install button ignores CLI-only refresh work.
+            // Verifies that the Skills install button stays gated during CLI refresh work.
             bool enabled = CliSetupSection.IsInstallSkillsButtonEnabled(
                 isCliInstalled,
                 isInstallingSkills,
+                isChecking,
                 installState);
 
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
@@ -131,14 +134,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliSetupData data = CreateData(
                 isCliInstalled: true,
                 isChecking: true,
-                selectedTargetInstallState: SkillInstallState.Checking);
+                selectedTargetInstallState: SkillInstallState.Missing);
 
             section.Update(data);
 
             Button refreshSkillsButton = root.Q<Button>("refresh-skills-state-button");
             VisualElement skillsSubsection = root.Q<VisualElement>("skills-subsection");
+            Button installSkillsButton = root.Q<Button>("install-skills-button");
             Assert.That(refreshSkillsButton.enabledSelf, Is.True);
             Assert.That(skillsSubsection.enabledSelf, Is.True);
+            Assert.That(installSkillsButton.enabledSelf, Is.False);
         }
 
         private static VisualElement CreateRootElement()

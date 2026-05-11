@@ -772,6 +772,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _installSkillsButton.SetEnabled(CliSetupSection.IsInstallSkillsButtonEnabled(
                     isCliInstalled: true,
                     _isInstallingSkills,
+                    isChecking: false,
                     selectedTargetInfo.InstallState));
                 return;
             }

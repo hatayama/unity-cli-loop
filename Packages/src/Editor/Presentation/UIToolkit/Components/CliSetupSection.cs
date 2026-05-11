@@ -181,6 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool enabled = IsInstallSkillsButtonEnabled(
                 data.IsCliInstalled,
                 data.IsInstallingSkills,
+                data.IsChecking,
                 data.SelectedTargetInstallState);
             SetSkillsButton(label, enabled);
         }
@@ -274,9 +275,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool IsInstallSkillsButtonEnabled(
             bool isCliInstalled,
             bool isInstallingSkills,
+            bool isChecking,
             SkillInstallState installState)
         {
-            if (!isCliInstalled || isInstallingSkills)
+            if (!isCliInstalled || isInstallingSkills || isChecking)
             {
                 return false;
             }
