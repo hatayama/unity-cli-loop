@@ -151,6 +151,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 ViewDataBinder.UpdateEnumField(_skillsTargetField, data.SelectedTarget);
             }
+
+            _skillsTargetField.SetEnabled(data.IsCliInstalled && !data.IsChecking);
         }
 
         private void UpdateRefreshSkillsButton(CliSetupData data)

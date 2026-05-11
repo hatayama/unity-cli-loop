@@ -140,9 +140,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Button refreshSkillsButton = root.Q<Button>("refresh-skills-state-button");
             VisualElement skillsSubsection = root.Q<VisualElement>("skills-subsection");
+            EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
             Button installSkillsButton = root.Q<Button>("install-skills-button");
             Assert.That(refreshSkillsButton.enabledSelf, Is.True);
             Assert.That(skillsSubsection.enabledSelf, Is.True);
+            Assert.That(skillsTargetField.enabledSelf, Is.False);
             Assert.That(installSkillsButton.enabledSelf, Is.False);
         }
 
