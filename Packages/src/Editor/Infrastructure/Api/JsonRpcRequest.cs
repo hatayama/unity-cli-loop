@@ -16,6 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         public JToken Params { get; set; }
 
+        public string ClientCliVersion { get; set; }
+
         /// <summary>
         /// JSON-RPC 2.0 spec requires id type to match the request.
         /// Must be string, number, or null - same as received.

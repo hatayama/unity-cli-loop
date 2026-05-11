@@ -45,16 +45,8 @@ update_uloop_link() {
     echo "Creating global uloop symlink: $link_path"
   fi
 
-  ln -sfn "$dispatcher_path" "$link_path"
-  echo "Global uloop now points at the rebuilt dispatcher: $link_path -> $(readlink "$link_path")"
-}
-
-install_project_local_core() {
-  mkdir -p "$ROOT_DIR/.uloop/bin"
-  rm -f "$project_local_core_path"
-  cp "$core_path" "$project_local_core_path"
-  chmod +x "$project_local_core_path"
-  echo "Project-local uloop-core now uses the rebuilt binary: $project_local_core_path"
+  ln -sfn "$cli_path" "$link_path"
+  echo "Global uloop now points at the rebuilt native CLI: $link_path -> $(readlink "$link_path")"
 }
 
 ensure_global_uloop_resolves_to_link() {
@@ -77,44 +69,33 @@ ensure_global_uloop_resolves_to_link() {
 "$ROOT_DIR/scripts/check-go-cli-source.sh"
 "$ROOT_DIR/scripts/build-go-cli.sh"
 
-core_path=""
-dispatcher_path=""
+cli_path=""
 global_command_name="uloop"
 existing_uloop_path=""
-project_local_core_path="$ROOT_DIR/.uloop/bin/uloop-core"
 os=$(uname -s)
 arch=$(uname -m)
 
 case "$os:$arch" in
   Darwin:arm64 | Darwin:aarch64)
-    core_path="$ROOT_DIR/Packages/src/Cli~/Core~/dist/darwin-arm64/uloop-core"
-    dispatcher_path="$ROOT_DIR/Packages/src/Cli~/Dispatcher~/dist/darwin-arm64/uloop-dispatcher"
+    cli_path="$ROOT_DIR/Packages/src/Cli~/dist/darwin-arm64/uloop"
     ;;
   Darwin:x86_64 | Darwin:amd64)
-    core_path="$ROOT_DIR/Packages/src/Cli~/Core~/dist/darwin-amd64/uloop-core"
-    dispatcher_path="$ROOT_DIR/Packages/src/Cli~/Dispatcher~/dist/darwin-amd64/uloop-dispatcher"
+    cli_path="$ROOT_DIR/Packages/src/Cli~/dist/darwin-amd64/uloop"
     ;;
   MINGW*:x86_64 | MINGW*:amd64 | MSYS*:x86_64 | MSYS*:amd64 | CYGWIN*:x86_64 | CYGWIN*:amd64 | Windows_NT:x86_64 | Windows_NT:amd64)
-    core_path="$ROOT_DIR/Packages/src/Cli~/Core~/dist/windows-amd64/uloop-core.exe"
-    dispatcher_path="$ROOT_DIR/Packages/src/Cli~/Dispatcher~/dist/windows-amd64/uloop-dispatcher.exe"
+    cli_path="$ROOT_DIR/Packages/src/Cli~/dist/windows-amd64/uloop.exe"
     global_command_name="uloop.exe"
-    project_local_core_path="$ROOT_DIR/.uloop/bin/uloop-core.exe"
     ;;
 esac
 
-if [ -z "$dispatcher_path" ] || [ -z "$core_path" ]; then
+if [ -z "$cli_path" ]; then
   echo "Go CLI source checks passed and dist binaries were rebuilt."
-  echo "No checked-in dispatcher is mapped for this platform: $os/$arch"
+  echo "No checked-in native CLI is mapped for this platform: $os/$arch"
   exit 0
 fi
 
-if [ ! -x "$core_path" ]; then
-  echo "Project-local core was not built or is not executable: $core_path" >&2
-  exit 1
-fi
-
-if [ ! -x "$dispatcher_path" ]; then
-  echo "Dispatcher was not built or is not executable: $dispatcher_path" >&2
+if [ ! -x "$cli_path" ]; then
+  echo "Native CLI was not built or is not executable: $cli_path" >&2
   exit 1
 fi
 
@@ -154,8 +135,6 @@ if [ "$global_command_name" = "uloop.exe" ] && [ -n "$existing_uloop_path" ] && 
 fi
 
 echo "Go CLI source checks passed and dist binaries were rebuilt."
-
-install_project_local_core
 
 ensure_symlink_target "$global_uloop_path"
 if [ -n "$extra_global_uloop_path" ]; then

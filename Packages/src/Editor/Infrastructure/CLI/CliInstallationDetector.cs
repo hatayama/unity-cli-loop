@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     }
 
     /// <summary>
-    /// Detects the installed CLI dispatcher and keeps the result in an instance-scoped editor cache.
+    /// Detects the installed CLI and keeps the result in an instance-scoped editor cache.
     /// </summary>
     public sealed class CliInstallationDetector : ICliInstallationDetector
     {

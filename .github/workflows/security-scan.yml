@@ -132,6 +132,4 @@ jobs:
 
     - name: Run govulncheck
       run: |
-        for module in Packages/src/Cli~/Shared~ Packages/src/Cli~/Core~ Packages/src/Cli~/Dispatcher~; do
-          (cd "$module" && govulncheck ./...)
-        done
+        (cd Packages/src/Cli~ && govulncheck ./...)

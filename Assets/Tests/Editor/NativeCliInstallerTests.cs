@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(command.Arguments, Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.sh"));
             Assert.That(command.Arguments, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
             Assert.That(command.Arguments, Does.Contain("ULOOP_VERSION"));
-            Assert.That(command.Arguments, Does.Contain("v3.0.0-beta.3"));
+            Assert.That(command.Arguments, Does.Contain("cli-v3.0.0-beta.3"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
@@ -80,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(command.FileName, Is.EqualTo("powershell"));
             Assert.That(command.Arguments, Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.ps1"));
-            Assert.That(command.Arguments, Does.Contain("$env:ULOOP_VERSION='v3.0.0-beta.3'"));
+            Assert.That(command.Arguments, Does.Contain("$env:ULOOP_VERSION='cli-v3.0.0-beta.3'"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Contain("irm"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
@@ -147,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(command.ManualCommand, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
                 Assert.That(command.ManualCommand, Does.Contain(scriptPath));
                 Assert.That(command.ManualCommand, Does.Contain("ULOOP_VERSION"));
-                Assert.That(command.ManualCommand, Does.Contain("v3.0.0-beta.3"));
+                Assert.That(command.ManualCommand, Does.Contain("cli-v3.0.0-beta.3"));
                 Assert.That(command.ManualCommand, Does.Not.Contain("curl -fsSL"));
                 Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
             }
@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(command.FileName, Is.EqualTo("powershell"));
                 Assert.That(command.ManualCommand, Does.Contain($"& '{scriptPath}'"));
-                Assert.That(command.ManualCommand, Does.Contain("$env:ULOOP_VERSION='v3.0.0-beta.3'"));
+                Assert.That(command.ManualCommand, Does.Contain("$env:ULOOP_VERSION='cli-v3.0.0-beta.3'"));
                 Assert.That(command.ManualCommand, Does.Not.Contain("irm"));
                 Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
             }
@@ -208,7 +208,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that beta editor installs call the same beta installer script as CLI commands.
             string url = NativeCliInstaller.BuildInstallerScriptUrl(
-                "v3.0.0-beta.3",
+                "cli-v3.0.0-beta.3",
                 CliConstants.POSIX_INSTALL_SCRIPT_NAME);
 
             Assert.That(url, Is.EqualTo("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.sh"));
@@ -219,7 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that stable editor installs call the stable installer script.
             string url = NativeCliInstaller.BuildInstallerScriptUrl(
-                "v3.0.0",
+                "cli-v3.0.0",
                 CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
 
             Assert.That(url, Is.EqualTo("https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1"));
@@ -237,7 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliInstallResult result = NativeCliInstaller.RunInstallCommand(command, CancellationToken.None, 1000);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorOutput, Does.Contain("Failed to start release CLI dispatcher installer"));
+            Assert.That(result.ErrorOutput, Does.Contain("Failed to start release CLI installer"));
         }
 
         [Test]

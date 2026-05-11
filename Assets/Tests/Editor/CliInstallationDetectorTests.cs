@@ -10,7 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class CliInstallationDetectorTests
     {
         [Test]
-        public void SelectPreferredDetection_WhenShellCommandShadowsPackageOwnedDispatcherUsesShellPath()
+        public void SelectPreferredDetection_WhenShellCommandShadowsPackageOwnedCliUsesShellPath()
         {
             // Verifies that the settings UI reports the same CLI command the user's terminal runs.
             CliInstallationDetection packageOwnedDetection = new(
@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void SelectPreferredDetection_WhenShellCommandMissingUsesPackageOwnedDispatcher()
+        public void SelectPreferredDetection_WhenShellCommandMissingUsesPackageOwnedCli()
         {
             // Verifies that package-owned installs still count when the shell cannot resolve uloop.
             CliInstallationDetection packageOwnedDetection = new(
@@ -67,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void SelectPreferredDetection_WhenPackageOwnedDispatcherMissingUsesShellPath()
+        public void SelectPreferredDetection_WhenPackageOwnedCliMissingUsesShellPath()
         {
             // Verifies that legacy CLI installs still surface as update candidates.
             CliInstallationDetection packageOwnedDetection = new(

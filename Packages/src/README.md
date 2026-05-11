@@ -90,7 +90,7 @@ On Windows PowerShell:
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-After installing the native dispatcher, the installer automatically tries to remove the old npm package with `npm uninstall -g uloop-cli`.
+After installing the native CLI, the installer automatically tries to remove the old npm package with `npm uninstall -g uloop-cli`.
 If npm is unavailable or the old command belongs to a different Node prefix, the installer prints the manual command to run:
 
 ```bash
@@ -639,13 +639,13 @@ See [HelloWorld sample](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKI
 
 ### Native Go CLI Development
 
-Run the native Go CLI checks before changing files under `Packages/src/Cli~/Core~`, `Packages/src/Cli~/Dispatcher~`, or `Packages/src/Cli~/Shared~`:
+Run the native Go CLI checks before changing files under `Packages/src/Cli~`:
 
 ```bash
 scripts/check-go-cli.sh
 ```
 
-The check script verifies formatting with `goimports` and `gofumpt`, runs `go vet ./...`, runs `golangci-lint`, and then runs `go test ./...` for each Go CLI module. Install `golangci-lint` first if it is not available on your `PATH`.
+The check script verifies formatting with `goimports` and `gofumpt`, runs `go vet ./...`, runs `golangci-lint`, and then runs `go test ./...` for the Go CLI module. Install `golangci-lint` first if it is not available on your `PATH`.
 
 Use the existing build script when you need to refresh the checked-in native binaries:
 

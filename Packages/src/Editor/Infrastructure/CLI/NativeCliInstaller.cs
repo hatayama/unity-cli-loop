@@ -14,7 +14,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Installs the package-owned global dispatcher through the same installer scripts used by CLI commands.
+    /// Installs the package-owned global CLI through the same installer scripts used by CLI commands.
     /// </summary>
     public static class NativeCliInstaller
     {
@@ -23,12 +23,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public static NativeCliInstallCommand GetInstallCommand(
             RuntimePlatform platform,
-            string packageVersion,
+            string cliReleaseTag,
             bool removeLegacyLaunchers)
         {
             return BuildInstallCommand(
                 platform,
-                packageVersion,
+                cliReleaseTag,
                 removeLegacyLaunchers,
                 NodeEnvironmentResolver.GetUserShell(),
                 UnityCliLoopConstants.PackageResolvedPath);
@@ -36,13 +36,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static NativeCliInstallCommand BuildInstallCommand(
             RuntimePlatform platform,
-            string packageVersion,
+            string cliReleaseTag,
             bool removeLegacyLaunchers,
             string posixShellPath)
         {
             return BuildInstallCommand(
                 platform,
-                packageVersion,
+                cliReleaseTag,
                 removeLegacyLaunchers,
                 posixShellPath,
                 null);
@@ -50,16 +50,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static NativeCliInstallCommand BuildInstallCommand(
             RuntimePlatform platform,
-            string packageVersion,
+            string cliReleaseTag,
             bool removeLegacyLaunchers,
             string posixShellPath,
             string packageResolvedPath)
         {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(packageVersion), "packageVersion must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(cliReleaseTag), "cliReleaseTag must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(posixShellPath), "posixShellPath must not be null or empty");
             _ = removeLegacyLaunchers;
 
-            string releaseTag = BuildReleaseTag(packageVersion);
+            string releaseTag = BuildReleaseTag(cliReleaseTag);
             if (platform == RuntimePlatform.WindowsEditor)
             {
                 string localScriptPath = ResolvePackageLocalInstallerScriptPath(
@@ -93,10 +93,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public static async Task<CliInstallResult> InstallAsync(
             RuntimePlatform platform,
-            string dispatcherVersion,
+            string cliReleaseTag,
             CancellationToken ct)
         {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(dispatcherVersion), "dispatcherVersion must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(cliReleaseTag), "cliReleaseTag must not be null or empty");
             ct.ThrowIfCancellationRequested();
 
             string installDirectory = GetInstallDirectoryForCurrentUser(platform);
@@ -107,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Could not resolve the global CLI install directory. Set {CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE} and try again.");
             }
 
-            NativeCliInstallCommand command = GetInstallCommand(platform, dispatcherVersion, true);
+            NativeCliInstallCommand command = GetInstallCommand(platform, cliReleaseTag, true);
             CliInstallResult result = await Task.Run(
                 () => RunInstallCommand(command, ct, INSTALL_PROCESS_TIMEOUT_MS),
                 ct);
@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 return new CliInstallResult(
                     false,
-                    $"Failed to start release CLI dispatcher installer: {command.FileName}");
+                    $"Failed to start release CLI installer: {command.FileName}");
             }
 
             StringBuilder standardOutputBuilder = new();
@@ -216,7 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (canceled)
                 {
-                    return new CliInstallResult(false, "Release CLI dispatcher installer was canceled.");
+                    return new CliInstallResult(false, "Release CLI installer was canceled.");
                 }
 
                 return new CliInstallResult(
@@ -690,7 +690,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             UnityEngine.Debug.Assert(ex != null, "ex must not be null");
 
-            string errorOutput = $"Failed to uninstall CLI dispatcher: {ex.Message}";
+            string errorOutput = $"Failed to uninstall CLI: {ex.Message}";
             return new CliInstallResult(false, errorOutput);
         }
 
@@ -706,7 +706,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return standardOutput;
             }
 
-            return "Release CLI dispatcher installer failed without output.";
+            return "Release CLI installer failed without output.";
         }
 
         private static string BuildReleaseCliInstallTimeoutFailure(
@@ -715,12 +715,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string standardOutput)
         {
             string capturedOutput = BuildReleaseCliInstallFailure(errorOutput, standardOutput);
-            if (string.Equals(capturedOutput, "Release CLI dispatcher installer failed without output.", StringComparison.Ordinal))
+            if (string.Equals(capturedOutput, "Release CLI installer failed without output.", StringComparison.Ordinal))
             {
-                return $"Release CLI dispatcher installer timed out after {timeoutMs} ms.";
+                return $"Release CLI installer timed out after {timeoutMs} ms.";
             }
 
-            return $"Release CLI dispatcher installer timed out after {timeoutMs} ms.\n{capturedOutput}";
+            return $"Release CLI installer timed out after {timeoutMs} ms.\n{capturedOutput}";
         }
 
         private static bool WaitForInstallProcessExit(
@@ -922,13 +922,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return $"\"{value.Replace("\"", "\\\"")}\"";
         }
 
-        private static string BuildReleaseTag(string packageVersion)
+        private static string BuildReleaseTag(string cliReleaseTag)
         {
-            if (packageVersion.StartsWith(CliConstants.RELEASE_TAG_PREFIX, StringComparison.Ordinal))
+            if (cliReleaseTag.StartsWith(CliConstants.RELEASE_TAG_PREFIX, StringComparison.Ordinal)
+                || cliReleaseTag.StartsWith(CliConstants.CLI_RELEASE_TAG_PREFIX, StringComparison.Ordinal))
             {
-                return packageVersion;
+                return cliReleaseTag;
             }
-            return $"{CliConstants.RELEASE_TAG_PREFIX}{packageVersion}";
+            return $"{CliConstants.CLI_RELEASE_TAG_PREFIX}{cliReleaseTag}";
         }
 
         internal static string BuildInstallerScriptUrl(string releaseTag, string assetName)
@@ -961,11 +962,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public Task<CliInstallResult> InstallGlobalCliAsync(
             RuntimePlatform platform,
-            string dispatcherVersion,
+            string cliReleaseTag,
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            return NativeCliInstaller.InstallAsync(platform, dispatcherVersion, ct);
+            return NativeCliInstaller.InstallAsync(platform, cliReleaseTag, ct);
         }
 
         public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
@@ -976,10 +977,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public NativeCliInstallCommand GetGlobalCliInstallCommand(
             RuntimePlatform platform,
-            string packageVersion,
+            string cliReleaseTag,
             bool removeLegacyLaunchers)
         {
-            return NativeCliInstaller.GetInstallCommand(platform, packageVersion, removeLegacyLaunchers);
+            return NativeCliInstaller.GetInstallCommand(platform, cliReleaseTag, removeLegacyLaunchers);
         }
     }
 }
