@@ -326,6 +326,9 @@ else
   if [ -z "$PREVIOUS_CLI_RELEASE_TAG" ]; then
     echo "No previous CLI asset release found; publishing native CLI assets." >&2
     SHOULD_PUBLISH=true
+  elif release_commit_updates_cli_version "$RELEASE_TARGET_SHA" "$VERSION"; then
+    echo "CLI release metadata changed in $RELEASE_TARGET_SHA; publishing native CLI assets." >&2
+    SHOULD_PUBLISH=true
   elif cli_release_inputs_changed "$PREVIOUS_CLI_RELEASE_TAG" "$TARGET_SHA"; then
     echo "CLI release inputs changed since $PREVIOUS_CLI_RELEASE_TAG; publishing native CLI assets." >&2
     SHOULD_PUBLISH=true

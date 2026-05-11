@@ -309,6 +309,11 @@ test_cli_requirement_change_publishes() {
   run_success_case cli-requirement-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false true true true
 }
 
+# Verifies CLI release metadata-only release commits still publish native CLI assets.
+test_cli_release_metadata_change_publishes() {
+  run_success_case cli-release-metadata-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false false true true target-sha target-sha target-sha "chore: release v3-beta" "chore: release v3-beta" true false
+}
+
 # Verifies the first CLI asset release is published when no previous asset tag exists.
 test_missing_previous_cli_release_publishes() {
   run_success_case bootstrap 3.0.0-beta.0 push v3-beta missing false "" false false false false true true
@@ -366,6 +371,7 @@ test_cli_change_publishes
 test_published_current_release_can_receive_cli_assets
 test_cli_contract_change_publishes
 test_cli_requirement_change_publishes
+test_cli_release_metadata_change_publishes
 test_missing_previous_cli_release_publishes
 test_recovery_targets_release_commit
 test_recovery_targets_grouped_release_commit
