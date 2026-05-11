@@ -39,8 +39,8 @@ func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t
 	}
 }
 
-func TestSendDoesNotIncludeProjectIdentityMetadata(t *testing.T) {
-	// Verifies that per-project endpoints do not need legacy project identity metadata.
+func TestSendIncludesCliVersionWithoutProjectIdentityMetadata(t *testing.T) {
+	// Verifies that requests carry CLI compatibility metadata without reviving legacy project identity metadata.
 	if runtime.GOOS == "windows" {
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
@@ -92,7 +92,7 @@ func TestSendDoesNotIncludeProjectIdentityMetadata(t *testing.T) {
 		},
 		ProjectRoot: "/tmp/MyProject",
 	}
-	client := NewClient(connection)
+	client := NewClient(connection, "3.0.0-beta.6")
 	if _, err := client.Send(context.Background(), "get-version", map[string]any{}); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
@@ -103,6 +103,13 @@ func TestSendDoesNotIncludeProjectIdentityMetadata(t *testing.T) {
 	case request := <-captured:
 		if _, ok := request["x-uloop"]; ok {
 			t.Fatalf("request should not include x-uloop metadata: %#v", request["x-uloop"])
+		}
+		metadata, ok := request["uloop"].(map[string]any)
+		if !ok {
+			t.Fatalf("request should include uloop metadata: %#v", request)
+		}
+		if metadata["cliVersion"] != "3.0.0-beta.6" {
+			t.Fatalf("cli version metadata mismatch: %#v", metadata)
 		}
 	}
 }

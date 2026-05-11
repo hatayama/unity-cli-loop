@@ -17,6 +17,7 @@ const (
 	errorCodeUnityNotReachable              = "UNITY_NOT_REACHABLE"
 	errorCodeUnityDisconnectedAfterDispatch = "UNITY_DISCONNECTED_AFTER_DISPATCH"
 	errorCodeUnityRPCError                  = "UNITY_RPC_ERROR"
+	errorCodeCLIUpdateRequired              = "CLI_UPDATE_REQUIRED"
 	errorCodeCompileWaitTimeout             = "COMPILE_WAIT_TIMEOUT"
 	errorCodeInternalError                  = "INTERNAL_ERROR"
 
@@ -115,13 +116,20 @@ func classifyError(err error, context errorContext) cliError {
 			"code":    rpcErr.Code,
 			"message": rpcErr.Message,
 		}
+		var decodedData map[string]any
 		if len(rpcErr.Data) > 0 {
 			var data any
 			if json.Unmarshal(rpcErr.Data, &data) == nil {
 				details["data"] = data
+				if typedData, ok := data.(map[string]any); ok {
+					decodedData = typedData
+				}
 			} else {
 				details["data"] = string(rpcErr.Data)
 			}
+		}
+		if rpcDataType(decodedData) == "cli_update_required" {
+			return cliUpdateRequiredError(rpcErr, details, decodedData, context)
 		}
 		return cliError{
 			ErrorCode:   errorCodeUnityRPCError,
@@ -172,6 +180,45 @@ func classifyError(err error, context errorContext) cliError {
 	}
 
 	return internalCLIError(message, context)
+}
+
+func rpcDataType(data map[string]any) string {
+	if data == nil {
+		return ""
+	}
+	value, ok := data["type"].(string)
+	if !ok {
+		return ""
+	}
+	return value
+}
+
+func cliUpdateRequiredError(rpcErr *unity.RPCError, details map[string]any, data map[string]any, context errorContext) cliError {
+	return cliError{
+		ErrorCode:   errorCodeCLIUpdateRequired,
+		Phase:       errorPhaseUnityRPC,
+		Message:     rpcErr.Message,
+		Retryable:   true,
+		SafeToRetry: true,
+		ProjectRoot: context.projectRoot,
+		Command:     context.command,
+		NextActions: cliUpdateRequiredNextActions(data),
+		Details:     details,
+	}
+}
+
+func cliUpdateRequiredNextActions(data map[string]any) []string {
+	updateCommand, _ := data["updateCommand"].(string)
+	fallbackCommand, _ := data["fallbackUpdateCommand"].(string)
+	actions := []string{}
+	if updateCommand != "" {
+		actions = append(actions, "Run `"+updateCommand+"`.")
+	}
+	if fallbackCommand != "" && fallbackCommand != updateCommand {
+		actions = append(actions, "If that is unavailable, run `"+fallbackCommand+"`.")
+	}
+	actions = append(actions, "Retry the original command after the update completes.")
+	return actions
 }
 
 func disconnectedAfterDispatchError(err error, context errorContext) cliError {

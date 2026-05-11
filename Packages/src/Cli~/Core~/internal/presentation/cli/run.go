@@ -115,7 +115,7 @@ func runTool(ctx context.Context, connection domain.Connection, command string, 
 	applyDebugTimingParams(command, params)
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, command)
-	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
+	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection, version)}
 	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
 		Command: command,
 		Params:  params,
@@ -149,7 +149,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection domain.Conne
 
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, compileCommandName)
-	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
+	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection, version)}
 	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
 		Command: compileCommandName,
 		Params:  params,
@@ -214,7 +214,7 @@ func writePostCompileWarmupWarning(stderr io.Writer, err error) {
 
 func runList(ctx context.Context, connection domain.Connection, stdout io.Writer, stderr io.Writer) int {
 	spinner := newToolSpinner(stderr, "list")
-	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
+	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection, version)}
 	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
 		Command: "get-tool-details",
 		Params:  map[string]any{},
@@ -236,7 +236,7 @@ func runList(ctx context.Context, connection domain.Connection, stdout io.Writer
 
 func runSync(ctx context.Context, connection domain.Connection, stdout io.Writer, stderr io.Writer) int {
 	spinner := newToolSpinner(stderr, "sync")
-	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection)}
+	dispatcher := application.ToolDispatcher{Bridge: unity.NewClient(connection, version)}
 	outcome, err := dispatcher.Dispatch(ctx, application.ToolDispatchRequest{
 		Command: "get-tool-details",
 		Params:  map[string]any{},

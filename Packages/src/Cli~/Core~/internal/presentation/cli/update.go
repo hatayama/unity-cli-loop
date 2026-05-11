@@ -11,27 +11,29 @@ import (
 
 	corecontract "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core"
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/adapters/installer"
+	sharedversion "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/version"
 )
 
 const (
-	updateUnsupportedOSMessage  = "native update is only supported on macOS and Windows"
-	updateUnsupportedArgMessage = "update does not accept options yet"
+	updateUnsupportedOSMessage = "native update is only supported on macOS and Windows"
+	updateToVersionFlagName    = "to-version"
 )
+
+type updateOptions struct {
+	targetVersion string
+}
 
 func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) (bool, int) {
 	if len(args) == 0 || args[0] != "update" {
 		return false, 0
 	}
-	if len(args) > 1 {
-		writeErrorEnvelope(stderr, (&argumentError{
-			message:     updateUnsupportedArgMessage,
-			command:     "update",
-			nextActions: []string{"Run `uloop update` without options."},
-		}).toCLIError(errorContext{command: "update"}))
+	options, err := parseUpdateOptions(args[1:])
+	if err != nil {
+		writeClassifiedError(stderr, err, errorContext{command: "update"})
 		return true, 1
 	}
 
-	commandName, commandArgs, err := updateCommandForOS(runtime.GOOS)
+	commandName, commandArgs, err := updateCommandForOSWithOptions(runtime.GOOS, options)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{command: "update"})
 		return true, 1
@@ -61,8 +63,12 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 }
 
 func updateCommandForOS(goos string) (string, []string, error) {
-	version := corecontract.Current.CliVersion
-	updateSelector := installer.UpdateSelectorForVersion(version)
+	return updateCommandForOSWithOptions(goos, updateOptions{})
+}
+
+func updateCommandForOSWithOptions(goos string, options updateOptions) (string, []string, error) {
+	version := updateScriptVersion(options)
+	updateSelector := updateSelector(options)
 	switch goos {
 	case "darwin":
 		scriptURL := installer.ScriptURL(version, installer.PosixScriptName)
@@ -80,6 +86,67 @@ func updateCommandForOS(goos string) (string, []string, error) {
 	default:
 		return "", nil, errors.New(updateUnsupportedOSMessage)
 	}
+}
+
+func parseUpdateOptions(args []string) (updateOptions, error) {
+	options := updateOptions{}
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		name, value, consumedNext, err := parseFlagValue(arg, args, index)
+		if err != nil {
+			return updateOptions{}, err
+		}
+		if name != updateToVersionFlagName {
+			return updateOptions{}, &argumentError{
+				message:     "Unknown update option: --" + name,
+				option:      "--" + name,
+				command:     "update",
+				nextActions: []string{"Run `uloop update` or `uloop update --to-version <version>`."},
+			}
+		}
+		if options.targetVersion != "" {
+			return updateOptions{}, &argumentError{
+				message:     "Duplicate update option: --" + updateToVersionFlagName,
+				option:      "--" + updateToVersionFlagName,
+				command:     "update",
+				nextActions: []string{"Pass `--to-version` only once."},
+			}
+		}
+		if !isValidUpdateTargetVersion(value) {
+			return updateOptions{}, &argumentError{
+				message:      "Invalid CLI version for --" + updateToVersionFlagName + ": " + value,
+				option:       "--" + updateToVersionFlagName,
+				received:     value,
+				expectedType: "semantic version",
+				command:      "update",
+				nextActions:  []string{"Pass a semantic version such as `3.0.0-beta.6`."},
+			}
+		}
+		options.targetVersion = value
+		if consumedNext {
+			index++
+		}
+	}
+	return options, nil
+}
+
+func isValidUpdateTargetVersion(value string) bool {
+	_, ok := sharedversion.Compare(value, value)
+	return ok
+}
+
+func updateScriptVersion(options updateOptions) string {
+	if options.targetVersion != "" {
+		return options.targetVersion
+	}
+	return corecontract.Current.CliVersion
+}
+
+func updateSelector(options updateOptions) string {
+	if options.targetVersion != "" {
+		return installer.ReleaseTag(options.targetVersion)
+	}
+	return installer.UpdateSelectorForVersion(corecontract.Current.CliVersion)
 }
 
 func shellQuote(value string) string {

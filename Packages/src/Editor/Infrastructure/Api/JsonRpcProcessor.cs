@@ -67,8 +67,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 Method = request["method"]?.ToString(),
                 Params = request["params"],
+                ClientCliVersion = ReadClientCliVersion(request),
                 Id = request["id"]?.ToObject<object>()
             };
+        }
+
+        private static string ReadClientCliVersion(JObject request)
+        {
+            JObject metadata = request["uloop"] as JObject;
+            if (metadata == null)
+            {
+                return null;
+            }
+
+            string cliVersion = metadata["cliVersion"]?.ToString();
+            return string.IsNullOrWhiteSpace(cliVersion) ? null : cliVersion;
         }
 
         /// <summary>
@@ -113,6 +126,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             try
             {
+                if (IsCliUpdateRequired(request.ClientCliVersion))
+                {
+                    return CreateCliUpdateRequiredResponse(request.Id, request.ClientCliVersion);
+                }
+
                 Stopwatch requestStopwatch = Stopwatch.StartNew();
                 Stopwatch mainThreadSwitchStopwatch = Stopwatch.StartNew();
                 await MainThreadSwitcher.SwitchToMainThread();
@@ -150,6 +168,42 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
                 return CreateErrorResponse(request.Id, ex);
             }
+        }
+
+        private static bool IsCliUpdateRequired(string currentCliVersion)
+        {
+            if (string.IsNullOrWhiteSpace(currentCliVersion))
+            {
+                return true;
+            }
+
+            return !CliVersionComparer.IsVersionGreaterThanOrEqual(
+                currentCliVersion,
+                CliConstants.MINIMUM_REQUIRED_CLI_VERSION);
+        }
+
+        private static string CreateCliUpdateRequiredResponse(object id, string currentCliVersion)
+        {
+            string requiredCliVersion = CliConstants.MINIMUM_REQUIRED_CLI_VERSION;
+            JsonRpcErrorResponse errorResponse = new(
+                UnityCliLoopServerConfig.JSONRPC_VERSION,
+                id,
+                new JsonRpcError(
+                    UnityCliLoopServerConfig.INTERNAL_ERROR_CODE,
+                    "The installed uloop CLI is too old for this Unity package.",
+                    new CliUpdateRequiredErrorData(
+                        currentCliVersion,
+                        requiredCliVersion,
+                        $"{CliConstants.EXECUTABLE_NAME} update --to-version {requiredCliVersion}",
+                        $"{CliConstants.EXECUTABLE_NAME} update")));
+
+            JsonSerializerSettings settings = new()
+            {
+                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
+            };
+
+            return JsonConvert.SerializeObject(errorResponse, Formatting.None, settings);
         }
 
         private static void AppendTimingIfRequested(UnityCliLoopToolResponse result, string timing)
@@ -267,6 +321,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         public const string SecurityBlocked = "security_blocked";
         public const string InternalError = "internal_error";
+        public const string CliUpdateRequired = "cli_update_required";
     }
 
     /// <summary>
@@ -311,6 +366,37 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         
         public InternalErrorData(string message) : base(message)
         {
+        }
+    }
+
+    /// <summary>
+    /// Carries exact CLI update instructions so clients do not infer release tags.
+    /// </summary>
+    public class CliUpdateRequiredErrorData : JsonRpcErrorData
+    {
+        public override string type => JsonRpcErrorTypes.CliUpdateRequired;
+
+        public string currentCliVersion { get; }
+
+        public string requiredCliVersion { get; }
+
+        public string updateCommand { get; }
+
+        public string fallbackUpdateCommand { get; }
+
+        public bool retryableAfterUpdate { get; }
+
+        public CliUpdateRequiredErrorData(
+            string currentCliVersion,
+            string requiredCliVersion,
+            string updateCommand,
+            string fallbackUpdateCommand) : base("Update the uloop CLI and retry the original command.")
+        {
+            this.currentCliVersion = string.IsNullOrWhiteSpace(currentCliVersion) ? null : currentCliVersion;
+            this.requiredCliVersion = requiredCliVersion;
+            this.updateCommand = updateCommand;
+            this.fallbackUpdateCommand = fallbackUpdateCommand;
+            retryableAfterUpdate = true;
         }
     }
 

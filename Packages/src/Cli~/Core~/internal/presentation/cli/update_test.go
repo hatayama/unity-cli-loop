@@ -59,6 +59,68 @@ func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
 	}
 }
 
+func TestUpdateCommandForDarwinUsesRequestedVersion(t *testing.T) {
+	// Verifies CLI update can target the minimum release version requested by Unity.
+	commandName, args, err := updateCommandForOSWithOptions("darwin", updateOptions{
+		targetVersion: "3.0.0-beta.6",
+	})
+	if err != nil {
+		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
+	}
+
+	if commandName != "sh" {
+		t.Fatalf("command mismatch: %s", commandName)
+	}
+	joinedArgs := strings.Join(args, " ")
+	if !strings.Contains(joinedArgs, "v3-beta/scripts/install.sh") {
+		t.Fatalf("installer URL mismatch: %s", joinedArgs)
+	}
+	if !strings.Contains(joinedArgs, "ULOOP_VERSION='cli-v3.0.0-beta.6'") {
+		t.Fatalf("installer version missing: %s", joinedArgs)
+	}
+}
+
+func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
+	// Verifies Windows CLI update can target the minimum release version requested by Unity.
+	commandName, args, err := updateCommandForOSWithOptions("windows", updateOptions{
+		targetVersion: "3.0.0",
+	})
+	if err != nil {
+		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
+	}
+
+	if commandName != windowsPowerShellCommand {
+		t.Fatalf("command mismatch: %s", commandName)
+	}
+	joinedArgs := strings.Join(args, " ")
+	if !strings.Contains(joinedArgs, "main/scripts/install.ps1") {
+		t.Fatalf("installer URL mismatch: %s", joinedArgs)
+	}
+	if !strings.Contains(joinedArgs, "$env:ULOOP_VERSION='cli-v3.0.0'") {
+		t.Fatalf("installer version missing: %s", joinedArgs)
+	}
+}
+
+func TestParseUpdateOptionsAcceptsEqualsSyntax(t *testing.T) {
+	// Verifies AI-readable update commands may use a single --to-version=value token.
+	options, err := parseUpdateOptions([]string{"--to-version=3.0.0-beta.6"})
+	if err != nil {
+		t.Fatalf("parseUpdateOptions failed: %v", err)
+	}
+
+	if options.targetVersion != "3.0.0-beta.6" {
+		t.Fatalf("target version mismatch: %#v", options)
+	}
+}
+
+func TestParseUpdateOptionsRejectsInvalidVersion(t *testing.T) {
+	// Verifies invalid requested update versions fail before installer execution.
+	_, err := parseUpdateOptions([]string{"--to-version", "not-a-version"})
+	if err == nil {
+		t.Fatal("expected invalid version error")
+	}
+}
+
 func TestUpdateCommandForLinuxIsUnsupported(t *testing.T) {
 	// Verifies Linux update fails before trying to run a platform-specific installer.
 	_, _, err := updateCommandForOS("linux")

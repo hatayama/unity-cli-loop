@@ -112,6 +112,27 @@ func TestClassifyRPCErrorKeepsData(t *testing.T) {
 	}
 }
 
+func TestClassifyCliUpdateRequiredRPCError(t *testing.T) {
+	// Verifies Unity compatibility errors become self-repair guidance for AI clients.
+	err := &unity.RPCError{
+		Code:    -32603,
+		Message: "The installed uloop CLI is too old for this Unity package.",
+		Data: json.RawMessage(
+			`{"type":"cli_update_required","currentCliVersion":"3.0.0-beta.5","requiredCliVersion":"3.0.0-beta.6","updateCommand":"uloop update --to-version 3.0.0-beta.6","fallbackUpdateCommand":"uloop update","retryableAfterUpdate":true}`),
+	}
+
+	cliErr := classifyError(err, errorContext{projectRoot: "/tmp/MyProject", command: "compile"})
+	if cliErr.ErrorCode != errorCodeCLIUpdateRequired {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if !cliErr.Retryable || !cliErr.SafeToRetry {
+		t.Fatalf("retry flags mismatch: %#v", cliErr)
+	}
+	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != "Run `uloop update --to-version 3.0.0-beta.6`." {
+		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
+	}
+}
+
 func TestWriteToolFailureClassifiesDispatchedDisconnect(t *testing.T) {
 	var stderr bytes.Buffer
 

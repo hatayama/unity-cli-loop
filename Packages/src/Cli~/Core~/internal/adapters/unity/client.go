@@ -14,17 +14,23 @@ import (
 const requestTimeout = 180 * time.Second
 
 type Client struct {
-	connection domain.Connection
-	requestID  int
+	connection    domain.Connection
+	requestID     int
+	clientVersion string
 }
 
 type ProgressFunc = func(message string)
 
 type rpcRequest struct {
-	JSONRPC string         `json:"jsonrpc"`
-	Method  string         `json:"method"`
-	Params  map[string]any `json:"params"`
-	ID      int            `json:"id"`
+	JSONRPC string            `json:"jsonrpc"`
+	Method  string            `json:"method"`
+	Params  map[string]any    `json:"params"`
+	ULoop   rpcClientMetadata `json:"uloop"`
+	ID      int               `json:"id"`
+}
+
+type rpcClientMetadata struct {
+	CLIVersion string `json:"cliVersion"`
 }
 
 type rpcResponse struct {
@@ -64,8 +70,8 @@ func (err *RPCError) Error() string {
 	return fmt.Sprintf("unity error: %s", err.Message)
 }
 
-func NewClient(connection domain.Connection) *Client {
-	return &Client{connection: connection}
+func NewClient(connection domain.Connection, clientVersion string) *Client {
+	return &Client{connection: connection, clientVersion: clientVersion}
 }
 
 func (client *Client) Send(ctx context.Context, method string, params map[string]any) (json.RawMessage, error) {
@@ -104,7 +110,10 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		JSONRPC: "2.0",
 		Method:  method,
 		Params:  params,
-		ID:      client.requestID,
+		ULoop: rpcClientMetadata{
+			CLIVersion: client.clientVersion,
+		},
+		ID: client.requestID,
 	}
 
 	payload, err := json.Marshal(request)
