@@ -8,18 +8,16 @@ ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 EVENT_REF_NAME=${EVENT_REF_NAME:-}
 INPUT_RELEASE_TAG=${INPUT_RELEASE_TAG:-}
 INPUT_DRY_RUN=${INPUT_DRY_RUN:-false}
-DISPATCHER_CONTRACT_PATH="Packages/src/Cli~/Dispatcher~/contract.json"
-CORE_CONTRACT_PATH="Packages/src/Cli~/Core~/contract.json"
 RELEASE_DATA=""
-DISPATCHER_RELEASE_INPUT_PATHS="
+CLI_RELEASE_INPUT_PATHS="
 Packages/src/Cli~/.go-version
 Packages/src/Cli~/layout-contract.json
-Packages/src/Cli~/Dispatcher~/cmd
-Packages/src/Cli~/Dispatcher~/internal
-Packages/src/Cli~/Dispatcher~/contract.go
-Packages/src/Cli~/Dispatcher~/contract_test.go
-Packages/src/Cli~/Dispatcher~/go.mod
-Packages/src/Cli~/Dispatcher~/go.sum
+Packages/src/Cli~/Core~/cmd
+Packages/src/Cli~/Core~/internal
+Packages/src/Cli~/Core~/contract.go
+Packages/src/Cli~/Core~/contract_test.go
+Packages/src/Cli~/Core~/go.mod
+Packages/src/Cli~/Core~/go.sum
 Packages/src/Cli~/Shared~
 scripts/build-go-cli.sh
 scripts/go-cli-toolchain.sh
@@ -71,7 +69,7 @@ release_json_or_exit() {
   esac
 }
 
-release_has_all_dispatcher_assets() {
+release_has_all_cli_assets() {
   release_tag=$1
   release_json_or_exit "$release_tag" || return 1
   release_data=$RELEASE_DATA
@@ -89,7 +87,7 @@ release_has_all_dispatcher_assets() {
   return 0
 }
 
-release_is_published_with_dispatcher_assets() {
+release_is_published_with_cli_assets() {
   release_tag=$1
   release_json_or_exit "$release_tag" || return 1
   release_data=$RELEASE_DATA
@@ -102,7 +100,7 @@ release_is_published_with_dispatcher_assets() {
     return 1
   fi
 
-  release_has_all_dispatcher_assets "$release_tag"
+  release_has_all_cli_assets "$release_tag"
 }
 
 release_is_published() {
@@ -117,7 +115,7 @@ release_is_published() {
   [ "$is_draft" = "false" ]
 }
 
-latest_dispatcher_asset_release_tag() {
+latest_cli_asset_release_tag() {
   excluded_tag=$1
   release_list=$(gh release list --limit 100 --json tagName,isDraft)
   release_tags=$(printf '%s\n' "$release_list" | jq -r '.[] | select(.isDraft == false) | .tagName')
@@ -126,51 +124,22 @@ latest_dispatcher_asset_release_tag() {
       continue
     fi
 
-    if release_has_all_dispatcher_assets "$release_tag"; then
+    if release_has_all_cli_assets "$release_tag"; then
       printf '%s\n' "$release_tag"
       return
     fi
   done
 }
 
-normalized_dispatcher_contract() {
-  git_ref=$1
-  git show "$git_ref:$DISPATCHER_CONTRACT_PATH" | jq 'del(.dispatcherVersion)'
-}
-
-dispatcher_contract_changed_except_version() {
-  base_ref=$1
-  head_ref=$2
-  base_contract=$(normalized_dispatcher_contract "$base_ref") || return 0
-  head_contract=$(normalized_dispatcher_contract "$head_ref") || return 0
-
-  [ "$base_contract" != "$head_contract" ]
-}
-
-core_required_dispatcher_version() {
-  git_ref=$1
-  git show "$git_ref:$CORE_CONTRACT_PATH" | jq -r '.minimumRequiredDispatcherVersion'
-}
-
-core_required_dispatcher_version_changed() {
-  base_ref=$1
-  head_ref=$2
-  base_required_version=$(core_required_dispatcher_version "$base_ref") || return 0
-  head_required_version=$(core_required_dispatcher_version "$head_ref") || return 0
-
-  [ "$base_required_version" != "$head_required_version" ]
-}
-
-dispatcher_release_inputs_changed() {
+cli_release_inputs_changed() {
   base_ref=$1
   head_ref=$2
 
-  if ! git diff --quiet "$base_ref" "$head_ref" -- $DISPATCHER_RELEASE_INPUT_PATHS; then
+  if ! git diff --quiet "$base_ref" "$head_ref" -- $CLI_RELEASE_INPUT_PATHS; then
     return 0
   fi
 
-  dispatcher_contract_changed_except_version "$base_ref" "$head_ref" \
-    || core_required_dispatcher_version_changed "$base_ref" "$head_ref"
+  return 1
 }
 
 release_commit_sha_for_version() {
@@ -213,15 +182,15 @@ release_commit_sha_for_version() {
     '
 }
 
-VERSION=$(jq -r '.["."]' .release-please-manifest.json)
+VERSION=$(jq -r '.["Packages/src/Cli~"]' .release-please-manifest.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
-  echo "Could not resolve release version from .release-please-manifest.json." >&2
+  echo "Could not resolve CLI release version from .release-please-manifest.json." >&2
   exit 1
 fi
 
-RELEASE_TAG="${INPUT_RELEASE_TAG:-v$VERSION}"
+RELEASE_TAG="${INPUT_RELEASE_TAG:-cli-v$VERSION}"
 case "$RELEASE_TAG" in
-  v[0-9]*)
+  cli-v[0-9]*)
     ;;
   *)
     echo "Invalid release tag: $RELEASE_TAG" >&2
@@ -245,7 +214,7 @@ esac
 
 SHOULD_PUBLISH=false
 SHOULD_RELEASE=false
-CAN_EVALUATE_DISPATCHER_RELEASE=true
+CAN_EVALUATE_CLI_RELEASE=true
 if [ "$EVENT_NAME" = "push" ]; then
   case "$EVENT_REF_NAME" in
     main)
@@ -262,7 +231,7 @@ if [ "$EVENT_NAME" = "push" ]; then
       ;;
     *)
       echo "Skipping native CLI publish for unsupported branch $EVENT_REF_NAME." >&2
-      CAN_EVALUATE_DISPATCHER_RELEASE=false
+      CAN_EVALUATE_CLI_RELEASE=false
       ;;
   esac
 fi
@@ -274,7 +243,7 @@ if [ -z "$RELEASE_TARGET_SHA" ]; then
   RELEASE_TARGET_SHA=$BUILD_SHA
 fi
 
-if [ "$CAN_EVALUATE_DISPATCHER_RELEASE" != "true" ]; then
+if [ "$CAN_EVALUATE_CLI_RELEASE" != "true" ]; then
   SHOULD_PUBLISH=false
   SHOULD_RELEASE=false
 elif release_is_published "$RELEASE_TAG"; then
@@ -283,20 +252,20 @@ else
   SHOULD_RELEASE=true
 fi
 
-if [ "$CAN_EVALUATE_DISPATCHER_RELEASE" != "true" ]; then
+if [ "$CAN_EVALUATE_CLI_RELEASE" != "true" ]; then
   SHOULD_PUBLISH=false
-elif release_is_published_with_dispatcher_assets "$RELEASE_TAG"; then
+elif release_is_published_with_cli_assets "$RELEASE_TAG"; then
   SHOULD_PUBLISH=false
 else
-  PREVIOUS_DISPATCHER_RELEASE_TAG=$(latest_dispatcher_asset_release_tag "$RELEASE_TAG")
-  if [ -z "$PREVIOUS_DISPATCHER_RELEASE_TAG" ]; then
-    echo "No previous Dispatcher asset release found; publishing native CLI assets." >&2
+  PREVIOUS_CLI_RELEASE_TAG=$(latest_cli_asset_release_tag "$RELEASE_TAG")
+  if [ -z "$PREVIOUS_CLI_RELEASE_TAG" ]; then
+    echo "No previous CLI asset release found; publishing native CLI assets." >&2
     SHOULD_PUBLISH=true
-  elif dispatcher_release_inputs_changed "$PREVIOUS_DISPATCHER_RELEASE_TAG" "$TARGET_SHA"; then
-    echo "Dispatcher release inputs changed since $PREVIOUS_DISPATCHER_RELEASE_TAG; publishing native CLI assets." >&2
+  elif cli_release_inputs_changed "$PREVIOUS_CLI_RELEASE_TAG" "$TARGET_SHA"; then
+    echo "CLI release inputs changed since $PREVIOUS_CLI_RELEASE_TAG; publishing native CLI assets." >&2
     SHOULD_PUBLISH=true
   else
-    echo "Dispatcher release inputs are unchanged since $PREVIOUS_DISPATCHER_RELEASE_TAG; skipping native CLI publish." >&2
+    echo "CLI release inputs are unchanged since $PREVIOUS_CLI_RELEASE_TAG; skipping native CLI publish." >&2
   fi
 fi
 

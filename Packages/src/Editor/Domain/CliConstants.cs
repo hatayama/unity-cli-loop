@@ -6,8 +6,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     public static class CliConstants
     {
         public const string EXECUTABLE_NAME = "uloop";
+        public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.6";
         public const string VERSION_FLAG = "--version";
-        public const string REQUIRED_DISPATCHER_VERSION_FLAG = "--required-dispatcher-version";
         public const string RAW_CONTENT_BASE_URL = "https://raw.githubusercontent.com/hatayama/unity-cli-loop";
         public const string STABLE_INSTALLER_SOURCE_REF = "main";
         public const string BETA_INSTALLER_SOURCE_REF = "v3-beta";
@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string POSIX_PATH_SEPARATOR = ":";
         public const string WINDOWS_PATH_SEPARATOR = ";";
         public const string RELEASE_TAG_PREFIX = "v";
+        public const string CLI_RELEASE_TAG_PREFIX = "cli-v";
         public const string BETA_VERSION_MARKER = "-beta.";
         public const string SKILL_DIR_PREFIX = "uloop-";
         public const string UNITY_PACKAGES_DIR_NAME = "Packages";
@@ -35,19 +36,11 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string CLI_PACKAGE_DIR_NAME = "Cli~";
         public const string LEGACY_GO_CLI_PACKAGE_DIR_NAME = "GoCli~";
         public const string GO_CLI_CORE_DIR_NAME = "Core~";
-        public const string GO_CLI_DISPATCHER_DIR_NAME = "Dispatcher~";
         public const string GO_CLI_SHARED_DIR_NAME = "Shared~";
         public const string DIST_DIR_NAME = "dist";
         public const string CLI_LAYOUT_CONTRACT_FILE_NAME = "layout-contract.json";
         public const string CLI_CONTRACT_FILE_NAME = "contract.json";
-        public const string CLI_CONTRACT_MINIMUM_REQUIRED_DISPATCHER_VERSION_KEY = "minimumRequiredDispatcherVersion";
-        public const string CLI_CONTRACT_REQUIRED_DISPATCHER_VERSION_FLAG_KEY = "requiredDispatcherVersionFlag";
         public const string GLOBAL_UNIX_COMMAND_NAME = EXECUTABLE_NAME;
         public const string GLOBAL_WINDOWS_COMMAND_NAME = EXECUTABLE_NAME + ".exe";
-        public const string GLOBAL_DISPATCHER_UNIX_BUNDLE_NAME = "uloop-dispatcher";
-        public const string GLOBAL_DISPATCHER_WINDOWS_BUNDLE_NAME = "uloop-dispatcher.exe";
-        public const string PROJECT_LOCAL_BIN_DIR_NAME = "bin";
-        public const string PROJECT_LOCAL_UNIX_COMMAND_NAME = "uloop-core";
-        public const string PROJECT_LOCAL_WINDOWS_COMMAND_NAME = "uloop-core.exe";
     }
 }

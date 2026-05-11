@@ -27,4 +27,3 @@ run_module_checks() {
 
 run_module_checks "$CLI_DIR/Shared~"
 run_module_checks "$CLI_DIR/Core~"
-run_module_checks "$CLI_DIR/Dispatcher~"

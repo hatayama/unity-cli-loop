@@ -9,7 +9,7 @@ import (
 )
 
 func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
-	// Verifies core update downloads the shared installer before running it with the required dispatcher version.
+	// Verifies CLI update downloads the shared installer before running it on the matching channel.
 	commandName, args, err := updateCommandForOS("darwin")
 	if err != nil {
 		t.Fatalf("updateCommandForOS failed: %v", err)
@@ -19,8 +19,8 @@ func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	expectedScriptURL := installer.ScriptURL(corecontract.Current.MinimumRequiredDispatcherVersion, installer.PosixScriptName)
-	expectedReleaseTag := installer.ReleaseTag(corecontract.Current.MinimumRequiredDispatcherVersion)
+	expectedScriptURL := installer.ScriptURL(corecontract.Current.CliVersion, installer.PosixScriptName)
+	expectedReleaseTag := installer.UpdateSelectorForVersion(corecontract.Current.CliVersion)
 	if !strings.Contains(joinedArgs, expectedScriptURL) {
 		t.Fatalf("installer URL missing: %s", joinedArgs)
 	}
@@ -36,7 +36,7 @@ func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
 }
 
 func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
-	// Verifies core update calls the same Windows installer script with the required dispatcher version.
+	// Verifies CLI update calls the same Windows installer script on the matching channel.
 	commandName, args, err := updateCommandForOS("windows")
 	if err != nil {
 		t.Fatalf("updateCommandForOS failed: %v", err)
@@ -46,8 +46,8 @@ func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	expectedScriptURL := installer.ScriptURL(corecontract.Current.MinimumRequiredDispatcherVersion, installer.WindowsScriptName)
-	expectedReleaseTag := installer.ReleaseTag(corecontract.Current.MinimumRequiredDispatcherVersion)
+	expectedScriptURL := installer.ScriptURL(corecontract.Current.CliVersion, installer.WindowsScriptName)
+	expectedReleaseTag := installer.UpdateSelectorForVersion(corecontract.Current.CliVersion)
 	if !strings.Contains(joinedArgs, expectedScriptURL) {
 		t.Fatalf("installer URL missing: %s", joinedArgs)
 	}

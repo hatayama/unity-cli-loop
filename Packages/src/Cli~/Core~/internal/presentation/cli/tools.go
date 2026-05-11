@@ -15,7 +15,7 @@ import (
 //go:embed default-tools.json
 var embeddedTools embed.FS
 
-var version = corecontract.Current.CoreVersion
+var version = corecontract.Current.CliVersion
 
 const (
 	cacheDirectoryName  = ".uloop"

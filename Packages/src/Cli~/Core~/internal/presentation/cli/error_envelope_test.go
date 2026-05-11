@@ -134,21 +134,6 @@ func TestWriteToolFailureClassifiesDispatchedDisconnect(t *testing.T) {
 	}
 }
 
-func TestProjectLocalCLIMissingError(t *testing.T) {
-	cliErr := projectLocalCLIMissingError(
-		"/tmp/MyProject/.uloop/bin/uloop-core",
-		"/tmp/MyProject",
-		"compile",
-	)
-
-	if cliErr.ErrorCode != errorCodeProjectLocalCLIMissing {
-		t.Fatalf("error code mismatch: %#v", cliErr)
-	}
-	if cliErr.Details["path"] != "/tmp/MyProject/.uloop/bin/uloop-core" {
-		t.Fatalf("details mismatch: %#v", cliErr.Details)
-	}
-}
-
 func TestUnknownCommandErrorIncludesAvailableCommands(t *testing.T) {
 	cliErr := unknownCommandError(
 		"missing",

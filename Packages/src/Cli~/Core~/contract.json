@@ -1,7 +1,4 @@
 {
   "schemaVersion": 1,
-  "coreVersion": "3.0.0-beta.5",
-  "minimumRequiredDispatcherVersion": "3.0.0-beta.2",
-  "dispatcherVersionEnv": "ULOOP_DISPATCHER_VERSION",
-  "requiredDispatcherVersionFlag": "--required-dispatcher-version"
+  "cliVersion": "3.0.0-beta.6"
 }

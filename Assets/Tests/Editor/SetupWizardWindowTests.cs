@@ -323,7 +323,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool isChecking,
             bool needsUpdate,
             string cliVersion,
-            string requiredDispatcherVersion,
+            string requiredCliVersion,
             string expectedLabel)
         {
             string label = SetupWizardWindow.GetCliButtonTextForSetupWizard(
@@ -332,7 +332,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isChecking,
                 needsUpdate,
                 cliVersion,
-                requiredDispatcherVersion);
+                requiredCliVersion);
 
             Assert.That(label, Is.EqualTo(expectedLabel));
         }

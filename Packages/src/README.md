@@ -639,7 +639,7 @@ See [HelloWorld sample](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKI
 
 ### Native Go CLI Development
 
-Run the native Go CLI checks before changing files under `Packages/src/Cli~/Core~`, `Packages/src/Cli~/Dispatcher~`, or `Packages/src/Cli~/Shared~`:
+Run the native Go CLI checks before changing files under `Packages/src/Cli~/Core~` or `Packages/src/Cli~/Shared~`:
 
 ```bash
 scripts/check-go-cli.sh

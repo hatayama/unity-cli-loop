@@ -11,7 +11,7 @@ const (
 	repositoryRawBaseURL = "https://raw.githubusercontent.com/hatayama/unity-cli-loop"
 	stableSourceRef      = "main"
 	betaSourceRef        = "v3-beta"
-	releaseTagPrefix     = "v"
+	releaseTagPrefix     = "cli-v"
 	betaVersionMarker    = "-beta."
 )
 

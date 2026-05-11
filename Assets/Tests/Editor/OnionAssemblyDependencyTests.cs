@@ -861,8 +861,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string[] forbiddenReferences =
             {
                 "CliInstallationDetector",
-                "ProjectLocalCliAutoInstaller",
-                "ProjectLocalCliInstaller",
                 "NativeCliInstaller",
                 "CliVersionComparer",
                 "ToolSkillSynchronizer",

@@ -14,12 +14,10 @@ const (
 	errorCodeInvalidArgument                = "INVALID_ARGUMENT"
 	errorCodeUnknownCommand                 = "UNKNOWN_COMMAND"
 	errorCodeProjectNotFound                = "PROJECT_NOT_FOUND"
-	errorCodeProjectLocalCLIMissing         = "PROJECT_LOCAL_CLI_MISSING"
 	errorCodeUnityNotReachable              = "UNITY_NOT_REACHABLE"
 	errorCodeUnityDisconnectedAfterDispatch = "UNITY_DISCONNECTED_AFTER_DISPATCH"
 	errorCodeUnityRPCError                  = "UNITY_RPC_ERROR"
 	errorCodeCompileWaitTimeout             = "COMPILE_WAIT_TIMEOUT"
-	errorCodeDispatcherUpdateRequired       = "DISPATCHER_UPDATE_REQUIRED"
 	errorCodeInternalError                  = "INTERNAL_ERROR"
 
 	errorPhaseArgumentParsing = "argument_parsing"
@@ -210,25 +208,6 @@ func unknownCommandError(command string, cache toolsCache, context errorContext)
 		},
 		Details: map[string]any{
 			"availableCommands": availableCommandNames(cache),
-		},
-	}
-}
-
-func projectLocalCLIMissingError(localPath string, projectRoot string, command string) cliError {
-	return cliError{
-		ErrorCode:   errorCodeProjectLocalCLIMissing,
-		Phase:       errorPhaseDispatch,
-		Message:     "Project-local uloop-core CLI was not found.",
-		Retryable:   false,
-		SafeToRetry: false,
-		ProjectRoot: projectRoot,
-		Command:     command,
-		NextActions: []string{
-			"Open the Unity project so the package can install the project-local CLI.",
-			"Reinstall or update Unity CLI Loop in this project if the file is still missing.",
-		},
-		Details: map[string]any{
-			"path": localPath,
 		},
 	}
 }

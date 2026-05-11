@@ -433,7 +433,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             string cachedCliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            EnsureProjectLocalCliCurrent(projectRoot);
             bool cliInstalled = IsCliInstalled(cachedCliVersion);
             List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
             bool canManageSkills = CanManageSkills(cliInstalled);
@@ -473,12 +472,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             await CliSetupApplicationFacade.ForceRefreshCliVersionAsync(CancellationToken.None);
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            EnsureProjectLocalCliCurrent(projectRoot);
-            string requiredDispatcherVersion = GetRequiredDispatcherVersion();
+            string requiredCliVersion = GetMinimumRequiredCliVersion();
             bool cliInstalled = IsCliInstalled(cliVersion);
-            bool cliVersionMatched = IsDispatcherVersionSatisfied(cliVersion, requiredDispatcherVersion) && cliInstalled;
+            bool cliVersionMatched = IsCliVersionSatisfied(cliVersion, requiredCliVersion) && cliInstalled;
 
-            UpdateCliStep(cliInstalled, cliVersion, requiredDispatcherVersion, cliVersionMatched);
+            UpdateCliStep(cliInstalled, cliVersion, requiredCliVersion, cliVersionMatched);
 
             if (!refreshSkillsSection)
             {
@@ -613,7 +611,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void UpdateCliStep(
             bool cliInstalled,
             string cliVersion,
-            string requiredDispatcherVersion,
+            string requiredCliVersion,
             bool cliVersionMatched)
         {
             bool needsUpdate = cliInstalled && !cliVersionMatched;
@@ -623,7 +621,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 false,
                 needsUpdate,
                 cliVersion,
-                requiredDispatcherVersion);
+                requiredCliVersion);
             bool buttonEnabled = IsCliButtonEnabledForSetupWizard(
                 cliInstalled,
                 cliVersionMatched,
@@ -642,7 +640,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (cliInstalled)
             {
-                _cliStatusLabel.text = $"v{cliVersion} (requires v{requiredDispatcherVersion})";
+                _cliStatusLabel.text = $"v{cliVersion} (requires v{requiredCliVersion})";
             }
             else
             {
@@ -661,7 +659,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isChecking,
             bool needsUpdate,
             string cliVersion,
-            string requiredDispatcherVersion)
+            string requiredCliVersion)
         {
             if (isChecking)
             {
@@ -680,7 +678,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (needsUpdate)
             {
-                return $"Update CLI (v{cliVersion} \u2192 v{requiredDispatcherVersion})";
+                return $"Update CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
             }
 
             return "Installed";
@@ -695,41 +693,24 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return !isInstallingCli && !isChecking && (!cliInstalled || !cliVersionMatched);
         }
 
-        private static bool IsDispatcherVersionSatisfied(string cliVersion, string requiredDispatcherVersion)
+        private static bool IsCliVersionSatisfied(string cliVersion, string requiredCliVersion)
         {
             if (string.IsNullOrEmpty(cliVersion))
             {
                 return false;
             }
 
-            return CliSetupApplicationFacade.IsCliVersionGreaterThanOrEqual(cliVersion, requiredDispatcherVersion);
+            return CliSetupApplicationFacade.IsCliVersionGreaterThanOrEqual(cliVersion, requiredCliVersion);
         }
 
-        private static string GetRequiredDispatcherVersion()
+        private static string GetMinimumRequiredCliVersion()
         {
-            string requiredDispatcherVersion = CliSetupApplicationFacade.GetRequiredDispatcherVersion(UnityCliLoopConstants.PackageInfo.version);
-            return string.IsNullOrEmpty(requiredDispatcherVersion)
-                ? UnityCliLoopConstants.PackageInfo.version
-                : requiredDispatcherVersion;
+            return CliSetupApplicationFacade.GetMinimumRequiredCliVersion();
         }
 
         private static bool IsCliInstalled(string cliVersion)
         {
             return !string.IsNullOrEmpty(cliVersion);
-        }
-
-        private static void EnsureProjectLocalCliCurrent(string projectRoot)
-        {
-            CliInstallResult result = CliSetupApplicationFacade.EnsureProjectLocalCliCurrent(
-                projectRoot,
-                UnityCliLoopConstants.PackageInfo.version);
-            if (result.Success)
-            {
-                return;
-            }
-
-            Debug.LogWarning(
-                $"[{UnityCliLoopConstants.PROJECT_NAME}] Failed to update project-local uLoop CLI: {result.ErrorOutput}");
         }
 
         private void UpdateSkillsStep(
@@ -925,20 +906,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             bool wasCliInstalledBeforeInstall = CliSetupApplicationFacade.IsCliInstalled();
             _isInstallingCli = true;
-            UpdateCliStep(false, null, GetRequiredDispatcherVersion(), false);
+            UpdateCliStep(false, null, GetMinimumRequiredCliVersion(), false);
 
             try
             {
                 CliInstallResult result = await CliSetupApplicationFacade.InstallGlobalCliAsync(
                     UnityEngine.Application.platform,
-                    UnityCliLoopConstants.PackageInfo.version,
                     CancellationToken.None);
 
                 if (!result.Success)
                 {
                     NativeCliInstallCommand command = CliSetupApplicationFacade.GetGlobalCliInstallCommand(
                         UnityEngine.Application.platform,
-                        UnityCliLoopConstants.PackageInfo.version,
                         true);
                     EditorUtility.DisplayDialog(
                         "Installation Failed",

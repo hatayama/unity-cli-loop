@@ -13,7 +13,6 @@ import (
 
 const (
 	coreModulePath         = "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core"
-	dispatcherModulePath   = "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Dispatcher"
 	sharedModulePath       = "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared"
 	maxProductionFileLines = 500
 )
@@ -30,39 +29,28 @@ type layoutContract struct {
 }
 
 type layoutSection struct {
-	CliDir             string `json:"cliDir"`
-	CoreDir            string `json:"coreDir"`
-	DispatcherDir      string `json:"dispatcherDir"`
-	SharedDir          string `json:"sharedDir"`
-	DistDir            string `json:"distDir"`
-	ProjectLocalBinDir string `json:"projectLocalBinDir"`
+	CliDir    string `json:"cliDir"`
+	CoreDir   string `json:"coreDir"`
+	SharedDir string `json:"sharedDir"`
+	DistDir   string `json:"distDir"`
 }
 
 type binariesLayout struct {
-	Core       binaryNames `json:"core"`
-	Dispatcher binaryNames `json:"dispatcher"`
+	Cli cliBinaryNames `json:"cli"`
 }
 
-type binaryNames struct {
+type cliBinaryNames struct {
 	Unix    string `json:"unix"`
 	Windows string `json:"windows"`
 }
 
-type coreContract struct {
-	DispatcherVersionEnv string `json:"dispatcherVersionEnv"`
-}
-
-type dispatcherContract struct {
-	DispatcherVersionEnv string `json:"dispatcherVersionEnv"`
-}
-
-// Tests that shared packages do not depend on runtime-specific modules.
+// Tests that shared packages do not depend on the runtime-specific module.
 func TestSharedPackagesDoNotImportRuntimeModules(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
 	packages := listPackages(t, moduleRoot)
 	for _, goPackage := range packages {
 		for _, importedPath := range goPackage.Imports {
-			if strings.HasPrefix(importedPath, coreModulePath) || strings.HasPrefix(importedPath, dispatcherModulePath) {
+			if strings.HasPrefix(importedPath, coreModulePath) {
 				t.Fatalf("shared package %s must not import runtime module package %s", goPackage.ImportPath, importedPath)
 			}
 		}
@@ -95,27 +83,11 @@ func TestLayoutContractMatchesRepositoryPaths(t *testing.T) {
 	}
 	assertDirectoryName(t, cliRoot, contract.Layout.CliDir)
 	assertPathExists(t, filepath.Join(cliRoot, contract.Layout.CoreDir))
-	assertPathExists(t, filepath.Join(cliRoot, contract.Layout.DispatcherDir))
 	assertPathExists(t, filepath.Join(cliRoot, contract.Layout.SharedDir))
-	assertPathExists(t, filepath.Join(cliRoot, contract.Layout.CoreDir, contract.Layout.DistDir))
 	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "build-go-cli.sh"), packagePath(contract, contract.Layout.CoreDir))
-	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "build-go-cli.sh"), packagePath(contract, contract.Layout.DispatcherDir))
-	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "verify-go-cli-dist.sh"), filepath.ToSlash(filepath.Join(packagePath(contract, contract.Layout.CoreDir), contract.Layout.DistDir, "darwin-arm64", contract.Binaries.Core.Unix)))
+	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "verify-go-cli-dist.sh"), filepath.ToSlash(filepath.Join(packagePath(contract, contract.Layout.DistDir), "darwin-arm64", contract.Binaries.Cli.Unix)))
 	assertTextContains(t, filepath.Join(repositoryRoot, ".github", "workflows", "security-scan.yml"), packagePath(contract, contract.Layout.SharedDir))
 	assertTextContains(t, filepath.Join(repositoryRoot, ".github", "workflows", "security-scan.yml"), packagePath(contract, contract.Layout.CoreDir))
-	assertTextContains(t, filepath.Join(repositoryRoot, ".github", "workflows", "security-scan.yml"), packagePath(contract, contract.Layout.DispatcherDir))
-}
-
-// Tests that core and dispatcher agree on the environment key used for compatibility handoff.
-func TestRuntimeContractsShareDispatcherVersionProtocol(t *testing.T) {
-	moduleRoot := findModuleRoot(t)
-	cliRoot := filepath.Dir(moduleRoot)
-	core := readCoreContract(t, filepath.Join(cliRoot, "Core~", "contract.json"))
-	dispatcher := readDispatcherContract(t, filepath.Join(cliRoot, "Dispatcher~", "contract.json"))
-
-	if core.DispatcherVersionEnv != dispatcher.DispatcherVersionEnv {
-		t.Fatalf("dispatcher version env mismatch: core=%s dispatcher=%s", core.DispatcherVersionEnv, dispatcher.DispatcherVersionEnv)
-	}
 }
 
 // Tests that production files stay small enough to keep each file focused on one responsibility.
@@ -186,32 +158,6 @@ func readLayoutContract(t *testing.T, path string) layoutContract {
 	var contract layoutContract
 	if err := json.Unmarshal(content, &contract); err != nil {
 		t.Fatalf("failed to parse layout contract: %v", err)
-	}
-	return contract
-}
-
-func readCoreContract(t *testing.T, path string) coreContract {
-	t.Helper()
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("failed to read core contract: %v", err)
-	}
-	var contract coreContract
-	if err := json.Unmarshal(content, &contract); err != nil {
-		t.Fatalf("failed to parse core contract: %v", err)
-	}
-	return contract
-}
-
-func readDispatcherContract(t *testing.T, path string) dispatcherContract {
-	t.Helper()
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("failed to read dispatcher contract: %v", err)
-	}
-	var contract dispatcherContract
-	if err := json.Unmarshal(content, &contract); err != nil {
-		t.Fatalf("failed to parse dispatcher contract: %v", err)
 	}
 	return contract
 }

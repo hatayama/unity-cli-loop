@@ -13,7 +13,6 @@ import (
 
 const (
 	coreModulePath         = "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core"
-	dispatcherModulePath   = "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Dispatcher"
 	sharedModulePath       = "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared"
 	maxProductionFileLines = 500
 )
@@ -65,10 +64,10 @@ func TestCoreInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 	}
 }
 
-// Tests that the project-local core binary stays independent from the global dispatcher module.
-func TestCoreCommandDoesNotDependOnDispatcherModule(t *testing.T) {
+// Tests that the native CLI command only depends on this runtime module and shared packages.
+func TestCliCommandDoesNotDependOnRemovedDispatcherModule(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
-	command := exec.Command("go", "list", "-deps", "./cmd/uloop-core")
+	command := exec.Command("go", "list", "-deps", "./cmd/uloop")
 	command.Dir = moduleRoot
 	output, err := command.Output()
 	if err != nil {
@@ -76,8 +75,8 @@ func TestCoreCommandDoesNotDependOnDispatcherModule(t *testing.T) {
 	}
 
 	for _, dependency := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if strings.HasPrefix(dependency, dispatcherModulePath) {
-			t.Fatalf("core command must not depend on dispatcher module package %s", dependency)
+		if strings.Contains(dependency, "/Packages/src/Cli/Dispatcher") {
+			t.Fatalf("CLI command must not depend on removed dispatcher module package %s", dependency)
 		}
 	}
 }

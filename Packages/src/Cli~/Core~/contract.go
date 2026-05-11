@@ -17,11 +17,8 @@ var contractFiles embed.FS
 var Current = mustLoad()
 
 type Contract struct {
-	SchemaVersion                    int    `json:"schemaVersion"`
-	CoreVersion                      string `json:"coreVersion"`
-	MinimumRequiredDispatcherVersion string `json:"minimumRequiredDispatcherVersion"`
-	DispatcherVersionEnv             string `json:"dispatcherVersionEnv"`
-	RequiredDispatcherVersionFlag    string `json:"requiredDispatcherVersionFlag"`
+	SchemaVersion int    `json:"schemaVersion"`
+	CliVersion    string `json:"cliVersion"`
 }
 
 func mustLoad() Contract {
@@ -37,10 +34,7 @@ func mustLoad() Contract {
 	if contract.SchemaVersion != schemaVersion {
 		panic(fmt.Sprintf("core contract schema version mismatch: %d", contract.SchemaVersion))
 	}
-	requireString(contract.CoreVersion, "coreVersion")
-	requireString(contract.MinimumRequiredDispatcherVersion, "minimumRequiredDispatcherVersion")
-	requireString(contract.DispatcherVersionEnv, "dispatcherVersionEnv")
-	requireString(contract.RequiredDispatcherVersionFlag, "requiredDispatcherVersionFlag")
+	requireString(contract.CliVersion, "cliVersion")
 	return contract
 }
 

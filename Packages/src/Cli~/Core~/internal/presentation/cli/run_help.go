@@ -18,7 +18,7 @@ func isHelpRequest(args []string) bool {
 func printHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
-		"Project-local CLI. Runs native uloop commands and dispatches live Unity tool commands.",
+		"Native CLI. Runs uloop commands and dispatches live Unity tool commands.",
 		toolsCache{},
 		false)
 }
@@ -26,7 +26,7 @@ func printHelp(stdout io.Writer) {
 func printLauncherHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
-		"Global dispatcher. Finds the Unity project, then dispatches to the project-local uloop-core binary.",
+		"Native CLI. Finds the Unity project, then dispatches live Unity tool commands.",
 		toolsCache{},
 		false)
 }

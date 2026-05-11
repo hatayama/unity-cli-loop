@@ -13,7 +13,19 @@
           "type": "json",
           "path": "Packages/src/package.json",
           "jsonpath": "$.version"
-        },
+        }
+      ]
+    },
+    "Packages/src/Cli~": {
+      "component": "cli",
+      "release-type": "go",
+      "versioning": "prerelease",
+      "prerelease": true,
+      "prerelease-type": "beta",
+      "include-v-in-tag": true,
+      "include-component-in-tag": true,
+      "changelog-path": "Packages/src/Cli~/CHANGELOG.md",
+      "extra-files": [
         {
           "type": "json",
           "path": "Packages/src/Cli~/Core~/internal/presentation/cli/default-tools.json",
@@ -22,12 +34,7 @@
         {
           "type": "json",
           "path": "Packages/src/Cli~/Core~/contract.json",
-          "jsonpath": "$.coreVersion"
-        },
-        {
-          "type": "json",
-          "path": "Packages/src/Cli~/Dispatcher~/contract.json",
-          "jsonpath": "$.dispatcherVersion"
+          "jsonpath": "$.cliVersion"
         }
       ]
     }

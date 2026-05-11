@@ -22,7 +22,7 @@ set -eu
 
 case "$1" in
   diff)
-    if [ "$DISPATCHER_CHANGED" = "true" ]; then
+    if [ "$DISPATCHER_CHANGED" = "true" ] || [ "$CONTRACT_CHANGED" = "true" ] || [ "$CORE_REQUIRED_CHANGED" = "true" ]; then
       exit 1
     fi
     exit 0
@@ -35,42 +35,6 @@ case "$1" in
     if [ -n "${RELEASE_COMMIT_SHA:-}" ] && [ "$RELEASE_COMMIT_SHA" != "${BUILD_SHA_VALUE:-target-sha}" ]; then
       printf '%s\t%s\n' "$RELEASE_COMMIT_SHA" "$RELEASE_COMMIT_SUBJECT"
     fi
-    ;;
-  show)
-    case "$2" in
-      *:Packages/src/Cli~/Dispatcher~/contract.json)
-        case "$2" in
-          target-sha:*)
-            if [ "$CONTRACT_CHANGED" = "true" ]; then
-              printf '{"schemaVersion":1,"dispatcherVersion":"%s","dispatcherVersionEnv":"ULOOP_DISPATCHER_VERSION_V2"}\n' "$CURRENT_VERSION"
-            else
-              printf '{"schemaVersion":1,"dispatcherVersion":"%s","dispatcherVersionEnv":"ULOOP_DISPATCHER_VERSION"}\n' "$CURRENT_VERSION"
-            fi
-            ;;
-          *)
-            printf '{"schemaVersion":1,"dispatcherVersion":"0.0.0","dispatcherVersionEnv":"ULOOP_DISPATCHER_VERSION"}\n'
-            ;;
-        esac
-        ;;
-      *:Packages/src/Cli~/Core~/contract.json)
-        case "$2" in
-          target-sha:*)
-            if [ "$CORE_REQUIRED_CHANGED" = "true" ]; then
-              printf '{"schemaVersion":1,"coreVersion":"%s","minimumRequiredDispatcherVersion":"%s"}\n' "$CURRENT_VERSION" "$CURRENT_VERSION"
-            else
-              printf '{"schemaVersion":1,"coreVersion":"%s","minimumRequiredDispatcherVersion":"0.0.0"}\n' "$CURRENT_VERSION"
-            fi
-            ;;
-          *)
-            printf '{"schemaVersion":1,"coreVersion":"0.0.0","minimumRequiredDispatcherVersion":"0.0.0"}\n'
-            ;;
-        esac
-        ;;
-      *)
-        echo "unexpected git show target: $2" >&2
-        exit 1
-        ;;
-    esac
     ;;
   *)
     echo "unexpected git command: $*" >&2
@@ -117,7 +81,7 @@ release_json() {
 
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
-  if [ "$tag" = "v$CURRENT_VERSION" ]; then
+  if [ "$tag" = "cli-v$CURRENT_VERSION" ]; then
     release_json "$CURRENT_RELEASE_STATE" "$CURRENT_RELEASE_HAS_ASSETS"
     exit 0
   fi
@@ -151,7 +115,7 @@ write_manifest() {
   version=$1
   cat > .release-please-manifest.json <<EOF_MANIFEST
 {
-  ".": "$version"
+  "Packages/src/Cli~": "$version"
 }
 EOF_MANIFEST
 }
@@ -224,7 +188,7 @@ run_success_case() {
 
     assert_contains output.txt "publish=$expected_publish"
     assert_contains output.txt "release=$expected_release"
-    assert_contains output.txt "tag=v$current_version"
+    assert_contains output.txt "tag=cli-v$current_version"
     assert_contains output.txt "version=$current_version"
     assert_contains output.txt "sha=$expected_sha"
     assert_contains output.txt "build_sha=$build_sha_value"
@@ -257,7 +221,7 @@ run_failure_case() {
       BUILD_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
       RELEASE_COMMIT_SHA=target-sha \
       RELEASE_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
-      PREVIOUS_RELEASE_TAG=v3.0.0-beta.1 \
+      PREVIOUS_RELEASE_TAG=cli-v3.0.0-beta.1 \
       PREVIOUS_RELEASE_HAS_ASSETS=true \
       DISPATCHER_CHANGED=false \
       CONTRACT_CHANGED=false \
@@ -282,32 +246,32 @@ run_failure_case() {
 
 # Verifies already published complete Dispatcher assets are not rebuilt.
 test_complete_current_release_skips() {
-  run_success_case current-complete 3.0.0-beta.2 push v3-beta published true v3.0.0-beta.1 true true false false false false
+  run_success_case current-complete 3.0.0-beta.2 push v3-beta published true cli-v3.0.0-beta.1 true true false false false false
 }
 
 # Verifies package-only version changes do not publish Dispatcher assets.
 test_package_version_change_without_dispatcher_change_skips() {
-  run_success_case package-only 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false false false false true
+  run_success_case package-only 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false false false true
 }
 
 # Verifies Dispatcher source changes publish assets on the current release tag.
 test_dispatcher_change_publishes() {
-  run_success_case dispatcher-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true true false false true true
+  run_success_case dispatcher-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true
 }
 
 # Verifies missing Dispatcher assets can be uploaded to an already published package release.
 test_published_current_release_can_receive_dispatcher_assets() {
-  run_success_case published-missing-assets 3.0.0-beta.3 push v3-beta published false v3.0.0-beta.1 true true false false true false
+  run_success_case published-missing-assets 3.0.0-beta.3 push v3-beta published false cli-v3.0.0-beta.1 true true false false true false
 }
 
 # Verifies non-version Dispatcher contract changes publish assets.
 test_dispatcher_contract_change_publishes() {
-  run_success_case contract-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false true false true true
+  run_success_case contract-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false true false true true
 }
 
 # Verifies Core-required Dispatcher version bumps publish assets for that required tag.
 test_core_required_dispatcher_change_publishes() {
-  run_success_case core-required-change 3.0.0-beta.3 push v3-beta missing false v3.0.0-beta.1 true false false true true true
+  run_success_case core-required-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false true true true
 }
 
 # Verifies the first Dispatcher asset release is published when no previous asset tag exists.
@@ -317,22 +281,22 @@ test_missing_previous_dispatcher_release_publishes() {
 
 # Verifies a recovered release still tags the original release PR merge commit.
 test_recovery_targets_release_commit() {
-  run_success_case recovery-target 3.0.0-beta.2 push v3-beta missing false v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: follow-up change"
+  run_success_case recovery-target 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: follow-up change"
 }
 
 # Verifies recovery ignores follow-up commits that only mention the release version.
 test_recovery_ignores_non_release_subject_mentions() {
-  run_success_case recovery-non-release-subject 3.0.0-beta.2 push v3-beta missing false v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: keep release 3.0.0-beta.2 on the release commit"
+  run_success_case recovery-non-release-subject 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: keep release 3.0.0-beta.2 on the release commit"
 }
 
 # Verifies recovery ignores non-release subjects with a later release marker.
 test_recovery_requires_release_marker_after_scope() {
-  run_success_case recovery-scoped-marker 3.0.0-beta.2 push v3-beta missing false v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta) follow-up): release 3.0.0-beta.2"
+  run_success_case recovery-scoped-marker 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta) follow-up): release 3.0.0-beta.2"
 }
 
 # Verifies version matching does not confuse beta.2 with beta.20.
 test_recovery_target_uses_exact_version_boundary() {
-  run_success_case recovery-boundary 3.0.0-beta.2 push v3-beta missing false v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta): release 3.0.0-beta.20"
+  run_success_case recovery-boundary 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta): release 3.0.0-beta.20"
 }
 
 # Verifies main refuses prerelease versions.

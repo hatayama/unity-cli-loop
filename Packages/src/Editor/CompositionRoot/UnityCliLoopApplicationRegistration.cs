@@ -34,7 +34,6 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             SkillSetupUseCaseRegistry.Register(skillSetupUseCase);
             CliSetupApplicationFacade.RegisterService(new CliSetupApplicationService(
                 new CliInstallationDetector(),
-                new ProjectLocalCliInstallerService(),
                 new NativeCliInstallerService()));
             UnityCliLoopBridgeServerInstanceFactory serverFactory = new(
                 domainReloadDetectionService,

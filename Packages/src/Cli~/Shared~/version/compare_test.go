@@ -3,7 +3,7 @@ package version
 import "testing"
 
 func TestIsLessThanHandlesPrereleaseVersions(t *testing.T) {
-	// Verifies that dispatcher compatibility checks follow npm-style prerelease ordering.
+	// Verifies that CLI version checks follow npm-style prerelease ordering.
 	cases := []struct {
 		left     string
 		right    string
@@ -25,7 +25,7 @@ func TestIsLessThanHandlesPrereleaseVersions(t *testing.T) {
 }
 
 func TestCompareRejectsInvalidVersion(t *testing.T) {
-	// Verifies that malformed dispatcher versions do not pass compatibility checks.
+	// Verifies that malformed CLI versions do not pass compatibility checks.
 	cases := []string{
 		"not-a-version",
 		"1.2.3-",

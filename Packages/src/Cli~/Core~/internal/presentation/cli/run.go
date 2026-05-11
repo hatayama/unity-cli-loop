@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	corecontract "github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core"
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core/internal/adapters/unity"
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Core/internal/application"
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/Shared/adapters/project"
@@ -29,10 +28,6 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	}
 	if isVersionRequest(remainingArgs) {
 		writeLine(stdout, version)
-		return 0
-	}
-	if isRequiredDispatcherVersionRequest(remainingArgs) {
-		writeLine(stdout, corecontract.Current.MinimumRequiredDispatcherVersion)
 		return 0
 	}
 
@@ -59,13 +54,6 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	}
 	if handled, code := tryHandleSkillsRequest(remainingArgs, startPath, projectPath, stdout, stderr); handled {
 		return code
-	}
-	if !isDispatcherCompatible(os.Getenv(corecontract.Current.DispatcherVersionEnv)) {
-		writeErrorEnvelope(stderr, dispatcherUpdateRequiredError(
-			os.Getenv(corecontract.Current.DispatcherVersionEnv),
-			corecontract.Current.MinimumRequiredDispatcherVersion,
-			command))
-		return 1
 	}
 
 	connection, err := project.ResolveConnection(startPath, projectPath)
