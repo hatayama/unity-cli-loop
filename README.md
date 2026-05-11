@@ -483,10 +483,6 @@ sh scripts/test-simulate-mouse-demo.sh
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-simulate-mouse-demo.ps1
 ```
 
-## Tool Reference
-
-For detailed specifications of all tools (parameters, responses, examples), see **[TOOL_REFERENCE.md](/Packages/src/TOOL_REFERENCE.md)**.
-
 ## Unity CLI Loop Extension Development
 Unity CLI Loop enables efficient development of project-specific tools without requiring changes to the core package.
 The type-safe design allows for reliable custom tool implementation in minimal time.

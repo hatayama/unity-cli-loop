@@ -4,7 +4,7 @@
   "displayName": "Unity CLI Loop",
   "description": "AI-driven development loop for Unity via CLI.",
   "unity": "2022.3",
-  "documentationUrl": "https://github.com/hatayama/unity-cli-loop/blob/main/Packages/src/README.md",
+  "documentationUrl": "https://github.com/hatayama/unity-cli-loop/blob/main/README.md",
   "licensesUrl": "https://github.com/hatayama/unity-cli-loop/blob/main/LICENSE.md",
   "author": {
     "name": "hatayama",

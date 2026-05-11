@@ -135,6 +135,30 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return CliVersionComparer.IsVersionGreaterThanOrEqual(leftVersion, rightVersion);
         }
 
+        private bool SatisfiesMinimumRequiredCliVersion(string cliVersion, string minimumRequiredCliVersion)
+        {
+            if (string.IsNullOrEmpty(cliVersion))
+            {
+                return false;
+            }
+
+            return IsCliVersionGreaterThanOrEqual(cliVersion, minimumRequiredCliVersion);
+        }
+
+        private static string BuildPostInstallVersionMismatchMessage(
+            string cliVersion,
+            string minimumRequiredCliVersion)
+        {
+            string detectedCliVersion = string.IsNullOrEmpty(cliVersion)
+                ? "not detected"
+                : cliVersion;
+
+            return "Global CLI install completed, but the detected uloop version still does not satisfy the package minimum. Detected: "
+                + detectedCliVersion
+                + ", Required: "
+                + minimumRequiredCliVersion;
+        }
+
         public async Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -154,8 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             await _cliInstallationDetector.ForceRefreshCliVersionAsync(ct);
             string cliVersion = _cliInstallationDetector.GetCachedCliVersion();
             string minimumRequiredCliVersion = GetMinimumRequiredCliVersion();
-            if (!string.IsNullOrEmpty(cliVersion)
-                && IsCliVersionGreaterThanOrEqual(cliVersion, minimumRequiredCliVersion))
+            if (SatisfiesMinimumRequiredCliVersion(cliVersion, minimumRequiredCliVersion))
             {
                 return new CliInstallResult(true, "");
             }
@@ -167,7 +190,15 @@ namespace io.github.hatayama.UnityCliLoop.Application
             }
 
             await _cliInstallationDetector.ForceRefreshCliVersionAsync(ct);
-            return result;
+            string refreshedCliVersion = _cliInstallationDetector.GetCachedCliVersion();
+            if (SatisfiesMinimumRequiredCliVersion(refreshedCliVersion, minimumRequiredCliVersion))
+            {
+                return result;
+            }
+
+            return new CliInstallResult(
+                false,
+                BuildPostInstallVersionMismatchMessage(refreshedCliVersion, minimumRequiredCliVersion));
         }
 
         public async Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
