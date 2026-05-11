@@ -69,6 +69,22 @@ func TestFindUnityProjectRootWithinFindsNestedProject(t *testing.T) {
 	}
 }
 
+func TestFindUnityProjectRootWithinRejectsAmbiguousNestedProjects(t *testing.T) {
+	// Verifies launch discovery never silently chooses one Unity project from an ambiguous workspace.
+	workspaceRoot := t.TempDir()
+	createUnityProject(t, filepath.Join(workspaceRoot, "first", "Game"))
+	createUnityProject(t, filepath.Join(workspaceRoot, "second", "Game"))
+
+	_, err := FindUnityProjectRootWithin(workspaceRoot, 3)
+
+	if err == nil {
+		t.Fatal("expected ambiguous project error")
+	}
+	if !strings.Contains(err.Error(), "--project-path") {
+		t.Fatalf("error should ask for --project-path: %v", err)
+	}
+}
+
 func TestFindUnityProjectRootWithinHonorsMaxDepth(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	projectRoot := filepath.Join(workspaceRoot, "nested", "Game")

@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	updateCommandName          = "update"
 	updateUnsupportedOSMessage = "native update is only supported on macOS and Windows"
 	updateToVersionFlagName    = "to-version"
 )
@@ -24,18 +25,18 @@ type updateOptions struct {
 }
 
 func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) (bool, int) {
-	if len(args) == 0 || args[0] != "update" {
+	if len(args) == 0 || args[0] != updateCommandName {
 		return false, 0
 	}
 	options, err := parseUpdateOptions(args[1:])
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: "update"})
+		writeClassifiedError(stderr, err, errorContext{command: updateCommandName})
 		return true, 1
 	}
 
 	commandName, commandArgs, err := updateCommandForOSWithOptions(runtime.GOOS, options)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: "update"})
+		writeClassifiedError(stderr, err, errorContext{command: updateCommandName})
 		return true, 1
 	}
 
@@ -50,7 +51,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 			Message:     "Update failed: " + err.Error(),
 			Retryable:   true,
 			SafeToRetry: true,
-			Command:     "update",
+			Command:     updateCommandName,
 			NextActions: []string{"Retry `uloop update` after checking network access to GitHub."},
 			Details: map[string]any{
 				"cause": err.Error(),

@@ -167,6 +167,20 @@ func TestWaitForUnityLockfileReturnsAfterLockfileAppears(t *testing.T) {
 	}
 }
 
+func TestResolveExistingUnityExecutablePathReportsSearchedCandidates(t *testing.T) {
+	// Verifies missing Unity installs fail before command execution with actionable paths.
+	missingPath := filepath.Join(t.TempDir(), "Unity")
+
+	_, err := resolveExistingUnityExecutablePath("9999.9.9f9", []string{missingPath})
+
+	if err == nil {
+		t.Fatal("expected missing Unity executable error")
+	}
+	if !strings.Contains(err.Error(), missingPath) {
+		t.Fatalf("error should include searched candidate: %v", err)
+	}
+}
+
 func createLaunchTestProject(t *testing.T) string {
 	t.Helper()
 

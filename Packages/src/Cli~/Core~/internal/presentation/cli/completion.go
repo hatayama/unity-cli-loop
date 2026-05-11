@@ -23,6 +23,19 @@ const (
 	pwshProfileSubpath       = "Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
 )
 
+var nativeCommandOptions = map[string][]string{
+	completionCommand: {installCompletionFlag, shellFlag},
+	launchCommandName: {
+		"--" + projectPathFlagName,
+		"--delete-recovery",
+		"--max-depth",
+		"--platform",
+		"--quit",
+		"--restart",
+	},
+	updateCommandName: {"--" + updateToVersionFlagName},
+}
+
 func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Writer, stderr io.Writer) (bool, int) {
 	if len(args) == 0 {
 		return false, 0
@@ -49,6 +62,23 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 
 	if args[0] != completionCommand {
 		return false, 0
+	}
+	if len(args) >= 2 && args[1] == listCommandsFlag {
+		printCommandNames(cache, stdout)
+		return true, 0
+	}
+	if len(args) >= 2 && args[1] == listOptionsFlag {
+		if len(args) < 3 {
+			writeErrorEnvelope(stderr, (&argumentError{
+				message:     "--list-options requires a command name",
+				option:      listOptionsFlag,
+				command:     completionCommand,
+				nextActions: []string{"Pass the command name after `--list-options`."},
+			}).toCLIError(errorContext{command: completionCommand}))
+			return true, 1
+		}
+		printOptionsForCommand(args[2], cache, stdout)
+		return true, 0
 	}
 
 	if len(args) == 2 && isHelpRequest(args[1:]) {
@@ -204,10 +234,12 @@ func printCommandNames(cache toolsCache, stdout io.Writer) {
 }
 
 func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) {
-	for _, nativeCommand := range nativeCommandNamesForCompletion() {
-		if command == nativeCommand {
-			return
-		}
+	nativeOptions, ok := nativeCommandOptions[command]
+	if ok {
+		options := append([]string{}, nativeOptions...)
+		sort.Strings(options)
+		writeLine(stdout, strings.Join(options, "\n"))
+		return
 	}
 
 	tool, ok := findTool(cache, command)

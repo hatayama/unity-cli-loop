@@ -57,6 +57,77 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 	}
 }
 
+func TestCompletionListOptionsUsesNativeLaunchOptions(t *testing.T) {
+	// Verifies shell completion still suggests native launch flags after CLI unification.
+	var stdout bytes.Buffer
+	handled, code := tryHandleCompletionRequest(
+		[]string{"--list-options", launchCommandName},
+		loadDefaultTools(),
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+
+	output := stdout.String()
+	for _, option := range []string{"--project-path", "--restart", "--quit", "--delete-recovery", "--platform", "--max-depth"} {
+		if !strings.Contains(output, option) {
+			t.Fatalf("launch option %s was not listed: %s", option, output)
+		}
+	}
+}
+
+func TestCompletionListOptionsUsesNativeUpdateOptions(t *testing.T) {
+	// Verifies shell completion suggests exact update target flags.
+	var stdout bytes.Buffer
+	handled, code := tryHandleCompletionRequest(
+		[]string{"--list-options", updateCommandName},
+		loadDefaultTools(),
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+	if !strings.Contains(stdout.String(), "--to-version") {
+		t.Fatalf("update option was not listed: %s", stdout.String())
+	}
+}
+
+func TestCompletionCommandListOptionsUsesNativeCompletionOptions(t *testing.T) {
+	// Verifies nested completion option probes preserve dispatcher-compatible behavior.
+	var stdout bytes.Buffer
+	handled, code := tryHandleCompletionRequest(
+		[]string{completionCommand, "--list-options", completionCommand},
+		loadDefaultTools(),
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+
+	output := stdout.String()
+	for _, option := range []string{"--install", "--shell"} {
+		if !strings.Contains(output, option) {
+			t.Fatalf("completion option %s was not listed: %s", option, output)
+		}
+	}
+}
+
 // Tests that completion lists default-enabled boolean arguments as --no-* flags.
 func TestCompletionListOptionsUsesNegatedDefaultTrueBooleanFlags(t *testing.T) {
 	var stdout bytes.Buffer

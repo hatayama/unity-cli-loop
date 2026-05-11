@@ -330,6 +330,10 @@ func resolveUnityExecutablePath(projectRoot string) (string, error) {
 	}
 
 	candidates := unityExecutableCandidates(version)
+	return resolveExistingUnityExecutablePath(version, candidates)
+}
+
+func resolveExistingUnityExecutablePath(version string, candidates []string) (string, error) {
 	for _, candidate := range candidates {
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate, nil
@@ -338,7 +342,7 @@ func resolveUnityExecutablePath(projectRoot string) (string, error) {
 	if len(candidates) == 0 {
 		return "", fmt.Errorf("unity launch is not supported on %s", runtime.GOOS)
 	}
-	return candidates[0], nil
+	return "", fmt.Errorf("unity %s executable not found; searched: %s", version, strings.Join(candidates, ", "))
 }
 
 func unityExecutableCandidates(version string) []string {

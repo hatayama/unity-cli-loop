@@ -107,8 +107,11 @@ func FindUnityProjectRootWithin(startPath string, maxDepth int) (string, error) 
 	}
 
 	childProjects := findUnityProjectsInChildren(currentPath, maxDepth)
-	if len(childProjects) > 0 {
+	if len(childProjects) == 1 {
 		return childProjects[0], nil
+	}
+	if len(childProjects) > 1 {
+		return "", fmt.Errorf("multiple Unity projects found under %s; use --project-path to choose one", currentPath)
 	}
 
 	return findUnityProjectRootInParents(currentPath)
