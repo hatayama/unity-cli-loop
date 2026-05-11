@@ -142,6 +142,24 @@ cli_release_inputs_changed() {
   return 1
 }
 
+release_commit_updates_cli_version() {
+  commit_sha=$1
+  version=$2
+  expected_manifest_entry="\"Packages/src/Cli~\": \"$version\""
+  expected_changelog_heading="## [$version]"
+
+  commit_diff=$(git show --format= "$commit_sha" -- .release-please-manifest.json Packages/src/Cli~/CHANGELOG.md 2>/dev/null || true)
+  printf '%s\n' "$commit_diff" \
+    | awk -v manifest_entry="$expected_manifest_entry" -v changelog_heading="$expected_changelog_heading" '
+      substr($0, 1, 1) == "+" && (index($0, manifest_entry) > 0 || index($0, changelog_heading) > 0) {
+        found = 1
+      }
+      END {
+        exit found ? 0 : 1
+      }
+    '
+}
+
 release_commit_sha_for_version() {
   version=$1
   build_sha=$2
@@ -149,11 +167,6 @@ release_commit_sha_for_version() {
 
   git log --format='%H	%s' "$build_sha" \
     | awk -F '	' -v version="$version" -v release_branch="$release_branch" '
-      function version_boundary_matches(subject, prefix) {
-        next_character = substr(subject, length(prefix) + 1, 1)
-        return next_character == "" || next_character == " "
-      }
-
       function value_appears_as_release_token(remainder, value, parts, part_index) {
         split(remainder, parts, " ")
         for (part_index in parts) {
@@ -164,14 +177,20 @@ release_commit_sha_for_version() {
         return 0
       }
 
-      function release_remainder_matches(remainder) {
+      function release_remainder_matches_version(remainder) {
         if (value_appears_as_release_token(remainder, version)) {
-          return 1
+          return "version"
         }
+
+        return ""
+      }
+
+      function release_remainder_matches_branch(remainder) {
         if (release_branch != "" && value_appears_as_release_token(remainder, release_branch)) {
-          return 1
+          return "branch"
         }
-        return 0
+
+        return ""
       }
 
       function is_release_please_subject(subject) {
@@ -179,7 +198,13 @@ release_commit_sha_for_version() {
         scoped_marker = "): release "
 
         if (index(subject, plain_prefix) == 1) {
-          return release_remainder_matches(substr(subject, length(plain_prefix) + 1))
+          release_remainder = substr(subject, length(plain_prefix) + 1)
+          release_match = release_remainder_matches_version(release_remainder)
+          if (release_match != "") {
+            return release_match
+          }
+
+          return release_remainder_matches_branch(release_remainder)
         }
 
         if (index(subject, "chore(") != 1) {
@@ -190,17 +215,36 @@ release_commit_sha_for_version() {
         marker_start = scope_end
         marker = substr(subject, marker_start, length(scoped_marker))
         if (scope_end == 0 || marker != scoped_marker) {
-          return 0
+          return ""
         }
 
-        return release_remainder_matches(substr(subject, marker_start + length(scoped_marker)))
+        release_remainder = substr(subject, marker_start + length(scoped_marker))
+        release_match = release_remainder_matches_version(release_remainder)
+        if (release_match != "") {
+          return release_match
+        }
+
+        return release_remainder_matches_branch(release_remainder)
       }
 
-      is_release_please_subject($2) {
-        print $1
-        exit
+      {
+        release_match = is_release_please_subject($2)
+        if (release_match != "") {
+          print $1 "\t" release_match
+        }
       }
-    '
+    ' \
+    | while IFS='	' read -r candidate_sha release_match; do
+      if [ "$release_match" = "version" ]; then
+        printf '%s\n' "$candidate_sha"
+        return
+      fi
+
+      if release_commit_updates_cli_version "$candidate_sha" "$version"; then
+        printf '%s\n' "$candidate_sha"
+        return
+      fi
+    done
 }
 
 VERSION=$(jq -r '.["Packages/src/Cli~"]' .release-please-manifest.json)

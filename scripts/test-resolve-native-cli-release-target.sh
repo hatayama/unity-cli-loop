@@ -20,6 +20,14 @@ write_mock_commands() {
 #!/bin/sh
 set -eu
 
+emit_cli_release_diff() {
+  version=$1
+  printf '%s\n' 'diff --git a/.release-please-manifest.json b/.release-please-manifest.json'
+  printf '+  "Packages/src/Cli~": "%s"\n' "$version"
+  printf '%s\n' 'diff --git a/Packages/src/Cli~/CHANGELOG.md b/Packages/src/Cli~/CHANGELOG.md'
+  printf '+## [%s]\n' "$version"
+}
+
 case "$1" in
   diff)
     if [ "$CLI_SOURCE_CHANGED" = "true" ] || [ "$CONTRACT_CHANGED" = "true" ] || [ "$CLI_REQUIREMENT_CHANGED" = "true" ]; then
@@ -35,6 +43,20 @@ case "$1" in
     if [ -n "${RELEASE_COMMIT_SHA:-}" ] && [ "$RELEASE_COMMIT_SHA" != "${BUILD_SHA_VALUE:-target-sha}" ]; then
       printf '%s\t%s\n' "$RELEASE_COMMIT_SHA" "$RELEASE_COMMIT_SUBJECT"
     fi
+    ;;
+  show)
+    commit_sha=$3
+    if [ "$commit_sha" = "${BUILD_SHA_VALUE:-target-sha}" ] && [ "${BUILD_COMMIT_UPDATES_CLI:-false}" = "true" ]; then
+      emit_cli_release_diff "$CURRENT_VERSION"
+      exit 0
+    fi
+
+    if [ -n "${RELEASE_COMMIT_SHA:-}" ] && [ "$commit_sha" = "$RELEASE_COMMIT_SHA" ] && [ "${RELEASE_COMMIT_UPDATES_CLI:-false}" = "true" ]; then
+      emit_cli_release_diff "$CURRENT_VERSION"
+      exit 0
+    fi
+
+    exit 0
     ;;
   *)
     echo "unexpected git command: $*" >&2
@@ -160,6 +182,8 @@ run_success_case() {
   release_commit_sha=${16:-target-sha}
   release_commit_subject=${17:-}
   build_commit_subject=${18:-}
+  build_commit_updates_cli=${19:-false}
+  release_commit_updates_cli=${20:-false}
   if [ -z "$release_commit_subject" ]; then
     release_commit_subject="chore(v3-beta): release $current_version"
   fi
@@ -181,8 +205,10 @@ run_success_case() {
       CURRENT_RELEASE_HAS_ASSETS="$current_release_has_assets" \
       BUILD_SHA_VALUE="$build_sha_value" \
       BUILD_COMMIT_SUBJECT="$build_commit_subject" \
+      BUILD_COMMIT_UPDATES_CLI="$build_commit_updates_cli" \
       RELEASE_COMMIT_SHA="$release_commit_sha" \
       RELEASE_COMMIT_SUBJECT="$release_commit_subject" \
+      RELEASE_COMMIT_UPDATES_CLI="$release_commit_updates_cli" \
       PREVIOUS_RELEASE_TAG="$previous_release_tag" \
       PREVIOUS_RELEASE_HAS_ASSETS="$previous_release_has_assets" \
       CLI_SOURCE_CHANGED="$cli_source_changed" \
@@ -295,7 +321,12 @@ test_recovery_targets_release_commit() {
 
 # Verifies grouped manifest release commits remain the recovery target.
 test_recovery_targets_grouped_release_commit() {
-  run_success_case recovery-grouped-target 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore: release v3-beta" "fix: follow-up change"
+  run_success_case recovery-grouped-target 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore: release v3-beta" "fix: follow-up change" false true
+}
+
+# Verifies package-only grouped release commits do not steal the CLI release target.
+test_recovery_ignores_grouped_package_only_release_commit() {
+  run_success_case recovery-grouped-package-only-target 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore: release v3-beta" false false
 }
 
 # Verifies recovery ignores follow-up commits that only mention the release version.
@@ -338,6 +369,7 @@ test_cli_requirement_change_publishes
 test_missing_previous_cli_release_publishes
 test_recovery_targets_release_commit
 test_recovery_targets_grouped_release_commit
+test_recovery_ignores_grouped_package_only_release_commit
 test_recovery_ignores_non_release_subject_mentions
 test_recovery_requires_release_marker_after_scope
 test_recovery_target_uses_exact_version_boundary
