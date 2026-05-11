@@ -22,7 +22,7 @@ set -eu
 
 case "$1" in
   diff)
-    if [ "$DISPATCHER_CHANGED" = "true" ] || [ "$CONTRACT_CHANGED" = "true" ] || [ "$CORE_REQUIRED_CHANGED" = "true" ]; then
+    if [ "$CLI_SOURCE_CHANGED" = "true" ] || [ "$CONTRACT_CHANGED" = "true" ] || [ "$CLI_REQUIREMENT_CHANGED" = "true" ]; then
       exit 1
     fi
     exit 0
@@ -150,9 +150,9 @@ run_success_case() {
   current_release_has_assets=$6
   previous_release_tag=$7
   previous_release_has_assets=$8
-  dispatcher_changed=$9
+  cli_source_changed=$9
   contract_changed=${10}
-  core_required_changed=${11}
+  cli_requirement_changed=${11}
   expected_publish=${12}
   expected_release=${13}
   expected_sha=${14:-target-sha}
@@ -185,9 +185,9 @@ run_success_case() {
       RELEASE_COMMIT_SUBJECT="$release_commit_subject" \
       PREVIOUS_RELEASE_TAG="$previous_release_tag" \
       PREVIOUS_RELEASE_HAS_ASSETS="$previous_release_has_assets" \
-      DISPATCHER_CHANGED="$dispatcher_changed" \
+      CLI_SOURCE_CHANGED="$cli_source_changed" \
       CONTRACT_CHANGED="$contract_changed" \
-      CORE_REQUIRED_CHANGED="$core_required_changed" \
+      CLI_REQUIREMENT_CHANGED="$cli_requirement_changed" \
       EVENT_NAME="$event_name" \
       EVENT_REF_NAME="$branch_name" \
       BEFORE_SHA=before \
@@ -232,9 +232,9 @@ run_failure_case() {
       RELEASE_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
       PREVIOUS_RELEASE_TAG=cli-v3.0.0-beta.1 \
       PREVIOUS_RELEASE_HAS_ASSETS=true \
-      DISPATCHER_CHANGED=false \
+      CLI_SOURCE_CHANGED=false \
       CONTRACT_CHANGED=false \
-      CORE_REQUIRED_CHANGED=false \
+      CLI_REQUIREMENT_CHANGED=false \
       EVENT_NAME="$event_name" \
       EVENT_REF_NAME="$branch_name" \
       BEFORE_SHA=before \
@@ -253,38 +253,38 @@ run_failure_case() {
   )
 }
 
-# Verifies already published complete Dispatcher assets are not rebuilt.
+# Verifies already published complete CLI assets are not rebuilt.
 test_complete_current_release_skips() {
   run_success_case current-complete 3.0.0-beta.2 push v3-beta published true cli-v3.0.0-beta.1 true true false false false false
 }
 
-# Verifies package-only version changes do not publish Dispatcher assets.
-test_package_version_change_without_dispatcher_change_skips() {
+# Verifies package-only version changes do not publish CLI assets.
+test_package_version_change_without_cli_change_skips() {
   run_success_case package-only 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false false false true
 }
 
-# Verifies Dispatcher source changes publish assets on the current release tag.
-test_dispatcher_change_publishes() {
-  run_success_case dispatcher-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true
+# Verifies CLI source changes publish assets on the current release tag.
+test_cli_change_publishes() {
+  run_success_case cli-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true
 }
 
-# Verifies missing Dispatcher assets can be uploaded to an already published package release.
-test_published_current_release_can_receive_dispatcher_assets() {
+# Verifies missing CLI assets can be uploaded to an already published package release.
+test_published_current_release_can_receive_cli_assets() {
   run_success_case published-missing-assets 3.0.0-beta.3 push v3-beta published false cli-v3.0.0-beta.1 true true false false true false
 }
 
-# Verifies non-version Dispatcher contract changes publish assets.
-test_dispatcher_contract_change_publishes() {
+# Verifies non-version CLI contract changes publish assets.
+test_cli_contract_change_publishes() {
   run_success_case contract-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false true false true true
 }
 
-# Verifies Core-required Dispatcher version bumps publish assets for that required tag.
-test_core_required_dispatcher_change_publishes() {
-  run_success_case core-required-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false true true true
+# Verifies CLI requirement version bumps publish assets for that required tag.
+test_cli_requirement_change_publishes() {
+  run_success_case cli-requirement-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false true true true
 }
 
-# Verifies the first Dispatcher asset release is published when no previous asset tag exists.
-test_missing_previous_dispatcher_release_publishes() {
+# Verifies the first CLI asset release is published when no previous asset tag exists.
+test_missing_previous_cli_release_publishes() {
   run_success_case bootstrap 3.0.0-beta.0 push v3-beta missing false "" false false false false true true
 }
 
@@ -328,14 +328,14 @@ test_release_lookup_error_fails() {
   run_failure_case release-lookup-error 3.0.0-beta.3 push v3-beta "gh auth failed" error
 }
 
-assert_script_contains "Packages/src/Cli~/Core~/contract.json"
+assert_script_contains "Packages/src/Cli~/contract.json"
 test_complete_current_release_skips
-test_package_version_change_without_dispatcher_change_skips
-test_dispatcher_change_publishes
-test_published_current_release_can_receive_dispatcher_assets
-test_dispatcher_contract_change_publishes
-test_core_required_dispatcher_change_publishes
-test_missing_previous_dispatcher_release_publishes
+test_package_version_change_without_cli_change_skips
+test_cli_change_publishes
+test_published_current_release_can_receive_cli_assets
+test_cli_contract_change_publishes
+test_cli_requirement_change_publishes
+test_missing_previous_cli_release_publishes
 test_recovery_targets_release_commit
 test_recovery_targets_grouped_release_commit
 test_recovery_ignores_non_release_subject_mentions

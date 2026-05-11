@@ -35,8 +35,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string PACKAGE_SOURCE_DIR_NAME = "src";
         public const string CLI_PACKAGE_DIR_NAME = "Cli~";
         public const string LEGACY_GO_CLI_PACKAGE_DIR_NAME = "GoCli~";
-        public const string GO_CLI_CORE_DIR_NAME = "Core~";
-        public const string GO_CLI_SHARED_DIR_NAME = "Shared~";
         public const string DIST_DIR_NAME = "dist";
         public const string CLI_LAYOUT_CONTRACT_FILE_NAME = "layout-contract.json";
         public const string CLI_CONTRACT_FILE_NAME = "contract.json";

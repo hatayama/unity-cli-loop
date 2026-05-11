@@ -2,8 +2,6 @@
   "schemaVersion": 1,
   "layout": {
     "cliDir": "Cli~",
-    "coreDir": "Core~",
-    "sharedDir": "Shared~",
     "distDir": "dist"
   },
   "binaries": {

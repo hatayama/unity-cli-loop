@@ -106,12 +106,12 @@ print_legacy_npm_manual_removal() {
   fi
 
   if [ -n "$legacy_prefix" ]; then
-    echo "Run this manually if that command still shadows the native dispatcher:"
+    echo "Run this manually if that command still shadows the native CLI:"
     echo "  npm uninstall -g --prefix \"$legacy_prefix\" uloop-cli"
     return
   fi
 
-  echo "Run this manually if the old npm command still shadows the native dispatcher:"
+  echo "Run this manually if the old npm command still shadows the native CLI:"
   echo "  npm uninstall -g uloop-cli"
 }
 

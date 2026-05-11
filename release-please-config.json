@@ -28,12 +28,12 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "Packages/src/Cli~/Core~/internal/presentation/cli/default-tools.json",
+          "path": "Packages/src/Cli~/internal/presentation/cli/default-tools.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "Packages/src/Cli~/Core~/contract.json",
+          "path": "Packages/src/Cli~/contract.json",
           "jsonpath": "$.cliVersion"
         }
       ]

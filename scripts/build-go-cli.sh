@@ -3,7 +3,6 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 CLI_DIR="$ROOT_DIR/Packages/src/Cli~"
-CORE_DIR="$ROOT_DIR/Packages/src/Cli~/Core~"
 
 . "$ROOT_DIR/scripts/go-cli-toolchain.sh"
 require_go_cli_toolchain "$ROOT_DIR"
@@ -29,6 +28,6 @@ build_binary() {
   )
 }
 
-build_binary darwin arm64 uloop "$CORE_DIR" ./cmd/uloop
-build_binary darwin amd64 uloop "$CORE_DIR" ./cmd/uloop
-build_binary windows amd64 uloop "$CORE_DIR" ./cmd/uloop
+build_binary darwin arm64 uloop "$CLI_DIR" ./cmd/uloop
+build_binary darwin amd64 uloop "$CLI_DIR" ./cmd/uloop
+build_binary windows amd64 uloop "$CLI_DIR" ./cmd/uloop
