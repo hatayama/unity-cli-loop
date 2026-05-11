@@ -161,6 +161,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return allowDuringCliRefresh || !isRefreshingVersion;
         }
 
+        public static SkillInstallState ResolveSkillInstallStateWhenRefreshCannotStart(
+            bool isCliInstalled,
+            SkillInstallState currentState)
+        {
+            return isCliInstalled ? currentState : SkillInstallState.Missing;
+        }
+
         public static bool ShouldKeepToolSettingsCatalogDirty(ToolSettingsSectionData toolSettingsData)
         {
             Debug.Assert(toolSettingsData != null, "toolSettingsData must not be null");

@@ -639,12 +639,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void RefreshSelectedTargetInstallStateInBackground(bool allowDuringCliRefresh = false)
         {
             CancelSkillInstallStateRefresh();
+            bool isCliInstalled = CliSetupApplicationFacade.IsCliInstalled();
             if (!UnityCliLoopSettingsWindowRefreshPolicy.ShouldStartSkillInstallStateRefresh(
-                    CliSetupApplicationFacade.IsCliInstalled(),
+                    isCliInstalled,
                     _isRefreshingVersion,
                     _isInstallingSkills,
                     allowDuringCliRefresh))
             {
+                SkillInstallState resolvedInstallState =
+                    UnityCliLoopSettingsWindowRefreshPolicy.ResolveSkillInstallStateWhenRefreshCannotStart(
+                        isCliInstalled,
+                        _selectedTargetInstallState);
+                if (_selectedTargetInstallState != resolvedInstallState)
+                {
+                    _selectedTargetInstallState = resolvedInstallState;
+                    RefreshCliSetupSection();
+                }
                 return;
             }
 
