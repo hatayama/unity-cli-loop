@@ -1,12 +1,5 @@
 #!/usr/bin/env sh
 
-# Sync root READMEs to Packages/src/ (must run before cd)
-changed_readmes="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(README(_ja)?\.md|Packages/src/README(_ja)?\.md)$' || true)"
-
-if [ -n "$changed_readmes" ]; then
-  sh scripts/sync-readmes.sh
-fi
-
 changed_cli_ts="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^Packages/src/Cli~/src/.*\.(ts|tsx)$' || true)"
 
 if [ -n "$changed_cli_ts" ]; then
