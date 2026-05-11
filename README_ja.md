@@ -484,10 +484,6 @@ sh scripts/test-simulate-mouse-demo.sh
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-simulate-mouse-demo.ps1
 ```
 
-## ツールリファレンス
-
-全ツールの詳細仕様（パラメータ、レスポンス、使用例）については **[TOOL_REFERENCE_ja.md](/Packages/src/TOOL_REFERENCE_ja.md)** を参照してください。
-
 ## Unity CLI Loop 拡張ツールの開発
 Unity CLI Loopはコアパッケージへの変更を必要とせず、プロジェクト固有のツールを効率的に開発できます。
 型安全な設計により、信頼性の高いカスタムツールを短時間で実装可能です。

@@ -22,6 +22,7 @@ jobs:
         run: |
           scripts/test-resolve-native-cli-release-target.sh
           scripts/test-is-release-please-release-commit.sh
+          scripts/test-release-please-config.sh
           scripts/test-mark-release-pr-tagged.sh
           scripts/test-sync-published-release-pr-labels.sh
           scripts/test-sync-release-please-go-cli-dist.sh

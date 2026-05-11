@@ -41,22 +41,17 @@ type cliBinaryNames struct {
 	Windows string `json:"windows"`
 }
 
-// Tests that CLI onion layers only import packages from allowed inner or outer boundaries.
-func TestCliOnionLayerDependencies(t *testing.T) {
+// Tests that feature packages do not depend on CLI input/output orchestration.
+func TestCliFeaturePackagesDoNotImportCli(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
 	packages := listPackages(t, moduleRoot)
 	for _, goPackage := range packages {
-		sourceLayer := layerOf(goPackage.ImportPath)
-		if sourceLayer == "" {
+		if goPackage.ImportPath == cliModulePath+"/internal/cli" || strings.HasPrefix(goPackage.ImportPath, cliModulePath+"/cmd/") {
 			continue
 		}
 		for _, importedPath := range goPackage.Imports {
-			targetLayer := layerOf(importedPath)
-			if targetLayer == "" {
-				continue
-			}
-			if !isAllowedDependency(sourceLayer, targetLayer, importedPath) {
-				t.Fatalf("%s package %s must not import %s package %s", sourceLayer, goPackage.ImportPath, targetLayer, importedPath)
+			if strings.HasPrefix(importedPath, cliModulePath+"/internal/cli") {
+				t.Fatalf("feature package %s must not import CLI package %s", goPackage.ImportPath, importedPath)
 			}
 		}
 	}
@@ -73,7 +68,7 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 		if goPackage.ImportPath == cliModulePath+"/internal/architecture" {
 			continue
 		}
-		for _, boundary := range []string{"/internal/adapters/", "/internal/app", "/internal/application", "/internal/domain", "/internal/ports", "/internal/presentation", "/internal/version"} {
+		for _, boundary := range []string{"/internal/cli", "/internal/project", "/internal/skills", "/internal/tools", "/internal/unityipc", "/internal/update", "/internal/version"} {
 			if strings.Contains(goPackage.ImportPath, boundary) {
 				goto nextPackage
 			}
@@ -83,21 +78,31 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 	}
 }
 
-// Tests that the native CLI command does not depend on removed split runtime modules.
-func TestCliCommandDoesNotDependOnRemovedSplitModules(t *testing.T) {
+// Tests that the native CLI command only enters the CLI orchestration package.
+func TestCliCommandOnlyDependsOnCliEntrypoint(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
-	command := exec.Command("go", "list", "-deps", "./cmd/uloop")
+	command := exec.Command("go", "list", "-json", "./cmd/uloop")
 	command.Dir = moduleRoot
 	output, err := command.Output()
 	if err != nil {
 		t.Fatalf("go list failed: %v", err)
 	}
 
-	for _, dependency := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+	var commandPackage goPackage
+	if err := json.Unmarshal(output, &commandPackage); err != nil {
+		t.Fatalf("failed to decode command package: %v", err)
+	}
+	for _, dependency := range commandPackage.Imports {
 		for _, removedModule := range []string{"/Packages/src/Cli/Dispatcher", "/Packages/src/Cli/Core", "/Packages/src/Cli/Shared"} {
 			if strings.Contains(dependency, removedModule) {
 				t.Fatalf("CLI command must not depend on removed split module package %s", dependency)
 			}
+		}
+		if !strings.HasPrefix(dependency, cliModulePath+"/internal/") {
+			continue
+		}
+		if dependency != cliModulePath+"/internal/cli" {
+			t.Fatalf("CLI command must enter internal code through internal/cli, got %s", dependency)
 		}
 	}
 }
@@ -116,6 +121,7 @@ func TestLayoutContractMatchesRepositoryPaths(t *testing.T) {
 	assertPathExists(t, filepath.Join(moduleRoot, "internal"))
 	assertPathExists(t, filepath.Join(moduleRoot, contract.Layout.DistDir))
 	assertPathDoesNotExist(t, filepath.Join(moduleRoot, "Core~"))
+	assertPathDoesNotExist(t, filepath.Join(moduleRoot, "Dispatcher~"))
 	assertPathDoesNotExist(t, filepath.Join(moduleRoot, "Shared~"))
 	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "build-go-cli.sh"), packagePath(contract, ""))
 	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "verify-go-cli-dist.sh"), filepath.ToSlash(filepath.Join(packagePath(contract, contract.Layout.DistDir), "darwin-arm64", contract.Binaries.Cli.Unix)))
@@ -178,56 +184,6 @@ func listPackages(t *testing.T, moduleRoot string) []goPackage {
 		packages = append(packages, goPackage)
 	}
 	return packages
-}
-
-func layerOf(importPath string) string {
-	switch {
-	case strings.HasPrefix(importPath, cliModulePath+"/internal/domain"):
-		return "domain"
-	case strings.HasPrefix(importPath, cliModulePath+"/internal/version"):
-		return "version"
-	case strings.HasPrefix(importPath, cliModulePath+"/internal/adapters"):
-		return "adapters"
-	case importPath == cliModulePath:
-		return "contract"
-	case strings.HasPrefix(importPath, cliModulePath+"/internal/application"):
-		return "application"
-	case strings.HasPrefix(importPath, cliModulePath+"/internal/ports"):
-		return "ports"
-	case strings.HasPrefix(importPath, cliModulePath+"/internal/presentation"):
-		return "presentation"
-	case strings.HasPrefix(importPath, cliModulePath+"/internal/app"):
-		return "app"
-	case strings.HasPrefix(importPath, cliModulePath+"/cmd/"):
-		return "cmd"
-	default:
-		return ""
-	}
-}
-
-func isAllowedDependency(sourceLayer string, targetLayer string, importedPath string) bool {
-	switch sourceLayer {
-	case "domain":
-		return targetLayer == "domain"
-	case "version":
-		return targetLayer == "version"
-	case "contract":
-		return targetLayer == "contract"
-	case "application":
-		return targetLayer == "domain" || targetLayer == "ports" || targetLayer == "application"
-	case "ports":
-		return targetLayer == "domain" || targetLayer == "ports"
-	case "adapters":
-		return targetLayer == "domain" || targetLayer == "ports" || targetLayer == "application" || targetLayer == "adapters"
-	case "presentation":
-		return targetLayer == "domain" || targetLayer == "version" || targetLayer == "contract" || targetLayer == "ports" || targetLayer == "application" || targetLayer == "adapters" || targetLayer == "presentation"
-	case "app":
-		return targetLayer == "domain" || targetLayer == "version" || targetLayer == "contract" || targetLayer == "ports" || targetLayer == "application" || targetLayer == "adapters" || targetLayer == "presentation"
-	case "cmd":
-		return targetLayer == "app" || importedPath == cliModulePath+"/internal/app"
-	default:
-		return true
-	}
 }
 
 func readLayoutContract(t *testing.T, path string) layoutContract {
