@@ -1,4 +1,6 @@
 using NUnit.Framework;
+using UnityEditor.UIElements;
+using UnityEngine.UIElements;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
@@ -99,27 +101,108 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(text, Is.EqualTo(expectedText));
         }
 
-        [TestCase(false, false, false, SkillInstallState.Missing, false)]
-        [TestCase(true, true, false, SkillInstallState.Missing, false)]
-        [TestCase(true, false, true, SkillInstallState.Missing, false)]
-        [TestCase(true, false, false, SkillInstallState.Checking, false)]
-        [TestCase(true, false, false, SkillInstallState.Installed, false)]
-        [TestCase(true, false, false, SkillInstallState.Outdated, true)]
-        [TestCase(true, false, false, SkillInstallState.Missing, true)]
+        [TestCase(false, false, SkillInstallState.Missing, false)]
+        [TestCase(true, true, SkillInstallState.Missing, false)]
+        [TestCase(true, false, SkillInstallState.Checking, false)]
+        [TestCase(true, false, SkillInstallState.Installed, false)]
+        [TestCase(true, false, SkillInstallState.Outdated, true)]
+        [TestCase(true, false, SkillInstallState.Missing, true)]
         public void IsInstallSkillsButtonEnabled_ReturnsExpectedValue(
             bool isCliInstalled,
             bool isInstallingSkills,
-            bool isChecking,
             SkillInstallState installState,
             bool expectedEnabled)
         {
+            // Verifies that the Skills install button follows only Skills state.
             bool enabled = CliSetupSection.IsInstallSkillsButtonEnabled(
                 isCliInstalled,
                 isInstallingSkills,
-                isChecking,
                 installState);
 
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
+        }
+
+        [Test]
+        public void Update_WhenCliRefreshIsChecking_KeepsSkillsControlsEnabled()
+        {
+            // Verifies that a CLI-only refresh does not gray out Skills controls.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: true,
+                selectedTargetInstallState: SkillInstallState.Missing);
+
+            section.Update(data);
+
+            Button refreshSkillsButton = root.Q<Button>("refresh-skills-state-button");
+            VisualElement skillsSubsection = root.Q<VisualElement>("skills-subsection");
+            EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
+            Button installSkillsButton = root.Q<Button>("install-skills-button");
+            Assert.That(refreshSkillsButton.enabledSelf, Is.True);
+            Assert.That(skillsSubsection.enabledSelf, Is.True);
+            Assert.That(skillsTargetField.enabledSelf, Is.True);
+            Assert.That(installSkillsButton.enabledSelf, Is.True);
+        }
+
+        [Test]
+        public void Update_WhenSkillsStateIsChecking_DisablesSkillsTargetField()
+        {
+            // Verifies that the Skills target cannot change while the selected target state is being checked.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Checking);
+
+            section.Update(data);
+
+            EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
+            Assert.That(skillsTargetField.enabledSelf, Is.False);
+        }
+
+        private static VisualElement CreateRootElement()
+        {
+            VisualElement root = new();
+            root.Add(new VisualElement { name = "cli-status-icon" });
+            root.Add(new Label { name = "cli-status-label" });
+            root.Add(new Button { name = "refresh-cli-version-button" });
+            root.Add(new Button { name = "install-cli-button" });
+            root.Add(new EnumField { name = "skills-target-field" });
+            root.Add(new Button { name = "refresh-skills-state-button" });
+            root.Add(new VisualElement { name = "group-skills-row" });
+            root.Add(new Toggle { name = "group-skills-toggle" });
+            root.Add(new Label { name = "group-skills-label" });
+            root.Add(new Button { name = "install-skills-button" });
+            root.Add(new VisualElement { name = "skills-subsection" });
+            return root;
+        }
+
+        private static CliSetupData CreateData(
+            bool isCliInstalled,
+            bool isChecking,
+            SkillInstallState selectedTargetInstallState)
+        {
+            return new CliSetupData(
+                isCliInstalled,
+                cliVersion: "3.0.0",
+                requiredDispatcherVersion: "3.0.0",
+                needsUpdate: false,
+                needsDowngrade: false,
+                canUninstallCli: true,
+                isInstallingCli: false,
+                isChecking,
+                isClaudeSkillsInstalled: false,
+                isAgentsSkillsInstalled: false,
+                isCursorSkillsInstalled: false,
+                isGeminiSkillsInstalled: false,
+                isCodexSkillsInstalled: false,
+                isAntigravitySkillsInstalled: false,
+                selectedTargetInstallState,
+                SkillsTarget.Claude,
+                groupSkillsUnderUnityCliLoop: false,
+                isInstallingSkills: false);
         }
     }
 }

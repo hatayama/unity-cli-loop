@@ -124,7 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 _skillsTarget = value;
                 RefreshSelectedTargetInstallStateFast();
-                RefreshSelectedTargetInstallStateInBackground();
+                RefreshSelectedTargetInstallStateInBackground(allowDuringCliRefresh: true);
             };
             _view.OnGroupSkillsChanged += HandleGroupSkillsChanged;
             _view.OnConfigurationFoldoutChanged += UpdateShowConfiguration;
@@ -199,7 +199,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void ScheduleDeferredInitialRefresh()
         {
-            if (_isDeferredInitialRefreshScheduled)
+            if (!UnityCliLoopSettingsWindowRefreshPolicy.ShouldScheduleDeferredInitialRefresh(
+                    _isDeferredInitialRefreshScheduled,
+                    _hasCompletedDeferredInitialRefresh))
             {
                 return;
             }
@@ -319,7 +321,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 _isRefreshingVersion = false;
                 RefreshCliSetupSection();
-                RefreshSelectedTargetInstallStateInBackground();
             }
         }
 
@@ -635,11 +636,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             RefreshCliSetupSection();
         }
 
-        private void RefreshSelectedTargetInstallStateInBackground()
+        private void RefreshSelectedTargetInstallStateInBackground(bool allowDuringCliRefresh = false)
         {
             CancelSkillInstallStateRefresh();
-            if (!CliSetupApplicationFacade.IsCliInstalled() || _isRefreshingVersion || _isInstallingSkills)
+            bool isCliInstalled = CliSetupApplicationFacade.IsCliInstalled();
+            if (!UnityCliLoopSettingsWindowRefreshPolicy.ShouldStartSkillInstallStateRefresh(
+                    isCliInstalled,
+                    _isRefreshingVersion,
+                    _isInstallingSkills,
+                    allowDuringCliRefresh))
             {
+                SkillInstallState resolvedInstallState =
+                    UnityCliLoopSettingsWindowRefreshPolicy.ResolveSkillInstallStateWhenRefreshCannotStart(
+                        isCliInstalled,
+                        _selectedTargetInstallState);
+                if (_selectedTargetInstallState != resolvedInstallState)
+                {
+                    _selectedTargetInstallState = resolvedInstallState;
+                    RefreshCliSetupSection();
+                }
                 return;
             }
 
@@ -837,7 +852,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 _isInstallingSkills = false;
                 RefreshSelectedTargetInstallStateFast();
-                RefreshSelectedTargetInstallStateInBackground();
+                RefreshSelectedTargetInstallStateInBackground(allowDuringCliRefresh: true);
                 RefreshCliSetupSection();
             }
         }
@@ -869,7 +884,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void HandleRefreshSkillsState()
         {
             RefreshSelectedTargetInstallStateFast();
-            RefreshSelectedTargetInstallStateInBackground();
+            RefreshSelectedTargetInstallStateInBackground(allowDuringCliRefresh: true);
         }
 
     }

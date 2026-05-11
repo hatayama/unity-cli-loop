@@ -67,6 +67,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldRefresh, Is.True);
         }
 
+        [TestCase(false, false, true)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, false)]
+        [TestCase(true, true, false)]
+        public void ShouldScheduleDeferredInitialRefresh_ReturnsExpectedValue(
+            bool isAlreadyScheduled,
+            bool hasCompleted,
+            bool expected)
+        {
+            // Verifies that focus changes do not rerun the initial Skills freshness check.
+            bool shouldSchedule = UnityCliLoopSettingsWindowRefreshPolicy.ShouldScheduleDeferredInitialRefresh(
+                isAlreadyScheduled,
+                hasCompleted);
+
+            Assert.That(shouldSchedule, Is.EqualTo(expected));
+        }
+
+        [TestCase(true, true, false, false, false)]
+        [TestCase(true, true, false, true, true)]
+        [TestCase(true, false, false, false, true)]
+        [TestCase(false, true, false, true, false)]
+        [TestCase(true, true, true, true, false)]
+        public void ShouldStartSkillInstallStateRefresh_ReturnsExpectedValue(
+            bool isCliInstalled,
+            bool isRefreshingVersion,
+            bool isInstallingSkills,
+            bool allowDuringCliRefresh,
+            bool expected)
+        {
+            // Verifies that manual Skills refresh can run during CLI refresh while automatic refresh remains gated.
+            bool shouldStart = UnityCliLoopSettingsWindowRefreshPolicy.ShouldStartSkillInstallStateRefresh(
+                isCliInstalled,
+                isRefreshingVersion,
+                isInstallingSkills,
+                allowDuringCliRefresh);
+
+            Assert.That(shouldStart, Is.EqualTo(expected));
+        }
+
+        [TestCase(false, SkillInstallState.Checking, SkillInstallState.Missing)]
+        [TestCase(false, SkillInstallState.Installed, SkillInstallState.Missing)]
+        [TestCase(false, SkillInstallState.Outdated, SkillInstallState.Missing)]
+        [TestCase(true, SkillInstallState.Checking, SkillInstallState.Checking)]
+        public void ResolveSkillInstallStateWhenRefreshCannotStart_ReturnsExpectedValue(
+            bool isCliInstalled,
+            SkillInstallState currentState,
+            SkillInstallState expected)
+        {
+            // Verifies that a skipped freshness check cannot leave Skills in a stale state when the CLI is unavailable.
+            SkillInstallState resolvedState = UnityCliLoopSettingsWindowRefreshPolicy.ResolveSkillInstallStateWhenRefreshCannotStart(
+                isCliInstalled,
+                currentState);
+
+            Assert.That(resolvedState, Is.EqualTo(expected));
+        }
+
         [Test]
         public void ShouldKeepToolSettingsCatalogDirty_WhenOpenRegistryUnavailable_ReturnsTrue()
         {
