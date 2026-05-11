@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.0-beta.6](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.5...v3.0.0-beta.6) (2026-05-11)
+
+
+### Features
+
+* Native CLI is distributed as a single uloop binary ([#1100](https://github.com/hatayama/unity-cli-loop/issues/1100)) ([1180fae](https://github.com/hatayama/unity-cli-loop/commit/1180fae9be33c3f1cc6e35044b2ee42130052e93))
+* Simplify native CLI packaging and updates ([#1099](https://github.com/hatayama/unity-cli-loop/issues/1099)) ([35ef3c0](https://github.com/hatayama/unity-cli-loop/commit/35ef3c0c61b4bb8d00d2dab8ab8468fa3b5bdab6))
+
+
+### Bug Fixes
+
+* CLI and Skills reload buttons refresh independently ([#1091](https://github.com/hatayama/unity-cli-loop/issues/1091)) ([95f7c2d](https://github.com/hatayama/unity-cli-loop/commit/95f7c2d941a044f2177f2bde057d650da45547cb))
+
 ## [3.0.0-beta.5](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.4...v3.0.0-beta.5) (2026-05-10)
 
 
