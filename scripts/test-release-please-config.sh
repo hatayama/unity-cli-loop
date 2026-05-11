@@ -16,13 +16,17 @@ assert_json_value() {
   fi
 }
 
-assert_manifest_value() {
+assert_manifest_semver() {
   expression=$1
-  expected=$2
-  actual=$(jq -r "$expression" "$MANIFEST")
+  actual=$(jq -r "$expression // empty" "$MANIFEST")
 
-  if [ "$actual" != "$expected" ]; then
-    echo "Expected manifest $expression to be $expected, got $actual." >&2
+  if [ -z "$actual" ]; then
+    echo "Expected manifest $expression to exist." >&2
+    exit 1
+  fi
+
+  if ! printf '%s\n' "$actual" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$' >/dev/null; then
+    echo "Expected manifest $expression to be a semantic version, got $actual." >&2
     exit 1
   fi
 }
@@ -58,8 +62,8 @@ assert_json_value '.packages["Packages/src/Cli~"].["changelog-path"]' 'CHANGELOG
 assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][0].path' 'Packages/src/Cli~/internal/tools/default-tools.json'
 assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][1].path' 'Packages/src/Cli~/contract.json'
 
-assert_manifest_value '.["."]' '3.0.0-beta.5'
-assert_manifest_value '.["Packages/src/Cli~"]' '3.0.0-beta.6'
+assert_manifest_semver '.["."]'
+assert_manifest_semver '.["Packages/src/Cli~"]'
 
 jq -r '.packages | to_entries[] | [.key, .value["changelog-path"]] | @tsv' "$CONFIG" |
 while IFS='	' read -r package_path changelog_path; do

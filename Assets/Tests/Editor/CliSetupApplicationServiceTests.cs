@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that manual installs target the independent CLI release stream.
             FakeNativeCliInstaller nativeCliInstaller = new();
             CliSetupApplicationService service = new(
-                new FakeCliInstallationDetector(null),
+                new FakeCliInstallationDetector(new string[] { null }),
                 nativeCliInstaller);
 
             await service.InstallGlobalCliAsync(RuntimePlatform.OSXEditor, CancellationToken.None);
@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that fallback manual commands point at the independent CLI release stream.
             FakeNativeCliInstaller nativeCliInstaller = new();
             CliSetupApplicationService service = new(
-                new FakeCliInstallationDetector(null),
+                new FakeCliInstallationDetector(new string[] { null }),
                 nativeCliInstaller);
 
             NativeCliInstallCommand command = service.GetGlobalCliInstallCommand(
@@ -53,7 +53,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that startup does not download when the global CLI already satisfies the package minimum.
             FakeNativeCliInstaller nativeCliInstaller = new();
-            FakeCliInstallationDetector detector = new(CliConstants.MINIMUM_REQUIRED_CLI_VERSION);
+            FakeCliInstallationDetector detector = new(
+                new string[]
+                {
+                    CliConstants.MINIMUM_REQUIRED_CLI_VERSION,
+                    CliConstants.MINIMUM_REQUIRED_CLI_VERSION
+                });
             CliSetupApplicationService service = new(detector, nativeCliInstaller);
 
             CliInstallResult result = await service.EnsureGlobalCliCurrentAsync(
@@ -70,7 +75,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that startup upgrades the global CLI to the minimum CLI release tag.
             FakeNativeCliInstaller nativeCliInstaller = new();
-            FakeCliInstallationDetector detector = new("3.0.0-beta.5");
+            FakeCliInstallationDetector detector = new(
+                new string[]
+                {
+                    "3.0.0-beta.5",
+                    "3.0.0-beta.5",
+                    CliConstants.MINIMUM_REQUIRED_CLI_VERSION
+                });
             CliSetupApplicationService service = new(detector, nativeCliInstaller);
 
             CliInstallResult result = await service.EnsureGlobalCliCurrentAsync(
@@ -85,19 +96,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(detector.ForceRefreshCount, Is.EqualTo(2));
         }
 
+        [Test]
+        public async Task EnsureGlobalCliCurrentAsync_WhenPostInstallVersionIsStillTooOld_Fails()
+        {
+            // Verifies that startup reports failure when install succeeds but the detected global CLI is still stale.
+            FakeNativeCliInstaller nativeCliInstaller = new();
+            FakeCliInstallationDetector detector = new(
+                new string[]
+                {
+                    "3.0.0-beta.5",
+                    "3.0.0-beta.5",
+                    "3.0.0-beta.5"
+                });
+            CliSetupApplicationService service = new(detector, nativeCliInstaller);
+
+            CliInstallResult result = await service.EnsureGlobalCliCurrentAsync(
+                RuntimePlatform.OSXEditor,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorOutput, Does.Contain("does not satisfy the package minimum"));
+            Assert.That(nativeCliInstaller.InstallCount, Is.EqualTo(1));
+            Assert.That(detector.ForceRefreshCount, Is.EqualTo(2));
+        }
+
         private sealed class FakeCliInstallationDetector : ICliInstallationDetector
         {
-            private readonly string _version;
+            private readonly string[] _versions;
+            private int _versionIndex;
 
-            public FakeCliInstallationDetector(string version)
+            public FakeCliInstallationDetector(string[] versions)
             {
-                _version = version;
+                Debug.Assert(versions != null, "versions must not be null");
+                Debug.Assert(versions.Length > 0, "versions must not be empty");
+
+                _versions = versions;
             }
 
             public int ForceRefreshCount { get; private set; }
 
-            public bool IsCliInstalled() => _version != null;
-            public string GetCachedCliVersion() => _version;
+            public bool IsCliInstalled() => GetCachedCliVersion() != null;
+            public string GetCachedCliVersion() => _versions[_versionIndex];
             public string GetCachedCliExecutablePath() => "";
             public bool IsCheckCompleted() => true;
             public Task RefreshCliVersionAsync(CancellationToken ct) => Task.CompletedTask;
@@ -105,6 +144,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task ForceRefreshCliVersionAsync(CancellationToken ct)
             {
                 ForceRefreshCount++;
+                if (_versionIndex < _versions.Length - 1)
+                {
+                    _versionIndex++;
+                }
+
                 return Task.CompletedTask;
             }
 
