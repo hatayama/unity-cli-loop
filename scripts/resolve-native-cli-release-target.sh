@@ -146,20 +146,41 @@ cli_release_inputs_changed() {
 release_commit_sha_for_version() {
   version=$1
   build_sha=$2
+  release_branch=${EVENT_REF_NAME:-}
 
   git log --format='%H	%s' "$build_sha" \
-    | awk -F '	' -v version="$version" '
+    | awk -F '	' -v version="$version" -v release_branch="$release_branch" '
       function version_boundary_matches(subject, prefix) {
         next_character = substr(subject, length(prefix) + 1, 1)
         return next_character == "" || next_character == " "
       }
 
+      function value_appears_as_release_token(remainder, value, parts, part_index) {
+        split(remainder, parts, " ")
+        for (part_index in parts) {
+          if (parts[part_index] == value) {
+            return 1
+          }
+        }
+        return 0
+      }
+
+      function release_remainder_matches(remainder) {
+        if (value_appears_as_release_token(remainder, version)) {
+          return 1
+        }
+        if (release_branch != "" && value_appears_as_release_token(remainder, release_branch)) {
+          return 1
+        }
+        return 0
+      }
+
       function is_release_please_subject(subject) {
-        plain_prefix = "chore: release " version
-        scoped_marker = "): release " version
+        plain_prefix = "chore: release "
+        scoped_marker = "): release "
 
         if (index(subject, plain_prefix) == 1) {
-          return version_boundary_matches(subject, plain_prefix)
+          return release_remainder_matches(substr(subject, length(plain_prefix) + 1))
         }
 
         if (index(subject, "chore(") != 1) {
@@ -167,13 +188,13 @@ release_commit_sha_for_version() {
         }
 
         scope_end = index(subject, ")")
-        marker_index = index(subject, scoped_marker)
-        if (scope_end == 0 || marker_index != scope_end) {
+        marker_start = scope_end
+        marker = substr(subject, marker_start, length(scoped_marker))
+        if (scope_end == 0 || marker != scoped_marker) {
           return 0
         }
 
-        scoped_prefix = substr(subject, 1, marker_index + length(scoped_marker) - 1)
-        return version_boundary_matches(subject, scoped_prefix)
+        return release_remainder_matches(substr(subject, marker_start + length(scoped_marker)))
       }
 
       is_release_please_subject($2) {

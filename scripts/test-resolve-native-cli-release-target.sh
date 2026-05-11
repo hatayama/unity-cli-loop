@@ -293,6 +293,11 @@ test_recovery_targets_release_commit() {
   run_success_case recovery-target 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: follow-up change"
 }
 
+# Verifies grouped manifest release commits remain the recovery target.
+test_recovery_targets_grouped_release_commit() {
+  run_success_case recovery-grouped-target 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore: release v3-beta" "fix: follow-up change"
+}
+
 # Verifies recovery ignores follow-up commits that only mention the release version.
 test_recovery_ignores_non_release_subject_mentions() {
   run_success_case recovery-non-release-subject 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: keep release 3.0.0-beta.2 on the release commit"
@@ -332,6 +337,7 @@ test_dispatcher_contract_change_publishes
 test_core_required_dispatcher_change_publishes
 test_missing_previous_dispatcher_release_publishes
 test_recovery_targets_release_commit
+test_recovery_targets_grouped_release_commit
 test_recovery_ignores_non_release_subject_mentions
 test_recovery_requires_release_marker_after_scope
 test_recovery_target_uses_exact_version_boundary

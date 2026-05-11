@@ -17,9 +17,12 @@ RELEASE_PRS=$(gh pr list \
   --json number,headRefName,title,url)
 
 MATCHING_RELEASE_PRS=$(printf '%s' "$RELEASE_PRS" | jq --arg release_branch "$RELEASE_PR_BRANCH" '
+  def is_release_please_title:
+    (. // "") | test("^chore(\\([^)]*\\))?: release( |$)");
+
   [
     .[]
-    | select((.title // "") | test("^chore(\\([^)]*\\))?: release [0-9]"))
+    | select(.title | is_release_please_title)
     | select(
         (.headRefName // "") == $release_branch
         or ((.headRefName // "") | startswith($release_branch + "--components--"))
