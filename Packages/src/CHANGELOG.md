@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.7](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.6...v3.0.0-beta.7) (2026-05-12)
+
+
+### Bug Fixes
+
+* Release PRs keep changelog baselines in sync ([#1104](https://github.com/hatayama/unity-cli-loop/issues/1104)) ([3d0426e](https://github.com/hatayama/unity-cli-loop/commit/3d0426eb560087a702ed756f092897587976e5f1))
+* Setup now requires the single-binary CLI before running tools ([#1101](https://github.com/hatayama/unity-cli-loop/issues/1101)) ([98c3cda](https://github.com/hatayama/unity-cli-loop/commit/98c3cda7caeb76635bb14dfd11cf177aa41fbd06))
+
 ## [3.0.0-beta.6](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.5...v3.0.0-beta.6) (2026-05-11)
 
 
