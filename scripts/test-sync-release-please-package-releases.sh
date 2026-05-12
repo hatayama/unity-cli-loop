@@ -25,6 +25,23 @@ printf '%s\n' "$*" >> "$GH_LOG"
 
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
+  if [ "$tag" = "cli-v3.0.0-beta.6" ]; then
+    case "${CLI_RELEASE_STATE:-published}" in
+      published)
+        printf '{"isDraft":false,"targetCommitish":"%s"}\n' "${CLI_RELEASE_TARGET:-cli-release-sha}"
+        exit 0
+        ;;
+      draft)
+        printf '{"isDraft":true,"targetCommitish":"%s"}\n' "${CLI_RELEASE_TARGET:-cli-release-sha}"
+        exit 0
+        ;;
+      missing)
+        echo "release not found" >&2
+        exit 1
+        ;;
+    esac
+  fi
+
   if [ -n "${EXISTING_RELEASE_TAG:-}" ] && [ "$tag" = "$EXISTING_RELEASE_TAG" ]; then
     printf '{"isDraft":%s,"targetCommitish":"%s"}\n' "$EXISTING_RELEASE_DRAFT" "$EXISTING_RELEASE_TARGET"
     exit 0
@@ -156,6 +173,7 @@ run_sync() {
   existing_tag=$2
   existing_draft=$3
   existing_target=$4
+  cli_release_state=${5:-published}
 
   touch "$work_dir/gh.log"
   write_mock_commands "$work_dir"
@@ -165,6 +183,7 @@ run_sync() {
     EXISTING_RELEASE_TAG="$existing_tag" \
     EXISTING_RELEASE_DRAFT="$existing_draft" \
     EXISTING_RELEASE_TARGET="$existing_target" \
+    CLI_RELEASE_STATE="$cli_release_state" \
     GITHUB_REPOSITORY=hatayama/unity-cli-loop \
     ULOOP_REPO_ROOT="$work_dir" \
     "$SCRIPT" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
@@ -180,7 +199,7 @@ test_creates_missing_root_release_from_release_commit() {
   assert_contains "$work_dir/gh.log" "release view v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
   assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
   assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
-  assert_not_contains "$work_dir/gh.log" "cli-v3.0.0-beta.6"
+  assert_contains "$work_dir/gh.log" "release view cli-v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
 }
 
 # Verifies an existing root package release is accepted without creating another release.
@@ -204,6 +223,17 @@ test_existing_draft_root_release_is_published() {
   assert_contains "$work_dir/gh.log" "release edit v3.0.0-beta.6 --repo hatayama/unity-cli-loop --draft=false --prerelease"
 }
 
+# Verifies package releases wait until the matching CLI release is public.
+test_waits_for_cli_release_before_creating_root_release() {
+  work_dir=$(create_release_repo waits-for-cli)
+
+  run_sync "$work_dir" "" false "" missing
+
+  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published; package release sync will wait."
+  assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
+}
+
 test_creates_missing_root_release_from_release_commit
 test_existing_root_release_is_reused
 test_existing_draft_root_release_is_published
+test_waits_for_cli_release_before_creating_root_release

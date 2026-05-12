@@ -200,8 +200,63 @@ create_package_release() {
   echo "Created release-please package release $release_tag at $target_sha."
 }
 
+release_is_published() {
+  release_tag=$1
+
+  set +e
+  release_data=$(release_json "$release_tag")
+  release_status=$?
+  set -e
+
+  case "$release_status" in
+    0)
+      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
+      [ "$is_draft" = "false" ]
+      return
+      ;;
+    1)
+      return 1
+      ;;
+    *)
+      exit "$release_status"
+      ;;
+  esac
+}
+
+release_tag_from_config() {
+  package_path=$1
+  version=$2
+
+  jq -r --arg package_path "$package_path" '
+    .packages[$package_path] as $package
+    | [
+        ($package.component // "__ULOOP_EMPTY_COMPONENT__"),
+        ($package["include-component-in-tag"] // false),
+        ($package["include-v-in-tag"] // false)
+      ]
+    | @tsv
+  ' "$CONFIG" |
+  while IFS='	' read -r component include_component include_v; do
+    if [ "$component" = "__ULOOP_EMPTY_COMPONENT__" ]; then
+      component=""
+    fi
+
+    release_tag_for_package "$component" "$include_component" "$include_v" "$version"
+    break
+  done
+}
+
 if git remote get-url origin >/dev/null 2>&1; then
   git fetch --force --tags origin >/dev/null
+fi
+
+cli_version=$(jq -r --arg package_path "$CLI_PACKAGE_PATH" '.[$package_path] // empty' "$MANIFEST")
+if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packages[$package_path] != null' "$CONFIG" >/dev/null; then
+  cli_release_tag=$(release_tag_from_config "$CLI_PACKAGE_PATH" "$cli_version")
+  if ! release_is_published "$cli_release_tag"; then
+    echo "CLI release $cli_release_tag is not published; package release sync will wait."
+    exit 0
+  fi
 fi
 
 jq -r --arg skip "$CLI_PACKAGE_PATH" '
