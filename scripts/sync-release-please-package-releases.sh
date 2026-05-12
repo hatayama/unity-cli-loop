@@ -16,6 +16,14 @@ cleanup() {
 
 trap cleanup EXIT INT HUP TERM
 
+mark_package_release_sync_ready() {
+  ready=$1
+
+  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    printf 'ready=%s\n' "$ready" >> "$GITHUB_OUTPUT"
+  fi
+}
+
 resolve_package_path() {
   package_path=$1
   file_path=$2
@@ -38,7 +46,7 @@ resolve_package_path() {
 release_json() {
   release_tag=$1
   release_error_file=$(mktemp)
-  if gh release view "$release_tag" --repo "$REPO_FULL_NAME" --json isDraft,targetCommitish 2>"$release_error_file"; then
+  if gh release view "$release_tag" --repo "$REPO_FULL_NAME" --json isDraft,targetCommitish,assets 2>"$release_error_file"; then
     rm -f "$release_error_file"
     return 0
   fi
@@ -200,7 +208,18 @@ create_package_release() {
   echo "Created release-please package release $release_tag at $target_sha."
 }
 
-release_is_published() {
+release_has_all_cli_assets() {
+  release_data=$1
+
+  for asset_name in $("${ROOT_DIR}/scripts/verify-native-cli-release-assets.sh" --list); do
+    asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length')
+    if [ "$asset_count" -eq 0 ]; then
+      return 1
+    fi
+  done
+}
+
+cli_release_is_ready() {
   release_tag=$1
 
   set +e
@@ -211,8 +230,11 @@ release_is_published() {
   case "$release_status" in
     0)
       is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
-      [ "$is_draft" = "false" ]
-      return
+      if [ "$is_draft" != "false" ]; then
+        return 1
+      fi
+
+      release_has_all_cli_assets "$release_data"
       ;;
     1)
       return 1
@@ -246,6 +268,8 @@ release_tag_from_config() {
   done
 }
 
+mark_package_release_sync_ready true
+
 if git remote get-url origin >/dev/null 2>&1; then
   git fetch --force --tags origin >/dev/null
 fi
@@ -253,8 +277,9 @@ fi
 cli_version=$(jq -r --arg package_path "$CLI_PACKAGE_PATH" '.[$package_path] // empty' "$MANIFEST")
 if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packages[$package_path] != null' "$CONFIG" >/dev/null; then
   cli_release_tag=$(release_tag_from_config "$CLI_PACKAGE_PATH" "$cli_version")
-  if ! release_is_published "$cli_release_tag"; then
-    echo "CLI release $cli_release_tag is not published; package release sync will wait."
+  if ! cli_release_is_ready "$cli_release_tag"; then
+    mark_package_release_sync_ready false
+    echo "CLI release $cli_release_tag is not published with complete assets; package release sync will wait."
     exit 0
   fi
 fi

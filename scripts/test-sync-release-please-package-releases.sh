@@ -23,16 +23,34 @@ set -eu
 
 printf '%s\n' "$*" >> "$GH_LOG"
 
+asset_json() {
+  case "${CLI_RELEASE_ASSETS:-complete}" in
+    complete)
+      printf '[{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]'
+      ;;
+    missing)
+      printf '[]'
+      ;;
+    empty)
+      printf '[{"name":"uloop-darwin-amd64.tar.gz","size":0},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]'
+      ;;
+  esac
+}
+
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
   if [ "$tag" = "cli-v3.0.0-beta.6" ]; then
     case "${CLI_RELEASE_STATE:-published}" in
       published)
-        printf '{"isDraft":false,"targetCommitish":"%s"}\n' "${CLI_RELEASE_TARGET:-cli-release-sha}"
+        printf '{"isDraft":false,"targetCommitish":"%s","assets":' "${CLI_RELEASE_TARGET:-cli-release-sha}"
+        asset_json
+        printf '}\n'
         exit 0
         ;;
       draft)
-        printf '{"isDraft":true,"targetCommitish":"%s"}\n' "${CLI_RELEASE_TARGET:-cli-release-sha}"
+        printf '{"isDraft":true,"targetCommitish":"%s","assets":' "${CLI_RELEASE_TARGET:-cli-release-sha}"
+        asset_json
+        printf '}\n'
         exit 0
         ;;
       missing)
@@ -43,7 +61,7 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   fi
 
   if [ -n "${EXISTING_RELEASE_TAG:-}" ] && [ "$tag" = "$EXISTING_RELEASE_TAG" ]; then
-    printf '{"isDraft":%s,"targetCommitish":"%s"}\n' "$EXISTING_RELEASE_DRAFT" "$EXISTING_RELEASE_TARGET"
+    printf '{"isDraft":%s,"targetCommitish":"%s","assets":[]}\n' "$EXISTING_RELEASE_DRAFT" "$EXISTING_RELEASE_TARGET"
     exit 0
   fi
 
@@ -69,7 +87,7 @@ MOCK_GH
 write_release_files() {
   version=$1
 
-  mkdir -p Packages/src Packages/src/Cli~
+  mkdir -p Packages/src Packages/src/Cli~ scripts
   cat > release-please-config.json <<'EOF_CONFIG'
 {
   "packages": {
@@ -116,6 +134,25 @@ EOF_CHANGELOG
 
 * keep the CLI release baseline available
 EOF_CLI_CHANGELOG
+
+  cat > scripts/verify-native-cli-release-assets.sh <<'EOF_VERIFY'
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "--list" ]; then
+  printf '%s\n' \
+    uloop-darwin-amd64.tar.gz \
+    uloop-darwin-amd64.tar.gz.sha256 \
+    uloop-darwin-arm64.tar.gz \
+    uloop-darwin-arm64.tar.gz.sha256 \
+    uloop-windows-amd64.zip \
+    uloop-windows-amd64.zip.sha256
+  exit 0
+fi
+
+exit 1
+EOF_VERIFY
+  chmod +x scripts/verify-native-cli-release-assets.sh
 }
 
 create_release_repo() {
@@ -174,8 +211,10 @@ run_sync() {
   existing_draft=$3
   existing_target=$4
   cli_release_state=${5:-published}
+  cli_release_assets=${6:-complete}
 
   touch "$work_dir/gh.log"
+  touch "$work_dir/github-output.txt"
   write_mock_commands "$work_dir"
 
   PATH="$work_dir/bin:$ORIGINAL_PATH" \
@@ -184,6 +223,8 @@ run_sync() {
     EXISTING_RELEASE_DRAFT="$existing_draft" \
     EXISTING_RELEASE_TARGET="$existing_target" \
     CLI_RELEASE_STATE="$cli_release_state" \
+    CLI_RELEASE_ASSETS="$cli_release_assets" \
+    GITHUB_OUTPUT="$work_dir/github-output.txt" \
     GITHUB_REPOSITORY=hatayama/unity-cli-loop \
     ULOOP_REPO_ROOT="$work_dir" \
     "$SCRIPT" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
@@ -199,7 +240,8 @@ test_creates_missing_root_release_from_release_commit() {
   assert_contains "$work_dir/gh.log" "release view v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
   assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
   assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
-  assert_contains "$work_dir/gh.log" "release view cli-v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
+  assert_contains "$work_dir/gh.log" "release view cli-v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish,assets"
+  assert_contains "$work_dir/github-output.txt" "ready=true"
 }
 
 # Verifies an existing root package release is accepted without creating another release.
@@ -229,11 +271,24 @@ test_waits_for_cli_release_before_creating_root_release() {
 
   run_sync "$work_dir" "" false "" missing
 
-  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published; package release sync will wait."
+  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published with complete assets; package release sync will wait."
   assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
+  assert_contains "$work_dir/github-output.txt" "ready=false"
+}
+
+# Verifies package releases wait until the matching CLI release has all native assets.
+test_waits_for_cli_assets_before_creating_root_release() {
+  work_dir=$(create_release_repo waits-for-cli-assets)
+
+  run_sync "$work_dir" "" false "" published missing
+
+  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published with complete assets; package release sync will wait."
+  assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
+  assert_contains "$work_dir/github-output.txt" "ready=false"
 }
 
 test_creates_missing_root_release_from_release_commit
 test_existing_root_release_is_reused
 test_existing_draft_root_release_is_published
 test_waits_for_cli_release_before_creating_root_release
+test_waits_for_cli_assets_before_creating_root_release

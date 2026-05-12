@@ -4,6 +4,7 @@ set -eu
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 CONFIG="$ROOT_DIR/release-please-config.json"
 MANIFEST="$ROOT_DIR/.release-please-manifest.json"
+RELEASE_WORKFLOW="$ROOT_DIR/.github/workflows/release-please.yml"
 
 assert_json_value() {
   expression=$1
@@ -36,6 +37,16 @@ assert_repository_path_exists() {
 
   if [ ! -e "$ROOT_DIR/$path" ]; then
     echo "Missing release-please path: $path" >&2
+    exit 1
+  fi
+}
+
+assert_file_contains() {
+  path=$1
+  expected=$2
+
+  if ! grep -F -- "$expected" "$path" >/dev/null; then
+    echo "Expected $path to contain: $expected" >&2
     exit 1
   fi
 }
@@ -75,6 +86,9 @@ assert_json_value '.packages["Packages/src/Cli~"].["include-component-in-tag"]' 
 assert_json_value '.packages["Packages/src/Cli~"].["changelog-path"]' 'CHANGELOG.md'
 assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][0].path' 'internal/tools/default-tools.json'
 assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][1].path' 'contract.json'
+
+assert_file_contains "$RELEASE_WORKFLOW" 'id: package_release_sync'
+assert_file_contains "$RELEASE_WORKFLOW" "steps.package_release_sync.outputs.ready != 'false'"
 
 assert_manifest_semver '.["."]'
 assert_manifest_semver '.["Packages/src/Cli~"]'
