@@ -10,6 +10,12 @@ Comments in the code, commit messages, PR titles, and PR descriptions must all b
 
 Every test method must have a short comment that states what behavior the test verifies.
 
+## Commit-Time Version Checks
+
+Before committing a C# package version bump, check whether `CliConstants.MINIMUM_REQUIRED_CLI_VERSION` must also change.
+If the package release depends on behavior from a newer native CLI contract, update the minimum required CLI version and add or update focused tests.
+If the minimum CLI version stays unchanged, make sure that decision is intentional before committing.
+
 ## Generated Skill Files
 
 Do not directly edit skill files under the project-root `.agents/` or `.claude/` directories.
