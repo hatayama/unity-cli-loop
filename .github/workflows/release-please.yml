@@ -70,6 +70,7 @@ jobs:
           test -f Packages/src/package.json && echo "✅ Unity package.json OK"
 
       - name: 🏷️ Sync release-please package releases
+        if: steps.release_commit.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}

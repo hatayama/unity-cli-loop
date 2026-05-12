@@ -211,13 +211,6 @@ jobs:
             fi
           done
 
-      - name: Sync release-please package releases
-        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: scripts/sync-release-please-package-releases.sh
-
       - name: Publish draft release
         if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true' && steps.draft.outputs.release_published != 'true'
         env:
@@ -233,6 +226,13 @@ jobs:
               gh release edit "${RELEASE_TAG}" --draft=false
               ;;
           esac
+
+      - name: Sync release-please package releases
+        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: scripts/sync-release-please-package-releases.sh
 
       - name: Mark release PR as tagged
         if: github.event_name == 'push' && (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
