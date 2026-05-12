@@ -56,11 +56,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool ShouldAutoShowForVersion(
             string currentVersion,
             string lastSeenVersion,
-            bool suppressAutoShow)
+            bool suppressAutoShow,
+            bool hasThirdPartyToolMigrationTargets)
         {
-            if (suppressAutoShow) return false;
+            bool versionChanged = !string.Equals(currentVersion, lastSeenVersion, System.StringComparison.Ordinal);
+            if (!versionChanged) return false;
+            if (hasThirdPartyToolMigrationTargets) return true;
 
-            return !string.Equals(currentVersion, lastSeenVersion, System.StringComparison.Ordinal);
+            return !suppressAutoShow;
         }
 
         internal static void MaybeRecordLastSeenVersion(bool shouldRecordVersion, string version)
@@ -84,11 +87,28 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
             UnityCliLoopEditorSettingsService editorSettingsService = GetEditorSettingsService();
             bool suppressAutoShow = editorSettingsService.GetSuppressSetupWizardAutoShow();
-            MaybeRecordSuppressedVersion(suppressAutoShow, currentVersion);
             string lastSeenVersion = editorSettingsService.GetLastSeenSetupWizardVersion();
-            if (!ShouldAutoShowForVersion(currentVersion, lastSeenVersion, suppressAutoShow)) return;
+            bool hasThirdPartyToolMigrationTargets = suppressAutoShow
+                && HasThirdPartyToolMigrationTargets();
+            if (!ShouldAutoShowForVersion(
+                currentVersion,
+                lastSeenVersion,
+                suppressAutoShow,
+                hasThirdPartyToolMigrationTargets))
+            {
+                MaybeRecordSuppressedVersion(suppressAutoShow, currentVersion);
+                return;
+            }
 
             EditorApplication.delayCall += ShowWindowOnVersionChange;
+        }
+
+        private static bool HasThirdPartyToolMigrationTargets()
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            ThirdPartyToolMigrationPreview preview =
+                ThirdPartyToolMigrationUseCaseRegistry.GetRegisteredUseCase().PreviewMigration(projectRoot);
+            return preview.HasTargets;
         }
 
         private static void ShowWindowOnVersionChange()
@@ -210,6 +230,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private Label _skillsStatusLabel;
         private Button _installSkillsButton;
 
+        // V3 custom tool migration
+        private VisualElement _thirdPartyToolMigrationSection;
+        private Label _thirdPartyToolMigrationStatusLabel;
+        private Button _migrateThirdPartyToolsButton;
+
         // Footer
         private Toggle _suppressAutoShowToggle;
         private Button _openSettingsButton;
@@ -222,6 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         // State
         private bool _isInstallingCli;
         private bool _isInstallingSkills;
+        private bool _isMigratingThirdPartyTools;
         private bool _isApplyingContentSize;
         private bool _isSkillsTargetFieldInitialized;
         private bool _shouldUseFirstInstallSkillsUi;
@@ -235,6 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private CancellationTokenSource _skillInstallStateRefreshCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private SkillSetupUseCase _skillSetupUseCase;
+        private ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private UnityCliLoopEditorSettingsService _editorSettingsService;
 
         private void CreateGUI()
@@ -254,6 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void InitializeApplicationServices()
         {
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            _thirdPartyToolMigrationUseCase = ThirdPartyToolMigrationUseCaseRegistry.GetRegisteredUseCase();
             _editorSettingsService = GetEditorSettingsService();
         }
 
@@ -310,6 +338,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillsStatusLabel = rootVisualElement.Q<Label>("skills-status-label");
             _installSkillsButton = rootVisualElement.Q<Button>("install-skills-button");
 
+            _thirdPartyToolMigrationSection =
+                rootVisualElement.Q<VisualElement>("third-party-tool-migration-section");
+            _thirdPartyToolMigrationStatusLabel =
+                rootVisualElement.Q<Label>("third-party-tool-migration-status-label");
+            _migrateThirdPartyToolsButton =
+                rootVisualElement.Q<Button>("migrate-third-party-tools-button");
+
             _suppressAutoShowToggle = rootVisualElement.Q<Toggle>("suppress-auto-show-toggle");
             _openSettingsButton = rootVisualElement.Q<Button>("open-settings-button");
             _closeButton = rootVisualElement.Q<Button>("close-button");
@@ -324,6 +359,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _refreshButton.clicked += () => RefreshUI();
             _installCliButton.clicked += HandleInstallCli;
             _installSkillsButton.clicked += HandleInstallSkills;
+            _migrateThirdPartyToolsButton.clicked += HandleMigrateThirdPartyTools;
             InitializeSkillsTargetField();
             InitializeGroupSkillsToggle();
             _suppressAutoShowToggle.RegisterValueChangedCallback(evt => HandleSuppressAutoShowChanged(evt.newValue));
@@ -413,6 +449,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.SetVisible(_skillsTargetRow, _shouldUseFirstInstallSkillsUi);
             ViewDataBinder.SetVisible(_skillsTargetList, !_shouldUseFirstInstallSkillsUi);
             _skillsTargetList.Clear();
+            ViewDataBinder.SetVisible(_thirdPartyToolMigrationSection, false);
+            _migrateThirdPartyToolsButton.SetEnabled(false);
+            _migrateThirdPartyToolsButton.text = GetThirdPartyToolMigrationButtonText(
+                _isMigratingThirdPartyTools);
         }
 
         private void UpdateSkillsStatusLabel(string text)
@@ -480,6 +520,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (!refreshSkillsSection)
             {
+                RefreshThirdPartyToolMigrationSection();
                 ScheduleResizeToContent();
                 return;
             }
@@ -488,7 +529,32 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canManageSkills = CanManageSkills(cliInstalled);
             UpdateSkillsStep(canManageSkills, targets);
             BeginRefreshDisplayedSkillTargets(canManageSkills);
+            RefreshThirdPartyToolMigrationSection();
             ScheduleResizeToContent();
+        }
+
+        private void RefreshThirdPartyToolMigrationSection()
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            ThirdPartyToolMigrationPreview preview =
+                _thirdPartyToolMigrationUseCase.PreviewMigration(projectRoot);
+
+            if (!preview.HasTargets)
+            {
+                ViewDataBinder.SetVisible(_thirdPartyToolMigrationSection, false);
+                _thirdPartyToolMigrationStatusLabel.text = string.Empty;
+                _migrateThirdPartyToolsButton.SetEnabled(false);
+                _migrateThirdPartyToolsButton.text = GetThirdPartyToolMigrationButtonText(
+                    _isMigratingThirdPartyTools);
+                return;
+            }
+
+            ViewDataBinder.SetVisible(_thirdPartyToolMigrationSection, true);
+            _thirdPartyToolMigrationStatusLabel.text =
+                GetThirdPartyToolMigrationStatusText(preview.FileCount);
+            _migrateThirdPartyToolsButton.SetEnabled(!_isMigratingThirdPartyTools);
+            _migrateThirdPartyToolsButton.text = GetThirdPartyToolMigrationButtonText(
+                _isMigratingThirdPartyTools);
         }
 
         private List<SkillSetupTargetInfo> DetectDisplayedSkillTargets(string projectRoot)
@@ -557,6 +623,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool CanManageSkills(bool cliInstalled)
         {
             return cliInstalled;
+        }
+
+        internal static string GetThirdPartyToolMigrationStatusText(int fileCount)
+        {
+            Debug.Assert(fileCount >= 0, "fileCount must not be negative");
+
+            string noun = fileCount == 1 ? "file" : "files";
+            string verb = fileCount == 1 ? "needs" : "need";
+            return $"{fileCount} {noun} {verb} V3 custom tool migration.";
+        }
+
+        internal static string GetThirdPartyToolMigrationButtonText(bool isMigrating)
+        {
+            return isMigrating ? "Migrating..." : "Migrate";
         }
 
         internal static SkillSetupTargetInfo CreateFirstInstallSkillTarget(
@@ -960,6 +1040,27 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 _isInstallingSkills = false;
                 RefreshSkillsSection();
+            }
+        }
+
+        private void HandleMigrateThirdPartyTools()
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            _isMigratingThirdPartyTools = true;
+            RefreshThirdPartyToolMigrationSection();
+
+            try
+            {
+                ThirdPartyToolMigrationResult result =
+                    _thirdPartyToolMigrationUseCase.ApplyMigration(projectRoot);
+                Debug.Assert(result.Changed, "migration result should contain changed files");
+                AssetDatabase.Refresh();
+            }
+            finally
+            {
+                _isMigratingThirdPartyTools = false;
+                RefreshThirdPartyToolMigrationSection();
+                ScheduleResizeToContent();
             }
         }
 

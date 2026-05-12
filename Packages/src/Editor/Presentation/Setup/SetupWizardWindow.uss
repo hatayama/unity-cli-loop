@@ -95,6 +95,11 @@
     margin-left: 6px;
 }
 
+.setup-step__status-label--standalone {
+    margin-left: 0;
+    white-space: normal;
+}
+
 /* ===========================================
    Block: Status Icon
    =========================================== */

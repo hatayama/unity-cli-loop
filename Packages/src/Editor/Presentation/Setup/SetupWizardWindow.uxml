@@ -48,6 +48,20 @@
             </ui:VisualElement>
         </ui:VisualElement>
 
+        <!-- V3 custom tool migration -->
+        <ui:VisualElement name="third-party-tool-migration-section" class="setup-step setup-hidden">
+            <ui:Label text="Custom Tool Migration" class="setup-step__title" />
+            <ui:VisualElement class="setup-step__content">
+                <ui:Label
+                    name="third-party-tool-migration-status-label"
+                    text=""
+                    class="setup-step__status-label setup-step__status-label--standalone" />
+                <ui:VisualElement class="setup-step__button-row">
+                    <ui:Button name="migrate-third-party-tools-button" text="Migrate" class="setup-button" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
         <!-- Footer -->
         <ui:VisualElement class="setup-footer">
             <ui:VisualElement class="setup-footer__button-row">

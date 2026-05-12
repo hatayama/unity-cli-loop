@@ -32,6 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 toolRegistrarService));
             SkillSetupUseCase skillSetupUseCase = new(new SkillSetupService(new ToolSkillSetupService(toolSettingsService)));
             SkillSetupUseCaseRegistry.Register(skillSetupUseCase);
+            ThirdPartyToolMigrationUseCaseRegistry.Register(
+                new ThirdPartyToolMigrationUseCase(new ThirdPartyToolMigrationFileService()));
             CliSetupApplicationFacade.RegisterService(new CliSetupApplicationService(
                 new CliInstallationDetector(),
                 new NativeCliInstallerService()));

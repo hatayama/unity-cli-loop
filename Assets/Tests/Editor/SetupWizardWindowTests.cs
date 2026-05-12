@@ -52,22 +52,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _editorSettingsRepository.InvalidateCache();
         }
 
-        [TestCase("", "1.7.3", false, true)]
-        [TestCase("1.7.2", "1.7.3", false, true)]
-        [TestCase("1.7.4", "1.7.3", false, true)]
-        [TestCase("1.7.3", "1.7.3", false, false)]
-        [TestCase("", "1.7.3", true, false)]
-        [TestCase("1.7.2", "1.7.3", true, false)]
+        [TestCase("", "1.7.3", false, false, true)]
+        [TestCase("1.7.2", "1.7.3", false, false, true)]
+        [TestCase("1.7.4", "1.7.3", false, false, true)]
+        [TestCase("1.7.3", "1.7.3", false, false, false)]
+        [TestCase("", "1.7.3", true, false, false)]
+        [TestCase("1.7.2", "1.7.3", true, false, false)]
+        [TestCase("1.7.2", "1.7.3", true, true, true)]
+        [TestCase("1.7.3", "1.7.3", true, true, false)]
         public void ShouldAutoShowForVersion_ReturnsExpectedValue(
             string lastSeenVersion,
             string currentVersion,
             bool suppressAutoShow,
+            bool hasThirdPartyToolMigrationTargets,
             bool expected)
         {
             bool shouldAutoShow =
-                SetupWizardWindow.ShouldAutoShowForVersion(currentVersion, lastSeenVersion, suppressAutoShow);
+                SetupWizardWindow.ShouldAutoShowForVersion(
+                    currentVersion,
+                    lastSeenVersion,
+                    suppressAutoShow,
+                    hasThirdPartyToolMigrationTargets);
 
             Assert.That(shouldAutoShow, Is.EqualTo(expected));
+        }
+
+        [TestCase(1, "1 file needs V3 custom tool migration.")]
+        [TestCase(3, "3 files need V3 custom tool migration.")]
+        public void GetThirdPartyToolMigrationStatusText_WhenTargetsExist_ReturnsFileCount(
+            int fileCount,
+            string expectedText)
+        {
+            // Verifies that the setup wizard summarizes detected V2 custom tool files.
+            string text = SetupWizardWindow.GetThirdPartyToolMigrationStatusText(fileCount);
+
+            Assert.That(text, Is.EqualTo(expectedText));
+        }
+
+        [TestCase(false, "Migrate")]
+        [TestCase(true, "Migrating...")]
+        public void GetThirdPartyToolMigrationButtonText_ReturnsExpectedLabel(
+            bool isMigrating,
+            string expectedLabel)
+        {
+            // Verifies that the migration action communicates its current state.
+            string label = SetupWizardWindow.GetThirdPartyToolMigrationButtonText(isMigrating);
+
+            Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
         [Test]
