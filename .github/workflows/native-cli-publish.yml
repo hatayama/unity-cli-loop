@@ -227,8 +227,16 @@ jobs:
               ;;
           esac
 
+      - name: Sync release-please package releases
+        id: package_release_sync
+        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: scripts/sync-release-please-package-releases.sh
+
       - name: Mark release PR as tagged
-        if: github.event_name == 'push' && (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
+        if: github.event_name == 'push' && (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true' && steps.package_release_sync.outputs.ready != 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
