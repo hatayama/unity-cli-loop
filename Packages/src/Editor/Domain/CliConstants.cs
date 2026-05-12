@@ -6,7 +6,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     public static class CliConstants
     {
         public const string EXECUTABLE_NAME = "uloop";
-        public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.6";
+        public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.7";
         public const string VERSION_FLAG = "--version";
         public const string RAW_CONTENT_BASE_URL = "https://raw.githubusercontent.com/hatayama/unity-cli-loop";
         public const string STABLE_INSTALLER_SOURCE_REF = "main";
