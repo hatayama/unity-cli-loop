@@ -31,6 +31,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetMinimumRequiredCliVersion_RequiresSingleBinaryCliRelease()
+        {
+            // Verifies this package release rejects CLIs older than the single-binary release.
+            CliSetupApplicationService service = new(
+                new FakeCliInstallationDetector(new string[] { null }),
+                new FakeNativeCliInstaller());
+
+            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.7"));
+        }
+
+        [Test]
         public void GetGlobalCliInstallCommand_UsesMinimumRequiredCliReleaseTag()
         {
             // Verifies that fallback manual commands point at the independent CLI release stream.
