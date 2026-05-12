@@ -25,6 +25,7 @@ jobs:
           scripts/test-release-please-config.sh
           scripts/test-mark-release-pr-tagged.sh
           scripts/test-sync-published-release-pr-labels.sh
+          scripts/test-sync-release-please-package-releases.sh
           scripts/test-sync-release-please-go-cli-dist.sh
           scripts/test-notify-release-workflow-failure.sh
           scripts/test-install-release-filter.sh
