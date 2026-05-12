@@ -183,6 +183,20 @@ create_release_repo() {
   printf '%s\n' "$work_dir"
 }
 
+prepare_origin_branch() {
+  work_dir=$1
+  branch_name=$2
+  commit_sha=$3
+  remote_dir="$work_dir.origin.git"
+
+  git init --bare -q "$remote_dir"
+  (
+    cd "$work_dir"
+    git remote add origin "$remote_dir"
+    git push -q origin "$commit_sha:refs/heads/$branch_name"
+  )
+}
+
 assert_contains() {
   file=$1
   expected=$2
@@ -255,6 +269,18 @@ test_existing_root_release_is_reused() {
   assert_not_contains "$work_dir/gh.log" "release create"
 }
 
+# Verifies an existing release target branch is compared through the fetched origin branch.
+test_existing_root_release_target_branch_resolves_via_origin() {
+  work_dir=$(create_release_repo existing-root-branch-target)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+  prepare_origin_branch "$work_dir" v3-beta "$release_sha"
+
+  run_sync "$work_dir" v3.0.0-beta.6 false v3-beta
+
+  assert_contains "$work_dir/output.txt" "Release v3.0.0-beta.6 already exists."
+  assert_not_contains "$work_dir/stderr.txt" "points at"
+}
+
 # Verifies a draft root package release is published once it points at the expected release commit.
 test_existing_draft_root_release_is_published() {
   work_dir=$(create_release_repo draft-root)
@@ -289,6 +315,7 @@ test_waits_for_cli_assets_before_creating_root_release() {
 
 test_creates_missing_root_release_from_release_commit
 test_existing_root_release_is_reused
+test_existing_root_release_target_branch_resolves_via_origin
 test_existing_draft_root_release_is_published
 test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release

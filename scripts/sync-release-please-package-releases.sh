@@ -123,6 +123,37 @@ release_tag_for_package() {
   printf '%s%s\n' "$release_tag" "$version"
 }
 
+fetch_release_refs() {
+  if git remote get-url origin >/dev/null 2>&1; then
+    git fetch --force --tags origin '+refs/heads/*:refs/remotes/origin/*' >/dev/null
+  fi
+}
+
+resolve_release_target_commit() {
+  release_target=$1
+
+  if resolved_commit=$(git rev-parse "$release_target^{commit}" 2>/dev/null); then
+    printf '%s\n' "$resolved_commit"
+    return
+  fi
+
+  case "$release_target" in
+    refs/heads/*)
+      release_branch=${release_target#refs/heads/}
+      ;;
+    *)
+      release_branch=$release_target
+      ;;
+  esac
+
+  if resolved_commit=$(git rev-parse "refs/remotes/origin/$release_branch^{commit}" 2>/dev/null); then
+    printf '%s\n' "$resolved_commit"
+    return
+  fi
+
+  printf '%s\n' "$release_target"
+}
+
 write_release_notes() {
   changelog_path=$1
   version=$2
@@ -155,7 +186,7 @@ ensure_release_points_to_commit() {
   release_data=$3
 
   release_target=$(printf '%s\n' "$release_data" | jq -r '.targetCommitish')
-  resolved_release_target=$(git rev-parse "$release_target^{commit}" 2>/dev/null || printf '%s\n' "$release_target")
+  resolved_release_target=$(resolve_release_target_commit "$release_target")
   resolved_expected_sha=$(git rev-parse "$expected_sha^{commit}")
 
   if [ "$resolved_release_target" != "$resolved_expected_sha" ]; then
@@ -270,9 +301,7 @@ release_tag_from_config() {
 
 mark_package_release_sync_ready true
 
-if git remote get-url origin >/dev/null 2>&1; then
-  git fetch --force --tags origin >/dev/null
-fi
+fetch_release_refs
 
 cli_version=$(jq -r --arg package_path "$CLI_PACKAGE_PATH" '.[$package_path] // empty' "$MANIFEST")
 if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packages[$package_path] != null' "$CONFIG" >/dev/null; then
