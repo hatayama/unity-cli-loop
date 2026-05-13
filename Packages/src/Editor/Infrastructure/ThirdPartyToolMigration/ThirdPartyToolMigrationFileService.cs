@@ -111,24 +111,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 .OrderByDescending(path => path.Length)
                 .ToList();
             HashSet<string> legacyAssemblyDirectories = new(StringComparer.Ordinal);
+            HashSet<string> registrarAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> applicationReferenceAssemblyDirectories = new(StringComparer.Ordinal);
 
             foreach (string csharpFilePath in csharpFilePaths)
             {
                 string source = File.ReadAllText(csharpFilePath);
-                if (!ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
+                string assemblyDirectory = FindNearestAssemblyDirectory(csharpFilePath, asmdefDirectories);
+                if (string.IsNullOrEmpty(assemblyDirectory))
                 {
                     continue;
                 }
 
-                string assemblyDirectory = FindNearestAssemblyDirectory(csharpFilePath, asmdefDirectories);
-                if (!string.IsNullOrEmpty(assemblyDirectory))
+                if (ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
                 {
                     legacyAssemblyDirectories.Add(assemblyDirectory);
-                    if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source))
-                    {
-                        applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
-                    }
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source))
+                {
+                    registrarAssemblyDirectories.Add(assemblyDirectory);
+                }
+            }
+
+            foreach (string registrarAssemblyDirectory in registrarAssemblyDirectories)
+            {
+                if (legacyAssemblyDirectories.Contains(registrarAssemblyDirectory))
+                {
+                    applicationReferenceAssemblyDirectories.Add(registrarAssemblyDirectory);
                 }
             }
 

@@ -192,7 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            return ContainsLegacyToolMigrationMarker(source) && RegexMatchesCode(source, LegacyRegistrarRegex);
+            return RegexMatchesCode(source, LegacyRegistrarRegex);
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)
