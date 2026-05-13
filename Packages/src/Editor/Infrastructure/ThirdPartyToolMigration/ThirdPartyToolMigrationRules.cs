@@ -48,6 +48,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyRegistrarRegex =
             new(@"\bCustomToolManager\b", RegexOptions.Compiled);
 
+        private static readonly Regex LegacyDomainMetadataRegex =
+            new(@"\bToolInfo\b", RegexOptions.Compiled);
+
         private static readonly Regex LegacyNamespaceAliasRegex =
             new(
                 @"\busing\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?" +
@@ -56,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static readonly Regex LegacyToolAttributeEntryRegex =
             new(
-                @"^\s*(?:(?<qualifier>io\.github\.hatayama\.uLoopMCP\.)|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.)?" +
+                @"^\s*(?:(?<qualifier>(?:global::)?io\.github\.hatayama\.uLoopMCP\.)|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.)?" +
                 @"McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$",
                 RegexOptions.Compiled);
 
@@ -103,6 +106,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool shouldApplyContractRenames = hasLegacyAssemblySource || hasLocalLegacyMarker;
             bool shouldApplyRegistrarRenames = shouldApplyContractRenames &&
                 RegexMatchesCode(source, LegacyRegistrarRegex);
+            bool shouldApplyDomainMetadataRenames = shouldApplyContractRenames &&
+                RegexMatchesCode(source, LegacyDomainMetadataRegex);
             int replacementCount = 0;
             string[] legacyNamespaceAliases = GetLegacyNamespaceAliases(source);
             migratedContent = ReplaceLegacyToolAttributesInCode(
@@ -126,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
-            if (shouldApplyRegistrarRenames)
+            if (shouldApplyRegistrarRenames || shouldApplyDomainMetadataRenames)
             {
                 foreach (ReplacementRule rule in RegistrarReplacementRules)
                 {
@@ -146,7 +151,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static ThirdPartyToolMigrationContentResult MigrateAsmdefSource(
             string source,
             bool hasLegacyCSharpSource,
-            bool requiresApplicationReference)
+            bool requiresApplicationReference,
+            bool requiresDomainReference)
         {
             Debug.Assert(source != null, "source must not be null");
 
@@ -166,7 +172,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string[] migratedReferenceItems = GetMigratedAsmdefReferences(
                     reference,
                     hasLegacyCSharpSource,
-                    requiresApplicationReference);
+                    requiresApplicationReference,
+                    requiresDomainReference);
                 bool referenceChanged = migratedReferenceItems.Length != 1 ||
                     !string.Equals(migratedReferenceItems[0], reference, StringComparison.Ordinal);
                 if (referenceChanged)
@@ -210,6 +217,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return RegexMatchesCode(source, LegacyRegistrarRegex);
         }
 
+        internal static bool ContainsLegacyDomainMetadataApi(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, LegacyDomainMetadataRegex);
+        }
+
         internal static bool IsExcludedDirectoryName(string directoryName)
         {
             Debug.Assert(!string.IsNullOrEmpty(directoryName), "directoryName must not be null or empty");
@@ -231,35 +245,43 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static string[] GetMigratedAsmdefReferences(
             string reference,
             bool hasLegacyCSharpSource,
-            bool requiresApplicationReference)
+            bool requiresApplicationReference,
+            bool requiresDomainReference)
         {
             if (string.Equals(reference, LegacyEditorAssemblyName, StringComparison.Ordinal))
             {
-                return GetMigratedLegacyEditorReferences(requiresApplicationReference);
+                return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
             }
 
             if (hasLegacyCSharpSource
                 && string.Equals(reference, LegacyEditorAssemblyGuidReference, StringComparison.Ordinal))
             {
-                return GetMigratedLegacyEditorReferences(requiresApplicationReference);
+                return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
             }
 
             return new[] { reference };
         }
 
-        private static string[] GetMigratedLegacyEditorReferences(bool requiresApplicationReference)
+        private static string[] GetMigratedLegacyEditorReferences(
+            bool requiresApplicationReference,
+            bool requiresDomainReference)
         {
-            if (!requiresApplicationReference)
+            List<string> references = new()
             {
-                return new[] { CurrentToolContractsGuidReference };
+                CurrentToolContractsGuidReference
+            };
+
+            if (requiresApplicationReference)
+            {
+                references.Add(CurrentApplicationGuidReference);
             }
 
-            return new[]
+            if (requiresApplicationReference || requiresDomainReference)
             {
-                CurrentToolContractsGuidReference,
-                CurrentApplicationGuidReference,
-                CurrentDomainGuidReference
-            };
+                references.Add(CurrentDomainGuidReference);
+            }
+
+            return references.ToArray();
         }
 
         private static bool TryMigrateLegacyToolAttributeList(

@@ -153,6 +153,23 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolAttributeIsGlobalQualified_RewritesGlobalQualifiedAttribute()
+        {
+            // Verifies that global-qualified V2 attributes do not bypass argument cleanup.
+            string source =
+                "[global::io.github.hatayama.uLoopMCP.McpTool(Description = \"hello\")] public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "[io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopTool]"));
+            Assert.That(result.Content, Does.Not.Contain("McpTool"));
+            Assert.That(result.Content, Does.Not.Contain("Description"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolAttributeIsAliasQualified_RewritesAliasQualifiedAttribute()
         {
             // Verifies that namespace alias attribute shorthand migrates to a resolvable V3 attribute.
@@ -217,6 +234,28 @@ public static class ManualToolRegistration
             Assert.That(result.Content, Does.Contain("io.github.hatayama.UnityCliLoop.Domain.ToolInfo[]"));
             Assert.That(result.Content, Does.Contain(
                 "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.GetRegisteredCustomTools"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyDomainMetadataIsUsedWithoutRegistrar_RewritesDomainMetadataType()
+        {
+            // Verifies that metadata helpers split away from registration code keep compiling after migration.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo[] GetTools()
+    {
+        return new ToolInfo[0];
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("io.github.hatayama.UnityCliLoop.Domain.ToolInfo[]"));
+            Assert.That(result.Content, Does.Not.Match(@"(?<!\.)\bToolInfo\b"));
         }
 
         [Test]
@@ -328,7 +367,8 @@ public static class ManualToolRegistration
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: false,
-                    requiresApplicationReference: false);
+                    requiresApplicationReference: false,
+                    requiresDomainReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
@@ -351,7 +391,8 @@ public static class ManualToolRegistration
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: false,
-                    requiresApplicationReference: false);
+                    requiresApplicationReference: false,
+                    requiresDomainReference: false);
 
             Assert.That(result.Changed, Is.False);
             Assert.That(result.Content, Is.EqualTo(source));
@@ -372,7 +413,8 @@ public static class ManualToolRegistration
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: true,
-                    requiresApplicationReference: false);
+                    requiresApplicationReference: false,
+                    requiresDomainReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
@@ -394,12 +436,37 @@ public static class ManualToolRegistration
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: true,
-                    requiresApplicationReference: true);
+                    requiresApplicationReference: true,
+                    requiresDomainReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             Assert.That(result.Content, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             Assert.That(result.Content, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+        }
+
+        [Test]
+        public void MigrateAsmdefSource_WhenDomainMetadataIsUsed_AddsDomainReference()
+        {
+            // Verifies that ToolInfo-only helper assemblies can resolve the V3 Domain metadata type.
+            string source = @"{
+    ""name"": ""MyCompany.Tools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: true,
+                    requiresApplicationReference: false,
+                    requiresDomainReference: true);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            Assert.That(result.Content, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+            Assert.That(result.Content, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
         }
 
         [Test]
