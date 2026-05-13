@@ -38,7 +38,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             "Logs",
             "obj",
             "bin",
-            "Packages",
             "Build",
             "Builds"
         };

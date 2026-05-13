@@ -530,6 +530,68 @@ public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
         }
 
         [Test]
+        public void ApplyMigration_WhenNoAsmdefFirstPassRuntimeUsesGlobalLegacyUsing_KeepsRegularRuntimeFiles()
+        {
+            // Verifies that Unity predefined firstpass runtime scripts do not migrate regular runtime siblings.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string firstPassDirectory = Path.Combine(projectRoot, "Assets", "Plugins");
+                string runtimeDirectory = Path.Combine(projectRoot, "Assets", "Scripts");
+                Directory.CreateDirectory(firstPassDirectory);
+                Directory.CreateDirectory(runtimeDirectory);
+                string globalUsingPath = Path.Combine(firstPassDirectory, "GlobalUsings.cs");
+                string runtimePath = Path.Combine(runtimeDirectory, "UnrelatedMetadata.cs");
+                string runtimeSource =
+                    "public sealed class UnrelatedMetadata { public BaseToolResponse Response; }";
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(runtimePath, runtimeSource);
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain("io.github.hatayama.UnityCliLoop.ToolContracts"));
+                Assert.That(File.ReadAllText(runtimePath), Is.EqualTo(runtimeSource));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenNoAsmdefFirstPassEditorUsesGlobalLegacyUsing_KeepsRegularEditorFiles()
+        {
+            // Verifies that Unity predefined firstpass editor scripts do not migrate regular editor siblings.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string firstPassEditorDirectory = Path.Combine(projectRoot, "Assets", "Plugins", "Editor");
+                string editorDirectory = Path.Combine(projectRoot, "Assets", "Editor");
+                Directory.CreateDirectory(firstPassEditorDirectory);
+                Directory.CreateDirectory(editorDirectory);
+                string globalUsingPath = Path.Combine(firstPassEditorDirectory, "GlobalUsings.cs");
+                string editorPath = Path.Combine(editorDirectory, "UnrelatedMetadata.cs");
+                string editorSource =
+                    "public sealed class UnrelatedMetadata { public BaseToolResponse Response; }";
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(editorPath, editorSource);
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain("io.github.hatayama.UnityCliLoop.ToolContracts"));
+                Assert.That(File.ReadAllText(editorPath), Is.EqualTo(editorSource));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsingAndSplitManualRegistration_AddsApplicationReference()
         {
             // Verifies that manual registration files relying on assembly-level legacy detection get required refs.
@@ -624,6 +686,51 @@ public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
                 ThirdPartyToolMigrationPreview preview = service.PreviewMigration(projectRoot);
 
                 Assert.That(preview.HasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenLegacyToolExistsUnderAssetsPackagesDirectory_RewritesAssetsFiles()
+        {
+            // Verifies that only Unity's project-root Packages directory is excluded from migration scans.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "Packages", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(toolPath), Does.Contain("UnityCliLoopTool<HelloSchema, HelloResponse>"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             }
             finally
             {

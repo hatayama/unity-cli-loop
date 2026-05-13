@@ -17,6 +17,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const string ImplicitEditorAssemblyDirectoryName = "__UnityCliLoopImplicitEditorAssembly";
         private const string ImplicitRuntimeAssemblyDirectoryName = "__UnityCliLoopImplicitRuntimeAssembly";
+        private const string ImplicitFirstPassEditorAssemblyDirectoryName =
+            "__UnityCliLoopImplicitFirstPassEditorAssembly";
+        private const string ImplicitFirstPassRuntimeAssemblyDirectoryName =
+            "__UnityCliLoopImplicitFirstPassRuntimeAssembly";
 
         public ThirdPartyToolMigrationPreview PreviewMigration(string projectRoot)
         {
@@ -386,10 +390,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(csharpFilePath), "csharpFilePath must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            string implicitAssemblyDirectoryName = IsEditorAssemblyPath(csharpFilePath, projectRoot)
+            bool isEditorAssemblyPath = IsEditorAssemblyPath(csharpFilePath, projectRoot);
+            bool isFirstPassAssemblyPath = IsFirstPassAssemblyPath(csharpFilePath, projectRoot);
+            string implicitAssemblyDirectoryName = GetImplicitAssemblyDirectoryName(
+                isEditorAssemblyPath,
+                isFirstPassAssemblyPath);
+            return Path.Combine(projectRoot, implicitAssemblyDirectoryName);
+        }
+
+        private static string GetImplicitAssemblyDirectoryName(
+            bool isEditorAssemblyPath,
+            bool isFirstPassAssemblyPath)
+        {
+            if (isEditorAssemblyPath && isFirstPassAssemblyPath)
+            {
+                return ImplicitFirstPassEditorAssemblyDirectoryName;
+            }
+
+            if (isFirstPassAssemblyPath)
+            {
+                return ImplicitFirstPassRuntimeAssemblyDirectoryName;
+            }
+
+            return isEditorAssemblyPath
                 ? ImplicitEditorAssemblyDirectoryName
                 : ImplicitRuntimeAssemblyDirectoryName;
-            return Path.Combine(projectRoot, implicitAssemblyDirectoryName);
         }
 
         private static bool IsEditorAssemblyPath(string csharpFilePath, string projectRoot)
@@ -397,17 +422,42 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(csharpFilePath), "csharpFilePath must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            string relativePath = csharpFilePath.StartsWith(projectRoot, StringComparison.Ordinal)
-                ? csharpFilePath.Substring(projectRoot.Length)
-                : csharpFilePath;
+            string[] pathSegments = GetRelativePathSegments(csharpFilePath, projectRoot);
+            return pathSegments.Any(
+                pathSegment => string.Equals(pathSegment, "Editor", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsFirstPassAssemblyPath(string csharpFilePath, string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(csharpFilePath), "csharpFilePath must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            string[] pathSegments = GetRelativePathSegments(csharpFilePath, projectRoot);
+            if (pathSegments.Length < 2 ||
+                !string.Equals(pathSegments[0], "Assets", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return string.Equals(pathSegments[1], "Plugins", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(pathSegments[1], "Standard Assets", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(pathSegments[1], "Pro Standard Assets", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string[] GetRelativePathSegments(string filePath, string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            string relativePath = filePath.StartsWith(projectRoot, StringComparison.Ordinal)
+                ? filePath.Substring(projectRoot.Length)
+                : filePath;
             char[] separators =
             {
                 Path.DirectorySeparatorChar,
                 Path.AltDirectorySeparatorChar
             };
-            string[] pathSegments = relativePath.Split(separators, StringSplitOptions.RemoveEmptyEntries);
-            return pathSegments.Any(
-                pathSegment => string.Equals(pathSegment, "Editor", StringComparison.OrdinalIgnoreCase));
+            return relativePath.Split(separators, StringSplitOptions.RemoveEmptyEntries);
         }
 
         private static bool IsSameOrChildPath(string childPath, string parentPath)
@@ -544,7 +594,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 List<string> csharpFilePaths = new();
                 List<string> asmdefFilePaths = new();
                 List<string> asmrefFilePaths = new();
-                CollectCandidateFiles(projectRoot, csharpFilePaths, asmdefFilePaths, asmrefFilePaths);
+                CollectCandidateFiles(
+                    projectRoot,
+                    projectRoot,
+                    csharpFilePaths,
+                    asmdefFilePaths,
+                    asmrefFilePaths);
                 csharpFilePaths.Sort(StringComparer.Ordinal);
                 asmdefFilePaths.Sort(StringComparer.Ordinal);
                 asmrefFilePaths.Sort(StringComparer.Ordinal);
@@ -552,11 +607,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             private static void CollectCandidateFiles(
+                string projectRoot,
                 string directoryPath,
                 List<string> csharpFilePaths,
                 List<string> asmdefFilePaths,
                 List<string> asmrefFilePaths)
             {
+                Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
                 Debug.Assert(!string.IsNullOrEmpty(directoryPath), "directoryPath must not be null or empty");
                 Debug.Assert(csharpFilePaths != null, "csharpFilePaths must not be null");
                 Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
@@ -585,14 +642,54 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 foreach (string childDirectoryPath in Directory.EnumerateDirectories(directoryPath))
                 {
-                    string directoryName = Path.GetFileName(childDirectoryPath);
-                    if (ThirdPartyToolMigrationRules.IsExcludedDirectoryName(directoryName))
+                    if (ShouldExcludeDirectory(projectRoot, childDirectoryPath))
                     {
                         continue;
                     }
 
-                    CollectCandidateFiles(childDirectoryPath, csharpFilePaths, asmdefFilePaths, asmrefFilePaths);
+                    CollectCandidateFiles(
+                        projectRoot,
+                        childDirectoryPath,
+                        csharpFilePaths,
+                        asmdefFilePaths,
+                        asmrefFilePaths);
                 }
+            }
+
+            private static bool ShouldExcludeDirectory(string projectRoot, string directoryPath)
+            {
+                Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+                Debug.Assert(!string.IsNullOrEmpty(directoryPath), "directoryPath must not be null or empty");
+
+                if (IsProjectRootPackagesDirectory(projectRoot, directoryPath))
+                {
+                    return true;
+                }
+
+                string directoryName = Path.GetFileName(directoryPath);
+                return ThirdPartyToolMigrationRules.IsExcludedDirectoryName(directoryName);
+            }
+
+            private static bool IsProjectRootPackagesDirectory(string projectRoot, string directoryPath)
+            {
+                Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+                Debug.Assert(!string.IsNullOrEmpty(directoryPath), "directoryPath must not be null or empty");
+
+                string packagesDirectory = Path.Combine(projectRoot, "Packages");
+                string normalizedPackagesDirectory = NormalizeDirectoryPath(packagesDirectory);
+                string normalizedDirectoryPath = NormalizeDirectoryPath(directoryPath);
+                return string.Equals(
+                    normalizedDirectoryPath,
+                    normalizedPackagesDirectory,
+                    StringComparison.Ordinal);
+            }
+
+            private static string NormalizeDirectoryPath(string directoryPath)
+            {
+                Debug.Assert(!string.IsNullOrEmpty(directoryPath), "directoryPath must not be null or empty");
+
+                return Path.GetFullPath(directoryPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             }
         }
     }
