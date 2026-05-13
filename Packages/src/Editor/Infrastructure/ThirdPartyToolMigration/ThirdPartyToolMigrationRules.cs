@@ -19,6 +19,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal const string LegacyEditorAssemblyName = "uLoopMCP.Editor";
         internal const string LegacyEditorAssemblyGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
         internal const string CurrentToolContractsGuidReference = "GUID:fc3fd32eddbee40e39c2d76dc184957b";
+        private const string DescriptionAttributeArgumentName = "Description";
+        private const string DisplayDevelopmentOnlyAttributeArgumentName = "DisplayDevelopmentOnly";
+        private const string RequiredSecuritySettingAttributeArgumentName = "RequiredSecuritySetting";
+        private const string LegacySecuritySettingsTypeName = "SecuritySettings";
+        private const string CurrentSecuritySettingTypeName = "UnityCliLoopSecuritySetting";
 
         private static readonly string[] ExcludedDirectoryNames =
         {
@@ -33,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         };
 
         private static readonly Regex LegacyToolAttributeWithArgumentsRegex =
-            new(@"\[\s*McpTool(?:Attribute)?\s*\([^\]]*\)\s*\]", RegexOptions.Compiled);
+            new(@"\[\s*McpTool(?:Attribute)?\s*\((?<arguments>[\s\S]*?)\)\s*\]", RegexOptions.Compiled);
 
         private static readonly Regex LegacyToolAttributeRegex =
             new(@"\[\s*McpTool(?:Attribute)?\s*\]", RegexOptions.Compiled);
@@ -46,6 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             new(@"\bAbstractUnityTool\b", "UnityCliLoopTool"),
             new(@"\bBaseToolSchema\b", "UnityCliLoopToolSchema"),
             new(@"\bBaseToolResponse\b", "UnityCliLoopToolResponse"),
+            new(@"\bSecuritySettings\b", CurrentSecuritySettingTypeName),
             new(@"\bCustomToolManager\b", "UnityCliLoopToolRegistrar")
         };
 
@@ -55,23 +61,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string migratedContent = source;
             int replacementCount = 0;
-            migratedContent = ReplaceRegex(
+            migratedContent = ReplaceRegexInCode(
                 migratedContent,
                 LegacyToolAttributeWithArgumentsRegex,
-                "[UnityCliLoopTool]",
+                MigrateLegacyToolAttributeWithArguments,
                 ref replacementCount);
-            migratedContent = ReplaceRegex(
+            migratedContent = ReplaceRegexInCode(
                 migratedContent,
                 LegacyToolAttributeRegex,
-                "[UnityCliLoopTool]",
+                _ => "[UnityCliLoopTool]",
                 ref replacementCount);
 
             foreach (ReplacementRule rule in CSharpReplacementRules)
             {
-                migratedContent = ReplaceRegex(
+                migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     rule.PatternRegex,
-                    rule.Replacement,
+                    _ => rule.Replacement,
                     ref replacementCount);
             }
 
@@ -128,11 +134,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            if (source.Contains(LegacyNamespace)) return true;
-            if (LegacyToolAttributeWithArgumentsRegex.IsMatch(source)) return true;
-            if (LegacyToolAttributeRegex.IsMatch(source)) return true;
+            if (RegexMatchesCode(source, LegacyToolAttributeWithArgumentsRegex)) return true;
+            if (RegexMatchesCode(source, LegacyToolAttributeRegex)) return true;
 
-            return CSharpReplacementRules.Any(rule => rule.PatternRegex.IsMatch(source));
+            return CSharpReplacementRules.Any(rule => RegexMatchesCode(source, rule.PatternRegex));
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)
@@ -169,22 +174,273 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return reference;
         }
 
-        private static string ReplaceRegex(
+        private static string MigrateLegacyToolAttributeWithArguments(Match match)
+        {
+            Debug.Assert(match != null, "match must not be null");
+
+            string argumentsSource = match.Groups["arguments"].Value;
+            string[] migratedArguments = GetMigratedSupportedAttributeArguments(argumentsSource);
+            if (migratedArguments.Length == 0)
+            {
+                return "[UnityCliLoopTool]";
+            }
+
+            return $"[UnityCliLoopTool({string.Join(", ", migratedArguments)})]";
+        }
+
+        private static string[] GetMigratedSupportedAttributeArguments(string argumentsSource)
+        {
+            Debug.Assert(argumentsSource != null, "argumentsSource must not be null");
+
+            List<string> migratedArguments = new();
+            string[] arguments = SplitAttributeArguments(argumentsSource);
+            foreach (string argument in arguments)
+            {
+                string trimmedArgument = argument.Trim();
+                if (trimmedArgument.Length == 0)
+                {
+                    continue;
+                }
+
+                if (IsNamedAttributeArgument(trimmedArgument, DescriptionAttributeArgumentName))
+                {
+                    continue;
+                }
+
+                if (IsNamedAttributeArgument(trimmedArgument, DisplayDevelopmentOnlyAttributeArgumentName))
+                {
+                    migratedArguments.Add(trimmedArgument);
+                    continue;
+                }
+
+                if (IsNamedAttributeArgument(trimmedArgument, RequiredSecuritySettingAttributeArgumentName))
+                {
+                    migratedArguments.Add(
+                        trimmedArgument.Replace(
+                            LegacySecuritySettingsTypeName,
+                            CurrentSecuritySettingTypeName));
+                }
+            }
+
+            return migratedArguments.ToArray();
+        }
+
+        private static string[] SplitAttributeArguments(string argumentsSource)
+        {
+            Debug.Assert(argumentsSource != null, "argumentsSource must not be null");
+
+            List<string> arguments = new();
+            int argumentStartIndex = 0;
+            int nestingDepth = 0;
+            bool isInRegularString = false;
+            bool isInVerbatimString = false;
+            bool isInCharLiteral = false;
+            for (int i = 0; i < argumentsSource.Length; i++)
+            {
+                char current = argumentsSource[i];
+                if (isInRegularString)
+                {
+                    if (current == '\\')
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    if (current == '"')
+                    {
+                        isInRegularString = false;
+                    }
+
+                    continue;
+                }
+
+                if (isInVerbatimString)
+                {
+                    if (current != '"')
+                    {
+                        continue;
+                    }
+
+                    if (i + 1 < argumentsSource.Length && argumentsSource[i + 1] == '"')
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    isInVerbatimString = false;
+                    continue;
+                }
+
+                if (isInCharLiteral)
+                {
+                    if (current == '\\')
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    if (current == '\'')
+                    {
+                        isInCharLiteral = false;
+                    }
+
+                    continue;
+                }
+
+                if (StartsWith(argumentsSource, i, "@\"") ||
+                    StartsWith(argumentsSource, i, "$@\"") ||
+                    StartsWith(argumentsSource, i, "@$\""))
+                {
+                    isInVerbatimString = true;
+                    i += GetStringPrefixLength(argumentsSource, i);
+                    continue;
+                }
+
+                if (StartsWith(argumentsSource, i, "$\""))
+                {
+                    isInRegularString = true;
+                    i++;
+                    continue;
+                }
+
+                if (current == '"')
+                {
+                    isInRegularString = true;
+                    continue;
+                }
+
+                if (current == '\'')
+                {
+                    isInCharLiteral = true;
+                    continue;
+                }
+
+                if (current == '(' || current == '[' || current == '{')
+                {
+                    nestingDepth++;
+                    continue;
+                }
+
+                if (current == ')' || current == ']' || current == '}')
+                {
+                    nestingDepth = Math.Max(0, nestingDepth - 1);
+                    continue;
+                }
+
+                if (current != ',' || nestingDepth != 0)
+                {
+                    continue;
+                }
+
+                arguments.Add(argumentsSource.Substring(argumentStartIndex, i - argumentStartIndex));
+                argumentStartIndex = i + 1;
+            }
+
+            arguments.Add(argumentsSource.Substring(argumentStartIndex));
+            return arguments.ToArray();
+        }
+
+        private static bool IsNamedAttributeArgument(string argument, string argumentName)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(argument), "argument must not be null or whitespace");
+            Debug.Assert(!string.IsNullOrWhiteSpace(argumentName), "argumentName must not be null or whitespace");
+
+            if (!argument.StartsWith(argumentName, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            for (int i = argumentName.Length; i < argument.Length; i++)
+            {
+                char current = argument[i];
+                if (char.IsWhiteSpace(current))
+                {
+                    continue;
+                }
+
+                return current == '=';
+            }
+
+            return false;
+        }
+
+        private static string ReplaceRegexInCode(
             string source,
             Regex regex,
-            string replacement,
+            Func<Match, string> replacementFactory,
             ref int replacementCount)
         {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(regex != null, "regex must not be null");
+            Debug.Assert(replacementFactory != null, "replacementFactory must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
             int localReplacementCount = 0;
             string migrated = regex.Replace(
                 source,
-                _ =>
+                match =>
                 {
+                    if (!codeTextMask.IsCodeAt(match.Index))
+                    {
+                        return match.Value;
+                    }
+
+                    string replacement = replacementFactory(match);
+                    if (string.Equals(match.Value, replacement, StringComparison.Ordinal))
+                    {
+                        return match.Value;
+                    }
+
                     localReplacementCount++;
                     return replacement;
                 });
             replacementCount += localReplacementCount;
             return migrated;
+        }
+
+        private static bool RegexMatchesCode(string source, Regex regex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(regex != null, "regex must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = regex.Matches(source);
+            foreach (Match match in matches)
+            {
+                if (codeTextMask.IsCodeAt(match.Index))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool StartsWith(string source, int startIndex, string value)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+            Debug.Assert(value != null, "value must not be null");
+
+            if (startIndex + value.Length > source.Length)
+            {
+                return false;
+            }
+
+            return string.CompareOrdinal(source, startIndex, value, 0, value.Length) == 0;
+        }
+
+        private static int GetStringPrefixLength(string source, int startIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+            if (StartsWith(source, startIndex, "$@\"") || StartsWith(source, startIndex, "@$\""))
+            {
+                return 2;
+            }
+
+            return 1;
         }
 
         private readonly struct ReplacementRule
@@ -200,6 +456,230 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             public Regex PatternRegex { get; }
             public string Replacement { get; }
+        }
+
+        private readonly struct CodeTextMask
+        {
+            private readonly bool[] _codeCharacters;
+
+            private CodeTextMask(bool[] codeCharacters)
+            {
+                Debug.Assert(codeCharacters != null, "codeCharacters must not be null");
+
+                _codeCharacters = codeCharacters;
+            }
+
+            public static CodeTextMask Create(string source)
+            {
+                Debug.Assert(source != null, "source must not be null");
+
+                bool[] codeCharacters = new bool[source.Length];
+                for (int i = 0; i < codeCharacters.Length; i++)
+                {
+                    codeCharacters[i] = true;
+                }
+
+                int index = 0;
+                while (index < source.Length)
+                {
+                    int ignoredTextEndIndex = GetIgnoredTextEndIndex(source, index);
+                    if (ignoredTextEndIndex == index)
+                    {
+                        index++;
+                        continue;
+                    }
+
+                    MarkRangeAsIgnored(codeCharacters, index, ignoredTextEndIndex);
+                    index = ignoredTextEndIndex;
+                }
+
+                return new CodeTextMask(codeCharacters);
+            }
+
+            public bool IsCodeAt(int index)
+            {
+                if (index < 0 || index >= _codeCharacters.Length)
+                {
+                    return false;
+                }
+
+                return _codeCharacters[index];
+            }
+
+            private static int GetIgnoredTextEndIndex(string source, int startIndex)
+            {
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+                if (StartsWith(source, startIndex, "//"))
+                {
+                    return FindLineCommentEndIndex(source, startIndex);
+                }
+
+                if (StartsWith(source, startIndex, "/*"))
+                {
+                    return FindBlockCommentEndIndex(source, startIndex);
+                }
+
+                if (StartsWith(source, startIndex, "$@\"") || StartsWith(source, startIndex, "@$\""))
+                {
+                    return FindVerbatimStringEndIndex(source, startIndex + 2);
+                }
+
+                if (StartsWith(source, startIndex, "@\""))
+                {
+                    return FindVerbatimStringEndIndex(source, startIndex + 1);
+                }
+
+                if (StartsWith(source, startIndex, "$\"\"\""))
+                {
+                    return FindRawStringEndIndex(source, startIndex + 1);
+                }
+
+                if (StartsWith(source, startIndex, "$\""))
+                {
+                    return FindRegularStringEndIndex(source, startIndex + 1);
+                }
+
+                if (StartsWith(source, startIndex, "\"\"\""))
+                {
+                    return FindRawStringEndIndex(source, startIndex);
+                }
+
+                if (source[startIndex] == '"')
+                {
+                    return FindRegularStringEndIndex(source, startIndex);
+                }
+
+                if (source[startIndex] == '\'')
+                {
+                    return FindCharLiteralEndIndex(source, startIndex);
+                }
+
+                return startIndex;
+            }
+
+            private static int FindLineCommentEndIndex(string source, int startIndex)
+            {
+                int index = startIndex;
+                while (index < source.Length && source[index] != '\n')
+                {
+                    index++;
+                }
+
+                return index;
+            }
+
+            private static int FindBlockCommentEndIndex(string source, int startIndex)
+            {
+                int index = startIndex + 2;
+                while (index + 1 < source.Length)
+                {
+                    if (source[index] == '*' && source[index + 1] == '/')
+                    {
+                        return index + 2;
+                    }
+
+                    index++;
+                }
+
+                return source.Length;
+            }
+
+            private static int FindRegularStringEndIndex(string source, int quoteIndex)
+            {
+                int index = quoteIndex + 1;
+                while (index < source.Length)
+                {
+                    if (source[index] == '\\')
+                    {
+                        index += 2;
+                        continue;
+                    }
+
+                    if (source[index] == '"')
+                    {
+                        return index + 1;
+                    }
+
+                    index++;
+                }
+
+                return source.Length;
+            }
+
+            private static int FindVerbatimStringEndIndex(string source, int quoteIndex)
+            {
+                int index = quoteIndex + 1;
+                while (index < source.Length)
+                {
+                    if (source[index] != '"')
+                    {
+                        index++;
+                        continue;
+                    }
+
+                    if (index + 1 < source.Length && source[index + 1] == '"')
+                    {
+                        index += 2;
+                        continue;
+                    }
+
+                    return index + 1;
+                }
+
+                return source.Length;
+            }
+
+            private static int FindRawStringEndIndex(string source, int quoteIndex)
+            {
+                int index = quoteIndex + 3;
+                while (index + 2 < source.Length)
+                {
+                    if (StartsWith(source, index, "\"\"\""))
+                    {
+                        return index + 3;
+                    }
+
+                    index++;
+                }
+
+                return source.Length;
+            }
+
+            private static int FindCharLiteralEndIndex(string source, int quoteIndex)
+            {
+                int index = quoteIndex + 1;
+                while (index < source.Length)
+                {
+                    if (source[index] == '\\')
+                    {
+                        index += 2;
+                        continue;
+                    }
+
+                    if (source[index] == '\'')
+                    {
+                        return index + 1;
+                    }
+
+                    index++;
+                }
+
+                return source.Length;
+            }
+
+            private static void MarkRangeAsIgnored(bool[] codeCharacters, int startIndex, int endIndex)
+            {
+                Debug.Assert(codeCharacters != null, "codeCharacters must not be null");
+                Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+                Debug.Assert(endIndex >= startIndex, "endIndex must not be less than startIndex");
+
+                for (int i = startIndex; i < endIndex && i < codeCharacters.Length; i++)
+                {
+                    codeCharacters[i] = false;
+                }
+            }
         }
     }
 

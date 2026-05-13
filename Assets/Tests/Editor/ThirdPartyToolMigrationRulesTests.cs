@@ -76,6 +76,62 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolAttributeHasSupportedArguments_PreservesSupportedArguments()
+        {
+            // Verifies that migration drops removed metadata without changing supported tool visibility metadata.
+            string source =
+                "[McpTool(Description = \"hello\", DisplayDevelopmentOnly = true)] public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("[UnityCliLoopTool(DisplayDevelopmentOnly = true)]"));
+            Assert.That(result.Content, Does.Not.Contain("Description"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyToolAttributeHasSecurityArgument_RewritesSecurityArgument()
+        {
+            // Verifies that supported security metadata keeps compiling after the enum rename.
+            string source =
+                "[McpTool(RequiredSecuritySetting = SecuritySettings.None)] public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "[UnityCliLoopTool(RequiredSecuritySetting = UnityCliLoopSecuritySetting.None)]"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyApiExistsOnlyInComment_KeepsContent()
+        {
+            // Verifies that migration does not rewrite inert documentation comments inside C# files.
+            string source = "// AbstractUnityTool should not be rewritten here";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyApiExistsOnlyInStringLiteral_KeepsContent()
+        {
+            // Verifies that migration does not rewrite test fixture strings or examples inside C# files.
+            string source = "public const string Example = \"IUnityTool\";";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyNamespaceLikeTextExists_KeepsContent()
         {
             // Verifies that namespace migration treats dots as literal characters.
@@ -154,6 +210,28 @@ namespace Samples
             bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
 
             Assert.That(containsLegacyApi, Is.True);
+        }
+
+        [Test]
+        public void ContainsLegacyCSharpApi_WhenLegacyToolApiExistsOnlyInStringLiteral_ReturnsFalse()
+        {
+            // Verifies that inert fixture text does not trigger project migration UI.
+            string source = "public const string Example = \"[McpTool]\";";
+
+            bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
+
+            Assert.That(containsLegacyApi, Is.False);
+        }
+
+        [Test]
+        public void ContainsLegacyCSharpApi_WhenLegacyToolApiExistsOnlyInComment_ReturnsFalse()
+        {
+            // Verifies that comments do not trigger project migration UI.
+            string source = "// CustomToolManager";
+
+            bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
+
+            Assert.That(containsLegacyApi, Is.False);
         }
 
         [Test]
