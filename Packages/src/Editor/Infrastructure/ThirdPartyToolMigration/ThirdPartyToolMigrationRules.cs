@@ -81,27 +81,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 @"McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$",
                 RegexOptions.Compiled);
 
+        private static readonly TypeReplacementRule[] ToolContractTypeReplacementRules =
+        {
+            new("ToolParameterSchemaGenerator", "UnityCliLoopToolParameterSchemaGenerator"),
+            new("ParameterValidationException", "UnityCliLoopToolParameterValidationException"),
+            new("McpToolAttribute", "UnityCliLoopToolAttribute"),
+            new("IUnityTool", "IUnityCliLoopTool"),
+            new("AbstractUnityTool", "UnityCliLoopTool"),
+            new("BaseToolSchema", "UnityCliLoopToolSchema"),
+            new("BaseToolResponse", "UnityCliLoopToolResponse"),
+            new("SecuritySettings", CurrentSecuritySettingTypeName)
+        };
+
         private static readonly ReplacementRule[] CSharpReplacementRules =
         {
             new(
                 Regex.Escape($"{LegacyNamespace}.CustomToolManager"),
                 $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"),
             new(Regex.Escape(LegacyNamespace), CurrentNamespace),
-            new(@"\bToolParameterSchemaGenerator\b", "UnityCliLoopToolParameterSchemaGenerator"),
-            new(@"\bParameterValidationException\b", "UnityCliLoopToolParameterValidationException"),
-            new(@"\bMcpToolAttribute\b", "UnityCliLoopToolAttribute"),
-            new(@"\bIUnityTool\b", "IUnityCliLoopTool"),
-            new(@"\bAbstractUnityTool\b", "UnityCliLoopTool"),
-            new(@"\bBaseToolSchema\b", "UnityCliLoopToolSchema"),
-            new(@"\bBaseToolResponse\b", "UnityCliLoopToolResponse"),
-            new(@"\bSecuritySettings\b", CurrentSecuritySettingTypeName),
-            new(@"(?<!\.)\bCustomToolManager\b", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
+            new(@"(?<![\.:])\bCustomToolManager\b", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
         };
 
         private static readonly ReplacementRule[] RegistrarReplacementRules =
         {
             new(Regex.Escape($"{CurrentNamespace}.ToolInfo"), $"{CurrentDomainNamespace}.ToolInfo"),
-            new(@"(?<!\.)\bToolInfo\b", $"{CurrentDomainNamespace}.ToolInfo")
+            new(@"(?<![\.:])\bToolInfo\b", $"{CurrentDomainNamespace}.ToolInfo")
         };
 
         internal static ThirdPartyToolMigrationContentResult MigrateCSharpSource(string source)
@@ -139,6 +143,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (shouldApplyContractRenames)
             {
+                migratedContent = ReplaceLegacyContractTypeNamesInCode(
+                    migratedContent,
+                    legacyNamespaceAliases,
+                    ref replacementCount);
+
                 foreach (ReplacementRule rule in CSharpReplacementRules)
                 {
                     migratedContent = ReplaceRegexInCode(
@@ -586,6 +595,51 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return migratedContent;
         }
 
+        private static string ReplaceLegacyContractTypeNamesInCode(
+            string source,
+            string[] aliases,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            string migratedContent = source;
+            foreach (TypeReplacementRule rule in ToolContractTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    fullyQualifiedRegex,
+                    _ => $"{CurrentNamespace}.{rule.CurrentName}",
+                    ref replacementCount);
+
+                foreach (string alias in aliases)
+                {
+                    Regex aliasRegex = new(
+                        $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(rule.LegacyName)}\b",
+                        RegexOptions.Compiled);
+                    migratedContent = ReplaceRegexInCode(
+                        migratedContent,
+                        aliasRegex,
+                        _ => $"{alias}.{rule.CurrentName}",
+                        ref replacementCount);
+                }
+
+                Regex unqualifiedRegex = new(
+                    $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    unqualifiedRegex,
+                    _ => rule.CurrentName,
+                    ref replacementCount);
+            }
+
+            return migratedContent;
+        }
+
         private static bool IsNamedAttributeArgument(string argument, string argumentName)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(argument), "argument must not be null or whitespace");
@@ -902,6 +956,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             public Regex PatternRegex { get; }
             public string Replacement { get; }
+        }
+
+        private readonly struct TypeReplacementRule
+        {
+            public TypeReplacementRule(string legacyName, string currentName)
+            {
+                Debug.Assert(!string.IsNullOrEmpty(legacyName), "legacyName must not be null or empty");
+                Debug.Assert(!string.IsNullOrEmpty(currentName), "currentName must not be null or empty");
+
+                LegacyName = legacyName;
+                CurrentName = currentName;
+            }
+
+            public string LegacyName { get; }
+            public string CurrentName { get; }
         }
 
         private readonly struct CodeTextMask

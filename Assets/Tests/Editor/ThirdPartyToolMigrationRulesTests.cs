@@ -373,9 +373,62 @@ public static class ManualToolRegistration
             Assert.That(result.Content, Does.Contain(
                 "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.RegisterCustomTool"));
             Assert.That(result.Content, Does.Contain("io.github.hatayama.UnityCliLoop.Domain.ToolInfo[]"));
+            Assert.That(result.Content, Does.Contain("Old.IUnityCliLoopTool tool"));
             Assert.That(result.Content, Does.Not.Contain("Old.io.github"));
             Assert.That(result.Content, Does.Not.Contain("Old.CustomToolManager"));
             Assert.That(result.Content, Does.Not.Contain("Old.ToolInfo"));
+            Assert.That(result.Content, Does.Not.Contain("Old.IUnityTool"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenQualifiedUnrelatedTypeNamesExist_KeepsQualifiedTypeNames()
+        {
+            // Verifies that migration does not rewrite unrelated project types behind another qualifier.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+    private Other.BaseToolResponse response;
+    private MyGame.SecuritySettings securitySettings;
+}
+
+public sealed class HelloSchema : BaseToolSchema {}
+
+public sealed class HelloResponse : BaseToolResponse {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("Other.BaseToolResponse"));
+            Assert.That(result.Content, Does.Contain("MyGame.SecuritySettings"));
+            Assert.That(result.Content, Does.Contain("UnityCliLoopTool<HelloSchema, HelloResponse>"));
+            Assert.That(result.Content, Does.Contain("UnityCliLoopToolSchema"));
+            Assert.That(result.Content, Does.Contain("UnityCliLoopToolResponse"));
+            Assert.That(result.Content, Does.Not.Contain("Other.UnityCliLoopToolResponse"));
+            Assert.That(result.Content, Does.Not.Contain("MyGame.UnityCliLoopSecuritySetting"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyContractTypeIsFullyQualified_RewritesFullyQualifiedType()
+        {
+            // Verifies that qualified legacy namespace usage still migrates after qualified unrelated types are ignored.
+            string source = @"public sealed class HelloTool :
+    io.github.hatayama.uLoopMCP.AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloResponse : io.github.hatayama.uLoopMCP.BaseToolResponse {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopTool<HelloSchema, HelloResponse>"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopToolResponse"));
+            Assert.That(result.Content, Does.Not.Contain("uLoopMCP"));
         }
 
         [Test]
