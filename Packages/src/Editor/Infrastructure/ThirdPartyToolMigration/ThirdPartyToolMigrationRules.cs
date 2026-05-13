@@ -43,8 +43,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             "Builds"
         };
 
+        private static readonly string LegacyNamespacePattern =
+            $@"(?<![\w.])(?:global::)?{Regex.Escape(LegacyNamespace)}(?=\.|;|\s|$)";
+
         private static readonly Regex LegacyNamespaceRegex =
-            new(Regex.Escape(LegacyNamespace), RegexOptions.Compiled);
+            new(LegacyNamespacePattern, RegexOptions.Compiled);
 
         private static readonly Regex LegacyRegistrarRegex =
             new(@"\bCustomToolManager\b", RegexOptions.Compiled);
@@ -93,9 +96,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly ReplacementRule[] CSharpReplacementRules =
         {
             new(
-                Regex.Escape($"{LegacyNamespace}.CustomToolManager"),
+                $@"(?<![\w.])(?:global::)?{Regex.Escape(LegacyNamespace)}\.CustomToolManager\b",
                 $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"),
-            new(Regex.Escape(LegacyNamespace), CurrentNamespace),
+            new(LegacyNamespacePattern, CurrentNamespace),
             new(@"(?<![\.:])\bCustomToolManager\b", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
         };
 
@@ -911,10 +914,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             if (RegexMatchesCode(source, LegacyNamespaceRegex)) return true;
-
-            if (RegexMatchesCode(source, LegacyBaseTypeUsageRegex)) return true;
-
-            if (RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex)) return true;
 
             return ContainsLegacyToolAttributeList(source, canMigrateBareLegacyToolAttribute: false);
         }

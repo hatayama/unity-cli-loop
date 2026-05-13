@@ -493,6 +493,32 @@ public sealed class OtherTool
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenUnqualifiedLegacyLikeBaseTypeHasNoLegacyMarker_KeepsContent()
+        {
+            // Verifies that unrelated base types with the same short name do not trigger migration.
+            string source = "public sealed class MyResponse : BaseToolResponse {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyNamespacePrefixExists_KeepsContent()
+        {
+            // Verifies that namespace matching does not treat prefixes as the V2 namespace.
+            string source = "using io.github.hatayama.uLoopMCPExtensions;";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+        }
+
+        [Test]
         public void MigrateCSharpSourceForLegacyAssembly_WhenFileReliesOnGlobalUsing_RewritesContractTypes()
         {
             // Verifies that files split away from a legacy global using still migrate inside the same assembly.
@@ -652,7 +678,8 @@ public sealed class OtherTool
         public void ContainsLegacyCSharpApi_WhenLegacyToolApiExists_ReturnsTrue()
         {
             // Verifies that migration detection is based on public custom tool API usage.
-            string source = "[McpTool] public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse> {}";
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
+                "[McpTool] public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse> {}";
 
             bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
 
