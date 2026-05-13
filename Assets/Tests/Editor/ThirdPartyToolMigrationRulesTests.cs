@@ -202,6 +202,30 @@ public static class ManualToolRegistration
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyRegistrarIsUsedThroughNamespaceAlias_RewritesRegistrar()
+        {
+            // Verifies that namespace aliases do not create invalid qualified registrar names.
+            string source = @"using Old = io.github.hatayama.uLoopMCP;
+
+public static class ManualToolRegistration
+{
+    public static void Register(Old.IUnityTool tool)
+    {
+        Old.CustomToolManager.RegisterCustomTool(tool);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.RegisterCustomTool"));
+            Assert.That(result.Content, Does.Not.Contain("Old.io.github"));
+            Assert.That(result.Content, Does.Not.Contain("Old.CustomToolManager"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyApiExistsOnlyInComment_KeepsContent()
         {
             // Verifies that migration does not rewrite inert documentation comments inside C# files.

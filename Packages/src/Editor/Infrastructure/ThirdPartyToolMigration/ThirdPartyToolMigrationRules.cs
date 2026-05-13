@@ -48,6 +48,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyRegistrarRegex =
             new(@"\bCustomToolManager\b", RegexOptions.Compiled);
 
+        private static readonly Regex LegacyNamespaceAliasRegex =
+            new(
+                @"\busing\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?" +
+                @"io\.github\.hatayama\.uLoopMCP\s*;",
+                RegexOptions.Compiled);
+
         private static readonly Regex LegacyToolAttributeEntryRegex =
             new(
                 @"^\s*(?<qualifier>io\.github\.hatayama\.uLoopMCP\.)?McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$",
@@ -67,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             new(@"\bBaseToolSchema\b", "UnityCliLoopToolSchema"),
             new(@"\bBaseToolResponse\b", "UnityCliLoopToolResponse"),
             new(@"\bSecuritySettings\b", CurrentSecuritySettingTypeName),
-            new(@"\bCustomToolManager\b", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
+            new(@"(?<!\.)\bCustomToolManager\b", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
         };
 
         private static readonly ReplacementRule[] RegistrarReplacementRules =
@@ -98,6 +104,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 RegexMatchesCode(source, LegacyRegistrarRegex);
             int replacementCount = 0;
             migratedContent = ReplaceLegacyToolAttributesInCode(migratedContent, ref replacementCount);
+            migratedContent = ReplaceLegacyRegistrarAliasesInCode(
+                migratedContent,
+                GetLegacyNamespaceAliases(source),
+                ref replacementCount);
 
             if (shouldApplyContractRenames)
             {
@@ -449,6 +459,50 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             arguments.Add(argumentsSource.Substring(argumentStartIndex));
             return arguments.ToArray();
+        }
+
+        private static string[] GetLegacyNamespaceAliases(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            List<string> aliases = new();
+            MatchCollection matches = LegacyNamespaceAliasRegex.Matches(source);
+            foreach (Match match in matches)
+            {
+                if (!codeTextMask.IsCodeAt(match.Index))
+                {
+                    continue;
+                }
+
+                aliases.Add(match.Groups["alias"].Value);
+            }
+
+            return aliases.ToArray();
+        }
+
+        private static string ReplaceLegacyRegistrarAliasesInCode(
+            string source,
+            string[] aliases,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            string migratedContent = source;
+            foreach (string alias in aliases)
+            {
+                Regex aliasRegistrarRegex = new(
+                    $@"(?<!\w){Regex.Escape(alias)}\.CustomToolManager\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    aliasRegistrarRegex,
+                    _ => $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar",
+                    ref replacementCount);
+            }
+
+            return migratedContent;
         }
 
         private static bool IsNamedAttributeArgument(string argument, string argumentName)
