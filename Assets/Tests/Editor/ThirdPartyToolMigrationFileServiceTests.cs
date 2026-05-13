@@ -208,6 +208,50 @@ public static class CurrentManualToolRegistration
         }
 
         [Test]
+        public void ApplyMigration_WhenCurrentManualRegistrationExistsWithLegacyAsmdefGuid_AddsContractReferences()
+        {
+            // Verifies that partially migrated GUID refs are expanded to the assemblies current registrar APIs expose.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string registrationPath = Path.Combine(toolDirectory, "CurrentManualToolRegistration.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string registrationSource = @"using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public static class CurrentManualToolRegistration
+{
+    public static void Register(IUnityCliLoopTool tool)
+    {
+        UnityCliLoopToolRegistrar.RegisterCustomTool(tool);
+    }
+}";
+                File.WriteAllText(registrationPath, registrationSource);
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(registrationPath), Is.EqualTo(registrationSource));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenDomainMetadataExistsWithoutManualRegistration_AddsDomainReference()
         {
             // Verifies that ToolInfo-only metadata helpers migrate their asmdef dependency.
@@ -510,6 +554,43 @@ public sealed class HelloResponse : BaseToolResponse
                 Assert.That(File.ReadAllText(toolAttributePath), Does.Contain(
                     "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopTool"));
                 Assert.That(File.ReadAllText(toolAttributePath), Does.Contain("Old.IUnityCliLoopTool"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyAlias_RewritesSplitAliasQualifiedContractTypes()
+        {
+            // Verifies that alias-qualified legacy contract types migrate in sibling files.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string responseFactoryPath = Path.Combine(toolDirectory, "ResponseFactory.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using Old = io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(
+                    responseFactoryPath,
+                    "public static class ResponseFactory { public static Old.BaseToolResponse Create() => null; }");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(3));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain("io.github.hatayama.UnityCliLoop.ToolContracts"));
+                Assert.That(File.ReadAllText(responseFactoryPath), Does.Contain("Old.UnityCliLoopToolResponse Create"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             }
             finally

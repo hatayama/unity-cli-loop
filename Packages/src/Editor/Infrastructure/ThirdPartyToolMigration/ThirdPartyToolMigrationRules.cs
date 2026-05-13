@@ -311,6 +311,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return RegexMatchesCode(source, LegacyBaseTypeUsageRegex) ||
                 RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex) ||
                 ContainsLegacyAssemblyScopedTypeReference(source) ||
+                ContainsLegacyAliasQualifiedAssemblyScopedApi(source, legacyAssemblyAliases) ||
                 ContainsLegacyToolAttributeList(
                     source,
                     legacyAssemblyAliases,
@@ -360,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
             }
 
-            if (hasLegacyCSharpSource
+            if ((hasLegacyCSharpSource || requiresApplicationReference || requiresDomainReference)
                 && string.Equals(reference, LegacyEditorAssemblyGuidReference, StringComparison.Ordinal))
             {
                 return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
@@ -1156,6 +1157,45 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, "ToolInfo");
+        }
+
+        private static bool ContainsLegacyAliasQualifiedAssemblyScopedApi(
+            string source,
+            string[] legacyAssemblyAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
+
+            foreach (string alias in legacyAssemblyAliases)
+            {
+                foreach (TypeReplacementRule rule in ToolContractTypeReplacementRules)
+                {
+                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
+                    {
+                        return true;
+                    }
+                }
+
+                if (ContainsLegacyAliasQualifiedName(source, alias, "ToolInfo") ||
+                    ContainsLegacyAliasQualifiedName(source, alias, "CustomToolManager"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsLegacyAliasQualifiedName(string source, string alias, string typeName)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(alias), "alias must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(typeName), "typeName must not be null or empty");
+
+            Regex aliasQualifiedRegex = new(
+                $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(typeName)}\b",
+                RegexOptions.Compiled);
+            return RegexMatchesCode(source, aliasQualifiedRegex);
         }
 
         private static bool ContainsLegacyAssemblyScopedTypeName(
