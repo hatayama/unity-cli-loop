@@ -509,6 +509,59 @@ public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
             }
         }
 
+        [Test]
+        public void ApplyMigration_WhenLegacyToolExistsUnderPackagesDirectory_KeepsPackageFiles()
+        {
+            // Verifies that Package Manager and embedded package contents are not rewritten in place.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string packageDirectory = Path.Combine(
+                    projectRoot,
+                    "Packages",
+                    "com.example.legacy-tool",
+                    "Editor");
+                Directory.CreateDirectory(packageDirectory);
+                string toolPath = Path.Combine(packageDirectory, "PackageTool.cs");
+                string asmdefPath = Path.Combine(packageDirectory, "LegacyPackageTool.Editor.asmdef");
+                string toolSource = @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class PackageTool : AbstractUnityTool<PackageToolSchema, PackageToolResponse>
+{
+}
+
+public sealed class PackageToolSchema : BaseToolSchema
+{
+}
+
+public sealed class PackageToolResponse : BaseToolResponse
+{
+}";
+                string asmdefSource = @"{
+    ""name"": ""LegacyPackageTool.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}";
+                File.WriteAllText(toolPath, toolSource);
+                File.WriteAllText(asmdefPath, asmdefSource);
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationPreview preview = service.PreviewMigration(projectRoot);
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(preview.HasTargets, Is.False);
+                Assert.That(result.FileCount, Is.EqualTo(0));
+                Assert.That(File.ReadAllText(toolPath), Is.EqualTo(toolSource));
+                Assert.That(File.ReadAllText(asmdefPath), Is.EqualTo(asmdefSource));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
         private static string CreateProjectRoot()
         {
             string projectRoot = Path.Combine(
