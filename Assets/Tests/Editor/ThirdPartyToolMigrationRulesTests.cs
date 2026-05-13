@@ -681,6 +681,33 @@ public sealed class HelloResponse : BaseToolResponse {}";
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyFileHasMemberNameMatchingLegacyContractType_KeepsIdentifier()
+        {
+            // Verifies that contract type migration does not rewrite member names.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+    public SecuritySettings SecuritySettings { get; set; }
+}
+
+public sealed class HelloResponse : BaseToolResponse {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "public UnityCliLoopSecuritySetting SecuritySettings { get; set; }"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "UnityCliLoopSecuritySetting UnityCliLoopSecuritySetting"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyContractTypeIsFullyQualified_RewritesFullyQualifiedType()
         {
             // Verifies that qualified legacy namespace usage still migrates after qualified unrelated types are ignored.

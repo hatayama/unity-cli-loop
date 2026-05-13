@@ -764,7 +764,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     unqualifiedRegex,
-                    _ => rule.CurrentName,
+                    match => ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
+                        ? rule.CurrentName
+                        : match.Value,
                     ref replacementCount);
             }
 
@@ -789,15 +791,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(toolInfoIndex >= 0, "toolInfoIndex must not be negative");
 
-            if (IsLegacyAssemblyScopedTypeDeclaration(source, toolInfoIndex))
+            return ShouldMigrateLegacyTypeReference(source, "ToolInfo", toolInfoIndex);
+        }
+
+        private static bool ShouldMigrateLegacyTypeReference(string source, string typeName, int typeNameIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(typeName), "typeName must not be empty");
+            Debug.Assert(typeNameIndex >= 0, "typeNameIndex must not be negative");
+
+            if (IsLegacyAssemblyScopedTypeDeclaration(source, typeNameIndex))
             {
                 return false;
             }
 
-            char nextCharacter = ReadNextNonWhitespaceCharacter(source, toolInfoIndex + "ToolInfo".Length);
-            return nextCharacter != '{' &&
-                nextCharacter != ';' &&
-                nextCharacter != '=';
+            char nextCharacter = ReadNextNonWhitespaceCharacter(source, typeNameIndex + typeName.Length);
+            char previousCharacter = ReadPreviousNonWhitespaceCharacter(source, typeNameIndex);
+            return !IsDeclarationIdentifierTerminator(nextCharacter) ||
+                !CanPrecedeDeclarationIdentifier(previousCharacter);
         }
 
         private static string ReplaceLegacyToolInfoConstructorsInCode(
@@ -1324,6 +1335,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return '\0';
+        }
+
+        private static char ReadPreviousNonWhitespaceCharacter(string source, int startIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+            for (int index = startIndex - 1; index >= 0; index--)
+            {
+                if (char.IsWhiteSpace(source[index]))
+                {
+                    continue;
+                }
+
+                return source[index];
+            }
+
+            return '\0';
+        }
+
+        private static bool IsDeclarationIdentifierTerminator(char value)
+        {
+            return value == '{' ||
+                value == ';' ||
+                value == '=' ||
+                value == ')' ||
+                value == ',';
+        }
+
+        private static bool CanPrecedeDeclarationIdentifier(char value)
+        {
+            return IsIdentifierCharacter(value) ||
+                value == ']' ||
+                value == '>';
         }
 
         private static bool IsIdentifierCharacter(char value)
