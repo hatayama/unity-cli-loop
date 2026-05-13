@@ -476,6 +476,32 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolInfoConstructorUsesSameNameTypeAlias_KeepsAliasIdentifier()
+        {
+            // Verifies that unqualified type replacement does not rewrite the left side of using aliases.
+            string source = @"using ToolInfo = io.github.hatayama.uLoopMCP.ToolInfo;
+using io.github.hatayama.uLoopMCP;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo Create(ToolParameterSchema parameters, string label)
+    {
+        return new ToolInfo(""hello"", label, parameters);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "using ToolInfo = io.github.hatayama.UnityCliLoop.Domain.ToolInfo;"));
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", parameters)"));
+            Assert.That(result.Content, Does.Not.Contain("using io.github.hatayama.UnityCliLoop.Domain.ToolInfo ="));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolInfoConstructorUsesNamedDescription_RemovesDescriptionArgument()
         {
             // Verifies that named V2 description arguments are removed without reordering supported arguments.

@@ -126,13 +126,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"(?<![\w.])(?:global::)?{Regex.Escape(LegacyNamespace)}\.CustomToolManager\b",
                 $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"),
             new(LegacyNamespacePattern, CurrentNamespace),
-            new(@"(?<![\.:])\bCustomToolManager\b", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
+            new(@"(?<![\.:])\bCustomToolManager\b(?!\s*=)", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
         };
 
         private static readonly ReplacementRule[] RegistrarReplacementRules =
         {
             new(Regex.Escape($"{CurrentNamespace}.ToolInfo"), $"{CurrentDomainNamespace}.ToolInfo"),
-            new(@"(?<![\.:])\bToolInfo\b", $"{CurrentDomainNamespace}.ToolInfo")
+            new(@"(?<![\.:])\bToolInfo\b(?!\s*=)", $"{CurrentDomainNamespace}.ToolInfo")
         };
 
         internal static ThirdPartyToolMigrationContentResult MigrateCSharpSource(string source)
@@ -738,7 +738,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 Regex unqualifiedRegex = new(
-                    $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b",
+                    $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b(?!\s*=)",
                     RegexOptions.Compiled);
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
