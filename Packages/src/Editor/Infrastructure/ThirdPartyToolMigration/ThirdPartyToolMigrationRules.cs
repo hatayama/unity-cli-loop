@@ -18,9 +18,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal const string LegacyNamespace = "io.github.hatayama.uLoopMCP";
         internal const string CurrentNamespace = "io.github.hatayama.UnityCliLoop.ToolContracts";
         internal const string CurrentApplicationNamespace = "io.github.hatayama.UnityCliLoop.Application";
+        internal const string CurrentDomainNamespace = "io.github.hatayama.UnityCliLoop.Domain";
         internal const string LegacyEditorAssemblyName = "uLoopMCP.Editor";
         internal const string LegacyEditorAssemblyGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
         internal const string CurrentApplicationGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
+        internal const string CurrentDomainGuidReference = "GUID:5c4588558a3624eacbce0f50007cf1eb";
         internal const string CurrentToolContractsGuidReference = "GUID:fc3fd32eddbee40e39c2d76dc184957b";
         private const string DescriptionAttributeArgumentName = "Description";
         private const string DisplayDevelopmentOnlyAttributeArgumentName = "DisplayDevelopmentOnly";
@@ -68,18 +70,37 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             new(@"\bCustomToolManager\b", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
         };
 
+        private static readonly ReplacementRule[] RegistrarReplacementRules =
+        {
+            new(Regex.Escape($"{CurrentNamespace}.ToolInfo"), $"{CurrentDomainNamespace}.ToolInfo"),
+            new(@"(?<!\.)\bToolInfo\b", $"{CurrentDomainNamespace}.ToolInfo")
+        };
+
         internal static ThirdPartyToolMigrationContentResult MigrateCSharpSource(string source)
         {
             Debug.Assert(source != null, "source must not be null");
 
             string migratedContent = source;
             bool shouldApplyContractRenames = ContainsLegacyToolMigrationMarker(source);
+            bool shouldApplyRegistrarRenames = ContainsLegacyRegistrarApi(source);
             int replacementCount = 0;
             migratedContent = ReplaceLegacyToolAttributesInCode(migratedContent, ref replacementCount);
 
             if (shouldApplyContractRenames)
             {
                 foreach (ReplacementRule rule in CSharpReplacementRules)
+                {
+                    migratedContent = ReplaceRegexInCode(
+                        migratedContent,
+                        rule.PatternRegex,
+                        _ => rule.Replacement,
+                    ref replacementCount);
+                }
+            }
+
+            if (shouldApplyRegistrarRenames)
+            {
+                foreach (ReplacementRule rule in RegistrarReplacementRules)
                 {
                     migratedContent = ReplaceRegexInCode(
                         migratedContent,
@@ -205,7 +226,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return new[] { CurrentToolContractsGuidReference };
             }
 
-            return new[] { CurrentToolContractsGuidReference, CurrentApplicationGuidReference };
+            return new[]
+            {
+                CurrentToolContractsGuidReference,
+                CurrentApplicationGuidReference,
+                CurrentDomainGuidReference
+            };
         }
 
         private static bool TryMigrateLegacyToolAttributeList(string attributesSource, out string migratedAttributes)

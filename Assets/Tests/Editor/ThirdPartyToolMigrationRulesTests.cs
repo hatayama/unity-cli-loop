@@ -179,6 +179,29 @@ public sealed class HelloTool
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyRegistrarMetadataIsUsed_RewritesDomainMetadataType()
+        {
+            // Verifies that explicit registrar metadata declarations keep compiling after namespace migration.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ManualToolRegistration
+{
+    public static ToolInfo[] GetTools()
+    {
+        return CustomToolManager.GetRegisteredCustomTools();
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("io.github.hatayama.UnityCliLoop.Domain.ToolInfo[]"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.GetRegisteredCustomTools"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyApiExistsOnlyInComment_KeepsContent()
         {
             // Verifies that migration does not rewrite inert documentation comments inside C# files.
@@ -316,6 +339,7 @@ public sealed class HelloTool
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             Assert.That(result.Content, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            Assert.That(result.Content, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
         }
 
         [Test]
