@@ -121,6 +121,21 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolDescriptionContainsBracket_RewritesAttribute()
+        {
+            // Verifies that description text cannot terminate the attribute-list scan early.
+            string source = "[McpTool(Description = \"Use [foo]\")] public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("[UnityCliLoopTool]"));
+            Assert.That(result.Content, Does.Not.Contain("McpTool"));
+            Assert.That(result.Content, Does.Not.Contain("Description"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolAttributeIsQualified_RewritesQualifiedAttribute()
         {
             // Verifies that tools without a namespace import still receive a compilable V3 attribute.
@@ -135,6 +150,32 @@ namespace Samples
                 "[io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopTool]"));
             Assert.That(result.Content, Does.Not.Contain("McpTool"));
             Assert.That(result.Content, Does.Not.Contain("Description"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyPublicHelpersAreUsed_RewritesHelperTypes()
+        {
+            // Verifies that migrated custom tools keep compiling when they override helper-driven schema behavior.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public sealed class HelloTool
+{
+    public ToolParameterSchema ParameterSchema => ToolParameterSchemaGenerator.FromDto<HelloSchema>();
+
+    private void Fail()
+    {
+        throw new ParameterValidationException(""bad"");
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("UnityCliLoopToolParameterSchemaGenerator"));
+            Assert.That(result.Content, Does.Contain("UnityCliLoopToolParameterValidationException"));
+            Assert.That(result.Content, Does.Not.Match(@"\bToolParameterSchemaGenerator\b"));
+            Assert.That(result.Content, Does.Not.Match(@"\bParameterValidationException\b"));
         }
 
         [Test]

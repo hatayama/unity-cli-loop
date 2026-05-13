@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 using Newtonsoft.Json;
@@ -45,9 +46,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyRegistrarRegex =
             new(@"\bCustomToolManager\b", RegexOptions.Compiled);
 
-        private static readonly Regex LegacyToolAttributeListRegex =
-            new(@"\[(?<attributes>[^\]]*\bMcpTool(?:Attribute)?\b[^\]]*)\]", RegexOptions.Compiled);
-
         private static readonly Regex LegacyToolAttributeEntryRegex =
             new(
                 @"^\s*(?<qualifier>io\.github\.hatayama\.uLoopMCP\.)?McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$",
@@ -59,6 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Regex.Escape($"{LegacyNamespace}.CustomToolManager"),
                 $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"),
             new(Regex.Escape(LegacyNamespace), CurrentNamespace),
+            new(@"\bToolParameterSchemaGenerator\b", "UnityCliLoopToolParameterSchemaGenerator"),
+            new(@"\bParameterValidationException\b", "UnityCliLoopToolParameterValidationException"),
             new(@"\bMcpToolAttribute\b", "UnityCliLoopToolAttribute"),
             new(@"\bIUnityTool\b", "IUnityCliLoopTool"),
             new(@"\bAbstractUnityTool\b", "UnityCliLoopTool"),
@@ -75,11 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string migratedContent = source;
             bool shouldApplyContractRenames = ContainsLegacyToolMigrationMarker(source);
             int replacementCount = 0;
-            migratedContent = ReplaceRegexInCode(
-                migratedContent,
-                LegacyToolAttributeListRegex,
-                MigrateLegacyToolAttributeList,
-                ref replacementCount);
+            migratedContent = ReplaceLegacyToolAttributesInCode(migratedContent, ref replacementCount);
 
             if (shouldApplyContractRenames)
             {
@@ -212,33 +208,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new[] { CurrentToolContractsGuidReference, CurrentApplicationGuidReference };
         }
 
-        private static string MigrateLegacyToolAttributeList(Match match)
+        private static bool TryMigrateLegacyToolAttributeList(string attributesSource, out string migratedAttributes)
         {
-            Debug.Assert(match != null, "match must not be null");
+            Debug.Assert(attributesSource != null, "attributesSource must not be null");
 
-            string attributesSource = match.Groups["attributes"].Value;
             string[] attributes = SplitAttributeArguments(attributesSource);
-            List<string> migratedAttributes = new();
+            List<string> migratedAttributeItems = new();
             bool changed = false;
             foreach (string attribute in attributes)
             {
                 string trimmedAttribute = attribute.Trim();
                 if (TryMigrateLegacyToolAttributeEntry(trimmedAttribute, out string migratedAttribute))
                 {
-                    migratedAttributes.Add(migratedAttribute);
+                    migratedAttributeItems.Add(migratedAttribute);
                     changed = true;
                     continue;
                 }
 
-                migratedAttributes.Add(trimmedAttribute);
+                migratedAttributeItems.Add(trimmedAttribute);
             }
 
             if (!changed)
             {
-                return match.Value;
+                migratedAttributes = string.Empty;
+                return false;
             }
 
-            return $"[{string.Join(", ", migratedAttributes)}]";
+            migratedAttributes = string.Join(", ", migratedAttributeItems);
+            return true;
         }
 
         private static bool TryMigrateLegacyToolAttributeEntry(string attribute, out string migratedAttribute)
@@ -473,6 +470,91 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return migrated;
         }
 
+        private static string ReplaceLegacyToolAttributesInCode(string source, ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            StringBuilder builder = new(source.Length);
+            int localReplacementCount = 0;
+            int index = 0;
+            while (index < source.Length)
+            {
+                if (source[index] != '[' || !codeTextMask.IsCodeAt(index))
+                {
+                    builder.Append(source[index]);
+                    index++;
+                    continue;
+                }
+
+                int closingBracketIndex = FindAttributeListClosingBracketIndex(
+                    source,
+                    codeTextMask,
+                    index + 1);
+                if (closingBracketIndex < 0)
+                {
+                    builder.Append(source[index]);
+                    index++;
+                    continue;
+                }
+
+                string attributesSource = source.Substring(index + 1, closingBracketIndex - index - 1);
+                if (!TryMigrateLegacyToolAttributeList(attributesSource, out string migratedAttributes))
+                {
+                    builder.Append(source, index, closingBracketIndex - index + 1);
+                    index = closingBracketIndex + 1;
+                    continue;
+                }
+
+                builder.Append('[');
+                builder.Append(migratedAttributes);
+                builder.Append(']');
+                localReplacementCount++;
+                index = closingBracketIndex + 1;
+            }
+
+            replacementCount += localReplacementCount;
+            return builder.ToString();
+        }
+
+        private static int FindAttributeListClosingBracketIndex(
+            string source,
+            CodeTextMask codeTextMask,
+            int startIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+            int nestedBracketDepth = 0;
+            for (int i = startIndex; i < source.Length; i++)
+            {
+                if (!codeTextMask.IsCodeAt(i))
+                {
+                    continue;
+                }
+
+                if (source[i] == '[')
+                {
+                    nestedBracketDepth++;
+                    continue;
+                }
+
+                if (source[i] != ']')
+                {
+                    continue;
+                }
+
+                if (nestedBracketDepth == 0)
+                {
+                    return i;
+                }
+
+                nestedBracketDepth--;
+            }
+
+            return -1;
+        }
+
         private static bool RegexMatchesCode(string source, Regex regex)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -497,7 +579,43 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (RegexMatchesCode(source, LegacyNamespaceRegex)) return true;
 
-            return RegexMatchesCode(source, LegacyToolAttributeListRegex);
+            return ContainsLegacyToolAttributeList(source);
+        }
+
+        private static bool ContainsLegacyToolAttributeList(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            int index = 0;
+            while (index < source.Length)
+            {
+                if (source[index] != '[' || !codeTextMask.IsCodeAt(index))
+                {
+                    index++;
+                    continue;
+                }
+
+                int closingBracketIndex = FindAttributeListClosingBracketIndex(
+                    source,
+                    codeTextMask,
+                    index + 1);
+                if (closingBracketIndex < 0)
+                {
+                    index++;
+                    continue;
+                }
+
+                string attributesSource = source.Substring(index + 1, closingBracketIndex - index - 1);
+                if (TryMigrateLegacyToolAttributeList(attributesSource, out _))
+                {
+                    return true;
+                }
+
+                index = closingBracketIndex + 1;
+            }
+
+            return false;
         }
 
         private static bool StartsWith(string source, int startIndex, string value)
