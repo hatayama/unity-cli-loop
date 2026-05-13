@@ -285,6 +285,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
+            AddRequiredCurrentAsmdefReferences(
+                migratedReferences,
+                addedReferences,
+                hasLegacyCSharpSource || requiresToolContractsReference,
+                requiresApplicationReference,
+                requiresDomainReference,
+                ref replacementCount);
+
             if (replacementCount == 0)
             {
                 return new ThirdPartyToolMigrationContentResult(source, 0);
@@ -431,6 +439,64 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return references.ToArray();
+        }
+
+        private static void AddRequiredCurrentAsmdefReferences(
+            JArray references,
+            HashSet<string> addedReferences,
+            bool requiresToolContractsReference,
+            bool requiresApplicationReference,
+            bool requiresDomainReference,
+            ref int replacementCount)
+        {
+            Debug.Assert(references != null, "references must not be null");
+            Debug.Assert(addedReferences != null, "addedReferences must not be null");
+
+            if (requiresToolContractsReference)
+            {
+                AddRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentToolContractsGuidReference,
+                    ref replacementCount);
+            }
+
+            if (requiresApplicationReference)
+            {
+                AddRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentApplicationGuidReference,
+                    ref replacementCount);
+            }
+
+            if (requiresApplicationReference || requiresDomainReference)
+            {
+                AddRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentDomainGuidReference,
+                    ref replacementCount);
+            }
+        }
+
+        private static void AddRequiredCurrentAsmdefReference(
+            JArray references,
+            HashSet<string> addedReferences,
+            string reference,
+            ref int replacementCount)
+        {
+            Debug.Assert(references != null, "references must not be null");
+            Debug.Assert(addedReferences != null, "addedReferences must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
+
+            if (!addedReferences.Add(reference))
+            {
+                return;
+            }
+
+            references.Add(reference);
+            replacementCount++;
         }
 
         private static bool TryMigrateLegacyToolAttributeList(
@@ -828,6 +894,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             char nextCharacter = ReadNextNonWhitespaceCharacter(source, typeNameIndex + typeName.Length);
             char previousCharacter = ReadPreviousNonWhitespaceCharacter(source, typeNameIndex);
+            if (nextCharacter == '(' && !PreviousCodeTokenEquals(source, typeNameIndex, "new"))
+            {
+                return false;
+            }
+
             return !IsDeclarationIdentifierTerminator(nextCharacter) ||
                 !CanPrecedeDeclarationIdentifier(previousCharacter);
         }
@@ -933,9 +1004,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return true;
             }
 
+            if (arguments.Length == 3 && IsLikelyLegacyDescriptionArgument(arguments[1]))
+            {
+                return true;
+            }
+
             return FindNamedConstructorArgumentIndex(
                 arguments,
                 DescriptionAttributeArgumentName.ToLowerInvariant()) >= 0;
+        }
+
+        private static bool IsLikelyLegacyDescriptionArgument(string argument)
+        {
+            Debug.Assert(argument != null, "argument must not be null");
+
+            string trimmedArgument = argument.Trim();
+            return IsStringLiteralArgument(trimmedArgument) ||
+                string.Equals(trimmedArgument, "description", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsStringLiteralArgument(string argument)
+        {
+            Debug.Assert(argument != null, "argument must not be null");
+
+            return argument.StartsWith("\"", StringComparison.Ordinal) ||
+                argument.StartsWith("@\"", StringComparison.Ordinal) ||
+                argument.StartsWith("$\"", StringComparison.Ordinal) ||
+                argument.StartsWith("$@\"", StringComparison.Ordinal) ||
+                argument.StartsWith("@$\"", StringComparison.Ordinal);
         }
 
         private static bool IsLegacyToolInfoConstructorMatch(
@@ -1423,6 +1519,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 value == '=' ||
                 value == ')' ||
                 value == ',';
+        }
+
+        private static bool PreviousCodeTokenEquals(string source, int endIndex, string token)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(endIndex >= 0, "endIndex must not be negative");
+            Debug.Assert(!string.IsNullOrEmpty(token), "token must not be null or empty");
+
+            int tokenEndIndex = endIndex - 1;
+            while (tokenEndIndex >= 0 && char.IsWhiteSpace(source[tokenEndIndex]))
+            {
+                tokenEndIndex--;
+            }
+
+            int tokenStartIndex = tokenEndIndex;
+            while (tokenStartIndex >= 0 && IsIdentifierCharacter(source[tokenStartIndex]))
+            {
+                tokenStartIndex--;
+            }
+
+            int tokenLength = tokenEndIndex - tokenStartIndex;
+            if (tokenLength <= 0)
+            {
+                return false;
+            }
+
+            string previousToken = source.Substring(tokenStartIndex + 1, tokenLength);
+            return string.Equals(previousToken, token, StringComparison.Ordinal);
         }
 
         private static bool CanPrecedeDeclarationIdentifier(char value)

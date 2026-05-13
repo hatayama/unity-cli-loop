@@ -575,6 +575,30 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCurrentDomainUsingHasLegacyToolInfoDescriptionVariable_RemovesDescriptionArgument()
+        {
+            // Verifies that mixed partially migrated files do not keep the removed V2 description argument.
+            string source = @"using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop.Domain;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo Create(ToolParameterSchema schema, string description)
+    {
+        return new ToolInfo(""hello"", description, schema);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema)"));
+            Assert.That(result.Content, Does.Not.Contain("description, schema"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenCurrentToolInfoConstructorUsesArbitraryVariableNames_KeepsConstructorArguments()
         {
             // Verifies that current V3 metadata construction is not inferred from local variable names.
@@ -597,6 +621,32 @@ public static class ToolMetadataProvider
                 "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", parameters, includeDevTools)"));
             Assert.That(result.Content, Does.Not.Contain(
                 "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", includeDevTools)"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyFileHasMethodNameMatchingDomainType_KeepsIdentifier()
+        {
+            // Verifies that method names are not rewritten as migrated type references.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public sealed class ToolMetadataProvider
+{
+    public void ToolInfo()
+    {
+    }
+
+    public ToolInfo[] GetTools()
+    {
+        return new ToolInfo[0];
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("public void ToolInfo()"));
+            Assert.That(result.Content, Does.Not.Contain("public void io.github.hatayama.UnityCliLoop.Domain.ToolInfo"));
         }
 
         [Test]
