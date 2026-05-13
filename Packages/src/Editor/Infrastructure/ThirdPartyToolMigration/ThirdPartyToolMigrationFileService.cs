@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
+using Newtonsoft.Json.Linq;
+
 using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -54,7 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             MigrationAssemblyUsage assemblyUsage = FindMigrationAssemblyUsage(
                 projectRoot,
                 inventory.CSharpFilePaths,
-                inventory.AsmdefFilePaths);
+                inventory.AsmdefFilePaths,
+                inventory.AsmrefFilePaths);
             List<MigrationFileChange> changes = new();
             int replacementCount = 0;
 
@@ -64,9 +67,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string assemblyDirectory = FindNearestAssemblyDirectory(
                     csharpFilePath,
                     assemblyUsage.AsmdefDirectories,
+                    assemblyUsage.AssemblyReferenceDirectories,
                     projectRoot);
                 bool hasLegacyAssemblySource =
-                    assemblyUsage.LegacyAssemblyDirectories.Contains(assemblyDirectory);
+                    assemblyUsage.LegacyAssemblyDirectories.Contains(assemblyDirectory) &&
+                    ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(source);
                 ThirdPartyToolMigrationContentResult result =
                     ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
                         source,
@@ -145,17 +150,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static MigrationAssemblyUsage FindMigrationAssemblyUsage(
             string projectRoot,
             List<string> csharpFilePaths,
-            List<string> asmdefFilePaths)
+            List<string> asmdefFilePaths,
+            List<string> asmrefFilePaths)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(csharpFilePaths != null, "csharpFilePaths must not be null");
             Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
+            Debug.Assert(asmrefFilePaths != null, "asmrefFilePaths must not be null");
 
             List<string> asmdefDirectories = asmdefFilePaths
                 .Select(path => Path.GetDirectoryName(path) ?? string.Empty)
                 .Where(path => !string.IsNullOrEmpty(path))
                 .OrderByDescending(path => path.Length)
                 .ToList();
+            List<AssemblyReferenceDirectory> assemblyReferenceDirectories =
+                CreateAssemblyReferenceDirectories(asmdefFilePaths, asmrefFilePaths);
             HashSet<string> legacyAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> registrarAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> domainMetadataAssemblyDirectories = new(StringComparer.Ordinal);
@@ -168,6 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string assemblyDirectory = FindNearestAssemblyDirectory(
                     csharpFilePath,
                     asmdefDirectories,
+                    assemblyReferenceDirectories,
                     projectRoot);
 
                 if (ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
@@ -204,18 +214,128 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return new MigrationAssemblyUsage(
                 asmdefDirectories,
+                assemblyReferenceDirectories,
                 legacyAssemblyDirectories,
                 applicationReferenceAssemblyDirectories,
                 domainReferenceAssemblyDirectories);
         }
 
+        private static List<AssemblyReferenceDirectory> CreateAssemblyReferenceDirectories(
+            List<string> asmdefFilePaths,
+            List<string> asmrefFilePaths)
+        {
+            Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
+            Debug.Assert(asmrefFilePaths != null, "asmrefFilePaths must not be null");
+
+            Dictionary<string, string> asmdefDirectoriesByReference = CreateAsmdefDirectoryMap(asmdefFilePaths);
+            List<AssemblyReferenceDirectory> assemblyReferenceDirectories = new();
+            foreach (string asmrefFilePath in asmrefFilePaths)
+            {
+                JObject asmref = JObject.Parse(File.ReadAllText(asmrefFilePath));
+                string reference = asmref["reference"]?.Value<string>() ?? string.Empty;
+                if (reference.Length == 0)
+                {
+                    continue;
+                }
+
+                if (!asmdefDirectoriesByReference.TryGetValue(reference, out string targetAssemblyDirectory))
+                {
+                    continue;
+                }
+
+                string sourceDirectory = Path.GetDirectoryName(asmrefFilePath) ?? string.Empty;
+                if (sourceDirectory.Length == 0)
+                {
+                    continue;
+                }
+
+                assemblyReferenceDirectories.Add(
+                    new AssemblyReferenceDirectory(sourceDirectory, targetAssemblyDirectory));
+            }
+
+            return assemblyReferenceDirectories
+                .OrderByDescending(assemblyReferenceDirectory => assemblyReferenceDirectory.SourceDirectory.Length)
+                .ToList();
+        }
+
+        private static Dictionary<string, string> CreateAsmdefDirectoryMap(List<string> asmdefFilePaths)
+        {
+            Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
+
+            Dictionary<string, string> asmdefDirectoriesByReference = new(StringComparer.Ordinal);
+            foreach (string asmdefFilePath in asmdefFilePaths)
+            {
+                string asmdefDirectory = Path.GetDirectoryName(asmdefFilePath) ?? string.Empty;
+                if (asmdefDirectory.Length == 0)
+                {
+                    continue;
+                }
+
+                JObject asmdef = JObject.Parse(File.ReadAllText(asmdefFilePath));
+                string assemblyName = asmdef["name"]?.Value<string>() ?? string.Empty;
+                AddAsmdefDirectoryReference(asmdefDirectoriesByReference, assemblyName, asmdefDirectory);
+                AddAsmdefDirectoryReference(
+                    asmdefDirectoriesByReference,
+                    ReadAsmdefGuidReference(asmdefFilePath),
+                    asmdefDirectory);
+            }
+
+            return asmdefDirectoriesByReference;
+        }
+
+        private static void AddAsmdefDirectoryReference(
+            Dictionary<string, string> asmdefDirectoriesByReference,
+            string reference,
+            string asmdefDirectory)
+        {
+            Debug.Assert(asmdefDirectoriesByReference != null, "asmdefDirectoriesByReference must not be null");
+            Debug.Assert(reference != null, "reference must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(asmdefDirectory), "asmdefDirectory must not be null or empty");
+
+            if (reference.Length == 0 || asmdefDirectoriesByReference.ContainsKey(reference))
+            {
+                return;
+            }
+
+            asmdefDirectoriesByReference.Add(reference, asmdefDirectory);
+        }
+
+        private static string ReadAsmdefGuidReference(string asmdefFilePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(asmdefFilePath), "asmdefFilePath must not be null or empty");
+
+            string metaPath = asmdefFilePath + ".meta";
+            if (!File.Exists(metaPath))
+            {
+                return string.Empty;
+            }
+
+            foreach (string line in File.ReadLines(metaPath))
+            {
+                string trimmedLine = line.Trim();
+                if (!trimmedLine.StartsWith("guid:", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string guid = trimmedLine.Substring("guid:".Length).Trim();
+                return guid.Length == 0 ? string.Empty : $"GUID:{guid}";
+            }
+
+            return string.Empty;
+        }
+
         private static string FindNearestAssemblyDirectory(
             string csharpFilePath,
             List<string> asmdefDirectories,
+            List<AssemblyReferenceDirectory> assemblyReferenceDirectories,
             string projectRoot)
         {
             Debug.Assert(!string.IsNullOrEmpty(csharpFilePath), "csharpFilePath must not be null or empty");
             Debug.Assert(asmdefDirectories != null, "asmdefDirectories must not be null");
+            Debug.Assert(
+                assemblyReferenceDirectories != null,
+                "assemblyReferenceDirectories must not be null");
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
             string csharpDirectory = Path.GetDirectoryName(csharpFilePath) ?? string.Empty;
@@ -224,6 +344,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (IsSameOrChildPath(csharpDirectory, asmdefDirectory))
                 {
                     return asmdefDirectory;
+                }
+            }
+
+            foreach (AssemblyReferenceDirectory assemblyReferenceDirectory in assemblyReferenceDirectories)
+            {
+                if (IsSameOrChildPath(csharpDirectory, assemblyReferenceDirectory.SourceDirectory))
+                {
+                    return assemblyReferenceDirectory.TargetAssemblyDirectory;
                 }
             }
 
@@ -313,11 +441,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             public MigrationAssemblyUsage(
                 List<string> asmdefDirectories,
+                List<AssemblyReferenceDirectory> assemblyReferenceDirectories,
                 HashSet<string> legacyAssemblyDirectories,
                 HashSet<string> applicationReferenceAssemblyDirectories,
                 HashSet<string> domainReferenceAssemblyDirectories)
             {
                 Debug.Assert(asmdefDirectories != null, "asmdefDirectories must not be null");
+                Debug.Assert(
+                    assemblyReferenceDirectories != null,
+                    "assemblyReferenceDirectories must not be null");
                 Debug.Assert(legacyAssemblyDirectories != null, "legacyAssemblyDirectories must not be null");
                 Debug.Assert(
                     applicationReferenceAssemblyDirectories != null,
@@ -327,6 +459,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     "domainReferenceAssemblyDirectories must not be null");
 
                 AsmdefDirectories = asmdefDirectories ?? new List<string>();
+                AssemblyReferenceDirectories = assemblyReferenceDirectories ?? new List<AssemblyReferenceDirectory>();
                 LegacyAssemblyDirectories = legacyAssemblyDirectories ?? new HashSet<string>(StringComparer.Ordinal);
                 ApplicationReferenceAssemblyDirectories = applicationReferenceAssemblyDirectories ??
                     new HashSet<string>(StringComparer.Ordinal);
@@ -335,21 +468,44 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             public List<string> AsmdefDirectories { get; }
+            public List<AssemblyReferenceDirectory> AssemblyReferenceDirectories { get; }
             public HashSet<string> LegacyAssemblyDirectories { get; }
             public HashSet<string> ApplicationReferenceAssemblyDirectories { get; }
             public HashSet<string> DomainReferenceAssemblyDirectories { get; }
         }
 
+        private readonly struct AssemblyReferenceDirectory
+        {
+            public AssemblyReferenceDirectory(string sourceDirectory, string targetAssemblyDirectory)
+            {
+                Debug.Assert(!string.IsNullOrEmpty(sourceDirectory), "sourceDirectory must not be null or empty");
+                Debug.Assert(
+                    !string.IsNullOrEmpty(targetAssemblyDirectory),
+                    "targetAssemblyDirectory must not be null or empty");
+
+                SourceDirectory = sourceDirectory;
+                TargetAssemblyDirectory = targetAssemblyDirectory;
+            }
+
+            public string SourceDirectory { get; }
+            public string TargetAssemblyDirectory { get; }
+        }
+
         private sealed class ProjectFileInventory
         {
-            private ProjectFileInventory(List<string> csharpFilePaths, List<string> asmdefFilePaths)
+            private ProjectFileInventory(
+                List<string> csharpFilePaths,
+                List<string> asmdefFilePaths,
+                List<string> asmrefFilePaths)
             {
                 CSharpFilePaths = csharpFilePaths;
                 AsmdefFilePaths = asmdefFilePaths;
+                AsmrefFilePaths = asmrefFilePaths;
             }
 
             public List<string> CSharpFilePaths { get; }
             public List<string> AsmdefFilePaths { get; }
+            public List<string> AsmrefFilePaths { get; }
 
             public static ProjectFileInventory Create(string projectRoot)
             {
@@ -357,20 +513,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 List<string> csharpFilePaths = new();
                 List<string> asmdefFilePaths = new();
-                CollectCandidateFiles(projectRoot, csharpFilePaths, asmdefFilePaths);
+                List<string> asmrefFilePaths = new();
+                CollectCandidateFiles(projectRoot, csharpFilePaths, asmdefFilePaths, asmrefFilePaths);
                 csharpFilePaths.Sort(StringComparer.Ordinal);
                 asmdefFilePaths.Sort(StringComparer.Ordinal);
-                return new ProjectFileInventory(csharpFilePaths, asmdefFilePaths);
+                asmrefFilePaths.Sort(StringComparer.Ordinal);
+                return new ProjectFileInventory(csharpFilePaths, asmdefFilePaths, asmrefFilePaths);
             }
 
             private static void CollectCandidateFiles(
                 string directoryPath,
                 List<string> csharpFilePaths,
-                List<string> asmdefFilePaths)
+                List<string> asmdefFilePaths,
+                List<string> asmrefFilePaths)
             {
                 Debug.Assert(!string.IsNullOrEmpty(directoryPath), "directoryPath must not be null or empty");
                 Debug.Assert(csharpFilePaths != null, "csharpFilePaths must not be null");
                 Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
+                Debug.Assert(asmrefFilePaths != null, "asmrefFilePaths must not be null");
 
                 foreach (string filePath in Directory.EnumerateFiles(directoryPath))
                 {
@@ -384,6 +544,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     if (string.Equals(extension, ".asmdef", StringComparison.OrdinalIgnoreCase))
                     {
                         asmdefFilePaths.Add(filePath);
+                        continue;
+                    }
+
+                    if (string.Equals(extension, ".asmref", StringComparison.OrdinalIgnoreCase))
+                    {
+                        asmrefFilePaths.Add(filePath);
                     }
                 }
 
@@ -395,7 +561,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         continue;
                     }
 
-                    CollectCandidateFiles(childDirectoryPath, csharpFilePaths, asmdefFilePaths);
+                    CollectCandidateFiles(childDirectoryPath, csharpFilePaths, asmdefFilePaths, asmrefFilePaths);
                 }
             }
         }

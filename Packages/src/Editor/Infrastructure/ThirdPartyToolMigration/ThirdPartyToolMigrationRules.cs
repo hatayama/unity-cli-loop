@@ -51,6 +51,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyDomainMetadataRegex =
             new(@"\bToolInfo\b", RegexOptions.Compiled);
 
+        private static readonly Regex LegacyBaseTypeUsageRegex =
+            new(
+                @":\s*[^;{}=]*\b(?:AbstractUnityTool|BaseToolSchema|BaseToolResponse)\b",
+                RegexOptions.Compiled);
+
+        private static readonly Regex LegacyAssemblyScopedApiUsageRegex =
+            new(
+                @"\b(?:IUnityTool\s+[A-Za-z_][A-Za-z0-9_]*|" +
+                @"ToolParameterSchemaGenerator\s*\.|" +
+                @"new\s+ParameterValidationException\b|" +
+                @"CustomToolManager\s*\.|" +
+                @"ToolInfo\s*(?:\[\])?\s+[A-Za-z_][A-Za-z0-9_]*)",
+                RegexOptions.Compiled);
+
         private static readonly Regex LegacyNamespaceAliasRegex =
             new(
                 @"\busing\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?" +
@@ -222,6 +236,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, LegacyDomainMetadataRegex);
+        }
+
+        internal static bool ContainsLegacyAssemblyScopedApi(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, LegacyBaseTypeUsageRegex) ||
+                RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex);
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)
