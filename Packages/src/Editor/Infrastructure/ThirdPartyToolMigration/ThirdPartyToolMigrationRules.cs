@@ -135,8 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             new(
                 $@"(?<![\w.])(?:global::)?{Regex.Escape(LegacyNamespace)}\.CustomToolManager\b",
                 $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"),
-            new(LegacyNamespacePattern, CurrentNamespace),
-            new(@"(?<![\.:])\bCustomToolManager\b(?!\s*=)", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
+            new(LegacyNamespacePattern, CurrentNamespace)
         };
 
         private static readonly ReplacementRule[] RegistrarReplacementRules =
@@ -220,6 +219,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (shouldApplyRegistrarRenames || shouldApplyDomainMetadataRenames)
             {
+                if (shouldApplyRegistrarRenames)
+                {
+                    migratedContent = ReplaceUnqualifiedLegacyRegistrarReferencesInCode(
+                        migratedContent,
+                        ref replacementCount);
+                }
+
                 foreach (ReplacementRule rule in RegistrarReplacementRules)
                 {
                     migratedContent = ReplaceRegexInCode(
@@ -606,10 +612,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (IsNamedAttributeArgument(trimmedArgument, RequiredSecuritySettingAttributeArgumentName))
                 {
-                    migratedArguments.Add(
-                        trimmedArgument.Replace(
-                            LegacySecuritySettingsTypeName,
-                            CurrentSecuritySettingTypeName));
+                    migratedArguments.Add(trimmedArgument);
                 }
             }
 
@@ -811,6 +814,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return migratedContent;
+        }
+
+        private static string ReplaceUnqualifiedLegacyRegistrarReferencesInCode(
+            string source,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            Regex unqualifiedRegistrarRegex =
+                new(@"(?<![\.:])\bCustomToolManager\b(?!\s*=)", RegexOptions.Compiled);
+            return ReplaceRegexInCode(
+                source,
+                unqualifiedRegistrarRegex,
+                match => ShouldMigrateLegacyTypeReference(source, "CustomToolManager", match.Index)
+                    ? $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"
+                    : match.Value,
+                ref replacementCount);
         }
 
         private static string ReplaceLegacyContractTypeNamesInCode(

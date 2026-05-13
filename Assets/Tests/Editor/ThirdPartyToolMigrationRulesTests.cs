@@ -108,6 +108,27 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolAttributeUsesSecurityAlias_KeepsAliasIdentifier()
+        {
+            // Verifies that aliases containing the old enum name are not rewritten as partial identifiers.
+            string source = @"using LegacySecuritySettings = io.github.hatayama.uLoopMCP.SecuritySettings;
+using io.github.hatayama.uLoopMCP;
+
+[McpTool(RequiredSecuritySetting = LegacySecuritySettings.None)]
+public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "using LegacySecuritySettings = io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopSecuritySetting;"));
+            Assert.That(result.Content, Does.Contain(
+                "[UnityCliLoopTool(RequiredSecuritySetting = LegacySecuritySettings.None)]"));
+            Assert.That(result.Content, Does.Not.Contain("LegacyUnityCliLoopSecuritySetting"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolAttributeSharesAttributeList_RewritesOnlyLegacyToolEntry()
         {
             // Verifies that valid C# attribute lists migrate the tool attribute without dropping sibling attributes.
@@ -840,6 +861,29 @@ public sealed class HelloResponse : io.github.hatayama.uLoopMCP.BaseToolResponse
 
             Assert.That(result.Changed, Is.False);
             Assert.That(result.Content, Is.EqualTo(source));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyFileDeclaresCustomToolManagerIdentifier_KeepsIdentifier()
+        {
+            // Verifies that registrar migration does not rewrite unrelated declaration identifiers.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public sealed class CustomToolManager
+{
+    public void CustomToolManager()
+    {
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("public sealed class CustomToolManager"));
+            Assert.That(result.Content, Does.Contain("public void CustomToolManager()"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "public sealed class io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar"));
         }
 
         [Test]
