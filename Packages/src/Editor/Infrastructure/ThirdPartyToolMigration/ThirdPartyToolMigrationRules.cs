@@ -861,6 +861,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int index = 0;
                 while (index < source.Length)
                 {
+                    if (StartsWith(source, index, "$\"") && !StartsWith(source, index, "$\"\"\""))
+                    {
+                        index = MarkInterpolatedRegularStringAsIgnored(codeCharacters, source, index);
+                        continue;
+                    }
+
                     int ignoredTextEndIndex = GetIgnoredTextEndIndex(source, index);
                     if (ignoredTextEndIndex == index)
                     {
@@ -1018,6 +1024,103 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     if (StartsWith(source, index, "\"\"\""))
                     {
                         return index + 3;
+                    }
+
+                    index++;
+                }
+
+                return source.Length;
+            }
+
+            private static int MarkInterpolatedRegularStringAsIgnored(
+                bool[] codeCharacters,
+                string source,
+                int dollarIndex)
+            {
+                Debug.Assert(codeCharacters != null, "codeCharacters must not be null");
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(dollarIndex >= 0, "dollarIndex must not be negative");
+
+                int quoteIndex = dollarIndex + 1;
+                int literalStartIndex = dollarIndex;
+                int index = quoteIndex + 1;
+                while (index < source.Length)
+                {
+                    if (source[index] == '\\')
+                    {
+                        index += 2;
+                        continue;
+                    }
+
+                    if (source[index] == '{')
+                    {
+                        if (index + 1 < source.Length && source[index + 1] == '{')
+                        {
+                            index += 2;
+                            continue;
+                        }
+
+                        MarkRangeAsIgnored(codeCharacters, literalStartIndex, index);
+                        index = FindInterpolationHoleEndIndex(source, index);
+                        literalStartIndex = index;
+                        continue;
+                    }
+
+                    if (source[index] == '"')
+                    {
+                        MarkRangeAsIgnored(codeCharacters, literalStartIndex, index + 1);
+                        return index + 1;
+                    }
+
+                    index++;
+                }
+
+                MarkRangeAsIgnored(codeCharacters, literalStartIndex, source.Length);
+                return source.Length;
+            }
+
+            private static int FindInterpolationHoleEndIndex(string source, int openBraceIndex)
+            {
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(openBraceIndex >= 0, "openBraceIndex must not be negative");
+
+                int nestedBraceDepth = 0;
+                int index = openBraceIndex + 1;
+                while (index < source.Length)
+                {
+                    if (StartsWith(source, index, "@\""))
+                    {
+                        index = FindVerbatimStringEndIndex(source, index + 1);
+                        continue;
+                    }
+
+                    if (source[index] == '"')
+                    {
+                        index = FindRegularStringEndIndex(source, index);
+                        continue;
+                    }
+
+                    if (source[index] == '\'')
+                    {
+                        index = FindCharLiteralEndIndex(source, index);
+                        continue;
+                    }
+
+                    if (source[index] == '{')
+                    {
+                        nestedBraceDepth++;
+                        index++;
+                        continue;
+                    }
+
+                    if (source[index] == '}')
+                    {
+                        if (nestedBraceDepth == 0)
+                        {
+                            return index + 1;
+                        }
+
+                        nestedBraceDepth--;
                     }
 
                     index++;

@@ -237,6 +237,29 @@ public static class ManualToolRegistration
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyApiIsUsedInsideInterpolatedString_RewritesInterpolationCode()
+        {
+            // Verifies that code inside interpolation holes migrates while literal text stays inert.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolCountLabel
+{
+    public static string GetLabel()
+    {
+        return $""Tools: {CustomToolManager.GetRegisteredCustomTools().Length}"";
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.GetRegisteredCustomTools"));
+            Assert.That(result.Content, Does.Not.Contain("{CustomToolManager"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyDomainMetadataIsUsedWithoutRegistrar_RewritesDomainMetadataType()
         {
             // Verifies that metadata helpers split away from registration code keep compiling after migration.
