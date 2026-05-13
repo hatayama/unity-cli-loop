@@ -224,10 +224,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             foreach (string registrarAssemblyDirectory in registrarAssemblyDirectories)
             {
-                if (legacyAssemblyDirectories.Contains(registrarAssemblyDirectory))
-                {
-                    applicationReferenceAssemblyDirectories.Add(registrarAssemblyDirectory);
-                }
+                applicationReferenceAssemblyDirectories.Add(registrarAssemblyDirectory);
             }
 
             foreach (string domainMetadataAssemblyDirectory in domainMetadataAssemblyDirectories)
