@@ -66,6 +66,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyRegistrarRegex =
             new(@"\bCustomToolManager\b", RegexOptions.Compiled);
 
+        private static readonly Regex CurrentRegistrarRegex =
+            new(@"\bUnityCliLoopToolRegistrar\b", RegexOptions.Compiled);
+
         private static readonly Regex LegacyDomainMetadataRegex =
             new(@"\bToolInfo\b", RegexOptions.Compiled);
 
@@ -284,6 +287,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, LegacyRegistrarRegex);
+        }
+
+        internal static bool ContainsCurrentRegistrarApi(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, CurrentRegistrarRegex);
         }
 
         internal static bool ContainsLegacyDomainMetadataApi(string source)

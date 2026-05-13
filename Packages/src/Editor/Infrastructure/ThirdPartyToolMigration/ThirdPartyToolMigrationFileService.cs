@@ -210,7 +210,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         ThirdPartyToolMigrationRules.GetLegacyGlobalNamespaceAliases(source));
                 }
 
-                if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source))
+                if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source) ||
+                    ThirdPartyToolMigrationRules.ContainsCurrentRegistrarApi(source))
                 {
                     registrarAssemblyDirectories.Add(assemblyDirectory);
                 }
