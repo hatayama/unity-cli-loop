@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyUsage.AssemblyReferenceDirectories,
                     projectRoot);
                 bool hasLegacyAssemblySource =
-                    assemblyUsage.LegacyAssemblyDirectories.Contains(assemblyDirectory) &&
+                    assemblyUsage.AssemblyScopedLegacyDirectories.Contains(assemblyDirectory) &&
                     ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(source);
                 ThirdPartyToolMigrationContentResult result =
                     ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
@@ -166,6 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             List<AssemblyReferenceDirectory> assemblyReferenceDirectories =
                 CreateAssemblyReferenceDirectories(asmdefFilePaths, asmrefFilePaths);
             HashSet<string> legacyAssemblyDirectories = new(StringComparer.Ordinal);
+            HashSet<string> assemblyScopedLegacyDirectories = new(StringComparer.Ordinal);
             HashSet<string> registrarAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> domainMetadataAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> applicationReferenceAssemblyDirectories = new(StringComparer.Ordinal);
@@ -183,6 +184,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
                 {
                     legacyAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalUsing(source))
+                {
+                    assemblyScopedLegacyDirectories.Add(assemblyDirectory);
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source))
@@ -216,6 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 asmdefDirectories,
                 assemblyReferenceDirectories,
                 legacyAssemblyDirectories,
+                assemblyScopedLegacyDirectories,
                 applicationReferenceAssemblyDirectories,
                 domainReferenceAssemblyDirectories);
         }
@@ -459,6 +466,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 List<string> asmdefDirectories,
                 List<AssemblyReferenceDirectory> assemblyReferenceDirectories,
                 HashSet<string> legacyAssemblyDirectories,
+                HashSet<string> assemblyScopedLegacyDirectories,
                 HashSet<string> applicationReferenceAssemblyDirectories,
                 HashSet<string> domainReferenceAssemblyDirectories)
             {
@@ -467,6 +475,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyReferenceDirectories != null,
                     "assemblyReferenceDirectories must not be null");
                 Debug.Assert(legacyAssemblyDirectories != null, "legacyAssemblyDirectories must not be null");
+                Debug.Assert(
+                    assemblyScopedLegacyDirectories != null,
+                    "assemblyScopedLegacyDirectories must not be null");
                 Debug.Assert(
                     applicationReferenceAssemblyDirectories != null,
                     "applicationReferenceAssemblyDirectories must not be null");
@@ -477,6 +488,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 AsmdefDirectories = asmdefDirectories ?? new List<string>();
                 AssemblyReferenceDirectories = assemblyReferenceDirectories ?? new List<AssemblyReferenceDirectory>();
                 LegacyAssemblyDirectories = legacyAssemblyDirectories ?? new HashSet<string>(StringComparer.Ordinal);
+                AssemblyScopedLegacyDirectories = assemblyScopedLegacyDirectories ??
+                    new HashSet<string>(StringComparer.Ordinal);
                 ApplicationReferenceAssemblyDirectories = applicationReferenceAssemblyDirectories ??
                     new HashSet<string>(StringComparer.Ordinal);
                 DomainReferenceAssemblyDirectories = domainReferenceAssemblyDirectories ??
@@ -486,6 +499,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             public List<string> AsmdefDirectories { get; }
             public List<AssemblyReferenceDirectory> AssemblyReferenceDirectories { get; }
             public HashSet<string> LegacyAssemblyDirectories { get; }
+            public HashSet<string> AssemblyScopedLegacyDirectories { get; }
             public HashSet<string> ApplicationReferenceAssemblyDirectories { get; }
             public HashSet<string> DomainReferenceAssemblyDirectories { get; }
         }

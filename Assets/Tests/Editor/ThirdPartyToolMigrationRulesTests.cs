@@ -429,6 +429,30 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCurrentToolInfoConstructorExistsInMixedFile_KeepsConstructorArguments()
+        {
+            // Verifies that partially migrated metadata construction is not treated as the removed V2 signature.
+            string source = @"using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop.Domain;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo Create(ToolParameterSchema schema)
+    {
+        return new ToolInfo(""hello"", schema, true);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema, true)"));
+            Assert.That(result.Content, Does.Not.Contain("new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", true)"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyRegistrarIsUsedThroughNamespaceAlias_RewritesRegistrar()
         {
             // Verifies that namespace aliases do not create invalid qualified registrar names.

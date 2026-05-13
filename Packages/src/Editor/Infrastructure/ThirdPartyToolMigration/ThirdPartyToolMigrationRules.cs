@@ -49,6 +49,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyNamespaceRegex =
             new(LegacyNamespacePattern, RegexOptions.Compiled);
 
+        private static readonly Regex LegacyGlobalUsingRegex =
+            new(
+                $@"\bglobal\s+using\s+(?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?(?:global::)?{Regex.Escape(LegacyNamespace)}\s*;",
+                RegexOptions.Compiled);
+
         private static readonly Regex LegacyRegistrarRegex =
             new(@"\bCustomToolManager\b", RegexOptions.Compiled);
 
@@ -274,6 +279,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex) ||
                 ContainsLegacyAssemblyScopedTypeReference(source) ||
                 ContainsLegacyToolAttributeList(source, canMigrateBareLegacyToolAttribute: true);
+        }
+
+        internal static bool ContainsLegacyGlobalUsing(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, LegacyGlobalUsingRegex);
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)
@@ -698,7 +710,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     openParenthesisIndex + 1,
                     closingParenthesisIndex - openParenthesisIndex - 1);
                 string[] arguments = SplitAttributeArguments(argumentsSource);
-                if (arguments.Length != 3 && arguments.Length != 4)
+                if (!ShouldDropLegacyToolInfoDescriptionArgument(arguments))
                 {
                     continue;
                 }
@@ -727,6 +739,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
             replacementCount += localReplacementCount;
             return builder.ToString();
+        }
+
+        private static bool ShouldDropLegacyToolInfoDescriptionArgument(string[] arguments)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+
+            return arguments.Length == 4 ||
+                (arguments.Length == 3 && IsStringLiteralExpression(arguments[1].Trim()));
+        }
+
+        private static bool IsStringLiteralExpression(string expression)
+        {
+            Debug.Assert(expression != null, "expression must not be null");
+
+            return expression.StartsWith("\"", StringComparison.Ordinal) ||
+                expression.StartsWith("@\"", StringComparison.Ordinal) ||
+                expression.StartsWith("$\"", StringComparison.Ordinal) ||
+                expression.StartsWith("$@\"", StringComparison.Ordinal) ||
+                expression.StartsWith("@$\"", StringComparison.Ordinal) ||
+                expression.StartsWith("\"\"\"", StringComparison.Ordinal);
         }
 
         private static int FindInvocationClosingParenthesisIndex(
