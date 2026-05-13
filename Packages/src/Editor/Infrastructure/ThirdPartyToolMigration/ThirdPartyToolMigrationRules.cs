@@ -906,6 +906,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private readonly struct CodeTextMask
         {
+            private const int MinimumRawStringDelimiterQuoteCount = 3;
+
             private readonly bool[] _codeCharacters;
 
             private CodeTextMask(bool[] codeCharacters)
@@ -928,6 +930,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int index = 0;
                 while (index < source.Length)
                 {
+                    if (IsInterpolatedRawStringStart(source, index))
+                    {
+                        index = MarkInterpolatedRawStringAsIgnored(codeCharacters, source, index);
+                        continue;
+                    }
+
                     if (StartsWith(source, index, "$@\"") || StartsWith(source, index, "@$\""))
                     {
                         index = MarkInterpolatedVerbatimStringAsIgnored(codeCharacters, source, index);
@@ -989,9 +997,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return FindVerbatimStringEndIndex(source, startIndex + 1);
                 }
 
-                if (StartsWith(source, startIndex, "$\"\"\""))
+                if (IsInterpolatedRawStringStart(source, startIndex))
                 {
-                    return FindRawStringEndIndex(source, startIndex + 1);
+                    int dollarCount = CountRepeatedCharacter(source, startIndex, '$');
+                    return FindRawStringEndIndex(source, startIndex + dollarCount);
                 }
 
                 if (StartsWith(source, startIndex, "$\""))
@@ -1091,17 +1100,78 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             private static int FindRawStringEndIndex(string source, int quoteIndex)
             {
-                int index = quoteIndex + 3;
-                while (index + 2 < source.Length)
+                int quoteCount = CountRepeatedCharacter(source, quoteIndex, '"');
+                Debug.Assert(
+                    quoteCount >= MinimumRawStringDelimiterQuoteCount,
+                    "quoteIndex must point to a raw string delimiter");
+
+                int index = quoteIndex + quoteCount;
+                while (index + quoteCount <= source.Length)
                 {
-                    if (StartsWith(source, index, "\"\"\""))
+                    if (HasRepeatedCharacterAt(source, index, '"', quoteCount))
                     {
-                        return index + 3;
+                        return index + quoteCount;
                     }
 
                     index++;
                 }
 
+                return source.Length;
+            }
+
+            private static int MarkInterpolatedRawStringAsIgnored(
+                bool[] codeCharacters,
+                string source,
+                int dollarIndex)
+            {
+                Debug.Assert(codeCharacters != null, "codeCharacters must not be null");
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(dollarIndex >= 0, "dollarIndex must not be negative");
+
+                int dollarCount = CountRepeatedCharacter(source, dollarIndex, '$');
+                int quoteIndex = dollarIndex + dollarCount;
+                int quoteCount = CountRepeatedCharacter(source, quoteIndex, '"');
+                Debug.Assert(dollarCount > 0, "dollarIndex must point to an interpolated raw string prefix");
+                Debug.Assert(
+                    quoteCount >= MinimumRawStringDelimiterQuoteCount,
+                    "quoteIndex must point to a raw string delimiter");
+
+                int literalStartIndex = dollarIndex;
+                int index = quoteIndex + quoteCount;
+                while (index < source.Length)
+                {
+                    if (HasRepeatedCharacterAt(source, index, '"', quoteCount))
+                    {
+                        MarkRangeAsIgnored(codeCharacters, literalStartIndex, index + quoteCount);
+                        return index + quoteCount;
+                    }
+
+                    if (source[index] == '{')
+                    {
+                        int braceCount = CountRepeatedCharacter(source, index, '{');
+                        if (braceCount < dollarCount)
+                        {
+                            index += braceCount;
+                            continue;
+                        }
+
+                        MarkRangeAsIgnored(codeCharacters, literalStartIndex, index);
+                        index = FindRawInterpolationHoleEndIndex(source, index, dollarCount);
+                        literalStartIndex = index;
+                        continue;
+                    }
+
+                    if (source[index] == '}')
+                    {
+                        int braceCount = CountRepeatedCharacter(source, index, '}');
+                        index += braceCount;
+                        continue;
+                    }
+
+                    index++;
+                }
+
+                MarkRangeAsIgnored(codeCharacters, literalStartIndex, source.Length);
                 return source.Length;
             }
 
@@ -1255,6 +1325,79 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return source.Length;
             }
 
+            private static int FindRawInterpolationHoleEndIndex(
+                string source,
+                int openBraceIndex,
+                int interpolationBraceCount)
+            {
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(openBraceIndex >= 0, "openBraceIndex must not be negative");
+                Debug.Assert(interpolationBraceCount > 0, "interpolationBraceCount must be positive");
+
+                int nestedBraceDepth = 0;
+                int index = openBraceIndex + interpolationBraceCount;
+                while (index < source.Length)
+                {
+                    if (IsInterpolatedRawStringStart(source, index))
+                    {
+                        int dollarCount = CountRepeatedCharacter(source, index, '$');
+                        index = FindRawStringEndIndex(source, index + dollarCount);
+                        continue;
+                    }
+
+                    if (CountRepeatedCharacter(source, index, '"') >= MinimumRawStringDelimiterQuoteCount)
+                    {
+                        index = FindRawStringEndIndex(source, index);
+                        continue;
+                    }
+
+                    if (StartsWith(source, index, "@\""))
+                    {
+                        index = FindVerbatimStringEndIndex(source, index + 1);
+                        continue;
+                    }
+
+                    if (source[index] == '"')
+                    {
+                        index = FindRegularStringEndIndex(source, index);
+                        continue;
+                    }
+
+                    if (source[index] == '\'')
+                    {
+                        index = FindCharLiteralEndIndex(source, index);
+                        continue;
+                    }
+
+                    if (source[index] == '{')
+                    {
+                        nestedBraceDepth++;
+                        index++;
+                        continue;
+                    }
+
+                    if (source[index] == '}')
+                    {
+                        bool isClosingInterpolation =
+                            nestedBraceDepth == 0 &&
+                            HasRepeatedCharacterAt(source, index, '}', interpolationBraceCount);
+                        if (isClosingInterpolation)
+                        {
+                            return index + interpolationBraceCount;
+                        }
+
+                        if (nestedBraceDepth > 0)
+                        {
+                            nestedBraceDepth--;
+                        }
+                    }
+
+                    index++;
+                }
+
+                return source.Length;
+            }
+
             private static int FindCharLiteralEndIndex(string source, int quoteIndex)
             {
                 int index = quoteIndex + 1;
@@ -1287,6 +1430,57 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     codeCharacters[i] = false;
                 }
+            }
+
+            private static bool IsInterpolatedRawStringStart(string source, int startIndex)
+            {
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+                if (startIndex >= source.Length || source[startIndex] != '$')
+                {
+                    return false;
+                }
+
+                int dollarCount = CountRepeatedCharacter(source, startIndex, '$');
+                int quoteIndex = startIndex + dollarCount;
+                return CountRepeatedCharacter(source, quoteIndex, '"') >= MinimumRawStringDelimiterQuoteCount;
+            }
+
+            private static int CountRepeatedCharacter(string source, int startIndex, char character)
+            {
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+                int index = startIndex;
+                while (index < source.Length && source[index] == character)
+                {
+                    index++;
+                }
+
+                return index - startIndex;
+            }
+
+            private static bool HasRepeatedCharacterAt(string source, int startIndex, char character, int count)
+            {
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+                Debug.Assert(count > 0, "count must be positive");
+
+                if (startIndex + count > source.Length)
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < count; i++)
+                {
+                    if (source[startIndex + i] != character)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
             }
         }
     }

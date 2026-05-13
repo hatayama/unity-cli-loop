@@ -283,6 +283,53 @@ public static class ToolCountLabel
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyApiIsUsedInsideInterpolatedRawString_RewritesInterpolationCode()
+        {
+            // Verifies that raw interpolation holes are treated as code.
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
+                "\n" +
+                "public static class ToolCountLabel\n" +
+                "{\n" +
+                "    public static string GetLabel()\n" +
+                "    {\n" +
+                "        return $\"\"\"Tools: {CustomToolManager.GetRegisteredCustomTools().Length}\"\"\";\n" +
+                "    }\n" +
+                "}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.GetRegisteredCustomTools"));
+            Assert.That(result.Content, Does.Not.Contain("{CustomToolManager"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyApiIsUsedInsideMultiDollarRawString_RewritesInterpolationCode()
+        {
+            // Verifies that literal braces stay inert when multiple dollar signs are used.
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
+                "\n" +
+                "public static class ToolCountLabel\n" +
+                "{\n" +
+                "    public static string GetLabel()\n" +
+                "    {\n" +
+                "        return $$\"\"\"Literal { braces } tools: {{CustomToolManager.GetRegisteredCustomTools().Length}}\"\"\";\n" +
+                "    }\n" +
+                "}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("Literal { braces }"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.GetRegisteredCustomTools"));
+            Assert.That(result.Content, Does.Not.Contain("{{CustomToolManager"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyDomainMetadataIsUsedWithoutRegistrar_RewritesDomainMetadataType()
         {
             // Verifies that metadata helpers split away from registration code keep compiling after migration.
