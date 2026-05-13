@@ -252,6 +252,53 @@ public static class CurrentManualToolRegistration
         }
 
         [Test]
+        public void ApplyMigration_WhenCurrentToolContractsExistsWithLegacyAsmdefGuid_RewritesToToolContractsReference()
+        {
+            // Verifies that partially migrated tool implementations receive the ToolContracts asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CurrentHelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string toolSource = @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[UnityCliLoopTool]
+public sealed class CurrentHelloTool : UnityCliLoopTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class HelloResponse : UnityCliLoopToolResponse
+{
+}";
+                File.WriteAllText(toolPath, toolSource);
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(toolPath), Is.EqualTo(toolSource));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenDomainMetadataExistsWithoutManualRegistration_AddsDomainReference()
         {
             // Verifies that ToolInfo-only metadata helpers migrate their asmdef dependency.

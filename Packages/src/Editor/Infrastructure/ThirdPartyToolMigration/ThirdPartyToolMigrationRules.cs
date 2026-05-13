@@ -53,6 +53,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentDomainNamespace)}(?=\.|;|\s|$)",
                 RegexOptions.Compiled);
 
+        private static readonly Regex CurrentToolContractsNamespaceRegex =
+            new(
+                $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentNamespace)}(?=\.|;|\s|$)",
+                RegexOptions.Compiled);
+
         private static readonly Regex CurrentDomainMetadataRegex =
             new(
                 $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\.ToolInfo\b",
@@ -237,6 +242,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static ThirdPartyToolMigrationContentResult MigrateAsmdefSource(
             string source,
             bool hasLegacyCSharpSource,
+            bool requiresToolContractsReference,
             bool requiresApplicationReference,
             bool requiresDomainReference)
         {
@@ -258,6 +264,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string[] migratedReferenceItems = GetMigratedAsmdefReferences(
                     reference,
                     hasLegacyCSharpSource,
+                    requiresToolContractsReference,
                     requiresApplicationReference,
                     requiresDomainReference);
                 bool referenceChanged = migratedReferenceItems.Length != 1 ||
@@ -308,6 +315,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, CurrentRegistrarRegex);
+        }
+
+        internal static bool ContainsCurrentToolContractsApi(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, CurrentToolContractsNamespaceRegex);
         }
 
         internal static bool ContainsLegacyDomainMetadataApi(string source)
@@ -376,6 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static string[] GetMigratedAsmdefReferences(
             string reference,
             bool hasLegacyCSharpSource,
+            bool requiresToolContractsReference,
             bool requiresApplicationReference,
             bool requiresDomainReference)
         {
@@ -384,7 +399,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
             }
 
-            if ((hasLegacyCSharpSource || requiresApplicationReference || requiresDomainReference)
+            if ((hasLegacyCSharpSource ||
+                    requiresToolContractsReference ||
+                    requiresApplicationReference ||
+                    requiresDomainReference)
                 && string.Equals(reference, LegacyEditorAssemblyGuidReference, StringComparison.Ordinal))
             {
                 return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);

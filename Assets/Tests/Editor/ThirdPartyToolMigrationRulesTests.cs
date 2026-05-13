@@ -893,6 +893,7 @@ public sealed class OtherTool
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: false,
+                    requiresToolContractsReference: false,
                     requiresApplicationReference: false,
                     requiresDomainReference: false);
 
@@ -917,6 +918,7 @@ public sealed class OtherTool
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: false,
+                    requiresToolContractsReference: false,
                     requiresApplicationReference: false,
                     requiresDomainReference: false);
 
@@ -939,6 +941,31 @@ public sealed class OtherTool
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: true,
+                    requiresToolContractsReference: false,
+                    requiresApplicationReference: false,
+                    requiresDomainReference: false);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            Assert.That(result.Content, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+        }
+
+        [Test]
+        public void MigrateAsmdefSource_WhenCurrentToolContractsUsesLegacyGuid_RewritesToToolContractsGuid()
+        {
+            // Verifies that partially migrated custom tool assemblies can resolve V3 ToolContracts.
+            string source = @"{
+    ""name"": ""MyCompany.Tools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: false,
+                    requiresToolContractsReference: true,
                     requiresApplicationReference: false,
                     requiresDomainReference: false);
 
@@ -962,6 +989,7 @@ public sealed class OtherTool
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: true,
+                    requiresToolContractsReference: false,
                     requiresApplicationReference: true,
                     requiresDomainReference: false);
 
@@ -986,6 +1014,7 @@ public sealed class OtherTool
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: true,
+                    requiresToolContractsReference: false,
                     requiresApplicationReference: false,
                     requiresDomainReference: true);
 
