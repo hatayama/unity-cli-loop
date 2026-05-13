@@ -77,6 +77,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldAutoShow, Is.EqualTo(expected));
         }
 
+        [TestCase("1.7.2", "1.7.3", true, true)]
+        [TestCase("1.7.3", "1.7.3", true, false)]
+        [TestCase("1.7.2", "1.7.3", false, false)]
+        public void ShouldCheckThirdPartyToolMigrationTargets_ReturnsExpectedValue(
+            string lastSeenVersion,
+            string currentVersion,
+            bool suppressAutoShow,
+            bool expected)
+        {
+            bool shouldCheck =
+                SetupWizardWindow.ShouldCheckThirdPartyToolMigrationTargets(
+                    currentVersion,
+                    lastSeenVersion,
+                    suppressAutoShow);
+
+            Assert.That(shouldCheck, Is.EqualTo(expected));
+        }
+
         [TestCase(1, "1 file needs V3 custom tool migration.")]
         [TestCase(3, "3 files need V3 custom tool migration.")]
         public void GetThirdPartyToolMigrationStatusText_WhenTargetsExist_ReturnsFileCount(

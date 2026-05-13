@@ -66,6 +66,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return !suppressAutoShow;
         }
 
+        internal static bool ShouldCheckThirdPartyToolMigrationTargets(
+            string currentVersion,
+            string lastSeenVersion,
+            bool suppressAutoShow)
+        {
+            bool versionChanged = !string.Equals(currentVersion, lastSeenVersion, System.StringComparison.Ordinal);
+            return suppressAutoShow && versionChanged;
+        }
+
         internal static void MaybeRecordLastSeenVersion(bool shouldRecordVersion, string version)
         {
             if (!shouldRecordVersion) return;
@@ -88,7 +97,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             UnityCliLoopEditorSettingsService editorSettingsService = GetEditorSettingsService();
             bool suppressAutoShow = editorSettingsService.GetSuppressSetupWizardAutoShow();
             string lastSeenVersion = editorSettingsService.GetLastSeenSetupWizardVersion();
-            bool hasThirdPartyToolMigrationTargets = suppressAutoShow
+            bool hasThirdPartyToolMigrationTargets = ShouldCheckThirdPartyToolMigrationTargets(
+                    currentVersion,
+                    lastSeenVersion,
+                    suppressAutoShow)
                 && HasThirdPartyToolMigrationTargets();
             if (!ShouldAutoShowForVersion(
                 currentVersion,

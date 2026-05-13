@@ -37,11 +37,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             "Builds"
         };
 
-        private static readonly Regex LegacyToolAttributeWithArgumentsRegex =
-            new(@"\[\s*McpTool(?:Attribute)?\s*\((?<arguments>[\s\S]*?)\)\s*\]", RegexOptions.Compiled);
+        private static readonly Regex LegacyNamespaceRegex =
+            new(Regex.Escape(LegacyNamespace), RegexOptions.Compiled);
 
-        private static readonly Regex LegacyToolAttributeRegex =
-            new(@"\[\s*McpTool(?:Attribute)?\s*\]", RegexOptions.Compiled);
+        private static readonly Regex LegacyToolAttributeListRegex =
+            new(@"\[(?<attributes>[^\]]*\bMcpTool(?:Attribute)?\b[^\]]*)\]", RegexOptions.Compiled);
+
+        private static readonly Regex LegacyToolAttributeEntryRegex =
+            new(@"^\s*McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$", RegexOptions.Compiled);
 
         private static readonly ReplacementRule[] CSharpReplacementRules =
         {
@@ -60,25 +63,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             string migratedContent = source;
+            bool shouldApplyContractRenames = ContainsLegacyToolMigrationMarker(source);
             int replacementCount = 0;
             migratedContent = ReplaceRegexInCode(
                 migratedContent,
-                LegacyToolAttributeWithArgumentsRegex,
-                MigrateLegacyToolAttributeWithArguments,
-                ref replacementCount);
-            migratedContent = ReplaceRegexInCode(
-                migratedContent,
-                LegacyToolAttributeRegex,
-                _ => "[UnityCliLoopTool]",
+                LegacyToolAttributeListRegex,
+                MigrateLegacyToolAttributeList,
                 ref replacementCount);
 
-            foreach (ReplacementRule rule in CSharpReplacementRules)
+            if (shouldApplyContractRenames)
             {
-                migratedContent = ReplaceRegexInCode(
-                    migratedContent,
-                    rule.PatternRegex,
-                    _ => rule.Replacement,
-                    ref replacementCount);
+                foreach (ReplacementRule rule in CSharpReplacementRules)
+                {
+                    migratedContent = ReplaceRegexInCode(
+                        migratedContent,
+                        rule.PatternRegex,
+                        _ => rule.Replacement,
+                        ref replacementCount);
+                }
             }
 
             return new ThirdPartyToolMigrationContentResult(
@@ -134,10 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            if (RegexMatchesCode(source, LegacyToolAttributeWithArgumentsRegex)) return true;
-            if (RegexMatchesCode(source, LegacyToolAttributeRegex)) return true;
-
-            return CSharpReplacementRules.Any(rule => RegexMatchesCode(source, rule.PatternRegex));
+            return ContainsLegacyToolMigrationMarker(source);
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)
@@ -174,18 +173,52 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return reference;
         }
 
-        private static string MigrateLegacyToolAttributeWithArguments(Match match)
+        private static string MigrateLegacyToolAttributeList(Match match)
         {
             Debug.Assert(match != null, "match must not be null");
 
-            string argumentsSource = match.Groups["arguments"].Value;
-            string[] migratedArguments = GetMigratedSupportedAttributeArguments(argumentsSource);
-            if (migratedArguments.Length == 0)
+            string attributesSource = match.Groups["attributes"].Value;
+            string[] attributes = SplitAttributeArguments(attributesSource);
+            List<string> migratedAttributes = new();
+            bool changed = false;
+            foreach (string attribute in attributes)
             {
-                return "[UnityCliLoopTool]";
+                string trimmedAttribute = attribute.Trim();
+                if (TryMigrateLegacyToolAttributeEntry(trimmedAttribute, out string migratedAttribute))
+                {
+                    migratedAttributes.Add(migratedAttribute);
+                    changed = true;
+                    continue;
+                }
+
+                migratedAttributes.Add(trimmedAttribute);
             }
 
-            return $"[UnityCliLoopTool({string.Join(", ", migratedArguments)})]";
+            if (!changed)
+            {
+                return match.Value;
+            }
+
+            return $"[{string.Join(", ", migratedAttributes)}]";
+        }
+
+        private static bool TryMigrateLegacyToolAttributeEntry(string attribute, out string migratedAttribute)
+        {
+            Debug.Assert(attribute != null, "attribute must not be null");
+
+            Match match = LegacyToolAttributeEntryRegex.Match(attribute);
+            if (!match.Success)
+            {
+                migratedAttribute = string.Empty;
+                return false;
+            }
+
+            string argumentsSource = match.Groups["arguments"].Value;
+            string[] migratedArguments = GetMigratedSupportedAttributeArguments(argumentsSource);
+            migratedAttribute = migratedArguments.Length == 0
+                ? "UnityCliLoopTool"
+                : $"UnityCliLoopTool({string.Join(", ", migratedArguments)})";
+            return true;
         }
 
         private static string[] GetMigratedSupportedAttributeArguments(string argumentsSource)
@@ -414,6 +447,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return false;
+        }
+
+        private static bool ContainsLegacyToolMigrationMarker(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            if (RegexMatchesCode(source, LegacyNamespaceRegex)) return true;
+
+            return RegexMatchesCode(source, LegacyToolAttributeListRegex);
         }
 
         private static bool StartsWith(string source, int startIndex, string value)

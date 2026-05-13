@@ -106,6 +106,21 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolAttributeSharesAttributeList_RewritesOnlyLegacyToolEntry()
+        {
+            // Verifies that valid C# attribute lists migrate the tool attribute without dropping sibling attributes.
+            string source = "[McpTool(Description = \"hello\"), System.Obsolete] public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("[UnityCliLoopTool, System.Obsolete]"));
+            Assert.That(result.Content, Does.Not.Contain("McpTool"));
+            Assert.That(result.Content, Does.Not.Contain("Description"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyApiExistsOnlyInComment_KeepsContent()
         {
             // Verifies that migration does not rewrite inert documentation comments inside C# files.
@@ -123,6 +138,19 @@ namespace Samples
         {
             // Verifies that migration does not rewrite test fixture strings or examples inside C# files.
             string source = "public const string Example = \"IUnityTool\";";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenGenericLegacyNameExistsWithoutLegacyMarker_KeepsContent()
+        {
+            // Verifies that unrelated project types are not migrated just because their names resemble old API names.
+            string source = "public sealed class CustomToolManager { public SecuritySettings Settings; }";
 
             ThirdPartyToolMigrationContentResult result =
                 ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
@@ -228,6 +256,17 @@ namespace Samples
         {
             // Verifies that comments do not trigger project migration UI.
             string source = "// CustomToolManager";
+
+            bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
+
+            Assert.That(containsLegacyApi, Is.False);
+        }
+
+        [Test]
+        public void ContainsLegacyCSharpApi_WhenGenericLegacyNameExistsWithoutLegacyMarker_ReturnsFalse()
+        {
+            // Verifies that unrelated source names do not trigger project migration UI.
+            string source = "public sealed class CustomToolManager {}";
 
             bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
 
