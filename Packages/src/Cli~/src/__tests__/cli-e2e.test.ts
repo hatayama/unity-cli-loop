@@ -669,6 +669,7 @@ describe('CLI E2E Tests (requires running Unity)', () => {
     });
 
     it('should install skills for claude target', () => {
+      // Verifies default installs land where Claude Code can discover skills.
       // First uninstall to ensure clean state
       runCli('skills uninstall --claude');
 
@@ -677,7 +678,6 @@ describe('CLI E2E Tests (requires running Unity)', () => {
         UNITY_PROJECT_ROOT,
         '.claude',
         'skills',
-        'unity-cli-loop',
         'uloop-compile',
         'SKILL.md',
       );
@@ -687,7 +687,8 @@ describe('CLI E2E Tests (requires running Unity)', () => {
       expect(existsSync(installedSkillPath)).toBe(true);
     });
 
-    it('should install skills directly under skills when grouping is disabled', () => {
+    it('should install skills directly under skills when flat flag is provided', () => {
+      // Verifies the explicit flat flag remains accepted for discoverable installs.
       runCli('skills uninstall --claude');
 
       const { stdout, exitCode } = runCli('skills install --claude --flat');
