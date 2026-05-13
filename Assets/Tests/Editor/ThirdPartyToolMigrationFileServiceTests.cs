@@ -379,6 +379,45 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
+        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyAlias_RewritesSplitAliasQualifiedFiles()
+        {
+            // Verifies that global namespace aliases provide legacy context to sibling files.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string toolAttributePath = Path.Combine(toolDirectory, "HelloTool.Attribute.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using Old = io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(
+                    toolAttributePath,
+                    "[Old.McpTool]\npublic sealed partial class HelloTool\n{\n    private Old.IUnityTool tool;\n}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(3));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain("io.github.hatayama.UnityCliLoop.ToolContracts"));
+                Assert.That(File.ReadAllText(toolAttributePath), Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopTool"));
+                Assert.That(File.ReadAllText(toolAttributePath), Does.Contain("Old.IUnityCliLoopTool"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenLegacyToolExistsUnderAsmref_RewritesReferencedAsmdef()
         {
             // Verifies that asmref folders mark the referenced asmdef as the migrated assembly.

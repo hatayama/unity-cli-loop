@@ -53,6 +53,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"\bglobal\s+using\s+(?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?(?:global::)?{Regex.Escape(LegacyNamespace)}\s*;",
                 RegexOptions.Compiled);
 
+        private static readonly Regex LegacyGlobalNamespaceAliasRegex =
+            new(
+                $@"\bglobal\s+using\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?{Regex.Escape(LegacyNamespace)}\s*;",
+                RegexOptions.Compiled);
+
         private static readonly Regex LegacyRegistrarRegex =
             new(@"\bCustomToolManager\b", RegexOptions.Compiled);
 
@@ -123,17 +128,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return MigrateCSharpSourceForLegacyAssembly(
                 source,
-                hasLegacyAssemblySource: ContainsLegacyToolMigrationMarker(source));
+                hasLegacyAssemblySource: ContainsLegacyToolMigrationMarker(source),
+                legacyAssemblyAliases: Array.Empty<string>());
         }
 
         internal static ThirdPartyToolMigrationContentResult MigrateCSharpSourceForLegacyAssembly(
             string source,
-            bool hasLegacyAssemblySource)
+            bool hasLegacyAssemblySource,
+            string[] legacyAssemblyAliases)
         {
             Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
 
             string migratedContent = source;
-            string[] legacyNamespaceAliases = GetLegacyNamespaceAliases(source);
+            string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
             bool hasLegacyNamespaceUsage = RegexMatchesCode(source, LegacyNamespaceRegex);
             bool canMigrateBareLegacyToolAttribute =
                 hasLegacyAssemblySource ||
@@ -270,14 +278,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return RegexMatchesCode(source, LegacyDomainMetadataRegex);
         }
 
-        internal static bool ContainsLegacyAssemblyScopedApi(string source)
+        internal static bool ContainsLegacyAssemblyScopedApi(string source, string[] legacyAssemblyAliases)
         {
             Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
 
             return RegexMatchesCode(source, LegacyBaseTypeUsageRegex) ||
                 RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex) ||
                 ContainsLegacyAssemblyScopedTypeReference(source) ||
-                ContainsLegacyToolAttributeList(source, canMigrateBareLegacyToolAttribute: true);
+                ContainsLegacyToolAttributeList(
+                    source,
+                    legacyAssemblyAliases,
+                    canMigrateBareLegacyToolAttribute: true);
         }
 
         internal static bool ContainsLegacyGlobalUsing(string source)
@@ -285,6 +297,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, LegacyGlobalUsingRegex);
+        }
+
+        internal static string[] GetLegacyGlobalNamespaceAliases(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return GetRegexGroupValuesInCode(source, LegacyGlobalNamespaceAliasRegex, "alias");
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)
@@ -583,9 +602,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
+            return GetRegexGroupValuesInCode(source, LegacyNamespaceAliasRegex, "alias");
+        }
+
+        private static string[] GetCombinedLegacyNamespaceAliases(
+            string source,
+            string[] legacyAssemblyAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
+
+            return GetLegacyNamespaceAliases(source)
+                .Concat(legacyAssemblyAliases)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+        }
+
+        private static string[] GetRegexGroupValuesInCode(string source, Regex regex, string groupName)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(regex != null, "regex must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(groupName), "groupName must not be null or empty");
+
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
-            List<string> aliases = new();
-            MatchCollection matches = LegacyNamespaceAliasRegex.Matches(source);
+            List<string> values = new();
+            MatchCollection matches = regex.Matches(source);
             foreach (Match match in matches)
             {
                 if (!codeTextMask.IsCodeAt(match.Index))
@@ -593,10 +634,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     continue;
                 }
 
-                aliases.Add(match.Groups["alias"].Value);
+                values.Add(match.Groups[groupName].Value);
             }
 
-            return aliases.ToArray();
+            return values.ToArray();
         }
 
         private static string ReplaceLegacyRegistrarAliasesInCode(
@@ -830,7 +871,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            return IsStringLiteralExpression(secondArgument) || !IsBooleanLikeExpression(thirdArgument);
+            return IsStringLiteralExpression(secondArgument) ||
+                IsLikelyToolParameterSchemaExpression(thirdArgument);
         }
 
         private static bool IsStringLiteralExpression(string expression)
@@ -850,57 +892,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(expression != null, "expression must not be null");
 
             return expression.IndexOf("schema", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static bool IsBooleanLikeExpression(string expression)
-        {
-            Debug.Assert(expression != null, "expression must not be null");
-
-            string valueExpression = RemoveNamedArgumentPrefix(expression);
-            return string.Equals(valueExpression, "true", StringComparison.Ordinal) ||
-                string.Equals(valueExpression, "false", StringComparison.Ordinal) ||
-                valueExpression.IndexOf(
-                    DisplayDevelopmentOnlyAttributeArgumentName,
-                    StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static string RemoveNamedArgumentPrefix(string expression)
-        {
-            Debug.Assert(expression != null, "expression must not be null");
-
-            int colonIndex = expression.IndexOf(':');
-            if (colonIndex <= 0)
-            {
-                return expression;
-            }
-
-            string possibleArgumentName = expression.Substring(0, colonIndex).Trim();
-            if (!IsIdentifier(possibleArgumentName))
-            {
-                return expression;
-            }
-
-            return expression.Substring(colonIndex + 1).Trim();
-        }
-
-        private static bool IsIdentifier(string value)
-        {
-            Debug.Assert(value != null, "value must not be null");
-
-            if (value.Length == 0 || char.IsDigit(value[0]))
-            {
-                return false;
-            }
-
-            for (int i = 0; i < value.Length; i++)
-            {
-                if (!IsIdentifierCharacter(value[i]))
-                {
-                    return false;
-                }
-            }
-
-            return true;
         }
 
         private static int FindInvocationClosingParenthesisIndex(
@@ -1199,17 +1190,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (RegexMatchesCode(source, LegacyNamespaceRegex)) return true;
 
-            return ContainsLegacyToolAttributeList(source, canMigrateBareLegacyToolAttribute: false);
+            return ContainsLegacyToolAttributeList(
+                source,
+                Array.Empty<string>(),
+                canMigrateBareLegacyToolAttribute: false);
         }
 
         private static bool ContainsLegacyToolAttributeList(
             string source,
+            string[] legacyAssemblyAliases,
             bool canMigrateBareLegacyToolAttribute)
         {
             Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
 
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
-            string[] legacyNamespaceAliases = GetLegacyNamespaceAliases(source);
+            string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
             int index = 0;
             while (index < source.Length)
             {

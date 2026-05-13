@@ -73,13 +73,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyUsage.AsmdefDirectories,
                     assemblyUsage.AssemblyReferenceDirectories,
                     projectRoot);
+                string[] legacyAssemblyAliases;
+                if (!assemblyUsage.AssemblyScopedLegacyAliasesByDirectory.TryGetValue(
+                        assemblyDirectory,
+                        out legacyAssemblyAliases))
+                {
+                    legacyAssemblyAliases = Array.Empty<string>();
+                }
+
                 bool hasLegacyAssemblySource =
                     assemblyUsage.AssemblyScopedLegacyDirectories.Contains(assemblyDirectory) &&
-                    ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(source);
+                    ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(source, legacyAssemblyAliases);
                 ThirdPartyToolMigrationContentResult result =
                     ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
                         source,
-                        hasLegacyAssemblySource);
+                        hasLegacyAssemblySource,
+                        legacyAssemblyAliases);
                 if (!result.Changed)
                 {
                     continue;
@@ -171,6 +180,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CreateAssemblyReferenceDirectories(asmdefFilePaths, asmrefFilePaths);
             HashSet<string> legacyAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> assemblyScopedLegacyDirectories = new(StringComparer.Ordinal);
+            Dictionary<string, HashSet<string>> assemblyScopedLegacyAliasesByDirectory =
+                new(StringComparer.Ordinal);
             HashSet<string> registrarAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> domainMetadataAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> applicationReferenceAssemblyDirectories = new(StringComparer.Ordinal);
@@ -193,6 +204,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalUsing(source))
                 {
                     assemblyScopedLegacyDirectories.Add(assemblyDirectory);
+                    AddAssemblyScopedLegacyAliases(
+                        assemblyScopedLegacyAliasesByDirectory,
+                        assemblyDirectory,
+                        ThirdPartyToolMigrationRules.GetLegacyGlobalNamespaceAliases(source));
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source))
@@ -227,8 +242,51 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 assemblyReferenceDirectories,
                 legacyAssemblyDirectories,
                 assemblyScopedLegacyDirectories,
+                CreateAssemblyScopedLegacyAliasesByDirectory(assemblyScopedLegacyAliasesByDirectory),
                 applicationReferenceAssemblyDirectories,
                 domainReferenceAssemblyDirectories);
+        }
+
+        private static void AddAssemblyScopedLegacyAliases(
+            Dictionary<string, HashSet<string>> aliasesByDirectory,
+            string assemblyDirectory,
+            string[] aliases)
+        {
+            Debug.Assert(aliasesByDirectory != null, "aliasesByDirectory must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(assemblyDirectory), "assemblyDirectory must not be null or empty");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            if (aliases.Length == 0)
+            {
+                return;
+            }
+
+            if (!aliasesByDirectory.TryGetValue(assemblyDirectory, out HashSet<string> aliasSet))
+            {
+                aliasSet = new HashSet<string>(StringComparer.Ordinal);
+                aliasesByDirectory.Add(assemblyDirectory, aliasSet);
+            }
+
+            foreach (string alias in aliases)
+            {
+                aliasSet.Add(alias);
+            }
+        }
+
+        private static Dictionary<string, string[]> CreateAssemblyScopedLegacyAliasesByDirectory(
+            Dictionary<string, HashSet<string>> aliasesByDirectory)
+        {
+            Debug.Assert(aliasesByDirectory != null, "aliasesByDirectory must not be null");
+
+            Dictionary<string, string[]> result = new(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, HashSet<string>> aliasesForDirectory in aliasesByDirectory)
+            {
+                result.Add(
+                    aliasesForDirectory.Key,
+                    aliasesForDirectory.Value.OrderBy(alias => alias, StringComparer.Ordinal).ToArray());
+            }
+
+            return result;
         }
 
         private static List<AssemblyReferenceDirectory> CreateAssemblyReferenceDirectories(
@@ -517,6 +575,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 List<AssemblyReferenceDirectory> assemblyReferenceDirectories,
                 HashSet<string> legacyAssemblyDirectories,
                 HashSet<string> assemblyScopedLegacyDirectories,
+                Dictionary<string, string[]> assemblyScopedLegacyAliasesByDirectory,
                 HashSet<string> applicationReferenceAssemblyDirectories,
                 HashSet<string> domainReferenceAssemblyDirectories)
             {
@@ -529,6 +588,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyScopedLegacyDirectories != null,
                     "assemblyScopedLegacyDirectories must not be null");
                 Debug.Assert(
+                    assemblyScopedLegacyAliasesByDirectory != null,
+                    "assemblyScopedLegacyAliasesByDirectory must not be null");
+                Debug.Assert(
                     applicationReferenceAssemblyDirectories != null,
                     "applicationReferenceAssemblyDirectories must not be null");
                 Debug.Assert(
@@ -540,6 +602,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 LegacyAssemblyDirectories = legacyAssemblyDirectories ?? new HashSet<string>(StringComparer.Ordinal);
                 AssemblyScopedLegacyDirectories = assemblyScopedLegacyDirectories ??
                     new HashSet<string>(StringComparer.Ordinal);
+                AssemblyScopedLegacyAliasesByDirectory = assemblyScopedLegacyAliasesByDirectory ??
+                    new Dictionary<string, string[]>(StringComparer.Ordinal);
                 ApplicationReferenceAssemblyDirectories = applicationReferenceAssemblyDirectories ??
                     new HashSet<string>(StringComparer.Ordinal);
                 DomainReferenceAssemblyDirectories = domainReferenceAssemblyDirectories ??
@@ -550,6 +614,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             public List<AssemblyReferenceDirectory> AssemblyReferenceDirectories { get; }
             public HashSet<string> LegacyAssemblyDirectories { get; }
             public HashSet<string> AssemblyScopedLegacyDirectories { get; }
+            public Dictionary<string, string[]> AssemblyScopedLegacyAliasesByDirectory { get; }
             public HashSet<string> ApplicationReferenceAssemblyDirectories { get; }
             public HashSet<string> DomainReferenceAssemblyDirectories { get; }
         }

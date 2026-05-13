@@ -501,6 +501,31 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCurrentToolInfoConstructorUsesArbitraryVariableNames_KeepsConstructorArguments()
+        {
+            // Verifies that current V3 metadata construction is not inferred from local variable names.
+            string source = @"using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop.Domain;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo Create(ToolParameterSchema parameters, bool includeDevTools)
+    {
+        return new ToolInfo(""hello"", parameters, includeDevTools);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", parameters, includeDevTools)"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", includeDevTools)"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyRegistrarIsUsedThroughNamespaceAlias_RewritesRegistrar()
         {
             // Verifies that namespace aliases do not create invalid qualified registrar names.
@@ -672,7 +697,8 @@ public sealed class OtherTool
             ThirdPartyToolMigrationContentResult result =
                 ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
                     source,
-                    hasLegacyAssemblySource: true);
+                    hasLegacyAssemblySource: true,
+                    legacyAssemblyAliases: System.Array.Empty<string>());
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("UnityCliLoopToolSchema"));
@@ -684,7 +710,9 @@ public sealed class OtherTool
             // Verifies that split files using collection-shaped legacy types are migrated with their assembly.
             string source = "public sealed class ToolList { public System.Collections.Generic.List<IUnityTool> Tools; }";
 
-            bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(source);
+            bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(
+                source,
+                System.Array.Empty<string>());
 
             Assert.That(containsLegacyApi, Is.True);
         }
