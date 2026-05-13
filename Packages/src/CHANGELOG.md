@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.2](https://github.com/hatayama/unity-cli-loop/compare/v2.1.1...v2.1.2) (2026-05-13)
+
+
+### Bug Fixes
+
+* Global skill installs work without manual folder moves ([#1112](https://github.com/hatayama/unity-cli-loop/issues/1112)) ([498e428](https://github.com/hatayama/unity-cli-loop/commit/498e428958dd4d38ee83e5ca6d027eed9be9901d))
+
 ## [2.1.1](https://github.com/hatayama/unity-cli-loop/compare/v2.1.0...v2.1.1) (2026-05-07)
 
 
