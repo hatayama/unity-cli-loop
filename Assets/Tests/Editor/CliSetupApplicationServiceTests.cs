@@ -131,6 +131,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(detector.ForceRefreshCount, Is.EqualTo(2));
         }
 
+        [Test]
+        public async Task EnsureGlobalCliCurrentAsync_AfterManualUninstall_SkipsInstallForCurrentSession()
+        {
+            // Verifies that startup auto install does not immediately undo a successful manual uninstall.
+            FakeNativeCliInstaller nativeCliInstaller = new();
+            FakeCliInstallationDetector detector = new(new string[] { null });
+            CliSetupApplicationService service = new(detector, nativeCliInstaller);
+
+            CliInstallResult uninstallResult = await service.UninstallGlobalCliAsync(
+                RuntimePlatform.OSXEditor,
+                CancellationToken.None);
+            CliInstallResult ensureResult = await service.EnsureGlobalCliCurrentAsync(
+                RuntimePlatform.OSXEditor,
+                CancellationToken.None);
+
+            Assert.That(uninstallResult.Success, Is.True);
+            Assert.That(ensureResult.Success, Is.True);
+            Assert.That(nativeCliInstaller.UninstallCount, Is.EqualTo(1));
+            Assert.That(nativeCliInstaller.InstallCount, Is.EqualTo(0));
+            Assert.That(detector.ForceRefreshCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task EnsureGlobalCliCurrentAsync_AfterFailedManualUninstall_StillInstallsMinimumRelease()
+        {
+            // Verifies that failed manual uninstall attempts do not disable startup recovery.
+            FakeNativeCliInstaller nativeCliInstaller = new()
+            {
+                UninstallResult = new CliInstallResult(false, "uninstall failed")
+            };
+            FakeCliInstallationDetector detector = new(
+                new string[]
+                {
+                    "3.0.0-beta.5",
+                    "3.0.0-beta.5",
+                    CliConstants.MINIMUM_REQUIRED_CLI_VERSION
+                });
+            CliSetupApplicationService service = new(detector, nativeCliInstaller);
+
+            CliInstallResult uninstallResult = await service.UninstallGlobalCliAsync(
+                RuntimePlatform.OSXEditor,
+                CancellationToken.None);
+            CliInstallResult ensureResult = await service.EnsureGlobalCliCurrentAsync(
+                RuntimePlatform.OSXEditor,
+                CancellationToken.None);
+
+            Assert.That(uninstallResult.Success, Is.False);
+            Assert.That(ensureResult.Success, Is.True);
+            Assert.That(nativeCliInstaller.UninstallCount, Is.EqualTo(1));
+            Assert.That(nativeCliInstaller.InstallCount, Is.EqualTo(1));
+            Assert.That(detector.ForceRefreshCount, Is.EqualTo(2));
+        }
+
         private sealed class FakeCliInstallationDetector : ICliInstallationDetector
         {
             private readonly string[] _versions;
@@ -170,6 +223,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public string InstalledVersion { get; private set; }
             public int InstallCount { get; private set; }
+            public int UninstallCount { get; private set; }
+            public CliInstallResult UninstallResult { get; set; } = new(true, "");
 
             public bool IsPackageOwnedCurrentUserInstallPath(string cliExecutablePath, RuntimePlatform platform)
             {
@@ -188,7 +243,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
             {
-                return Task.FromResult(new CliInstallResult(true, ""));
+                UninstallCount++;
+                return Task.FromResult(UninstallResult);
             }
 
             public NativeCliInstallCommand GetGlobalCliInstallCommand(

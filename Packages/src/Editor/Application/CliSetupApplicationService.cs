@@ -61,6 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private readonly ICliInstallationDetector _cliInstallationDetector;
         private readonly INativeCliInstaller _nativeCliInstaller;
+        private bool _isAutoInstallSuppressedForCurrentSession;
 
         public CliSetupApplicationService(
             ICliInstallationDetector cliInstallationDetector,
@@ -163,6 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             ct.ThrowIfCancellationRequested();
 
+            _isAutoInstallSuppressedForCurrentSession = false;
             CliInstallResult result = await _nativeCliInstaller.InstallGlobalCliAsync(
                 platform,
                 GetMinimumRequiredCliReleaseTag(),
@@ -174,6 +176,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public async Task<CliInstallResult> EnsureGlobalCliCurrentAsync(RuntimePlatform platform, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
+
+            if (_isAutoInstallSuppressedForCurrentSession)
+            {
+                return new CliInstallResult(
+                    true,
+                    "Manual uninstall disabled automatic CLI install for this editor session.");
+            }
 
             await _cliInstallationDetector.ForceRefreshCliVersionAsync(ct);
             string cliVersion = _cliInstallationDetector.GetCachedCliVersion();
@@ -206,6 +215,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             ct.ThrowIfCancellationRequested();
 
             CliInstallResult result = await _nativeCliInstaller.UninstallGlobalCliAsync(platform, ct);
+            if (result.Success)
+            {
+                _isAutoInstallSuppressedForCurrentSession = true;
+            }
+
             _cliInstallationDetector.InvalidateCache();
             return result;
         }
