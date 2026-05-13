@@ -220,6 +220,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     domainMetadataAssemblyDirectories.Add(assemblyDirectory);
                 }
+
+                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApi(source))
+                {
+                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
             }
 
             foreach (string registrarAssemblyDirectory in registrarAssemblyDirectories)

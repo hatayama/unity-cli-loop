@@ -295,6 +295,49 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void ApplyMigration_WhenCurrentDomainMetadataExistsWithLegacyAsmdefGuid_AddsDomainReference()
+        {
+            // Verifies that partially migrated metadata helpers receive the asmdef refs they already require.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string metadataPath = Path.Combine(toolDirectory, "ToolMetadataProvider.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string metadataSource = @"using io.github.hatayama.UnityCliLoop.Domain;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo[] GetTools()
+    {
+        return new ToolInfo[0];
+    }
+}";
+                File.WriteAllText(metadataPath, metadataSource);
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(metadataPath), Is.EqualTo(metadataSource));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsing_RewritesSplitContractFiles()
         {
             // Verifies that schema files relying on global legacy usings migrate with their assembly.

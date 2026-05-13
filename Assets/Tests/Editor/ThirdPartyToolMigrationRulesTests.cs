@@ -657,6 +657,30 @@ public sealed class HelloResponse : BaseToolResponse {}";
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyFileHasUnrelatedToolInfoProperty_KeepsIdentifier()
+        {
+            // Verifies that metadata type migration does not rewrite member names.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+    public string ToolInfo { get; }
+}
+
+public sealed class HelloSchema : BaseToolSchema {}
+
+public sealed class HelloResponse : BaseToolResponse {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("public string ToolInfo { get; }"));
+            Assert.That(result.Content, Does.Contain("UnityCliLoopTool<HelloSchema, HelloResponse>"));
+            Assert.That(result.Content, Does.Not.Contain("public string io.github.hatayama.UnityCliLoop.Domain.ToolInfo"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyContractTypeIsFullyQualified_RewritesFullyQualifiedType()
         {
             // Verifies that qualified legacy namespace usage still migrates after qualified unrelated types are ignored.

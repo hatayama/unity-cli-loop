@@ -53,6 +53,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentDomainNamespace)}(?=\.|;|\s|$)",
                 RegexOptions.Compiled);
 
+        private static readonly Regex CurrentDomainMetadataRegex =
+            new(
+                $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\.ToolInfo\b",
+                RegexOptions.Compiled);
+
         private static readonly Regex LegacyGlobalUsingRegex =
             new(
                 $@"\bglobal\s+using\s+(?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?(?:global::)?{Regex.Escape(LegacyNamespace)}\s*;",
@@ -131,9 +136,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static readonly ReplacementRule[] RegistrarReplacementRules =
         {
-            new(Regex.Escape($"{CurrentNamespace}.ToolInfo"), $"{CurrentDomainNamespace}.ToolInfo"),
-            new(@"(?<![\.:])\bToolInfo\b(?!\s*=)", $"{CurrentDomainNamespace}.ToolInfo")
+            new(Regex.Escape($"{CurrentNamespace}.ToolInfo"), $"{CurrentDomainNamespace}.ToolInfo")
         };
+
+        private static readonly Regex UnqualifiedToolInfoRegex =
+            new(@"(?<![\.:])\bToolInfo\b(?!\s*=)", RegexOptions.Compiled);
 
         internal static ThirdPartyToolMigrationContentResult MigrateCSharpSource(string source)
         {
@@ -213,6 +220,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         _ => rule.Replacement,
                         ref replacementCount);
                 }
+
+                migratedContent = ReplaceLegacyToolInfoTypeReferencesInCode(
+                    migratedContent,
+                    ref replacementCount);
             }
 
             return new ThirdPartyToolMigrationContentResult(
@@ -301,6 +312,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, LegacyDomainMetadataRegex);
+        }
+
+        internal static bool ContainsCurrentDomainMetadataApi(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, CurrentDomainMetadataRegex) ||
+                (RegexMatchesCode(source, CurrentDomainNamespaceRegex) &&
+                    RegexMatchesCode(source, LegacyDomainMetadataRegex));
         }
 
         internal static bool ContainsLegacyAssemblyScopedApi(string source, string[] legacyAssemblyAliases)
@@ -749,6 +769,35 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return migratedContent;
+        }
+
+        private static string ReplaceLegacyToolInfoTypeReferencesInCode(string source, ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return ReplaceRegexInCode(
+                source,
+                UnqualifiedToolInfoRegex,
+                match => ShouldMigrateLegacyToolInfoTypeReference(source, match.Index)
+                    ? $"{CurrentDomainNamespace}.ToolInfo"
+                    : match.Value,
+                ref replacementCount);
+        }
+
+        private static bool ShouldMigrateLegacyToolInfoTypeReference(string source, int toolInfoIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(toolInfoIndex >= 0, "toolInfoIndex must not be negative");
+
+            if (IsLegacyAssemblyScopedTypeDeclaration(source, toolInfoIndex))
+            {
+                return false;
+            }
+
+            char nextCharacter = ReadNextNonWhitespaceCharacter(source, toolInfoIndex + "ToolInfo".Length);
+            return nextCharacter != '{' &&
+                nextCharacter != ';' &&
+                nextCharacter != '=';
         }
 
         private static string ReplaceLegacyToolInfoConstructorsInCode(
@@ -1257,6 +1306,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return source.Substring(index + 1, identifierEndIndex - index - 1);
+        }
+
+        private static char ReadNextNonWhitespaceCharacter(string source, int startIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+            for (int index = startIndex; index < source.Length; index++)
+            {
+                if (char.IsWhiteSpace(source[index]))
+                {
+                    continue;
+                }
+
+                return source[index];
+            }
+
+            return '\0';
         }
 
         private static bool IsIdentifierCharacter(char value)
