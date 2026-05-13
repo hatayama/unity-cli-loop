@@ -436,9 +436,9 @@ public static class ToolMetadataProvider
 
 public static class ToolMetadataProvider
 {
-    public static ToolInfo Create(ToolParameterSchema schema, string description)
+    public static ToolInfo Create(ToolParameterSchema parameters, string label)
     {
-        return new ToolInfo(""hello"", description, schema);
+        return new ToolInfo(""hello"", label, parameters);
     }
 }";
 
@@ -447,8 +447,32 @@ public static class ToolMetadataProvider
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema)"));
-            Assert.That(result.Content, Does.Not.Contain("description, schema"));
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", parameters)"));
+            Assert.That(result.Content, Does.Not.Contain("label, parameters"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyToolInfoConstructorUsesTypeAlias_RemovesDescriptionArgument()
+        {
+            // Verifies that constructor migration follows aliases that target the old ToolInfo type.
+            string source = @"using LegacyToolInfo = io.github.hatayama.uLoopMCP.ToolInfo;
+using io.github.hatayama.uLoopMCP;
+
+public static class ToolMetadataProvider
+{
+    public static LegacyToolInfo Create(ToolParameterSchema parameters, string label)
+    {
+        return new LegacyToolInfo(""hello"", label, parameters);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", parameters)"));
+            Assert.That(result.Content, Does.Not.Contain("new LegacyToolInfo(\"hello\", label, parameters)"));
         }
 
         [Test]

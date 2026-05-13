@@ -48,6 +48,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyNamespaceRegex =
             new(LegacyNamespacePattern, RegexOptions.Compiled);
 
+        private static readonly Regex CurrentDomainNamespaceRegex =
+            new(
+                $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentDomainNamespace)}(?=\.|;|\s|$)",
+                RegexOptions.Compiled);
+
         private static readonly Regex LegacyGlobalUsingRegex =
             new(
                 $@"\bglobal\s+using\s+(?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?(?:global::)?{Regex.Escape(LegacyNamespace)}\s*;",
@@ -90,9 +95,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 @"McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$",
                 RegexOptions.Compiled);
 
-        private static readonly Regex CurrentToolInfoConstructorRegex =
+        private static readonly Regex LegacyToolInfoConstructorRegex =
             new(
-                $@"new\s+{Regex.Escape(CurrentDomainNamespace)}\.ToolInfo\s*\(",
+                $@"new\s+(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.)ToolInfo|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.ToolInfo|(?<toolInfo>ToolInfo)|(?<typeAlias>[A-Za-z_][A-Za-z0-9_]*))\s*\(",
+                RegexOptions.Compiled);
+
+        private static readonly Regex LegacyToolInfoTypeAliasRegex =
+            new(
+                $@"\busing\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?{Regex.Escape(LegacyNamespace)}\.ToolInfo\s*;",
                 RegexOptions.Compiled);
 
         private static readonly TypeReplacementRule[] ToolContractTypeReplacementRules =
@@ -143,10 +153,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string migratedContent = source;
             string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
             bool hasLegacyNamespaceUsage = RegexMatchesCode(source, LegacyNamespaceRegex);
+            bool hasCurrentDomainNamespaceUsage = RegexMatchesCode(source, CurrentDomainNamespaceRegex);
             bool canMigrateBareLegacyToolAttribute =
                 hasLegacyAssemblySource ||
                 hasLegacyNamespaceUsage ||
                 legacyNamespaceAliases.Length > 0;
+            bool canMigrateBareLegacyToolInfoConstructor =
+                canMigrateBareLegacyToolAttribute &&
+                !hasCurrentDomainNamespaceUsage;
             bool hasLocalLegacyMarker = ContainsLegacyToolMigrationMarker(source);
             bool shouldApplyContractRenames = hasLegacyAssemblySource || hasLocalLegacyMarker;
             bool shouldApplyRegistrarRenames = shouldApplyContractRenames &&
@@ -162,6 +176,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
+                ref replacementCount);
+            migratedContent = ReplaceLegacyToolInfoConstructorsInCode(
+                migratedContent,
+                legacyNamespaceAliases,
+                canMigrateBareLegacyToolInfoConstructor,
                 ref replacementCount);
 
             if (shouldApplyContractRenames)
@@ -191,10 +210,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         _ => rule.Replacement,
                         ref replacementCount);
                 }
-
-                migratedContent = ReplaceLegacyToolInfoConstructorsInCode(
-                    migratedContent,
-                    ref replacementCount);
             }
 
             return new ThirdPartyToolMigrationContentResult(
@@ -605,6 +620,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return GetRegexGroupValuesInCode(source, LegacyNamespaceAliasRegex, "alias");
         }
 
+        private static string[] GetLegacyToolInfoTypeAliases(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return GetRegexGroupValuesInCode(source, LegacyToolInfoTypeAliasRegex, "alias");
+        }
+
         private static string[] GetCombinedLegacyNamespaceAliases(
             string source,
             string[] legacyAssemblyAliases)
@@ -720,18 +742,28 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static string ReplaceLegacyToolInfoConstructorsInCode(
             string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyToolInfoConstructor,
             ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
 
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
-            MatchCollection matches = CurrentToolInfoConstructorRegex.Matches(source);
+            string[] legacyToolInfoTypeAliases = GetLegacyToolInfoTypeAliases(source);
+            MatchCollection matches = LegacyToolInfoConstructorRegex.Matches(source);
             StringBuilder builder = new(source.Length);
             int sourceCopyIndex = 0;
             int localReplacementCount = 0;
             foreach (Match match in matches)
             {
-                if (match.Index < sourceCopyIndex || !codeTextMask.IsCodeAt(match.Index))
+                if (match.Index < sourceCopyIndex ||
+                    !codeTextMask.IsCodeAt(match.Index) ||
+                    !IsLegacyToolInfoConstructorMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        legacyToolInfoTypeAliases,
+                        canMigrateBareLegacyToolInfoConstructor))
                 {
                     continue;
                 }
@@ -757,7 +789,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                builder.Append(source, match.Index, openParenthesisIndex - match.Index + 1);
+                builder.Append($"new {CurrentDomainNamespace}.ToolInfo(");
                 builder.Append(string.Join(", ", migratedArguments));
                 builder.Append(')');
                 sourceCopyIndex = closingParenthesisIndex + 1;
@@ -772,6 +804,39 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
             replacementCount += localReplacementCount;
             return builder.ToString();
+        }
+
+        private static bool IsLegacyToolInfoConstructorMatch(
+            Match match,
+            string[] legacyNamespaceAliases,
+            string[] legacyToolInfoTypeAliases,
+            bool canMigrateBareLegacyToolInfoConstructor)
+        {
+            Debug.Assert(match != null, "match must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+            Debug.Assert(legacyToolInfoTypeAliases != null, "legacyToolInfoTypeAliases must not be null");
+
+            if (match.Groups["qualifier"].Success)
+            {
+                return true;
+            }
+
+            if (match.Groups["alias"].Success)
+            {
+                return legacyNamespaceAliases.Contains(match.Groups["alias"].Value);
+            }
+
+            if (match.Groups["typeAlias"].Success)
+            {
+                return legacyToolInfoTypeAliases.Contains(match.Groups["typeAlias"].Value);
+            }
+
+            if (match.Groups["toolInfo"].Success)
+            {
+                return canMigrateBareLegacyToolInfoConstructor;
+            }
+
+            return false;
         }
 
         private static string[] GetMigratedToolInfoConstructorArguments(string[] arguments)
@@ -796,7 +861,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 };
             }
 
-            if (arguments.Length == 3 && ShouldDropLegacyPositionalToolInfoDescriptionArgument(arguments))
+            if (arguments.Length == 3)
             {
                 return new[]
                 {
@@ -857,41 +922,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return migratedArguments.ToArray();
-        }
-
-        private static bool ShouldDropLegacyPositionalToolInfoDescriptionArgument(string[] arguments)
-        {
-            Debug.Assert(arguments != null, "arguments must not be null");
-            Debug.Assert(arguments.Length == 3, "arguments must contain three items");
-
-            string secondArgument = arguments[1].Trim();
-            string thirdArgument = arguments[2].Trim();
-            if (IsLikelyToolParameterSchemaExpression(secondArgument))
-            {
-                return false;
-            }
-
-            return IsStringLiteralExpression(secondArgument) ||
-                IsLikelyToolParameterSchemaExpression(thirdArgument);
-        }
-
-        private static bool IsStringLiteralExpression(string expression)
-        {
-            Debug.Assert(expression != null, "expression must not be null");
-
-            return expression.StartsWith("\"", StringComparison.Ordinal) ||
-                expression.StartsWith("@\"", StringComparison.Ordinal) ||
-                expression.StartsWith("$\"", StringComparison.Ordinal) ||
-                expression.StartsWith("$@\"", StringComparison.Ordinal) ||
-                expression.StartsWith("@$\"", StringComparison.Ordinal) ||
-                expression.StartsWith("\"\"\"", StringComparison.Ordinal);
-        }
-
-        private static bool IsLikelyToolParameterSchemaExpression(string expression)
-        {
-            Debug.Assert(expression != null, "expression must not be null");
-
-            return expression.IndexOf("schema", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static int FindInvocationClosingParenthesisIndex(
