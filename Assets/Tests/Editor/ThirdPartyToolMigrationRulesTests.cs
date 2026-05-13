@@ -551,6 +551,30 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCurrentDomainUsingHasLegacyToolInfoConstructor_RemovesDescriptionArgument()
+        {
+            // Verifies that partially migrated files still remove the deleted V2 description argument.
+            string source = @"using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop.Domain;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo Create(ToolParameterSchema schema)
+    {
+        return new ToolInfo(""hello"", ""description"", schema, true);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema, true)"));
+            Assert.That(result.Content, Does.Not.Contain("\"description\""));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenCurrentToolInfoConstructorUsesArbitraryVariableNames_KeepsConstructorArguments()
         {
             // Verifies that current V3 metadata construction is not inferred from local variable names.

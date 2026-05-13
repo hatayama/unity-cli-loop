@@ -169,6 +169,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 hasLegacyNamespaceUsage ||
                 legacyNamespaceAliases.Length > 0;
             bool canMigrateBareLegacyToolInfoConstructor =
+                canMigrateBareLegacyToolAttribute;
+            bool canMigrateAmbiguousBareLegacyToolInfoConstructor =
                 canMigrateBareLegacyToolAttribute &&
                 !hasCurrentDomainNamespaceUsage;
             bool hasLocalLegacyMarker = ContainsLegacyToolMigrationMarker(source);
@@ -187,6 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 migratedContent,
                 legacyNamespaceAliases,
                 canMigrateBareLegacyToolInfoConstructor,
+                canMigrateAmbiguousBareLegacyToolInfoConstructor,
                 ref replacementCount);
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(
                 migratedContent,
@@ -815,6 +818,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string source,
             string[] legacyNamespaceAliases,
             bool canMigrateBareLegacyToolInfoConstructor,
+            bool canMigrateAmbiguousBareLegacyToolInfoConstructor,
             ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -853,6 +857,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     openParenthesisIndex + 1,
                     closingParenthesisIndex - openParenthesisIndex - 1);
                 string[] arguments = SplitAttributeArguments(argumentsSource);
+                if (!ShouldMigrateLegacyToolInfoConstructorArguments(
+                        match,
+                        arguments,
+                        canMigrateAmbiguousBareLegacyToolInfoConstructor))
+                {
+                    continue;
+                }
+
                 string[] migratedArguments = GetMigratedToolInfoConstructorArguments(arguments);
                 if (migratedArguments.Length == arguments.Length)
                 {
@@ -875,6 +887,37 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
             replacementCount += localReplacementCount;
             return builder.ToString();
+        }
+
+        private static bool ShouldMigrateLegacyToolInfoConstructorArguments(
+            Match match,
+            string[] arguments,
+            bool canMigrateAmbiguousBareLegacyToolInfoConstructor)
+        {
+            Debug.Assert(match != null, "match must not be null");
+            Debug.Assert(arguments != null, "arguments must not be null");
+
+            if (!match.Groups["toolInfo"].Success)
+            {
+                return true;
+            }
+
+            return canMigrateAmbiguousBareLegacyToolInfoConstructor ||
+                HasUnambiguousLegacyToolInfoConstructorArguments(arguments);
+        }
+
+        private static bool HasUnambiguousLegacyToolInfoConstructorArguments(string[] arguments)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+
+            if (arguments.Length == 4)
+            {
+                return true;
+            }
+
+            return FindNamedConstructorArgumentIndex(
+                arguments,
+                DescriptionAttributeArgumentName.ToLowerInvariant()) >= 0;
         }
 
         private static bool IsLegacyToolInfoConstructorMatch(
