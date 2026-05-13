@@ -339,20 +339,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
             string csharpDirectory = Path.GetDirectoryName(csharpFilePath) ?? string.Empty;
+            string matchedAssemblyDirectory = string.Empty;
+            int matchedSourceDirectoryLength = -1;
             foreach (string asmdefDirectory in asmdefDirectories)
             {
-                if (IsSameOrChildPath(csharpDirectory, asmdefDirectory))
+                if (!IsSameOrChildPath(csharpDirectory, asmdefDirectory) ||
+                    asmdefDirectory.Length <= matchedSourceDirectoryLength)
                 {
-                    return asmdefDirectory;
+                    continue;
                 }
+
+                matchedAssemblyDirectory = asmdefDirectory;
+                matchedSourceDirectoryLength = asmdefDirectory.Length;
             }
 
             foreach (AssemblyReferenceDirectory assemblyReferenceDirectory in assemblyReferenceDirectories)
             {
-                if (IsSameOrChildPath(csharpDirectory, assemblyReferenceDirectory.SourceDirectory))
+                string sourceDirectory = assemblyReferenceDirectory.SourceDirectory;
+                if (!IsSameOrChildPath(csharpDirectory, sourceDirectory) ||
+                    sourceDirectory.Length <= matchedSourceDirectoryLength)
                 {
-                    return assemblyReferenceDirectory.TargetAssemblyDirectory;
+                    continue;
                 }
+
+                matchedAssemblyDirectory = assemblyReferenceDirectory.TargetAssemblyDirectory;
+                matchedSourceDirectoryLength = sourceDirectory.Length;
+            }
+
+            if (matchedAssemblyDirectory.Length > 0)
+            {
+                return matchedAssemblyDirectory;
             }
 
             return GetImplicitAssemblyDirectory(csharpFilePath, projectRoot);

@@ -260,6 +260,29 @@ public static class ToolCountLabel
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyApiIsUsedInsideInterpolatedVerbatimString_RewritesInterpolationCode()
+        {
+            // Verifies that verbatim interpolation holes are treated as code.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolCountLabel
+{
+    public static string GetLabel()
+    {
+        return $@""Tools: {CustomToolManager.GetRegisteredCustomTools().Length}"";
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.GetRegisteredCustomTools"));
+            Assert.That(result.Content, Does.Not.Contain("{CustomToolManager"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyDomainMetadataIsUsedWithoutRegistrar_RewritesDomainMetadataType()
         {
             // Verifies that metadata helpers split away from registration code keep compiling after migration.
@@ -360,6 +383,17 @@ public static class ManualToolRegistration
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("UnityCliLoopToolSchema"));
+        }
+
+        [Test]
+        public void ContainsLegacyAssemblyScopedApi_WhenGenericLegacyTypesAreUsed_ReturnsTrue()
+        {
+            // Verifies that split files using collection-shaped legacy types are migrated with their assembly.
+            string source = "public sealed class ToolList { public System.Collections.Generic.List<IUnityTool> Tools; }";
+
+            bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(source);
+
+            Assert.That(containsLegacyApi, Is.True);
         }
 
         [Test]

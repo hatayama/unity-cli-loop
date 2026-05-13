@@ -65,6 +65,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 @"ToolInfo\s*(?:\[\])?\s+[A-Za-z_][A-Za-z0-9_]*)",
                 RegexOptions.Compiled);
 
+        private static readonly Regex LegacyAssemblyScopedTypeNameRegex =
+            new(@"\b(?:IUnityTool|ToolInfo)\b", RegexOptions.Compiled);
+
         private static readonly Regex LegacyNamespaceAliasRegex =
             new(
                 @"\busing\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?" +
@@ -243,7 +246,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, LegacyBaseTypeUsageRegex) ||
-                RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex);
+                RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex) ||
+                ContainsLegacyAssemblyScopedTypeReference(source);
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)
@@ -749,6 +753,68 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
+        private static bool ContainsLegacyAssemblyScopedTypeReference(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyAssemblyScopedTypeNameRegex.Matches(source);
+            foreach (Match match in matches)
+            {
+                if (!codeTextMask.IsCodeAt(match.Index))
+                {
+                    continue;
+                }
+
+                if (IsLegacyAssemblyScopedTypeDeclaration(source, match.Index))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsLegacyAssemblyScopedTypeDeclaration(string source, int typeNameIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(typeNameIndex >= 0, "typeNameIndex must not be negative");
+
+            string previousIdentifier = ReadPreviousIdentifier(source, typeNameIndex);
+            return string.Equals(previousIdentifier, "class", StringComparison.Ordinal) ||
+                string.Equals(previousIdentifier, "struct", StringComparison.Ordinal) ||
+                string.Equals(previousIdentifier, "interface", StringComparison.Ordinal) ||
+                string.Equals(previousIdentifier, "enum", StringComparison.Ordinal) ||
+                string.Equals(previousIdentifier, "using", StringComparison.Ordinal);
+        }
+
+        private static string ReadPreviousIdentifier(string source, int startIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+            int index = startIndex - 1;
+            while (index >= 0 && char.IsWhiteSpace(source[index]))
+            {
+                index--;
+            }
+
+            int identifierEndIndex = index + 1;
+            while (index >= 0 && IsIdentifierCharacter(source[index]))
+            {
+                index--;
+            }
+
+            return source.Substring(index + 1, identifierEndIndex - index - 1);
+        }
+
+        private static bool IsIdentifierCharacter(char value)
+        {
+            return char.IsLetterOrDigit(value) || value == '_';
+        }
+
         private static bool ContainsLegacyToolMigrationMarker(string source)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -861,6 +927,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int index = 0;
                 while (index < source.Length)
                 {
+                    if (StartsWith(source, index, "$@\"") || StartsWith(source, index, "@$\""))
+                    {
+                        index = MarkInterpolatedVerbatimStringAsIgnored(codeCharacters, source, index);
+                        continue;
+                    }
+
                     if (StartsWith(source, index, "$\"") && !StartsWith(source, index, "$\"\"\""))
                     {
                         index = MarkInterpolatedRegularStringAsIgnored(codeCharacters, source, index);
@@ -1070,6 +1142,59 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     {
                         MarkRangeAsIgnored(codeCharacters, literalStartIndex, index + 1);
                         return index + 1;
+                    }
+
+                    index++;
+                }
+
+                MarkRangeAsIgnored(codeCharacters, literalStartIndex, source.Length);
+                return source.Length;
+            }
+
+            private static int MarkInterpolatedVerbatimStringAsIgnored(
+                bool[] codeCharacters,
+                string source,
+                int prefixIndex)
+            {
+                Debug.Assert(codeCharacters != null, "codeCharacters must not be null");
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(prefixIndex >= 0, "prefixIndex must not be negative");
+
+                int quoteIndex = prefixIndex + 2;
+                int literalStartIndex = prefixIndex;
+                int index = quoteIndex + 1;
+                while (index < source.Length)
+                {
+                    if (source[index] == '"')
+                    {
+                        if (index + 1 < source.Length && source[index + 1] == '"')
+                        {
+                            index += 2;
+                            continue;
+                        }
+
+                        MarkRangeAsIgnored(codeCharacters, literalStartIndex, index + 1);
+                        return index + 1;
+                    }
+
+                    if (source[index] == '{')
+                    {
+                        if (index + 1 < source.Length && source[index + 1] == '{')
+                        {
+                            index += 2;
+                            continue;
+                        }
+
+                        MarkRangeAsIgnored(codeCharacters, literalStartIndex, index);
+                        index = FindInterpolationHoleEndIndex(source, index);
+                        literalStartIndex = index;
+                        continue;
+                    }
+
+                    if (source[index] == '}' && index + 1 < source.Length && source[index + 1] == '}')
+                    {
+                        index += 2;
+                        continue;
                     }
 
                     index++;

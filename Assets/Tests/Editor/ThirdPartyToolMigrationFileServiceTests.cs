@@ -221,6 +221,42 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsing_RewritesGenericSplitContractFiles()
+        {
+            // Verifies that collection-shaped legacy type references migrate with their assembly.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string listPath = Path.Combine(toolDirectory, "ToolList.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(
+                    listPath,
+                    "public sealed class ToolList { public System.Collections.Generic.List<IUnityTool> Tools; }");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(3));
+                Assert.That(File.ReadAllText(listPath), Does.Contain(
+                    "System.Collections.Generic.List<IUnityCliLoopTool>"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenLegacyToolExistsUnderAsmref_RewritesReferencedAsmdef()
         {
             // Verifies that asmref folders mark the referenced asmdef as the migrated assembly.
@@ -257,6 +293,56 @@ public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
                 Assert.That(File.ReadAllText(toolPath), Does.Contain("UnityCliLoopTool<HelloSchema, HelloResponse>"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenNestedAsmrefOverridesAncestorAsmdef_RewritesReferencedAsmdef()
+        {
+            // Verifies that nested asmref folders use their referenced assembly instead of an ancestor asmdef.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string ancestorDirectory = Path.Combine(projectRoot, "Assets", "OuterAssembly");
+                string asmrefDirectory = Path.Combine(ancestorDirectory, "VendorToolParts");
+                string targetDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(asmrefDirectory);
+                Directory.CreateDirectory(targetDirectory);
+                string ancestorAsmdefPath = Path.Combine(ancestorDirectory, "OuterAssembly.Editor.asmdef");
+                string toolPath = Path.Combine(asmrefDirectory, "HelloTool.cs");
+                string asmrefPath = Path.Combine(asmrefDirectory, "VendorTools.Editor.asmref");
+                string targetAsmdefPath = Path.Combine(targetDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(ancestorAsmdefPath, @"{
+    ""name"": ""OuterAssembly.Editor"",
+    ""references"": []
+}");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}");
+                File.WriteAllText(asmrefPath, @"{
+    ""reference"": ""VendorTools.Editor""
+}");
+                File.WriteAllText(targetAsmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(toolPath), Does.Contain("UnityCliLoopTool<HelloSchema, HelloResponse>"));
+                Assert.That(File.ReadAllText(targetAsmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(ancestorAsmdefPath), Does.Not.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             }
             finally
             {
