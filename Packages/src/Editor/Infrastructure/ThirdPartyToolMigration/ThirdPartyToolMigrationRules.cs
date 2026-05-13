@@ -260,7 +260,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return RegexMatchesCode(source, LegacyBaseTypeUsageRegex) ||
                 RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex) ||
-                ContainsLegacyAssemblyScopedTypeReference(source);
+                ContainsLegacyAssemblyScopedTypeReference(source) ||
+                ContainsLegacyToolAttributeList(source, canMigrateBareLegacyToolAttribute: true);
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)

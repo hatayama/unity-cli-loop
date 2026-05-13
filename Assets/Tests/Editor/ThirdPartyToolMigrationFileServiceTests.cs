@@ -293,6 +293,42 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsing_RewritesSplitBareToolAttributes()
+        {
+            // Verifies that attribute-only files relying on global legacy usings migrate with their assembly.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string toolAttributePath = Path.Combine(toolDirectory, "HelloTool.Attribute.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(
+                    toolAttributePath,
+                    "[McpTool]\npublic sealed partial class HelloTool\n{\n}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(3));
+                Assert.That(File.ReadAllText(toolAttributePath), Does.Contain("[UnityCliLoopTool]"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenLegacyToolExistsUnderAsmref_RewritesReferencedAsmdef()
         {
             // Verifies that asmref folders mark the referenced asmdef as the migrated assembly.
