@@ -31,8 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             MigrationPlan plan = CreateMigrationPlan(projectRoot);
             foreach (MigrationFileChange change in plan.Changes)
             {
-                AtomicFileWriter.Write(change.FilePath, change.Content);
-                AtomicFileWriter.CleanupBackup(change.FilePath + ".bak");
+                WriteMigrationFile(change.FilePath, change.Content);
             }
 
             return new ThirdPartyToolMigrationResult(
@@ -50,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             ProjectFileInventory inventory = ProjectFileInventory.Create(projectRoot);
             MigrationAssemblyUsage assemblyUsage = FindMigrationAssemblyUsage(
+                projectRoot,
                 inventory.CSharpFilePaths,
                 inventory.AsmdefFilePaths);
             List<MigrationFileChange> changes = new();
@@ -58,7 +58,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             foreach (string csharpFilePath in inventory.CSharpFilePaths)
             {
                 string source = File.ReadAllText(csharpFilePath);
-                string assemblyDirectory = FindNearestAssemblyDirectory(csharpFilePath, assemblyUsage.AsmdefDirectories);
+                string assemblyDirectory = FindNearestAssemblyDirectory(
+                    csharpFilePath,
+                    assemblyUsage.AsmdefDirectories,
+                    projectRoot);
                 bool hasLegacyAssemblySource =
                     assemblyUsage.LegacyAssemblyDirectories.Contains(assemblyDirectory);
                 ThirdPartyToolMigrationContentResult result =
@@ -98,10 +101,46 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new MigrationPlan(changes, replacementCount);
         }
 
+        private static void WriteMigrationFile(string filePath, string content)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+            Debug.Assert(content != null, "content must not be null");
+
+            string tempFilePath = CreateUniqueSidecarPath(filePath, ".tmp");
+            File.WriteAllText(tempFilePath, content);
+            if (!File.Exists(filePath))
+            {
+                File.Move(tempFilePath, filePath);
+                return;
+            }
+
+            string backupFilePath = CreateUniqueSidecarPath(filePath, ".bak");
+            File.Replace(tempFilePath, filePath, backupFilePath);
+            File.Delete(backupFilePath);
+        }
+
+        private static string CreateUniqueSidecarPath(string filePath, string extension)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(extension), "extension must not be null or empty");
+
+            string directory = Path.GetDirectoryName(filePath) ?? string.Empty;
+            string fileName = Path.GetFileName(filePath);
+            string sidecarPath = Path.Combine(directory, $"{fileName}.{Guid.NewGuid():N}{extension}");
+            while (File.Exists(sidecarPath))
+            {
+                sidecarPath = Path.Combine(directory, $"{fileName}.{Guid.NewGuid():N}{extension}");
+            }
+
+            return sidecarPath;
+        }
+
         private static MigrationAssemblyUsage FindMigrationAssemblyUsage(
+            string projectRoot,
             List<string> csharpFilePaths,
             List<string> asmdefFilePaths)
         {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(csharpFilePaths != null, "csharpFilePaths must not be null");
             Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
 
@@ -117,11 +156,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             foreach (string csharpFilePath in csharpFilePaths)
             {
                 string source = File.ReadAllText(csharpFilePath);
-                string assemblyDirectory = FindNearestAssemblyDirectory(csharpFilePath, asmdefDirectories);
-                if (string.IsNullOrEmpty(assemblyDirectory))
-                {
-                    continue;
-                }
+                string assemblyDirectory = FindNearestAssemblyDirectory(
+                    csharpFilePath,
+                    asmdefDirectories,
+                    projectRoot);
 
                 if (ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
                 {
@@ -150,10 +188,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static string FindNearestAssemblyDirectory(
             string csharpFilePath,
-            List<string> asmdefDirectories)
+            List<string> asmdefDirectories,
+            string fallbackAssemblyDirectory)
         {
             Debug.Assert(!string.IsNullOrEmpty(csharpFilePath), "csharpFilePath must not be null or empty");
             Debug.Assert(asmdefDirectories != null, "asmdefDirectories must not be null");
+            Debug.Assert(
+                !string.IsNullOrEmpty(fallbackAssemblyDirectory),
+                "fallbackAssemblyDirectory must not be null or empty");
 
             string csharpDirectory = Path.GetDirectoryName(csharpFilePath) ?? string.Empty;
             foreach (string asmdefDirectory in asmdefDirectories)
@@ -164,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
-            return string.Empty;
+            return fallbackAssemblyDirectory;
         }
 
         private static bool IsSameOrChildPath(string childPath, string parentPath)
