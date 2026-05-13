@@ -121,6 +121,23 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolAttributeIsQualified_RewritesQualifiedAttribute()
+        {
+            // Verifies that tools without a namespace import still receive a compilable V3 attribute.
+            string source =
+                "[io.github.hatayama.uLoopMCP.McpToolAttribute(Description = \"hello\")] public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "[io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopTool]"));
+            Assert.That(result.Content, Does.Not.Contain("McpTool"));
+            Assert.That(result.Content, Does.Not.Contain("Description"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyApiExistsOnlyInComment_KeepsContent()
         {
             // Verifies that migration does not rewrite inert documentation comments inside C# files.
@@ -184,7 +201,10 @@ namespace Samples
 }";
 
             ThirdPartyToolMigrationContentResult result =
-                ThirdPartyToolMigrationRules.MigrateAsmdefSource(source, hasLegacyCSharpSource: false);
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: false,
+                    requiresApplicationReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
@@ -204,7 +224,10 @@ namespace Samples
 }";
 
             ThirdPartyToolMigrationContentResult result =
-                ThirdPartyToolMigrationRules.MigrateAsmdefSource(source, hasLegacyCSharpSource: false);
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: false,
+                    requiresApplicationReference: false);
 
             Assert.That(result.Changed, Is.False);
             Assert.That(result.Content, Is.EqualTo(source));
@@ -222,11 +245,36 @@ namespace Samples
 }";
 
             ThirdPartyToolMigrationContentResult result =
-                ThirdPartyToolMigrationRules.MigrateAsmdefSource(source, hasLegacyCSharpSource: true);
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: true,
+                    requiresApplicationReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             Assert.That(result.Content, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+        }
+
+        [Test]
+        public void MigrateAsmdefSource_WhenManualRegistrationIsUsed_KeepsApplicationReference()
+        {
+            // Verifies that migrated manual registration code can reference the V3 registrar assembly.
+            string source = @"{
+    ""name"": ""MyCompany.Tools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: true,
+                    requiresApplicationReference: true);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            Assert.That(result.Content, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
         }
 
         [Test]

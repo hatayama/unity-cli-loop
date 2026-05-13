@@ -64,6 +64,48 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
+        public void ApplyMigration_WhenManualRegistrationExists_AddsApplicationReference()
+        {
+            // Verifies that migrated manual registration source keeps access to the V3 registrar assembly.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "ManualToolRegistration.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+public static class ManualToolRegistration
+{
+    public static void Register(IUnityTool tool)
+    {
+        CustomToolManager.RegisterCustomTool(tool);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(toolPath), Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.RegisterCustomTool"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void PreviewMigration_WhenLegacyToolExistsUnderExcludedDirectory_IgnoresFile()
         {
             // Verifies that generated Unity folders are not scanned for third-party tools.

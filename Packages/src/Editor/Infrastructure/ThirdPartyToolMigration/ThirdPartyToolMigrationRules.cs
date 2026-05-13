@@ -16,8 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         internal const string LegacyNamespace = "io.github.hatayama.uLoopMCP";
         internal const string CurrentNamespace = "io.github.hatayama.UnityCliLoop.ToolContracts";
+        internal const string CurrentApplicationNamespace = "io.github.hatayama.UnityCliLoop.Application";
         internal const string LegacyEditorAssemblyName = "uLoopMCP.Editor";
         internal const string LegacyEditorAssemblyGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
+        internal const string CurrentApplicationGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
         internal const string CurrentToolContractsGuidReference = "GUID:fc3fd32eddbee40e39c2d76dc184957b";
         private const string DescriptionAttributeArgumentName = "Description";
         private const string DisplayDevelopmentOnlyAttributeArgumentName = "DisplayDevelopmentOnly";
@@ -40,14 +42,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyNamespaceRegex =
             new(Regex.Escape(LegacyNamespace), RegexOptions.Compiled);
 
+        private static readonly Regex LegacyRegistrarRegex =
+            new(@"\bCustomToolManager\b", RegexOptions.Compiled);
+
         private static readonly Regex LegacyToolAttributeListRegex =
             new(@"\[(?<attributes>[^\]]*\bMcpTool(?:Attribute)?\b[^\]]*)\]", RegexOptions.Compiled);
 
         private static readonly Regex LegacyToolAttributeEntryRegex =
-            new(@"^\s*McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$", RegexOptions.Compiled);
+            new(
+                @"^\s*(?<qualifier>io\.github\.hatayama\.uLoopMCP\.)?McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$",
+                RegexOptions.Compiled);
 
         private static readonly ReplacementRule[] CSharpReplacementRules =
         {
+            new(
+                Regex.Escape($"{LegacyNamespace}.CustomToolManager"),
+                $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"),
             new(Regex.Escape(LegacyNamespace), CurrentNamespace),
             new(@"\bMcpToolAttribute\b", "UnityCliLoopToolAttribute"),
             new(@"\bIUnityTool\b", "IUnityCliLoopTool"),
@@ -55,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             new(@"\bBaseToolSchema\b", "UnityCliLoopToolSchema"),
             new(@"\bBaseToolResponse\b", "UnityCliLoopToolResponse"),
             new(@"\bSecuritySettings\b", CurrentSecuritySettingTypeName),
-            new(@"\bCustomToolManager\b", "UnityCliLoopToolRegistrar")
+            new(@"\bCustomToolManager\b", $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar")
         };
 
         internal static ThirdPartyToolMigrationContentResult MigrateCSharpSource(string source)
@@ -90,7 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static ThirdPartyToolMigrationContentResult MigrateAsmdefSource(
             string source,
-            bool hasLegacyCSharpSource)
+            bool hasLegacyCSharpSource,
+            bool requiresApplicationReference)
         {
             Debug.Assert(source != null, "source must not be null");
 
@@ -107,18 +118,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             foreach (JToken referenceToken in references)
             {
                 string reference = referenceToken.Value<string>() ?? string.Empty;
-                string migratedReference = GetMigratedAsmdefReference(reference, hasLegacyCSharpSource);
-                if (!string.Equals(reference, migratedReference, StringComparison.Ordinal))
+                string[] migratedReferenceItems = GetMigratedAsmdefReferences(
+                    reference,
+                    hasLegacyCSharpSource,
+                    requiresApplicationReference);
+                bool referenceChanged = migratedReferenceItems.Length != 1 ||
+                    !string.Equals(migratedReferenceItems[0], reference, StringComparison.Ordinal);
+                if (referenceChanged)
                 {
                     replacementCount++;
                 }
 
-                if (!addedReferences.Add(migratedReference))
+                foreach (string migratedReference in migratedReferenceItems)
                 {
-                    continue;
-                }
+                    if (!addedReferences.Add(migratedReference))
+                    {
+                        continue;
+                    }
 
-                migratedReferences.Add(migratedReference);
+                    migratedReferences.Add(migratedReference);
+                }
             }
 
             if (replacementCount == 0)
@@ -139,6 +158,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ContainsLegacyToolMigrationMarker(source);
         }
 
+        internal static bool ContainsLegacyRegistrarApi(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return ContainsLegacyToolMigrationMarker(source) && RegexMatchesCode(source, LegacyRegistrarRegex);
+        }
+
         internal static bool IsExcludedDirectoryName(string directoryName)
         {
             Debug.Assert(!string.IsNullOrEmpty(directoryName), "directoryName must not be null or empty");
@@ -157,20 +183,33 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return names;
         }
 
-        private static string GetMigratedAsmdefReference(string reference, bool hasLegacyCSharpSource)
+        private static string[] GetMigratedAsmdefReferences(
+            string reference,
+            bool hasLegacyCSharpSource,
+            bool requiresApplicationReference)
         {
             if (string.Equals(reference, LegacyEditorAssemblyName, StringComparison.Ordinal))
             {
-                return CurrentToolContractsGuidReference;
+                return GetMigratedLegacyEditorReferences(requiresApplicationReference);
             }
 
             if (hasLegacyCSharpSource
                 && string.Equals(reference, LegacyEditorAssemblyGuidReference, StringComparison.Ordinal))
             {
-                return CurrentToolContractsGuidReference;
+                return GetMigratedLegacyEditorReferences(requiresApplicationReference);
             }
 
-            return reference;
+            return new[] { reference };
+        }
+
+        private static string[] GetMigratedLegacyEditorReferences(bool requiresApplicationReference)
+        {
+            if (!requiresApplicationReference)
+            {
+                return new[] { CurrentToolContractsGuidReference };
+            }
+
+            return new[] { CurrentToolContractsGuidReference, CurrentApplicationGuidReference };
         }
 
         private static string MigrateLegacyToolAttributeList(Match match)
@@ -215,9 +254,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string argumentsSource = match.Groups["arguments"].Value;
             string[] migratedArguments = GetMigratedSupportedAttributeArguments(argumentsSource);
+            string attributeName = match.Groups["qualifier"].Success
+                ? $"{CurrentNamespace}.UnityCliLoopTool"
+                : "UnityCliLoopTool";
             migratedAttribute = migratedArguments.Length == 0
-                ? "UnityCliLoopTool"
-                : $"UnityCliLoopTool({string.Join(", ", migratedArguments)})";
+                ? attributeName
+                : $"{attributeName}({string.Join(", ", migratedArguments)})";
             return true;
         }
 

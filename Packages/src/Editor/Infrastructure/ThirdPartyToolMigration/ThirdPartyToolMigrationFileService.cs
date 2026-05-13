@@ -49,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             ProjectFileInventory inventory = ProjectFileInventory.Create(projectRoot);
-            HashSet<string> legacyAssemblyDirectories = FindLegacyAssemblyDirectories(
+            MigrationAssemblyUsage assemblyUsage = FindMigrationAssemblyUsage(
                 inventory.CSharpFilePaths,
                 inventory.AsmdefFilePaths);
             List<MigrationFileChange> changes = new();
@@ -73,9 +73,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 string source = File.ReadAllText(asmdefFilePath);
                 string asmdefDirectory = Path.GetDirectoryName(asmdefFilePath) ?? projectRoot;
-                bool hasLegacyCSharpSource = legacyAssemblyDirectories.Contains(asmdefDirectory);
+                bool hasLegacyCSharpSource = assemblyUsage.LegacyAssemblyDirectories.Contains(asmdefDirectory);
+                bool requiresApplicationReference =
+                    assemblyUsage.ApplicationReferenceAssemblyDirectories.Contains(asmdefDirectory);
                 ThirdPartyToolMigrationContentResult result =
-                    ThirdPartyToolMigrationRules.MigrateAsmdefSource(source, hasLegacyCSharpSource);
+                    ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                        source,
+                        hasLegacyCSharpSource,
+                        requiresApplicationReference);
                 if (!result.Changed)
                 {
                     continue;
@@ -88,7 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new MigrationPlan(changes, replacementCount);
         }
 
-        private static HashSet<string> FindLegacyAssemblyDirectories(
+        private static MigrationAssemblyUsage FindMigrationAssemblyUsage(
             List<string> csharpFilePaths,
             List<string> asmdefFilePaths)
         {
@@ -101,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 .OrderByDescending(path => path.Length)
                 .ToList();
             HashSet<string> legacyAssemblyDirectories = new(StringComparer.Ordinal);
+            HashSet<string> applicationReferenceAssemblyDirectories = new(StringComparer.Ordinal);
 
             foreach (string csharpFilePath in csharpFilePaths)
             {
@@ -114,10 +120,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (!string.IsNullOrEmpty(assemblyDirectory))
                 {
                     legacyAssemblyDirectories.Add(assemblyDirectory);
+                    if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source))
+                    {
+                        applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
+                    }
                 }
             }
 
-            return legacyAssemblyDirectories;
+            return new MigrationAssemblyUsage(
+                legacyAssemblyDirectories,
+                applicationReferenceAssemblyDirectories);
         }
 
         private static string FindNearestAssemblyDirectory(
@@ -187,6 +199,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             public List<MigrationFileChange> Changes { get; }
             public int ReplacementCount { get; }
             public List<string> ChangedFilePaths { get; }
+        }
+
+        private readonly struct MigrationAssemblyUsage
+        {
+            public MigrationAssemblyUsage(
+                HashSet<string> legacyAssemblyDirectories,
+                HashSet<string> applicationReferenceAssemblyDirectories)
+            {
+                Debug.Assert(legacyAssemblyDirectories != null, "legacyAssemblyDirectories must not be null");
+                Debug.Assert(
+                    applicationReferenceAssemblyDirectories != null,
+                    "applicationReferenceAssemblyDirectories must not be null");
+
+                LegacyAssemblyDirectories = legacyAssemblyDirectories ?? new HashSet<string>(StringComparer.Ordinal);
+                ApplicationReferenceAssemblyDirectories = applicationReferenceAssemblyDirectories ??
+                    new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            public HashSet<string> LegacyAssemblyDirectories { get; }
+            public HashSet<string> ApplicationReferenceAssemblyDirectories { get; }
         }
 
         private sealed class ProjectFileInventory
