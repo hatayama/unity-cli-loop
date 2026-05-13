@@ -56,7 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static readonly Regex LegacyToolAttributeEntryRegex =
             new(
-                @"^\s*(?<qualifier>io\.github\.hatayama\.uLoopMCP\.)?McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$",
+                @"^\s*(?:(?<qualifier>io\.github\.hatayama\.uLoopMCP\.)|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.)?" +
+                @"McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$",
                 RegexOptions.Compiled);
 
         private static readonly ReplacementRule[] CSharpReplacementRules =
@@ -103,10 +104,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool shouldApplyRegistrarRenames = shouldApplyContractRenames &&
                 RegexMatchesCode(source, LegacyRegistrarRegex);
             int replacementCount = 0;
-            migratedContent = ReplaceLegacyToolAttributesInCode(migratedContent, ref replacementCount);
+            string[] legacyNamespaceAliases = GetLegacyNamespaceAliases(source);
+            migratedContent = ReplaceLegacyToolAttributesInCode(
+                migratedContent,
+                legacyNamespaceAliases,
+                ref replacementCount);
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(
                 migratedContent,
-                GetLegacyNamespaceAliases(source),
+                legacyNamespaceAliases,
                 ref replacementCount);
 
             if (shouldApplyContractRenames)
@@ -257,9 +262,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             };
         }
 
-        private static bool TryMigrateLegacyToolAttributeList(string attributesSource, out string migratedAttributes)
+        private static bool TryMigrateLegacyToolAttributeList(
+            string attributesSource,
+            string[] legacyNamespaceAliases,
+            out string migratedAttributes)
         {
             Debug.Assert(attributesSource != null, "attributesSource must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
 
             string[] attributes = SplitAttributeArguments(attributesSource);
             List<string> migratedAttributeItems = new();
@@ -267,7 +276,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             foreach (string attribute in attributes)
             {
                 string trimmedAttribute = attribute.Trim();
-                if (TryMigrateLegacyToolAttributeEntry(trimmedAttribute, out string migratedAttribute))
+                if (TryMigrateLegacyToolAttributeEntry(
+                        trimmedAttribute,
+                        legacyNamespaceAliases,
+                        out string migratedAttribute))
                 {
                     migratedAttributeItems.Add(migratedAttribute);
                     changed = true;
@@ -287,9 +299,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return true;
         }
 
-        private static bool TryMigrateLegacyToolAttributeEntry(string attribute, out string migratedAttribute)
+        private static bool TryMigrateLegacyToolAttributeEntry(
+            string attribute,
+            string[] legacyNamespaceAliases,
+            out string migratedAttribute)
         {
             Debug.Assert(attribute != null, "attribute must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
 
             Match match = LegacyToolAttributeEntryRegex.Match(attribute);
             if (!match.Success)
@@ -298,9 +314,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
+            if (match.Groups["alias"].Success &&
+                !legacyNamespaceAliases.Contains(match.Groups["alias"].Value))
+            {
+                migratedAttribute = string.Empty;
+                return false;
+            }
+
             string argumentsSource = match.Groups["arguments"].Value;
             string[] migratedArguments = GetMigratedSupportedAttributeArguments(argumentsSource);
-            string attributeName = match.Groups["qualifier"].Success
+            string attributeName = match.Groups["qualifier"].Success || match.Groups["alias"].Success
                 ? $"{CurrentNamespace}.UnityCliLoopTool"
                 : "UnityCliLoopTool";
             migratedAttribute = migratedArguments.Length == 0
@@ -500,6 +523,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     aliasRegistrarRegex,
                     _ => $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar",
                     ref replacementCount);
+
+                Regex aliasToolInfoRegex = new(
+                    $@"(?<!\w){Regex.Escape(alias)}\.ToolInfo\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    aliasToolInfoRegex,
+                    _ => $"{CurrentDomainNamespace}.ToolInfo",
+                    ref replacementCount);
             }
 
             return migratedContent;
@@ -563,9 +595,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return migrated;
         }
 
-        private static string ReplaceLegacyToolAttributesInCode(string source, ref int replacementCount)
+        private static string ReplaceLegacyToolAttributesInCode(
+            string source,
+            string[] legacyNamespaceAliases,
+            ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
 
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
             StringBuilder builder = new(source.Length);
@@ -592,7 +628,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string attributesSource = source.Substring(index + 1, closingBracketIndex - index - 1);
-                if (!TryMigrateLegacyToolAttributeList(attributesSource, out string migratedAttributes))
+                if (!TryMigrateLegacyToolAttributeList(
+                        attributesSource,
+                        legacyNamespaceAliases,
+                        out string migratedAttributes))
                 {
                     builder.Append(source, index, closingBracketIndex - index + 1);
                     index = closingBracketIndex + 1;
@@ -680,6 +719,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            string[] legacyNamespaceAliases = GetLegacyNamespaceAliases(source);
             int index = 0;
             while (index < source.Length)
             {
@@ -700,7 +740,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string attributesSource = source.Substring(index + 1, closingBracketIndex - index - 1);
-                if (TryMigrateLegacyToolAttributeList(attributesSource, out _))
+                if (TryMigrateLegacyToolAttributeList(attributesSource, legacyNamespaceAliases, out _))
                 {
                     return true;
                 }

@@ -153,6 +153,24 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolAttributeIsAliasQualified_RewritesAliasQualifiedAttribute()
+        {
+            // Verifies that namespace alias attribute shorthand migrates to a resolvable V3 attribute.
+            string source = @"using Old = io.github.hatayama.uLoopMCP;
+
+[Old.McpTool(DisplayDevelopmentOnly = true)]
+public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "[io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopTool(DisplayDevelopmentOnly = true)]"));
+            Assert.That(result.Content, Does.Not.Contain("Old.McpTool"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyPublicHelpersAreUsed_RewritesHelperTypes()
         {
             // Verifies that migrated custom tools keep compiling when they override helper-driven schema behavior.
@@ -209,9 +227,10 @@ public static class ManualToolRegistration
 
 public static class ManualToolRegistration
 {
-    public static void Register(Old.IUnityTool tool)
+    public static Old.ToolInfo[] Register(Old.IUnityTool tool)
     {
         Old.CustomToolManager.RegisterCustomTool(tool);
+        return Old.CustomToolManager.GetRegisteredCustomTools();
     }
 }";
 
@@ -221,8 +240,10 @@ public static class ManualToolRegistration
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
                 "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.RegisterCustomTool"));
+            Assert.That(result.Content, Does.Contain("io.github.hatayama.UnityCliLoop.Domain.ToolInfo[]"));
             Assert.That(result.Content, Does.Not.Contain("Old.io.github"));
             Assert.That(result.Content, Does.Not.Contain("Old.CustomToolManager"));
+            Assert.That(result.Content, Does.Not.Contain("Old.ToolInfo"));
         }
 
         [Test]

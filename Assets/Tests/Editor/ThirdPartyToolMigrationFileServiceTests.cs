@@ -169,6 +169,36 @@ public static class ManualToolRegistration
         }
 
         [Test]
+        public void ApplyMigration_WhenNoAsmdefEditorAssemblyUsesGlobalLegacyUsing_KeepsRuntimeFiles()
+        {
+            // Verifies that predefined editor migration does not rewrite the separate runtime assembly.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string editorDirectory = Path.Combine(projectRoot, "Assets", "Editor", "VendorTools");
+                string runtimeDirectory = Path.Combine(projectRoot, "Assets", "Scripts");
+                Directory.CreateDirectory(editorDirectory);
+                Directory.CreateDirectory(runtimeDirectory);
+                string globalUsingPath = Path.Combine(editorDirectory, "GlobalUsings.cs");
+                string runtimePath = Path.Combine(runtimeDirectory, "BaseToolSchema.cs");
+                string runtimeSource = "public sealed class BaseToolSchema {}";
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(runtimePath, runtimeSource);
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain("io.github.hatayama.UnityCliLoop.ToolContracts"));
+                Assert.That(File.ReadAllText(runtimePath), Is.EqualTo(runtimeSource));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsingAndSplitManualRegistration_AddsApplicationReference()
         {
             // Verifies that manual registration files relying on assembly-level legacy detection get required refs.

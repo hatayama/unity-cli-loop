@@ -13,6 +13,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class ThirdPartyToolMigrationFileService : IThirdPartyToolMigrationPort
     {
+        private const string ImplicitEditorAssemblyDirectoryName = "__UnityCliLoopImplicitEditorAssembly";
+        private const string ImplicitRuntimeAssemblyDirectoryName = "__UnityCliLoopImplicitRuntimeAssembly";
+
         public ThirdPartyToolMigrationPreview PreviewMigration(string projectRoot)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
@@ -189,13 +192,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static string FindNearestAssemblyDirectory(
             string csharpFilePath,
             List<string> asmdefDirectories,
-            string fallbackAssemblyDirectory)
+            string projectRoot)
         {
             Debug.Assert(!string.IsNullOrEmpty(csharpFilePath), "csharpFilePath must not be null or empty");
             Debug.Assert(asmdefDirectories != null, "asmdefDirectories must not be null");
-            Debug.Assert(
-                !string.IsNullOrEmpty(fallbackAssemblyDirectory),
-                "fallbackAssemblyDirectory must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
             string csharpDirectory = Path.GetDirectoryName(csharpFilePath) ?? string.Empty;
             foreach (string asmdefDirectory in asmdefDirectories)
@@ -206,7 +207,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
-            return fallbackAssemblyDirectory;
+            return GetImplicitAssemblyDirectory(csharpFilePath, projectRoot);
+        }
+
+        private static string GetImplicitAssemblyDirectory(string csharpFilePath, string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(csharpFilePath), "csharpFilePath must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            string implicitAssemblyDirectoryName = IsEditorAssemblyPath(csharpFilePath, projectRoot)
+                ? ImplicitEditorAssemblyDirectoryName
+                : ImplicitRuntimeAssemblyDirectoryName;
+            return Path.Combine(projectRoot, implicitAssemblyDirectoryName);
+        }
+
+        private static bool IsEditorAssemblyPath(string csharpFilePath, string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(csharpFilePath), "csharpFilePath must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            string relativePath = csharpFilePath.StartsWith(projectRoot, StringComparison.Ordinal)
+                ? csharpFilePath.Substring(projectRoot.Length)
+                : csharpFilePath;
+            char[] separators =
+            {
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar
+            };
+            string[] pathSegments = relativePath.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            return pathSegments.Any(
+                pathSegment => string.Equals(pathSegment, "Editor", StringComparison.OrdinalIgnoreCase));
         }
 
         private static bool IsSameOrChildPath(string childPath, string parentPath)
