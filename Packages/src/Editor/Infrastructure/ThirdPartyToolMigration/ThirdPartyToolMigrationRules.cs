@@ -176,14 +176,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 legacyNamespaceAliases,
                 canMigrateBareLegacyToolAttribute,
                 ref replacementCount);
-            migratedContent = ReplaceLegacyRegistrarAliasesInCode(
-                migratedContent,
-                legacyNamespaceAliases,
-                ref replacementCount);
             migratedContent = ReplaceLegacyToolInfoConstructorsInCode(
                 migratedContent,
                 legacyNamespaceAliases,
                 canMigrateBareLegacyToolInfoConstructor,
+                ref replacementCount);
+            migratedContent = ReplaceLegacyRegistrarAliasesInCode(
+                migratedContent,
+                legacyNamespaceAliases,
                 ref replacementCount);
 
             if (shouldApplyContractRenames)

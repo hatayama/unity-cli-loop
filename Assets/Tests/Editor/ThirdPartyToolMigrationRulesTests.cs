@@ -576,6 +576,29 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolInfoConstructorUsesNamespaceAlias_RemovesDescriptionArgument()
+        {
+            // Verifies that aliased legacy metadata constructors migrate before namespace alias rewrites.
+            string source = @"using Old = io.github.hatayama.uLoopMCP;
+
+public static class ToolMetadataProvider
+{
+    public static Old.ToolInfo Create(Old.ToolParameterSchema schema)
+    {
+        return new Old.ToolInfo(""hello"", ""description"", schema);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema)"));
+            Assert.That(result.Content, Does.Not.Contain("\"description\", schema"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyRegistrarIsUsedThroughNamespaceAlias_RewritesRegistrar()
         {
             // Verifies that namespace aliases do not create invalid qualified registrar names.
