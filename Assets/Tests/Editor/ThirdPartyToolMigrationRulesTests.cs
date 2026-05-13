@@ -334,6 +334,33 @@ public static class ToolCountLabel
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyTextIsUsedInsideNestedInterpolatedStringLiteral_KeepsNestedLiteral()
+        {
+            // Verifies that string literals inside interpolation holes do not get rewritten as executable code.
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
+                "\n" +
+                "public static class ToolLabel\n" +
+                "{\n" +
+                "    public static string GetLabel()\n" +
+                "    {\n" +
+                "        return $\"{Log(\"CustomToolManager\")}\";\n" +
+                "    }\n" +
+                "\n" +
+                "    private static string Log(string value)\n" +
+                "    {\n" +
+                "        return value;\n" +
+                "    }\n" +
+                "}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("Log(\"CustomToolManager\")"));
+            Assert.That(result.Content, Does.Not.Contain("Log(\"io.github.hatayama.UnityCliLoop.Application"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyDomainMetadataIsUsedWithoutRegistrar_RewritesDomainMetadataType()
         {
             // Verifies that metadata helpers split away from registration code keep compiling after migration.
@@ -353,6 +380,29 @@ public static class ToolMetadataProvider
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("io.github.hatayama.UnityCliLoop.Domain.ToolInfo[]"));
             Assert.That(result.Content, Does.Not.Match(@"(?<!\.)\bToolInfo\b"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyToolInfoConstructorHasDescription_RemovesDescriptionArgument()
+        {
+            // Verifies that old registrar metadata construction keeps compiling after the V3 ToolInfo signature change.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo Create(ToolParameterSchema schema)
+    {
+        return new ToolInfo(""hello"", ""description"", schema);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema)"));
+            Assert.That(result.Content, Does.Not.Contain("\"description\", schema"));
         }
 
         [Test]

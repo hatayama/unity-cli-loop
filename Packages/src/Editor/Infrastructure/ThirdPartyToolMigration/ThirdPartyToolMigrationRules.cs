@@ -81,6 +81,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 @"McpTool(?:Attribute)?\s*(?:\((?<arguments>[\s\S]*)\))?\s*$",
                 RegexOptions.Compiled);
 
+        private static readonly Regex CurrentToolInfoConstructorRegex =
+            new(
+                $@"new\s+{Regex.Escape(CurrentDomainNamespace)}\.ToolInfo\s*\(",
+                RegexOptions.Compiled);
+
         private static readonly TypeReplacementRule[] ToolContractTypeReplacementRules =
         {
             new("ToolParameterSchemaGenerator", "UnityCliLoopToolParameterSchemaGenerator"),
@@ -174,6 +179,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         _ => rule.Replacement,
                         ref replacementCount);
                 }
+
+                migratedContent = ReplaceLegacyToolInfoConstructorsInCode(
+                    migratedContent,
+                    ref replacementCount);
             }
 
             return new ThirdPartyToolMigrationContentResult(
@@ -655,6 +664,101 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return migratedContent;
+        }
+
+        private static string ReplaceLegacyToolInfoConstructorsInCode(
+            string source,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = CurrentToolInfoConstructorRegex.Matches(source);
+            StringBuilder builder = new(source.Length);
+            int sourceCopyIndex = 0;
+            int localReplacementCount = 0;
+            foreach (Match match in matches)
+            {
+                if (match.Index < sourceCopyIndex || !codeTextMask.IsCodeAt(match.Index))
+                {
+                    continue;
+                }
+
+                int openParenthesisIndex = match.Index + match.Length - 1;
+                int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                    source,
+                    codeTextMask,
+                    openParenthesisIndex);
+                if (closingParenthesisIndex < 0)
+                {
+                    continue;
+                }
+
+                string argumentsSource = source.Substring(
+                    openParenthesisIndex + 1,
+                    closingParenthesisIndex - openParenthesisIndex - 1);
+                string[] arguments = SplitAttributeArguments(argumentsSource);
+                if (arguments.Length != 3)
+                {
+                    continue;
+                }
+
+                builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
+                builder.Append(source, match.Index, openParenthesisIndex - match.Index + 1);
+                builder.Append(arguments[0].Trim());
+                builder.Append(", ");
+                builder.Append(arguments[2].Trim());
+                builder.Append(')');
+                sourceCopyIndex = closingParenthesisIndex + 1;
+                localReplacementCount++;
+            }
+
+            if (localReplacementCount == 0)
+            {
+                return source;
+            }
+
+            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
+            replacementCount += localReplacementCount;
+            return builder.ToString();
+        }
+
+        private static int FindInvocationClosingParenthesisIndex(
+            string source,
+            CodeTextMask codeTextMask,
+            int openParenthesisIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(openParenthesisIndex >= 0, "openParenthesisIndex must not be negative");
+
+            int nestedParenthesisDepth = 0;
+            for (int i = openParenthesisIndex + 1; i < source.Length; i++)
+            {
+                if (!codeTextMask.IsCodeAt(i))
+                {
+                    continue;
+                }
+
+                if (source[i] == '(')
+                {
+                    nestedParenthesisDepth++;
+                    continue;
+                }
+
+                if (source[i] != ')')
+                {
+                    continue;
+                }
+
+                if (nestedParenthesisDepth == 0)
+                {
+                    return i;
+                }
+
+                nestedParenthesisDepth--;
+            }
+
+            return -1;
         }
 
         private static bool IsNamedAttributeArgument(string argument, string argumentName)
@@ -1270,7 +1374,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         }
 
                         MarkRangeAsIgnored(codeCharacters, literalStartIndex, index);
-                        index = FindRawInterpolationHoleEndIndex(source, index, dollarCount);
+                        index = MarkRawInterpolationHoleNestedTextAsIgnored(
+                            codeCharacters,
+                            source,
+                            index,
+                            dollarCount);
                         literalStartIndex = index;
                         continue;
                     }
@@ -1318,7 +1426,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         }
 
                         MarkRangeAsIgnored(codeCharacters, literalStartIndex, index);
-                        index = FindInterpolationHoleEndIndex(source, index);
+                        index = MarkInterpolationHoleNestedTextAsIgnored(codeCharacters, source, index);
                         literalStartIndex = index;
                         continue;
                     }
@@ -1371,7 +1479,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         }
 
                         MarkRangeAsIgnored(codeCharacters, literalStartIndex, index);
-                        index = FindInterpolationHoleEndIndex(source, index);
+                        index = MarkInterpolationHoleNestedTextAsIgnored(codeCharacters, source, index);
                         literalStartIndex = index;
                         continue;
                     }
@@ -1389,8 +1497,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return source.Length;
             }
 
-            private static int FindInterpolationHoleEndIndex(string source, int openBraceIndex)
+            private static int MarkInterpolationHoleNestedTextAsIgnored(
+                bool[] codeCharacters,
+                string source,
+                int openBraceIndex)
             {
+                Debug.Assert(codeCharacters != null, "codeCharacters must not be null");
                 Debug.Assert(source != null, "source must not be null");
                 Debug.Assert(openBraceIndex >= 0, "openBraceIndex must not be negative");
 
@@ -1398,21 +1510,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int index = openBraceIndex + 1;
                 while (index < source.Length)
                 {
-                    if (StartsWith(source, index, "@\""))
+                    int ignoredTextEndIndex = MarkIgnoredTextInInterpolationHole(
+                        codeCharacters,
+                        source,
+                        index);
+                    if (ignoredTextEndIndex != index)
                     {
-                        index = FindVerbatimStringEndIndex(source, index + 1);
-                        continue;
-                    }
-
-                    if (source[index] == '"')
-                    {
-                        index = FindRegularStringEndIndex(source, index);
-                        continue;
-                    }
-
-                    if (source[index] == '\'')
-                    {
-                        index = FindCharLiteralEndIndex(source, index);
+                        index = ignoredTextEndIndex;
                         continue;
                     }
 
@@ -1439,11 +1543,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return source.Length;
             }
 
-            private static int FindRawInterpolationHoleEndIndex(
+            private static int MarkRawInterpolationHoleNestedTextAsIgnored(
+                bool[] codeCharacters,
                 string source,
                 int openBraceIndex,
                 int interpolationBraceCount)
             {
+                Debug.Assert(codeCharacters != null, "codeCharacters must not be null");
                 Debug.Assert(source != null, "source must not be null");
                 Debug.Assert(openBraceIndex >= 0, "openBraceIndex must not be negative");
                 Debug.Assert(interpolationBraceCount > 0, "interpolationBraceCount must be positive");
@@ -1452,34 +1558,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int index = openBraceIndex + interpolationBraceCount;
                 while (index < source.Length)
                 {
-                    if (IsInterpolatedRawStringStart(source, index))
+                    int ignoredTextEndIndex = MarkIgnoredTextInInterpolationHole(
+                        codeCharacters,
+                        source,
+                        index);
+                    if (ignoredTextEndIndex != index)
                     {
-                        int dollarCount = CountRepeatedCharacter(source, index, '$');
-                        index = FindRawStringEndIndex(source, index + dollarCount);
-                        continue;
-                    }
-
-                    if (CountRepeatedCharacter(source, index, '"') >= MinimumRawStringDelimiterQuoteCount)
-                    {
-                        index = FindRawStringEndIndex(source, index);
-                        continue;
-                    }
-
-                    if (StartsWith(source, index, "@\""))
-                    {
-                        index = FindVerbatimStringEndIndex(source, index + 1);
-                        continue;
-                    }
-
-                    if (source[index] == '"')
-                    {
-                        index = FindRegularStringEndIndex(source, index);
-                        continue;
-                    }
-
-                    if (source[index] == '\'')
-                    {
-                        index = FindCharLiteralEndIndex(source, index);
+                        index = ignoredTextEndIndex;
                         continue;
                     }
 
@@ -1510,6 +1595,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 return source.Length;
+            }
+
+            private static int MarkIgnoredTextInInterpolationHole(
+                bool[] codeCharacters,
+                string source,
+                int startIndex)
+            {
+                Debug.Assert(codeCharacters != null, "codeCharacters must not be null");
+                Debug.Assert(source != null, "source must not be null");
+                Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+                if (IsInterpolatedRawStringStart(source, startIndex))
+                {
+                    return MarkInterpolatedRawStringAsIgnored(codeCharacters, source, startIndex);
+                }
+
+                if (StartsWith(source, startIndex, "$@\"") || StartsWith(source, startIndex, "@$\""))
+                {
+                    return MarkInterpolatedVerbatimStringAsIgnored(codeCharacters, source, startIndex);
+                }
+
+                if (StartsWith(source, startIndex, "$\"") && !StartsWith(source, startIndex, "$\"\"\""))
+                {
+                    return MarkInterpolatedRegularStringAsIgnored(codeCharacters, source, startIndex);
+                }
+
+                int ignoredTextEndIndex = GetIgnoredTextEndIndex(source, startIndex);
+                if (ignoredTextEndIndex == startIndex)
+                {
+                    return startIndex;
+                }
+
+                MarkRangeAsIgnored(codeCharacters, startIndex, ignoredTextEndIndex);
+                return ignoredTextEndIndex;
             }
 
             private static int FindCharLiteralEndIndex(string source, int quoteIndex)
