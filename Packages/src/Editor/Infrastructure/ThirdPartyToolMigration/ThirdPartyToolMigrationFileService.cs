@@ -594,12 +594,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 List<string> csharpFilePaths = new();
                 List<string> asmdefFilePaths = new();
                 List<string> asmrefFilePaths = new();
-                CollectCandidateFiles(
-                    projectRoot,
-                    projectRoot,
-                    csharpFilePaths,
-                    asmdefFilePaths,
-                    asmrefFilePaths);
+                string assetsDirectory = Path.Combine(projectRoot, "Assets");
+                if (Directory.Exists(assetsDirectory))
+                {
+                    CollectCandidateFiles(
+                        projectRoot,
+                        assetsDirectory,
+                        csharpFilePaths,
+                        asmdefFilePaths,
+                        asmrefFilePaths);
+                }
+
                 csharpFilePaths.Sort(StringComparer.Ordinal);
                 asmdefFilePaths.Sort(StringComparer.Ordinal);
                 asmrefFilePaths.Sort(StringComparer.Ordinal);

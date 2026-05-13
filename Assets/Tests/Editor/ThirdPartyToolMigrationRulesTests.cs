@@ -429,6 +429,52 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolInfoConstructorUsesDescriptionVariable_RemovesDescriptionArgument()
+        {
+            // Verifies that non-literal V2 description arguments do not survive into the V3 constructor call.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo Create(ToolParameterSchema schema, string description)
+    {
+        return new ToolInfo(""hello"", description, schema);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema)"));
+            Assert.That(result.Content, Does.Not.Contain("description, schema"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyToolInfoConstructorUsesNamedDescription_RemovesDescriptionArgument()
+        {
+            // Verifies that named V2 description arguments are removed without reordering supported arguments.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo Create(ToolParameterSchema schema, string description)
+    {
+        return new ToolInfo(name: ""hello"", description: description, parameterSchema: schema);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(name: \"hello\", parameterSchema: schema)"));
+            Assert.That(result.Content, Does.Not.Contain("description: description"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenCurrentToolInfoConstructorExistsInMixedFile_KeepsConstructorArguments()
         {
             // Verifies that partially migrated metadata construction is not treated as the removed V2 signature.
@@ -439,7 +485,8 @@ public static class ToolMetadataProvider
 {
     public static ToolInfo Create(ToolParameterSchema schema)
     {
-        return new ToolInfo(""hello"", schema, true);
+        bool displayDevelopmentOnly = true;
+        return new ToolInfo(""hello"", schema, displayDevelopmentOnly);
     }
 }";
 
@@ -448,8 +495,9 @@ public static class ToolMetadataProvider
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema, true)"));
-            Assert.That(result.Content, Does.Not.Contain("new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", true)"));
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema, displayDevelopmentOnly)"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", displayDevelopmentOnly)"));
         }
 
         [Test]

@@ -709,22 +709,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     openParenthesisIndex + 1,
                     closingParenthesisIndex - openParenthesisIndex - 1);
                 string[] arguments = SplitAttributeArguments(argumentsSource);
-                if (!ShouldDropLegacyToolInfoDescriptionArgument(arguments))
+                string[] migratedArguments = GetMigratedToolInfoConstructorArguments(arguments);
+                if (migratedArguments.Length == arguments.Length)
                 {
                     continue;
                 }
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
                 builder.Append(source, match.Index, openParenthesisIndex - match.Index + 1);
-                builder.Append(arguments[0].Trim());
-                builder.Append(", ");
-                builder.Append(arguments[2].Trim());
-                if (arguments.Length == 4)
-                {
-                    builder.Append(", ");
-                    builder.Append(arguments[3].Trim());
-                }
-
+                builder.Append(string.Join(", ", migratedArguments));
                 builder.Append(')');
                 sourceCopyIndex = closingParenthesisIndex + 1;
                 localReplacementCount++;
@@ -740,12 +733,104 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return builder.ToString();
         }
 
-        private static bool ShouldDropLegacyToolInfoDescriptionArgument(string[] arguments)
+        private static string[] GetMigratedToolInfoConstructorArguments(string[] arguments)
         {
             Debug.Assert(arguments != null, "arguments must not be null");
 
-            return arguments.Length == 4 ||
-                (arguments.Length == 3 && IsStringLiteralExpression(arguments[1].Trim()));
+            int namedDescriptionArgumentIndex = FindNamedConstructorArgumentIndex(
+                arguments,
+                DescriptionAttributeArgumentName.ToLowerInvariant());
+            if (namedDescriptionArgumentIndex >= 0)
+            {
+                return RemoveArgumentAt(arguments, namedDescriptionArgumentIndex);
+            }
+
+            if (arguments.Length == 4)
+            {
+                return new[]
+                {
+                    arguments[0].Trim(),
+                    arguments[2].Trim(),
+                    arguments[3].Trim()
+                };
+            }
+
+            if (arguments.Length == 3 && ShouldDropLegacyPositionalToolInfoDescriptionArgument(arguments))
+            {
+                return new[]
+                {
+                    arguments[0].Trim(),
+                    arguments[2].Trim()
+                };
+            }
+
+            return arguments;
+        }
+
+        private static int FindNamedConstructorArgumentIndex(string[] arguments, string argumentName)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(argumentName), "argumentName must not be null or empty");
+
+            for (int i = 0; i < arguments.Length; i++)
+            {
+                if (IsNamedConstructorArgument(arguments[i].Trim(), argumentName))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static bool IsNamedConstructorArgument(string argument, string argumentName)
+        {
+            Debug.Assert(argument != null, "argument must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(argumentName), "argumentName must not be null or empty");
+
+            int colonIndex = argument.IndexOf(':');
+            if (colonIndex <= 0)
+            {
+                return false;
+            }
+
+            string possibleArgumentName = argument.Substring(0, colonIndex).Trim();
+            return string.Equals(possibleArgumentName, argumentName, StringComparison.Ordinal);
+        }
+
+        private static string[] RemoveArgumentAt(string[] arguments, int removeIndex)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+            Debug.Assert(removeIndex >= 0, "removeIndex must not be negative");
+            Debug.Assert(removeIndex < arguments.Length, "removeIndex must be within arguments");
+
+            List<string> migratedArguments = new();
+            for (int i = 0; i < arguments.Length; i++)
+            {
+                if (i == removeIndex)
+                {
+                    continue;
+                }
+
+                migratedArguments.Add(arguments[i].Trim());
+            }
+
+            return migratedArguments.ToArray();
+        }
+
+        private static bool ShouldDropLegacyPositionalToolInfoDescriptionArgument(string[] arguments)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+            Debug.Assert(arguments.Length == 3, "arguments must contain three items");
+
+            string secondArgument = arguments[1].Trim();
+            string thirdArgument = arguments[2].Trim();
+            if (IsLikelyToolParameterSchemaExpression(secondArgument))
+            {
+                return false;
+            }
+
+            return IsStringLiteralExpression(secondArgument) || !IsBooleanLikeExpression(thirdArgument);
         }
 
         private static bool IsStringLiteralExpression(string expression)
@@ -758,6 +843,64 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 expression.StartsWith("$@\"", StringComparison.Ordinal) ||
                 expression.StartsWith("@$\"", StringComparison.Ordinal) ||
                 expression.StartsWith("\"\"\"", StringComparison.Ordinal);
+        }
+
+        private static bool IsLikelyToolParameterSchemaExpression(string expression)
+        {
+            Debug.Assert(expression != null, "expression must not be null");
+
+            return expression.IndexOf("schema", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsBooleanLikeExpression(string expression)
+        {
+            Debug.Assert(expression != null, "expression must not be null");
+
+            string valueExpression = RemoveNamedArgumentPrefix(expression);
+            return string.Equals(valueExpression, "true", StringComparison.Ordinal) ||
+                string.Equals(valueExpression, "false", StringComparison.Ordinal) ||
+                valueExpression.IndexOf(
+                    DisplayDevelopmentOnlyAttributeArgumentName,
+                    StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string RemoveNamedArgumentPrefix(string expression)
+        {
+            Debug.Assert(expression != null, "expression must not be null");
+
+            int colonIndex = expression.IndexOf(':');
+            if (colonIndex <= 0)
+            {
+                return expression;
+            }
+
+            string possibleArgumentName = expression.Substring(0, colonIndex).Trim();
+            if (!IsIdentifier(possibleArgumentName))
+            {
+                return expression;
+            }
+
+            return expression.Substring(colonIndex + 1).Trim();
+        }
+
+        private static bool IsIdentifier(string value)
+        {
+            Debug.Assert(value != null, "value must not be null");
+
+            if (value.Length == 0 || char.IsDigit(value[0]))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < value.Length; i++)
+            {
+                if (!IsIdentifierCharacter(value[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static int FindInvocationClosingParenthesisIndex(

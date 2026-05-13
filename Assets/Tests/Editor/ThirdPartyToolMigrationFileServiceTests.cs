@@ -694,6 +694,30 @@ public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
         }
 
         [Test]
+        public void PreviewMigration_WhenLegacyToolExistsOutsideAssets_IgnoresFile()
+        {
+            // Verifies that repository tooling outside Unity source roots is not migrated.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolsDirectory = Path.Combine(projectRoot, "tools");
+                Directory.CreateDirectory(toolsDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolsDirectory, "LegacyToolFixture.cs"),
+                    "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class LegacyToolFixture {}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationPreview preview = service.PreviewMigration(projectRoot);
+
+                Assert.That(preview.HasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenLegacyToolExistsUnderAssetsPackagesDirectory_RewritesAssetsFiles()
         {
             // Verifies that only Unity's project-root Packages directory is excluded from migration scans.
