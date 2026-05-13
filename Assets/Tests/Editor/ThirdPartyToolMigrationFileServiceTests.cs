@@ -64,6 +64,49 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
+        public void ApplyMigration_WhenLegacyToolAsmdefHasNoReferencesArray_AddsAsmdefReference()
+        {
+            // Verifies that valid minimal asmdefs compile after project-wide migration.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor""
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(toolPath), Does.Contain("UnityCliLoopTool<HelloSchema, HelloResponse>"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain(@"""references"": ["));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenManualRegistrationExists_AddsApplicationReference()
         {
             // Verifies that migrated manual registration source keeps access to the V3 registrar assembly.

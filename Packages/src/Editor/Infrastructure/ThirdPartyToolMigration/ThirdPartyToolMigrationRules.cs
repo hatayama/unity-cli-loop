@@ -255,8 +255,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             JObject asmdef = JObject.Parse(source);
-            JArray references = asmdef["references"] as JArray;
-            if (references == null)
+            JToken referencesToken = asmdef["references"];
+            JArray references = referencesToken == null ? new JArray() : referencesToken as JArray;
+            if (referencesToken != null && references == null)
             {
                 return new ThirdPartyToolMigrationContentResult(source, 0);
             }

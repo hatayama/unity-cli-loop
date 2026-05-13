@@ -1045,6 +1045,27 @@ public sealed class OtherTool
         }
 
         [Test]
+        public void MigrateAsmdefSource_WhenLegacySourceHasNoReferencesArray_AddsToolContractsReference()
+        {
+            // Verifies that valid minimal asmdefs receive references needed by migrated source files.
+            string source = @"{
+    ""name"": ""MyCompany.Tools.Editor""
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: true,
+                    requiresToolContractsReference: false,
+                    requiresApplicationReference: false,
+                    requiresDomainReference: false);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(@"""references"": ["));
+            Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+        }
+
+        [Test]
         public void MigrateAsmdefSource_WhenCurrentToolContractsUsesLegacyGuid_RewritesToToolContractsGuid()
         {
             // Verifies that partially migrated custom tool assemblies can resolve V3 ToolContracts.
