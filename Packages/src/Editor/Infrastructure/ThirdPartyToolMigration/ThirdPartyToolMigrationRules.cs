@@ -80,9 +80,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
+            return MigrateCSharpSourceForLegacyAssembly(
+                source,
+                hasLegacyAssemblySource: ContainsLegacyToolMigrationMarker(source));
+        }
+
+        internal static ThirdPartyToolMigrationContentResult MigrateCSharpSourceForLegacyAssembly(
+            string source,
+            bool hasLegacyAssemblySource)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
             string migratedContent = source;
-            bool shouldApplyContractRenames = ContainsLegacyToolMigrationMarker(source);
-            bool shouldApplyRegistrarRenames = ContainsLegacyRegistrarApi(source);
+            bool hasLocalLegacyMarker = ContainsLegacyToolMigrationMarker(source);
+            bool shouldApplyContractRenames = hasLegacyAssemblySource || hasLocalLegacyMarker;
+            bool shouldApplyRegistrarRenames = shouldApplyContractRenames &&
+                RegexMatchesCode(source, LegacyRegistrarRegex);
             int replacementCount = 0;
             migratedContent = ReplaceLegacyToolAttributesInCode(migratedContent, ref replacementCount);
 

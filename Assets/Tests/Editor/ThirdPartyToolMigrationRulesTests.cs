@@ -241,6 +241,21 @@ public static class ManualToolRegistration
         }
 
         [Test]
+        public void MigrateCSharpSourceForLegacyAssembly_WhenFileReliesOnGlobalUsing_RewritesContractTypes()
+        {
+            // Verifies that files split away from a legacy global using still migrate inside the same assembly.
+            string source = "public sealed class HelloSchema : BaseToolSchema {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
+                    source,
+                    hasLegacyAssemblySource: true);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("UnityCliLoopToolSchema"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyNamespaceLikeTextExists_KeepsContent()
         {
             // Verifies that namespace migration treats dots as literal characters.

@@ -107,6 +107,41 @@ public static class ManualToolRegistration
         }
 
         [Test]
+        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsing_RewritesSplitContractFiles()
+        {
+            // Verifies that schema files relying on global legacy usings migrate with their assembly.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string schemaPath = Path.Combine(toolDirectory, "HelloSchema.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(schemaPath, "public sealed class HelloSchema : BaseToolSchema {}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(3));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain("io.github.hatayama.UnityCliLoop.ToolContracts"));
+                Assert.That(File.ReadAllText(schemaPath), Does.Contain("UnityCliLoopToolSchema"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void PreviewMigration_WhenLegacyToolExistsUnderExcludedDirectory_IgnoresFile()
         {
             // Verifies that generated Unity folders are not scanned for third-party tools.
