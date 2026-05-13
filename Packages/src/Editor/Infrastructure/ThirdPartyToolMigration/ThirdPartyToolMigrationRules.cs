@@ -698,7 +698,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     openParenthesisIndex + 1,
                     closingParenthesisIndex - openParenthesisIndex - 1);
                 string[] arguments = SplitAttributeArguments(argumentsSource);
-                if (arguments.Length != 3)
+                if (arguments.Length != 3 && arguments.Length != 4)
                 {
                     continue;
                 }
@@ -708,6 +708,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 builder.Append(arguments[0].Trim());
                 builder.Append(", ");
                 builder.Append(arguments[2].Trim());
+                if (arguments.Length == 4)
+                {
+                    builder.Append(", ");
+                    builder.Append(arguments[3].Trim());
+                }
+
                 builder.Append(')');
                 sourceCopyIndex = closingParenthesisIndex + 1;
                 localReplacementCount++;

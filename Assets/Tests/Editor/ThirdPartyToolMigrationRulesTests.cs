@@ -406,6 +406,29 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolInfoConstructorHasDevelopmentFlag_PreservesDevelopmentFlag()
+        {
+            // Verifies that old registrar metadata visibility keeps compiling after the V3 ToolInfo signature change.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolMetadataProvider
+{
+    public static ToolInfo Create(ToolParameterSchema schema)
+    {
+        return new ToolInfo(""hello"", ""description"", schema, true);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema, true)"));
+            Assert.That(result.Content, Does.Not.Contain("\"description\", schema"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyRegistrarIsUsedThroughNamespaceAlias_RewritesRegistrar()
         {
             // Verifies that namespace aliases do not create invalid qualified registrar names.
