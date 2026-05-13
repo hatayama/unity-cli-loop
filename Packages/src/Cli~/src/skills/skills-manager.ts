@@ -56,6 +56,7 @@ const EXCLUDED_DIRS = new Set([
   'Skill',
 ]);
 const EXCLUDED_FILES = new Set(['.meta', '.DS_Store', '.gitkeep']);
+export const DEFAULT_GROUP_MANAGED_SKILLS = false;
 class SkillsPathConstants {
   public static readonly PACKAGES_DIR = 'Packages';
   public static readonly SRC_DIR = 'src';
@@ -268,7 +269,7 @@ function getSkillStatus(
   return 'installed';
 }
 
-/** @internal Move managed skills from the legacy flat layout into the namespaced install root. */
+/** @internal Move top-level managed skills into the namespaced install root when grouping is requested. */
 export function migrateLegacyManagedSkills(
   baseDir: string,
   managedSkillDirNames: readonly string[],
@@ -625,7 +626,7 @@ function resolveSkillSearchRootCandidate(candidate: string): string {
 export function getAllSkillStatuses(
   target: TargetConfig,
   global: boolean,
-  groupManagedSkills: boolean = true,
+  groupManagedSkills: boolean = DEFAULT_GROUP_MANAGED_SKILLS,
 ): SkillInfo[] {
   const allSkills = collectAllSkills();
   return allSkills.map((skill) => ({
@@ -755,7 +756,7 @@ interface InstallResult {
 export function installAllSkills(
   target: TargetConfig,
   global: boolean,
-  groupManagedSkills: boolean = true,
+  groupManagedSkills: boolean = DEFAULT_GROUP_MANAGED_SKILLS,
 ): InstallResult {
   const result: InstallResult = {
     installed: 0,
@@ -826,7 +827,7 @@ interface UninstallResult {
 export function uninstallAllSkills(
   target: TargetConfig,
   global: boolean,
-  groupManagedSkills: boolean = true,
+  groupManagedSkills: boolean = DEFAULT_GROUP_MANAGED_SKILLS,
 ): UninstallResult {
   const result: UninstallResult = { removed: 0, notFound: 0 };
 
@@ -835,7 +836,11 @@ export function uninstallAllSkills(
 
   const allSkills = collectAllSkills();
   for (const skill of allSkills) {
-    if (uninstallSkill(skill, target, global, groupManagedSkills)) {
+    const removed = groupManagedSkills
+      ? uninstallSkill(skill, target, global, groupManagedSkills)
+      : uninstallSkillFromAllLayouts(skill, target, global);
+
+    if (removed) {
       result.removed++;
     } else {
       result.notFound++;
@@ -848,7 +853,7 @@ export function uninstallAllSkills(
 export function getInstallDir(
   target: TargetConfig,
   global: boolean,
-  groupManagedSkills: boolean = true,
+  groupManagedSkills: boolean = DEFAULT_GROUP_MANAGED_SKILLS,
 ): string {
   const baseDir = getSkillsBaseDir(target, global);
   return groupManagedSkills ? getManagedSkillsDir(baseDir) : baseDir;

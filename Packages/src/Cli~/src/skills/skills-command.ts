@@ -12,6 +12,7 @@ import {
   uninstallAllSkills,
   getInstallDir,
   getTotalSkillCount,
+  DEFAULT_GROUP_MANAGED_SKILLS,
 } from './skills-manager.js';
 import { TargetConfig, ALL_TARGET_IDS, getTargetConfig } from './target-config.js';
 
@@ -36,7 +37,7 @@ export function registerSkillsCommand(program: Command): void {
     .command('list')
     .description('List all uloop skills and their installation status')
     .option('-g, --global', 'Check global installation')
-    .option('--flat', 'Install directly under skills/ instead of skills/unity-cli-loop/')
+    .option('--flat', 'Use skills/ directly (default)')
     .option('--claude', 'Check Claude Code installation')
     .option('--codex', 'Check Codex CLI installation')
     .option('--cursor', 'Check Cursor installation')
@@ -47,14 +48,14 @@ export function registerSkillsCommand(program: Command): void {
     .action((options: SkillsOptions) => {
       const targets = resolveTargets(options);
       const global = options.global ?? false;
-      listSkills(targets, global, !(options.flat ?? false));
+      listSkills(targets, global, DEFAULT_GROUP_MANAGED_SKILLS);
     });
 
   skillsCmd
     .command('install')
     .description('Install all uloop skills')
     .option('-g, --global', 'Install to global location')
-    .option('--flat', 'Install directly under skills/ instead of skills/unity-cli-loop/')
+    .option('--flat', 'Install directly under skills/ (default)')
     .option('--claude', 'Install to Claude Code')
     .option('--codex', 'Install to Codex CLI')
     .option('--cursor', 'Install to Cursor')
@@ -68,14 +69,14 @@ export function registerSkillsCommand(program: Command): void {
         showTargetGuidance('install');
         return;
       }
-      installSkills(targets, options.global ?? false, !(options.flat ?? false));
+      installSkills(targets, options.global ?? false, DEFAULT_GROUP_MANAGED_SKILLS);
     });
 
   skillsCmd
     .command('uninstall')
     .description('Uninstall all uloop skills')
     .option('-g, --global', 'Uninstall from global location')
-    .option('--flat', 'Uninstall skills installed directly under skills/')
+    .option('--flat', 'Uninstall skills installed directly under skills/ (default)')
     .option('--claude', 'Uninstall from Claude Code')
     .option('--codex', 'Uninstall from Codex CLI')
     .option('--cursor', 'Uninstall from Cursor')
@@ -89,7 +90,7 @@ export function registerSkillsCommand(program: Command): void {
         showTargetGuidance('uninstall');
         return;
       }
-      uninstallSkills(targets, options.global ?? false, !(options.flat ?? false));
+      uninstallSkills(targets, options.global ?? false, DEFAULT_GROUP_MANAGED_SKILLS);
     });
 }
 
@@ -123,17 +124,17 @@ function showTargetGuidance(command: string): void {
   console.log(`\nPlease specify at least one target for '${command}':`);
   console.log('');
   console.log('Available targets:');
-  console.log('  --claude        Claude Code (.claude/skills/unity-cli-loop/)');
-  console.log('  --codex         Codex CLI (.codex/skills/unity-cli-loop/)');
-  console.log('  --cursor        Cursor (.cursor/skills/unity-cli-loop/)');
-  console.log('  --gemini        Gemini CLI (.gemini/skills/unity-cli-loop/)');
-  console.log('  --agents        Other (.agents) (.agents/skills/unity-cli-loop/)');
-  console.log('  --windsurf      Windsurf (.agents/skills/unity-cli-loop/)');
-  console.log('  --antigravity   Antigravity (.agent/skills/unity-cli-loop/)');
+  console.log('  --claude        Claude Code (.claude/skills/)');
+  console.log('  --codex         Codex CLI (.codex/skills/)');
+  console.log('  --cursor        Cursor (.cursor/skills/)');
+  console.log('  --gemini        Gemini CLI (.gemini/skills/)');
+  console.log('  --agents        Other (.agents) (.agents/skills/)');
+  console.log('  --windsurf      Windsurf (.agents/skills/)');
+  console.log('  --antigravity   Antigravity (.agent/skills/)');
   console.log('');
   console.log('Options:');
   console.log('  -g, --global   Use global location');
-  console.log('  --flat         Use skills/ directly instead of skills/unity-cli-loop/');
+  console.log('  --flat         Use skills/ directly (default)');
   console.log('');
   console.log('Examples:');
   console.log(`  uloop skills ${command} --claude`);

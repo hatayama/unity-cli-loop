@@ -19,6 +19,7 @@ import {
   parseFrontmatter,
   removeDeprecatedSkillDirs,
   syncInstalledSkillDirectory,
+  uninstallAllSkills,
 } from '../skills/skills-manager.js';
 import { getTargetConfig } from '../skills/target-config.js';
 
@@ -225,6 +226,13 @@ describe('skill install layout', () => {
     );
   });
 
+  it('should resolve the flat install directory by default', () => {
+    // Verifies default installs land where Claude Code can discover skills.
+    expect(getInstallDir(getTargetConfig('claude'), true)).toBe(
+      join(homedir(), '.claude', 'skills'),
+    );
+  });
+
   it('should resolve the selected skill directory for uninstall operations', () => {
     const skillsRoot = createSkillsRoot();
 
@@ -376,7 +384,7 @@ describe('skill install layout', () => {
 
     process.chdir(projectRoot);
 
-    const skillsRoot = getInstallDir(getTargetConfig('claude'), false);
+    const skillsRoot = getInstallDir(getTargetConfig('claude'), false, true);
     syncInstalledSkillDirectory(
       join(skillsRoot, 'uloop-capture-tool'),
       'SKILL.md',
@@ -435,6 +443,28 @@ describe('skill install layout', () => {
     expect(removed).toBe(2);
     expect(existsSync(join(skillsRoot, 'uloop-unity-search'))).toBe(false);
     expect(existsSync(join(managedSkillsRoot, 'uloop-unity-search'))).toBe(false);
+  });
+
+  it('should remove an installed skill from both layouts by default', () => {
+    // Verifies default uninstall cleans up the previous grouped CLI layout.
+    const projectRoot = createUnityProjectRoot();
+    const skillsRoot = join(projectRoot, '.claude', 'skills');
+    const projectSkillDir = join(projectRoot, 'Assets', 'Test', 'Editor', 'CleanupTool', 'Skill');
+    const skillName = 'uloop-cleanup-test';
+
+    writeSkill(
+      projectSkillDir,
+      ['---', `name: ${skillName}`, '---', '', '# Cleanup Test', ''].join('\n'),
+    );
+    writeSkill(join(skillsRoot, skillName));
+    writeSkill(join(skillsRoot, 'unity-cli-loop', skillName));
+    process.chdir(projectRoot);
+
+    const result = uninstallAllSkills(getTargetConfig('claude'), false);
+
+    expect(result.removed).toBe(1);
+    expect(existsSync(join(skillsRoot, skillName))).toBe(false);
+    expect(existsSync(join(skillsRoot, 'unity-cli-loop', skillName))).toBe(false);
   });
 
   it('should remove stale files when syncing an installed skill directory', () => {
