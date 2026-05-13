@@ -64,7 +64,9 @@ namespace Samples
         public void MigrateCSharpSource_WhenLegacyToolAttributeSuffixHasArguments_DropsUnsupportedArguments()
         {
             // Verifies that old attribute suffix syntax does not keep removed V3 attribute arguments.
-            string source = "[McpToolAttribute(Description = \"hello\")] public sealed class HelloTool {}";
+            string source =
+                "using io.github.hatayama.uLoopMCP;\n" +
+                "[McpToolAttribute(Description = \"hello\")] public sealed class HelloTool {}";
 
             ThirdPartyToolMigrationContentResult result =
                 ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
@@ -79,7 +81,7 @@ namespace Samples
         public void MigrateCSharpSource_WhenLegacyToolAttributeHasSupportedArguments_PreservesSupportedArguments()
         {
             // Verifies that migration drops removed metadata without changing supported tool visibility metadata.
-            string source =
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
                 "[McpTool(Description = \"hello\", DisplayDevelopmentOnly = true)] public sealed class HelloTool {}";
 
             ThirdPartyToolMigrationContentResult result =
@@ -94,7 +96,7 @@ namespace Samples
         public void MigrateCSharpSource_WhenLegacyToolAttributeHasSecurityArgument_RewritesSecurityArgument()
         {
             // Verifies that supported security metadata keeps compiling after the enum rename.
-            string source =
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
                 "[McpTool(RequiredSecuritySetting = SecuritySettings.None)] public sealed class HelloTool {}";
 
             ThirdPartyToolMigrationContentResult result =
@@ -109,7 +111,8 @@ namespace Samples
         public void MigrateCSharpSource_WhenLegacyToolAttributeSharesAttributeList_RewritesOnlyLegacyToolEntry()
         {
             // Verifies that valid C# attribute lists migrate the tool attribute without dropping sibling attributes.
-            string source = "[McpTool(Description = \"hello\"), System.Obsolete] public sealed class HelloTool {}";
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
+                "[McpTool(Description = \"hello\"), System.Obsolete] public sealed class HelloTool {}";
 
             ThirdPartyToolMigrationContentResult result =
                 ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
@@ -124,7 +127,8 @@ namespace Samples
         public void MigrateCSharpSource_WhenLegacyToolDescriptionContainsBracket_RewritesAttribute()
         {
             // Verifies that description text cannot terminate the attribute-list scan early.
-            string source = "[McpTool(Description = \"Use [foo]\")] public sealed class HelloTool {}";
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
+                "[McpTool(Description = \"Use [foo]\")] public sealed class HelloTool {}";
 
             ThirdPartyToolMigrationContentResult result =
                 ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
@@ -462,6 +466,24 @@ public sealed class HelloResponse : io.github.hatayama.uLoopMCP.BaseToolResponse
         {
             // Verifies that unrelated project types are not migrated just because their names resemble old API names.
             string source = "public sealed class CustomToolManager { public SecuritySettings Settings; }";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenBareMcpToolHasNoLegacyMarker_KeepsContent()
+        {
+            // Verifies that unrelated attribute types with the same short name do not trigger migration.
+            string source = @"using Some.Other.Mcp;
+
+[McpTool]
+public sealed class OtherTool
+{
+}";
 
             ThirdPartyToolMigrationContentResult result =
                 ThirdPartyToolMigrationRules.MigrateCSharpSource(source);

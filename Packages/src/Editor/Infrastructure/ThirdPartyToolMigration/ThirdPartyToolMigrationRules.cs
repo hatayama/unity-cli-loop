@@ -66,9 +66,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 @"ToolInfo\s*(?:\[\])?\s+[A-Za-z_][A-Za-z0-9_]*)",
                 RegexOptions.Compiled);
 
-        private static readonly Regex LegacyAssemblyScopedTypeNameRegex =
-            new(@"\b(?:IUnityTool|ToolInfo)\b", RegexOptions.Compiled);
-
         private static readonly Regex LegacyNamespaceAliasRegex =
             new(
                 @"\busing\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?" +
@@ -124,6 +121,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             string migratedContent = source;
+            string[] legacyNamespaceAliases = GetLegacyNamespaceAliases(source);
+            bool hasLegacyNamespaceUsage = RegexMatchesCode(source, LegacyNamespaceRegex);
+            bool canMigrateBareLegacyToolAttribute =
+                hasLegacyAssemblySource ||
+                hasLegacyNamespaceUsage ||
+                legacyNamespaceAliases.Length > 0;
             bool hasLocalLegacyMarker = ContainsLegacyToolMigrationMarker(source);
             bool shouldApplyContractRenames = hasLegacyAssemblySource || hasLocalLegacyMarker;
             bool shouldApplyRegistrarRenames = shouldApplyContractRenames &&
@@ -131,10 +134,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool shouldApplyDomainMetadataRenames = shouldApplyContractRenames &&
                 RegexMatchesCode(source, LegacyDomainMetadataRegex);
             int replacementCount = 0;
-            string[] legacyNamespaceAliases = GetLegacyNamespaceAliases(source);
             migratedContent = ReplaceLegacyToolAttributesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
+                canMigrateBareLegacyToolAttribute,
                 ref replacementCount);
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(
                 migratedContent,
@@ -323,6 +326,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static bool TryMigrateLegacyToolAttributeList(
             string attributesSource,
             string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyToolAttribute,
             out string migratedAttributes)
         {
             Debug.Assert(attributesSource != null, "attributesSource must not be null");
@@ -337,6 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (TryMigrateLegacyToolAttributeEntry(
                         trimmedAttribute,
                         legacyNamespaceAliases,
+                        canMigrateBareLegacyToolAttribute,
                         out string migratedAttribute))
                 {
                     migratedAttributeItems.Add(migratedAttribute);
@@ -360,6 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static bool TryMigrateLegacyToolAttributeEntry(
             string attribute,
             string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyToolAttribute,
             out string migratedAttribute)
         {
             Debug.Assert(attribute != null, "attribute must not be null");
@@ -372,8 +378,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            if (match.Groups["alias"].Success &&
-                !legacyNamespaceAliases.Contains(match.Groups["alias"].Value))
+            bool hasQualifier = match.Groups["qualifier"].Success;
+            bool hasAlias = match.Groups["alias"].Success;
+            if (!hasQualifier && !hasAlias && !canMigrateBareLegacyToolAttribute)
+            {
+                migratedAttribute = string.Empty;
+                return false;
+            }
+
+            if (hasAlias && !legacyNamespaceAliases.Contains(match.Groups["alias"].Value))
             {
                 migratedAttribute = string.Empty;
                 return false;
@@ -381,7 +394,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string argumentsSource = match.Groups["arguments"].Value;
             string[] migratedArguments = GetMigratedSupportedAttributeArguments(argumentsSource);
-            string attributeName = match.Groups["qualifier"].Success || match.Groups["alias"].Success
+            string attributeName = hasQualifier || hasAlias
                 ? $"{CurrentNamespace}.UnityCliLoopTool"
                 : "UnityCliLoopTool";
             migratedAttribute = migratedArguments.Length == 0
@@ -701,6 +714,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static string ReplaceLegacyToolAttributesInCode(
             string source,
             string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyToolAttribute,
             ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -734,6 +748,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (!TryMigrateLegacyToolAttributeList(
                         attributesSource,
                         legacyNamespaceAliases,
+                        canMigrateBareLegacyToolAttribute,
                         out string migratedAttributes))
                 {
                     builder.Append(source, index, closingBracketIndex - index + 1);
@@ -813,7 +828,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
-            MatchCollection matches = LegacyAssemblyScopedTypeNameRegex.Matches(source);
+            foreach (TypeReplacementRule rule in ToolContractTypeReplacementRules)
+            {
+                if (ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.LegacyName))
+                {
+                    return true;
+                }
+            }
+
+            return ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, "ToolInfo");
+        }
+
+        private static bool ContainsLegacyAssemblyScopedTypeName(
+            string source,
+            CodeTextMask codeTextMask,
+            string typeName)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(typeName), "typeName must not be null or empty");
+
+            Regex typeNameRegex = new($@"(?<![\.:])\b{Regex.Escape(typeName)}\b", RegexOptions.Compiled);
+            MatchCollection matches = typeNameRegex.Matches(source);
             foreach (Match match in matches)
             {
                 if (!codeTextMask.IsCodeAt(match.Index))
@@ -876,10 +911,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (RegexMatchesCode(source, LegacyNamespaceRegex)) return true;
 
-            return ContainsLegacyToolAttributeList(source);
+            if (RegexMatchesCode(source, LegacyBaseTypeUsageRegex)) return true;
+
+            if (RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex)) return true;
+
+            return ContainsLegacyToolAttributeList(source, canMigrateBareLegacyToolAttribute: false);
         }
 
-        private static bool ContainsLegacyToolAttributeList(string source)
+        private static bool ContainsLegacyToolAttributeList(
+            string source,
+            bool canMigrateBareLegacyToolAttribute)
         {
             Debug.Assert(source != null, "source must not be null");
 
@@ -905,7 +946,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string attributesSource = source.Substring(index + 1, closingBracketIndex - index - 1);
-                if (TryMigrateLegacyToolAttributeList(attributesSource, legacyNamespaceAliases, out _))
+                if (TryMigrateLegacyToolAttributeList(
+                        attributesSource,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyToolAttribute,
+                        out _))
                 {
                     return true;
                 }
