@@ -77,22 +77,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldAutoShow, Is.EqualTo(expected));
         }
 
-        [TestCase("1.7.2", "1.7.3", true, true)]
-        [TestCase("1.7.3", "1.7.3", true, false)]
-        [TestCase("1.7.2", "1.7.3", false, false)]
+        [TestCase("1.7.2", "1.7.3", true)]
+        [TestCase("1.7.3", "1.7.3", false)]
         public void ShouldCheckThirdPartyToolMigrationTargets_ReturnsExpectedValue(
             string lastSeenVersion,
             string currentVersion,
-            bool suppressAutoShow,
             bool expected)
         {
             bool shouldCheck =
                 SetupWizardWindow.ShouldCheckThirdPartyToolMigrationTargets(
                     currentVersion,
-                    lastSeenVersion,
-                    suppressAutoShow);
+                    lastSeenVersion);
 
             Assert.That(shouldCheck, Is.EqualTo(expected));
+        }
+
+        [TestCase(true, true)]
+        [TestCase(false, false)]
+        public void ShouldRefreshThirdPartyToolMigrationOnOpen_ReturnsStartupDetectionResult(
+            bool hasThirdPartyToolMigrationTargets,
+            bool expected)
+        {
+            // Verifies that manual setup wizard opens do not start the project-wide migration preview.
+            bool shouldRefresh =
+                SetupWizardWindow.ShouldRefreshThirdPartyToolMigrationOnOpen(
+                    hasThirdPartyToolMigrationTargets);
+
+            Assert.That(shouldRefresh, Is.EqualTo(expected));
         }
 
         [TestCase(
@@ -311,6 +322,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "Unity CLI Loop Setup",
                     position,
                     "1.9.0",
+                    true,
                     true);
 
                 SerializedObject serializedWindow = new(window);
@@ -318,6 +330,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     serializedWindow.FindProperty("_lastSeenSetupWizardVersionBeforeOpen");
                 SerializedProperty recordVersionProperty =
                     serializedWindow.FindProperty("_shouldRecordLastSeenVersionAfterCreateGui");
+                SerializedProperty refreshMigrationProperty =
+                    serializedWindow.FindProperty("_shouldRefreshThirdPartyToolMigrationAfterCreateGui");
 
                 Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Setup"));
                 Assert.That(window.position, Is.EqualTo(position));
@@ -325,6 +339,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(lastSeenVersionProperty.stringValue, Is.EqualTo("1.9.0"));
                 Assert.That(recordVersionProperty, Is.Not.Null);
                 Assert.That(recordVersionProperty.boolValue, Is.True);
+                Assert.That(refreshMigrationProperty, Is.Not.Null);
+                Assert.That(refreshMigrationProperty.boolValue, Is.True);
             }
             finally
             {

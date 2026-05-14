@@ -77,6 +77,25 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return preview;
         }
 
+        public async Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
+            if (!Directory.Exists(normalizedProjectRoot))
+            {
+                throw new DirectoryNotFoundException(normalizedProjectRoot);
+            }
+
+            string assetsDirectory = Path.Combine(normalizedProjectRoot, "Assets");
+            if (!Directory.Exists(assetsDirectory))
+            {
+                return false;
+            }
+
+            return await FindFirstMigrationTargetAsync(assetsDirectory, ct);
+        }
+
         public ThirdPartyToolMigrationResult ApplyMigration(string projectRoot)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
@@ -103,6 +122,101 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 _cachedPreviewProjectRoot = string.Empty;
                 _cachedPreview = default;
             }
+        }
+
+        private static async Task<bool> FindFirstMigrationTargetAsync(string assetsDirectory, CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(assetsDirectory), "assetsDirectory must not be null or empty");
+
+            Stack<string> pendingDirectories = new();
+            pendingDirectories.Push(assetsDirectory);
+            int inspectedEntryCount = 0;
+
+            while (pendingDirectories.Count > 0)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                string directoryPath = pendingDirectories.Pop();
+                foreach (string filePath in Directory.EnumerateFiles(directoryPath))
+                {
+                    if (ct.IsCancellationRequested)
+                    {
+                        return false;
+                    }
+
+                    if (ContainsFastMigrationTarget(filePath))
+                    {
+                        return true;
+                    }
+
+                    inspectedEntryCount++;
+                    if (inspectedEntryCount % PreviewYieldBatchSize == 0)
+                    {
+                        await Task.Yield();
+                    }
+                }
+
+                foreach (string childDirectoryPath in Directory.EnumerateDirectories(directoryPath))
+                {
+                    if (ShouldExcludeFastScanDirectory(childDirectoryPath))
+                    {
+                        continue;
+                    }
+
+                    pendingDirectories.Push(childDirectoryPath);
+                    inspectedEntryCount++;
+                    if (inspectedEntryCount % PreviewYieldBatchSize == 0)
+                    {
+                        await Task.Yield();
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsFastMigrationTarget(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            string extension = Path.GetExtension(filePath);
+            if (string.Equals(extension, ".cs", StringComparison.OrdinalIgnoreCase))
+            {
+                return ContainsFastCSharpMigrationTarget(File.ReadAllText(filePath));
+            }
+
+            if (string.Equals(extension, ".asmdef", StringComparison.OrdinalIgnoreCase))
+            {
+                return ContainsFastAsmdefMigrationTarget(File.ReadAllText(filePath));
+            }
+
+            return false;
+        }
+
+        private static bool ContainsFastCSharpMigrationTarget(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return ThirdPartyToolMigrationRules.ContainsLegacyMigrationCandidateText(source) &&
+                ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
+        }
+
+        private static bool ContainsFastAsmdefMigrationTarget(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return ThirdPartyToolMigrationRules.ContainsLegacyAsmdefNameReference(source);
+        }
+
+        private static bool ShouldExcludeFastScanDirectory(string directoryPath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(directoryPath), "directoryPath must not be null or empty");
+
+            string directoryName = Path.GetFileName(directoryPath);
+            return ThirdPartyToolMigrationRules.IsExcludedDirectoryName(directoryName);
         }
 
         private bool TryGetCachedPreview(

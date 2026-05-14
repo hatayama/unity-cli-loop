@@ -77,6 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             string projectRoot,
             IProgress<ThirdPartyToolMigrationProgress> progress,
             CancellationToken ct);
+        Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct);
         ThirdPartyToolMigrationResult ApplyMigration(string projectRoot);
     }
 }

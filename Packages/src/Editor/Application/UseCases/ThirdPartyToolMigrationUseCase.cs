@@ -39,6 +39,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _migrationPort.PreviewMigrationAsync(projectRoot, progress, ct);
         }
 
+        public Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            return _migrationPort.HasMigrationTargetsAsync(projectRoot, ct);
+        }
+
         public ThirdPartyToolMigrationResult ApplyMigration(string projectRoot)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");

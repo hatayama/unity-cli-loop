@@ -382,6 +382,41 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
+        internal static bool ContainsLegacyMigrationCandidateText(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return ContainsTextFragment(source, LegacyNamespace) ||
+                ContainsTextFragment(source, LegacyEditorAssemblyName);
+        }
+
+        internal static bool ContainsLegacyAsmdefNameReference(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            if (!ContainsTextFragment(source, LegacyEditorAssemblyName))
+            {
+                return false;
+            }
+
+            JObject asmdef = JObject.Parse(source);
+            if (asmdef["references"] is not JArray references)
+            {
+                return false;
+            }
+
+            foreach (JToken reference in references)
+            {
+                string referenceValue = reference.Value<string>() ?? string.Empty;
+                if (string.Equals(referenceValue, LegacyEditorAssemblyName, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         internal static bool ContainsLegacyRegistrarApi(string source)
         {
             Debug.Assert(source != null, "source must not be null");

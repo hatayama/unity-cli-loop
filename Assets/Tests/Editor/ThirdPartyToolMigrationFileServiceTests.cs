@@ -1384,6 +1384,133 @@ public sealed class PackageToolResponse : BaseToolResponse
         }
 
         [Test]
+        public async Task HasMigrationTargetsAsync_WhenLegacyToolExistsUnderAssets_ReturnsTrue()
+        {
+            // Verifies that startup detection can find V2 custom tools without building a migration preview.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "HelloTool.cs"),
+                    "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class HelloTool {}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenLegacyAsmdefNameExistsUnderAssets_ReturnsTrue()
+        {
+            // Verifies that startup detection catches old assembly names without relying on source files.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""uLoopMCP.Editor""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentApplicationGuidReferenceExists_ReturnsFalse()
+        {
+            // Verifies that current V3 Application references do not trigger the startup migration prompt.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "CurrentManualToolRegistration.cs"),
+                    @"using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public static class CurrentManualToolRegistration
+{
+    public static void Register(IUnityCliLoopTool tool)
+    {
+        UnityCliLoopToolRegistrar.RegisterCustomTool(tool);
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d"",
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenLegacyToolExistsUnderPackagesDirectory_ReturnsFalse()
+        {
+            // Verifies that startup detection keeps Package Manager contents outside migration scope.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string packageDirectory = Path.Combine(
+                    projectRoot,
+                    "Packages",
+                    "com.example.legacy-tool",
+                    "Editor");
+                Directory.CreateDirectory(packageDirectory);
+                File.WriteAllText(
+                    Path.Combine(packageDirectory, "PackageTool.cs"),
+                    "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class PackageTool {}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void PreviewMigration_WhenCacheIsInvalidated_RefreshesChangedProject()
         {
             // Verifies that repeated setup wizard previews can reuse scans and refresh after invalidation.
