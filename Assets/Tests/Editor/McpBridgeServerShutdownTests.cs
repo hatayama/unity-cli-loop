@@ -146,14 +146,16 @@ namespace io.github.hatayama.uLoopMCP
 
         private static async Task<bool> WaitUntilAsync(Func<bool> predicate)
         {
-            for (int attempt = 0; attempt < 100; attempt++)
+            System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            TimeSpan timeout = TimeSpan.FromSeconds(1);
+            while (stopwatch.Elapsed < timeout)
             {
                 if (predicate())
                 {
                     return true;
                 }
 
-                await Task.Yield();
+                await Task.Delay(10);
             }
 
             return predicate();
