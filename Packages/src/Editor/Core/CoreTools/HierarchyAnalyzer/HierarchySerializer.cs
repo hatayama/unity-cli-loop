@@ -35,7 +35,7 @@ namespace io.github.hatayama.uLoopMCP
             );
 
             // Group by scene
-            var groups = nodes
+            List<SceneHierarchyGroup> groups = nodes
                 .GroupBy(n => n.sceneName)
                 .Select(g => BuildGroupForScene(g.Key ?? string.Empty, g.ToList(), options))
                 .ToList();
@@ -46,7 +46,7 @@ namespace io.github.hatayama.uLoopMCP
         private SceneHierarchyGroup BuildGroupForScene(string sceneName, List<HierarchyNode> sceneNodes, HierarchySerializationOptions options)
         {
             // Build nested structure per scene
-            Dictionary<int, HierarchyNodeNested> nodeDict = new Dictionary<int, HierarchyNodeNested>();
+            Dictionary<string, HierarchyNodeNested> nodeDict = new Dictionary<string, HierarchyNodeNested>();
 
             foreach (HierarchyNode flat in sceneNodes)
             {
@@ -70,7 +70,7 @@ namespace io.github.hatayama.uLoopMCP
                 {
                     roots.Add(nested);
                 }
-                else if (nodeDict.TryGetValue(flat.parent.Value, out var parentNested))
+                else if (nodeDict.TryGetValue(flat.parent, out HierarchyNodeNested parentNested))
                 {
                     parentNested.children.Add(nested);
                 }
@@ -121,7 +121,7 @@ namespace io.github.hatayama.uLoopMCP
             return unique * 2 < all.Count; // more than 50% duplicates
         }
 
-        private static List<string> BuildComponentsLutAndApply(List<HierarchyNode> sceneNodes, Dictionary<int, HierarchyNodeNested> nodeDict)
+        private static List<string> BuildComponentsLutAndApply(List<HierarchyNode> sceneNodes, Dictionary<string, HierarchyNodeNested> nodeDict)
         {
             Dictionary<string, int> lutIndex = new Dictionary<string, int>();
             List<string> lut = new List<string>();

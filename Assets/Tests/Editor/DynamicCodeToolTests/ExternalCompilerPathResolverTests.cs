@@ -88,6 +88,19 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
+        public void ResolveScriptingRootPath_WhenResourcesScriptingDotNetSdkLayoutExists_ShouldReturnResourcesScriptingPath()
+        {
+            string contentsPath = CreateDirectory("Contents");
+            string expectedScriptingRootPath = CreateDirectory(Path.Combine("Contents", "Resources", "Scripting"));
+            CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "NetCoreRuntime"));
+            CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "DotNetSdk", "sdk", "8.0.318", "Roslyn", "bincore"));
+
+            string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
+
+            Assert.That(resolvedScriptingRootPath, Is.EqualTo(expectedScriptingRootPath));
+        }
+
+        [Test]
         public void ResolveScriptingRootPath_WhenBothLayoutsExist_ShouldPreferResourcesScriptingLayout()
         {
             string contentsPath = CreateDirectory("Contents");
@@ -113,6 +126,30 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
 
             Assert.That(resolvedScriptingRootPath, Is.EqualTo(expectedScriptingRootPath));
+        }
+
+        [Test]
+        public void ResolveCompilerDirectoryPath_WhenLegacyLayoutExists_ShouldReturnDotNetSdkRoslynPath()
+        {
+            string scriptingRootPath = CreateDirectory("Scripting");
+            string expectedCompilerDirectoryPath = CreateDirectory(Path.Combine("Scripting", "DotNetSdkRoslyn"));
+
+            string resolvedCompilerDirectoryPath = ExternalCompilerPathResolver.ResolveCompilerDirectoryPath(scriptingRootPath);
+
+            Assert.That(resolvedCompilerDirectoryPath, Is.EqualTo(expectedCompilerDirectoryPath));
+        }
+
+        [Test]
+        public void ResolveCompilerDirectoryPath_WhenDotNetSdkLayoutHasMultipleSdkVersions_ShouldChooseHighestSdkRoslynBincorePath()
+        {
+            string scriptingRootPath = CreateDirectory("Scripting");
+            CreateDirectory(Path.Combine("Scripting", "DotNetSdk", "sdk", "8.0.100", "Roslyn", "bincore"));
+            string expectedCompilerDirectoryPath = CreateDirectory(Path.Combine("Scripting", "DotNetSdk", "sdk", "8.0.318", "Roslyn", "bincore"));
+            CreateDirectory(Path.Combine("Scripting", "DotNetSdk", "sdk", "current", "Roslyn", "bincore"));
+
+            string resolvedCompilerDirectoryPath = ExternalCompilerPathResolver.ResolveCompilerDirectoryPath(scriptingRootPath);
+
+            Assert.That(resolvedCompilerDirectoryPath, Is.EqualTo(expectedCompilerDirectoryPath));
         }
 
         private string CreateDirectory(string relativePath)
