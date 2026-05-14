@@ -85,6 +85,7 @@ namespace io.github.hatayama.uLoopMCP
         private TcpListener _tcpListener;
         private CancellationTokenSource _cancellationTokenSource;
         private Task _serverTask;
+        private readonly ConcurrentDictionary<int, Task> _clientTasks = new();
         // Read from thread pool (ServerLoopAsync), written from main thread (StopServer)
         private volatile bool _isRunning = false;
 
@@ -196,8 +197,10 @@ namespace io.github.hatayama.uLoopMCP
                 _tcpListener = new TcpListener(IPAddress.Loopback, Port);
                 _tcpListener.Start();
                 _isRunning = true;
-                
-                _serverTask = Task.Run(() => ServerLoopAsync(_cancellationTokenSource.Token));
+
+                TcpListener tcpListener = _tcpListener;
+                CancellationToken cancellationToken = _cancellationTokenSource.Token;
+                _serverTask = Task.Run(() => ServerLoopAsync(tcpListener, cancellationToken));
 
                 // Safety net: log if the server task faults unexpectedly.
                 // Primary detection is in ServerLoopAsync's finally block; this catches unhandled exceptions in Task.Run itself.
@@ -246,65 +249,136 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public void StopServer()
         {
-            if (!_isRunning)
+            StopServerCore(ServerStopMode.Normal);
+        }
+
+        /// <summary>
+        /// Domain reload can suspend editor-thread continuations before the server task observes shutdown.
+        /// </summary>
+        public void StopServerBeforeDomainReload()
+        {
+            StopServerCore(ServerStopMode.BeforeDomainReload);
+        }
+
+        private void StopServerCore(ServerStopMode mode)
+        {
+            bool wasRunning = _isRunning;
+            CancellationTokenSource cancellationTokenSource = Interlocked.Exchange(ref _cancellationTokenSource, null);
+            TcpListener tcpListener = Interlocked.Exchange(ref _tcpListener, null);
+            Task serverTask = mode == ServerStopMode.BeforeDomainReload
+                ? _serverTask
+                : Interlocked.Exchange(ref _serverTask, null);
+
+            if (!wasRunning &&
+                cancellationTokenSource == null &&
+                tcpListener == null &&
+                serverTask == null)
             {
                 return;
             }
 
-            // Determine shutdown reason based on domain reload state
-            ServerShutdownReason shutdownReason = McpEditorSettings.GetIsDomainReloadInProgress()
-                ? ServerShutdownReason.DomainReload
-                : ServerShutdownReason.EditorQuit;
+            if (wasRunning && mode != ServerStopMode.UnexpectedLoopExit)
+            {
+                ServerShutdownReason shutdownReason = McpEditorSettings.GetIsDomainReloadInProgress()
+                    ? ServerShutdownReason.DomainReload
+                    : ServerShutdownReason.EditorQuit;
 
-            // Send shutdown notification to all connected clients BEFORE disconnecting
-            // This allows TypeScript side to differentiate between temporary and permanent shutdown
-            SendShutdownNotification(shutdownReason);
-
-            // Notify that server is stopping
-            OnServerStopping?.Invoke();
+                SendShutdownNotification(shutdownReason);
+                OnServerStopping?.Invoke();
+            }
 
             _isRunning = false;
 
-            // Explicitly disconnect all connected clients before stopping the server
-            DisconnectAllClients();
-            
-            // Request cancellation.
-            _cancellationTokenSource?.Cancel();
-            
-            // Stop the TCP listener.
+            DisconnectAllClientsCore(notifyLifecycleEvents: mode != ServerStopMode.UnexpectedLoopExit);
+
+            cancellationTokenSource?.Cancel();
+            tcpListener?.Stop();
+
+            if (mode == ServerStopMode.BeforeDomainReload)
+            {
+                return;
+            }
+
+            if (mode == ServerStopMode.UnexpectedLoopExit)
+            {
+                cancellationTokenSource?.Dispose();
+                return;
+            }
+
+            serverTask?.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
+            DisposeCancellationTokenSourceAfterClientTasks(cancellationTokenSource);
+        }
+
+        private void DisposeCancellationTokenSourceAfterClientTasks(
+            CancellationTokenSource cancellationTokenSource)
+        {
+            Task[] clientTasks = _clientTasks.Values.ToArray();
+            if (clientTasks.Length == 0)
+            {
+                cancellationTokenSource?.Dispose();
+                return;
+            }
+
+            if (MainThreadSwitcher.IsMainThread)
+            {
+                _ = ObserveClientTasksThenDisposeCancellationTokenSourceAsync(
+                    clientTasks,
+                    cancellationTokenSource);
+                return;
+            }
+
+            WaitForClientTasksToComplete(clientTasks);
+            cancellationTokenSource?.Dispose();
+        }
+
+        private static void WaitForClientTasksToComplete(Task[] clientTasks)
+        {
+            Task completionTask = CreateObservedClientTaskCompletionTask(clientTasks);
+            bool completed = completionTask.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
+            if (!completed)
+            {
+                LogClientTaskShutdownTimeout(clientTasks.Length);
+            }
+        }
+
+        private static async Task ObserveClientTasksThenDisposeCancellationTokenSourceAsync(
+            Task[] clientTasks,
+            CancellationTokenSource cancellationTokenSource)
+        {
             try
             {
-                _tcpListener?.Stop();
+                Task completionTask = CreateObservedClientTaskCompletionTask(clientTasks);
+                Task timeoutTask = Task.Delay(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
+                Task finishedTask = await Task.WhenAny(completionTask, timeoutTask);
+                if (!ReferenceEquals(finishedTask, completionTask))
+                {
+                    LogClientTaskShutdownTimeout(clientTasks.Length);
+                }
             }
             finally
             {
-                // Set the TCP listener to null regardless of success/failure
-                _tcpListener = null;
+                cancellationTokenSource?.Dispose();
             }
-            
-            // Wait for the server task to complete.
-            try
+        }
+
+        private static Task CreateObservedClientTaskCompletionTask(Task[] clientTasks)
+        {
+            return Task.WhenAll(clientTasks).ContinueWith(task =>
             {
-                _serverTask?.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
-            }
-            finally
-            {
-                // Set the server task to null regardless of success/failure
-                _serverTask = null;
-            }
-            
-            // Dispose of the cancellation token source.
-            try
-            {
-                _cancellationTokenSource?.Dispose();
-            }
-            finally
-            {
-                // Set the cancellation token source to null regardless of success/failure
-                _cancellationTokenSource = null;
-            }
-            
-            
+                if (task.IsFaulted)
+                {
+                    _ = task.Exception;
+                }
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+
+        private static void LogClientTaskShutdownTimeout(int activeClientTasks)
+        {
+            VibeLogger.LogWarning(
+                "client_tasks_shutdown_timeout",
+                "Timed out waiting for client handlers to finish during normal server shutdown.",
+                new { activeClientTasks }
+            );
         }
 
         /// <summary>
@@ -375,48 +449,29 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            DisconnectAllClientsCore(notifyLifecycleEvents: false);
-
-            try
-            {
-                _cancellationTokenSource?.Cancel();
-            }
-            finally
-            {
-                _cancellationTokenSource?.Dispose();
-                _cancellationTokenSource = null;
-            }
-
-            try
-            {
-                _tcpListener?.Stop();
-            }
-            finally
-            {
-                _tcpListener = null;
-                _isRunning = false;
-            }
+            StopServerCore(ServerStopMode.UnexpectedLoopExit);
         }
 
         /// <summary>
         /// The server's main loop.
         /// </summary>
-        private async Task ServerLoopAsync(CancellationToken cancellationToken)
+        private async Task ServerLoopAsync(TcpListener listener, CancellationToken cancellationToken)
         {
+            System.Diagnostics.Debug.Assert(listener != null, "TcpListener must be captured before starting the server loop.");
             try
             {
                 while (!cancellationToken.IsCancellationRequested && _isRunning)
                 {
                     try
                     {
-                        TcpClient client = await AcceptTcpClientAsync(_tcpListener, cancellationToken);
+                        TcpClient client = await AcceptTcpClientAsync(listener, cancellationToken);
                         if (client != null)
                         {
                             string clientEndpoint = client.Client.RemoteEndPoint?.ToString() ?? McpServerConfig.UNKNOWN_CLIENT_ENDPOINT;
                             OnClientConnected?.Invoke(clientEndpoint);
 
-                            // Execute client handling in a separate task (fire-and-forget).
-                            Task.Run(() => HandleClientAsync(client, cancellationToken)).Forget();
+                            Task clientTask = Task.Run(() => HandleClientAsync(client, cancellationToken));
+                            TrackClientTask(clientTask);
                         }
                     }
                     catch (ObjectDisposedException)
@@ -453,9 +508,7 @@ namespace io.github.hatayama.uLoopMCP
             }
             finally
             {
-                // StopServer sets _isRunning=false before cancelling, so if it's still true here
-                // the loop exited unexpectedly (e.g. ObjectDisposedException, TcpListener disposed externally)
-                bool wasUnexpectedExit = _isRunning;
+                bool wasUnexpectedExit = ShouldTreatLoopExitAsUnexpected(_isRunning, cancellationToken);
                 if (wasUnexpectedExit)
                 {
                     VibeLogger.LogWarning(
@@ -470,6 +523,14 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
+        private static bool ShouldTreatLoopExitAsUnexpected(
+            bool isRunning,
+            CancellationToken cancellationToken)
+        {
+            // A canceled loop belongs to an intentional shutdown and must not recover a newer server.
+            return isRunning && !cancellationToken.IsCancellationRequested;
+        }
+
         /// <summary>
         /// Asynchronously accepts a client from the TcpListener.
         /// </summary>
@@ -477,7 +538,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             try
             {
-                return await Task.Run(() => listener.AcceptTcpClient(), cancellationToken);
+                return await AcceptTcpClientAsyncCore(listener, cancellationToken);
             }
             catch (ThreadAbortException ex)
             {
@@ -492,6 +553,83 @@ namespace io.github.hatayama.uLoopMCP
             {
                 return null;
             }
+        }
+
+        internal static Task<TcpClient> AcceptTcpClientAsyncForTests(
+            TcpListener listener,
+            CancellationToken cancellationToken)
+        {
+            return AcceptTcpClientAsyncCore(listener, cancellationToken);
+        }
+
+        internal int GetActiveClientTaskCountForTests()
+        {
+            return _clientTasks.Count;
+        }
+
+        internal static bool ShouldTreatLoopExitAsUnexpectedForTests(
+            bool isRunning,
+            CancellationToken cancellationToken)
+        {
+            return ShouldTreatLoopExitAsUnexpected(isRunning, cancellationToken);
+        }
+
+        internal void TrackClientTaskForTests(Task clientTask)
+        {
+            TrackClientTask(clientTask);
+        }
+
+        private static async Task<TcpClient> AcceptTcpClientAsyncCore(
+            TcpListener listener,
+            CancellationToken cancellationToken)
+        {
+            System.Diagnostics.Debug.Assert(listener != null, "TcpListener must be available while accepting clients.");
+            if (listener == null || cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+
+            using CancellationTokenRegistration cancellationRegistration =
+                cancellationToken.Register(() => listener.Stop());
+
+            try
+            {
+                return await listener.AcceptTcpClientAsync();
+            }
+            catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+            catch (SocketException) when (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+            catch (InvalidOperationException) when (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+        }
+
+        private void TrackClientTask(Task clientTask)
+        {
+            System.Diagnostics.Debug.Assert(clientTask != null, "Client handler task must be created before tracking.");
+            if (clientTask == null)
+            {
+                return;
+            }
+
+            bool added = _clientTasks.TryAdd(clientTask.Id, clientTask);
+            System.Diagnostics.Debug.Assert(added, "Client handler task id should be unique while tracking.");
+
+            clientTask.ContinueWith(completedTask =>
+            {
+                _clientTasks.TryRemove(completedTask.Id, out _);
+                if (completedTask.IsFaulted)
+                {
+                    Exception exception = completedTask.Exception?.GetBaseException();
+                    OnError?.Invoke($"Client handler task faulted: {exception?.Message}");
+                }
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
 
         /// <summary>
@@ -818,9 +956,13 @@ namespace io.github.hatayama.uLoopMCP
         public void Dispose()
         {
             StopServer();
-            _cancellationTokenSource?.Dispose();
-            _tcpListener = null;
-            _serverTask = null;
+        }
+
+        private enum ServerStopMode
+        {
+            Normal,
+            BeforeDomainReload,
+            UnexpectedLoopExit
         }
     }
 } 

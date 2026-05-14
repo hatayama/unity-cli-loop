@@ -85,6 +85,43 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
+        public static void ResetServerScopedServicesBeforeDomainReload()
+        {
+            CancellationTokenSource lifetimeCancellationTokenSource;
+            IDynamicCodeExecutionRuntime runtimeFacade;
+
+            lock (ServerScopedServicesLock)
+            {
+                lifetimeCancellationTokenSource = _serverScopedLifetimeCancellationTokenSource;
+                runtimeFacade = _runtimeFacade;
+
+                _serverScopedLifetimeCancellationTokenSource = null;
+                _executorPool = null;
+                _runtimeFacade = null;
+                _prewarmDynamicCodeUseCase = null;
+                _serverScopedDrainTask = Task.CompletedTask;
+            }
+
+            lifetimeCancellationTokenSource?.Cancel();
+            SignalRuntimeShutdownBeforeDomainReload(runtimeFacade);
+            SharedRoslynCompilerWorkerHost.ShutdownForServerReset();
+        }
+
+        private static void SignalRuntimeShutdownBeforeDomainReload(
+            IDynamicCodeExecutionRuntime runtimeFacade)
+        {
+            if (runtimeFacade is IShutdownAwareDynamicCodeExecutionRuntime shutdownAwareRuntime)
+            {
+                Task shutdownTask = shutdownAwareRuntime.ShutdownAsync();
+                _ = CreateObservedDrainTask(
+                    shutdownTask,
+                    "server_scoped_shutdown_before_domain_reload_failed");
+                return;
+            }
+
+            (runtimeFacade as IDisposable)?.Dispose();
+        }
+
         private static async Task<IDynamicCodeExecutionRuntime> GetRuntimeFacadeAsync()
         {
             await EnsureServerScopedServicesInitializedAsync();
