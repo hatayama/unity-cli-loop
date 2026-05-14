@@ -29,13 +29,14 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             DynamicCodeServices.ResetServerScopedServicesBeforeDomainReload();
 
             Assert.IsTrue(lifetimeCancellationTokenSource.IsCancellationRequested, "Lifetime token should be cancelled");
-            Assert.AreEqual(0, runtime.ShutdownCallCount, "Domain reload reset should not await runtime shutdown");
+            Assert.AreEqual(1, runtime.ShutdownCallCount, "Domain reload reset should signal runtime shutdown");
             Assert.AreEqual(0, runtime.DisposeCallCount, "Domain reload reset should leave managed disposal to reload teardown");
             Assert.AreEqual(0, executorPool.DisposeCallCount, "Domain reload reset should not dispose executor pool synchronously");
             Assert.IsTrue(
                 DynamicCodeServices.GetServerScopedDrainTaskForTests().IsCompleted,
                 "Domain reload reset should not leave a drain task that later runs into reload teardown");
 
+            runtime.CompleteShutdown();
             lifetimeCancellationTokenSource.Dispose();
         }
 
@@ -56,6 +57,9 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
 
         private sealed class FakeShutdownAwareRuntime : IShutdownAwareDynamicCodeExecutionRuntime, IDisposable
         {
+            private readonly TaskCompletionSource<bool> _shutdownCompletionSource =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
             public int ShutdownCallCount { get; private set; }
 
             public int DisposeCallCount { get; private set; }
@@ -82,7 +86,12 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             public Task ShutdownAsync()
             {
                 ShutdownCallCount++;
-                return Task.CompletedTask;
+                return _shutdownCompletionSource.Task;
+            }
+
+            public void CompleteShutdown()
+            {
+                _shutdownCompletionSource.SetResult(true);
             }
 
             public void Dispose()
