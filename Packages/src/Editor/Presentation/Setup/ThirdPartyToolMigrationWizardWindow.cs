@@ -231,6 +231,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _closeButton.text = "Close";
             _closeButton.AddToClassList("setup-button");
             footerButtonRow.Add(_closeButton);
+
+            Label reopenHintLabel = new(
+                "You can close this wizard and reopen it later from\n" +
+                "Window > Unity CLI Loop > Custom Tool Migration.");
+            reopenHintLabel.AddToClassList("setup-footer__hint-label");
+            footer.Add(reopenHintLabel);
         }
 
         private void BindEvents()
