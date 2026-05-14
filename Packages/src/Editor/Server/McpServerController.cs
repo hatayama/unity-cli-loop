@@ -292,7 +292,7 @@ namespace io.github.hatayama.uLoopMCP
 
             DynamicCodeStartupTelemetry.Reset();
             DynamicCodeForegroundWarmupState.Reset();
-            DynamicCodeServices.ResetServerScopedServices();
+            DynamicCodeServices.ResetServerScopedServicesBeforeDomainReload();
         }
 
         /// <summary>

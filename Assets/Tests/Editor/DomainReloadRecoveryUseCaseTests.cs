@@ -115,5 +115,26 @@ namespace io.github.hatayama.uLoopMCP
                 server?.Dispose();
             }
         }
+
+        [Test]
+        public void StopServerBeforeDomainReload_ShouldBeSafe_WhenCalledMoreThanOnce()
+        {
+            int instancePort = GetFreePort();
+            McpBridgeServer server = new McpBridgeServer();
+            try
+            {
+                server.StartServer(instancePort);
+
+                server.StopServerBeforeDomainReload();
+                server.StopServerBeforeDomainReload();
+                server.Dispose();
+
+                Assert.IsFalse(server.IsRunning, "Server should remain stopped after repeated domain reload stops");
+            }
+            finally
+            {
+                server.Dispose();
+            }
+        }
     }
 }

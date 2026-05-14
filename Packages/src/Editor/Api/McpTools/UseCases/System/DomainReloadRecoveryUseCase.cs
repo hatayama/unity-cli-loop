@@ -66,7 +66,7 @@ namespace io.github.hatayama.uLoopMCP
                     ClientNotificationService.LogServerStoppingBeforeDomainReload(correlationId, portToSave);
 
                     // 4.2. Stop server
-                    currentServer.Dispose();
+                    currentServer.StopServerBeforeDomainReload();
 
                     // 4.3. Notify client of stop completion
                     ClientNotificationService.LogServerStoppedAfterDomainReload(correlationId);

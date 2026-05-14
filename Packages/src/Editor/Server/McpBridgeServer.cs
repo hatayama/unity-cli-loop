@@ -246,65 +246,64 @@ namespace io.github.hatayama.uLoopMCP
         /// </summary>
         public void StopServer()
         {
-            if (!_isRunning)
+            StopServerCore(ServerStopMode.Normal);
+        }
+
+        /// <summary>
+        /// Domain reload can suspend editor-thread continuations before the server task observes shutdown.
+        /// </summary>
+        public void StopServerBeforeDomainReload()
+        {
+            StopServerCore(ServerStopMode.BeforeDomainReload);
+        }
+
+        private void StopServerCore(ServerStopMode mode)
+        {
+            bool wasRunning = _isRunning;
+            CancellationTokenSource cancellationTokenSource = Interlocked.Exchange(ref _cancellationTokenSource, null);
+            TcpListener tcpListener = Interlocked.Exchange(ref _tcpListener, null);
+            Task serverTask = mode == ServerStopMode.BeforeDomainReload
+                ? _serverTask
+                : Interlocked.Exchange(ref _serverTask, null);
+
+            if (!wasRunning &&
+                cancellationTokenSource == null &&
+                tcpListener == null &&
+                serverTask == null)
             {
                 return;
             }
 
-            // Determine shutdown reason based on domain reload state
-            ServerShutdownReason shutdownReason = McpEditorSettings.GetIsDomainReloadInProgress()
-                ? ServerShutdownReason.DomainReload
-                : ServerShutdownReason.EditorQuit;
+            if (wasRunning && mode != ServerStopMode.UnexpectedLoopExit)
+            {
+                ServerShutdownReason shutdownReason = McpEditorSettings.GetIsDomainReloadInProgress()
+                    ? ServerShutdownReason.DomainReload
+                    : ServerShutdownReason.EditorQuit;
 
-            // Send shutdown notification to all connected clients BEFORE disconnecting
-            // This allows TypeScript side to differentiate between temporary and permanent shutdown
-            SendShutdownNotification(shutdownReason);
-
-            // Notify that server is stopping
-            OnServerStopping?.Invoke();
+                SendShutdownNotification(shutdownReason);
+                OnServerStopping?.Invoke();
+            }
 
             _isRunning = false;
 
-            // Explicitly disconnect all connected clients before stopping the server
-            DisconnectAllClients();
-            
-            // Request cancellation.
-            _cancellationTokenSource?.Cancel();
-            
-            // Stop the TCP listener.
-            try
+            DisconnectAllClientsCore(notifyLifecycleEvents: mode != ServerStopMode.UnexpectedLoopExit);
+
+            cancellationTokenSource?.Cancel();
+            tcpListener?.Stop();
+
+            if (mode == ServerStopMode.BeforeDomainReload)
             {
-                _tcpListener?.Stop();
+                return;
             }
-            finally
+
+            if (mode == ServerStopMode.UnexpectedLoopExit)
             {
-                // Set the TCP listener to null regardless of success/failure
-                _tcpListener = null;
+                cancellationTokenSource?.Dispose();
+                return;
             }
-            
-            // Wait for the server task to complete.
-            try
-            {
-                _serverTask?.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
-            }
-            finally
-            {
-                // Set the server task to null regardless of success/failure
-                _serverTask = null;
-            }
-            
-            // Dispose of the cancellation token source.
-            try
-            {
-                _cancellationTokenSource?.Dispose();
-            }
-            finally
-            {
-                // Set the cancellation token source to null regardless of success/failure
-                _cancellationTokenSource = null;
-            }
-            
-            
+
+            serverTask?.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
+            cancellationTokenSource?.Dispose();
         }
 
         /// <summary>
@@ -375,27 +374,7 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            DisconnectAllClientsCore(notifyLifecycleEvents: false);
-
-            try
-            {
-                _cancellationTokenSource?.Cancel();
-            }
-            finally
-            {
-                _cancellationTokenSource?.Dispose();
-                _cancellationTokenSource = null;
-            }
-
-            try
-            {
-                _tcpListener?.Stop();
-            }
-            finally
-            {
-                _tcpListener = null;
-                _isRunning = false;
-            }
+            StopServerCore(ServerStopMode.UnexpectedLoopExit);
         }
 
         /// <summary>
@@ -818,9 +797,13 @@ namespace io.github.hatayama.uLoopMCP
         public void Dispose()
         {
             StopServer();
-            _cancellationTokenSource?.Dispose();
-            _tcpListener = null;
-            _serverTask = null;
+        }
+
+        private enum ServerStopMode
+        {
+            Normal,
+            BeforeDomainReload,
+            UnexpectedLoopExit
         }
     }
 } 
