@@ -20,6 +20,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal const string CurrentApplicationNamespace = "io.github.hatayama.UnityCliLoop.Application";
         internal const string CurrentDomainNamespace = "io.github.hatayama.UnityCliLoop.Domain";
         internal const string LegacyEditorAssemblyName = "uLoopMCP.Editor";
+        private const string CurrentApplicationAssemblyName = "UnityCLILoop.Application";
+        private const string CurrentDomainAssemblyName = "UnityCLILoop.Domain";
+        private const string CurrentToolContractsAssemblyName = "UnityCLILoop.ToolContracts";
         internal const string LegacyEditorAssemblyGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
         internal const string CurrentApplicationGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
         internal const string CurrentDomainGuidReference = "GUID:5c4588558a3624eacbce0f50007cf1eb";
@@ -294,7 +297,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 foreach (string migratedReference in migratedReferenceItems)
                 {
-                    if (!addedReferences.Add(migratedReference))
+                    string migratedReferenceKey = GetCurrentAsmdefReferenceKey(migratedReference);
+                    if (!addedReferences.Add(migratedReferenceKey))
                     {
                         continue;
                     }
@@ -528,13 +532,58 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(addedReferences != null, "addedReferences must not be null");
             Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
 
-            if (!addedReferences.Add(reference))
+            string referenceKey = GetCurrentAsmdefReferenceKey(reference);
+            if (!addedReferences.Add(referenceKey))
             {
                 return;
             }
 
             references.Add(reference);
             replacementCount++;
+        }
+
+        private static string GetCurrentAsmdefReferenceKey(string reference)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
+
+            if (IsCurrentAsmdefReference(
+                    reference,
+                    CurrentToolContractsAssemblyName,
+                    CurrentToolContractsGuidReference))
+            {
+                return CurrentToolContractsAssemblyName;
+            }
+
+            if (IsCurrentAsmdefReference(
+                    reference,
+                    CurrentApplicationAssemblyName,
+                    CurrentApplicationGuidReference))
+            {
+                return CurrentApplicationAssemblyName;
+            }
+
+            if (IsCurrentAsmdefReference(
+                    reference,
+                    CurrentDomainAssemblyName,
+                    CurrentDomainGuidReference))
+            {
+                return CurrentDomainAssemblyName;
+            }
+
+            return reference;
+        }
+
+        private static bool IsCurrentAsmdefReference(
+            string reference,
+            string assemblyName,
+            string guidReference)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(guidReference), "guidReference must not be null or empty");
+
+            return string.Equals(reference, assemblyName, StringComparison.Ordinal) ||
+                string.Equals(reference, guidReference, StringComparison.Ordinal);
         }
 
         private static bool TryMigrateLegacyToolAttributeList(

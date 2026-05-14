@@ -1239,6 +1239,33 @@ public sealed class OtherTool
         }
 
         [Test]
+        public void MigrateAsmdefSource_WhenCurrentReferencesUseAssemblyNames_DoesNotAddDuplicateGuids()
+        {
+            // Verifies that name-based V3 references are treated as the same assemblies as their GUID references.
+            string source = @"{
+    ""name"": ""MyCompany.Tools.Editor"",
+    ""references"": [
+        ""UnityCLILoop.ToolContracts"",
+        ""UnityCLILoop.Application"",
+        ""UnityCLILoop.Domain""
+    ]
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: false,
+                    requiresToolContractsReference: true,
+                    requiresApplicationReference: true,
+                    requiresDomainReference: true);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+            Assert.That(result.Content, Does.Not.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            Assert.That(result.Content, Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+        }
+
+        [Test]
         public void ContainsLegacyCSharpApi_WhenLegacyToolApiExists_ReturnsTrue()
         {
             // Verifies that migration detection is based on public custom tool API usage.
