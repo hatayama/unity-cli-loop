@@ -85,6 +85,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyRegistrarRegex =
             new(@"\bCustomToolManager\b", RegexOptions.Compiled);
 
+        private static readonly Regex LegacyQualifiedRegistrarRegex =
+            new(
+                $@"(?<![\w.])(?:global::)?{Regex.Escape(LegacyNamespace)}\.CustomToolManager\b",
+                RegexOptions.Compiled);
+
         private static readonly Regex CurrentRegistrarRegex =
             new(@"\bUnityCliLoopToolRegistrar\b", RegexOptions.Compiled);
 
@@ -344,7 +349,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            return RegexMatchesCode(source, LegacyRegistrarRegex);
+            return ContainsLegacyRegistrarApiForAssembly(
+                source,
+                hasLegacyAssemblySource: ContainsLegacyToolMigrationMarker(source),
+                legacyAssemblyAliases: Array.Empty<string>());
+        }
+
+        internal static bool ContainsLegacyRegistrarApiForAssembly(
+            string source,
+            bool hasLegacyAssemblySource,
+            string[] legacyAssemblyAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
+
+            string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
+            bool canMigrateBareLegacyRegistrar =
+                hasLegacyAssemblySource ||
+                ContainsLegacyToolMigrationMarker(source) ||
+                legacyNamespaceAliases.Length > 0;
+            return ContainsLegacyRegistrarReference(
+                source,
+                canMigrateBareLegacyRegistrar,
+                legacyNamespaceAliases);
         }
 
         internal static bool ContainsCurrentRegistrarApi(string source)
@@ -1626,6 +1653,48 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(typeName)}\b",
                 RegexOptions.Compiled);
             return RegexMatchesCode(source, aliasQualifiedRegex);
+        }
+
+        private static bool ContainsLegacyRegistrarReference(
+            string source,
+            bool canMigrateBareLegacyRegistrar,
+            string[] aliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            if (RegexMatchesCode(source, LegacyQualifiedRegistrarRegex))
+            {
+                return true;
+            }
+
+            foreach (string alias in aliases)
+            {
+                if (ContainsLegacyAliasQualifiedName(source, alias, "CustomToolManager"))
+                {
+                    return true;
+                }
+            }
+
+            return canMigrateBareLegacyRegistrar && ContainsMigratableUnqualifiedLegacyRegistrarReference(source);
+        }
+
+        private static bool ContainsMigratableUnqualifiedLegacyRegistrarReference(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyRegistrarRegex.Matches(source);
+            foreach (Match match in matches)
+            {
+                if (codeTextMask.IsCodeAt(match.Index) &&
+                    ShouldMigrateLegacyTypeReference(source, "CustomToolManager", match.Index))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool ContainsLegacyDomainHelperReference(

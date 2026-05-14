@@ -1166,6 +1166,40 @@ public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
         }
 
         [Test]
+        public void PreviewMigration_WhenUnrelatedCustomToolManagerExists_KeepsAsmdef()
+        {
+            // Verifies that project-owned type names do not trigger migration dependencies by themselves.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string sourcePath = Path.Combine(toolDirectory, "CustomToolManager.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string source = "public sealed class CustomToolManager {}";
+                string asmdefSource = @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}";
+                File.WriteAllText(sourcePath, source);
+                File.WriteAllText(asmdefPath, asmdefSource);
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationPreview preview = service.PreviewMigration(projectRoot);
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(preview.HasTargets, Is.False);
+                Assert.That(result.FileCount, Is.EqualTo(0));
+                Assert.That(File.ReadAllText(sourcePath), Is.EqualTo(source));
+                Assert.That(File.ReadAllText(asmdefPath), Is.EqualTo(asmdefSource));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenUserSidecarFilesExist_PreservesSidecarFiles()
         {
             // Verifies that project-wide source rewrites do not treat user sidecars as migration scratch files.

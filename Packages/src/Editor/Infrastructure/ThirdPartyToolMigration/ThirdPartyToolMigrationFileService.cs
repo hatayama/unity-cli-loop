@@ -268,6 +268,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     domainMetadataAssemblyDirectories.Add(assemblyDirectory);
                 }
 
+                if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApiForAssembly(
+                        source,
+                        assemblyScopedLegacyDirectories.Contains(assemblyDirectory),
+                        legacyAssemblyAliases))
+                {
+                    registrarAssemblyDirectories.Add(assemblyDirectory);
+                }
+
                 if (ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApiForAssembly(
                         source,
                         assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory)))
