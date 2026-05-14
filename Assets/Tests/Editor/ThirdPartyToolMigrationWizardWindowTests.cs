@@ -58,14 +58,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 checks complete."));
         }
 
-        [TestCase(false, "Migrate")]
-        [TestCase(true, "Migrating...")]
+        [TestCase(false, true, "Migrate")]
+        [TestCase(true, true, "Migrating...")]
+        [TestCase(false, false, "Nothing to migrate")]
         public void GetMigrationButtonText_ReturnsExpectedLabel(
             bool isMigrating,
+            bool hasMigrationTargets,
             string expectedLabel)
         {
             // Verifies that the migration action communicates its current state.
-            string label = ThirdPartyToolMigrationWizardWindow.GetMigrationButtonText(isMigrating);
+            string label = ThirdPartyToolMigrationWizardWindow.GetMigrationButtonText(
+                isMigrating,
+                hasMigrationTargets);
 
             Assert.That(label, Is.EqualTo(expectedLabel));
         }

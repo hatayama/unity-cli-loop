@@ -20,6 +20,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
         private const string MigrationCheckingText = "Scanning project for V3 custom tool migration...";
         private const string NoMigrationTargetsText = "No V3 custom tool migration is needed.";
+        private const string MigrationButtonReadyText = "Migrate";
+        private const string MigrationButtonMigratingText = "Migrating...";
+        private const string MigrationButtonNoTargetsText = "Nothing to migrate";
         private static readonly Vector2 InitialWindowSize = new(360f, 220f);
         private static readonly Vector2 MinimumWindowSize = new(360f, 120f);
 
@@ -116,9 +119,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 $"{progress.ProcessedItemCount}/{progress.TotalItemCount} checks complete.";
         }
 
-        internal static string GetMigrationButtonText(bool isMigrating)
+        internal static string GetMigrationButtonText(bool isMigrating, bool hasMigrationTargets)
         {
-            return isMigrating ? "Migrating..." : "Migrate";
+            if (isMigrating)
+            {
+                return MigrationButtonMigratingText;
+            }
+
+            return hasMigrationTargets ? MigrationButtonReadyText : MigrationButtonNoTargetsText;
         }
 
         private static void TryShowOnMigrationTargets()
@@ -228,7 +236,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             content.Add(migrationButtonRow);
 
             _migrateButton = new Button();
-            _migrateButton.text = GetMigrationButtonText(false);
+            _migrateButton.text = GetMigrationButtonText(false, true);
             _migrateButton.AddToClassList("setup-button");
             migrationButtonRow.Add(_migrateButton);
 
@@ -344,7 +352,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationStatusLabel.text = GetMigrationStatusText(fileCount);
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             _migrateButton.SetEnabled(!_isMigrating);
-            _migrateButton.text = GetMigrationButtonText(_isMigrating);
+            _migrateButton.text = GetMigrationButtonText(_isMigrating, true);
             ScheduleResizeToContent();
         }
 
@@ -353,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationStatusLabel.text = NoMigrationTargetsText;
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             _migrateButton.SetEnabled(false);
-            _migrateButton.text = GetMigrationButtonText(_isMigrating);
+            _migrateButton.text = GetMigrationButtonText(_isMigrating, false);
             ScheduleResizeToContent();
         }
 
@@ -363,7 +371,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.SetVisible(_migrationProgressBar, true);
             UpdateMigrationProgressBar(progress);
             _migrateButton.SetEnabled(false);
-            _migrateButton.text = GetMigrationButtonText(_isMigrating);
+            _migrateButton.text = GetMigrationButtonText(_isMigrating, true);
             ScheduleResizeToContent();
         }
 
