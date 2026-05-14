@@ -19,6 +19,9 @@
                     name="third-party-tool-migration-status-label"
                     text=""
                     class="setup-step__status-label setup-step__status-label--standalone" />
+                <ui:ProgressBar
+                    name="third-party-tool-migration-progress-bar"
+                    class="setup-progress-bar setup-hidden" />
                 <ui:VisualElement class="setup-step__button-row">
                     <ui:Button name="migrate-third-party-tools-button" text="Migrate" class="setup-button" />
                 </ui:VisualElement>

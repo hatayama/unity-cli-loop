@@ -26,8 +26,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string GITHUB_ICON_RELATIVE_PATH = "Editor/Presentation/Setup/GitHub_Invertocat_White.png";
         private const int PreferredWrappedTextLineCount = 2;
         private const bool ForceFlatSkillInstall = true;
+        private const string ThirdPartyToolMigrationCheckingText =
+            "Scanning project for V3 custom tool migration...";
         private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
         private static UnityCliLoopEditorSettingsService RegisteredEditorSettingsService;
+        private static readonly System.IProgress<ThirdPartyToolMigrationProgress> SilentMigrationProgress =
+            new SilentThirdPartyToolMigrationProgress();
 
         internal static void InitializeForEditorStartup(UnityCliLoopEditorSettingsService editorSettingsService)
         {
@@ -93,6 +97,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private static void TryShowOnVersionChange()
         {
+            TryShowOnVersionChangeAsync(CancellationToken.None);
+        }
+
+        private static async void TryShowOnVersionChangeAsync(CancellationToken ct)
+        {
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
             UnityCliLoopEditorSettingsService editorSettingsService = GetEditorSettingsService();
             bool suppressAutoShow = editorSettingsService.GetSuppressSetupWizardAutoShow();
@@ -101,7 +110,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     currentVersion,
                     lastSeenVersion,
                     suppressAutoShow)
-                && HasThirdPartyToolMigrationTargets();
+                && await HasThirdPartyToolMigrationTargetsAsync(ct);
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
             if (!ShouldAutoShowForVersion(
                 currentVersion,
                 lastSeenVersion,
@@ -115,11 +129,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             EditorApplication.delayCall += ShowWindowOnVersionChange;
         }
 
-        private static bool HasThirdPartyToolMigrationTargets()
+        private static async Task<bool> HasThirdPartyToolMigrationTargetsAsync(CancellationToken ct)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             ThirdPartyToolMigrationPreview preview =
-                ThirdPartyToolMigrationUseCaseRegistry.GetRegisteredUseCase().PreviewMigration(projectRoot);
+                await ThirdPartyToolMigrationUseCaseRegistry
+                    .GetRegisteredUseCase()
+                    .PreviewMigrationAsync(projectRoot, SilentMigrationProgress, ct);
             return preview.HasTargets;
         }
 
@@ -245,6 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         // V3 custom tool migration
         private VisualElement _thirdPartyToolMigrationSection;
         private Label _thirdPartyToolMigrationStatusLabel;
+        private ProgressBar _thirdPartyToolMigrationProgressBar;
         private Button _migrateThirdPartyToolsButton;
 
         // Footer
@@ -271,6 +288,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private IVisualElementScheduledItem _initialRefreshScheduledItem;
         private IVisualElementScheduledItem _resizeScheduledItem;
         private CancellationTokenSource _skillInstallStateRefreshCts;
+        private CancellationTokenSource _thirdPartyToolMigrationPreviewCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private SkillSetupUseCase _skillSetupUseCase;
         private ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
@@ -315,6 +333,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _initialRefreshScheduledItem?.Pause();
             CancelSkillInstallStateRefresh();
+            CancelThirdPartyToolMigrationPreview();
         }
 
         private void LoadLayout()
@@ -354,6 +373,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 rootVisualElement.Q<VisualElement>("third-party-tool-migration-section");
             _thirdPartyToolMigrationStatusLabel =
                 rootVisualElement.Q<Label>("third-party-tool-migration-status-label");
+            _thirdPartyToolMigrationProgressBar =
+                rootVisualElement.Q<ProgressBar>("third-party-tool-migration-progress-bar");
             _migrateThirdPartyToolsButton =
                 rootVisualElement.Q<Button>("migrate-third-party-tools-button");
 
@@ -462,6 +483,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.SetVisible(_skillsTargetList, !_shouldUseFirstInstallSkillsUi);
             _skillsTargetList.Clear();
             ViewDataBinder.SetVisible(_thirdPartyToolMigrationSection, false);
+            ViewDataBinder.SetVisible(_thirdPartyToolMigrationProgressBar, false);
             _migrateThirdPartyToolsButton.SetEnabled(false);
             _migrateThirdPartyToolsButton.text = GetThirdPartyToolMigrationButtonText(
                 _isMigratingThirdPartyTools);
@@ -496,6 +518,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private async void RefreshUI(bool refreshSkillsSection = true)
         {
             CancelSkillInstallStateRefresh();
+            CancelThirdPartyToolMigrationPreview();
             RefreshAutoShowToggle();
             ViewDataBinder.SetVisible(_nodejsWarning, false);
             ViewDataBinder.SetVisible(_nodejsOk, false);
@@ -516,6 +539,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _skillsTargetList.Clear();
             }
 
+            ShowThirdPartyToolMigrationCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
             await Task.Yield();
 
             ViewDataBinder.SetVisible(_nodejsWarning, false);
@@ -532,7 +556,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (!refreshSkillsSection)
             {
-                RefreshThirdPartyToolMigrationSection();
+                CancellationToken migrationPreviewCt = BeginThirdPartyToolMigrationPreview();
+                await RefreshThirdPartyToolMigrationSectionAsync(migrationPreviewCt);
+                if (migrationPreviewCt.IsCancellationRequested)
+                {
+                    return;
+                }
+
                 ScheduleResizeToContent();
                 return;
             }
@@ -541,19 +571,33 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canManageSkills = CanManageSkills(cliInstalled);
             UpdateSkillsStep(canManageSkills, targets);
             BeginRefreshDisplayedSkillTargets(canManageSkills);
-            RefreshThirdPartyToolMigrationSection();
+            CancellationToken ct = BeginThirdPartyToolMigrationPreview();
+            await RefreshThirdPartyToolMigrationSectionAsync(ct);
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
             ScheduleResizeToContent();
         }
 
-        private void RefreshThirdPartyToolMigrationSection()
+        private async Task RefreshThirdPartyToolMigrationSectionAsync(CancellationToken ct)
         {
+            ShowThirdPartyToolMigrationCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            System.IProgress<ThirdPartyToolMigrationProgress> progress =
+                new ThirdPartyToolMigrationPreviewProgress(this, ct);
             ThirdPartyToolMigrationPreview preview =
-                _thirdPartyToolMigrationUseCase.PreviewMigration(projectRoot);
+                await _thirdPartyToolMigrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct);
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
 
             if (!preview.HasTargets)
             {
                 ViewDataBinder.SetVisible(_thirdPartyToolMigrationSection, false);
+                ViewDataBinder.SetVisible(_thirdPartyToolMigrationProgressBar, false);
                 _thirdPartyToolMigrationStatusLabel.text = string.Empty;
                 _migrateThirdPartyToolsButton.SetEnabled(false);
                 _migrateThirdPartyToolsButton.text = GetThirdPartyToolMigrationButtonText(
@@ -562,11 +606,52 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             ViewDataBinder.SetVisible(_thirdPartyToolMigrationSection, true);
+            ViewDataBinder.SetVisible(_thirdPartyToolMigrationProgressBar, false);
             _thirdPartyToolMigrationStatusLabel.text =
                 GetThirdPartyToolMigrationStatusText(preview.FileCount);
             _migrateThirdPartyToolsButton.SetEnabled(!_isMigratingThirdPartyTools);
             _migrateThirdPartyToolsButton.text = GetThirdPartyToolMigrationButtonText(
                 _isMigratingThirdPartyTools);
+        }
+
+        private CancellationToken BeginThirdPartyToolMigrationPreview()
+        {
+            CancelThirdPartyToolMigrationPreview();
+            CancellationTokenSource cts = new();
+            _thirdPartyToolMigrationPreviewCts = cts;
+            return cts.Token;
+        }
+
+        private void CancelThirdPartyToolMigrationPreview()
+        {
+            if (_thirdPartyToolMigrationPreviewCts == null)
+            {
+                return;
+            }
+
+            _thirdPartyToolMigrationPreviewCts.Cancel();
+            _thirdPartyToolMigrationPreviewCts.Dispose();
+            _thirdPartyToolMigrationPreviewCts = null;
+        }
+
+        private void ShowThirdPartyToolMigrationCheckingState(ThirdPartyToolMigrationProgress progress)
+        {
+            ViewDataBinder.SetVisible(_thirdPartyToolMigrationSection, true);
+            ViewDataBinder.SetVisible(_thirdPartyToolMigrationProgressBar, true);
+            _thirdPartyToolMigrationStatusLabel.text = GetThirdPartyToolMigrationProgressText(progress);
+            UpdateThirdPartyToolMigrationProgressBar(progress);
+            _migrateThirdPartyToolsButton.SetEnabled(false);
+            _migrateThirdPartyToolsButton.text = GetThirdPartyToolMigrationButtonText(
+                _isMigratingThirdPartyTools);
+        }
+
+        private void UpdateThirdPartyToolMigrationProgressBar(ThirdPartyToolMigrationProgress progress)
+        {
+            int totalItemCount = Mathf.Max(progress.TotalItemCount, 1);
+            int processedItemCount = Mathf.Clamp(progress.ProcessedItemCount, 0, totalItemCount);
+            _thirdPartyToolMigrationProgressBar.lowValue = 0;
+            _thirdPartyToolMigrationProgressBar.highValue = totalItemCount;
+            _thirdPartyToolMigrationProgressBar.value = processedItemCount;
         }
 
         private List<SkillSetupTargetInfo> DetectDisplayedSkillTargets(string projectRoot)
@@ -647,9 +732,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string objectPronoun = fileCount == 1 ? "it" : "them";
 
             return $"{fileCount} {noun} {verb} V3 custom tool migration.\n" +
-                $"The Unity Console is showing errors because {subject} the old custom tool API.\n" +
+                $"The Unity Console is showing errors because {subject} the old custom tool API.\n\n" +
                 $"Click Migrate to update {objectPronoun} automatically. " +
                 "The errors should disappear after migration.";
+        }
+
+        internal static string GetThirdPartyToolMigrationProgressText(ThirdPartyToolMigrationProgress progress)
+        {
+            if (progress.TotalItemCount == 0)
+            {
+                return ThirdPartyToolMigrationCheckingText;
+            }
+
+            return $"{ThirdPartyToolMigrationCheckingText}\n" +
+                $"{progress.ProcessedItemCount}/{progress.TotalItemCount} checks complete.";
         }
 
         internal static string GetThirdPartyToolMigrationButtonText(bool isMigrating)
@@ -1065,7 +1161,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             _isMigratingThirdPartyTools = true;
-            RefreshThirdPartyToolMigrationSection();
+            ShowThirdPartyToolMigrationCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
 
             try
             {
@@ -1077,9 +1173,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             finally
             {
                 _isMigratingThirdPartyTools = false;
-                RefreshThirdPartyToolMigrationSection();
-                ScheduleResizeToContent();
+                CancellationToken ct = BeginThirdPartyToolMigrationPreview();
+                RefreshThirdPartyToolMigrationSectionAfterMigrationAsync(ct);
             }
+        }
+
+        private async void RefreshThirdPartyToolMigrationSectionAfterMigrationAsync(CancellationToken ct)
+        {
+            await RefreshThirdPartyToolMigrationSectionAsync(ct);
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            ScheduleResizeToContent();
         }
 
         private void HandleOpenSettings()
@@ -1293,5 +1400,37 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
+        private sealed class SilentThirdPartyToolMigrationProgress
+            : System.IProgress<ThirdPartyToolMigrationProgress>
+        {
+            public void Report(ThirdPartyToolMigrationProgress value)
+            {
+            }
+        }
+
+        private sealed class ThirdPartyToolMigrationPreviewProgress
+            : System.IProgress<ThirdPartyToolMigrationProgress>
+        {
+            private readonly SetupWizardWindow _window;
+            private readonly CancellationToken _ct;
+
+            public ThirdPartyToolMigrationPreviewProgress(SetupWizardWindow window, CancellationToken ct)
+            {
+                Debug.Assert(window != null, "window must not be null");
+
+                _window = window;
+                _ct = ct;
+            }
+
+            public void Report(ThirdPartyToolMigrationProgress value)
+            {
+                if (_ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                _window.ShowThirdPartyToolMigrationCheckingState(value);
+            }
+        }
     }
 }

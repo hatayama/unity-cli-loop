@@ -1387,6 +1387,28 @@ public sealed class OtherTool
         }
 
         [Test]
+        public void ContainsMigrationCandidateText_WhenPlainSourceExists_ReturnsFalse()
+        {
+            // Verifies that unrelated source files can skip expensive migration parsing.
+            string source = "public sealed class PlainEditorUtility { public int Count; }";
+
+            bool containsCandidateText = ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source);
+
+            Assert.That(containsCandidateText, Is.False);
+        }
+
+        [Test]
+        public void ContainsMigrationCandidateText_WhenLegacyNamespaceExists_ReturnsTrue()
+        {
+            // Verifies that old custom tool API source still enters migration parsing.
+            string source = "using io.github.hatayama.uLoopMCP;";
+
+            bool containsCandidateText = ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source);
+
+            Assert.That(containsCandidateText, Is.True);
+        }
+
+        [Test]
         public void ContainsLegacyCSharpApi_WhenGenericLegacyNameExistsWithoutLegacyMarker_ReturnsFalse()
         {
             // Verifies that unrelated source names do not trigger project migration UI.

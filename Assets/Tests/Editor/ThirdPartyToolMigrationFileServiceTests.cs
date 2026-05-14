@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 using NUnit.Framework;
 
@@ -1380,6 +1383,118 @@ public sealed class PackageToolResponse : BaseToolResponse
             }
         }
 
+        [Test]
+        public void PreviewMigration_WhenCacheIsInvalidated_RefreshesChangedProject()
+        {
+            // Verifies that repeated setup wizard previews can reuse scans and refresh after invalidation.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationPreview firstPreview = service.PreviewMigration(projectRoot);
+                File.WriteAllText(toolPath, "public sealed class HelloTool {}");
+                ThirdPartyToolMigrationPreview cachedPreview = service.PreviewMigration(projectRoot);
+                service.InvalidatePreviewCache();
+                ThirdPartyToolMigrationPreview refreshedPreview = service.PreviewMigration(projectRoot);
+
+                Assert.That(firstPreview.HasTargets, Is.True);
+                Assert.That(cachedPreview.FileCount, Is.EqualTo(firstPreview.FileCount));
+                Assert.That(refreshedPreview.HasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task PreviewMigrationAsync_WhenProjectContainsManyFiles_ReportsIncrementalProgress()
+        {
+            // Verifies that setup wizard previews report progress before the full scan finishes.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                for (int i = 0; i < 48; i++)
+                {
+                    File.WriteAllText(
+                        Path.Combine(toolDirectory, $"Plain{i}.cs"),
+                        $"public sealed class Plain{i} {{}}");
+                }
+
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                List<ThirdPartyToolMigrationProgress> reports = new();
+                RecordingMigrationProgress progress = new(reports);
+                ThirdPartyToolMigrationFileService service = new();
+
+                ThirdPartyToolMigrationPreview preview =
+                    await service.PreviewMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(reports.Count, Is.GreaterThan(1));
+                Assert.That(
+                    reports.Any(report =>
+                        report.TotalItemCount > 0 &&
+                        report.ProcessedItemCount > 0 &&
+                        report.ProcessedItemCount < report.TotalItemCount),
+                    Is.True);
+                ThirdPartyToolMigrationProgress lastReport = reports[reports.Count - 1];
+                Assert.That(lastReport.ProcessedItemCount, Is.EqualTo(lastReport.TotalItemCount));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
         private static string CreateProjectRoot()
         {
             string projectRoot = Path.Combine(
@@ -1391,6 +1506,23 @@ public sealed class PackageToolResponse : BaseToolResponse
             Directory.CreateDirectory(Path.Combine(projectRoot, "ProjectSettings"));
             Directory.CreateDirectory(Path.Combine(projectRoot, "Assets"));
             return projectRoot;
+        }
+
+        private sealed class RecordingMigrationProgress : IProgress<ThirdPartyToolMigrationProgress>
+        {
+            private readonly List<ThirdPartyToolMigrationProgress> _reports;
+
+            public RecordingMigrationProgress(List<ThirdPartyToolMigrationProgress> reports)
+            {
+                Assert.That(reports, Is.Not.Null);
+
+                _reports = reports;
+            }
+
+            public void Report(ThirdPartyToolMigrationProgress value)
+            {
+                _reports.Add(value);
+            }
         }
     }
 }

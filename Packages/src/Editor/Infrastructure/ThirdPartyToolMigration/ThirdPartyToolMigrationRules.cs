@@ -345,6 +345,43 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ContainsLegacyToolMigrationMarker(source);
         }
 
+        internal static bool ContainsMigrationCandidateText(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            if (ContainsTextFragment(source, LegacyNamespace) ||
+                ContainsTextFragment(source, CurrentNamespace) ||
+                ContainsTextFragment(source, CurrentApplicationNamespace) ||
+                ContainsTextFragment(source, CurrentDomainNamespace) ||
+                ContainsTextFragment(source, "McpTool") ||
+                ContainsTextFragment(source, "CustomToolManager") ||
+                ContainsTextFragment(source, "UnityCliLoopToolRegistrar") ||
+                ContainsTextFragment(source, "ToolInfo"))
+            {
+                return true;
+            }
+
+            foreach (TypeReplacementRule rule in ToolContractTypeReplacementRules)
+            {
+                if (ContainsTextFragment(source, rule.LegacyName) ||
+                    ContainsTextFragment(source, rule.CurrentName))
+                {
+                    return true;
+                }
+            }
+
+            foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
+            {
+                if (ContainsTextFragment(source, rule.LegacyName) ||
+                    ContainsTextFragment(source, rule.CurrentName))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         internal static bool ContainsLegacyRegistrarApi(string source)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -1985,6 +2022,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return string.CompareOrdinal(source, startIndex, value, 0, value.Length) == 0;
+        }
+
+        private static bool ContainsTextFragment(string source, string text)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(text), "text must not be null or empty");
+
+            return source.IndexOf(text, StringComparison.Ordinal) >= 0;
         }
 
         private static bool IsRawStringStart(string source, int startIndex)

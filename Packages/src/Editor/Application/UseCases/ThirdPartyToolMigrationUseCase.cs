@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 
@@ -24,6 +26,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
             return _migrationPort.PreviewMigration(projectRoot);
+        }
+
+        public Task<ThirdPartyToolMigrationPreview> PreviewMigrationAsync(
+            string projectRoot,
+            IProgress<ThirdPartyToolMigrationProgress> progress,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(progress != null, "progress must not be null");
+
+            return _migrationPort.PreviewMigrationAsync(projectRoot, progress, ct);
         }
 
         public ThirdPartyToolMigrationResult ApplyMigration(string projectRoot)

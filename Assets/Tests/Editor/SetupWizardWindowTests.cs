@@ -98,12 +98,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(
             1,
             "1 file needs V3 custom tool migration.\n" +
-            "The Unity Console is showing errors because this file still uses the old custom tool API.\n" +
+            "The Unity Console is showing errors because this file still uses the old custom tool API.\n\n" +
             "Click Migrate to update it automatically. The errors should disappear after migration.")]
         [TestCase(
             3,
             "3 files need V3 custom tool migration.\n" +
-            "The Unity Console is showing errors because these files still use the old custom tool API.\n" +
+            "The Unity Console is showing errors because these files still use the old custom tool API.\n\n" +
             "Click Migrate to update them automatically. The errors should disappear after migration.")]
         public void GetThirdPartyToolMigrationStatusText_WhenTargetsExist_ReturnsFileCount(
             int fileCount,
@@ -113,6 +113,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string text = SetupWizardWindow.GetThirdPartyToolMigrationStatusText(fileCount);
 
             Assert.That(text, Is.EqualTo(expectedText));
+        }
+
+        [Test]
+        public void GetThirdPartyToolMigrationProgressText_WhenProgressExists_ReturnsCheckCount()
+        {
+            // Verifies that the setup wizard reports scan progress while migration targets are unknown.
+            ThirdPartyToolMigrationProgress progress = new(3, 12);
+
+            string text = SetupWizardWindow.GetThirdPartyToolMigrationProgressText(progress);
+
+            Assert.That(
+                text,
+                Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 checks complete."));
         }
 
         [TestCase(false, "Migrate")]
