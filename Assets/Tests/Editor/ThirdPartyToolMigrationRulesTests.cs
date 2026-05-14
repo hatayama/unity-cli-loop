@@ -337,6 +337,29 @@ public static class ToolHelper
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolSettingsCatalogItemConstructorHasDescription_RemovesDescriptionArgument()
+        {
+            // Verifies that old settings catalog metadata keeps compiling after the V3 constructor signature change.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolSettingsCatalogProvider
+{
+    public static ToolSettingsCatalogItem Create(bool displayDevelopmentOnly, bool isThirdParty)
+    {
+        return new ToolSettingsCatalogItem(""hello"", ""description"", displayDevelopmentOnly, isThirdParty);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolSettingsCatalogItem(\"hello\", displayDevelopmentOnly, isThirdParty)"));
+            Assert.That(result.Content, Does.Not.Contain("\"description\", displayDevelopmentOnly"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyDomainHelpersUseNamespaceAlias_RewritesDomainHelperTypes()
         {
             // Verifies that namespace aliases targeting V2 helpers do not survive as ToolContracts references.
@@ -1072,7 +1095,8 @@ public sealed class OtherTool
                 ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
                     source,
                     hasLegacyAssemblySource: true,
-                    legacyAssemblyAliases: System.Array.Empty<string>());
+                    legacyAssemblyAliases: System.Array.Empty<string>(),
+                    legacyAssemblyToolInfoAliases: System.Array.Empty<string>());
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("UnityCliLoopToolSchema"));
@@ -1089,7 +1113,8 @@ public sealed class OtherTool
                 ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
                     source,
                     hasLegacyAssemblySource: true,
-                    legacyAssemblyAliases: System.Array.Empty<string>());
+                    legacyAssemblyAliases: System.Array.Empty<string>(),
+                    legacyAssemblyToolInfoAliases: System.Array.Empty<string>());
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(

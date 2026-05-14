@@ -1004,6 +1004,55 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
+        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyToolInfoAlias_RewritesSplitAliasConstructors()
+        {
+            // Verifies that global type aliases provide constructor migration context to sibling files.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string metadataPath = Path.Combine(toolDirectory, "ToolMetadataProvider.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(
+                    globalUsingPath,
+                    "global using LegacyToolInfo = io.github.hatayama.uLoopMCP.ToolInfo;");
+                File.WriteAllText(
+                    metadataPath,
+                    @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public static class ToolMetadataProvider
+{
+    public static LegacyToolInfo Create(ToolParameterSchema schema)
+    {
+        return new LegacyToolInfo(""hello"", ""description"", schema);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(3));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using LegacyToolInfo = io.github.hatayama.UnityCliLoop.Domain.ToolInfo;"));
+                Assert.That(File.ReadAllText(metadataPath), Does.Contain(
+                    "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema)"));
+                Assert.That(File.ReadAllText(metadataPath), Does.Not.Contain("\"description\", schema"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenLegacyToolExistsUnderAsmref_RewritesReferencedAsmdef()
         {
             // Verifies that asmref folders mark the referenced asmdef as the migrated assembly.

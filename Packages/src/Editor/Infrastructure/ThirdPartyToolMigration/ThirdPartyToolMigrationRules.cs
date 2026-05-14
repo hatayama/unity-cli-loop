@@ -143,6 +143,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"\busing\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?{Regex.Escape(LegacyNamespace)}\.ToolInfo\s*;",
                 RegexOptions.Compiled);
 
+        private static readonly Regex LegacyGlobalToolInfoTypeAliasRegex =
+            new(
+                $@"\bglobal\s+using\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?{Regex.Escape(LegacyNamespace)}\.ToolInfo\s*;",
+                RegexOptions.Compiled);
+
+        private static readonly Regex LegacyToolSettingsCatalogItemConstructorRegex =
+            new(
+                $@"new\s+(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.)ToolSettingsCatalogItem|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.ToolSettingsCatalogItem|(?<toolSettingsCatalogItem>ToolSettingsCatalogItem))\s*\(",
+                RegexOptions.Compiled);
+
         private static readonly TypeReplacementRule[] ToolContractTypeReplacementRules =
         {
             new("ToolParameterSchemaGenerator", "UnityCliLoopToolParameterSchemaGenerator"),
@@ -185,16 +195,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return MigrateCSharpSourceForLegacyAssembly(
                 source,
                 hasLegacyAssemblySource: ContainsLegacyToolMigrationMarker(source),
-                legacyAssemblyAliases: Array.Empty<string>());
+                legacyAssemblyAliases: Array.Empty<string>(),
+                legacyAssemblyToolInfoAliases: Array.Empty<string>());
         }
 
         internal static ThirdPartyToolMigrationContentResult MigrateCSharpSourceForLegacyAssembly(
             string source,
             bool hasLegacyAssemblySource,
-            string[] legacyAssemblyAliases)
+            string[] legacyAssemblyAliases,
+            string[] legacyAssemblyToolInfoAliases)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
+            Debug.Assert(legacyAssemblyToolInfoAliases != null, "legacyAssemblyToolInfoAliases must not be null");
 
             string migratedContent = source;
             string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
@@ -226,6 +239,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 legacyNamespaceAliases,
                 canMigrateBareLegacyToolInfoConstructor,
                 canMigrateAmbiguousBareLegacyToolInfoConstructor,
+                legacyAssemblyToolInfoAliases,
+                ref replacementCount);
+            migratedContent = ReplaceLegacyToolSettingsCatalogItemConstructorsInCode(
+                migratedContent,
+                legacyNamespaceAliases,
+                canMigrateBareLegacyToolAttribute,
                 ref replacementCount);
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(
                 migratedContent,
@@ -587,6 +606,42 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return GetRegexGroupValuesInCode(source, LegacyGlobalNamespaceAliasRegex, "alias");
+        }
+
+        internal static string[] GetLegacyGlobalToolInfoTypeAliases(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return GetRegexGroupValuesInCode(source, LegacyGlobalToolInfoTypeAliasRegex, "alias");
+        }
+
+        internal static bool ContainsLegacyGlobalToolInfoTypeAlias(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, LegacyGlobalToolInfoTypeAliasRegex);
+        }
+
+        internal static bool ContainsLegacyTypeAliasReference(string source, string[] aliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            foreach (string alias in aliases)
+            {
+                Regex aliasRegex = new($@"(?<![\w.]){Regex.Escape(alias)}\b", RegexOptions.Compiled);
+                MatchCollection matches = aliasRegex.Matches(source);
+                foreach (Match match in matches)
+                {
+                    if (codeTextMask.IsCodeAt(match.Index))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)
@@ -1032,6 +1087,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 .ToArray();
         }
 
+        private static string[] GetCombinedLegacyToolInfoTypeAliases(
+            string source,
+            string[] legacyAssemblyToolInfoAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyToolInfoAliases != null, "legacyAssemblyToolInfoAliases must not be null");
+
+            return GetLegacyToolInfoTypeAliases(source)
+                .Concat(legacyAssemblyToolInfoAliases)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+        }
+
         private static string[] GetRegexGroupValuesInCode(string source, Regex regex, string groupName)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -1246,13 +1314,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string[] legacyNamespaceAliases,
             bool canMigrateBareLegacyToolInfoConstructor,
             bool canMigrateAmbiguousBareLegacyToolInfoConstructor,
+            string[] legacyAssemblyToolInfoAliases,
             ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+            Debug.Assert(legacyAssemblyToolInfoAliases != null, "legacyAssemblyToolInfoAliases must not be null");
 
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
-            string[] legacyToolInfoTypeAliases = GetLegacyToolInfoTypeAliases(source);
+            string[] legacyToolInfoTypeAliases =
+                GetCombinedLegacyToolInfoTypeAliases(source, legacyAssemblyToolInfoAliases);
             MatchCollection matches = LegacyToolInfoConstructorRegex.Matches(source);
             StringBuilder builder = new(source.Length);
             int sourceCopyIndex = 0;
@@ -1314,6 +1385,91 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
             replacementCount += localReplacementCount;
             return builder.ToString();
+        }
+
+        private static string ReplaceLegacyToolSettingsCatalogItemConstructorsInCode(
+            string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyConstructor,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyToolSettingsCatalogItemConstructorRegex.Matches(source);
+            StringBuilder builder = new(source.Length);
+            int sourceCopyIndex = 0;
+            int localReplacementCount = 0;
+            foreach (Match match in matches)
+            {
+                if (match.Index < sourceCopyIndex ||
+                    !codeTextMask.IsCodeAt(match.Index) ||
+                    !IsLegacyToolSettingsCatalogItemConstructorMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyConstructor))
+                {
+                    continue;
+                }
+
+                int openParenthesisIndex = match.Index + match.Length - 1;
+                int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                    source,
+                    codeTextMask,
+                    openParenthesisIndex);
+                if (closingParenthesisIndex < 0)
+                {
+                    continue;
+                }
+
+                string argumentsSource = source.Substring(
+                    openParenthesisIndex + 1,
+                    closingParenthesisIndex - openParenthesisIndex - 1);
+                string[] arguments = SplitAttributeArguments(argumentsSource);
+                string[] migratedArguments = GetMigratedToolSettingsCatalogItemConstructorArguments(arguments);
+                if (migratedArguments.Length == arguments.Length)
+                {
+                    continue;
+                }
+
+                builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
+                builder.Append($"new {CurrentDomainNamespace}.ToolSettingsCatalogItem(");
+                builder.Append(string.Join(", ", migratedArguments));
+                builder.Append(')');
+                sourceCopyIndex = closingParenthesisIndex + 1;
+                localReplacementCount++;
+            }
+
+            if (localReplacementCount == 0)
+            {
+                return source;
+            }
+
+            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
+            replacementCount += localReplacementCount;
+            return builder.ToString();
+        }
+
+        private static bool IsLegacyToolSettingsCatalogItemConstructorMatch(
+            Match match,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyConstructor)
+        {
+            Debug.Assert(match != null, "match must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            if (match.Groups["qualifier"].Success)
+            {
+                return true;
+            }
+
+            if (match.Groups["alias"].Success)
+            {
+                return legacyNamespaceAliases.Contains(match.Groups["alias"].Value);
+            }
+
+            return match.Groups["toolSettingsCatalogItem"].Success && canMigrateBareLegacyConstructor;
         }
 
         private static bool ShouldMigrateLegacyToolInfoConstructorArguments(
@@ -1433,6 +1589,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     arguments[0].Trim(),
                     arguments[2].Trim()
+                };
+            }
+
+            return arguments;
+        }
+
+        private static string[] GetMigratedToolSettingsCatalogItemConstructorArguments(string[] arguments)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+
+            int namedDescriptionArgumentIndex = FindNamedConstructorArgumentIndex(
+                arguments,
+                DescriptionAttributeArgumentName.ToLowerInvariant());
+            if (namedDescriptionArgumentIndex >= 0)
+            {
+                return RemoveArgumentAt(arguments, namedDescriptionArgumentIndex);
+            }
+
+            if (arguments.Length == 4)
+            {
+                return new[]
+                {
+                    arguments[0].Trim(),
+                    arguments[2].Trim(),
+                    arguments[3].Trim()
                 };
             }
 
