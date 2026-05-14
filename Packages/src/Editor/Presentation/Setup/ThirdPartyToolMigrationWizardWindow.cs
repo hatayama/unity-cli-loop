@@ -20,8 +20,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
         private const string MigrationCheckingText = "Scanning project for V3 custom tool migration...";
         private const string NoMigrationTargetsText = "No V3 custom tool migration is needed.";
-        private static readonly Vector2 MinimumWindowSize = new(360f, 220f);
+        private const int PreferredWrappedTextLineCount = 2;
+        private static readonly Vector2 InitialWindowSize = new(320f, 220f);
+        private static readonly Vector2 MinimumWindowSize = new(300f, 120f);
 
+        private ScrollView _mainScrollView;
         private VisualElement _migrationSection;
         private Label _migrationStatusLabel;
         private ProgressBar _migrationProgressBar;
@@ -30,8 +33,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private Button _closeButton;
 
         private bool _isMigrating;
+        private bool _isApplyingContentSize;
         [SerializeField]
         private bool _shouldRefreshAfterCreateGui;
+        private IVisualElementScheduledItem _resizeScheduledItem;
         private CancellationTokenSource _migrationPreviewCts;
         private ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
 
@@ -73,6 +78,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             Vector2 centeredPosition = bounds.center - (size * 0.5f);
             return new Rect(centeredPosition, size);
+        }
+
+        internal static Rect WithContentSize(Rect currentRect, Vector2 contentSize, Vector2 frameSize)
+        {
+            Debug.Assert(contentSize.x >= 0f, "contentSize.x must not be negative");
+            Debug.Assert(contentSize.y >= 0f, "contentSize.y must not be negative");
+
+            Vector2 measuredSize = contentSize + frameSize;
+            Vector2 targetSize = new(
+                Mathf.Max(measuredSize.x, MinimumWindowSize.x),
+                Mathf.Max(measuredSize.y, MinimumWindowSize.y));
+            return CreateCenteredRect(currentRect, targetSize);
         }
 
         internal static string GetMigrationStatusText(int fileCount)
@@ -145,11 +162,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             Rect windowPosition = CreateCenteredRect(
                 EditorGUIUtility.GetMainWindowPosition(),
-                MinimumWindowSize);
+                InitialWindowSize);
             ThirdPartyToolMigrationWizardWindow window =
                 CreateInstance<ThirdPartyToolMigrationWizardWindow>();
             PrepareForOpen(window, WindowTitle, windowPosition, shouldRefreshAfterCreateGui);
             window.ShowUtility();
+            window.ScheduleResizeToContent();
         }
 
         private void CreateGUI()
@@ -157,8 +175,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             InitializeApplicationServices();
             BuildLayout();
             BindEvents();
+            BindSizeUpdates();
             ShowInitialState();
             ScheduleInitialRefresh();
+            ScheduleResizeToContent();
         }
 
         private void InitializeApplicationServices()
@@ -168,6 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void OnDisable()
         {
+            _resizeScheduledItem?.Pause();
             CancelMigrationPreview();
         }
 
@@ -178,14 +199,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(styleSheet != null, $"USS not found at {ussPath}");
             rootVisualElement.styleSheets.Add(styleSheet);
 
-            ScrollView mainContainer = new();
-            mainContainer.AddToClassList("setup-main-container");
-            rootVisualElement.Add(mainContainer);
+            _mainScrollView = new ScrollView();
+            _mainScrollView.AddToClassList("setup-main-container");
+            rootVisualElement.Add(_mainScrollView);
 
             _migrationSection = new VisualElement();
             _migrationSection.AddToClassList("setup-step");
             _migrationSection.AddToClassList("setup-step--migration-alert");
-            mainContainer.Add(_migrationSection);
+            _mainScrollView.Add(_migrationSection);
 
             Label titleLabel = new("Custom Tool Migration");
             titleLabel.AddToClassList("setup-step__title");
@@ -215,7 +236,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             VisualElement footer = new();
             footer.AddToClassList("setup-footer");
-            mainContainer.Add(footer);
+            _mainScrollView.Add(footer);
 
             VisualElement footerButtonRow = new();
             footerButtonRow.AddToClassList("setup-footer__button-row");
@@ -244,6 +265,19 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _refreshButton.clicked += RefreshUI;
             _migrateButton.clicked += HandleMigrateThirdPartyTools;
             _closeButton.clicked += Close;
+        }
+
+        private void BindSizeUpdates()
+        {
+            rootVisualElement.RegisterCallback<GeometryChangedEvent>(_ =>
+            {
+                if (_isApplyingContentSize)
+                {
+                    return;
+                }
+
+                ScheduleResizeToContent();
+            });
         }
 
         private void ShowInitialState()
@@ -313,6 +347,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             _migrateButton.SetEnabled(!_isMigrating);
             _migrateButton.text = GetMigrationButtonText(_isMigrating);
+            ScheduleResizeToContent();
         }
 
         private void ShowNoMigrationTargetsState()
@@ -321,6 +356,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             _migrateButton.SetEnabled(false);
             _migrateButton.text = GetMigrationButtonText(_isMigrating);
+            ScheduleResizeToContent();
         }
 
         private void ShowCheckingState(ThirdPartyToolMigrationProgress progress)
@@ -330,6 +366,194 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             UpdateMigrationProgressBar(progress);
             _migrateButton.SetEnabled(false);
             _migrateButton.text = GetMigrationButtonText(_isMigrating);
+            ScheduleResizeToContent();
+        }
+
+        private void ScheduleResizeToContent()
+        {
+            _resizeScheduledItem?.Pause();
+            _resizeScheduledItem = rootVisualElement.schedule.Execute(ResizeToContent).StartingIn(0);
+        }
+
+        private void ResizeToContent()
+        {
+            if (_mainScrollView == null) return;
+            if (rootVisualElement.layout.width <= 0f || rootVisualElement.layout.height <= 0f) return;
+
+            Vector2 contentSize = MeasurePreferredContentSize(_mainScrollView, _mainScrollView.contentContainer);
+            if (!HasFiniteSize(contentSize)) return;
+            if (contentSize.x <= 0f || contentSize.y <= 0f) return;
+
+            Vector2 frameSize = position.size - rootVisualElement.layout.size;
+            if (!HasFiniteSize(frameSize)) return;
+            Rect targetRect = WithContentSize(position, contentSize, frameSize);
+            if (!HasFiniteSize(targetRect.size)) return;
+            if (Approximately(position.size, targetRect.size))
+            {
+                minSize = targetRect.size;
+                maxSize = targetRect.size;
+                return;
+            }
+
+            _isApplyingContentSize = true;
+            minSize = targetRect.size;
+            maxSize = targetRect.size;
+            position = targetRect;
+            _isApplyingContentSize = false;
+        }
+
+        private static Vector2 MeasurePreferredContentSize(
+            ScrollView mainContainer,
+            VisualElement contentContainer)
+        {
+            float width = MeasurePreferredContentWidth(mainContainer, contentContainer);
+            float height = MeasurePreferredContentHeight(mainContainer, contentContainer);
+            return new Vector2(width, height);
+        }
+
+        private static float MeasurePreferredContentWidth(VisualElement mainContainer, VisualElement contentContainer)
+        {
+            float maxRight = 0f;
+            foreach (TextElement textElement in contentContainer.Query<TextElement>().Build())
+            {
+                if (!textElement.visible) continue;
+                if (string.IsNullOrEmpty(textElement.text)) continue;
+                if (!HasFiniteRect(textElement.worldBound)) continue;
+
+                float left = textElement.worldBound.xMin - contentContainer.worldBound.xMin;
+                float horizontalChrome =
+                    textElement.resolvedStyle.paddingLeft
+                    + textElement.resolvedStyle.paddingRight
+                    + textElement.resolvedStyle.borderLeftWidth
+                    + textElement.resolvedStyle.borderRightWidth;
+                float verticalChrome =
+                    textElement.resolvedStyle.paddingTop
+                    + textElement.resolvedStyle.paddingBottom
+                    + textElement.resolvedStyle.borderTopWidth
+                    + textElement.resolvedStyle.borderBottomWidth;
+                float laidOutWidth = textElement.worldBound.width;
+                Vector2 measuredTextSize = textElement.MeasureTextSize(
+                    textElement.text,
+                    0f,
+                    VisualElement.MeasureMode.Undefined,
+                    0f,
+                    VisualElement.MeasureMode.Undefined);
+                if (!IsFinite(left)) continue;
+                if (!IsFinite(horizontalChrome) || !IsFinite(verticalChrome)) continue;
+                if (!HasFiniteSize(measuredTextSize)) continue;
+                if (!IsFinite(laidOutWidth)) continue;
+                bool hasExplicitLineBreak = HasExplicitLineBreak(textElement.text);
+                float measuredWidth = hasExplicitLineBreak
+                    ? MeasureExplicitLinePreferredWidth(textElement, horizontalChrome)
+                    : measuredTextSize.x + horizontalChrome;
+                int lineCount = EstimateWrappedLineCount(
+                    textElement.worldBound.height - verticalChrome,
+                    measuredTextSize.y);
+                float preferredWidth = SelectPreferredTextWidth(
+                    laidOutWidth,
+                    measuredWidth,
+                    lineCount,
+                    textElement.resolvedStyle.whiteSpace,
+                    hasExplicitLineBreak);
+                if (!IsFinite(preferredWidth)) continue;
+                float right = left + preferredWidth;
+                maxRight = Mathf.Max(maxRight, right);
+            }
+
+            float width =
+                mainContainer.resolvedStyle.paddingLeft
+                + maxRight
+                + mainContainer.resolvedStyle.paddingRight;
+            return IsFinite(width) ? Mathf.Ceil(width) : 0f;
+        }
+
+        internal static int EstimateWrappedLineCount(float laidOutTextHeight, float singleLineTextHeight)
+        {
+            if (singleLineTextHeight <= 0f) return 1;
+
+            return Mathf.Max(1, Mathf.RoundToInt(laidOutTextHeight / singleLineTextHeight));
+        }
+
+        internal static float SelectPreferredTextWidth(
+            float laidOutWidth,
+            float measuredWidth,
+            int lineCount,
+            WhiteSpace whiteSpace,
+            bool hasExplicitLineBreak)
+        {
+            if (hasExplicitLineBreak) return measuredWidth;
+            if (whiteSpace != WhiteSpace.Normal) return measuredWidth;
+            if (lineCount <= PreferredWrappedTextLineCount) return Mathf.Min(laidOutWidth, measuredWidth);
+
+            return Mathf.Max(laidOutWidth, measuredWidth / PreferredWrappedTextLineCount);
+        }
+
+        private static bool HasExplicitLineBreak(string text)
+        {
+            return !string.IsNullOrEmpty(text) && text.IndexOf('\n') >= 0;
+        }
+
+        private static float MeasureExplicitLinePreferredWidth(TextElement textElement, float horizontalChrome)
+        {
+            float maxLineWidth = 0f;
+            string[] lines = textElement.text.Split('\n');
+            foreach (string rawLine in lines)
+            {
+                string line = rawLine.TrimEnd('\r');
+                Vector2 measuredLineSize = textElement.MeasureTextSize(
+                    line,
+                    0f,
+                    VisualElement.MeasureMode.Undefined,
+                    0f,
+                    VisualElement.MeasureMode.Undefined);
+                if (!HasFiniteSize(measuredLineSize)) continue;
+                maxLineWidth = Mathf.Max(maxLineWidth, measuredLineSize.x);
+            }
+
+            return maxLineWidth + horizontalChrome;
+        }
+
+        private static float MeasurePreferredContentHeight(VisualElement mainContainer, VisualElement contentContainer)
+        {
+            float maxBottom = 0f;
+            foreach (VisualElement child in contentContainer.Children())
+            {
+                if (!child.visible) continue;
+                if (!HasFiniteRect(child.worldBound)) continue;
+                float bottom = child.worldBound.yMax - contentContainer.worldBound.yMin;
+                if (!IsFinite(bottom)) continue;
+                maxBottom = Mathf.Max(maxBottom, bottom);
+            }
+
+            float height =
+                mainContainer.resolvedStyle.paddingTop
+                + maxBottom
+                + mainContainer.resolvedStyle.paddingBottom;
+            return IsFinite(height) ? Mathf.Ceil(height) : 0f;
+        }
+
+        private static bool Approximately(Vector2 left, Vector2 right)
+        {
+            const float Tolerance = 0.5f;
+            return Mathf.Abs(left.x - right.x) < Tolerance && Mathf.Abs(left.y - right.y) < Tolerance;
+        }
+
+        internal static bool HasFiniteSize(Vector2 size)
+        {
+            return IsFinite(size.x) && IsFinite(size.y);
+        }
+
+        private static bool HasFiniteRect(Rect rect)
+        {
+            return IsFinite(rect.xMin)
+                && IsFinite(rect.xMax)
+                && IsFinite(rect.yMin)
+                && IsFinite(rect.yMax);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private void UpdateMigrationProgressBar(ThirdPartyToolMigrationProgress progress)
