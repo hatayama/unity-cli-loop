@@ -643,7 +643,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             string noun = fileCount == 1 ? "file" : "files";
             string verb = fileCount == 1 ? "needs" : "need";
-            return $"{fileCount} {noun} {verb} V3 custom tool migration.";
+            string subject = fileCount == 1 ? "this file still uses" : "these files still use";
+            string objectPronoun = fileCount == 1 ? "it" : "them";
+
+            return $"{fileCount} {noun} {verb} V3 custom tool migration.\n" +
+                $"The Unity Console is showing errors because {subject} the old custom tool API.\n" +
+                $"Click Migrate to update {objectPronoun} automatically. " +
+                "The errors should disappear after migration.";
         }
 
         internal static string GetThirdPartyToolMigrationButtonText(bool isMigrating)

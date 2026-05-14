@@ -95,8 +95,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldCheck, Is.EqualTo(expected));
         }
 
-        [TestCase(1, "1 file needs V3 custom tool migration.")]
-        [TestCase(3, "3 files need V3 custom tool migration.")]
+        [TestCase(
+            1,
+            "1 file needs V3 custom tool migration.\n" +
+            "The Unity Console is showing errors because this file still uses the old custom tool API.\n" +
+            "Click Migrate to update it automatically. The errors should disappear after migration.")]
+        [TestCase(
+            3,
+            "3 files need V3 custom tool migration.\n" +
+            "The Unity Console is showing errors because these files still use the old custom tool API.\n" +
+            "Click Migrate to update them automatically. The errors should disappear after migration.")]
         public void GetThirdPartyToolMigrationStatusText_WhenTargetsExist_ReturnsFileCount(
             int fileCount,
             string expectedText)
