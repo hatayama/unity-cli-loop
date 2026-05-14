@@ -25881,7 +25881,7 @@ var McpKeepaliveService = class {
 };
 
 // src/version.ts
-var VERSION = "2.1.2";
+var VERSION = "2.1.3";
 
 // src/server.ts
 var UnityMcpServer = class {
