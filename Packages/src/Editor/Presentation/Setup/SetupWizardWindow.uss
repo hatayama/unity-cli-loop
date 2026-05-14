@@ -86,14 +86,14 @@
 }
 
 .setup-step--migration-alert {
-    background-color: #ffe082;
-    border-color: #ffc247;
+    background-color: #5c4a00;
+    border-color: #7a6400;
     border-width: 4px;
 }
 
 .setup-step--migration-alert .setup-step__title,
 .setup-step--migration-alert .setup-step__status-label {
-    color: #2f2500;
+    color: var(--setup-color-warning);
 }
 
 .setup-step__status-row {
