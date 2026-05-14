@@ -306,35 +306,79 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             serverTask?.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
-            WaitForClientTasksToComplete();
-            cancellationTokenSource?.Dispose();
+            DisposeCancellationTokenSourceAfterClientTasks(cancellationTokenSource);
         }
 
-        private void WaitForClientTasksToComplete()
+        private void DisposeCancellationTokenSourceAfterClientTasks(
+            CancellationTokenSource cancellationTokenSource)
         {
             Task[] clientTasks = _clientTasks.Values.ToArray();
             if (clientTasks.Length == 0)
             {
+                cancellationTokenSource?.Dispose();
                 return;
             }
 
-            Task completionTask = Task.WhenAll(clientTasks).ContinueWith(task =>
+            if (MainThreadSwitcher.IsMainThread)
+            {
+                _ = ObserveClientTasksThenDisposeCancellationTokenSourceAsync(
+                    clientTasks,
+                    cancellationTokenSource);
+                return;
+            }
+
+            WaitForClientTasksToComplete(clientTasks);
+            cancellationTokenSource?.Dispose();
+        }
+
+        private static void WaitForClientTasksToComplete(Task[] clientTasks)
+        {
+            Task completionTask = CreateObservedClientTaskCompletionTask(clientTasks);
+            bool completed = completionTask.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
+            if (!completed)
+            {
+                LogClientTaskShutdownTimeout(clientTasks.Length);
+            }
+        }
+
+        private static async Task ObserveClientTasksThenDisposeCancellationTokenSourceAsync(
+            Task[] clientTasks,
+            CancellationTokenSource cancellationTokenSource)
+        {
+            try
+            {
+                Task completionTask = CreateObservedClientTaskCompletionTask(clientTasks);
+                Task timeoutTask = Task.Delay(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
+                Task finishedTask = await Task.WhenAny(completionTask, timeoutTask);
+                if (!ReferenceEquals(finishedTask, completionTask))
+                {
+                    LogClientTaskShutdownTimeout(clientTasks.Length);
+                }
+            }
+            finally
+            {
+                cancellationTokenSource?.Dispose();
+            }
+        }
+
+        private static Task CreateObservedClientTaskCompletionTask(Task[] clientTasks)
+        {
+            return Task.WhenAll(clientTasks).ContinueWith(task =>
             {
                 if (task.IsFaulted)
                 {
                     _ = task.Exception;
                 }
             }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
 
-            bool completed = completionTask.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
-            if (!completed)
-            {
-                VibeLogger.LogWarning(
-                    "client_tasks_shutdown_timeout",
-                    "Timed out waiting for client handlers to finish during normal server shutdown.",
-                    new { activeClientTasks = _clientTasks.Count }
-                );
-            }
+        private static void LogClientTaskShutdownTimeout(int activeClientTasks)
+        {
+            VibeLogger.LogWarning(
+                "client_tasks_shutdown_timeout",
+                "Timed out waiting for client handlers to finish during normal server shutdown.",
+                new { activeClientTasks }
+            );
         }
 
         /// <summary>
@@ -515,6 +559,11 @@ namespace io.github.hatayama.uLoopMCP
         internal int GetActiveClientTaskCountForTests()
         {
             return _clientTasks.Count;
+        }
+
+        internal void TrackClientTaskForTests(Task clientTask)
+        {
+            TrackClientTask(clientTask);
         }
 
         private static async Task<TcpClient> AcceptTcpClientAsyncCore(

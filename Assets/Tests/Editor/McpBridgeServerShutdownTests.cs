@@ -35,7 +35,7 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public async Task StopServer_ShouldWaitForTrackedClientTasks()
+        public async Task StopServer_ShouldObserveTrackedClientTasksAfterShutdown()
         {
             int port = GetFreePort();
             McpBridgeServer server = new McpBridgeServer();
@@ -52,10 +52,9 @@ namespace io.github.hatayama.uLoopMCP
 
                 server.StopServer();
 
-                Assert.AreEqual(
-                    0,
-                    server.GetActiveClientTaskCountForTests(),
-                    "Normal shutdown should wait for tracked client tasks to finish");
+                bool taskRemoved = await WaitUntilAsync(
+                    () => server.GetActiveClientTaskCountForTests() == 0);
+                Assert.IsTrue(taskRemoved, "Normal shutdown should keep observing tracked client tasks after returning");
             }
             finally
             {
@@ -98,6 +97,38 @@ namespace io.github.hatayama.uLoopMCP
             finally
             {
                 McpBridgeServer.OnServerLoopExited -= CountUnexpectedExit;
+            }
+        }
+
+        [Test]
+        public async Task StopServerOnMainThread_ShouldNotBlockWaitingForClientTasks()
+        {
+            int port = GetFreePort();
+            McpBridgeServer server = new McpBridgeServer();
+            Task delayedClientTask = Task.Delay(1000);
+
+            try
+            {
+                server.StartServer(port);
+                server.TrackClientTaskForTests(delayedClientTask);
+
+                System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                server.StopServer();
+                stopwatch.Stop();
+
+                Assert.Less(
+                    stopwatch.ElapsedMilliseconds,
+                    500,
+                    "Main-thread shutdown should observe client tasks asynchronously instead of blocking");
+
+                await delayedClientTask;
+                bool taskRemoved = await WaitUntilAsync(
+                    () => server.GetActiveClientTaskCountForTests() == 0);
+                Assert.IsTrue(taskRemoved, "Tracked task should still be observed and removed after completion");
+            }
+            finally
+            {
+                server.Dispose();
             }
         }
 
