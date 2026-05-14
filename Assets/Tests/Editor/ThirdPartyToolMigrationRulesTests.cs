@@ -262,6 +262,74 @@ public static class ManualToolRegistration
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyDomainHelpersAreUsed_RewritesDomainHelperTypes()
+        {
+            // Verifies that legacy helpers moved to Domain keep compiling after namespace migration.
+            string source = @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolHelper
+{
+    public static ServiceResult<int> CreateResult()
+    {
+        return ServiceResult<int>.SuccessResult(1);
+    }
+
+    public static ToolSettingsCatalogItem[] GetCatalog()
+    {
+        return new ToolSettingsCatalogItem[0];
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Domain.ServiceResult<int> CreateResult"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Domain.ServiceResult<int>.SuccessResult"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Domain.ToolSettingsCatalogItem[] GetCatalog"));
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolSettingsCatalogItem[0]"));
+            Assert.That(result.Content, Does.Not.Contain("ToolContracts.ServiceResult"));
+            Assert.That(result.Content, Does.Not.Contain("ToolContracts.ToolSettingsCatalogItem"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyDomainHelpersUseNamespaceAlias_RewritesDomainHelperTypes()
+        {
+            // Verifies that namespace aliases targeting V2 helpers do not survive as ToolContracts references.
+            string source = @"using Old = io.github.hatayama.uLoopMCP;
+
+public static class ToolHelper
+{
+    public static Old.ServiceResult<int> CreateResult()
+    {
+        return Old.ServiceResult<int>.SuccessResult(1);
+    }
+
+    public static Old.ToolSettingsCatalogItem[] GetCatalog()
+    {
+        return new Old.ToolSettingsCatalogItem[0];
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Domain.ServiceResult<int> CreateResult"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Domain.ServiceResult<int>.SuccessResult"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Domain.ToolSettingsCatalogItem[] GetCatalog"));
+            Assert.That(result.Content, Does.Not.Contain("Old.ServiceResult"));
+            Assert.That(result.Content, Does.Not.Contain("Old.ToolSettingsCatalogItem"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyApiIsUsedInsideInterpolatedString_RewritesInterpolationCode()
         {
             // Verifies that code inside interpolation holes migrates while literal text stays inert.
@@ -947,10 +1015,41 @@ public sealed class OtherTool
         }
 
         [Test]
+        public void MigrateCSharpSourceForLegacyAssembly_WhenFileReliesOnGlobalUsing_RewritesDomainHelpers()
+        {
+            // Verifies that split helper files relying on a legacy global using migrate to Domain types.
+            string source =
+                "public static class ToolHelper { public static ServiceResult<int> Create() => null; }";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
+                    source,
+                    hasLegacyAssemblySource: true,
+                    legacyAssemblyAliases: System.Array.Empty<string>());
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Domain.ServiceResult<int> Create"));
+        }
+
+        [Test]
         public void ContainsLegacyAssemblyScopedApi_WhenGenericLegacyTypesAreUsed_ReturnsTrue()
         {
             // Verifies that split files using collection-shaped legacy types are migrated with their assembly.
             string source = "public sealed class ToolList { public System.Collections.Generic.List<IUnityTool> Tools; }";
+
+            bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(
+                source,
+                System.Array.Empty<string>());
+
+            Assert.That(containsLegacyApi, Is.True);
+        }
+
+        [Test]
+        public void ContainsLegacyAssemblyScopedApi_WhenLegacyDomainHelpersAreUsed_ReturnsTrue()
+        {
+            // Verifies that split files using Domain helpers are migrated with their legacy assembly.
+            string source = "public static class ToolHelper { public static ServiceResult<int> Create() => null; }";
 
             bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(
                 source,

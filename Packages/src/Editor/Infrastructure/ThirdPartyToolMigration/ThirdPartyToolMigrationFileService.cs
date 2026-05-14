@@ -236,6 +236,33 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
+            foreach (string csharpFilePath in csharpFilePaths)
+            {
+                string source = File.ReadAllText(csharpFilePath);
+                string assemblyDirectory = FindNearestAssemblyDirectory(
+                    csharpFilePath,
+                    asmdefDirectories,
+                    assemblyReferenceDirectories,
+                    projectRoot);
+                string[] legacyAssemblyAliases = Array.Empty<string>();
+                if (assemblyScopedLegacyAliasesByDirectory.TryGetValue(
+                        assemblyDirectory,
+                        out HashSet<string> legacyAssemblyAliasSet))
+                {
+                    legacyAssemblyAliases = legacyAssemblyAliasSet
+                        .OrderBy(alias => alias, StringComparer.Ordinal)
+                        .ToArray();
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsLegacyDomainHelperApiForAssembly(
+                        source,
+                        assemblyScopedLegacyDirectories.Contains(assemblyDirectory),
+                        legacyAssemblyAliases))
+                {
+                    domainMetadataAssemblyDirectories.Add(assemblyDirectory);
+                }
+            }
+
             foreach (string registrarAssemblyDirectory in registrarAssemblyDirectories)
             {
                 applicationReferenceAssemblyDirectories.Add(registrarAssemblyDirectory);

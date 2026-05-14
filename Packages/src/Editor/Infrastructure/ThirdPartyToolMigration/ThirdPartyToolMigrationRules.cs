@@ -130,6 +130,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             new("SecuritySettings", CurrentSecuritySettingTypeName)
         };
 
+        private static readonly TypeReplacementRule[] DomainTypeReplacementRules =
+        {
+            new("ServiceResult", "ServiceResult"),
+            new("ToolSettingsCatalogItem", "ToolSettingsCatalogItem")
+        };
+
         private static readonly ReplacementRule[] CSharpReplacementRules =
         {
             new(
@@ -202,6 +208,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (shouldApplyContractRenames)
             {
+                migratedContent = ReplaceLegacyDomainTypeNamesInCode(
+                    migratedContent,
+                    legacyNamespaceAliases,
+                    ref replacementCount);
+
                 migratedContent = ReplaceLegacyContractTypeNamesInCode(
                     migratedContent,
                     legacyNamespaceAliases,
@@ -343,7 +354,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            return RegexMatchesCode(source, LegacyDomainMetadataRegex);
+            return RegexMatchesCode(source, LegacyDomainMetadataRegex) ||
+                ContainsLegacyDomainHelperApiForAssembly(
+                    source,
+                    hasLegacyAssemblySource: ContainsLegacyToolMigrationMarker(source),
+                    legacyAssemblyAliases: Array.Empty<string>());
+        }
+
+        internal static bool ContainsLegacyDomainHelperApiForAssembly(
+            string source,
+            bool hasLegacyAssemblySource,
+            string[] legacyAssemblyAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
+
+            string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
+            return ContainsLegacyDomainHelperReference(
+                source,
+                hasLegacyAssemblySource,
+                legacyNamespaceAliases);
         }
 
         internal static bool ContainsCurrentDomainMetadataApi(string source)
@@ -351,6 +381,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, CurrentDomainMetadataRegex) ||
+                ContainsCurrentDomainHelperApi(source) ||
                 (RegexMatchesCode(source, CurrentDomainNamespaceRegex) &&
                     RegexMatchesCode(source, LegacyDomainMetadataRegex));
         }
@@ -881,6 +912,53 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return migratedContent;
         }
 
+        private static string ReplaceLegacyDomainTypeNamesInCode(
+            string source,
+            string[] aliases,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            string migratedContent = source;
+            foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    fullyQualifiedRegex,
+                    _ => $"{CurrentDomainNamespace}.{rule.CurrentName}",
+                    ref replacementCount);
+
+                foreach (string alias in aliases)
+                {
+                    Regex aliasRegex = new(
+                        $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(rule.LegacyName)}\b",
+                        RegexOptions.Compiled);
+                    migratedContent = ReplaceRegexInCode(
+                        migratedContent,
+                        aliasRegex,
+                        _ => $"{CurrentDomainNamespace}.{rule.CurrentName}",
+                        ref replacementCount);
+                }
+
+                Regex unqualifiedRegex = new(
+                    $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b(?!\s*=)",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    unqualifiedRegex,
+                    match => ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
+                        ? $"{CurrentDomainNamespace}.{rule.CurrentName}"
+                        : match.Value,
+                    ref replacementCount);
+            }
+
+            return migratedContent;
+        }
+
         private static string ReplaceLegacyToolInfoTypeReferencesInCode(string source, ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -1394,6 +1472,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
+            foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
+            {
+                if (ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.LegacyName))
+                {
+                    return true;
+                }
+            }
+
             return ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, "ToolInfo");
         }
 
@@ -1407,6 +1493,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             foreach (string alias in legacyAssemblyAliases)
             {
                 foreach (TypeReplacementRule rule in ToolContractTypeReplacementRules)
+                {
+                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
+                    {
+                        return true;
+                    }
+                }
+
+                foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
                 {
                     if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
                     {
@@ -1434,6 +1528,70 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(typeName)}\b",
                 RegexOptions.Compiled);
             return RegexMatchesCode(source, aliasQualifiedRegex);
+        }
+
+        private static bool ContainsLegacyDomainHelperReference(
+            string source,
+            bool canMigrateBareLegacyDomainHelper,
+            string[] aliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
+                    RegexOptions.Compiled);
+                if (RegexMatchesCode(source, fullyQualifiedRegex))
+                {
+                    return true;
+                }
+
+                foreach (string alias in aliases)
+                {
+                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
+                    {
+                        return true;
+                    }
+                }
+
+                if (canMigrateBareLegacyDomainHelper &&
+                    ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.LegacyName))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsCurrentDomainHelperApi(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            bool hasCurrentDomainNamespaceUsage = RegexMatchesCode(source, CurrentDomainNamespaceRegex);
+            foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\.){Regex.Escape(rule.CurrentName)}\b",
+                    RegexOptions.Compiled);
+                if (RegexMatchesCode(source, fullyQualifiedRegex))
+                {
+                    return true;
+                }
+
+                Regex unqualifiedRegex = new(
+                    $@"(?<![\.:])\b{Regex.Escape(rule.CurrentName)}\b",
+                    RegexOptions.Compiled);
+                if (hasCurrentDomainNamespaceUsage && RegexMatchesCode(source, unqualifiedRegex))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool ContainsLegacyAssemblyScopedTypeName(
