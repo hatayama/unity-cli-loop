@@ -85,6 +85,16 @@
     padding-left: 4px;
 }
 
+.setup-step--migration-alert {
+    background-color: #ffd54f;
+    border-color: #ffb300;
+}
+
+.setup-step--migration-alert .setup-step__title,
+.setup-step--migration-alert .setup-step__status-label {
+    color: #2f2500;
+}
+
 .setup-step__status-row {
     flex-direction: row;
     align-items: center;
