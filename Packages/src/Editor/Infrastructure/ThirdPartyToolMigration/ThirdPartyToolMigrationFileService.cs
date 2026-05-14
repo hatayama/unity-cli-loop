@@ -58,11 +58,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(progress != null, "progress must not be null");
 
             string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
-            if (TryGetCachedPreview(normalizedProjectRoot, out ThirdPartyToolMigrationPreview cachedPreview))
-            {
-                return cachedPreview;
-            }
-
             MigrationPlan plan = await CreateMigrationPlanAsync(normalizedProjectRoot, progress, ct);
             if (ct.IsCancellationRequested)
             {

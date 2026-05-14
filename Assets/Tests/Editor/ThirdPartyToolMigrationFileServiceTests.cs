@@ -1560,6 +1560,56 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
+        public async Task PreviewMigrationAsync_WhenProjectChangesAfterCachedPreview_RefreshesCurrentProject()
+        {
+            // Verifies that migration wizard Refresh reads the current files instead of reusing a stale preview.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                Progress<ThirdPartyToolMigrationProgress> progress = new();
+                ThirdPartyToolMigrationPreview firstPreview =
+                    await service.PreviewMigrationAsync(projectRoot, progress, CancellationToken.None);
+                File.WriteAllText(toolPath, "public sealed class HelloTool {}");
+
+                ThirdPartyToolMigrationPreview refreshedPreview =
+                    await service.PreviewMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(firstPreview.HasTargets, Is.True);
+                Assert.That(refreshedPreview.HasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void PreviewMigration_WhenCurrentApplicationGuidReferenceExists_KeepsAsmdef()
         {
             // Verifies that V3 Application references are not reported as legacy asmdef migration.
