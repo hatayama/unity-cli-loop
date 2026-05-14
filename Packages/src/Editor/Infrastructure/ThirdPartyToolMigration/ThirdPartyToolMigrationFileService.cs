@@ -829,7 +829,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalToolInfoTypeAlias(source))
                 {
-                    assemblyScopedLegacyDirectories.Add(assemblyDirectory);
                     AddAssemblyScopedLegacyAliases(
                         assemblyScopedLegacyToolInfoAliasesByDirectory,
                         assemblyDirectory,
@@ -1031,7 +1030,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalToolInfoTypeAlias(source))
                 {
-                    assemblyScopedLegacyDirectories.Add(assemblyDirectory);
                     AddAssemblyScopedLegacyAliases(
                         assemblyScopedLegacyToolInfoAliasesByDirectory,
                         assemblyDirectory,

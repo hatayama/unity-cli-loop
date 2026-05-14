@@ -1053,6 +1053,44 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyToolInfoAlias_KeepsUnrelatedBareTypes()
+        {
+            // Verifies that ToolInfo type aliases do not grant full legacy namespace context to sibling files.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string unrelatedPath = Path.Combine(toolDirectory, "UnrelatedMetadata.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string unrelatedSource = "public sealed class UnrelatedMetadata { public BaseToolSchema Schema; }";
+                File.WriteAllText(
+                    globalUsingPath,
+                    "global using LegacyToolInfo = io.github.hatayama.uLoopMCP.ToolInfo;");
+                File.WriteAllText(unrelatedPath, unrelatedSource);
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using LegacyToolInfo = io.github.hatayama.UnityCliLoop.Domain.ToolInfo;"));
+                Assert.That(File.ReadAllText(unrelatedPath), Is.EqualTo(unrelatedSource));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenLegacyToolExistsUnderAsmref_RewritesReferencedAsmdef()
         {
             // Verifies that asmref folders mark the referenced asmdef as the migrated assembly.
