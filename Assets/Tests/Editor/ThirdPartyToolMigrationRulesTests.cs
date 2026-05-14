@@ -239,6 +239,29 @@ public sealed class HelloTool
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyMcpConstantsAreUsed_RewritesConstantsType()
+        {
+            // Verifies that legacy public constants references resolve to the V3 constants type.
+            string source =
+                "using io.github.hatayama.uLoopMCP;\n" +
+                "\n" +
+                "public static class ToolConstants\n" +
+                "{\n" +
+                "    public const string Name = McpConstants.PROJECT_NAME;\n" +
+                "    public static string QualifiedName => io.github.hatayama.uLoopMCP.McpConstants.PROJECT_NAME;\n" +
+                "}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("UnityCliLoopConstants.PROJECT_NAME"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.PROJECT_NAME"));
+            Assert.That(result.Content, Does.Not.Contain("McpConstants"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyRegistrarMetadataIsUsed_RewritesDomainMetadataType()
         {
             // Verifies that explicit registrar metadata declarations keep compiling after namespace migration.
