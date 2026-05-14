@@ -104,6 +104,27 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public void ShouldTreatLoopExitAsUnexpectedForTests_ShouldIgnoreCanceledLoop_WhenServerIsRunning()
+        {
+            using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            cancellationTokenSource.Cancel();
+
+            bool canceledLoopResult = McpBridgeServer.ShouldTreatLoopExitAsUnexpectedForTests(
+                true,
+                cancellationTokenSource.Token);
+            bool activeLoopResult = McpBridgeServer.ShouldTreatLoopExitAsUnexpectedForTests(
+                true,
+                CancellationToken.None);
+
+            Assert.IsFalse(
+                canceledLoopResult,
+                "Canceled server loops should not trigger unexpected-exit recovery");
+            Assert.IsTrue(
+                activeLoopResult,
+                "Running non-canceled server loops should still trigger unexpected-exit recovery");
+        }
+
+        [Test]
         public async Task StopServerOnMainThread_ShouldNotBlockWaitingForClientTasks()
         {
             int port = GetFreePort();

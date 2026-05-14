@@ -508,9 +508,7 @@ namespace io.github.hatayama.uLoopMCP
             }
             finally
             {
-                // StopServer sets _isRunning=false before cancelling, so if it's still true here
-                // the loop exited unexpectedly (e.g. ObjectDisposedException, TcpListener disposed externally)
-                bool wasUnexpectedExit = _isRunning;
+                bool wasUnexpectedExit = ShouldTreatLoopExitAsUnexpected(_isRunning, cancellationToken);
                 if (wasUnexpectedExit)
                 {
                     VibeLogger.LogWarning(
@@ -523,6 +521,14 @@ namespace io.github.hatayama.uLoopMCP
                     OnServerLoopExited?.Invoke();
                 }
             }
+        }
+
+        private static bool ShouldTreatLoopExitAsUnexpected(
+            bool isRunning,
+            CancellationToken cancellationToken)
+        {
+            // A canceled loop belongs to an intentional shutdown and must not recover a newer server.
+            return isRunning && !cancellationToken.IsCancellationRequested;
         }
 
         /// <summary>
@@ -559,6 +565,13 @@ namespace io.github.hatayama.uLoopMCP
         internal int GetActiveClientTaskCountForTests()
         {
             return _clientTasks.Count;
+        }
+
+        internal static bool ShouldTreatLoopExitAsUnexpectedForTests(
+            bool isRunning,
+            CancellationToken cancellationToken)
+        {
+            return ShouldTreatLoopExitAsUnexpected(isRunning, cancellationToken);
         }
 
         internal void TrackClientTaskForTests(Task clientTask)
