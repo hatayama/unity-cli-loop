@@ -24,6 +24,9 @@ namespace io.github.hatayama.uLoopMCP
 
                 cancellationTokenSource.Cancel();
 
+                Task completedTask = await Task.WhenAny(acceptTask, Task.Delay(1000));
+                Assert.AreSame(acceptTask, completedTask, "Cancelled accept should complete before the timeout");
+
                 TcpClient acceptedClient = await acceptTask;
 
                 Assert.IsNull(acceptedClient, "Cancelled accept should complete without leaving a blocked task");
