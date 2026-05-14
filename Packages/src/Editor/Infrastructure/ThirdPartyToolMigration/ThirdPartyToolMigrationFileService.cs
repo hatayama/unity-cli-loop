@@ -82,13 +82,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 throw new DirectoryNotFoundException(normalizedProjectRoot);
             }
 
-            string assetsDirectory = Path.Combine(normalizedProjectRoot, "Assets");
-            if (!Directory.Exists(assetsDirectory))
+            if (!Directory.Exists(Path.Combine(normalizedProjectRoot, "Assets")))
             {
                 return false;
             }
 
-            return await FindFirstMigrationTargetAsync(assetsDirectory, ct);
+            return await HasMigrationTargetAsync(normalizedProjectRoot, ct);
         }
 
         public ThirdPartyToolMigrationResult ApplyMigration(string projectRoot)
@@ -119,76 +118,125 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static async Task<bool> FindFirstMigrationTargetAsync(string assetsDirectory, CancellationToken ct)
+        private static async Task<bool> HasMigrationTargetAsync(string projectRoot, CancellationToken ct)
         {
-            Debug.Assert(!string.IsNullOrEmpty(assetsDirectory), "assetsDirectory must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            Stack<string> pendingDirectories = new();
-            pendingDirectories.Push(assetsDirectory);
+            ProjectFileInventory inventory = await ProjectFileInventory.CreateAsync(
+                projectRoot,
+                new Progress<ThirdPartyToolMigrationProgress>(),
+                ct);
+            if (ct.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            bool hasCurrentAssemblyReferenceCandidate = false;
             int inspectedEntryCount = 0;
-
-            while (pendingDirectories.Count > 0)
+            foreach (string csharpFilePath in inventory.CSharpFilePaths)
             {
                 if (ct.IsCancellationRequested)
                 {
                     return false;
                 }
 
-                string directoryPath = pendingDirectories.Pop();
-                foreach (string filePath in Directory.EnumerateFiles(directoryPath))
+                string source = File.ReadAllText(csharpFilePath);
+                if (ContainsFastCSharpMigrationTarget(source))
                 {
-                    if (ct.IsCancellationRequested)
-                    {
-                        return false;
-                    }
-
-                    if (ContainsFastMigrationTarget(filePath))
-                    {
-                        return true;
-                    }
-
-                    inspectedEntryCount++;
-                    if (inspectedEntryCount % PreviewYieldBatchSize == 0)
-                    {
-                        await Task.Yield();
-                    }
+                    return true;
                 }
 
-                foreach (string childDirectoryPath in Directory.EnumerateDirectories(directoryPath))
+                hasCurrentAssemblyReferenceCandidate |=
+                    ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source);
+                inspectedEntryCount++;
+                if (inspectedEntryCount % PreviewYieldBatchSize == 0)
                 {
-                    if (ShouldExcludeFastScanDirectory(childDirectoryPath))
-                    {
-                        continue;
-                    }
+                    await Task.Yield();
+                }
+            }
 
-                    pendingDirectories.Push(childDirectoryPath);
-                    inspectedEntryCount++;
-                    if (inspectedEntryCount % PreviewYieldBatchSize == 0)
-                    {
-                        await Task.Yield();
-                    }
+            foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                string source = File.ReadAllText(asmdefFilePath);
+                if (ContainsFastAsmdefMigrationTarget(source))
+                {
+                    return true;
+                }
+
+                inspectedEntryCount++;
+                if (inspectedEntryCount % PreviewYieldBatchSize == 0)
+                {
+                    await Task.Yield();
+                }
+            }
+
+            if (!hasCurrentAssemblyReferenceCandidate)
+            {
+                return false;
+            }
+
+            MigrationProgressCounter progressCounter = new(
+                GetPreviewWorkItemCount(inventory),
+                new Progress<ThirdPartyToolMigrationProgress>());
+            MigrationAssemblyUsage assemblyUsage = await FindMigrationAssemblyUsageAsync(
+                projectRoot,
+                inventory.CSharpFilePaths,
+                inventory.AsmdefFilePaths,
+                inventory.AsmrefFilePaths,
+                progressCounter,
+                ct);
+            if (ct.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                if (ContainsAsmdefMigrationTarget(asmdefFilePath, projectRoot, assemblyUsage))
+                {
+                    return true;
                 }
             }
 
             return false;
         }
 
-        private static bool ContainsFastMigrationTarget(string filePath)
+        private static bool ContainsAsmdefMigrationTarget(
+            string asmdefFilePath,
+            string projectRoot,
+            MigrationAssemblyUsage assemblyUsage)
         {
-            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(asmdefFilePath), "asmdefFilePath must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            string extension = Path.GetExtension(filePath);
-            if (string.Equals(extension, ".cs", StringComparison.OrdinalIgnoreCase))
-            {
-                return ContainsFastCSharpMigrationTarget(File.ReadAllText(filePath));
-            }
+            string source = File.ReadAllText(asmdefFilePath);
+            string asmdefDirectory = Path.GetDirectoryName(asmdefFilePath) ?? projectRoot;
+            bool hasLegacyCSharpSource = assemblyUsage.LegacyAssemblyDirectories.Contains(asmdefDirectory);
+            bool requiresToolContractsReference =
+                assemblyUsage.ToolContractsReferenceAssemblyDirectories.Contains(asmdefDirectory);
+            bool requiresApplicationReference =
+                assemblyUsage.ApplicationReferenceAssemblyDirectories.Contains(asmdefDirectory);
+            bool requiresDomainReference =
+                assemblyUsage.DomainReferenceAssemblyDirectories.Contains(asmdefDirectory);
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource,
+                    requiresToolContractsReference,
+                    requiresApplicationReference,
+                    requiresDomainReference);
 
-            if (string.Equals(extension, ".asmdef", StringComparison.OrdinalIgnoreCase))
-            {
-                return ContainsFastAsmdefMigrationTarget(File.ReadAllText(filePath));
-            }
-
-            return false;
+            return result.Changed;
         }
 
         private static bool ContainsFastCSharpMigrationTarget(string source)
