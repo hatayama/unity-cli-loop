@@ -18,6 +18,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class ThirdPartyToolMigrationFileServiceTests
     {
         [Test]
+        public void ThirdPartyToolMigrationPreview_WhenInputFilePathsMutate_KeepsSnapshot()
+        {
+            // Verifies that preview file paths cannot be changed by mutating the constructor input array.
+            string[] filePaths =
+            {
+                "Assets/VendorTools/HelloTool.cs"
+            };
+            ThirdPartyToolMigrationPreview preview = new(1, 1, filePaths);
+
+            filePaths[0] = "Assets/Changed.cs";
+            preview.FilePaths[0] = "Assets/ChangedAgain.cs";
+
+            Assert.That(preview.FilePaths, Is.EqualTo(new[] { "Assets/VendorTools/HelloTool.cs" }));
+        }
+
+        [Test]
+        public void ThirdPartyToolMigrationResult_WhenInputFilePathsMutate_KeepsSnapshot()
+        {
+            // Verifies that result file paths cannot be changed by mutating the constructor input array.
+            string[] filePaths =
+            {
+                "Assets/VendorTools/HelloTool.cs"
+            };
+            ThirdPartyToolMigrationResult result = new(1, 1, filePaths);
+
+            filePaths[0] = "Assets/Changed.cs";
+            result.FilePaths[0] = "Assets/ChangedAgain.cs";
+
+            Assert.That(result.FilePaths, Is.EqualTo(new[] { "Assets/VendorTools/HelloTool.cs" }));
+        }
+
+        [Test]
         public void ApplyMigration_WhenLegacyToolAssemblyExists_RewritesSourceAndAsmdef()
         {
             // Verifies that project-wide migration rewrites both custom tool source and its asmdef reference.
@@ -622,6 +654,108 @@ public static class ToolMetadataProvider
                 string unrelatedDirectory = Path.Combine(projectRoot, "Assets", "Unrelated");
                 Directory.CreateDirectory(unrelatedDirectory);
                 File.WriteAllText(Path.Combine(unrelatedDirectory, "Broken.asmdef"), "{");
+
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CurrentHelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[UnityCliLoopTool]
+public sealed class CurrentHelloTool : UnityCliLoopTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class HelloResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenUnrelatedAsmdefJsonIsMalformedAndAsmrefExists_AppliesAsmdefRepair()
+        {
+            // Verifies that malformed asmdefs do not block asmref-aware migration scans.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string unrelatedDirectory = Path.Combine(projectRoot, "Assets", "Unrelated");
+                Directory.CreateDirectory(unrelatedDirectory);
+                File.WriteAllText(Path.Combine(unrelatedDirectory, "Broken.asmdef"), "{");
+
+                string asmrefDirectory = Path.Combine(projectRoot, "Assets", "VendorToolParts");
+                Directory.CreateDirectory(asmrefDirectory);
+                File.WriteAllText(Path.Combine(asmrefDirectory, "VendorTools.Editor.asmref"), @"{
+    ""reference"": ""VendorTools.Editor""
+}");
+
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CurrentHelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[UnityCliLoopTool]
+public sealed class CurrentHelloTool : UnityCliLoopTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class HelloResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenUnrelatedAsmrefJsonIsMalformed_AppliesAsmdefRepair()
+        {
+            // Verifies that malformed asmrefs do not block migration scans for valid assemblies.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string unrelatedDirectory = Path.Combine(projectRoot, "Assets", "Unrelated");
+                Directory.CreateDirectory(unrelatedDirectory);
+                File.WriteAllText(Path.Combine(unrelatedDirectory, "Broken.asmref"), "{");
 
                 string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
                 Directory.CreateDirectory(toolDirectory);
@@ -1977,6 +2111,59 @@ public sealed class HelloResponse : BaseToolResponse
                 string unrelatedDirectory = Path.Combine(projectRoot, "Assets", "Unrelated");
                 Directory.CreateDirectory(unrelatedDirectory);
                 File.WriteAllText(Path.Combine(unrelatedDirectory, "Broken.asmdef"), "{");
+
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "CurrentHelloTool.cs"),
+                    @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[UnityCliLoopTool]
+public sealed class CurrentHelloTool : UnityCliLoopTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class HelloResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                Progress<ThirdPartyToolMigrationProgress> progress = new();
+
+                ThirdPartyToolMigrationPreview preview =
+                    await service.PreviewMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(preview.FileCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task PreviewMigrationAsync_WhenUnrelatedAsmrefJsonIsMalformed_PreviewsAsmdefRepair()
+        {
+            // Verifies that malformed asmrefs do not block async preview scans for repairable assemblies.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string unrelatedDirectory = Path.Combine(projectRoot, "Assets", "Unrelated");
+                Directory.CreateDirectory(unrelatedDirectory);
+                File.WriteAllText(Path.Combine(unrelatedDirectory, "Broken.asmref"), "{");
 
                 string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
                 Directory.CreateDirectory(toolDirectory);

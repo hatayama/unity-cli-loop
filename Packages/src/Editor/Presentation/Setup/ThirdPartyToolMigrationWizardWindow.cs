@@ -299,6 +299,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void ScheduleInitialRefresh()
         {
+            if (!_shouldRefreshAfterCreateGui)
+            {
+                return;
+            }
+
             rootVisualElement.schedule.Execute(RefreshUI).StartingIn(0);
         }
 
@@ -337,8 +342,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 ThirdPartyToolMigrationResult result =
                     _thirdPartyToolMigrationUseCase.ApplyMigration(projectRoot);
-                Debug.Assert(result.Changed, "migration result should contain changed files");
-                AssetDatabase.Refresh();
+                if (result.Changed)
+                {
+                    AssetDatabase.Refresh();
+                }
             }
             finally
             {

@@ -10,6 +10,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     /// </summary>
     public readonly struct ThirdPartyToolMigrationPreview
     {
+        private readonly string[] _filePaths;
+
         public ThirdPartyToolMigrationPreview(int fileCount, int replacementCount, string[] filePaths)
         {
             Debug.Assert(fileCount >= 0, "fileCount must not be negative");
@@ -18,12 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             FileCount = fileCount;
             ReplacementCount = replacementCount;
-            FilePaths = filePaths ?? Array.Empty<string>();
+            _filePaths = ThirdPartyToolMigrationFilePathSnapshot.Copy(filePaths);
         }
 
         public int FileCount { get; }
         public int ReplacementCount { get; }
-        public string[] FilePaths { get; }
+        public string[] FilePaths => ThirdPartyToolMigrationFilePathSnapshot.Copy(_filePaths);
         public bool HasTargets => FileCount > 0;
     }
 
@@ -53,6 +55,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     /// </summary>
     public readonly struct ThirdPartyToolMigrationResult
     {
+        private readonly string[] _filePaths;
+
         public ThirdPartyToolMigrationResult(int fileCount, int replacementCount, string[] filePaths)
         {
             Debug.Assert(fileCount >= 0, "fileCount must not be negative");
@@ -61,12 +65,12 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             FileCount = fileCount;
             ReplacementCount = replacementCount;
-            FilePaths = filePaths ?? Array.Empty<string>();
+            _filePaths = ThirdPartyToolMigrationFilePathSnapshot.Copy(filePaths);
         }
 
         public int FileCount { get; }
         public int ReplacementCount { get; }
-        public string[] FilePaths { get; }
+        public string[] FilePaths => ThirdPartyToolMigrationFilePathSnapshot.Copy(_filePaths);
         public bool Changed => FileCount > 0;
     }
 
@@ -79,5 +83,23 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             CancellationToken ct);
         Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct);
         ThirdPartyToolMigrationResult ApplyMigration(string projectRoot);
+    }
+
+    /// <summary>
+    /// Creates stable migration file path snapshots before value objects store caller-owned arrays.
+    /// </summary>
+    internal static class ThirdPartyToolMigrationFilePathSnapshot
+    {
+        internal static string[] Copy(string[] filePaths)
+        {
+            if (filePaths == null || filePaths.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            string[] copy = new string[filePaths.Length];
+            Array.Copy(filePaths, copy, filePaths.Length);
+            return copy;
+        }
     }
 }

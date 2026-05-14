@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Domain;
@@ -1276,7 +1277,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             List<AssemblyReferenceDirectory> assemblyReferenceDirectories = new();
             foreach (string asmrefFilePath in asmrefFilePaths)
             {
-                JObject asmref = JObject.Parse(File.ReadAllText(asmrefFilePath));
+                if (!TryReadJsonObject(asmrefFilePath, out JObject asmref))
+                {
+                    continue;
+                }
+
                 string reference = asmref["reference"]?.Value<string>() ?? string.Empty;
                 if (reference.Length == 0)
                 {
@@ -1331,7 +1336,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         .ToList();
                 }
 
-                JObject asmref = JObject.Parse(File.ReadAllText(asmrefFilePath));
+                if (!TryReadJsonObject(asmrefFilePath, out JObject asmref))
+                {
+                    await progressCounter.ReportProcessedItemAsync(ct);
+                    continue;
+                }
+
                 await progressCounter.ReportProcessedItemAsync(ct);
                 string reference = asmref["reference"]?.Value<string>() ?? string.Empty;
                 if (reference.Length == 0)
@@ -1372,7 +1382,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     continue;
                 }
 
-                JObject asmdef = JObject.Parse(File.ReadAllText(asmdefFilePath));
+                if (!TryReadJsonObject(asmdefFilePath, out JObject asmdef))
+                {
+                    continue;
+                }
+
                 string assemblyName = asmdef["name"]?.Value<string>() ?? string.Empty;
                 AddAsmdefDirectoryReference(asmdefDirectoriesByReference, assemblyName, asmdefDirectory);
                 AddAsmdefDirectoryReference(
@@ -1407,7 +1421,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     continue;
                 }
 
-                JObject asmdef = JObject.Parse(File.ReadAllText(asmdefFilePath));
+                if (!TryReadJsonObject(asmdefFilePath, out JObject asmdef))
+                {
+                    await progressCounter.ReportProcessedItemAsync(ct);
+                    continue;
+                }
+
                 await progressCounter.ReportProcessedItemAsync(ct);
                 string assemblyName = asmdef["name"]?.Value<string>() ?? string.Empty;
                 AddAsmdefDirectoryReference(asmdefDirectoriesByReference, assemblyName, asmdefDirectory);
@@ -1418,6 +1437,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return asmdefDirectoriesByReference;
+        }
+
+        private static bool TryReadJsonObject(string filePath, out JObject jsonObject)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            try
+            {
+                jsonObject = JObject.Parse(File.ReadAllText(filePath));
+                return true;
+            }
+            catch (JsonException ex)
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[UnityCliLoop] Skipping malformed assembly definition JSON at {filePath}: {ex.Message}");
+                jsonObject = null;
+                return false;
+            }
         }
 
         private static void AddAsmdefDirectoryReference(
