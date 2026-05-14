@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.3](https://github.com/hatayama/unity-cli-loop/compare/v2.1.2...v2.1.3) (2026-05-14)
+
+
+### Bug Fixes
+
+* **build:** exclude Editor-only assemblies from player builds ([#1120](https://github.com/hatayama/unity-cli-loop/issues/1120)) ([768b49d](https://github.com/hatayama/unity-cli-loop/commit/768b49d447126cb04f98d1fe493c162fdcec6c28))
+* Unity 6.5 projects compile and keep fast code execution available ([#1119](https://github.com/hatayama/unity-cli-loop/issues/1119)) ([1a27478](https://github.com/hatayama/unity-cli-loop/commit/1a274786e8f53afe1a74bf7b66b894842310944f))
+* Unity no longer imports stale empty folders ([#1124](https://github.com/hatayama/unity-cli-loop/issues/1124)) ([45a57c3](https://github.com/hatayama/unity-cli-loop/commit/45a57c30c1803d93d4ef823e4937d1ed7c39d53d))
+* Unity stays responsive during domain reload recovery ([#1121](https://github.com/hatayama/unity-cli-loop/issues/1121)) ([5f5ab9d](https://github.com/hatayama/unity-cli-loop/commit/5f5ab9de8bf26972aaa9ef6a971324c907d01375))
+
 ## [2.1.2](https://github.com/hatayama/unity-cli-loop/compare/v2.1.1...v2.1.2) (2026-05-13)
 
 
