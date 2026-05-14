@@ -821,13 +821,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GlobalCliAutoInstaller_WhenLoaded_DoesNotSkipBatchModeStartup()
+        public void InfrastructureEditorStartup_WhenLoaded_DoesNotScheduleGlobalCliAutoInstall()
         {
-            // Tests that batch Unity sessions still run minimum CLI version enforcement.
-            string autoInstallerSource = ReadProductionSource(
-                "Packages/src/Editor/Infrastructure/CLI/GlobalCliAutoInstaller.cs");
+            string startupSource = ReadProductionSource(
+                "Packages/src/Editor/Infrastructure/InfrastructureEditorStartup.cs");
 
-            Assert.That(autoInstallerSource, Does.Not.Contain("Application.isBatchMode"));
+            Assert.That(startupSource, Does.Not.Contain("GlobalCliAutoInstaller"));
         }
 
         [Test]
