@@ -131,6 +131,17 @@ test_marks_stale_pending_release_pr() {
   assert_contains "$TMP_DIR/marks-stale/output.txt" "Marked release PR #1082 as tagged for v3.0.0-beta.3."
 }
 
+# Verifies branch-scoped release titles use the release-please body version before staying pending.
+test_marks_branch_title_release_pr_from_body() {
+  run_case branch-title \
+    '[{"number":1105,"title":"chore: release v3-beta","body":"<details><summary>3.0.0-beta.7</summary></details>","mergeCommit":{"oid":"abc123"}}]' \
+    '{"v3.0.0-beta.7":{"isDraft":false,"targetCommitish":"abc123"}}'
+
+  assert_file_equals "$TMP_DIR/branch-title/status.txt" "0"
+  assert_contains "$TMP_DIR/branch-title/gh.log" "pr edit 1105 --repo hatayama/unity-cli-loop --remove-label autorelease: pending --add-label autorelease: tagged"
+  assert_contains "$TMP_DIR/branch-title/output.txt" "Marked release PR #1105 as tagged for v3.0.0-beta.7."
+}
+
 # Verifies draft releases remain pending so release completion is not hidden.
 test_keeps_draft_release_pending() {
   run_case draft-release \
@@ -175,6 +186,7 @@ test_fails_when_release_lookup_fails_unexpectedly() {
 }
 
 test_marks_stale_pending_release_pr
+test_marks_branch_title_release_pr_from_body
 test_keeps_draft_release_pending
 test_keeps_mismatched_release_pending
 test_exits_when_no_pending_release_pr_exists
