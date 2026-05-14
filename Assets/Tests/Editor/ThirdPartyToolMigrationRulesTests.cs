@@ -93,6 +93,23 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolAttributeDescriptionIsRawStringWithComma_DropsDescriptionArgument()
+        {
+            // Verifies that commas inside raw string literals do not split legacy attribute arguments.
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
+                "[McpTool(Description = \"\"\"\"say \"hi\", world\"\"\"\", DisplayDevelopmentOnly = true)] " +
+                "public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("[UnityCliLoopTool(DisplayDevelopmentOnly = true)]"));
+            Assert.That(result.Content, Does.Not.Contain("Description"));
+            Assert.That(result.Content, Does.Not.Contain("\"\"\"\"say \"hi\", world\"\"\"\""));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolAttributeHasSecurityArgument_RewritesSecurityArgument()
         {
             // Verifies that supported security metadata keeps compiling after the enum rename.
@@ -515,6 +532,30 @@ public static class ToolMetadataProvider
             Assert.That(result.Content, Does.Contain(
                 "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema)"));
             Assert.That(result.Content, Does.Not.Contain("\"description\", schema"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyToolInfoDescriptionIsRawStringWithComma_RemovesDescriptionArgument()
+        {
+            // Verifies that commas inside raw string literals do not split legacy ToolInfo arguments.
+            string source =
+                "using io.github.hatayama.uLoopMCP;\n" +
+                "\n" +
+                "public static class ToolMetadataProvider\n" +
+                "{\n" +
+                "    public static ToolInfo Create(ToolParameterSchema schema)\n" +
+                "    {\n" +
+                "        return new ToolInfo(\"hello\", \"\"\"\"say \"hi\", world\"\"\"\", schema);\n" +
+                "    }\n" +
+                "}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema)"));
+            Assert.That(result.Content, Does.Not.Contain("\"\"\"\"say \"hi\", world\"\"\"\""));
         }
 
         [Test]
@@ -1251,6 +1292,29 @@ public sealed class OtherTool
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
                     hasLegacyCSharpSource: true,
+                    requiresToolContractsReference: false,
+                    requiresApplicationReference: false,
+                    requiresDomainReference: true);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            Assert.That(result.Content, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+            Assert.That(result.Content, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+        }
+
+        [Test]
+        public void MigrateAsmdefSource_WhenCurrentDomainMetadataRequiresDomainReference_AddsToolContractsReference()
+        {
+            // Verifies that direct V3 Domain consumers also receive transitive ToolContracts access.
+            string source = @"{
+    ""name"": ""MyCompany.Tools.Editor"",
+    ""references"": []
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: false,
                     requiresToolContractsReference: false,
                     requiresApplicationReference: false,
                     requiresDomainReference: true);

@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string RequiredSecuritySettingAttributeArgumentName = "RequiredSecuritySetting";
         private const string LegacySecuritySettingsTypeName = "SecuritySettings";
         private const string CurrentSecuritySettingTypeName = "UnityCliLoopSecuritySetting";
+        private const int MinimumRawStringDelimiterQuoteCount = 3;
 
         private static readonly string[] ExcludedDirectoryNames =
         {
@@ -69,6 +70,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex LegacyGlobalUsingRegex =
             new(
                 $@"\bglobal\s+using\s+(?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?(?:global::)?{Regex.Escape(LegacyNamespace)}\s*;",
+                RegexOptions.Compiled);
+
+        private static readonly Regex CurrentDomainGlobalUsingRegex =
+            new(
+                $@"\bglobal\s+using\s+(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\s*;",
                 RegexOptions.Compiled);
 
         private static readonly Regex LegacyGlobalNamespaceAliasRegex =
@@ -385,10 +391,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
+            return ContainsCurrentDomainMetadataApiForAssembly(
+                source,
+                hasAssemblyScopedCurrentDomainUsing: false);
+        }
+
+        internal static bool ContainsCurrentDomainMetadataApiForAssembly(
+            string source,
+            bool hasAssemblyScopedCurrentDomainUsing)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            bool hasCurrentDomainNamespaceUsage = RegexMatchesCode(source, CurrentDomainNamespaceRegex);
+            bool canUseBareCurrentDomainType = hasAssemblyScopedCurrentDomainUsing || hasCurrentDomainNamespaceUsage;
             return RegexMatchesCode(source, CurrentDomainMetadataRegex) ||
-                ContainsCurrentDomainHelperApi(source) ||
-                (RegexMatchesCode(source, CurrentDomainNamespaceRegex) &&
-                    RegexMatchesCode(source, LegacyDomainMetadataRegex));
+                ContainsCurrentDomainHelperApiForAssembly(source, canUseBareCurrentDomainType) ||
+                (canUseBareCurrentDomainType && RegexMatchesCode(source, LegacyDomainMetadataRegex));
         }
 
         internal static bool ContainsLegacyAssemblyScopedApi(string source, string[] legacyAssemblyAliases)
@@ -411,6 +429,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, LegacyGlobalUsingRegex);
+        }
+
+        internal static bool ContainsCurrentDomainGlobalUsing(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, CurrentDomainGlobalUsingRegex);
         }
 
         internal static string[] GetLegacyGlobalNamespaceAliases(string source)
@@ -495,7 +520,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(references != null, "references must not be null");
             Debug.Assert(addedReferences != null, "addedReferences must not be null");
 
-            if (requiresToolContractsReference)
+            if (requiresToolContractsReference || requiresApplicationReference || requiresDomainReference)
             {
                 AddRequiredCurrentAsmdefReference(
                     references,
@@ -711,6 +736,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool isInRegularString = false;
             bool isInVerbatimString = false;
             bool isInCharLiteral = false;
+            bool isInRawString = false;
+            int rawStringQuoteCount = 0;
             for (int i = 0; i < argumentsSource.Length; i++)
             {
                 char current = argumentsSource[i];
@@ -747,6 +774,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     continue;
                 }
 
+                if (isInRawString)
+                {
+                    if (HasRepeatedCharacterAt(argumentsSource, i, '"', rawStringQuoteCount))
+                    {
+                        i += rawStringQuoteCount - 1;
+                        isInRawString = false;
+                    }
+
+                    continue;
+                }
+
                 if (isInCharLiteral)
                 {
                     if (current == '\\')
@@ -760,6 +798,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         isInCharLiteral = false;
                     }
 
+                    continue;
+                }
+
+                if (IsRawStringStart(argumentsSource, i))
+                {
+                    int dollarCount = CountRepeatedCharacter(argumentsSource, i, '$');
+                    int quoteIndex = i + dollarCount;
+                    rawStringQuoteCount = CountRepeatedCharacter(argumentsSource, quoteIndex, '"');
+                    isInRawString = true;
+                    i = quoteIndex + rawStringQuoteCount - 1;
                     continue;
                 }
 
@@ -1622,6 +1670,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             bool hasCurrentDomainNamespaceUsage = RegexMatchesCode(source, CurrentDomainNamespaceRegex);
+            return ContainsCurrentDomainHelperApiForAssembly(source, hasCurrentDomainNamespaceUsage);
+        }
+
+        private static bool ContainsCurrentDomainHelperApiForAssembly(
+            string source,
+            bool canUseBareCurrentDomainType)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
             foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
             {
                 Regex fullyQualifiedRegex = new(
@@ -1635,7 +1692,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Regex unqualifiedRegex = new(
                     $@"(?<![\.:])\b{Regex.Escape(rule.CurrentName)}\b",
                     RegexOptions.Compiled);
-                if (hasCurrentDomainNamespaceUsage && RegexMatchesCode(source, unqualifiedRegex))
+                if (canUseBareCurrentDomainType && RegexMatchesCode(source, unqualifiedRegex))
                 {
                     return true;
                 }
@@ -1861,6 +1918,52 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return string.CompareOrdinal(source, startIndex, value, 0, value.Length) == 0;
         }
 
+        private static bool IsRawStringStart(string source, int startIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+            int dollarCount = CountRepeatedCharacter(source, startIndex, '$');
+            int quoteIndex = startIndex + dollarCount;
+            return CountRepeatedCharacter(source, quoteIndex, '"') >= MinimumRawStringDelimiterQuoteCount;
+        }
+
+        private static int CountRepeatedCharacter(string source, int startIndex, char character)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+            int index = startIndex;
+            while (index < source.Length && source[index] == character)
+            {
+                index++;
+            }
+
+            return index - startIndex;
+        }
+
+        private static bool HasRepeatedCharacterAt(string source, int startIndex, char character, int count)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+            Debug.Assert(count > 0, "count must be positive");
+
+            if (startIndex + count > source.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                if (source[startIndex + i] != character)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         private static int GetStringPrefixLength(string source, int startIndex)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -1906,8 +2009,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private readonly struct CodeTextMask
         {
-            private const int MinimumRawStringDelimiterQuoteCount = 3;
-
             private readonly bool[] _codeCharacters;
 
             private CodeTextMask(bool[] codeCharacters)

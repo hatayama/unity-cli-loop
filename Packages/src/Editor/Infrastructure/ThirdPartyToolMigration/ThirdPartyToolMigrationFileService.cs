@@ -183,6 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CreateAssemblyReferenceDirectories(asmdefFilePaths, asmrefFilePaths);
             HashSet<string> legacyAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> assemblyScopedLegacyDirectories = new(StringComparer.Ordinal);
+            HashSet<string> assemblyScopedCurrentDomainDirectories = new(StringComparer.Ordinal);
             Dictionary<string, HashSet<string>> assemblyScopedLegacyAliasesByDirectory =
                 new(StringComparer.Ordinal);
             HashSet<string> registrarAssemblyDirectories = new(StringComparer.Ordinal);
@@ -212,6 +213,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         assemblyScopedLegacyAliasesByDirectory,
                         assemblyDirectory,
                         ThirdPartyToolMigrationRules.GetLegacyGlobalNamespaceAliases(source));
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainGlobalUsing(source))
+                {
+                    assemblyScopedCurrentDomainDirectories.Add(assemblyDirectory);
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source) ||
@@ -260,6 +266,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         legacyAssemblyAliases))
                 {
                     domainMetadataAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApiForAssembly(
+                        source,
+                        assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory)))
+                {
+                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
             }
 
