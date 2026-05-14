@@ -1485,6 +1485,56 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
+        public async Task HasMigrationTargetsAsync_WhenUnrelatedAsmdefJsonIsMalformed_StillDetectsAsmdefRepair()
+        {
+            // Verifies that unrelated malformed asmdefs do not block startup detection for repairable tools.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string unrelatedDirectory = Path.Combine(projectRoot, "Assets", "Unrelated");
+                Directory.CreateDirectory(unrelatedDirectory);
+                File.WriteAllText(Path.Combine(unrelatedDirectory, "Broken.asmdef"), "{");
+
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "CurrentHelloTool.cs"),
+                    @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[UnityCliLoopTool]
+public sealed class CurrentHelloTool : UnityCliLoopTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class HelloResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task HasMigrationTargetsAsync_WhenCurrentApplicationGuidReferenceExists_ReturnsFalse()
         {
             // Verifies that current V3 Application references do not trigger the startup migration prompt.

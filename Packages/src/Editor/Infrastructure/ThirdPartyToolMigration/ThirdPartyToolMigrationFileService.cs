@@ -131,7 +131,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            bool hasCurrentAssemblyReferenceCandidate = false;
+            List<string> asmdefDirectories = inventory.AsmdefFilePaths
+                .Select(path => Path.GetDirectoryName(path) ?? string.Empty)
+                .Where(path => !string.IsNullOrEmpty(path))
+                .OrderByDescending(path => path.Length)
+                .ToList();
+            List<AssemblyReferenceDirectory> assemblyReferenceDirectories = inventory.AsmrefFilePaths.Count == 0
+                ? new List<AssemblyReferenceDirectory>()
+                : CreateAssemblyReferenceDirectories(inventory.AsmdefFilePaths, inventory.AsmrefFilePaths);
+            HashSet<string> legacyAssemblyDirectories = new(StringComparer.Ordinal);
+            HashSet<string> toolContractsReferenceAssemblyDirectories = new(StringComparer.Ordinal);
+            HashSet<string> applicationReferenceAssemblyDirectories = new(StringComparer.Ordinal);
+            HashSet<string> domainReferenceAssemblyDirectories = new(StringComparer.Ordinal);
             int inspectedEntryCount = 0;
             foreach (string csharpFilePath in inventory.CSharpFilePaths)
             {
@@ -146,8 +157,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return true;
                 }
 
-                hasCurrentAssemblyReferenceCandidate |=
-                    ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source);
+                if (ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
+                {
+                    string assemblyDirectory = FindNearestAssemblyDirectory(
+                        csharpFilePath,
+                        asmdefDirectories,
+                        assemblyReferenceDirectories,
+                        projectRoot);
+                    CollectFastAssemblyReferenceRequirements(
+                        source,
+                        assemblyDirectory,
+                        legacyAssemblyDirectories,
+                        toolContractsReferenceAssemblyDirectories,
+                        applicationReferenceAssemblyDirectories,
+                        domainReferenceAssemblyDirectories);
+                }
+
                 inspectedEntryCount++;
                 if (inspectedEntryCount % PreviewYieldBatchSize == 0)
                 {
@@ -175,25 +200,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
-            if (!hasCurrentAssemblyReferenceCandidate)
+            if (toolContractsReferenceAssemblyDirectories.Count == 0 &&
+                applicationReferenceAssemblyDirectories.Count == 0 &&
+                domainReferenceAssemblyDirectories.Count == 0)
             {
                 return false;
             }
 
-            MigrationProgressCounter progressCounter = new(
-                GetPreviewWorkItemCount(inventory),
-                new Progress<ThirdPartyToolMigrationProgress>());
-            MigrationAssemblyUsage assemblyUsage = await FindMigrationAssemblyUsageAsync(
-                projectRoot,
-                inventory.CSharpFilePaths,
-                inventory.AsmdefFilePaths,
-                inventory.AsmrefFilePaths,
-                progressCounter,
-                ct);
-            if (ct.IsCancellationRequested)
-            {
-                return false;
-            }
+            MigrationAssemblyUsage assemblyUsage = new(
+                asmdefDirectories,
+                assemblyReferenceDirectories,
+                legacyAssemblyDirectories,
+                new HashSet<string>(StringComparer.Ordinal),
+                new Dictionary<string, string[]>(StringComparer.Ordinal),
+                toolContractsReferenceAssemblyDirectories,
+                applicationReferenceAssemblyDirectories,
+                domainReferenceAssemblyDirectories);
 
             foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
             {
@@ -211,6 +233,50 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
+        private static void CollectFastAssemblyReferenceRequirements(
+            string source,
+            string assemblyDirectory,
+            HashSet<string> legacyAssemblyDirectories,
+            HashSet<string> toolContractsReferenceAssemblyDirectories,
+            HashSet<string> applicationReferenceAssemblyDirectories,
+            HashSet<string> domainReferenceAssemblyDirectories)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(assemblyDirectory), "assemblyDirectory must not be null or empty");
+            Debug.Assert(legacyAssemblyDirectories != null, "legacyAssemblyDirectories must not be null");
+            Debug.Assert(
+                toolContractsReferenceAssemblyDirectories != null,
+                "toolContractsReferenceAssemblyDirectories must not be null");
+            Debug.Assert(
+                applicationReferenceAssemblyDirectories != null,
+                "applicationReferenceAssemblyDirectories must not be null");
+            Debug.Assert(domainReferenceAssemblyDirectories != null, "domainReferenceAssemblyDirectories must not be null");
+
+            if (ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
+            {
+                legacyAssemblyDirectories.Add(assemblyDirectory);
+            }
+
+            if (ThirdPartyToolMigrationRules.ContainsCurrentToolContractsApi(source))
+            {
+                toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
+            }
+
+            if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source) ||
+                ThirdPartyToolMigrationRules.ContainsCurrentRegistrarApi(source))
+            {
+                applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
+            }
+
+            if (ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApi(source) ||
+                ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApiForAssembly(
+                    source,
+                    ThirdPartyToolMigrationRules.ContainsCurrentDomainGlobalUsing(source)))
+            {
+                domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+            }
+        }
+
         private static bool ContainsAsmdefMigrationTarget(
             string asmdefFilePath,
             string projectRoot,
@@ -219,7 +285,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(asmdefFilePath), "asmdefFilePath must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            string source = File.ReadAllText(asmdefFilePath);
             string asmdefDirectory = Path.GetDirectoryName(asmdefFilePath) ?? projectRoot;
             bool hasLegacyCSharpSource = assemblyUsage.LegacyAssemblyDirectories.Contains(asmdefDirectory);
             bool requiresToolContractsReference =
@@ -228,6 +293,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 assemblyUsage.ApplicationReferenceAssemblyDirectories.Contains(asmdefDirectory);
             bool requiresDomainReference =
                 assemblyUsage.DomainReferenceAssemblyDirectories.Contains(asmdefDirectory);
+            if (!hasLegacyCSharpSource &&
+                !requiresToolContractsReference &&
+                !requiresApplicationReference &&
+                !requiresDomainReference)
+            {
+                return false;
+            }
+
+            string source = File.ReadAllText(asmdefFilePath);
             ThirdPartyToolMigrationContentResult result =
                 ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                     source,
