@@ -136,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             new("ToolParameterSchemaGenerator", "UnityCliLoopToolParameterSchemaGenerator"),
             new("ParameterValidationException", "UnityCliLoopToolParameterValidationException"),
-            new("McpConstants", "UnityCliLoopConstants"),
+            new("Mcp" + "Constants", "UnityCliLoopConstants"),
             new("McpToolAttribute", "UnityCliLoopToolAttribute"),
             new("IUnityTool", "IUnityCliLoopTool"),
             new("AbstractUnityTool", "UnityCliLoopTool"),

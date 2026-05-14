@@ -11,23 +11,6 @@
             <ui:Label text="CLI installer ready" class="setup-prerequisite__title" />
         </ui:VisualElement>
 
-        <!-- V3 custom tool migration -->
-        <ui:VisualElement name="third-party-tool-migration-section" class="setup-step setup-step--migration-alert setup-hidden">
-            <ui:Label text="Custom Tool Migration" class="setup-step__title" />
-            <ui:VisualElement class="setup-step__content">
-                <ui:Label
-                    name="third-party-tool-migration-status-label"
-                    text=""
-                    class="setup-step__status-label setup-step__status-label--standalone" />
-                <ui:ProgressBar
-                    name="third-party-tool-migration-progress-bar"
-                    class="setup-progress-bar setup-hidden" />
-                <ui:VisualElement class="setup-step__button-row">
-                    <ui:Button name="migrate-third-party-tools-button" text="Migrate" class="setup-button" />
-                </ui:VisualElement>
-            </ui:VisualElement>
-        </ui:VisualElement>
-
         <!-- Step 1: Install CLI -->
         <ui:VisualElement name="step-1" class="setup-step">
             <ui:Label text="Step 1: Install CLI" class="setup-step__title" />

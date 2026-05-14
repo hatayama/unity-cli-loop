@@ -52,103 +52,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _editorSettingsRepository.InvalidateCache();
         }
 
-        [TestCase("", "1.7.3", false, false, true)]
-        [TestCase("1.7.2", "1.7.3", false, false, true)]
-        [TestCase("1.7.4", "1.7.3", false, false, true)]
-        [TestCase("1.7.3", "1.7.3", false, false, false)]
-        [TestCase("", "1.7.3", true, false, false)]
-        [TestCase("1.7.2", "1.7.3", true, false, false)]
-        [TestCase("1.7.2", "1.7.3", true, true, true)]
-        [TestCase("1.7.3", "1.7.3", true, true, false)]
+        [TestCase("", "1.7.3", false, true)]
+        [TestCase("1.7.2", "1.7.3", false, true)]
+        [TestCase("1.7.4", "1.7.3", false, true)]
+        [TestCase("1.7.3", "1.7.3", false, false)]
+        [TestCase("", "1.7.3", true, false)]
+        [TestCase("1.7.2", "1.7.3", true, false)]
         public void ShouldAutoShowForVersion_ReturnsExpectedValue(
             string lastSeenVersion,
             string currentVersion,
             bool suppressAutoShow,
-            bool hasThirdPartyToolMigrationTargets,
             bool expected)
         {
             bool shouldAutoShow =
                 SetupWizardWindow.ShouldAutoShowForVersion(
                     currentVersion,
                     lastSeenVersion,
-                    suppressAutoShow,
-                    hasThirdPartyToolMigrationTargets);
+                    suppressAutoShow);
 
             Assert.That(shouldAutoShow, Is.EqualTo(expected));
-        }
-
-        [TestCase("1.7.2", "1.7.3", true)]
-        [TestCase("1.7.3", "1.7.3", false)]
-        public void ShouldCheckThirdPartyToolMigrationTargets_ReturnsExpectedValue(
-            string lastSeenVersion,
-            string currentVersion,
-            bool expected)
-        {
-            bool shouldCheck =
-                SetupWizardWindow.ShouldCheckThirdPartyToolMigrationTargets(
-                    currentVersion,
-                    lastSeenVersion);
-
-            Assert.That(shouldCheck, Is.EqualTo(expected));
-        }
-
-        [TestCase(true, true)]
-        [TestCase(false, false)]
-        public void ShouldRefreshThirdPartyToolMigrationOnOpen_ReturnsStartupDetectionResult(
-            bool hasThirdPartyToolMigrationTargets,
-            bool expected)
-        {
-            // Verifies that manual setup wizard opens do not start the project-wide migration preview.
-            bool shouldRefresh =
-                SetupWizardWindow.ShouldRefreshThirdPartyToolMigrationOnOpen(
-                    hasThirdPartyToolMigrationTargets);
-
-            Assert.That(shouldRefresh, Is.EqualTo(expected));
-        }
-
-        [TestCase(
-            1,
-            "1 file needs V3 custom tool migration.\n" +
-            "The Unity Console is showing errors because this file still uses the old custom tool API.\n\n" +
-            "Click Migrate to update it automatically. The errors should disappear after migration.")]
-        [TestCase(
-            3,
-            "3 files need V3 custom tool migration.\n" +
-            "The Unity Console is showing errors because these files still use the old custom tool API.\n\n" +
-            "Click Migrate to update them automatically. The errors should disappear after migration.")]
-        public void GetThirdPartyToolMigrationStatusText_WhenTargetsExist_ReturnsFileCount(
-            int fileCount,
-            string expectedText)
-        {
-            // Verifies that the setup wizard summarizes detected V2 custom tool files.
-            string text = SetupWizardWindow.GetThirdPartyToolMigrationStatusText(fileCount);
-
-            Assert.That(text, Is.EqualTo(expectedText));
-        }
-
-        [Test]
-        public void GetThirdPartyToolMigrationProgressText_WhenProgressExists_ReturnsCheckCount()
-        {
-            // Verifies that the setup wizard reports scan progress while migration targets are unknown.
-            ThirdPartyToolMigrationProgress progress = new(3, 12);
-
-            string text = SetupWizardWindow.GetThirdPartyToolMigrationProgressText(progress);
-
-            Assert.That(
-                text,
-                Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 checks complete."));
-        }
-
-        [TestCase(false, "Migrate")]
-        [TestCase(true, "Migrating...")]
-        public void GetThirdPartyToolMigrationButtonText_ReturnsExpectedLabel(
-            bool isMigrating,
-            string expectedLabel)
-        {
-            // Verifies that the migration action communicates its current state.
-            string label = SetupWizardWindow.GetThirdPartyToolMigrationButtonText(isMigrating);
-
-            Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
         [Test]
@@ -322,7 +244,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "Unity CLI Loop Setup",
                     position,
                     "1.9.0",
-                    true,
                     true);
 
                 SerializedObject serializedWindow = new(window);
@@ -330,8 +251,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     serializedWindow.FindProperty("_lastSeenSetupWizardVersionBeforeOpen");
                 SerializedProperty recordVersionProperty =
                     serializedWindow.FindProperty("_shouldRecordLastSeenVersionAfterCreateGui");
-                SerializedProperty refreshMigrationProperty =
-                    serializedWindow.FindProperty("_shouldRefreshThirdPartyToolMigrationAfterCreateGui");
 
                 Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Setup"));
                 Assert.That(window.position, Is.EqualTo(position));
@@ -339,8 +258,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(lastSeenVersionProperty.stringValue, Is.EqualTo("1.9.0"));
                 Assert.That(recordVersionProperty, Is.Not.Null);
                 Assert.That(recordVersionProperty.boolValue, Is.True);
-                Assert.That(refreshMigrationProperty, Is.Not.Null);
-                Assert.That(refreshMigrationProperty.boolValue, Is.True);
             }
             finally
             {
