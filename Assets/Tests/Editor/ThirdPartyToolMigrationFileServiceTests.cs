@@ -389,6 +389,49 @@ public static class CurrentManualToolRegistration
         }
 
         [Test]
+        public void ApplyMigration_WhenLegacyRegistrarReturnIsUsedWithoutExplicitToolInfo_AddsDomainReference()
+        {
+            // Verifies that registrar return types add the Domain dependency even without explicit ToolInfo usage.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string registrationPath = Path.Combine(toolDirectory, "ToolCountLabel.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(registrationPath, @"using io.github.hatayama.uLoopMCP;
+
+public static class ToolCountLabel
+{
+    public static string GetLabel()
+    {
+        return $""Tools: {CustomToolManager.GetRegisteredCustomTools().Length}"";
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(registrationPath), Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.GetRegisteredCustomTools"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenDomainMetadataExistsWithoutManualRegistration_AddsDomainReference()
         {
             // Verifies that ToolInfo-only metadata helpers migrate their asmdef dependency.
@@ -1660,6 +1703,48 @@ public static class CurrentManualToolRegistration
                 bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
 
                 Assert.That(hasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentRegistrarReturnMissingDomainReference_ReturnsTrue()
+        {
+            // Verifies that startup detection catches registrar return calls that still need Domain asmdef refs.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "ToolCountLabel.cs"),
+                    @"using io.github.hatayama.UnityCliLoop.Application;
+
+public static class ToolCountLabel
+{
+    public static string GetLabel()
+    {
+        return $""Tools: {UnityCliLoopToolRegistrar.GetRegisteredCustomTools().Length}"";
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d"",
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
             }
             finally
             {
