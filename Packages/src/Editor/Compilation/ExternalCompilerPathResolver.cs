@@ -8,6 +8,20 @@ namespace io.github.hatayama.uLoopMCP
 {
     internal static class ExternalCompilerPathResolver
     {
+        private const string NetCoreRuntimeDirectoryName = "NetCoreRuntime";
+        private const string DotNetSdkRoslynDirectoryName = "DotNetSdkRoslyn";
+        private const string DotNetSdkDirectoryName = "DotNetSdk";
+        private const string DotNetSdkSdkDirectoryName = "sdk";
+        private const string RoslynDirectoryName = "Roslyn";
+        private const string CompilerBincoreDirectoryName = "bincore";
+        private const string CompilerDllFileName = "csc.dll";
+        private const string CompilerRuntimeConfigFileName = "csc.runtimeconfig.json";
+        private const string CompilerDepsFileName = "csc.deps.json";
+        private const string CodeAnalysisDllFileName = "Microsoft.CodeAnalysis.dll";
+        private const string CodeAnalysisCSharpDllFileName = "Microsoft.CodeAnalysis.CSharp.dll";
+        private const string NetCoreRuntimeSharedDirectoryName = "shared";
+        private const string NetCoreRuntimeSharedFrameworkName = "Microsoft.NETCore.App";
+
         public static ExternalCompilerPaths Resolve()
         {
             string editorPath = EditorApplication.applicationPath;
@@ -26,23 +40,34 @@ namespace io.github.hatayama.uLoopMCP
             string dotnetHostFileName = UnityEngine.Application.platform == UnityEngine.RuntimePlatform.WindowsEditor
                 ? "dotnet.exe"
                 : "dotnet";
+            string effectiveScriptingRootPath = scriptingRootPath ?? contentsPath;
+            string compilerDirectoryPath = ResolveCompilerDirectoryPath(effectiveScriptingRootPath);
 
             List<string> missingComponents = new List<string>();
             if (string.IsNullOrEmpty(scriptingRootPath))
             {
-                missingComponents.Add(Path.Combine(contentsPath, "NetCoreRuntime"));
-                missingComponents.Add(Path.Combine(contentsPath, "DotNetSdkRoslyn"));
-                missingComponents.Add(Path.Combine(contentsPath, "Resources", "Scripting", "NetCoreRuntime"));
-                missingComponents.Add(Path.Combine(contentsPath, "Resources", "Scripting", "DotNetSdkRoslyn"));
+                missingComponents.Add(Path.Combine(contentsPath, NetCoreRuntimeDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, DotNetSdkRoslynDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, DotNetSdkDirectoryName, DotNetSdkSdkDirectoryName, "*", RoslynDirectoryName, CompilerBincoreDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, "Resources", "Scripting", NetCoreRuntimeDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, "Resources", "Scripting", DotNetSdkRoslynDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, "Resources", "Scripting", DotNetSdkDirectoryName, DotNetSdkSdkDirectoryName, "*", RoslynDirectoryName, CompilerBincoreDirectoryName));
             }
 
-            string dotnetHostPath = Path.Combine(scriptingRootPath ?? contentsPath, "NetCoreRuntime", dotnetHostFileName);
-            string compilerDllPath = Path.Combine(scriptingRootPath ?? contentsPath, "DotNetSdkRoslyn", "csc.dll");
-            string compilerRuntimeConfigPath = Path.Combine(scriptingRootPath ?? contentsPath, "DotNetSdkRoslyn", "csc.runtimeconfig.json");
-            string compilerDepsFilePath = Path.Combine(scriptingRootPath ?? contentsPath, "DotNetSdkRoslyn", "csc.deps.json");
-            string codeAnalysisDllPath = Path.Combine(scriptingRootPath ?? contentsPath, "DotNetSdkRoslyn", "Microsoft.CodeAnalysis.dll");
-            string codeAnalysisCSharpDllPath = Path.Combine(scriptingRootPath ?? contentsPath, "DotNetSdkRoslyn", "Microsoft.CodeAnalysis.CSharp.dll");
-            string netCoreRuntimeSharedRootPath = Path.Combine(scriptingRootPath ?? contentsPath, "NetCoreRuntime", "shared", "Microsoft.NETCore.App");
+            if (string.IsNullOrEmpty(compilerDirectoryPath))
+            {
+                compilerDirectoryPath = Path.Combine(effectiveScriptingRootPath, DotNetSdkRoslynDirectoryName);
+                missingComponents.Add(compilerDirectoryPath);
+                missingComponents.Add(Path.Combine(effectiveScriptingRootPath, DotNetSdkDirectoryName, DotNetSdkSdkDirectoryName, "*", RoslynDirectoryName, CompilerBincoreDirectoryName));
+            }
+
+            string dotnetHostPath = Path.Combine(effectiveScriptingRootPath, NetCoreRuntimeDirectoryName, dotnetHostFileName);
+            string compilerDllPath = Path.Combine(compilerDirectoryPath, CompilerDllFileName);
+            string compilerRuntimeConfigPath = Path.Combine(compilerDirectoryPath, CompilerRuntimeConfigFileName);
+            string compilerDepsFilePath = Path.Combine(compilerDirectoryPath, CompilerDepsFileName);
+            string codeAnalysisDllPath = Path.Combine(compilerDirectoryPath, CodeAnalysisDllFileName);
+            string codeAnalysisCSharpDllPath = Path.Combine(compilerDirectoryPath, CodeAnalysisCSharpDllFileName);
+            string netCoreRuntimeSharedRootPath = Path.Combine(effectiveScriptingRootPath, NetCoreRuntimeDirectoryName, NetCoreRuntimeSharedDirectoryName, NetCoreRuntimeSharedFrameworkName);
             string netCoreRuntimeSharedDirectoryPath = ResolveNetCoreRuntimeSharedDirectoryPath(netCoreRuntimeSharedRootPath);
 
             if (!File.Exists(dotnetHostPath))
@@ -122,6 +147,22 @@ namespace io.github.hatayama.uLoopMCP
             return ResolveScriptingRootPathByScan(contentsPath);
         }
 
+        internal static string ResolveCompilerDirectoryPath(string scriptingRootPath)
+        {
+            if (string.IsNullOrEmpty(scriptingRootPath))
+            {
+                return null;
+            }
+
+            string legacyCompilerDirectoryPath = Path.Combine(scriptingRootPath, DotNetSdkRoslynDirectoryName);
+            if (Directory.Exists(legacyCompilerDirectoryPath))
+            {
+                return legacyCompilerDirectoryPath;
+            }
+
+            return ResolveDotNetSdkCompilerDirectoryPath(scriptingRootPath);
+        }
+
         internal static string ResolveNetCoreRuntimeSharedDirectoryPath(string netCoreRuntimeSharedRootPath)
         {
             if (!Directory.Exists(netCoreRuntimeSharedRootPath))
@@ -159,8 +200,58 @@ namespace io.github.hatayama.uLoopMCP
 
         private static bool ContainsExternalCompilerLayout(string rootPath)
         {
-            return Directory.Exists(Path.Combine(rootPath, "NetCoreRuntime"))
-                && Directory.Exists(Path.Combine(rootPath, "DotNetSdkRoslyn"));
+            return Directory.Exists(Path.Combine(rootPath, NetCoreRuntimeDirectoryName))
+                && !string.IsNullOrEmpty(ResolveCompilerDirectoryPath(rootPath));
+        }
+
+        private static string ResolveDotNetSdkCompilerDirectoryPath(string scriptingRootPath)
+        {
+            string sdkRootPath = Path.Combine(scriptingRootPath, DotNetSdkDirectoryName, DotNetSdkSdkDirectoryName);
+            if (!Directory.Exists(sdkRootPath))
+            {
+                return null;
+            }
+
+            List<string> sdkDirectoryPaths = Directory.GetDirectories(sdkRootPath).ToList();
+            sdkDirectoryPaths.Sort(CompareSdkDirectoryPathsDescending);
+
+            foreach (string sdkDirectoryPath in sdkDirectoryPaths)
+            {
+                string compilerDirectoryPath = Path.Combine(sdkDirectoryPath, RoslynDirectoryName, CompilerBincoreDirectoryName);
+                if (Directory.Exists(compilerDirectoryPath))
+                {
+                    return compilerDirectoryPath;
+                }
+            }
+
+            return null;
+        }
+
+        private static int CompareSdkDirectoryPathsDescending(string leftPath, string rightPath)
+        {
+            string leftVersionText = Path.GetFileName(leftPath);
+            string rightVersionText = Path.GetFileName(rightPath);
+            bool leftIsVersion = Version.TryParse(leftVersionText, out Version leftVersion);
+            bool rightIsVersion = Version.TryParse(rightVersionText, out Version rightVersion);
+
+            if (leftIsVersion && rightIsVersion)
+            {
+                int versionComparison = rightVersion.CompareTo(leftVersion);
+                if (versionComparison != 0)
+                {
+                    return versionComparison;
+                }
+            }
+            else if (leftIsVersion)
+            {
+                return -1;
+            }
+            else if (rightIsVersion)
+            {
+                return 1;
+            }
+
+            return string.Compare(rightVersionText, leftVersionText, StringComparison.Ordinal);
         }
 
         private static string ResolveScriptingRootPathByScan(string contentsPath)
