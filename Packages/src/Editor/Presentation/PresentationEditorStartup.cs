@@ -11,6 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             UnityCliLoopSettingsWindow.InitializeEditorServices(editorSettingsService);
             SetupWizardWindow.InitializeForEditorStartup(editorSettingsService);
+            ThirdPartyToolMigrationWizardWindow.InitializeForEditorStartup();
         }
     }
 }

@@ -58,9 +58,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string lastSeenVersion,
             bool suppressAutoShow)
         {
-            if (suppressAutoShow) return false;
+            bool versionChanged = !string.Equals(currentVersion, lastSeenVersion, System.StringComparison.Ordinal);
+            if (!versionChanged) return false;
 
-            return !string.Equals(currentVersion, lastSeenVersion, System.StringComparison.Ordinal);
+            return !suppressAutoShow;
         }
 
         internal static void MaybeRecordLastSeenVersion(bool shouldRecordVersion, string version)
@@ -81,12 +82,28 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private static void TryShowOnVersionChange()
         {
+            EvaluateVersionChange(CancellationToken.None);
+        }
+
+        private static void EvaluateVersionChange(CancellationToken ct)
+        {
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
             UnityCliLoopEditorSettingsService editorSettingsService = GetEditorSettingsService();
             bool suppressAutoShow = editorSettingsService.GetSuppressSetupWizardAutoShow();
-            MaybeRecordSuppressedVersion(suppressAutoShow, currentVersion);
             string lastSeenVersion = editorSettingsService.GetLastSeenSetupWizardVersion();
-            if (!ShouldAutoShowForVersion(currentVersion, lastSeenVersion, suppressAutoShow)) return;
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (!ShouldAutoShowForVersion(
+                currentVersion,
+                lastSeenVersion,
+                suppressAutoShow))
+            {
+                MaybeRecordSuppressedVersion(suppressAutoShow, currentVersion);
+                return;
+            }
 
             EditorApplication.delayCall += ShowWindowOnVersionChange;
         }
@@ -488,6 +505,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canManageSkills = CanManageSkills(cliInstalled);
             UpdateSkillsStep(canManageSkills, targets);
             BeginRefreshDisplayedSkillTargets(canManageSkills);
+
             ScheduleResizeToContent();
         }
 

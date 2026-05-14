@@ -852,6 +852,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void MigrationWizardStartup_WhenLoaded_SchedulesTargetCheckInsteadOfPreviewingSynchronously()
+        {
+            // Tests that migration target detection does not block the synchronous Editor startup hook.
+            string migrationWizardSource = ReadProductionSource(
+                "Packages/src/Editor/Presentation/Setup/ThirdPartyToolMigrationWizardWindow.cs");
+
+            Assert.That(migrationWizardSource, Does.Contain("EditorApplication.delayCall += TryShowOnMigrationTargets;"));
+            Assert.That(migrationWizardSource, Does.Not.Contain("\n            TryShowOnMigrationTargets();"));
+        }
+
+        [Test]
         public void ProjectAsmdefs_WhenLoaded_DoNotReferenceRemovedSharedAssemblyGuid()
         {
             // Tests that removed module asmdefs do not leave stale GUID references in dependent asmdefs.

@@ -65,7 +65,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool expected)
         {
             bool shouldAutoShow =
-                SetupWizardWindow.ShouldAutoShowForVersion(currentVersion, lastSeenVersion, suppressAutoShow);
+                SetupWizardWindow.ShouldAutoShowForVersion(
+                    currentVersion,
+                    lastSeenVersion,
+                    suppressAutoShow);
 
             Assert.That(shouldAutoShow, Is.EqualTo(expected));
         }
