@@ -1277,7 +1277,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             List<AssemblyReferenceDirectory> assemblyReferenceDirectories = new();
             foreach (string asmrefFilePath in asmrefFilePaths)
             {
-                if (!TryReadJsonObject(asmrefFilePath, out JObject asmref))
+                if (!TryReadJsonObjectFromFile(asmrefFilePath, out JObject asmref))
                 {
                     continue;
                 }
@@ -1336,7 +1336,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         .ToList();
                 }
 
-                if (!TryReadJsonObject(asmrefFilePath, out JObject asmref))
+                if (!TryReadJsonObjectFromFile(asmrefFilePath, out JObject asmref))
                 {
                     await progressCounter.ReportProcessedItemAsync(ct);
                     continue;
@@ -1382,7 +1382,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     continue;
                 }
 
-                if (!TryReadJsonObject(asmdefFilePath, out JObject asmdef))
+                if (!TryReadJsonObjectFromFile(asmdefFilePath, out JObject asmdef))
                 {
                     continue;
                 }
@@ -1421,7 +1421,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     continue;
                 }
 
-                if (!TryReadJsonObject(asmdefFilePath, out JObject asmdef))
+                if (!TryReadJsonObjectFromFile(asmdefFilePath, out JObject asmdef))
                 {
                     await progressCounter.ReportProcessedItemAsync(ct);
                     continue;
@@ -1439,22 +1439,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return asmdefDirectoriesByReference;
         }
 
-        private static bool TryReadJsonObject(string filePath, out JObject jsonObject)
+        private static bool TryReadJsonObjectFromFile(string filePath, out JObject jsonObject)
+        {
+            return TryReadJsonObjectForMigration(filePath, File.ReadAllText, out jsonObject);
+        }
+
+        internal static bool TryReadJsonObjectForMigration(
+            string filePath,
+            Func<string, string> readAllText,
+            out JObject jsonObject)
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+            Debug.Assert(readAllText != null, "readAllText must not be null");
 
             try
             {
-                jsonObject = JObject.Parse(File.ReadAllText(filePath));
+                jsonObject = JObject.Parse(readAllText(filePath));
                 return true;
             }
-            catch (JsonException ex)
+            catch (Exception ex) when (IsSkippableAssemblyJsonReadException(ex))
             {
                 UnityEngine.Debug.LogWarning(
-                    $"[UnityCliLoop] Skipping malformed assembly definition JSON at {filePath}: {ex.Message}");
+                    $"[UnityCliLoop] Skipping unreadable or malformed assembly JSON at {filePath}: {ex.Message}");
                 jsonObject = null;
                 return false;
             }
+        }
+
+        private static bool IsSkippableAssemblyJsonReadException(Exception ex)
+        {
+            Debug.Assert(ex != null, "ex must not be null");
+
+            return ex is JsonException ||
+                   ex is IOException ||
+                   ex is UnauthorizedAccessException;
         }
 
         private static void AddAsmdefDirectoryReference(

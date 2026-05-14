@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 
 using NUnit.Framework;
 
+using Newtonsoft.Json.Linq;
+
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 
@@ -47,6 +49,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             result.FilePaths[0] = "Assets/ChangedAgain.cs";
 
             Assert.That(result.FilePaths, Is.EqualTo(new[] { "Assets/VendorTools/HelloTool.cs" }));
+        }
+
+        [Test]
+        public void TryReadJsonObjectForMigration_WhenReadThrowsIOException_ReturnsFalse()
+        {
+            // Verifies that migration scans skip unreadable assembly JSON files.
+            bool success = ThirdPartyToolMigrationFileService.TryReadJsonObjectForMigration(
+                "Assets/VendorTools/VendorTools.Editor.asmdef",
+                _ => throw new IOException("locked"),
+                out JObject jsonObject);
+
+            Assert.That(success, Is.False);
+            Assert.That(jsonObject, Is.Null);
+        }
+
+        [Test]
+        public void TryReadJsonObjectForMigration_WhenReadThrowsUnauthorizedAccessException_ReturnsFalse()
+        {
+            // Verifies that migration scans skip assembly JSON files blocked by file permissions.
+            bool success = ThirdPartyToolMigrationFileService.TryReadJsonObjectForMigration(
+                "Assets/VendorTools/VendorTools.Editor.asmdef",
+                _ => throw new UnauthorizedAccessException("denied"),
+                out JObject jsonObject);
+
+            Assert.That(success, Is.False);
+            Assert.That(jsonObject, Is.Null);
         }
 
         [Test]
