@@ -20,9 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
         private const string MigrationCheckingText = "Scanning project for V3 custom tool migration...";
         private const string NoMigrationTargetsText = "No V3 custom tool migration is needed.";
-        private const int PreferredWrappedTextLineCount = 2;
-        private static readonly Vector2 InitialWindowSize = new(320f, 220f);
-        private static readonly Vector2 MinimumWindowSize = new(300f, 120f);
+        private static readonly Vector2 InitialWindowSize = new(360f, 220f);
+        private static readonly Vector2 MinimumWindowSize = new(360f, 120f);
 
         private ScrollView _mainScrollView;
         private VisualElement _migrationSection;
@@ -80,15 +79,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return new Rect(centeredPosition, size);
         }
 
-        internal static Rect WithContentSize(Rect currentRect, Vector2 contentSize, Vector2 frameSize)
+        internal static Rect WithContentHeight(Rect currentRect, float contentHeight, Vector2 frameSize)
         {
-            Debug.Assert(contentSize.x >= 0f, "contentSize.x must not be negative");
-            Debug.Assert(contentSize.y >= 0f, "contentSize.y must not be negative");
+            Debug.Assert(contentHeight >= 0f, "contentHeight must not be negative");
 
-            Vector2 measuredSize = contentSize + frameSize;
+            float measuredHeight = contentHeight + frameSize.y;
             Vector2 targetSize = new(
-                Mathf.Max(measuredSize.x, MinimumWindowSize.x),
-                Mathf.Max(measuredSize.y, MinimumWindowSize.y));
+                MinimumWindowSize.x,
+                Mathf.Max(measuredHeight, MinimumWindowSize.y));
             return CreateCenteredRect(currentRect, targetSize);
         }
 
@@ -380,13 +378,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (_mainScrollView == null) return;
             if (rootVisualElement.layout.width <= 0f || rootVisualElement.layout.height <= 0f) return;
 
-            Vector2 contentSize = MeasurePreferredContentSize(_mainScrollView, _mainScrollView.contentContainer);
-            if (!HasFiniteSize(contentSize)) return;
-            if (contentSize.x <= 0f || contentSize.y <= 0f) return;
+            float contentHeight = MeasurePreferredContentHeight(_mainScrollView, _mainScrollView.contentContainer);
+            if (!IsFinite(contentHeight)) return;
+            if (contentHeight <= 0f) return;
 
             Vector2 frameSize = position.size - rootVisualElement.layout.size;
             if (!HasFiniteSize(frameSize)) return;
-            Rect targetRect = WithContentSize(position, contentSize, frameSize);
+            Rect targetRect = WithContentHeight(position, contentHeight, frameSize);
             if (!HasFiniteSize(targetRect.size)) return;
             if (Approximately(position.size, targetRect.size))
             {
@@ -400,117 +398,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             maxSize = targetRect.size;
             position = targetRect;
             _isApplyingContentSize = false;
-        }
-
-        private static Vector2 MeasurePreferredContentSize(
-            ScrollView mainContainer,
-            VisualElement contentContainer)
-        {
-            float width = MeasurePreferredContentWidth(mainContainer, contentContainer);
-            float height = MeasurePreferredContentHeight(mainContainer, contentContainer);
-            return new Vector2(width, height);
-        }
-
-        private static float MeasurePreferredContentWidth(VisualElement mainContainer, VisualElement contentContainer)
-        {
-            float maxRight = 0f;
-            foreach (TextElement textElement in contentContainer.Query<TextElement>().Build())
-            {
-                if (!textElement.visible) continue;
-                if (string.IsNullOrEmpty(textElement.text)) continue;
-                if (!HasFiniteRect(textElement.worldBound)) continue;
-
-                float left = textElement.worldBound.xMin - contentContainer.worldBound.xMin;
-                float horizontalChrome =
-                    textElement.resolvedStyle.paddingLeft
-                    + textElement.resolvedStyle.paddingRight
-                    + textElement.resolvedStyle.borderLeftWidth
-                    + textElement.resolvedStyle.borderRightWidth;
-                float verticalChrome =
-                    textElement.resolvedStyle.paddingTop
-                    + textElement.resolvedStyle.paddingBottom
-                    + textElement.resolvedStyle.borderTopWidth
-                    + textElement.resolvedStyle.borderBottomWidth;
-                float laidOutWidth = textElement.worldBound.width;
-                Vector2 measuredTextSize = textElement.MeasureTextSize(
-                    textElement.text,
-                    0f,
-                    VisualElement.MeasureMode.Undefined,
-                    0f,
-                    VisualElement.MeasureMode.Undefined);
-                if (!IsFinite(left)) continue;
-                if (!IsFinite(horizontalChrome) || !IsFinite(verticalChrome)) continue;
-                if (!HasFiniteSize(measuredTextSize)) continue;
-                if (!IsFinite(laidOutWidth)) continue;
-                bool hasExplicitLineBreak = HasExplicitLineBreak(textElement.text);
-                float measuredWidth = hasExplicitLineBreak
-                    ? MeasureExplicitLinePreferredWidth(textElement, horizontalChrome)
-                    : measuredTextSize.x + horizontalChrome;
-                int lineCount = EstimateWrappedLineCount(
-                    textElement.worldBound.height - verticalChrome,
-                    measuredTextSize.y);
-                float preferredWidth = SelectPreferredTextWidth(
-                    laidOutWidth,
-                    measuredWidth,
-                    lineCount,
-                    textElement.resolvedStyle.whiteSpace,
-                    hasExplicitLineBreak);
-                if (!IsFinite(preferredWidth)) continue;
-                float right = left + preferredWidth;
-                maxRight = Mathf.Max(maxRight, right);
-            }
-
-            float width =
-                mainContainer.resolvedStyle.paddingLeft
-                + maxRight
-                + mainContainer.resolvedStyle.paddingRight;
-            return IsFinite(width) ? Mathf.Ceil(width) : 0f;
-        }
-
-        internal static int EstimateWrappedLineCount(float laidOutTextHeight, float singleLineTextHeight)
-        {
-            if (singleLineTextHeight <= 0f) return 1;
-
-            return Mathf.Max(1, Mathf.RoundToInt(laidOutTextHeight / singleLineTextHeight));
-        }
-
-        internal static float SelectPreferredTextWidth(
-            float laidOutWidth,
-            float measuredWidth,
-            int lineCount,
-            WhiteSpace whiteSpace,
-            bool hasExplicitLineBreak)
-        {
-            if (hasExplicitLineBreak) return measuredWidth;
-            if (whiteSpace != WhiteSpace.Normal) return measuredWidth;
-            if (lineCount <= PreferredWrappedTextLineCount) return Mathf.Min(laidOutWidth, measuredWidth);
-
-            return Mathf.Max(laidOutWidth, measuredWidth / PreferredWrappedTextLineCount);
-        }
-
-        private static bool HasExplicitLineBreak(string text)
-        {
-            return !string.IsNullOrEmpty(text) && text.IndexOf('\n') >= 0;
-        }
-
-        private static float MeasureExplicitLinePreferredWidth(TextElement textElement, float horizontalChrome)
-        {
-            float maxLineWidth = 0f;
-            string[] lines = textElement.text.Split('\n');
-            foreach (string rawLine in lines)
-            {
-                string line = rawLine.TrimEnd('\r');
-                Vector2 measuredLineSize = textElement.MeasureTextSize(
-                    line,
-                    0f,
-                    VisualElement.MeasureMode.Undefined,
-                    0f,
-                    VisualElement.MeasureMode.Undefined);
-                if (!HasFiniteSize(measuredLineSize)) continue;
-                maxLineWidth = Mathf.Max(maxLineWidth, measuredLineSize.x);
-            }
-
-            return maxLineWidth + horizontalChrome;
         }
 
         private static float MeasurePreferredContentHeight(VisualElement mainContainer, VisualElement contentContainer)
