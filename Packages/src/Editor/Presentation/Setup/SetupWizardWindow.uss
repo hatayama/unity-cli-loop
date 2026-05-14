@@ -88,7 +88,7 @@
 .setup-step--migration-alert {
     background-color: #5c4a00;
     border-color: #7a6400;
-    border-width: 4px;
+    border-width: 2px;
 }
 
 .setup-step--migration-alert .setup-step__title,
