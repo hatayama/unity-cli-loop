@@ -1229,9 +1229,9 @@ public sealed class OtherTool
         }
 
         [Test]
-        public void MigrateAsmdefSource_WhenCurrentToolContractsUsesLegacyGuid_RewritesToToolContractsGuid()
+        public void MigrateAsmdefSource_WhenCurrentToolContractsUsesApplicationGuid_AddsToolContractsGuid()
         {
-            // Verifies that partially migrated custom tool assemblies can resolve V3 ToolContracts.
+            // Verifies that partially migrated custom tool assemblies keep current Application refs by GUID.
             string source = @"{
     ""name"": ""MyCompany.Tools.Editor"",
     ""references"": [
@@ -1249,7 +1249,32 @@ public sealed class OtherTool
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-            Assert.That(result.Content, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            Assert.That(result.Content, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+        }
+
+        [Test]
+        public void MigrateAsmdefSource_WhenCurrentApplicationGuidAlreadyExists_DoesNotAddDomainReference()
+        {
+            // Verifies that current V3 Application refs do not look like pending legacy migration.
+            string source = @"{
+    ""name"": ""MyCompany.Tools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d"",
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: false,
+                    requiresToolContractsReference: true,
+                    requiresApplicationReference: true,
+                    requiresDomainReference: false);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+            Assert.That(result.Content, Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
         }
 
         [Test]
@@ -1274,7 +1299,7 @@ public sealed class OtherTool
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             Assert.That(result.Content, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
-            Assert.That(result.Content, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+            Assert.That(result.Content, Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
         }
 
         [Test]

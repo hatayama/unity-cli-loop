@@ -539,11 +539,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
             }
 
-            if ((hasLegacyCSharpSource ||
-                    requiresToolContractsReference ||
-                    requiresApplicationReference ||
-                    requiresDomainReference)
-                && string.Equals(reference, LegacyEditorAssemblyGuidReference, StringComparison.Ordinal))
+            if (hasLegacyCSharpSource &&
+                string.Equals(reference, LegacyEditorAssemblyGuidReference, StringComparison.Ordinal))
             {
                 return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
             }
@@ -565,7 +562,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 references.Add(CurrentApplicationGuidReference);
             }
 
-            if (requiresApplicationReference || requiresDomainReference)
+            if (requiresDomainReference)
             {
                 references.Add(CurrentDomainGuidReference);
             }
@@ -602,7 +599,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     ref replacementCount);
             }
 
-            if (requiresApplicationReference || requiresDomainReference)
+            if (requiresDomainReference)
             {
                 AddRequiredCurrentAsmdefReference(
                     references,

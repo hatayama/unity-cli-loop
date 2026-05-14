@@ -144,7 +144,7 @@ public static class ManualToolRegistration
                     "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.RegisterCustomTool"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
             {
@@ -202,7 +202,7 @@ public static class CurrentManualToolRegistration
                 Assert.That(File.ReadAllText(registrationPath), Does.Contain("UnityCliLoopToolRegistrar"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
             {
@@ -245,7 +245,7 @@ public static class CurrentManualToolRegistration
                 Assert.That(File.ReadAllText(registrationPath), Is.EqualTo(registrationSource));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
             {
@@ -289,7 +289,7 @@ public static class CurrentManualToolRegistration
                 Assert.That(File.ReadAllText(registrationPath), Is.EqualTo(registrationSource));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
             {
@@ -336,7 +336,7 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
                 Assert.That(result.FileCount, Is.EqualTo(1));
                 Assert.That(File.ReadAllText(toolPath), Is.EqualTo(toolSource));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
             {
@@ -345,7 +345,7 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
-        public void ApplyMigration_WhenCurrentRegistrarExistsWithToolContractsAsmdefReference_AddsApplicationReferences()
+        public void ApplyMigration_WhenCurrentRegistrarExistsWithToolContractsAsmdefReference_AddsApplicationReference()
         {
             // Verifies that already-replaced asmdef refs still receive missing current assembly dependencies.
             string projectRoot = CreateProjectRoot();
@@ -380,7 +380,7 @@ public static class CurrentManualToolRegistration
                 Assert.That(File.ReadAllText(registrationPath), Is.EqualTo(registrationSource));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
             {
@@ -516,7 +516,7 @@ public static class ToolMetadataProvider
                 Assert.That(File.ReadAllText(metadataPath), Is.EqualTo(metadataSource));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
             {
@@ -561,7 +561,7 @@ public static class ToolMetadataProvider
                 Assert.That(File.ReadAllText(metadataPath), Is.EqualTo(metadataSource));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
             {
@@ -1160,7 +1160,7 @@ public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
                     "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.RegisterCustomTool"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
             {
@@ -1425,6 +1425,50 @@ public sealed class HelloResponse : BaseToolResponse
                 Assert.That(firstPreview.HasTargets, Is.True);
                 Assert.That(cachedPreview.FileCount, Is.EqualTo(firstPreview.FileCount));
                 Assert.That(refreshedPreview.HasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void PreviewMigration_WhenCurrentApplicationGuidReferenceExists_KeepsAsmdef()
+        {
+            // Verifies that V3 Application references are not reported as legacy asmdef migration.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string registrationPath = Path.Combine(toolDirectory, "CurrentManualToolRegistration.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string registrationSource = @"using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public static class CurrentManualToolRegistration
+{
+    public static void Register(IUnityCliLoopTool tool)
+    {
+        UnityCliLoopToolRegistrar.RegisterCustomTool(tool);
+    }
+}";
+                string asmdefSource = @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d"",
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}";
+                File.WriteAllText(registrationPath, registrationSource);
+                File.WriteAllText(asmdefPath, asmdefSource);
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationPreview preview = service.PreviewMigration(projectRoot);
+
+                Assert.That(preview.HasTargets, Is.False);
+                Assert.That(File.ReadAllText(registrationPath), Is.EqualTo(registrationSource));
+                Assert.That(File.ReadAllText(asmdefPath), Is.EqualTo(asmdefSource));
             }
             finally
             {

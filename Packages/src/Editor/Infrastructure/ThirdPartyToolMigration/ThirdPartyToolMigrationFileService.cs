@@ -201,8 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 bool requiresApplicationReference =
                     assemblyUsage.ApplicationReferenceAssemblyDirectories.Contains(asmdefDirectory);
                 bool requiresDomainReference =
-                    assemblyUsage.DomainReferenceAssemblyDirectories.Contains(asmdefDirectory) ||
-                    requiresApplicationReference;
+                    assemblyUsage.DomainReferenceAssemblyDirectories.Contains(asmdefDirectory);
                 ThirdPartyToolMigrationContentResult result =
                     ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                         source,
@@ -317,8 +316,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 bool requiresApplicationReference =
                     assemblyUsage.ApplicationReferenceAssemblyDirectories.Contains(asmdefDirectory);
                 bool requiresDomainReference =
-                    assemblyUsage.DomainReferenceAssemblyDirectories.Contains(asmdefDirectory) ||
-                    requiresApplicationReference;
+                    assemblyUsage.DomainReferenceAssemblyDirectories.Contains(asmdefDirectory);
                 ThirdPartyToolMigrationContentResult result =
                     ThirdPartyToolMigrationRules.MigrateAsmdefSource(
                         source,
