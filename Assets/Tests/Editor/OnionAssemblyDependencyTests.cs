@@ -823,6 +823,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void InfrastructureEditorStartup_WhenLoaded_DoesNotScheduleGlobalCliAutoInstall()
         {
+            // Tests that Editor startup no longer schedules package-owned global CLI auto install.
             string startupSource = ReadProductionSource(
                 "Packages/src/Editor/Infrastructure/InfrastructureEditorStartup.cs");
 
