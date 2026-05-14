@@ -64,6 +64,43 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
+        [Test]
+        public void StopServerImmediatelyAfterStartServer_ShouldNotThrowOrReportUnexpectedLoopExit()
+        {
+            int unexpectedExitCount = 0;
+            void CountUnexpectedExit()
+            {
+                Interlocked.Increment(ref unexpectedExitCount);
+            }
+
+            McpBridgeServer.OnServerLoopExited += CountUnexpectedExit;
+            try
+            {
+                for (int attempt = 0; attempt < 50; attempt++)
+                {
+                    McpBridgeServer server = new McpBridgeServer();
+                    try
+                    {
+                        server.StartServer(GetFreePort());
+                        Assert.DoesNotThrow(server.StopServer);
+                    }
+                    finally
+                    {
+                        server.Dispose();
+                    }
+                }
+
+                Assert.AreEqual(
+                    0,
+                    unexpectedExitCount,
+                    "Immediate normal shutdown should not be reported as an unexpected server loop exit");
+            }
+            finally
+            {
+                McpBridgeServer.OnServerLoopExited -= CountUnexpectedExit;
+            }
+        }
+
         private static int GetFreePort()
         {
             TcpListener listener = new TcpListener(IPAddress.Loopback, 0);

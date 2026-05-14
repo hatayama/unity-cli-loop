@@ -197,8 +197,10 @@ namespace io.github.hatayama.uLoopMCP
                 _tcpListener = new TcpListener(IPAddress.Loopback, Port);
                 _tcpListener.Start();
                 _isRunning = true;
-                
-                _serverTask = Task.Run(() => ServerLoopAsync(_cancellationTokenSource.Token));
+
+                TcpListener tcpListener = _tcpListener;
+                CancellationToken cancellationToken = _cancellationTokenSource.Token;
+                _serverTask = Task.Run(() => ServerLoopAsync(tcpListener, cancellationToken));
 
                 // Safety net: log if the server task faults unexpectedly.
                 // Primary detection is in ServerLoopAsync's finally block; this catches unhandled exceptions in Task.Run itself.
@@ -409,20 +411,15 @@ namespace io.github.hatayama.uLoopMCP
         /// <summary>
         /// The server's main loop.
         /// </summary>
-        private async Task ServerLoopAsync(CancellationToken cancellationToken)
+        private async Task ServerLoopAsync(TcpListener listener, CancellationToken cancellationToken)
         {
+            System.Diagnostics.Debug.Assert(listener != null, "TcpListener must be captured before starting the server loop.");
             try
             {
                 while (!cancellationToken.IsCancellationRequested && _isRunning)
                 {
                     try
                     {
-                        TcpListener listener = _tcpListener;
-                        if (listener == null)
-                        {
-                            break;
-                        }
-
                         TcpClient client = await AcceptTcpClientAsync(listener, cancellationToken);
                         if (client != null)
                         {
