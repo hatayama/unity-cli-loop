@@ -570,6 +570,54 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void ApplyMigration_WhenUnrelatedAsmdefJsonIsMalformedAndNoAsmrefs_AppliesAsmdefRepair()
+        {
+            // Verifies that unrelated malformed asmdefs do not block applying repairable asmdef changes.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string unrelatedDirectory = Path.Combine(projectRoot, "Assets", "Unrelated");
+                Directory.CreateDirectory(unrelatedDirectory);
+                File.WriteAllText(Path.Combine(unrelatedDirectory, "Broken.asmdef"), "{");
+
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CurrentHelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[UnityCliLoopTool]
+public sealed class CurrentHelloTool : UnityCliLoopTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class HelloResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsing_RewritesSplitContractFiles()
         {
             // Verifies that schema files relying on global legacy usings migrate with their assembly.
@@ -1535,6 +1583,48 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
+        public async Task HasMigrationTargetsAsync_WhenAssemblyUsesCurrentDomainGlobalUsingAndSplitMetadata_ReturnsTrue()
+        {
+            // Verifies that startup detection treats current Domain global usings as assembly-scoped.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "GlobalUsings.cs"),
+                    "global using io.github.hatayama.UnityCliLoop.Domain;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "ToolMetadataProvider.cs"),
+                    @"public static class ToolMetadataProvider
+{
+    public static ToolInfo[] GetTools()
+    {
+        return new ToolInfo[0];
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task HasMigrationTargetsAsync_WhenCurrentApplicationGuidReferenceExists_ReturnsFalse()
         {
             // Verifies that current V3 Application references do not trigger the startup migration prompt.
@@ -1698,6 +1788,59 @@ public sealed class HelloResponse : BaseToolResponse
 
                 Assert.That(firstPreview.HasTargets, Is.True);
                 Assert.That(refreshedPreview.HasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task PreviewMigrationAsync_WhenUnrelatedAsmdefJsonIsMalformedAndNoAsmrefs_PreviewsAsmdefRepair()
+        {
+            // Verifies that unrelated malformed asmdefs do not block previewing repairable asmdef changes.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string unrelatedDirectory = Path.Combine(projectRoot, "Assets", "Unrelated");
+                Directory.CreateDirectory(unrelatedDirectory);
+                File.WriteAllText(Path.Combine(unrelatedDirectory, "Broken.asmdef"), "{");
+
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "CurrentHelloTool.cs"),
+                    @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[UnityCliLoopTool]
+public sealed class CurrentHelloTool : UnityCliLoopTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class HelloResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                Progress<ThirdPartyToolMigrationProgress> progress = new();
+
+                ThirdPartyToolMigrationPreview preview =
+                    await service.PreviewMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(preview.FileCount, Is.EqualTo(1));
             }
             finally
             {
