@@ -15,6 +15,27 @@ release_version_from_title() {
   '
 }
 
+release_version_from_body() {
+  body=$1
+
+  printf '%s\n' "$body" | jq -R -s -r '
+    try capture("<summary>(?<version>[0-9][A-Za-z0-9._-]*)</summary>").version catch ""
+  '
+}
+
+release_version_from_pr() {
+  title=$1
+  body=$2
+  release_version=$(release_version_from_title "$title")
+
+  if [ -n "$release_version" ]; then
+    printf '%s\n' "$release_version"
+    return
+  fi
+
+  release_version_from_body "$body"
+}
+
 release_is_published_at_sha() {
   release_tag=$1
   expected_sha=$2
@@ -47,7 +68,7 @@ PENDING_RELEASE_PRS=$(gh pr list \
   --state merged \
   --base "$TARGET_BRANCH" \
   --label "$PENDING_LABEL" \
-  --json number,title,mergeCommit)
+  --json number,title,body,mergeCommit)
 
 PENDING_RELEASE_PR_COUNT=$(printf '%s\n' "$PENDING_RELEASE_PRS" | jq 'length')
 if [ "$PENDING_RELEASE_PR_COUNT" -eq 0 ]; then
@@ -58,8 +79,9 @@ fi
 printf '%s\n' "$PENDING_RELEASE_PRS" | jq -c '.[]' | while IFS= read -r release_pr_json; do
   release_pr_number=$(printf '%s\n' "$release_pr_json" | jq -r '.number')
   release_pr_title=$(printf '%s\n' "$release_pr_json" | jq -r '.title')
+  release_pr_body=$(printf '%s\n' "$release_pr_json" | jq -r '.body // ""')
   release_pr_sha=$(printf '%s\n' "$release_pr_json" | jq -r '.mergeCommit.oid')
-  release_version=$(release_version_from_title "$release_pr_title")
+  release_version=$(release_version_from_pr "$release_pr_title" "$release_pr_body")
 
   if [ -z "$release_version" ]; then
     echo "Skipping pending PR #$release_pr_number because the title is not a release-please release title: $release_pr_title"
