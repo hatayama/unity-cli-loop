@@ -10,9 +10,9 @@ namespace io.github.hatayama.uLoopMCP
     public class HierarchyNode
     {
         /// <summary>
-        /// Unity's GetInstanceID() value - unique within session
+        /// Session-unique Unity object identifier
         /// </summary>
-        public readonly int id;
+        public readonly string id;
         
         /// <summary>
         /// GameObject name
@@ -20,9 +20,9 @@ namespace io.github.hatayama.uLoopMCP
         public readonly string name;
         
         /// <summary>
-        /// Parent node's instance ID (null for root objects)
+        /// Parent node's session-unique Unity object identifier (null for root objects)
         /// </summary>
-        public readonly int? parent;
+        public readonly string parent;
         
         /// <summary>
         /// Depth level in hierarchy (0 for root)
@@ -52,9 +52,9 @@ namespace io.github.hatayama.uLoopMCP
         /// <summary>
         /// Constructor for HierarchyNode
         /// </summary>
-        public HierarchyNode(int id, string name, int? parent, int depth, bool isActive, string[] components, string sceneName = "", int? siblingIndex = null, string tag = null, int? layer = null)
+        public HierarchyNode(string id, string name, string parent, int depth, bool isActive, string[] components, string sceneName = "", int? siblingIndex = null, string tag = null, int? layer = null)
         {
-            this.id = id;
+            this.id = id ?? string.Empty;
             this.name = name ?? string.Empty;
             this.parent = parent;
             this.depth = depth;

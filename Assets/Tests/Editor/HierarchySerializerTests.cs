@@ -19,8 +19,8 @@ namespace io.github.hatayama.uLoopMCP
             // Arrange
             List<HierarchyNode> nodes = new()
             {
-                new(1, "Root", null, 0, true, new[] { "Transform" }, "SceneA"),
-                new(2, "Child", 1, 1, true, new[] { "Transform", "MeshRenderer" }, "SceneA")
+                new("1", "Root", null, 0, true, new[] { "Transform" }, "SceneA"),
+                new("2", "Child", "1", 1, true, new[] { "Transform", "MeshRenderer" }, "SceneA")
             };
             
             HierarchyContext context = new HierarchyContext("editor", "TestScene", 0, 0);
@@ -72,10 +72,10 @@ namespace io.github.hatayama.uLoopMCP
             // Arrange
             List<HierarchyNode> nodes = new()
             {
-                new(1, "Root", null, 0, true, new string[0]),
-                new(2, "Level1", 1, 1, true, new string[0]),
-                new(3, "Level2", 2, 2, true, new string[0]),
-                new(4, "Level3", 3, 3, true, new string[0])
+                new("1", "Root", null, 0, true, new string[0]),
+                new("2", "Level1", "1", 1, true, new string[0]),
+                new("3", "Level2", "2", 2, true, new string[0]),
+                new("4", "Level3", "3", 3, true, new string[0])
             };
             
             HierarchyContext context = new HierarchyContext("editor", "DeepScene", 0, 0);

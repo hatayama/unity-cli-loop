@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using UnityEngine;
 using UnityEditor;
@@ -85,20 +86,62 @@ namespace io.github.hatayama.uLoopMCP
                 case SerializedPropertyType.LayerMask:
                     return property.intValue;
                 case SerializedPropertyType.ObjectReference:
-                    UnityEngine.Object obj = property.objectReferenceValue;
-                    if (obj == null)
-                    {
-                        // objectReferenceInstanceIDValue != 0 means a broken (Missing) reference
-                        if (property.objectReferenceInstanceIDValue != 0)
-                        {
-                            return new { name = "Missing", type = "Missing", instanceId = property.objectReferenceInstanceIDValue };
-                        }
-                        return new { name = "None", type = "None", instanceId = 0 };
-                    }
-                    return new { name = obj.name, type = obj.GetType().Name, instanceId = obj.GetInstanceID() };
+                    return GetObjectReferenceValue(property);
                 default:
                     return null; // Unsupported property types
             }
+        }
+
+        private object GetObjectReferenceValue(SerializedProperty property)
+        {
+            UnityEngine.Debug.Assert(property != null, "SerializedProperty must exist before reading object references.");
+            UnityEngine.Debug.Assert(property.propertyType == SerializedPropertyType.ObjectReference, "Object reference serialization requires an ObjectReference property.");
+
+            UnityEngine.Object obj = property.objectReferenceValue;
+            if (obj == null)
+            {
+                if (HasStoredObjectReferenceId(property))
+                {
+                    return new { name = "Missing", type = "Missing", entityId = GetStoredObjectReferenceId(property) };
+                }
+
+                return new { name = "None", type = "None", entityId = "0" };
+            }
+
+            return new { name = obj.name, type = obj.GetType().Name, entityId = GetObjectId(obj) };
+        }
+
+        private static bool HasStoredObjectReferenceId(SerializedProperty property)
+        {
+#if UNITY_6000_4_OR_NEWER
+            return property.objectReferenceEntityIdValue != UnityEngine.EntityId.None;
+#else
+            return property.objectReferenceInstanceIDValue != 0;
+#endif
+        }
+
+        private static string GetStoredObjectReferenceId(SerializedProperty property)
+        {
+#if UNITY_6000_4_OR_NEWER
+            ulong entityId = UnityEngine.EntityId.ToULong(property.objectReferenceEntityIdValue);
+            return entityId.ToString(CultureInfo.InvariantCulture);
+#else
+            int instanceId = property.objectReferenceInstanceIDValue;
+            return instanceId.ToString(CultureInfo.InvariantCulture);
+#endif
+        }
+
+        private static string GetObjectId(UnityEngine.Object obj)
+        {
+            UnityEngine.Debug.Assert(obj != null, "Unity Object must exist before reading its identifier.");
+
+#if UNITY_6000_4_OR_NEWER
+            ulong entityId = UnityEngine.EntityId.ToULong(obj.GetEntityId());
+            return entityId.ToString(CultureInfo.InvariantCulture);
+#else
+            int instanceId = obj.GetInstanceID();
+            return instanceId.ToString(CultureInfo.InvariantCulture);
+#endif
         }
         
         

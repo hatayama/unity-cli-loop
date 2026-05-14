@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -334,7 +335,7 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        private void TraverseHierarchy(GameObject obj, int? parentId, int depth, HierarchyOptions options, List<HierarchyNode> nodes)
+        private void TraverseHierarchy(GameObject obj, string parentId, int depth, HierarchyOptions options, List<HierarchyNode> nodes)
         {
             // Check depth limit
             if (options.MaxDepth >= 0 && depth > options.MaxDepth)
@@ -352,8 +353,9 @@ namespace io.github.hatayama.uLoopMCP
             }
             
             // Create node
+            string currentId = GetObjectId(obj);
             HierarchyNode node = new HierarchyNode(
-                id: obj.GetInstanceID(),
+                id: currentId,
                 name: obj.name,
                 parent: parentId,
                 depth: depth,
@@ -368,7 +370,6 @@ namespace io.github.hatayama.uLoopMCP
             nodes.Add(node);
             
             // Traverse children
-            int currentId = obj.GetInstanceID();
             foreach (Transform child in obj.transform)
             {
                 if (!options.IncludeInactive && !child.gameObject.activeInHierarchy)
@@ -376,6 +377,19 @@ namespace io.github.hatayama.uLoopMCP
                     
                 TraverseHierarchy(child.gameObject, currentId, depth + 1, options, nodes);
             }
+        }
+
+        private static string GetObjectId(UnityEngine.Object obj)
+        {
+            UnityEngine.Debug.Assert(obj != null, "Unity Object must exist before reading its identifier.");
+
+#if UNITY_6000_4_OR_NEWER
+            ulong entityId = UnityEngine.EntityId.ToULong(obj.GetEntityId());
+            return entityId.ToString(CultureInfo.InvariantCulture);
+#else
+            int instanceId = obj.GetInstanceID();
+            return instanceId.ToString(CultureInfo.InvariantCulture);
+#endif
         }
     }
 }

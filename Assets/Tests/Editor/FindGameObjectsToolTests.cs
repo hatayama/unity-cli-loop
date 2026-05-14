@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -652,11 +653,13 @@ namespace io.github.hatayama.uLoopMCP
                 Assert.That(probeAnchor, Is.Not.Null, "MeshRenderer should have Probe Anchor property");
                 Assert.That(probeAnchor.type, Is.EqualTo("ObjectReference"));
 
-                // Value should be a structured object with name, type, instanceId
+                string expectedEntityId = GetExpectedObjectId(anchorTarget.transform);
+
+                // Value should be a structured object with name, type, entityId
                 JObject valueObj = JObject.FromObject(probeAnchor.value);
                 Assert.That(valueObj["name"].ToString(), Is.EqualTo("AnchorTarget"));
                 Assert.That(valueObj["type"].ToString(), Is.EqualTo("Transform"));
-                Assert.That(valueObj["instanceId"].Value<int>(), Is.EqualTo(anchorTarget.transform.GetInstanceID()));
+                Assert.That(valueObj["entityId"].ToString(), Is.EqualTo(expectedEntityId));
             }
             finally
             {
@@ -695,7 +698,20 @@ namespace io.github.hatayama.uLoopMCP
             JObject valueObj = JObject.FromObject(probeAnchor.value);
             Assert.That(valueObj["name"].ToString(), Is.EqualTo("None"));
             Assert.That(valueObj["type"].ToString(), Is.EqualTo("None"));
-            Assert.That(valueObj["instanceId"].Value<int>(), Is.EqualTo(0));
+            Assert.That(valueObj["entityId"].ToString(), Is.EqualTo("0"));
+        }
+
+        private static string GetExpectedObjectId(Object obj)
+        {
+            UnityEngine.Debug.Assert(obj != null, "Unity Object must exist before reading its identifier.");
+
+#if UNITY_6000_4_OR_NEWER
+            ulong entityId = UnityEngine.EntityId.ToULong(obj.GetEntityId());
+            return entityId.ToString(CultureInfo.InvariantCulture);
+#else
+            int instanceId = obj.GetInstanceID();
+            return instanceId.ToString(CultureInfo.InvariantCulture);
+#endif
         }
 
         [Test]
