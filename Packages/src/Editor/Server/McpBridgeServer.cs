@@ -85,6 +85,7 @@ namespace io.github.hatayama.uLoopMCP
         private TcpListener _tcpListener;
         private CancellationTokenSource _cancellationTokenSource;
         private Task _serverTask;
+        private readonly ConcurrentDictionary<int, Task> _clientTasks = new();
         // Read from thread pool (ServerLoopAsync), written from main thread (StopServer)
         private volatile bool _isRunning = false;
 
@@ -303,7 +304,35 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             serverTask?.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
+            WaitForClientTasksToComplete();
             cancellationTokenSource?.Dispose();
+        }
+
+        private void WaitForClientTasksToComplete()
+        {
+            Task[] clientTasks = _clientTasks.Values.ToArray();
+            if (clientTasks.Length == 0)
+            {
+                return;
+            }
+
+            Task completionTask = Task.WhenAll(clientTasks).ContinueWith(task =>
+            {
+                if (task.IsFaulted)
+                {
+                    _ = task.Exception;
+                }
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+
+            bool completed = completionTask.Wait(TimeSpan.FromSeconds(McpServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
+            if (!completed)
+            {
+                VibeLogger.LogWarning(
+                    "client_tasks_shutdown_timeout",
+                    "Timed out waiting for client handlers to finish during normal server shutdown.",
+                    new { activeClientTasks = _clientTasks.Count }
+                );
+            }
         }
 
         /// <summary>
@@ -388,14 +417,20 @@ namespace io.github.hatayama.uLoopMCP
                 {
                     try
                     {
-                        TcpClient client = await AcceptTcpClientAsync(_tcpListener, cancellationToken);
+                        TcpListener listener = _tcpListener;
+                        if (listener == null)
+                        {
+                            break;
+                        }
+
+                        TcpClient client = await AcceptTcpClientAsync(listener, cancellationToken);
                         if (client != null)
                         {
                             string clientEndpoint = client.Client.RemoteEndPoint?.ToString() ?? McpServerConfig.UNKNOWN_CLIENT_ENDPOINT;
                             OnClientConnected?.Invoke(clientEndpoint);
 
-                            // Execute client handling in a separate task (fire-and-forget).
-                            Task.Run(() => HandleClientAsync(client, cancellationToken)).Forget();
+                            Task clientTask = Task.Run(() => HandleClientAsync(client, cancellationToken));
+                            TrackClientTask(clientTask);
                         }
                     }
                     catch (ObjectDisposedException)
@@ -456,7 +491,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             try
             {
-                return await Task.Run(() => listener.AcceptTcpClient(), cancellationToken);
+                return await AcceptTcpClientAsyncCore(listener, cancellationToken);
             }
             catch (ThreadAbortException ex)
             {
@@ -471,6 +506,71 @@ namespace io.github.hatayama.uLoopMCP
             {
                 return null;
             }
+        }
+
+        internal static Task<TcpClient> AcceptTcpClientAsyncForTests(
+            TcpListener listener,
+            CancellationToken cancellationToken)
+        {
+            return AcceptTcpClientAsyncCore(listener, cancellationToken);
+        }
+
+        internal int GetActiveClientTaskCountForTests()
+        {
+            return _clientTasks.Count;
+        }
+
+        private static async Task<TcpClient> AcceptTcpClientAsyncCore(
+            TcpListener listener,
+            CancellationToken cancellationToken)
+        {
+            System.Diagnostics.Debug.Assert(listener != null, "TcpListener must be available while accepting clients.");
+            if (listener == null || cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+
+            using CancellationTokenRegistration cancellationRegistration =
+                cancellationToken.Register(() => listener.Stop());
+
+            try
+            {
+                return await listener.AcceptTcpClientAsync();
+            }
+            catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+            catch (SocketException) when (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+            catch (InvalidOperationException) when (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+        }
+
+        private void TrackClientTask(Task clientTask)
+        {
+            System.Diagnostics.Debug.Assert(clientTask != null, "Client handler task must be created before tracking.");
+            if (clientTask == null)
+            {
+                return;
+            }
+
+            bool added = _clientTasks.TryAdd(clientTask.Id, clientTask);
+            System.Diagnostics.Debug.Assert(added, "Client handler task id should be unique while tracking.");
+
+            clientTask.ContinueWith(completedTask =>
+            {
+                _clientTasks.TryRemove(completedTask.Id, out _);
+                if (completedTask.IsFaulted)
+                {
+                    Exception exception = completedTask.Exception?.GetBaseException();
+                    OnError?.Invoke($"Client handler task faulted: {exception?.Message}");
+                }
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
 
         /// <summary>
