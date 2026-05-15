@@ -479,6 +479,15 @@ test_powershell_latest_skips_prerelease_assets() {
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Remove-LegacyUloopShims"
 }
 
+test_powershell_installer_avoids_optional_archive_cmdlets() {
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Get-UloopSha256Hash'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '[System.Security.Cryptography.SHA256]::Create()'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Expand-UloopArchive'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '[System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $DestinationPath)'
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Get-FileHash"
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Expand-Archive"
+}
+
 test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
 test_posix_skips_default_npm_cleanup_when_native_command_is_first
@@ -487,3 +496,4 @@ test_posix_prints_prefix_manual_cleanup_when_npm_is_unavailable
 test_posix_prints_manual_cleanup_when_npm_prefix_cannot_be_inferred
 test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets
+test_powershell_installer_avoids_optional_archive_cmdlets
