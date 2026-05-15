@@ -34,6 +34,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string SHELL_PATH_END_MARKER = "__ULOOP_PATH_END__";
         private const string SHELL_VERSION_START_MARKER = "__ULOOP_VERSION_START__";
         private const string SHELL_VERSION_END_MARKER = "__ULOOP_VERSION_END__";
+        private const string SHELL_VERSION_STATUS_START_MARKER = "__ULOOP_VERSION_STATUS_START__";
+        private const string SHELL_VERSION_STATUS_END_MARKER = "__ULOOP_VERSION_STATUS_END__";
+        private const string SHELL_SUCCESS_EXIT_CODE = "0";
 
         private string _cachedCliVersion;
         private string _cachedCliExecutablePath;
@@ -154,7 +157,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static CliInstallationDetection DetectShellCliInstallationFromLoginShell(CancellationToken ct)
         {
             string shell = NodeEnvironmentResolver.GetUserShell();
-            ProcessStartInfo startInfo = new()            {
+            ProcessStartInfo startInfo = new()
+            {
                 FileName = shell,
                 Arguments = "-l -i -c " + QuoteProcessArgument(BuildShellCliDetectionCommand(CliConstants.EXECUTABLE_NAME)),
                 UseShellExecute = false,
@@ -176,7 +180,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 + "echo " + SHELL_PATH_END_MARKER + "\n"
                 + "echo " + SHELL_VERSION_START_MARKER + "\n"
                 + executableName + " " + CliConstants.SHORT_VERSION_FLAG + "\n"
-                + "echo " + SHELL_VERSION_END_MARKER;
+                + "uloop_version_status=$?\n"
+                + "echo " + SHELL_VERSION_END_MARKER + "\n"
+                + "echo " + SHELL_VERSION_STATUS_START_MARKER + "\n"
+                + "echo $uloop_version_status\n"
+                + "echo " + SHELL_VERSION_STATUS_END_MARKER;
         }
 
         internal static CliInstallationDetection ParseShellCliInstallationOutput(string output)
@@ -189,8 +197,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 output,
                 SHELL_VERSION_START_MARKER,
                 SHELL_VERSION_END_MARKER);
+            string versionStatusBlock = NodeEnvironmentResolver.ExtractBetweenMarkers(
+                output,
+                SHELL_VERSION_STATUS_START_MARKER,
+                SHELL_VERSION_STATUS_END_MARKER);
             string executablePath = NodeEnvironmentResolver.ExtractAbsolutePathLine(pathBlock);
-            string version = ExtractFirstNonEmptyLine(versionBlock);
+            string version = IsSuccessfulShellStatus(versionStatusBlock)
+                ? ExtractFirstNonEmptyLine(versionBlock)
+                : null;
             return new CliInstallationDetection(version, executablePath);
         }
 
@@ -246,6 +260,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             catch (System.InvalidOperationException)
             {
             }
+        }
+
+        private static bool IsSuccessfulShellStatus(string statusBlock)
+        {
+            string status = ExtractFirstNonEmptyLine(statusBlock);
+            return string.Equals(status, SHELL_SUCCESS_EXIT_CODE, StringComparison.Ordinal);
         }
 
         private static string ExtractFirstNonEmptyLine(string block)

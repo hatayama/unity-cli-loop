@@ -114,6 +114,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(command, Does.Contain("command -v uloop"));
             Assert.That(command, Does.Contain("uloop -v"));
+            Assert.That(command, Does.Contain("uloop_version_status=$?"));
+            Assert.That(command, Does.Contain("__ULOOP_VERSION_STATUS_START__"));
             Assert.That(command, Does.Not.Contain("uloop --version"));
         }
 
@@ -127,7 +129,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             + "__ULOOP_PATH_END__\n"
                             + "__ULOOP_VERSION_START__\n"
                             + "2.1.1\n"
-                            + "__ULOOP_VERSION_END__\n";
+                            + "__ULOOP_VERSION_END__\n"
+                            + "__ULOOP_VERSION_STATUS_START__\n"
+                            + "0\n"
+                            + "__ULOOP_VERSION_STATUS_END__\n";
 
             CliInstallationDetection detection =
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
@@ -144,7 +149,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             + "__ULOOP_PATH_END__\n"
                             + "__ULOOP_VERSION_START__\n"
                             + "2.1.1\n"
-                            + "__ULOOP_VERSION_END__\n";
+                            + "__ULOOP_VERSION_END__\n"
+                            + "__ULOOP_VERSION_STATUS_START__\n"
+                            + "0\n"
+                            + "__ULOOP_VERSION_STATUS_END__\n";
 
             CliInstallationDetection detection =
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
@@ -154,10 +162,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ParseShellCliInstallationOutput_WhenVersionCommandFails_ReturnsPathWithoutVersion()
+        {
+            // Verifies that failed shell probes do not treat stdout usage text as a CLI version.
+            string output = "__ULOOP_PATH_START__\n"
+                            + "/Users/masamichi/.npm-global/bin/uloop\n"
+                            + "__ULOOP_PATH_END__\n"
+                            + "__ULOOP_VERSION_START__\n"
+                            + "usage: broken uloop\n"
+                            + "__ULOOP_VERSION_END__\n"
+                            + "__ULOOP_VERSION_STATUS_START__\n"
+                            + "1\n"
+                            + "__ULOOP_VERSION_STATUS_END__\n";
+
+            CliInstallationDetection detection =
+                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+
+            Assert.That(detection.Version, Is.Null);
+            Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/masamichi/.npm-global/bin/uloop"));
+        }
+
+        [Test]
         public void KillProcessIfRunning_WhenProcessAlreadyExited_DoesNotThrow()
         {
             // Verifies that process cleanup tolerates the race where the child exits before Kill.
-            ProcessStartInfo startInfo = new()
+            ProcessStartInfo startInfo = BuildImmediateExitProcessStartInfo();
+
+            using Process process = Process.Start(startInfo);
+            process.WaitForExit();
+
+            Assert.DoesNotThrow(() => CliInstallationDetector.KillProcessIfRunning(process));
+        }
+
+        private static ProcessStartInfo BuildImmediateExitProcessStartInfo()
+        {
+            if (UnityEngine.Application.platform == UnityEngine.RuntimePlatform.WindowsEditor)
+            {
+                return new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = "/c exit 0",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+            }
+
+            return new ProcessStartInfo
             {
                 FileName = "/bin/sh",
                 Arguments = "-c \"exit 0\"",
@@ -166,11 +218,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
-
-            using Process process = Process.Start(startInfo);
-            process.WaitForExit();
-
-            Assert.DoesNotThrow(() => CliInstallationDetector.KillProcessIfRunning(process));
         }
     }
 }
