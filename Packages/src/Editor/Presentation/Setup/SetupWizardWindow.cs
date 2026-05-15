@@ -577,6 +577,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return cliInstalled;
         }
 
+        internal static bool ShouldShowSkillsTargetRowForSetupWizard(bool shouldUseFirstInstallSkillsUi)
+        {
+            return shouldUseFirstInstallSkillsUi;
+        }
+
+        internal static bool ShouldShowSkillsTargetListForSetupWizard(
+            bool canManageSkills,
+            bool shouldUseFirstInstallSkillsUi)
+        {
+            return canManageSkills && !shouldUseFirstInstallSkillsUi;
+        }
+
         internal static SkillSetupTargetInfo CreateFirstInstallSkillTarget(
             SkillsTarget target,
             bool groupSkillsUnderUnityCliLoop)
@@ -736,6 +748,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             List<SkillSetupTargetInfo> targets)
         {
             _skillsTargetList.Clear();
+            bool useFirstInstallSkillsUi = _shouldUseFirstInstallSkillsUi;
+            ViewDataBinder.SetVisible(
+                _skillsTargetRow,
+                ShouldShowSkillsTargetRowForSetupWizard(useFirstInstallSkillsUi));
+            ViewDataBinder.SetVisible(
+                _skillsTargetList,
+                ShouldShowSkillsTargetListForSetupWizard(canManageSkills, useFirstInstallSkillsUi));
 
             if (!canManageSkills)
             {
@@ -746,16 +765,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     _isInstallingSkills,
                     hasOutdatedSkills: false);
                 _groupSkillsToggle.SetEnabled(false);
-                ViewDataBinder.SetVisible(_skillsTargetRow, false);
-                ViewDataBinder.SetVisible(_skillsTargetList, false);
                 return;
             }
 
             _groupSkillsToggle.SetEnabled(!_isInstallingSkills);
-
-            bool useFirstInstallSkillsUi = _shouldUseFirstInstallSkillsUi;
-            ViewDataBinder.SetVisible(_skillsTargetRow, useFirstInstallSkillsUi);
-            ViewDataBinder.SetVisible(_skillsTargetList, !useFirstInstallSkillsUi);
 
             if (useFirstInstallSkillsUi)
             {
