@@ -11,6 +11,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         internal static void Initialize(UnityCliLoopEditorSettingsService editorSettingsService)
         {
+            UnityCliLoopPackageRemovalSettingsResetter packageRemovalSettingsResetter = new(editorSettingsService);
+            packageRemovalSettingsResetter.RegisterForEditorStartup();
             UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsService);
             CompilationLockService.RegisterForEditorStartup();
         }
