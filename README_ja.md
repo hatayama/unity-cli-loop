@@ -81,6 +81,8 @@ v2系に戻したい場合は、Settings で **Uninstall CLI** を押し、Unity
 
 Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
 
+macOS、Windows Git Bash の場合:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
 ```

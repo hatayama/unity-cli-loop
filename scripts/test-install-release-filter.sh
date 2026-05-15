@@ -48,6 +48,10 @@ write_releases_json() {
       {
         "name": "uloop-darwin-arm64.tar.gz",
         "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/v3.0.0-beta.2/uloop-darwin-arm64.tar.gz"
+      },
+      {
+        "name": "uloop-windows-amd64.zip",
+        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/v3.0.0-beta.2/uloop-windows-amd64.zip"
       }
     ]
   },
@@ -59,6 +63,10 @@ write_releases_json() {
       {
         "name": "uloop-darwin-arm64.tar.gz",
         "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/v2.0.0/uloop-darwin-arm64.tar.gz"
+      },
+      {
+        "name": "uloop-windows-amd64.zip",
+        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/v2.0.0/uloop-windows-amd64.zip"
       }
     ]
   }
@@ -76,10 +84,10 @@ set -eu
 
 case "$1" in
   -s)
-    echo Darwin
+    echo "${MOCK_UNAME_OS:-Darwin}"
     ;;
   -m)
-    echo arm64
+    echo "${MOCK_UNAME_ARCH:-arm64}"
     ;;
   *)
     echo "unexpected uname argument: $*" >&2
@@ -125,6 +133,12 @@ case "$url" in
   *v2.0.0/uloop-darwin-arm64.tar.gz.sha256)
     printf 'fakehash  uloop-darwin-arm64.tar.gz\n' > "$output_file"
     ;;
+  *v2.0.0/uloop-windows-amd64.zip)
+    : > "$output_file"
+    ;;
+  *v2.0.0/uloop-windows-amd64.zip.sha256)
+    printf 'fakehash  uloop-windows-amd64.zip\n' > "$output_file"
+    ;;
   *v3.0.0-beta.2/uloop-darwin-arm64.tar.gz)
     if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
       echo "Prerelease asset should not be downloaded: $url" >&2
@@ -138,6 +152,20 @@ case "$url" in
       exit 1
     fi
     printf 'fakehash  uloop-darwin-arm64.tar.gz\n' > "$output_file"
+    ;;
+  *v3.0.0-beta.2/uloop-windows-amd64.zip)
+    if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
+      echo "Prerelease asset should not be downloaded: $url" >&2
+      exit 1
+    fi
+    : > "$output_file"
+    ;;
+  *v3.0.0-beta.2/uloop-windows-amd64.zip.sha256)
+    if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
+      echo "Prerelease checksum should not be downloaded: $url" >&2
+      exit 1
+    fi
+    printf 'fakehash  uloop-windows-amd64.zip\n' > "$output_file"
     ;;
   *)
     echo "unexpected curl url: $url" >&2
@@ -182,8 +210,35 @@ cat > "$extract_dir/uloop" <<'ULOOP'
 #!/bin/sh
 echo "uloop mock version"
 ULOOP
-chmod +x "$extract_dir/uloop"
+  chmod +x "$extract_dir/uloop"
 MOCK_TAR
+
+  cat > "$mock_bin/unzip" <<'MOCK_UNZIP'
+#!/bin/sh
+set -eu
+
+extract_dir=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -d)
+      shift
+      extract_dir=$1
+      ;;
+  esac
+  shift
+done
+
+if [ -z "$extract_dir" ]; then
+  echo "unzip extract directory is required" >&2
+  exit 1
+fi
+
+cat > "$extract_dir/uloop.exe" <<'ULOOP'
+#!/bin/sh
+echo "uloop mock version"
+ULOOP
+chmod +x "$extract_dir/uloop.exe"
+MOCK_UNZIP
 
   cat > "$mock_bin/npm" <<'MOCK_NPM'
 #!/bin/sh
@@ -206,7 +261,24 @@ echo "unexpected npm arguments: $*" >&2
 exit 1
 MOCK_NPM
 
-  chmod +x "$mock_bin/uname" "$mock_bin/curl" "$mock_bin/sha256sum" "$mock_bin/tar" "$mock_bin/npm"
+  chmod +x "$mock_bin/uname" "$mock_bin/curl" "$mock_bin/sha256sum" "$mock_bin/tar" "$mock_bin/unzip" "$mock_bin/npm"
+}
+
+write_legacy_npm_uloop_shim() {
+  legacy_uloop=$1
+  target=$2
+
+  if ln -s "$target" "$legacy_uloop" 2>/dev/null && [ -L "$legacy_uloop" ]; then
+    return
+  fi
+
+  rm -f "$legacy_uloop"
+  cat > "$legacy_uloop" <<'SHIM'
+#!/bin/sh
+# node_modules/uloop-cli shim marker
+echo "legacy uloop"
+SHIM
+  chmod +x "$legacy_uloop"
 }
 
 write_required_tool_links() {
@@ -215,7 +287,11 @@ write_required_tool_links() {
 
   for command_name in awk cat chmod grep install mkdir mktemp mv readlink rm; do
     command_path=$(command -v "$command_name")
-    ln -s "$command_path" "$tool_bin/$command_name"
+    {
+      printf '%s\n' '#!/bin/sh'
+      printf 'exec %s "$@"\n' "$command_path"
+    } > "$tool_bin/$command_name"
+    chmod +x "$tool_bin/$command_name"
   done
 }
 
@@ -234,7 +310,7 @@ test_posix_latest_skips_prerelease_assets() {
   : > "$npm_log"
   printf '%s\n' 'legacy node cli bundle' > "$legacy_package_dist/cli.bundle.cjs"
   chmod +x "$legacy_package_dist/cli.bundle.cjs"
-  ln -s "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs" "$legacy_uloop"
+  write_legacy_npm_uloop_shim "$legacy_uloop" "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs"
   write_releases_json "$releases_json"
   write_mock_commands "$mock_bin"
 
@@ -303,7 +379,7 @@ test_posix_skips_default_npm_cleanup_when_native_command_is_first() {
   chmod +x "$native_uloop"
   printf '%s\n' 'legacy node cli bundle' > "$legacy_package_dist/cli.bundle.cjs"
   chmod +x "$legacy_package_dist/cli.bundle.cjs"
-  ln -s "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs" "$legacy_uloop"
+  write_legacy_npm_uloop_shim "$legacy_uloop" "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs"
   write_releases_json "$releases_json"
   write_mock_commands "$mock_bin"
 
@@ -376,7 +452,7 @@ test_posix_prints_prefix_manual_cleanup_when_npm_is_unavailable() {
   : > "$npm_log"
   printf '%s\n' 'legacy node cli bundle' > "$legacy_package_dist/cli.bundle.cjs"
   chmod +x "$legacy_package_dist/cli.bundle.cjs"
-  ln -s "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs" "$legacy_uloop"
+  write_legacy_npm_uloop_shim "$legacy_uloop" "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs"
   write_releases_json "$releases_json"
   write_mock_commands "$mock_bin"
   rm -f "$mock_bin/npm"
@@ -442,7 +518,7 @@ test_posix_removes_npm_package_before_replacing_same_bin_path() {
   : > "$npm_log"
   printf '%s\n' 'legacy node cli bundle' > "$legacy_package_dist/cli.bundle.cjs"
   chmod +x "$legacy_package_dist/cli.bundle.cjs"
-  ln -s "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs" "$legacy_uloop"
+  write_legacy_npm_uloop_shim "$legacy_uloop" "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs"
   write_releases_json "$releases_json"
   write_mock_commands "$mock_bin"
 
@@ -479,6 +555,49 @@ test_powershell_latest_skips_prerelease_assets() {
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Remove-LegacyUloopShims"
 }
 
+test_git_bash_latest_installs_windows_zip_asset() {
+  work_dir="$TMP_DIR/git-bash-latest"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:$ORIGINAL_PATH" \
+    MOCK_UNAME_OS=MINGW64_NT-10.0-26100 \
+    MOCK_UNAME_ARCH=x86_64 \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$curl_log" "v2.0.0/uloop-windows-amd64.zip"
+  assert_contains "$curl_log" "v2.0.0/uloop-windows-amd64.zip.sha256"
+  assert_not_contains "$curl_log" "uloop-darwin-arm64.tar.gz"
+  if [ ! -x "$install_dir/uloop.exe" ]; then
+    echo "Expected Git Bash install to create executable uloop.exe: $install_dir/uloop.exe" >&2
+    exit 1
+  fi
+  assert_contains "$work_dir/output.txt" "uloop mock version"
+}
+
+test_powershell_installer_avoids_optional_archive_cmdlets() {
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Get-UloopSha256Hash'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '[System.Security.Cryptography.SHA256]::Create()'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Expand-UloopArchive'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '[System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $DestinationPath)'
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Get-FileHash"
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Expand-Archive"
+}
+
 test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
 test_posix_skips_default_npm_cleanup_when_native_command_is_first
@@ -487,3 +606,5 @@ test_posix_prints_prefix_manual_cleanup_when_npm_is_unavailable
 test_posix_prints_manual_cleanup_when_npm_prefix_cannot_be_inferred
 test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets
+test_git_bash_latest_installs_windows_zip_asset
+test_powershell_installer_avoids_optional_archive_cmdlets

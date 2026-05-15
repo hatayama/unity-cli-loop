@@ -215,6 +215,37 @@ function Assert-UloopVersionSucceeds {
     }
 }
 
+function Get-UloopSha256Hash {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $Stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $HashBytes = $Sha256.ComputeHash($Stream)
+    }
+    finally {
+        $Stream.Dispose()
+        $Sha256.Dispose()
+    }
+
+    return ([System.BitConverter]::ToString($HashBytes) -replace "-", "").ToLowerInvariant()
+}
+
+function Expand-UloopArchive {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ArchivePath,
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationPath
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $DestinationPath)
+}
+
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("uloop-install-" + [System.Guid]::NewGuid().ToString("N"))
 $StagedUloopPath = $null
 $LegacyUloopBeforeInstallCommand = Get-Command uloop -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -226,12 +257,12 @@ try {
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $ArchivePath
     Invoke-WebRequest -Uri $ChecksumUrl -OutFile $ChecksumPath
     $ExpectedHash = ((Get-Content -Path $ChecksumPath -Raw) -split "\s+")[0].ToLowerInvariant()
-    $ActualHash = (Get-FileHash -Path $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $ActualHash = Get-UloopSha256Hash -Path $ArchivePath
     if ($ExpectedHash -ne $ActualHash) {
         throw "Checksum mismatch for $AssetName"
     }
 
-    Expand-Archive -Path $ArchivePath -DestinationPath $TempDir -Force
+    Expand-UloopArchive -ArchivePath $ArchivePath -DestinationPath $TempDir
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     $StagedUloopPath = Join-Path $InstallDir ("uloop-install-" + [System.Guid]::NewGuid().ToString("N") + ".exe")

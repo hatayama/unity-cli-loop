@@ -80,6 +80,8 @@ To return to the v2 line, press **Uninstall CLI** in Settings, downgrade the U-L
 
 Use this only when you want to install the standalone global CLI without opening Unity package setup.
 
+On macOS or Windows Git Bash:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
 ```
