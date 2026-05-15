@@ -45,6 +45,14 @@ Interpret scanner output conservatively:
 
 ## Native Go CLI Validation
 
+When running `uloop` commands for this project during CLI development, do not use the `uloop` command resolved from `PATH`. Run this checkout's checked-in development binary directly so validation uses the code under review:
+
+```bash
+Packages/src/Cli~/dist/darwin-arm64/uloop compile --project-path /Users/a12115/ghq/hatayama/unity-cli-loop2
+```
+
+If CLI source changes affect the command behavior you are validating, rebuild the development binary before running it.
+
 When changing Go CLI source files under `Packages/src/Cli~`, run `scripts/check-go-cli.sh` before manually rebuilding checked-in binaries.
 If the source checks pass and the script fails only because the checked-in native binaries are out of date, commit the regenerated binaries under `Packages/src/Cli~/dist`; use `scripts/build-go-cli.sh` only when you need to refresh those binaries explicitly.
 When changing any checked-in native CLI binary under `Packages/src/Cli~/dist` directly, also run `scripts/check-go-cli.sh` before opening or updating a pull request.
