@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.0.0-beta.8](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.7...v3.0.0-beta.8) (2026-05-15)
+
+
+### Features
+
+* Help older custom tools migrate to V3 automatically ([#1125](https://github.com/hatayama/unity-cli-loop/issues/1125)) ([8412aa4](https://github.com/hatayama/unity-cli-loop/commit/8412aa449040d0ee8d05fb50b55b944e0cf31570))
+
+
+### Bug Fixes
+
+* Release PRs resume after branch-scoped releases are published ([#1127](https://github.com/hatayama/unity-cli-loop/issues/1127)) ([141e888](https://github.com/hatayama/unity-cli-loop/commit/141e888c9f89dc6cbb22cab48274527bf1f53897))
+* Setup recognizes existing npm CLI installs ([#1131](https://github.com/hatayama/unity-cli-loop/issues/1131)) ([7fbb0d8](https://github.com/hatayama/unity-cli-loop/commit/7fbb0d8ea34b7fe1c85de73240cbc0ca1129fe18))
+* Uninstall CLI no longer reinstalls the global command ([#1126](https://github.com/hatayama/unity-cli-loop/issues/1126)) ([2adffbc](https://github.com/hatayama/unity-cli-loop/commit/2adffbc1f97d62b02323b7926e1e1f3e82cd3ec0))
+
 ## [3.0.0-beta.7](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.6...v3.0.0-beta.7) (2026-05-12)
 
 
