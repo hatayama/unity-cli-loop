@@ -47,6 +47,22 @@ jobs:
       - name: Package native Go CLI installers
         run: scripts/package-go-cli.sh
 
+  test-windows-installers:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Test install release filter in Git Bash
+        shell: bash
+        run: sh scripts/test-install-release-filter.sh
+
+      - name: Parse PowerShell installer in Windows PowerShell
+        shell: powershell
+        run: |
+          $null = [scriptblock]::Create((Get-Content -Raw scripts/install.ps1))
+
   test-unity-package:
     runs-on: ubuntu-latest
     needs: build-cli
