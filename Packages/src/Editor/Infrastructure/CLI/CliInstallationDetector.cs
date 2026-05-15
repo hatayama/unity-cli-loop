@@ -30,6 +30,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     public sealed class CliInstallationDetector : ICliInstallationDetector
     {
         private const int PROCESS_TIMEOUT_MS = 5000;
+        private const string SHELL_PATH_START_MARKER = "__ULOOP_PATH_START__";
+        private const string SHELL_PATH_END_MARKER = "__ULOOP_PATH_END__";
+        private const string SHELL_VERSION_START_MARKER = "__ULOOP_VERSION_START__";
+        private const string SHELL_VERSION_END_MARKER = "__ULOOP_VERSION_END__";
 
         private string _cachedCliVersion;
         private string _cachedCliExecutablePath;
@@ -115,7 +119,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CliInstallationDetection packageOwnedDetection,
             CliInstallationDetection shellDetection)
         {
-            return !string.IsNullOrEmpty(shellDetection.ExecutablePath)
+            return !string.IsNullOrEmpty(shellDetection.Version)
+                || !string.IsNullOrEmpty(shellDetection.ExecutablePath)
                 ? shellDetection
                 : packageOwnedDetection;
         }
@@ -135,10 +140,126 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static CliInstallationDetection DetectShellCliInstallationBlocking(RuntimePlatform platform, CancellationToken ct)
         {
+            if (platform != RuntimePlatform.WindowsEditor)
+            {
+                return DetectShellCliInstallationFromLoginShell(ct);
+            }
+
             string executablePath = NodeEnvironmentResolver.FindExecutablePathAtPlatform(
                 CliConstants.EXECUTABLE_NAME,
                 platform);
             return DetectCliInstallationAtExecutablePath(executablePath, ct);
+        }
+
+        private static CliInstallationDetection DetectShellCliInstallationFromLoginShell(CancellationToken ct)
+        {
+            string shell = NodeEnvironmentResolver.GetUserShell();
+            ProcessStartInfo startInfo = new()            {
+                FileName = shell,
+                Arguments = "-l -i -c " + QuoteProcessArgument(BuildShellCliDetectionCommand(CliConstants.EXECUTABLE_NAME)),
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            string output = ExecuteAndGetOutput(startInfo, ct);
+            return ParseShellCliInstallationOutput(output);
+        }
+
+        internal static string BuildShellCliDetectionCommand(string executableName)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(executableName), "executableName must not be null or empty");
+
+            return "echo " + SHELL_PATH_START_MARKER + "\n"
+                + "command -v " + executableName + "\n"
+                + "echo " + SHELL_PATH_END_MARKER + "\n"
+                + "echo " + SHELL_VERSION_START_MARKER + "\n"
+                + executableName + " " + CliConstants.SHORT_VERSION_FLAG + "\n"
+                + "echo " + SHELL_VERSION_END_MARKER;
+        }
+
+        internal static CliInstallationDetection ParseShellCliInstallationOutput(string output)
+        {
+            string pathBlock = NodeEnvironmentResolver.ExtractBetweenMarkers(
+                output,
+                SHELL_PATH_START_MARKER,
+                SHELL_PATH_END_MARKER);
+            string versionBlock = NodeEnvironmentResolver.ExtractBetweenMarkers(
+                output,
+                SHELL_VERSION_START_MARKER,
+                SHELL_VERSION_END_MARKER);
+            string executablePath = NodeEnvironmentResolver.ExtractAbsolutePathLine(pathBlock);
+            string version = ExtractFirstNonEmptyLine(versionBlock);
+            return new CliInstallationDetection(version, executablePath);
+        }
+
+        private static string ExecuteAndGetOutput(ProcessStartInfo startInfo, CancellationToken ct)
+        {
+            UnityEngine.Debug.Assert(startInfo != null, "startInfo must not be null");
+            UnityEngine.Debug.Assert(startInfo.RedirectStandardOutput, "RedirectStandardOutput must be true");
+            UnityEngine.Debug.Assert(startInfo.RedirectStandardError, "RedirectStandardError must be true");
+
+            Process process = ProcessStartHelper.TryStart(startInfo);
+            if (process == null)
+            {
+                return null;
+            }
+
+            using (process)
+            {
+                StringBuilder outputBuilder = new();
+
+                process.OutputDataReceived += (sender, e) =>
+                {
+                    if (e.Data != null)
+                    {
+                        outputBuilder.AppendLine(e.Data);
+                    }
+                };
+                process.ErrorDataReceived += (sender, e) => { };
+
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                using CancellationTokenRegistration registration = ct.Register(() => process.Kill());
+                bool exited = process.WaitForExit(PROCESS_TIMEOUT_MS);
+                if (!exited)
+                {
+                    process.Kill();
+                    return null;
+                }
+
+                process.WaitForExit();
+                return outputBuilder.ToString().Trim();
+            }
+        }
+
+        private static string ExtractFirstNonEmptyLine(string block)
+        {
+            if (string.IsNullOrEmpty(block))
+            {
+                return null;
+            }
+
+            string[] lines = block.Split('\n');
+            foreach (string rawLine in lines)
+            {
+                string line = rawLine.Trim();
+                if (!string.IsNullOrEmpty(line))
+                {
+                    return line;
+                }
+            }
+
+            return null;
+        }
+
+        private static string QuoteProcessArgument(string value)
+        {
+            UnityEngine.Debug.Assert(value != null, "value must not be null");
+
+            return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
         }
 
         private static CliInstallationDetection DetectCliInstallationAtExecutablePath(

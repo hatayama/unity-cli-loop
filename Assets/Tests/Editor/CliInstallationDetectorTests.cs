@@ -84,5 +84,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Version, Is.EqualTo("2.1.0"));
             Assert.That(result.ExecutablePath, Is.EqualTo("/Users/masamichi/.npm-global/bin/uloop"));
         }
+
+        [Test]
+        public void SelectPreferredDetection_WhenShellVersionExistsWithoutPathUsesShellVersion()
+        {
+            // Verifies that installed state does not depend on command path availability.
+            CliInstallationDetection packageOwnedDetection = new(
+                "3.0.0-beta.3",
+                "/Users/masamichi/.local/bin/uloop");
+            CliInstallationDetection shellDetection = new(
+                "2.1.0",
+                null);
+
+            CliInstallationDetection result = CliInstallationDetector.SelectPreferredDetection(
+                packageOwnedDetection,
+                shellDetection);
+
+            Assert.That(result.Version, Is.EqualTo("2.1.0"));
+            Assert.That(result.ExecutablePath, Is.Null);
+        }
+
+        [Test]
+        public void BuildShellCliDetectionCommand_UsesShortVersionFlag()
+        {
+            // Verifies that shell detection asks the command itself for its terminal-visible version.
+            string command = CliInstallationDetector.BuildShellCliDetectionCommand("uloop");
+
+            Assert.That(command, Does.Contain("command -v uloop"));
+            Assert.That(command, Does.Contain("uloop -v"));
+            Assert.That(command, Does.Not.Contain("uloop --version"));
+        }
+
+        [Test]
+        public void ParseShellCliInstallationOutput_WhenPathAndVersionExist_ReturnsDetection()
+        {
+            // Verifies that shell detection keeps terminal-visible path data as auxiliary UI context.
+            string output = "banner\n"
+                            + "__ULOOP_PATH_START__\n"
+                            + "/Users/masamichi/.npm-global/bin/uloop\n"
+                            + "__ULOOP_PATH_END__\n"
+                            + "__ULOOP_VERSION_START__\n"
+                            + "2.1.1\n"
+                            + "__ULOOP_VERSION_END__\n";
+
+            CliInstallationDetection detection =
+                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+
+            Assert.That(detection.Version, Is.EqualTo("2.1.1"));
+            Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/masamichi/.npm-global/bin/uloop"));
+        }
+
+        [Test]
+        public void ParseShellCliInstallationOutput_WhenOnlyVersionExists_ReturnsInstalledDetection()
+        {
+            // Verifies that installation state depends on version output, not path availability.
+            string output = "__ULOOP_PATH_START__\n"
+                            + "__ULOOP_PATH_END__\n"
+                            + "__ULOOP_VERSION_START__\n"
+                            + "2.1.1\n"
+                            + "__ULOOP_VERSION_END__\n";
+
+            CliInstallationDetection detection =
+                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+
+            Assert.That(detection.Version, Is.EqualTo("2.1.1"));
+            Assert.That(detection.ExecutablePath, Is.Null);
+        }
     }
 }
