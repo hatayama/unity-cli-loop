@@ -222,16 +222,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 
-                using CancellationTokenRegistration registration = ct.Register(() => process.Kill());
+                using CancellationTokenRegistration registration = ct.Register(() => KillProcessIfRunning(process));
                 bool exited = process.WaitForExit(PROCESS_TIMEOUT_MS);
                 if (!exited)
                 {
-                    process.Kill();
+                    KillProcessIfRunning(process);
                     return null;
                 }
 
                 process.WaitForExit();
                 return outputBuilder.ToString().Trim();
+            }
+        }
+
+        internal static void KillProcessIfRunning(Process process)
+        {
+            UnityEngine.Debug.Assert(process != null, "process must not be null");
+
+            try
+            {
+                process.Kill();
+            }
+            catch (System.InvalidOperationException)
+            {
             }
         }
 
@@ -299,7 +312,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             using CancellationTokenRegistration registration = ct.Register(() =>
             {
-                try { process.Kill(); } catch (System.InvalidOperationException) { }
+                KillProcessIfRunning(process);
             });
 
             try
@@ -308,7 +321,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (!exited)
                 {
-                    try { process.Kill(); } catch (System.InvalidOperationException) { }
+                    KillProcessIfRunning(process);
                     process.Dispose();
                     return new CliInstallationDetection(null, executablePath);
                 }

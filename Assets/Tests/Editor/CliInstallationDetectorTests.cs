@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -149,6 +151,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(detection.Version, Is.EqualTo("2.1.1"));
             Assert.That(detection.ExecutablePath, Is.Null);
+        }
+
+        [Test]
+        public void KillProcessIfRunning_WhenProcessAlreadyExited_DoesNotThrow()
+        {
+            // Verifies that process cleanup tolerates the race where the child exits before Kill.
+            ProcessStartInfo startInfo = new()
+            {
+                FileName = "/bin/sh",
+                Arguments = "-c \"exit 0\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using Process process = Process.Start(startInfo);
+            process.WaitForExit();
+
+            Assert.DoesNotThrow(() => CliInstallationDetector.KillProcessIfRunning(process));
         }
     }
 }
