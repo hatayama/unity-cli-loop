@@ -232,5 +232,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.AreEqual("/usr/local/bin/node", result);
         }
+
+        [Test]
+        public void ExtractDirectoryServiceUserShell_WhenUserShellLineExists_ReturnsShellPath()
+        {
+            // Verifies that macOS directory service output can recover the user's login shell.
+            string output = "UserShell: /bin/zsh\n";
+
+            string result = NodeEnvironmentResolver.ExtractDirectoryServiceUserShell(output);
+
+            Assert.AreEqual("/bin/zsh", result);
+        }
+
+        [Test]
+        public void SelectUserShell_WhenEnvironmentShellIsMissing_UsesDirectoryServiceShell()
+        {
+            // Verifies that GUI-launched Unity can still resolve terminal PATH through the user's login shell.
+            string result = NodeEnvironmentResolver.SelectUserShell(
+                null,
+                "/bin/zsh",
+                path => path == "/bin/zsh");
+
+            Assert.AreEqual("/bin/zsh", result);
+        }
+
+        [Test]
+        public void SelectUserShell_WhenEnvironmentShellExists_PrefersEnvironmentShell()
+        {
+            // Verifies that an inherited SHELL remains authoritative when it points to a real shell.
+            string result = NodeEnvironmentResolver.SelectUserShell(
+                "/bin/bash",
+                "/bin/zsh",
+                path => path == "/bin/bash" || path == "/bin/zsh");
+
+            Assert.AreEqual("/bin/bash", result);
+        }
+
+        [Test]
+        public void SelectUserShell_WhenNoCandidateExists_ReturnsPosixFallbackShell()
+        {
+            // Verifies that shell resolution keeps a deterministic fallback when no user shell is available.
+            string result = NodeEnvironmentResolver.SelectUserShell(
+                null,
+                null,
+                path => false);
+
+            Assert.AreEqual("/bin/sh", result);
+        }
     }
 }
