@@ -181,6 +181,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string PATH_END_MARKER = "__PATH_END__";
         private const string WHICH_START_MARKER = "__WHICH_START__";
         private const string WHICH_END_MARKER = "__WHICH_END__";
+        private const string POSIX_FALLBACK_SHELL_PATH = "/bin/sh";
+        private const string DIRECTORY_SERVICE_EXECUTABLE_PATH = "/usr/bin/dscl";
+        private const string DIRECTORY_SERVICE_USERS_PATH_PREFIX = "/Users/";
+        private const string DIRECTORY_SERVICE_USER_SHELL_ATTRIBUTE = "UserShell";
+        private const string DIRECTORY_SERVICE_USER_SHELL_PREFIX = DIRECTORY_SERVICE_USER_SHELL_ATTRIBUTE + ":";
 
         // Uses markers to extract PATH value, ignoring any banner/echo output from shell startup files
         internal static string GetLoginShellPathAtPlatform(RuntimePlatform platform)
@@ -247,20 +252,106 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return null;
         }
 
-        // Falls back to /bin/sh when $SHELL is unset or invalid. /bin/sh won't load
-        // .zshrc/.bashrc, so version-manager paths may be missed — but $SHELL being unset
-        // is extremely rare on macOS/Linux and there is no reliable way to detect the user's
-        // preferred shell without it.
         internal static string GetUserShell()
         {
-            string shell = System.Environment.GetEnvironmentVariable("SHELL");
-            // $SHELL is external input — validate the path exists to avoid Process.Start exceptions
-            if (!string.IsNullOrEmpty(shell) && File.Exists(shell))
+            string environmentShell = System.Environment.GetEnvironmentVariable("SHELL");
+            if (IsExistingShell(environmentShell, File.Exists))
             {
-                return shell;
+                return environmentShell;
             }
 
-            return "/bin/sh";
+            string directoryServiceShell = TryReadDirectoryServiceUserShell(System.Environment.UserName);
+            return SelectUserShell(null, directoryServiceShell, File.Exists);
+        }
+
+        internal static string SelectUserShell(
+            string environmentShell,
+            string directoryServiceShell,
+            System.Func<string, bool> fileExists)
+        {
+            UnityEngine.Debug.Assert(fileExists != null, "fileExists must not be null");
+
+            if (IsExistingShell(environmentShell, fileExists))
+            {
+                return environmentShell;
+            }
+
+            if (IsExistingShell(directoryServiceShell, fileExists))
+            {
+                return directoryServiceShell;
+            }
+
+            return POSIX_FALLBACK_SHELL_PATH;
+        }
+
+        internal static string ExtractDirectoryServiceUserShell(string output)
+        {
+            if (string.IsNullOrEmpty(output))
+            {
+                return null;
+            }
+
+            string[] lines = output.Split('\n');
+            foreach (string rawLine in lines)
+            {
+                string line = rawLine.Trim();
+                if (!line.StartsWith(DIRECTORY_SERVICE_USER_SHELL_PREFIX, System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string shell = line.Substring(DIRECTORY_SERVICE_USER_SHELL_PREFIX.Length).Trim();
+                return string.IsNullOrEmpty(shell) ? null : shell;
+            }
+
+            return null;
+        }
+
+        private static bool IsExistingShell(
+            string shell,
+            System.Func<string, bool> fileExists)
+        {
+            return !string.IsNullOrEmpty(shell) && fileExists(shell);
+        }
+
+        private static string TryReadDirectoryServiceUserShell(string userName)
+        {
+            if (!File.Exists(DIRECTORY_SERVICE_EXECUTABLE_PATH) || !IsSafeDirectoryServiceUserName(userName))
+            {
+                return null;
+            }
+
+            ProcessStartInfo startInfo = new()            {
+                FileName = DIRECTORY_SERVICE_EXECUTABLE_PATH,
+                Arguments = ". -read " + DIRECTORY_SERVICE_USERS_PATH_PREFIX + userName
+                    + " " + DIRECTORY_SERVICE_USER_SHELL_ATTRIBUTE,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            return ExtractDirectoryServiceUserShell(ExecuteAndGetOutput(startInfo));
+        }
+
+        private static bool IsSafeDirectoryServiceUserName(string userName)
+        {
+            if (string.IsNullOrEmpty(userName))
+            {
+                return false;
+            }
+
+            foreach (char character in userName)
+            {
+                if (char.IsLetterOrDigit(character) || character == '_' || character == '-' || character == '.')
+                {
+                    continue;
+                }
+
+                return false;
+            }
+
+            return true;
         }
 
         private static bool IsWindowsEditor(RuntimePlatform platform)

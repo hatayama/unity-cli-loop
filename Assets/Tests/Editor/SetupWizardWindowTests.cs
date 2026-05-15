@@ -315,6 +315,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(canManageSkills, Is.True);
         }
 
+        [Test]
+        public void ShouldShowSkillsTargetRow_WhenFirstInstallAndCliMissing_ReturnsTrue()
+        {
+            // Verifies that first-time setup can choose a skill target before CLI installation.
+            bool shouldShow = SetupWizardWindow.ShouldShowSkillsTargetRowForSetupWizard(
+                shouldUseFirstInstallSkillsUi: true);
+
+            Assert.That(shouldShow, Is.True);
+        }
+
+        [Test]
+        public void ShouldShowSkillsTargetRow_WhenNotFirstInstall_ReturnsFalse()
+        {
+            // Verifies that returning setup keeps the compact target row hidden.
+            bool shouldShow = SetupWizardWindow.ShouldShowSkillsTargetRowForSetupWizard(
+                shouldUseFirstInstallSkillsUi: false);
+
+            Assert.That(shouldShow, Is.False);
+        }
+
+        [Test]
+        public void ShouldShowSkillsTargetList_WhenCliMissing_ReturnsFalse()
+        {
+            // Verifies that multi-target status rows stay hidden until the CLI can inspect skill state.
+            bool shouldShow = SetupWizardWindow.ShouldShowSkillsTargetListForSetupWizard(
+                canManageSkills: false,
+                shouldUseFirstInstallSkillsUi: false);
+
+            Assert.That(shouldShow, Is.False);
+        }
+
+        [Test]
+        public void ShouldShowSkillsTargetList_WhenCliInstalledAndNotFirstInstall_ReturnsTrue()
+        {
+            // Verifies that returning users keep the multi-target skill status view.
+            bool shouldShow = SetupWizardWindow.ShouldShowSkillsTargetListForSetupWizard(
+                canManageSkills: true,
+                shouldUseFirstInstallSkillsUi: false);
+
+            Assert.That(shouldShow, Is.True);
+        }
+
         [TestCase(false, false, false, false, null, "3.0.0", "Install CLI")]
         [TestCase(true, false, false, false, "3.0.0", "3.0.0", "Installed")]
         [TestCase(true, false, false, true, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]

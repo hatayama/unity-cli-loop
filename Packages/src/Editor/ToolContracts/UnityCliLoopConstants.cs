@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public static string PackageResolvedPath => PackageInfo.resolvedPath;
 
         public const string PROJECT_NAME = "UnityCliLoop";
+        public const string PACKAGE_NAME = "io.github.hatayama.uloopmcp";
         
         // Editor settings
         public const string SETTINGS_FILE_NAME = "UnityCliLoopSettings.json";
