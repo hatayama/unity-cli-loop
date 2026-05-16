@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.0-beta.9](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.8...v3.0.0-beta.9) (2026-05-16)
+
+
+### Features
+
+* uloop can uninstall its global command from terminal and Settings ([#1135](https://github.com/hatayama/unity-cli-loop/issues/1135)) ([4122d57](https://github.com/hatayama/unity-cli-loop/commit/4122d57eb79cbe491c633063b99e22484816d355))
+
+
+### Bug Fixes
+
+* Setup can update the CLI on older Windows PowerShell ([#1133](https://github.com/hatayama/unity-cli-loop/issues/1133)) ([6601ed3](https://github.com/hatayama/unity-cli-loop/commit/6601ed3af6cb89d18ff7dfee25148b4ad351ea21))
+
 ## [3.0.0-beta.8](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.7...v3.0.0-beta.8) (2026-05-15)
 
 
