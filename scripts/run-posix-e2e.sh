@@ -98,6 +98,9 @@ default_uloop_path() {
                 printf '%s\n' "$ROOT_DIR/Packages/src/Cli~/dist/darwin-amd64/uloop"
             fi
             ;;
+        MINGW*|MSYS*|CYGWIN*)
+            printf '%s\n' "$ROOT_DIR/Packages/src/Cli~/dist/windows-amd64/uloop.exe"
+            ;;
         *)
             printf '%s\n' ""
             ;;
