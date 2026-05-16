@@ -8,7 +8,12 @@ import (
 	"path/filepath"
 )
 
-const serverStateRelativePath = "Temp/UnityCliLoop/server-state.json"
+const (
+	serverStateRelativePath         = "Temp/UnityCliLoop/server-state.json"
+	serverStateCompletedTempSuffix  = ".tmp"
+	serverStateInProgressTempSuffix = ".tmp.write"
+	serverStateBackupSuffix         = ".bak"
+)
 
 type serverState struct {
 	Phase        string `json:"phase"`
@@ -68,7 +73,7 @@ func readServerStateFile(statePath string) ([]byte, bool, error) {
 		return content, true, nil
 	}
 
-	for _, sidecarPath := range []string{statePath + ".tmp", statePath + ".bak"} {
+	for _, sidecarPath := range []string{statePath + serverStateCompletedTempSuffix, statePath + serverStateBackupSuffix} {
 		sidecarContent, sidecarErr := os.ReadFile(sidecarPath)
 		if sidecarErr == nil {
 			return sidecarContent, true, nil

@@ -9,9 +9,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class AtomicFileWriter
     {
-        private const string CompletedTempFileSuffix = ".tmp";
-        private const string BackupFileSuffix = ".bak";
-        private const string InProgressTempFileSuffix = ".tmp.write";
+        internal const string CompletedTempFileSuffix = ".tmp";
+        internal const string BackupFileSuffix = ".bak";
+        internal const string InProgressTempFileSuffix = ".tmp.write";
 
         /// <summary>
         /// Writes content atomically: .tmp.write → .tmp → .bak → target.
@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string backupFilePath = filePath + BackupFileSuffix;
             CleanupInProgressTemp(inProgressTempFilePath);
             File.WriteAllText(inProgressTempFilePath, content);
-            CleanupTemp(tempFilePath);
+            CleanupCompletedTemp(tempFilePath);
             File.Move(inProgressTempFilePath, tempFilePath);
 
             // .NET Framework 4.7.1 lacks File.Move(src, dst, overwrite), so we
@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (File.Exists(filePath))
             {
                 CleanupBackup(backupFilePath);
-                CleanupTemp(tempFilePath);
+                CleanupCompletedTemp(tempFilePath);
                 return;
             }
 
@@ -90,11 +90,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static void CleanupTemp(string tempFilePath)
+        internal static void CleanupCompletedTemp(string completedTempFilePath)
         {
-            if (File.Exists(tempFilePath))
+            Debug.Assert(!string.IsNullOrEmpty(completedTempFilePath), "completedTempFilePath must not be null or empty");
+
+            if (File.Exists(completedTempFilePath))
             {
-                File.Delete(tempFilePath);
+                File.Delete(completedTempFilePath);
             }
         }
     }

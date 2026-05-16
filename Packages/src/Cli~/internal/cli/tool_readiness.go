@@ -55,7 +55,7 @@ func waitForToolReadinessWithMode(ctx context.Context, projectRoot string, mode 
 				return serverStoppedError{state: state}
 			}
 			if isServerStateBusy(state) {
-				stale, err := isBusyServerStateStale(ctx, projectRoot)
+				stale, err := isBusyServerStateStale(timeoutContext, projectRoot)
 				if err != nil {
 					return err
 				}

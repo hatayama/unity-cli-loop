@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -118,6 +119,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ServerReadinessState state = _stateStore.Read();
             Assert.That(state.Phase, Is.EqualTo("stopped"));
             Assert.That(_domainReloadDetectionService.IsLockFilePresent(), Is.False);
+        }
+
+        [Test]
+        public async Task RestoreServerStateIfNeededAsync_WhenRecoveryDoesNotStartServer_ShouldFail()
+        {
+            // Verifies that recovery is only reported as successful after a running server instance exists.
+            _editorSettingsService.SetIsServerRunning(true);
+            _editorSettingsService.UpdateSettings(s => s with { isAfterCompile = false });
+            TestRecoveryCoordinator recoveryCoordinator = new();
+            SessionRecoveryService service = new(
+                recoveryCoordinator,
+                _domainReloadDetectionService,
+                _editorSettingsService);
+
+            ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("Unity CLI Loop server recovery finished, but no running server instance is available."));
         }
 
         private static ServerReadinessStateStore CreateTestStateStore()

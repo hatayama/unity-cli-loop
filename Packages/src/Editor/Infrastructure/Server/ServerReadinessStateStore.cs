@@ -135,12 +135,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal void Delete()
         {
-            if (File.Exists(_stateFilePath))
-            {
-                File.Delete(_stateFilePath);
-            }
-
-            AtomicFileWriter.CleanupBackup(_stateFilePath + ".bak");
+            DeleteIfExists(_stateFilePath);
+            AtomicFileWriter.CleanupCompletedTemp(_stateFilePath + AtomicFileWriter.CompletedTempFileSuffix);
+            AtomicFileWriter.CleanupInProgressTemp(_stateFilePath + AtomicFileWriter.InProgressTempFileSuffix);
+            AtomicFileWriter.CleanupBackup(_stateFilePath + AtomicFileWriter.BackupFileSuffix);
         }
 
         internal static string CreateGenerationId()
@@ -151,6 +149,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static string ToWirePhase(ServerReadinessPhase phase)
         {
             return phase.ToString().ToLowerInvariant();
+        }
+
+        private static void DeleteIfExists(string filePath)
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
         }
     }
 }

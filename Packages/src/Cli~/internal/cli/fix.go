@@ -46,7 +46,12 @@ func cleanupStaleRecoveryState(projectRoot string) (int, error) {
 func cleanupServerStateFiles(projectRoot string) (int, error) {
 	cleaned := 0
 	statePath := filepath.Join(projectRoot, serverStateRelativePath)
-	for _, path := range []string{statePath, statePath + ".tmp", statePath + ".bak"} {
+	for _, path := range []string{
+		statePath,
+		statePath + serverStateCompletedTempSuffix,
+		statePath + serverStateInProgressTempSuffix,
+		statePath + serverStateBackupSuffix,
+	} {
 		if _, err := os.Stat(path); err != nil {
 			if !os.IsNotExist(err) {
 				return cleaned, err

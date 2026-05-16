@@ -12,7 +12,7 @@ using Newtonsoft.Json.Linq;
 namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 {
     /// <summary>
-    /// Resets bundled tool lifecycle state and proves execute-dynamic-code readiness before the server is published as ready.
+    /// Resets bundled tool lifecycle state and proves get-version IPC readiness before the server is published as ready.
     /// </summary>
     internal sealed class UnityCliLoopFirstPartyServerLifecycleBinding : IUnityCliLoopServerReadinessProbe
     {

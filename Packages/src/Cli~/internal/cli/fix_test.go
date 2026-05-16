@@ -78,8 +78,11 @@ func TestCleanupStaleRecoveryStateRemovesServerStateAndLegacyLocks(t *testing.T)
 	if err := os.WriteFile(statePath, []byte(`{"phase":"failed"}`), 0o644); err != nil {
 		t.Fatalf("failed to seed state file: %v", err)
 	}
-	if err := os.WriteFile(statePath+".tmp", []byte(`{"phase":"starting"}`), 0o644); err != nil {
+	if err := os.WriteFile(statePath+serverStateCompletedTempSuffix, []byte(`{"phase":"starting"}`), 0o644); err != nil {
 		t.Fatalf("failed to seed temp state file: %v", err)
+	}
+	if err := os.WriteFile(statePath+serverStateInProgressTempSuffix, []byte(`{"phase":"recovering"}`), 0o644); err != nil {
+		t.Fatalf("failed to seed in-progress temp state file: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(tempDirectory, "domainreload.lock"), []byte("lock"), 0o644); err != nil {
 		t.Fatalf("failed to seed legacy lock file: %v", err)
@@ -90,14 +93,17 @@ func TestCleanupStaleRecoveryStateRemovesServerStateAndLegacyLocks(t *testing.T)
 		t.Fatalf("cleanupStaleRecoveryState failed: %v", err)
 	}
 
-	if cleaned != 3 {
+	if cleaned != 4 {
 		t.Fatalf("cleaned count mismatch: %d", cleaned)
 	}
 	if _, err := os.Stat(statePath); err == nil {
 		t.Fatal("server state file was not removed")
 	}
-	if _, err := os.Stat(statePath + ".tmp"); err == nil {
+	if _, err := os.Stat(statePath + serverStateCompletedTempSuffix); err == nil {
 		t.Fatal("temporary server state file was not removed")
+	}
+	if _, err := os.Stat(statePath + serverStateInProgressTempSuffix); err == nil {
+		t.Fatal("in-progress temporary server state file was not removed")
 	}
 	if _, err := os.Stat(filepath.Join(tempDirectory, "domainreload.lock")); err == nil {
 		t.Fatal("legacy lock file was not removed")

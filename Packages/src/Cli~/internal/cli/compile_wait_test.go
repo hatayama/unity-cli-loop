@@ -101,9 +101,10 @@ func TestWaitForCompileCompletionReadsResultAfterRecoveryStateBecomesReady(t *te
 		t.Fatalf("failed to write result: %v", err)
 	}
 
+	stateWriteErrCh := make(chan error, 1)
 	go func() {
 		time.Sleep(20 * time.Millisecond)
-		_ = writeServerStateForTest(projectRoot, "ready", "")
+		stateWriteErrCh <- writeServerStateForTest(projectRoot, "ready", "")
 	}()
 
 	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
@@ -113,6 +114,9 @@ func TestWaitForCompileCompletionReadsResultAfterRecoveryStateBecomesReady(t *te
 		pollInterval: 5 * time.Millisecond,
 		lockGrace:    10 * time.Millisecond,
 	})
+	if stateWriteErr := <-stateWriteErrCh; stateWriteErr != nil {
+		t.Fatalf("failed to publish ready state: %v", stateWriteErr)
+	}
 	if err != nil {
 		t.Fatalf("waitForCompileCompletion failed: %v", err)
 	}

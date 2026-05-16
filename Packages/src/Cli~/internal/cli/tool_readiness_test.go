@@ -66,3 +66,29 @@ func TestWaitForRecoveringToolReadinessReportsStaleBusyStateWhenUnityIsGone(t *t
 		t.Fatalf("stale phase mismatch: %#v", staleErr.state)
 	}
 }
+
+// Verifies that stale-state process lookup is bounded by the readiness timeout context.
+func TestWaitForRecoveringToolReadinessPassesTimeoutContextToStaleCheck(t *testing.T) {
+	originalFinder := findRunningUnityProcessForReadiness
+	receivedDeadline := false
+	findRunningUnityProcessForReadiness = func(ctx context.Context, projectRoot string) (*unityProcess, error) {
+		_, receivedDeadline = ctx.Deadline()
+		return nil, nil
+	}
+	defer func() {
+		findRunningUnityProcessForReadiness = originalFinder
+	}()
+
+	projectRoot := t.TempDir()
+	writeReadinessServerStateForTest(t, projectRoot, `{"phase":"recovering","reason":"domain-reload-after"}`)
+
+	err := waitForRecoveringToolReadiness(context.Background(), projectRoot)
+
+	var staleErr staleServerStateError
+	if !errors.As(err, &staleErr) {
+		t.Fatalf("expected stale state error, got %v", err)
+	}
+	if !receivedDeadline {
+		t.Fatal("stale-state process lookup did not receive a timeout context")
+	}
+}

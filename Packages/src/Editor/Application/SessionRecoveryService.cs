@@ -74,6 +74,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
             if (wasRunning && (currentServer == null || !currentServer.IsRunning))
             {
                 await _recoveryCoordinator.StartRecoveryIfNeededAsync(isAfterCompile, ct);
+                IUnityCliLoopServerInstance recoveredServer = _recoveryCoordinator.CurrentServer;
+                if (recoveredServer?.IsRunning != true)
+                {
+                    return ValidationResult.Failure(
+                        "Unity CLI Loop server recovery finished, but no running server instance is available.");
+                }
             }
 
             return ValidationResult.Success();
