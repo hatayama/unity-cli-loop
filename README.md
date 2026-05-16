@@ -476,6 +476,8 @@ Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording
 Terminal-driven E2E helpers are available for both POSIX shells and Windows PowerShell:
 
 ```bash
+python3 scripts/smoke-cli-recovery-readiness.py --project-path /path/to/unity-project
+
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps1
 
 sh Assets/Tests/Demo/scripts/verify-replay-via-cli.sh
@@ -484,6 +486,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Assets\Tests\Demo\scripts\
 sh scripts/test-simulate-mouse-demo.sh
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-simulate-mouse-demo.ps1
 ```
+
+`smoke-cli-recovery-readiness.py` uses the checked-in native CLI binary by default, passes an explicit `--project-path` to every `uloop` invocation, and verifies launch/reuse readiness, `compile --wait-for-domain-reload`, immediate `get-logs`, `execute-dynamic-code`, and stale recovery-state guidance.
 
 ## Unity CLI Loop Extension Development
 Unity CLI Loop enables efficient development of project-specific tools without requiring changes to the core package.

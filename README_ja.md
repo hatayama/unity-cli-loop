@@ -477,6 +477,8 @@ PlayMode中のキーボード・マウス入力をフレーム単位でJSONフ�
 terminal から uloop コマンドを実行するE2Eヘルパーは、POSIXシェル向けとWindows PowerShell向けの両方があります:
 
 ```bash
+python3 scripts/smoke-cli-recovery-readiness.py --project-path /path/to/unity-project
+
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps1
 
 sh Assets/Tests/Demo/scripts/verify-replay-via-cli.sh
@@ -485,6 +487,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Assets\Tests\Demo\scripts\
 sh scripts/test-simulate-mouse-demo.sh
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-simulate-mouse-demo.ps1
 ```
+
+`smoke-cli-recovery-readiness.py` は、デフォルトでチェックイン済みのネイティブCLIバイナリを使い、すべての `uloop` 呼び出しに明示的な `--project-path` を渡します。launch/reuse readiness、`compile --wait-for-domain-reload`、直後の `get-logs`、`execute-dynamic-code`、stale recovery-state の案内を検証します。
 
 ## Unity CLI Loop 拡張ツールの開発
 Unity CLI Loopはコアパッケージへの変更を必要とせず、プロジェクト固有のツールを効率的に開発できます。
