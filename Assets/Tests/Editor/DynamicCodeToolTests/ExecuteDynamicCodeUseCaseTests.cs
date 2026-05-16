@@ -42,6 +42,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(serializedResponse["Timings"], Is.Null);
             Assert.That(serializedResponse["EmitTimingsInJsonResponse"], Is.Null);
             Assert.That(serializedResponse["EmitsTimingsInJsonResponse"], Is.Null);
+            Assert.That(serializedResponse["DomainReloadWaitRequired"], Is.Null);
+        }
+
+        [Test]
+        public void DynamicCodeDomainReloadWaitSignal_WhenEditorReportsReloadWork_ShouldRequestWait()
+        {
+            // Tests that native CLI waits are driven by explicit Unity reload signals.
+            ExecuteDynamicCodeSchema schema = new()
+            {
+                WaitForDomainReload = true,
+                CompileOnly = false
+            };
+
+            bool shouldWait = DynamicCodeDomainReloadWaitSignal.ShouldRequestWait(
+                schema,
+                editorIsCompiling: true,
+                reloadSignalObserved: false);
+
+            Assert.That(shouldWait, Is.True);
+        }
+
+        [Test]
+        public void DynamicCodeDomainReloadWaitSignal_WhenRequestCannotWait_ShouldNotRequestWait()
+        {
+            // Tests that compile-only and explicit no-wait requests keep their fast paths.
+            ExecuteDynamicCodeSchema compileOnlySchema = new()
+            {
+                WaitForDomainReload = true,
+                CompileOnly = true
+            };
+            ExecuteDynamicCodeSchema noWaitSchema = new()
+            {
+                WaitForDomainReload = false,
+                CompileOnly = false
+            };
+
+            bool compileOnlyShouldWait = DynamicCodeDomainReloadWaitSignal.ShouldRequestWait(
+                compileOnlySchema,
+                editorIsCompiling: true,
+                reloadSignalObserved: true);
+            bool noWaitShouldWait = DynamicCodeDomainReloadWaitSignal.ShouldRequestWait(
+                noWaitSchema,
+                editorIsCompiling: true,
+                reloadSignalObserved: true);
+
+            Assert.That(compileOnlyShouldWait, Is.False);
+            Assert.That(noWaitShouldWait, Is.False);
         }
 
         [Test]

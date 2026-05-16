@@ -27,18 +27,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 nativeCliInstaller.InstalledVersion,
-                Is.EqualTo(CliConstants.CLI_RELEASE_TAG_PREFIX + CliConstants.MINIMUM_REQUIRED_CLI_VERSION));
+                Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_RELEASE_TAG));
         }
 
         [Test]
-        public void GetMinimumRequiredCliVersion_RequiresTerminalUninstallCliRelease()
+        public void GetMinimumRequiredCliVersion_RequiresDynamicCodeDomainReloadWaitCliRelease()
         {
-            // Verifies this package release rejects CLIs older than the terminal uninstall command.
+            // Verifies this package release rejects CLIs without dynamic-code domain reload waiting.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.8"));
+            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.9"));
+        }
+
+        [Test]
+        public void GetMinimumRequiredCliReleaseTag_UsesCliGitHubReleaseTag()
+        {
+            // Verifies installers target the prefixed CLI GitHub Release tag.
+            CliSetupApplicationService service = new(
+                new FakeCliInstallationDetector(new string[] { null }),
+                new FakeNativeCliInstaller());
+
+            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo("cli-v3.0.0-beta.9"));
         }
 
         [Test]
@@ -56,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 command.ManualCommand,
-                Is.EqualTo("install " + CliConstants.CLI_RELEASE_TAG_PREFIX + CliConstants.MINIMUM_REQUIRED_CLI_VERSION));
+                Is.EqualTo("install " + CliConstants.MINIMUM_REQUIRED_CLI_RELEASE_TAG));
         }
 
         private sealed class FakeCliInstallationDetector : ICliInstallationDetector

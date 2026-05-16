@@ -1,5 +1,6 @@
 ---
 name: uloop-execute-dynamic-code
+toolName: execute-dynamic-code
 description: "Execute C# code dynamically in Unity Editor. Use find-game-objects first for basic selected GameObject discovery or property inspection. Use when you need to: (1) Wire prefab/material references and AddComponent operations, (2) Edit SerializedObject properties and reference wiring, (3) Perform scene/hierarchy edits and batch operations, (4) Execute Unity Editor menu commands through EditorApplication.ExecuteMenuItem, (5) PlayMode automation (click buttons, invoke methods, tweak runtime state), (6) PlayMode UI controls (InputField, Slider, Toggle, Dropdown), (7) PlayMode inspection that requires custom Unity API code beyond existing tools. NOT for file I/O or script authoring."
 context: fork
 ---
@@ -24,6 +25,7 @@ For basic selected GameObject discovery or property inspection, use `find-game-o
 - **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell doubles inner quotes (`'Debug.Log(""Hello!"");'`).
 - `--parameters {}` (advanced, optional): Pass an object when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets, and pass an object instead of a JSON string.
 - `--compile-only` (optional): Compile the snippet without executing it. Use this when you want Roslyn diagnostics before running new code.
+- `--no-wait-for-domain-reload` (optional): Return without waiting for Domain Reload recovery. Omit this for normal editor mutation workflows.
 
 ## Code Rules
 

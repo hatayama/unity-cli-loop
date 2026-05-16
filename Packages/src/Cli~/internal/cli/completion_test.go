@@ -57,6 +57,68 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 	}
 }
 
+func TestCompletionListOptionsUsesExecuteDynamicCodeNoWaitFlag(t *testing.T) {
+	// Verifies shell completion exposes the default-on reload wait as a negated flag.
+	var stdout bytes.Buffer
+	handled, code := tryHandleCompletionRequest(
+		[]string{"--list-options", executeDynamicCodeCommandName},
+		loadDefaultTools(),
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "--no-wait-for-domain-reload") {
+		t.Fatalf("execute-dynamic-code no-wait option was not listed: %s", output)
+	}
+	if strings.Contains(output, "--wait-for-domain-reload") {
+		t.Fatalf("execute-dynamic-code wait option should be negated only: %s", output)
+	}
+}
+
+func TestCompletionListOptionsUsesEmbeddedExecuteDynamicCodeDefinition(t *testing.T) {
+	// Verifies stale project caches do not hide hot-path execute-dynamic-code options.
+	var stdout bytes.Buffer
+	cache := toolsCache{
+		Tools: []toolDefinition{
+			{
+				Name: "execute-dynamic-code",
+				InputSchema: inputSchema{
+					Properties: map[string]toolProperty{
+						"Code": {Type: "string"},
+					},
+				},
+			},
+		},
+	}
+
+	handled, code := tryHandleCompletionRequest(
+		[]string{"--list-options", executeDynamicCodeCommandName},
+		cache,
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "--no-wait-for-domain-reload") {
+		t.Fatalf("embedded execute-dynamic-code options were not used: %s", output)
+	}
+}
+
 func TestCompletionListOptionsUsesNativeLaunchOptions(t *testing.T) {
 	// Verifies shell completion still suggests native launch flags after CLI unification.
 	var stdout bytes.Buffer

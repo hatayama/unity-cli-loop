@@ -65,6 +65,70 @@ func TestShouldWaitForCompileDomainReloadRespectsExplicitFalse(t *testing.T) {
 	}
 }
 
+// Verifies that execute-dynamic-code waits for domain reload by default.
+func TestShouldWaitForExecuteDynamicCodeDomainReloadDefaultsToExecuteDynamicCode(t *testing.T) {
+	if !shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, map[string]any{}) {
+		t.Fatal("execute-dynamic-code should wait for domain reload by default")
+	}
+
+	if shouldWaitForExecuteDynamicCodeDomainReload("get-logs", map[string]any{}) {
+		t.Fatal("non-execute-dynamic-code commands should not use dynamic-code wait")
+	}
+}
+
+// Verifies that execute-dynamic-code can preserve the fast no-wait path.
+func TestShouldWaitForExecuteDynamicCodeDomainReloadRespectsExplicitFalse(t *testing.T) {
+	params := map[string]any{compileWaitParam: false}
+
+	if shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, params) {
+		t.Fatal("execute-dynamic-code wait should be disabled by an explicit false flag")
+	}
+}
+
+// Verifies that compile-only dynamic-code requests keep the diagnostic path fast.
+func TestShouldWaitForExecuteDynamicCodeDomainReloadSkipsCompileOnly(t *testing.T) {
+	params := map[string]any{"CompileOnly": true}
+
+	if shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, params) {
+		t.Fatal("compile-only execute-dynamic-code should not wait for domain reload")
+	}
+}
+
+// Verifies that execute-dynamic-code waits only when Unity explicitly reports a reload signal.
+func TestExecuteDynamicCodeDomainReloadWaitRequiredReadsResponseSignal(t *testing.T) {
+	result := []byte(`{"Success":true,"DomainReloadWaitRequired":true}`)
+
+	if !executeDynamicCodeDomainReloadWaitRequired(result) {
+		t.Fatal("dynamic-code response should request a reload wait")
+	}
+
+	if executeDynamicCodeDomainReloadWaitRequired([]byte(`{"Success":true}`)) {
+		t.Fatal("dynamic-code response without a reload signal should not request a wait")
+	}
+}
+
+// Verifies that dispatched dynamic-code disconnects still wait for reload recovery.
+func TestShouldWaitForExecuteDynamicCodeDisconnectWaitsAfterDispatchedTransportLoss(t *testing.T) {
+	outcome := unityipc.UnitySendOutcome{RequestDispatched: true}
+
+	if !shouldWaitForExecuteDynamicCodeDisconnect(fmt.Errorf("EOF"), outcome) {
+		t.Fatal("dispatched transport loss should wait for domain reload recovery")
+	}
+
+	if shouldWaitForExecuteDynamicCodeDisconnect(fmt.Errorf("EOF"), unityipc.UnitySendOutcome{}) {
+		t.Fatal("undispatched transport loss should not use dynamic-code reload wait")
+	}
+}
+
+// Verifies that the CLI does not expose its internal reload-wait response field to users.
+func TestStripExecuteDynamicCodeControlResultRemovesReloadSignal(t *testing.T) {
+	result := stripExecuteDynamicCodeControlResult([]byte(`{"Success":true,"DomainReloadWaitRequired":true}`))
+
+	if strings.Contains(string(result), "DomainReloadWaitRequired") {
+		t.Fatalf("control field leaked into user output: %s", result)
+	}
+}
+
 // Verifies that compile wait preparation creates a request id and enables reload waiting.
 func TestPrepareCompileWaitParamsForcesDomainReloadWait(t *testing.T) {
 	params := map[string]any{}

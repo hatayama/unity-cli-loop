@@ -18,7 +18,7 @@ import (
 const (
 	compileCommandName       = "compile"
 	compileRequestIDParam    = "RequestId"
-	compileWaitParam         = "WaitForDomainReload"
+	compileWaitParam         = domainReloadWaitParam
 	compileResultRelativeDir = "Temp/UnityCliLoop/compile-results"
 	compileWaitTimeout       = 90 * time.Second
 	compileWaitPollInterval  = 50 * time.Millisecond
@@ -37,18 +37,7 @@ func shouldWaitForCompileDomainReload(command string, params map[string]any) boo
 	if command != compileCommandName {
 		return false
 	}
-	return compileDomainReloadWaitEnabled(params)
-}
-
-func compileDomainReloadWaitEnabled(params map[string]any) bool {
-	value, ok := params[compileWaitParam].(bool)
-	if ok {
-		return value
-	}
-
-	// Why: native CLI compile is a user-facing checkpoint; waiting by default
-	// ensures the post-compile readiness probe runs after the domain is usable.
-	return true
+	return domainReloadWaitEnabled(params)
 }
 
 func prepareCompileWaitParams(params map[string]any) (string, error) {
