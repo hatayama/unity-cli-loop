@@ -47,6 +47,9 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	if handled, code := tryHandleUpdateRequest(ctx, remainingArgs, stdout, stderr); handled {
 		return code
 	}
+	if handled, code := tryHandleUninstallRequest(ctx, remainingArgs, stdout, stderr); handled {
+		return code
+	}
 	if handled, code := tryHandleLaunchRequest(ctx, remainingArgs, startPath, projectPath, stdout, stderr); handled {
 		return code
 	}

@@ -14,6 +14,7 @@ var nativeCommands = []nativeCommandEntry{
 	{name: "skills", description: "List, install, or uninstall agent skills"},
 	{name: "completion", description: "Print or install shell completion"},
 	{name: "update", description: "Update the global uloop launcher binary"},
+	{name: "uninstall", description: "Remove the global uloop launcher binary"},
 }
 
 func nativeCommandNamesForCompletion() []string {
