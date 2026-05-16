@@ -178,6 +178,21 @@ func classifyError(err error, context errorContext) cliError {
 		}
 	}
 
+	if message == uninstallUnsupportedOSMessage {
+		return cliError{
+			ErrorCode:   errorCodeInvalidArgument,
+			Phase:       errorPhaseExecution,
+			Message:     message,
+			Retryable:   false,
+			SafeToRetry: false,
+			Command:     context.command,
+			NextActions: []string{
+				"Run `uloop uninstall` on macOS or Windows.",
+				"Remove the uloop launcher binary manually on this platform.",
+			},
+		}
+	}
+
 	return internalCLIError(message, context)
 }
 
