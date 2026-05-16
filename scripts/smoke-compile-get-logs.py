@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test compile --wait-for-domain-reload followed immediately by get-logs."""
+"""Smoke test compile followed immediately by get-logs after domain reload."""
 
 import argparse
 import os
@@ -51,10 +51,7 @@ def assert_ready(project_path: str, timeout: float) -> None:
 def assert_compile_then_get_logs(project_path: str, timeout: float, round_index: int) -> None:
     compile_started_at = time.time()
     compile_result = run_uloop(
-        [
-            "compile",
-            "--wait-for-domain-reload",
-        ],
+        ["compile"],
         project_path,
         timeout,
     )

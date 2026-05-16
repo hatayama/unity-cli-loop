@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,6 +117,74 @@ func TestReadServerStateReadsSharedTempPath(t *testing.T) {
 	}
 	if state.Phase != "ready" || state.Endpoint != "endpoint" {
 		t.Fatalf("server state mismatch: %#v", state)
+	}
+}
+
+// Verifies that transient read failures are retried before reporting server state as unreadable.
+func TestReadServerStateRetriesTransientReadError(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeReadinessServerStateForTest(t, projectRoot, `{"phase":"ready","generationId":"gen"}`)
+	statePath := filepath.Join(projectRoot, serverStateRelativePath)
+	attempts := 0
+
+	originalReadFile := readServerStateFileContent
+	originalRetryDelay := serverStateReadRetryDelay
+	readServerStateFileContent = func(path string) ([]byte, error) {
+		if path == statePath && attempts < 2 {
+			attempts++
+			return nil, errors.New("transient file lock")
+		}
+		return os.ReadFile(path)
+	}
+	serverStateReadRetryDelay = 0
+	t.Cleanup(func() {
+		readServerStateFileContent = originalReadFile
+		serverStateReadRetryDelay = originalRetryDelay
+	})
+
+	state, ok, err := readServerState(projectRoot)
+	if err != nil {
+		t.Fatalf("readServerState failed: %v", err)
+	}
+	if !ok || state.Phase != "ready" {
+		t.Fatalf("server state mismatch: ok=%v state=%#v", ok, state)
+	}
+	if attempts != 2 {
+		t.Fatalf("retry count mismatch: %d", attempts)
+	}
+}
+
+// Verifies that partially published server state JSON is retried before failing.
+func TestReadServerStateRetriesPartialJSON(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeReadinessServerStateForTest(t, projectRoot, `{"phase":"ready","generationId":"gen"}`)
+	statePath := filepath.Join(projectRoot, serverStateRelativePath)
+	attempts := 0
+
+	originalReadFile := readServerStateFileContent
+	originalRetryDelay := serverStateReadRetryDelay
+	readServerStateFileContent = func(path string) ([]byte, error) {
+		if path == statePath && attempts < 2 {
+			attempts++
+			return []byte(`{"phase":`), nil
+		}
+		return os.ReadFile(path)
+	}
+	serverStateReadRetryDelay = 0
+	t.Cleanup(func() {
+		readServerStateFileContent = originalReadFile
+		serverStateReadRetryDelay = originalRetryDelay
+	})
+
+	state, ok, err := readServerState(projectRoot)
+	if err != nil {
+		t.Fatalf("readServerState failed: %v", err)
+	}
+	if !ok || state.Phase != "ready" {
+		t.Fatalf("server state mismatch: ok=%v state=%#v", ok, state)
+	}
+	if attempts != 2 {
+		t.Fatalf("retry count mismatch: %d", attempts)
 	}
 }
 

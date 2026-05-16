@@ -474,17 +474,14 @@ PlayMode中のキーボード・マウス入力をフレーム単位でJSONフ�
 → replay-input (Action: Stop)
 ```
 
-terminal から uloop コマンドを実行するE2Eヘルパーは、POSIXシェル向けとWindows PowerShell向けの両方があります:
+terminal から uloop コマンドを実行するE2Eは、shell 系統ごとに1つのrunnerから実行します:
 
 ```bash
+sh scripts/run-posix-e2e.sh --project-path /path/to/unity-project
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps1
-
-sh Assets/Tests/Demo/scripts/verify-replay-via-cli.sh
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Assets\Tests\Demo\scripts\verify-replay-via-cli.ps1 -AutomatedInput
-
-sh scripts/test-simulate-mouse-demo.sh
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-simulate-mouse-demo.ps1
 ```
+
+`run-posix-e2e.sh` は、デフォルトでチェックイン済みのネイティブCLIバイナリを使い、すべての `uloop` 呼び出しに明示的な `--project-path` を渡します。CLI recovery/readiness、input record/replay、simulate-mouse UI を1つの流れで検証します。
 
 ## Unity CLI Loop 拡張ツールの開発
 Unity CLI Loopはコアパッケージへの変更を必要とせず、プロジェクト固有のツールを効率的に開発できます。

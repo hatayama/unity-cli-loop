@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -13,6 +14,12 @@ const (
 	serverStateCompletedTempSuffix  = ".tmp"
 	serverStateInProgressTempSuffix = ".tmp.write"
 	serverStateBackupSuffix         = ".bak"
+	serverStateReadRetryAttempts    = 20
+)
+
+var (
+	readServerStateFileContent = os.ReadFile
+	serverStateReadRetryDelay  = 25 * time.Millisecond
 )
 
 type serverState struct {
@@ -48,23 +55,33 @@ func (err staleServerStateError) Error() string {
 
 func readServerState(projectRoot string) (serverState, bool, error) {
 	statePath := filepath.Join(projectRoot, serverStateRelativePath)
-	content, ok, err := readServerStateFile(statePath)
-	if err != nil {
-		return serverState{}, false, err
-	}
-	if !ok {
-		return serverState{}, false, nil
-	}
+	var lastErr error
+	for attempt := 0; attempt <= serverStateReadRetryAttempts; attempt++ {
+		content, ok, err := readServerStateFile(statePath)
+		if err != nil {
+			return serverState{}, false, err
+		}
+		if !ok {
+			return serverState{}, false, nil
+		}
 
-	var state serverState
-	if err := json.Unmarshal(content, &state); err != nil {
-		return serverState{}, false, fmt.Errorf("server readiness state is unreadable: %w", err)
+		var state serverState
+		if err := json.Unmarshal(content, &state); err == nil {
+			return state, true, nil
+		} else {
+			lastErr = err
+		}
+
+		if attempt < serverStateReadRetryAttempts {
+			// Unity can briefly expose a truncated readiness file while replacing it.
+			time.Sleep(serverStateReadRetryDelay)
+		}
 	}
-	return state, true, nil
+	return serverState{}, false, fmt.Errorf("server readiness state is unreadable: %w", lastErr)
 }
 
 func readServerStateFile(statePath string) ([]byte, bool, error) {
-	content, err := os.ReadFile(statePath)
+	content, err := readServerStateFileWithRetry(statePath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, false, err
@@ -74,7 +91,7 @@ func readServerStateFile(statePath string) ([]byte, bool, error) {
 	}
 
 	for _, sidecarPath := range []string{statePath + serverStateCompletedTempSuffix, statePath + serverStateBackupSuffix} {
-		sidecarContent, sidecarErr := os.ReadFile(sidecarPath)
+		sidecarContent, sidecarErr := readServerStateFileWithRetry(sidecarPath)
 		if sidecarErr == nil {
 			return sidecarContent, true, nil
 		}
@@ -84,6 +101,23 @@ func readServerStateFile(statePath string) ([]byte, bool, error) {
 	}
 
 	return nil, false, nil
+}
+
+func readServerStateFileWithRetry(statePath string) ([]byte, error) {
+	var lastErr error
+	for attempt := 0; attempt <= serverStateReadRetryAttempts; attempt++ {
+		content, err := readServerStateFileContent(statePath)
+		if err == nil || os.IsNotExist(err) {
+			return content, err
+		}
+
+		lastErr = err
+		if attempt < serverStateReadRetryAttempts {
+			// Unity can briefly publish the readiness file with an exclusive Windows handle.
+			time.Sleep(serverStateReadRetryDelay)
+		}
+	}
+	return nil, lastErr
 }
 
 func isServerStateBusy(state serverState) bool {
