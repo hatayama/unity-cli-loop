@@ -7,6 +7,8 @@ SCENE_PATH="Assets/Scenes/SimulateMouseDemoScene.unity"
 TMP_DIR="${TMPDIR:-/tmp}/unity-cli-loop-simulate-mouse"
 ELEMENTS_JSON="$TMP_DIR/simulate-mouse-elements.json"
 ORIGINAL_GAME_VIEW_SIZE_INDEX=""
+PROJECT_PATH=""
+ULOOP_PATH="${ULOOP_BIN:-uloop}"
 
 fail() {
     printf 'ERROR: %s\n' "$1" >&2
@@ -14,19 +16,50 @@ fail() {
 }
 
 cleanup() {
-    uloop control-play-mode --action Stop >/dev/null 2>&1 || true
+    run_uloop control-play-mode --action Stop >/dev/null 2>&1 || true
     if [ -n "${ORIGINAL_GAME_VIEW_SIZE_INDEX:-}" ]; then
         restore_game_view_size_index "$ORIGINAL_GAME_VIEW_SIZE_INDEX" >/dev/null 2>&1 || true
     fi
 }
 trap cleanup EXIT INT TERM
 
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --project-path)
+            [ "$#" -ge 2 ] || fail "--project-path requires a value"
+            PROJECT_PATH=$2
+            shift 2
+            ;;
+        --uloop-path)
+            [ "$#" -ge 2 ] || fail "--uloop-path requires a value"
+            ULOOP_PATH=$2
+            shift 2
+            ;;
+        -h|--help)
+            printf 'Usage: sh scripts/test-simulate-mouse-demo.sh [--project-path <path>] [--uloop-path <path>]\n'
+            exit 0
+            ;;
+        *)
+            fail "unknown option: $1"
+            ;;
+    esac
+done
+
 require_jq() {
     command -v jq >/dev/null 2>&1 || fail "jq is required to parse uloop JSON responses"
 }
 
+run_uloop() {
+    if [ -n "$PROJECT_PATH" ]; then
+        "$ULOOP_PATH" --project-path "$PROJECT_PATH" "$@"
+        return
+    fi
+
+    "$ULOOP_PATH" "$@"
+}
+
 run_uloop_json() {
-    if ! output=$(uloop "$@" 2>&1); then
+    if ! output=$(run_uloop "$@" 2>&1); then
         printf '%s\n' "$output" >&2
         fail "uloop $* failed"
     fi
@@ -53,7 +86,7 @@ assert_text_equals() {
 wait_unity_ready() {
     attempt=0
     while [ "$attempt" -lt 15 ]; do
-        if uloop get-logs --max-count 1 >/dev/null 2>&1; then
+        if run_uloop get-logs --max-count 1 >/dev/null 2>&1; then
             return
         fi
 
@@ -80,7 +113,7 @@ wait_play_mode() {
 }
 
 initialize_demo_scene() {
-    uloop control-play-mode --action Stop >/dev/null 2>&1 || true
+    run_uloop control-play-mode --action Stop >/dev/null 2>&1 || true
 
     code="
 using UnityEditor.SceneManagement;

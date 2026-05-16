@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 	"unicode/utf16"
 )
@@ -34,7 +34,7 @@ func CommandForOS(goos string, options Options) (Command, error) {
 
 	switch goos {
 	case "darwin":
-		targetPath := filepath.Join(options.InstallDir, PosixCommandName)
+		targetPath := path.Join(options.InstallDir, PosixCommandName)
 		script := "rm -f " + shellQuote(targetPath)
 		return Command{
 			Name:       "sh",

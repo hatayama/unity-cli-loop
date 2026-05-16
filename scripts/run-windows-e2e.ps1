@@ -263,6 +263,30 @@ function Invoke-ScriptChecked {
     }
 }
 
+function Invoke-GoScriptChecked {
+    param(
+        [string]$ScriptPath,
+        [string[]]$Arguments = @()
+    )
+
+    [string[]]$scriptArguments = @("run", $ScriptPath) + $Arguments
+    [string]$previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        [object[]]$output = & go @scriptArguments 2>&1
+        [int]$exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    [string]$text = ($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+    Write-Host $text
+    if ($exitCode -ne 0) {
+        throw "$ScriptPath failed with exit code $exitCode"
+    }
+}
+
 function Invoke-Step {
     param(
         [string]$Name,
@@ -297,9 +321,19 @@ function Invoke-CoreToolSmoke {
     Invoke-UloopJsonChecked -CommandArguments @("hello-world") | Out-Null
     Invoke-UloopJsonChecked -CommandArguments @("focus-window") | Out-Null
     Invoke-UloopJsonChecked -CommandArguments @("clear-console") | Out-Null
-    Invoke-UloopJsonChecked -CommandArguments @("compile", "--wait-for-domain-reload") | Out-Null
+    Invoke-UloopJsonChecked -CommandArguments @("compile") | Out-Null
     Wait-UnityReady
     Invoke-UloopJsonChecked -CommandArguments @("get-logs", "--log-type", "All", "--max-count", "1") | Out-Null
+}
+
+function Invoke-CliRecoveryReadinessSmoke {
+    [System.Management.Automation.CommandInfo]$uloopCommand = Get-Command uloop -CommandType Application -ErrorAction Stop
+    Invoke-GoScriptChecked -ScriptPath (Resolve-ProjectRelativePath -RelativePath "scripts\smoke-cli-recovery-readiness.go") -Arguments @(
+        "--project-path",
+        $ResolvedProjectPath,
+        "--uloop-path",
+        $uloopCommand.Source
+    )
 }
 
 function Invoke-DiscoverySmoke {
@@ -327,7 +361,7 @@ function Invoke-RunTestsSmoke {
 function Invoke-CompileGetLogsStress {
     for ([int]$round = 1; $round -le $StressRounds; $round++) {
         Write-Host "stress round $round/$StressRounds"
-        Invoke-UloopJsonChecked -CommandArguments @("compile", "--wait-for-domain-reload") | Out-Null
+        Invoke-UloopJsonChecked -CommandArguments @("compile") | Out-Null
         Wait-UnityReady
         Invoke-UloopJsonChecked -CommandArguments @("get-logs", "--max-count", "1") | Out-Null
         Start-Sleep -Seconds 1
@@ -347,6 +381,7 @@ return cube.transform.position.z;
 
 try {
     Invoke-Step -Name "Launch Smoke" -Body { Invoke-LaunchSmoke }
+    Invoke-Step -Name "CLI Recovery Readiness Smoke" -Body { Invoke-CliRecoveryReadinessSmoke }
     Invoke-Step -Name "Core CLI Tool Smoke" -Body { Invoke-CoreToolSmoke }
     Invoke-Step -Name "Discovery and Screenshot Smoke" -Body { Invoke-DiscoverySmoke }
     Invoke-Step -Name "Run Tests Smoke" -Body { Invoke-RunTestsSmoke }

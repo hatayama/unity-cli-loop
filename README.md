@@ -473,17 +473,14 @@ Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording
 → replay-input (Action: Stop)
 ```
 
-Terminal-driven E2E helpers are available for both POSIX shells and Windows PowerShell:
+Terminal-driven E2E coverage is available through one runner per shell family:
 
 ```bash
+sh scripts/run-posix-e2e.sh --project-path /path/to/unity-project
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps1
-
-sh Assets/Tests/Demo/scripts/verify-replay-via-cli.sh
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Assets\Tests\Demo\scripts\verify-replay-via-cli.ps1 -AutomatedInput
-
-sh scripts/test-simulate-mouse-demo.sh
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-simulate-mouse-demo.ps1
 ```
+
+`run-posix-e2e.sh` uses the checked-in native CLI binary by default, passes an explicit `--project-path` to every `uloop` invocation, and runs CLI recovery/readiness, input record/replay, and simulate-mouse UI coverage in one sequence.
 
 ## Unity CLI Loop Extension Development
 Unity CLI Loop enables efficient development of project-specific tools without requiring changes to the core package.
