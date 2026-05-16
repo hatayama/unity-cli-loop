@@ -327,7 +327,7 @@ function Invoke-CoreToolSmoke {
 }
 
 function Invoke-CliRecoveryReadinessSmoke {
-    [System.Management.Automation.CommandInfo]$uloopCommand = Get-Command uloop -ErrorAction Stop
+    [System.Management.Automation.CommandInfo]$uloopCommand = Get-Command uloop -CommandType Application -ErrorAction Stop
     Invoke-GoScriptChecked -ScriptPath (Resolve-ProjectRelativePath -RelativePath "scripts\smoke-cli-recovery-readiness.go") -Arguments @(
         "--project-path",
         $ResolvedProjectPath,
