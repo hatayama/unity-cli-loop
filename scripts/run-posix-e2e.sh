@@ -131,7 +131,7 @@ printf 'uloop_path=%s\n' "$ULOOP_PATH"
 
 if [ "$SKIP_RECOVERY_READINESS" = false ]; then
     run_step "CLI recovery/readiness" \
-        python3 "$ROOT_DIR/scripts/smoke-cli-recovery-readiness.py" \
+        go run "$ROOT_DIR/scripts/smoke-cli-recovery-readiness.go" \
             --project-path "$PROJECT_PATH" \
             --uloop-path "$ULOOP_PATH" \
             --timeout "$TIMEOUT_SECONDS" \

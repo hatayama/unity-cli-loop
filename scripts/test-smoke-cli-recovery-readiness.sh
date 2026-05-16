@@ -4,7 +4,15 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/uloop-recovery-e2e-test.XXXXXX")
 PROJECT_PATH="$TMP_DIR/project"
-FAKE_ULOOP="$TMP_DIR/uloop"
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        FAKE_ULOOP="$TMP_DIR/uloop.exe"
+        ;;
+    *)
+        FAKE_ULOOP="$TMP_DIR/uloop"
+        ;;
+esac
+FAKE_ULOOP_SOURCE="$TMP_DIR/fake-uloop.go"
 CALL_LOG="$TMP_DIR/calls.log"
 
 cleanup() {
@@ -15,73 +23,102 @@ trap cleanup EXIT INT TERM
 
 mkdir -p "$PROJECT_PATH/Assets" "$PROJECT_PATH/ProjectSettings"
 
-cat > "$FAKE_ULOOP" <<'EOF'
-#!/bin/sh
-set -eu
+cat > "$FAKE_ULOOP_SOURCE" <<'EOF'
+package main
 
-if [ "$#" -lt 3 ] || [ "$1" != "--project-path" ]; then
-    echo "missing leading --project-path" >&2
-    exit 99
-fi
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
 
-project_path="$2"
-shift 2
-command_name="$1"
-shift
+func main() {
+	if len(os.Args) < 4 || os.Args[1] != "--project-path" {
+		fmt.Fprintln(os.Stderr, "missing leading --project-path")
+		os.Exit(99)
+	}
 
-printf '%s|%s|%s\n' "$project_path" "$command_name" "$*" >> "$CALL_LOG"
+	projectPath := os.Args[2]
+	commandName := os.Args[3]
+	commandArgs := os.Args[4:]
+	appendCallLog(projectPath, commandName, commandArgs)
 
-case "$command_name" in
-    launch)
-        echo "Unity is already running for $project_path (PID: 1234)"
-        ;;
-    get-logs)
-        if [ -f "$project_path/Temp/UnityCliLoop/server-state.json" ]; then
-            cat >&2 <<'JSON'
-{
-  "success": false,
-  "error": {
-    "errorCode": "UNITY_NOT_REACHABLE",
-    "message": "Unity is not running, but a stale Unity CLI Loop recovery state file says it is still busy.",
-    "nextActions": [
-      "Run `uloop fix` to remove stale recovery state files."
-    ]
-  }
+	switch commandName {
+	case "launch":
+		fmt.Printf("Unity is already running for %s (PID: 1234)\n", projectPath)
+	case "get-logs":
+		if fileExists(filepath.Join(projectPath, "Temp", "UnityCliLoop", "server-state.json")) {
+			fmt.Fprintln(os.Stderr, "{\n  \"success\": false,\n  \"error\": {\n    \"errorCode\": \"UNITY_NOT_REACHABLE\",\n    \"message\": \"Unity is not running, but a stale Unity CLI Loop recovery state file says it is still busy.\",\n    \"nextActions\": [\n      \"Run `uloop fix` to remove stale recovery state files.\"\n    ]\n  }\n}")
+			os.Exit(1)
+		}
+		fmt.Println(`{"DisplayedCount":0,"Logs":[],"MaxCount":1,"TotalCount":0}`)
+	case "compile":
+		fmt.Println(`{"Success":true,"ErrorCount":0,"WarningCount":0}`)
+	case "execute-dynamic-code":
+		fmt.Println(`{"Success":true,"Result":"cli-recovery-readiness-e2e"}`)
+	case "fix":
+		removeRecoveryStateFiles(projectPath)
+		fmt.Println("Cleaned up 1 recovery state file(s).")
+	default:
+		fmt.Fprintf(os.Stderr, "unexpected command: %s\n", commandName)
+		os.Exit(98)
+	}
 }
-JSON
-            exit 1
-        fi
-        echo '{"DisplayedCount":0,"Logs":[],"MaxCount":1,"TotalCount":0}'
-        ;;
-    compile)
-        echo '{"Success":true,"ErrorCount":0,"WarningCount":0}'
-        ;;
-    execute-dynamic-code)
-        echo '{"Success":true,"Result":"cli-recovery-readiness-e2e"}'
-        ;;
-    fix)
-        rm -f "$project_path/Temp/UnityCliLoop/server-state.json" \
-            "$project_path/Temp/UnityCliLoop/server-state.json.tmp" \
-            "$project_path/Temp/UnityCliLoop/server-state.json.tmp.write" \
-            "$project_path/Temp/UnityCliLoop/server-state.json.bak"
-        echo "Cleaned up 1 recovery state file(s)."
-        ;;
-    *)
-        echo "unexpected command: $command_name" >&2
-        exit 98
-        ;;
-esac
-EOF
-chmod +x "$FAKE_ULOOP"
 
-CALL_LOG="$CALL_LOG" python3 "$ROOT_DIR/scripts/smoke-cli-recovery-readiness.py" \
+func appendCallLog(projectPath string, commandName string, commandArgs []string) {
+	callLogPath := os.Getenv("CALL_LOG")
+	if callLogPath == "" {
+		fmt.Fprintln(os.Stderr, "CALL_LOG is required")
+		os.Exit(97)
+	}
+
+	line := fmt.Sprintf("%s|%s|%s\n", projectPath, commandName, strings.Join(commandArgs, " "))
+	file, err := os.OpenFile(callLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(96)
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString(line); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(95)
+	}
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func removeRecoveryStateFiles(projectPath string) {
+	stateDir := filepath.Join(projectPath, "Temp", "UnityCliLoop")
+	files := []string{
+		"server-state.json",
+		"server-state.json.tmp",
+		"server-state.json.tmp.write",
+		"server-state.json.bak",
+	}
+	for _, file := range files {
+		_ = os.Remove(filepath.Join(stateDir, file))
+	}
+}
+EOF
+
+go build -o "$FAKE_ULOOP" "$FAKE_ULOOP_SOURCE"
+
+if ! CALL_LOG="$CALL_LOG" go run "$ROOT_DIR/scripts/smoke-cli-recovery-readiness.go" \
     --project-path "$PROJECT_PATH" \
     --uloop-path "$FAKE_ULOOP" \
     --timeout 2 \
-    --launch-timeout 2 > "$TMP_DIR/output.txt"
+    --launch-timeout 2 > "$TMP_DIR/output.txt"; then
+    cat "$TMP_DIR/output.txt"
+    exit 1
+fi
 
 grep -F "launch" "$CALL_LOG" >/dev/null
-grep -F "compile|--wait-for-domain-reload" "$CALL_LOG" >/dev/null
+grep -E '\|compile\|$' "$CALL_LOG" >/dev/null
 grep -F "execute-dynamic-code" "$CALL_LOG" >/dev/null
 grep -F "fix" "$CALL_LOG" >/dev/null
 grep -F "stale recovery-state check passed" "$TMP_DIR/output.txt" >/dev/null
