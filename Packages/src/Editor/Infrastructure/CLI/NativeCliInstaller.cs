@@ -261,7 +261,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (canceled)
                 {
-                    return new CliInstallResult(false, "Release CLI installer was canceled.");
+                    return new CliInstallResult(
+                        false,
+                        $"{BuildSentenceSubject(commandDescription)} was canceled.");
                 }
 
                 return new CliInstallResult(

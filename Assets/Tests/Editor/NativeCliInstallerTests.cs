@@ -253,6 +253,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void RunUninstallCommand_WhenCanceledReportsUninstallCommand()
+        {
+            // Verifies shared setup command cancellation reports the uninstall operation.
+            NativeCliInstallCommand command = BuildLongRunningInstallCommand();
+            using CancellationTokenSource cts = new();
+            cts.CancelAfter(10);
+
+            CliInstallResult result = NativeCliInstaller.RunUninstallCommand(
+                command,
+                "/Users/masamichi/.local/bin",
+                cts.Token,
+                1000);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorOutput, Is.EqualTo("Global CLI uninstall command was canceled."));
+        }
+
+        [Test]
         public void BuildUninstallCommand_OnMacRunsInstalledLauncher()
         {
             // Verifies that editor uninstall delegates removal to the installed uloop command.
