@@ -106,6 +106,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.IsFalse(server.IsRunning, "Running server instance should be stopped before domain reload");
         }
 
+        [Test]
+        public void CompleteDomainReload_WhenServerWasNotRunning_ShouldPublishStoppedState()
+        {
+            // Verifies that a domain reload with no server to recover does not leave CLI waiters in recovering state.
+            _editorSettingsService.SetIsServerRunning(false);
+            _domainReloadDetectionService.StartDomainReload("test-correlation", serverIsRunning: false);
+
+            _domainReloadDetectionService.CompleteDomainReload("test-correlation");
+
+            ServerReadinessState state = _stateStore.Read();
+            Assert.That(state.Phase, Is.EqualTo("stopped"));
+            Assert.That(_domainReloadDetectionService.IsLockFilePresent(), Is.False);
+        }
+
         private static ServerReadinessStateStore CreateTestStateStore()
         {
             string projectRoot = System.IO.Path.Combine(

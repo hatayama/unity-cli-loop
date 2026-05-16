@@ -5,6 +5,7 @@ using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -33,34 +34,27 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         private async Task ResetServerScopedServicesAndWarmProjectIpcAsync(CancellationToken ct)
         {
             FirstPartyToolsEditorStartup.ResetServerScopedServices();
-            string requestJson = CreateExecuteDynamicCodeReadinessRequestJson(
-                FirstPartyToolsEditorStartup.CreateExecuteDynamicCodeReadinessProbeCode());
+            string requestJson = CreateGetVersionReadinessRequestJson();
 
             // Why: after server recovery, the next external CLI request otherwise pays the cold
             // project IPC and editor-thread wakeup cost. The composition root owns this transport
-            // readiness work so execute-dynamic-code stays focused on executing user code.
+            // readiness work through an internal command so user-disabled tools do not block startup.
             await _projectIpcWarmupClient.SendProjectIpcRequestAsync(
                 UnityEngine.Application.dataPath + "/..",
                 requestJson,
                 ct);
         }
 
-        internal static string CreateExecuteDynamicCodeReadinessRequestJson(string code)
+        internal static string CreateGetVersionReadinessRequestJson()
         {
             JObject request = new()
             {
                 ["jsonrpc"] = "2.0",
-                ["method"] = "execute-dynamic-code",
+                ["method"] = UnityCliLoopConstants.COMMAND_NAME_GET_VERSION,
                 ["id"] = 1,
                 ["uloop"] = new JObject
                 {
                     ["cliVersion"] = CliConstants.MINIMUM_REQUIRED_CLI_VERSION
-                },
-                ["params"] = new JObject
-                {
-                    ["Code"] = code,
-                    ["CompileOnly"] = false,
-                    ["YieldToForegroundRequests"] = false
                 }
             };
             return request.ToString(Formatting.None);

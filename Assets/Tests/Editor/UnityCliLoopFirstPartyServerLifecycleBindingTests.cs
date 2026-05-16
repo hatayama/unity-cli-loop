@@ -9,14 +9,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class UnityCliLoopFirstPartyServerLifecycleBindingTests
     {
         [Test]
-        public void CreateExecuteDynamicCodeReadinessRequestJson_IncludesCliVersionMetadata()
+        public void CreateGetVersionReadinessRequestJson_UsesInternalHealthCheckWithCliMetadata()
         {
-            // Tests that the internal readiness probe uses the same CLI metadata contract as native CLI requests.
+            // Tests that the internal readiness probe does not depend on user-toggleable tools.
             string requestJson =
-                UnityCliLoopFirstPartyServerLifecycleBinding.CreateExecuteDynamicCodeReadinessRequestJson("return \"ready\";");
+                UnityCliLoopFirstPartyServerLifecycleBinding.CreateGetVersionReadinessRequestJson();
 
             JObject request = JObject.Parse(requestJson);
 
+            Assert.That(request["method"]?.ToString(), Is.EqualTo("get-version"));
             Assert.That(request["uloop"]?["cliVersion"]?.ToString(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_VERSION));
         }
     }

@@ -150,10 +150,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // Lock file is deleted when server startup completes.
             // to avoid a gap between domain reload completion and server ready
+            bool serverWillRecover = _editorSettingsService.GetIsServerRunning();
+            if (!serverWillRecover)
+            {
+                DeleteLockFile();
+            }
+
             _stateStore.Write(
-                ServerReadinessPhase.Recovering,
+                serverWillRecover ? ServerReadinessPhase.Recovering : ServerReadinessPhase.Stopped,
                 correlationId,
-                "domain-reload-after",
+                serverWillRecover ? "domain-reload-after" : "domain-reload-after-no-server",
                 null,
                 null);
 
