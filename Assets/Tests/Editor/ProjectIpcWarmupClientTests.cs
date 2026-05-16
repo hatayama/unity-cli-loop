@@ -35,6 +35,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(exception.Message, Does.Contain("invalid Content-Length"));
         }
 
+        [Test]
+        public void ValidateJsonRpcSuccessResponse_WhenResponseContainsError_Throws()
+        {
+            // Tests that warmup response validation rejects server-side JSON-RPC errors.
+            ProjectIpcWarmupClient client = new();
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => client.ValidateJsonRpcSuccessResponse(
+                    "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32603,\"message\":\"The installed uloop CLI is too old for this Unity package.\"}}"));
+
+            Assert.That(exception.Message, Does.Contain("too old"));
+        }
+
+        [Test]
+        public void ValidateJsonRpcSuccessResponse_WhenResponseContainsResult_DoesNotThrow()
+        {
+            // Tests that warmup response validation accepts successful JSON-RPC responses.
+            ProjectIpcWarmupClient client = new();
+
+            client.ValidateJsonRpcSuccessResponse("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"ok\":true}}");
+        }
+
         private static List<byte> HeaderBytes(string header)
         {
             return new List<byte>(Encoding.ASCII.GetBytes(header));

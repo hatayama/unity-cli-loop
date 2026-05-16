@@ -137,6 +137,28 @@ namespace io.github.hatayama.UnityCliLoop.Application
             }
         }
 
+        public void PublishServerStarted()
+        {
+            Action handlers;
+            lock (_syncRoot)
+            {
+                handlers = _serverStartedHandlers;
+            }
+
+            handlers?.Invoke();
+        }
+
+        public void PublishServerStopping()
+        {
+            Action handlers;
+            lock (_syncRoot)
+            {
+                handlers = _serverStoppingHandlers;
+            }
+
+            handlers?.Invoke();
+        }
+
         private void AddHandler(
             ref Action handlers,
             Action value,

@@ -19,13 +19,58 @@ const (
 
 const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`
 
+type toolReadinessWaitMode int
+
+var findRunningUnityProcessForReadiness = findRunningUnityProcess
+
+const (
+	toolReadinessWaitThroughStopped toolReadinessWaitMode = iota
+	toolReadinessStopWhenServerStops
+)
+
 func waitForToolReadiness(ctx context.Context, projectRoot string) error {
+	return waitForToolReadinessWithMode(ctx, projectRoot, toolReadinessWaitThroughStopped)
+}
+
+func waitForRecoveringToolReadiness(ctx context.Context, projectRoot string) error {
+	return waitForToolReadinessWithMode(ctx, projectRoot, toolReadinessStopWhenServerStops)
+}
+
+func waitForToolReadinessWithMode(ctx context.Context, projectRoot string, mode toolReadinessWaitMode) error {
 	// Why: launch and compile can both recreate Unity's project IPC server; a real
 	// tool request proves the user-visible command will not be the cold transport probe.
 	timeoutContext, cancel := context.WithTimeout(ctx, toolReadinessTimeout)
 	defer cancel()
 
 	for {
+		state, ok, err := readServerState(projectRoot)
+		if err != nil {
+			return err
+		}
+		if ok {
+			if failure := serverStateFailureError(state); failure != nil {
+				return failure
+			}
+			if mode == toolReadinessStopWhenServerStops && isServerStateStopped(state) {
+				return serverStoppedError{state: state}
+			}
+			if isServerStateBusy(state) {
+				stale, err := isBusyServerStateStale(timeoutContext, projectRoot)
+				if err != nil {
+					return err
+				}
+				if stale {
+					return staleServerStateError{state: state}
+				}
+				select {
+				case <-timeoutContext.Done():
+					return toolReadinessDoneError(ctx)
+				case <-time.After(toolReadinessPoll):
+				}
+				continue
+			}
+		}
+
 		if err := probeToolReadinessSequence(timeoutContext, projectRoot); err == nil {
 			return nil
 		}
@@ -36,6 +81,14 @@ func waitForToolReadiness(ctx context.Context, projectRoot string) error {
 		case <-time.After(toolReadinessPoll):
 		}
 	}
+}
+
+func isBusyServerStateStale(ctx context.Context, projectRoot string) (bool, error) {
+	runningProcess, err := findRunningUnityProcessForReadiness(ctx, projectRoot)
+	if err != nil {
+		return false, err
+	}
+	return runningProcess == nil, nil
 }
 
 func toolReadinessDoneError(ctx context.Context) error {

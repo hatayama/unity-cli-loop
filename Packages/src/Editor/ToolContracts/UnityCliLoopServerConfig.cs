@@ -7,6 +7,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     {
         public const int SHUTDOWN_TIMEOUT_SECONDS = 5;
 
+        public const int READINESS_PROBE_TIMEOUT_MS = 30000;
+
         public const string JSONRPC_VERSION = "2.0";
 
         public const int INTERNAL_ERROR_CODE = -32603;

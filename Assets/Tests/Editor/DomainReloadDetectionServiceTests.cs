@@ -14,13 +14,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private UnityCliLoopEditorSettingsData _originalSettings;
         private UnityCliLoopEditorSettingsService _editorSettingsService;
         private IDomainReloadDetectionService _domainReloadDetectionService;
+        private ServerReadinessStateStore _stateStore;
 
         [SetUp]
         public void SetUp()
         {
             _editorSettingsService = UnityCliLoopEditorSettingsTestFactory.CreateService();
             _originalSettings = CloneSettings(_editorSettingsService.GetSettings());
-            _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService);
+            _stateStore = CreateTestStateStore();
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService, _stateStore);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
             _domainReloadDetectionService.DeleteLockFile();
         }
@@ -31,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _editorSettingsService.SaveSettings(_originalSettings);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
             _domainReloadDetectionService.DeleteLockFile();
+            _stateStore.Delete();
         }
 
         [Test]
@@ -68,6 +71,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string json = UnityEngine.JsonUtility.ToJson(settings);
             return UnityEngine.JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(json);
+        }
+
+        private static ServerReadinessStateStore CreateTestStateStore()
+        {
+            string projectRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "unity-cli-loop-tests",
+                System.Guid.NewGuid().ToString("N"));
+            return new ServerReadinessStateStore(projectRoot);
         }
     }
 }

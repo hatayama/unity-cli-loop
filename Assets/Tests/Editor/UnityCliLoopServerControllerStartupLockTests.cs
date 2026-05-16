@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -114,11 +115,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UnityCliLoopServerLifecycleRegistryService();
             UnityCliLoopEditorSettingsService editorSettingsService =
                 UnityCliLoopEditorSettingsTestFactory.CreateService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(editorSettingsService),
-                editorSettingsService);
+                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
+                editorSettingsService,
+                stateStore,
+                new TestReadinessProbe());
             string claimedLockPath = null;
             ServerStartingLockService.OnOwnedLockFileClaimedForDeletionForTests = path => claimedLockPath = path;
 
@@ -136,18 +140,113 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        [Test]
+        public async Task StartRecoveryIfNeededAsync_WhenReadinessSucceeds_ShouldPublishReadyState()
+        {
+            // Tests that recovery writes the ready state only after the readiness probe succeeds.
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            UnityCliLoopEditorSettingsService editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
+            TestReadinessProbe readinessProbe = new();
+            int serverStartedCount = 0;
+            lifecycleRegistry.ServerStarted += () => serverStartedCount++;
+            UnityCliLoopServerControllerService service = new(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
+                editorSettingsService,
+                stateStore,
+                readinessProbe);
+
+            await service.StartRecoveryIfNeededAsync(isAfterCompile: false, CancellationToken.None);
+
+            ServerReadinessState state = stateStore.Read();
+            Assert.That(readinessProbe.CallCount, Is.EqualTo(1));
+            Assert.That(serverStartedCount, Is.EqualTo(1));
+            Assert.That(state.Phase, Is.EqualTo("ready"));
+            Assert.That(state.Endpoint, Is.EqualTo("test"));
+        }
+
+        [Test]
+        public async Task ProbeReadinessWithTimeoutAsync_WhenProbeDoesNotComplete_ThrowsTimeout()
+        {
+            // Tests that readiness probing fails fast instead of leaving startup state stuck forever.
+            TestReadinessProbe readinessProbe = new(neverCompletes: true);
+            UnityCliLoopServerControllerService service = CreateControllerService(readinessProbe);
+
+            System.TimeoutException exception = null;
+            try
+            {
+                await service.ProbeReadinessWithTimeoutAsync(CancellationToken.None, 1);
+            }
+            catch (System.TimeoutException ex)
+            {
+                exception = ex;
+            }
+
+            Assert.That(exception, Is.Not.Null);
+            Assert.That(exception.Message, Does.Contain("timed out"));
+            Assert.That(readinessProbe.CallCount, Is.EqualTo(1));
+        }
+
         private static UnityCliLoopServerControllerService CreateControllerService()
+        {
+            return CreateControllerService(new TestReadinessProbe());
+        }
+
+        private static UnityCliLoopServerControllerService CreateControllerService(TestReadinessProbe readinessProbe)
         {
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
             UnityCliLoopEditorSettingsService editorSettingsService =
                 UnityCliLoopEditorSettingsTestFactory.CreateService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(editorSettingsService),
-                editorSettingsService);
+                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
+                editorSettingsService,
+                stateStore,
+                readinessProbe);
+        }
+
+        private static ServerReadinessStateStore CreateTestStateStore()
+        {
+            string projectRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "unity-cli-loop-tests",
+                System.Guid.NewGuid().ToString("N"));
+            return new ServerReadinessStateStore(projectRoot);
+        }
+
+        /// <summary>
+        /// Test support type that makes readiness probing deterministic and side-effect free.
+        /// </summary>
+        private sealed class TestReadinessProbe : IUnityCliLoopServerReadinessProbe
+        {
+            private readonly bool _neverCompletes;
+
+            public TestReadinessProbe(bool neverCompletes = false)
+            {
+                _neverCompletes = neverCompletes;
+            }
+
+            public int CallCount { get; private set; }
+
+            public Task ProbeAsync(CancellationToken ct)
+            {
+                CallCount++;
+                if (_neverCompletes)
+                {
+                    return TimerDelay.Wait(60000, ct);
+                }
+
+                return Task.CompletedTask;
+            }
         }
 
         /// <summary>

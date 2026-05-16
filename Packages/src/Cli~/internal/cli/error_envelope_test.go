@@ -107,6 +107,42 @@ func TestClassifyConnectionAttemptAllowsNilCause(t *testing.T) {
 	}
 }
 
+func TestClassifyServerStoppedError(t *testing.T) {
+	// Verifies stopped readiness state uses the same retryable connection guidance as unreachable Unity.
+	cliErr := classifyError(
+		serverStoppedError{state: serverState{Phase: "stopped", Reason: "manual-stop"}},
+		errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"},
+	)
+
+	if cliErr.ErrorCode != errorCodeUnityNotReachable {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if !cliErr.Retryable || !cliErr.SafeToRetry {
+		t.Fatalf("retry flags mismatch: %#v", cliErr)
+	}
+	if cliErr.Details["reason"] != "manual-stop" {
+		t.Fatalf("details mismatch: %#v", cliErr.Details)
+	}
+}
+
+func TestClassifyStaleServerStateError(t *testing.T) {
+	// Verifies stale recovery state tells users how to clear the external readiness signal.
+	cliErr := classifyError(
+		staleServerStateError{state: serverState{Phase: "recovering", Reason: "domain-reload-after"}},
+		errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"},
+	)
+
+	if cliErr.ErrorCode != errorCodeUnityNotReachable {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != "Run `uloop fix` to remove stale recovery state files." {
+		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
+	}
+	if cliErr.Details["phase"] != "recovering" {
+		t.Fatalf("details mismatch: %#v", cliErr.Details)
+	}
+}
+
 func TestClassifyRPCErrorKeepsData(t *testing.T) {
 	err := &unityipc.RPCError{
 		Code:    -32000,

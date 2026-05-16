@@ -9,17 +9,25 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class AtomicFileWriter
     {
+        internal const string CompletedTempFileSuffix = ".tmp";
+        internal const string BackupFileSuffix = ".bak";
+        internal const string InProgressTempFileSuffix = ".tmp.write";
+
         /// <summary>
-        /// Writes content atomically: .tmp → .bak → target.
+        /// Writes content atomically: .tmp.write → .tmp → .bak → target.
         /// </summary>
         public static void Write(string filePath, string content)
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
             Debug.Assert(content != null, "content must not be null");
 
-            string tempFilePath = filePath + ".tmp";
-            string backupFilePath = filePath + ".bak";
-            File.WriteAllText(tempFilePath, content);
+            string tempFilePath = filePath + CompletedTempFileSuffix;
+            string inProgressTempFilePath = filePath + InProgressTempFileSuffix;
+            string backupFilePath = filePath + BackupFileSuffix;
+            CleanupInProgressTemp(inProgressTempFilePath);
+            File.WriteAllText(inProgressTempFilePath, content);
+            CleanupCompletedTemp(tempFilePath);
+            File.Move(inProgressTempFilePath, tempFilePath);
 
             // .NET Framework 4.7.1 lacks File.Move(src, dst, overwrite), so we
             // rotate old → .bak before moving .tmp → target to minimize the window
@@ -39,13 +47,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
 
-            string tempFilePath = filePath + ".tmp";
-            string backupFilePath = filePath + ".bak";
+            string tempFilePath = filePath + CompletedTempFileSuffix;
+            string backupFilePath = filePath + BackupFileSuffix;
 
             if (File.Exists(filePath))
             {
                 CleanupBackup(backupFilePath);
-                CleanupTemp(tempFilePath);
+                CleanupCompletedTemp(tempFilePath);
                 return;
             }
 
@@ -64,6 +72,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
+        internal static void CleanupInProgressTemp(string inProgressTempFilePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(inProgressTempFilePath), "inProgressTempFilePath must not be null or empty");
+
+            if (File.Exists(inProgressTempFilePath))
+            {
+                File.Delete(inProgressTempFilePath);
+            }
+        }
+
         public static void CleanupBackup(string backupFilePath)
         {
             if (File.Exists(backupFilePath))
@@ -72,11 +90,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static void CleanupTemp(string tempFilePath)
+        internal static void CleanupCompletedTemp(string completedTempFilePath)
         {
-            if (File.Exists(tempFilePath))
+            Debug.Assert(!string.IsNullOrEmpty(completedTempFilePath), "completedTempFilePath must not be null or empty");
+
+            if (File.Exists(completedTempFilePath))
             {
-                File.Delete(tempFilePath);
+                File.Delete(completedTempFilePath);
             }
         }
     }
