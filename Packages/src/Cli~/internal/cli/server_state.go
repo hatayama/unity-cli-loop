@@ -23,11 +23,22 @@ type serverStoppedError struct {
 	state serverState
 }
 
+type staleServerStateError struct {
+	state serverState
+}
+
 func (err serverStoppedError) Error() string {
 	if err.state.Reason != "" {
 		return fmt.Sprintf("unity cli loop server stopped during %s", err.state.Reason)
 	}
 	return "unity cli loop server is stopped"
+}
+
+func (err staleServerStateError) Error() string {
+	if err.state.Phase != "" {
+		return fmt.Sprintf("unity cli loop server readiness state is stale: %s", err.state.Phase)
+	}
+	return "unity cli loop server readiness state is stale"
 }
 
 func readServerState(projectRoot string) (serverState, bool, error) {

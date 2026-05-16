@@ -131,6 +131,28 @@ func classifyError(err error, context errorContext) cliError {
 		}
 	}
 
+	var staleStateErr staleServerStateError
+	if errors.As(err, &staleStateErr) {
+		return cliError{
+			ErrorCode:   errorCodeUnityNotReachable,
+			Phase:       errorPhaseConnection,
+			Message:     "Unity is not running, but a stale Unity CLI Loop recovery state file says it is still busy.",
+			Retryable:   true,
+			SafeToRetry: true,
+			ProjectRoot: context.projectRoot,
+			Command:     context.command,
+			NextActions: []string{
+				"Run `uloop fix` to remove stale recovery state files.",
+				"Run `uloop launch` if Unity should be started for this project.",
+				"Retry the original command after the stale state is cleared.",
+			},
+			Details: map[string]any{
+				"phase":  staleStateErr.state.Phase,
+				"reason": staleStateErr.state.Reason,
+			},
+		}
+	}
+
 	var rpcErr *unityipc.RPCError
 	if errors.As(err, &rpcErr) {
 		details := map[string]any{

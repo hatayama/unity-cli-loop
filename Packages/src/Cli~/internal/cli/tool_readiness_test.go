@@ -42,3 +42,27 @@ func TestWaitForRecoveringToolReadinessStopsWhenServerStateStopped(t *testing.T)
 		t.Fatalf("stopped reason mismatch: %#v", stoppedErr.state)
 	}
 }
+
+// Verifies that stale busy state returns immediately when the Unity process is gone.
+func TestWaitForRecoveringToolReadinessReportsStaleBusyStateWhenUnityIsGone(t *testing.T) {
+	originalFinder := findRunningUnityProcessForReadiness
+	findRunningUnityProcessForReadiness = func(context.Context, string) (*unityProcess, error) {
+		return nil, nil
+	}
+	defer func() {
+		findRunningUnityProcessForReadiness = originalFinder
+	}()
+
+	projectRoot := t.TempDir()
+	writeReadinessServerStateForTest(t, projectRoot, `{"phase":"recovering","reason":"domain-reload-after"}`)
+
+	err := waitForRecoveringToolReadiness(context.Background(), projectRoot)
+
+	var staleErr staleServerStateError
+	if !errors.As(err, &staleErr) {
+		t.Fatalf("expected stale state error, got %v", err)
+	}
+	if staleErr.state.Phase != "recovering" {
+		t.Fatalf("stale phase mismatch: %#v", staleErr.state)
+	}
+}
