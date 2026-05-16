@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const string LOCK_FILE_NAME = "compiling.lock";
         private readonly ServerReadinessStateStore _stateStore;
+        private ServerReadinessState _stateBeforeCompilation;
+        private string _activeCompilationGenerationId;
 
         internal CompilationLockFileService(ServerReadinessStateStore stateStore = null)
         {
@@ -40,15 +42,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private void OnCompilationFinished(object context)
         {
-            MarkCompilationFinished();
+            DeleteLockFileCore();
+            string generationId = _activeCompilationGenerationId;
+            ServerReadinessState stateBeforeCompilation = _stateBeforeCompilation;
+            EditorApplication.delayCall += () =>
+                RestoreStateBeforeCompilationIfStillCurrent(generationId, stateBeforeCompilation);
         }
 
         internal void MarkCompilationStarted()
         {
             CreateLockFile();
+            _stateBeforeCompilation = _stateStore.Read();
+            _activeCompilationGenerationId = ServerReadinessStateStore.CreateGenerationId();
             _stateStore.Write(
                 ServerReadinessPhase.Compiling,
-                ServerReadinessStateStore.CreateGenerationId(),
+                _activeCompilationGenerationId,
                 "compilation-started",
                 null,
                 null);
@@ -57,6 +65,35 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal void MarkCompilationFinished()
         {
             DeleteLockFileCore();
+            RestoreStateBeforeCompilationIfStillCurrent(
+                _activeCompilationGenerationId,
+                _stateBeforeCompilation);
+        }
+
+        private void RestoreStateBeforeCompilationIfStillCurrent(
+            string compilationGenerationId,
+            ServerReadinessState stateBeforeCompilation)
+        {
+            if (string.IsNullOrWhiteSpace(compilationGenerationId))
+            {
+                return;
+            }
+
+            ServerReadinessState currentState = _stateStore.Read();
+            if (currentState == null ||
+                currentState.GenerationId != compilationGenerationId ||
+                currentState.Phase != "compiling")
+            {
+                return;
+            }
+
+            if (stateBeforeCompilation == null)
+            {
+                _stateStore.Delete();
+                return;
+            }
+
+            _stateStore.Write(stateBeforeCompilation);
         }
 
         private static void CreateLockFile()

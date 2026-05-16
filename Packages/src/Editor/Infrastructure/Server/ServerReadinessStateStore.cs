@@ -96,6 +96,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             AtomicFileWriter.Write(_stateFilePath, content);
         }
 
+        internal void Write(ServerReadinessState state)
+        {
+            Debug.Assert(state != null, "state must not be null");
+            Debug.Assert(!string.IsNullOrWhiteSpace(state.Phase), "state.Phase must not be null or empty");
+
+            if (state == null)
+            {
+                throw new ArgumentNullException(nameof(state));
+            }
+            if (string.IsNullOrWhiteSpace(state.Phase))
+            {
+                throw new ArgumentException("state.Phase must not be null or empty.", nameof(state));
+            }
+
+            if (string.IsNullOrWhiteSpace(state.GenerationId))
+            {
+                state.GenerationId = CreateGenerationId();
+            }
+
+            state.UpdatedAt = DateTime.UtcNow.ToString("o");
+            Directory.CreateDirectory(Path.GetDirectoryName(_stateFilePath));
+            string content = JsonConvert.SerializeObject(state, Formatting.Indented);
+            AtomicFileWriter.Write(_stateFilePath, content);
+        }
+
         internal ServerReadinessState Read()
         {
             AtomicFileWriter.RecoverSidecarFiles(_stateFilePath);

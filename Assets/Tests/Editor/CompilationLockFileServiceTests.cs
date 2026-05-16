@@ -24,15 +24,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void MarkCompilationFinished_ShouldNotPublishReadyState()
+        public void MarkCompilationFinished_WhenPreviousStateWasReady_ShouldRestoreReadyState()
         {
-            // Verifies that only the server lifecycle readiness probe can publish ready state.
+            // Verifies compile failures return CLI waiters to the already-probed ready state.
+            _stateStore.Write(
+                ServerReadinessPhase.Ready,
+                "previous-ready",
+                "server-ready",
+                "project-ipc-endpoint",
+                null);
+
             _service.MarkCompilationStarted();
 
             _service.MarkCompilationFinished();
 
             ServerReadinessState state = _stateStore.Read();
-            Assert.That(state.Phase, Is.EqualTo("compiling"));
+            Assert.That(state.Phase, Is.EqualTo("ready"));
+            Assert.That(state.Endpoint, Is.EqualTo("project-ipc-endpoint"));
+        }
+
+        [Test]
+        public void MarkCompilationFinished_WhenPreviousStateWasStarting_ShouldRestoreStartingState()
+        {
+            // Verifies startup recovery is not marked ready by a compile-finished callback.
+            _stateStore.Write(
+                ServerReadinessPhase.Starting,
+                "previous-starting",
+                "manual-start",
+                null,
+                null);
+
+            _service.MarkCompilationStarted();
+
+            _service.MarkCompilationFinished();
+
+            ServerReadinessState state = _stateStore.Read();
+            Assert.That(state.Phase, Is.EqualTo("starting"));
         }
 
         private static ServerReadinessStateStore CreateTestStateStore()
