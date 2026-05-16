@@ -7,7 +7,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Log filtering service
     /// Single function: Filter and limit log entries
     /// Related classes: GetLogsTool, GetLogsUseCase, LogEntry
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public class LogFilteringService
     {

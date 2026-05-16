@@ -10,7 +10,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// Application service responsible for publishing compilation readiness state.
     /// Single responsibility: Mark the external readiness state while Unity is compiling.
     /// Related classes: DomainReloadDetectionService (similar readiness state publishing)
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public sealed class CompilationLockFileService : ICompilationLockService
     {
