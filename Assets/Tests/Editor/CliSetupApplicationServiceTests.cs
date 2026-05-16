@@ -31,14 +31,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetMinimumRequiredCliVersion_RequiresSingleBinaryCliRelease()
+        public void GetMinimumRequiredCliVersion_RequiresTerminalUninstallCliRelease()
         {
-            // Verifies this package release rejects CLIs older than the single-binary release.
+            // Verifies this package release rejects CLIs older than the terminal uninstall command.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.7"));
+            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.8"));
         }
 
         [Test]

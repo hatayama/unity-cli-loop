@@ -253,6 +253,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void BuildUninstallCommand_OnMacRunsInstalledLauncher()
+        {
+            // Verifies that editor uninstall delegates removal to the installed uloop command.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildUninstallCommand(
+                "/Users/masamichi/.local/bin",
+                RuntimePlatform.OSXEditor);
+
+            Assert.That(command.FileName, Is.EqualTo("/Users/masamichi/.local/bin/uloop"));
+            Assert.That(command.Arguments, Is.EqualTo("uninstall"));
+            Assert.That(command.ManualCommand, Is.EqualTo("\"/Users/masamichi/.local/bin/uloop\" uninstall"));
+        }
+
+        [Test]
+        public void BuildUninstallCommand_OnWindowsRunsInstalledLauncher()
+        {
+            // Verifies that Windows editor uninstall delegates removal to the installed uloop command.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildUninstallCommand(
+                "C:\\Users\\masamichi\\AppData\\Local\\Programs\\uloop\\bin",
+                RuntimePlatform.WindowsEditor);
+
+            Assert.That(command.FileName, Does.Contain("C:\\Users\\masamichi\\AppData\\Local\\Programs\\uloop\\bin"));
+            Assert.That(command.FileName, Does.EndWith("uloop.exe"));
+            Assert.That(command.Arguments, Is.EqualTo("uninstall"));
+            Assert.That(command.ManualCommand, Does.Contain("C:\\Users\\masamichi\\AppData\\Local\\Programs\\uloop\\bin"));
+            Assert.That(command.ManualCommand, Does.EndWith("uloop.exe\" uninstall"));
+        }
+
+        [Test]
         public void BuildPathWithInstallDirectory_OnWindowsPrependsMissingNativeInstallDir()
         {
             // Verifies that Unity's current Windows PATH prefers the freshly installed native CLI.

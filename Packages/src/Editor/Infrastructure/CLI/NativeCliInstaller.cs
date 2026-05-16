@@ -129,8 +129,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return result;
         }
 
-        public static async Task<CliInstallResult> UninstallAsync(RuntimePlatform platform)
+        public static async Task<CliInstallResult> UninstallAsync(RuntimePlatform platform, CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
+
             string installDirectory = GetInstallDirectoryForCurrentUser(platform);
             if (string.IsNullOrWhiteSpace(installDirectory))
             {
@@ -139,23 +141,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Could not resolve the global CLI install directory. Set {CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE} and try again.");
             }
 
-            CliInstallResult result = await Task.Run(() => UninstallGlobalCli(installDirectory, platform));
-            if (!result.Success)
-            {
-                return result;
-            }
+            NativeCliInstallCommand command = BuildUninstallCommand(installDirectory, platform);
+            return await Task.Run(
+                () => RunUninstallCommand(command, installDirectory, ct, INSTALL_PROCESS_TIMEOUT_MS),
+                ct);
+        }
 
-            if (!ShouldRemoveInstallDirectoryFromPath(installDirectory, platform))
-            {
-                return result;
-            }
+        internal static NativeCliInstallCommand BuildUninstallCommand(
+            string installDirectory,
+            RuntimePlatform platform)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
 
-            RemoveInstallDirectoryFromCurrentProcessPath(installDirectory, platform);
-            return RemoveInstallDirectoryFromUserPath(
-                installDirectory,
-                platform,
-                Environment.GetEnvironmentVariable,
-                Environment.SetEnvironmentVariable);
+            string installPath = GetGlobalCliInstallPath(installDirectory, platform);
+            return new NativeCliInstallCommand(
+                installPath,
+                "uninstall",
+                $"{QuoteProcessArgument(installPath)} uninstall");
         }
 
         internal static CliInstallResult RunInstallCommand(
@@ -168,7 +170,49 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityEngine.Debug.Assert(timeoutMs > 0, "timeoutMs must be greater than zero");
             ct.ThrowIfCancellationRequested();
 
-            ProcessStartInfo startInfo = new()            {
+            return RunCliSetupCommand(
+                command,
+                ct,
+                timeoutMs,
+                "release CLI installer",
+                startInfo => { });
+        }
+
+        internal static CliInstallResult RunUninstallCommand(
+            NativeCliInstallCommand command,
+            string installDirectory,
+            CancellationToken ct,
+            int timeoutMs)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installDirectory), "installDirectory must not be null or empty");
+
+            return RunCliSetupCommand(
+                command,
+                ct,
+                timeoutMs,
+                "global CLI uninstall command",
+                startInfo =>
+                {
+                    startInfo.EnvironmentVariables[CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE] = installDirectory;
+                });
+        }
+
+        private static CliInstallResult RunCliSetupCommand(
+            NativeCliInstallCommand command,
+            CancellationToken ct,
+            int timeoutMs,
+            string commandDescription,
+            Action<ProcessStartInfo> configureStartInfo)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.FileName), "command.FileName must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.Arguments), "command.Arguments must not be null or empty");
+            UnityEngine.Debug.Assert(timeoutMs > 0, "timeoutMs must be greater than zero");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(commandDescription), "commandDescription must not be null or empty");
+            UnityEngine.Debug.Assert(configureStartInfo != null, "configureStartInfo must not be null");
+            ct.ThrowIfCancellationRequested();
+
+            ProcessStartInfo startInfo = new()
+            {
                 FileName = command.FileName,
                 Arguments = command.Arguments,
                 UseShellExecute = false,
@@ -176,13 +220,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            configureStartInfo(startInfo);
 
             Process process = ProcessStartHelper.TryStart(startInfo);
             if (process == null)
             {
                 return new CliInstallResult(
                     false,
-                    $"Failed to start release CLI installer: {command.FileName}");
+                    $"Failed to start {commandDescription}: {command.FileName}");
             }
 
             StringBuilder standardOutputBuilder = new();
@@ -221,7 +266,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 return new CliInstallResult(
                     false,
-                    BuildReleaseCliInstallTimeoutFailure(timeoutMs, timedOutErrorOutput, timedOutStandardOutput));
+                    BuildCliSetupCommandTimeoutFailure(
+                        commandDescription,
+                        timeoutMs,
+                        timedOutErrorOutput,
+                        timedOutStandardOutput));
             }
 
             process.WaitForExit();
@@ -232,7 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return success
                 ? new CliInstallResult(true, standardOutput)
-                : new CliInstallResult(false, BuildReleaseCliInstallFailure(errorOutput, standardOutput));
+                : new CliInstallResult(false, BuildCliSetupCommandFailure(commandDescription, errorOutput, standardOutput));
         }
 
         internal static CliInstallResult UninstallGlobalCli(string installDirectory, RuntimePlatform platform)
@@ -694,8 +743,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new CliInstallResult(false, errorOutput);
         }
 
-        private static string BuildReleaseCliInstallFailure(string errorOutput, string standardOutput)
+        private static string BuildCliSetupCommandFailure(
+            string commandDescription,
+            string errorOutput,
+            string standardOutput)
         {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(commandDescription), "commandDescription must not be null or empty");
+
             if (!string.IsNullOrWhiteSpace(errorOutput))
             {
                 return errorOutput;
@@ -706,21 +760,32 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return standardOutput;
             }
 
-            return "Release CLI installer failed without output.";
+            return $"{BuildSentenceSubject(commandDescription)} failed without output.";
         }
 
-        private static string BuildReleaseCliInstallTimeoutFailure(
+        private static string BuildCliSetupCommandTimeoutFailure(
+            string commandDescription,
             int timeoutMs,
             string errorOutput,
             string standardOutput)
         {
-            string capturedOutput = BuildReleaseCliInstallFailure(errorOutput, standardOutput);
-            if (string.Equals(capturedOutput, "Release CLI installer failed without output.", StringComparison.Ordinal))
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(commandDescription), "commandDescription must not be null or empty");
+
+            string capturedOutput = BuildCliSetupCommandFailure(commandDescription, errorOutput, standardOutput);
+            string noOutputMessage = $"{BuildSentenceSubject(commandDescription)} failed without output.";
+            if (string.Equals(capturedOutput, noOutputMessage, StringComparison.Ordinal))
             {
-                return $"Release CLI installer timed out after {timeoutMs} ms.";
+                return $"{BuildSentenceSubject(commandDescription)} timed out after {timeoutMs} ms.";
             }
 
-            return $"Release CLI installer timed out after {timeoutMs} ms.\n{capturedOutput}";
+            return $"{BuildSentenceSubject(commandDescription)} timed out after {timeoutMs} ms.\n{capturedOutput}";
+        }
+
+        private static string BuildSentenceSubject(string value)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(value), "value must not be null or empty");
+
+            return char.ToUpperInvariant(value[0]) + value.Substring(1);
         }
 
         private static bool WaitForInstallProcessExit(
@@ -972,7 +1037,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            return NativeCliInstaller.UninstallAsync(platform);
+            return NativeCliInstaller.UninstallAsync(platform, ct);
         }
 
         public NativeCliInstallCommand GetGlobalCliInstallCommand(
