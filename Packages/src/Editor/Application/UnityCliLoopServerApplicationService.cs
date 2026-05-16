@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         string Endpoint { get; }
 
-        void StartServer(bool clearServerStartingLockWhenReady = true);
+        void StartServer();
 
         void StopServer();
     }

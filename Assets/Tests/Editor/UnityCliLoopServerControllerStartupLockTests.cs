@@ -10,32 +10,10 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Test fixture that verifies Unity CLI Loop Server Controller Startup Lock behavior.
+    /// Test fixture that verifies Unity CLI Loop Server Controller recovery behavior.
     /// </summary>
-    public class UnityCliLoopServerControllerStartupLockTests
+    public class UnityCliLoopServerControllerRecoveryTests
     {
-        [Test]
-        public void CreateOptionalServerStartingLock_WhenLockCreationSucceeds_ShouldReturnOwnershipToken()
-        {
-            // Tests that optional startup locks return the ownership token when creation succeeds.
-            UnityCliLoopServerControllerService service = CreateControllerService();
-
-            string token = service.CreateOptionalServerStartingLock(() => "token-123");
-
-            Assert.That(token, Is.EqualTo("token-123"));
-        }
-
-        [Test]
-        public void CreateOptionalServerStartingLock_WhenLockCreationFails_ShouldContinueWithoutThrowing()
-        {
-            // Tests that optional startup locks do not fail server startup when creation fails.
-            UnityCliLoopServerControllerService service = CreateControllerService();
-
-            string token = service.CreateOptionalServerStartingLock(() => null);
-
-            Assert.That(token, Is.Null);
-        }
-
         [Test]
         public void ScheduleStartupRecovery_WhenCalled_ExposesRecoveryTaskBeforeDeferredActionRuns()
         {
@@ -104,40 +82,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(recoveryTask.IsCompleted, Is.True);
             Assert.That(service.RecoveryTask, Is.Null);
-        }
-
-        [Test]
-        public async Task StartRecoveryIfNeededAsync_WhenStartupLockExists_ShouldReleaseLockAfterWarmup()
-        {
-            // Tests that recovery keeps the startup lock until post-bind warmup has completed.
-            TestServerInstanceFactory serverInstanceFactory = new();
-            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
-                new UnityCliLoopServerLifecycleRegistryService();
-            UnityCliLoopEditorSettingsService editorSettingsService =
-                UnityCliLoopEditorSettingsTestFactory.CreateService();
-            ServerReadinessStateStore stateStore = CreateTestStateStore();
-            UnityCliLoopServerControllerService service = new(
-                serverInstanceFactory,
-                lifecycleRegistry,
-                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
-                editorSettingsService,
-                stateStore,
-                new TestReadinessProbe());
-            string claimedLockPath = null;
-            ServerStartingLockService.OnOwnedLockFileClaimedForDeletionForTests = path => claimedLockPath = path;
-
-            try
-            {
-                await service.StartRecoveryIfNeededAsync(isAfterCompile: true, CancellationToken.None);
-
-                Assert.That(serverInstanceFactory.LastCreated.ClearServerStartingLockWhenReady, Is.False);
-                Assert.That(claimedLockPath, Is.Not.Null);
-            }
-            finally
-            {
-                ServerStartingLockService.OnOwnedLockFileClaimedForDeletionForTests = null;
-                ServerStartingLockService.DeleteLockFile();
-            }
         }
 
         [Test]
@@ -270,13 +214,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public bool IsRunning { get; private set; }
 
-            public bool? ClearServerStartingLockWhenReady { get; private set; }
-
             public string Endpoint => "test";
 
-            public void StartServer(bool clearServerStartingLockWhenReady = true)
+            public void StartServer()
             {
-                ClearServerStartingLockWhenReady = clearServerStartingLockWhenReady;
                 IsRunning = true;
             }
 

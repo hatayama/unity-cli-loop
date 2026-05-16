@@ -10,30 +10,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class ServerLifecycleContractTests
     {
         [Test]
-        // Verifies that the default startup request releases the startup lock after readiness.
-        public void ReleaseStartupLockWhenReady_ClearsStartupLock_WhenServerReportsReady()
-        {
-            ServerInitializationRequest request =
-                ServerInitializationRequest.ReleaseStartupLockWhenReady();
-
-            Assert.That(request.StartupLockReleasePolicy, Is.EqualTo(ServerStartupLockReleasePolicy.ReleaseWhenReady));
-            Assert.That(request.ClearStartupLockWhenReady, Is.True);
-        }
-
-        [Test]
-        // Verifies that explicit-release startup requests preserve the startup lock for another owner.
-        public void PreserveStartupLockUntilExplicitRelease_KeepsStartupLock_ForExplicitRelease()
-        {
-            ServerInitializationRequest request =
-                ServerInitializationRequest.PreserveStartupLockUntilExplicitRelease();
-
-            Assert.That(
-                request.StartupLockReleasePolicy,
-                Is.EqualTo(ServerStartupLockReleasePolicy.PreserveUntilExplicitRelease));
-            Assert.That(request.ClearStartupLockWhenReady, Is.False);
-        }
-
-        [Test]
         // Verifies that a successful initialization result carries the application-owned server handle.
         public void RunningInitializationResult_CarriesServerInstanceAndSuccess()
         {

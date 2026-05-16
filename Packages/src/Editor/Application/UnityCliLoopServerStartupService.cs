@@ -21,13 +21,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
             _editorSettingsService = editorSettingsService ?? throw new System.ArgumentNullException(nameof(editorSettingsService));
         }
 
-        public ServiceResult<IUnityCliLoopServerInstance> StartServer(
-            ServerInitializationRequest request)
+        public ServiceResult<IUnityCliLoopServerInstance> StartServer()
         {
             try
             {
                 IUnityCliLoopServerInstance server = _serverInstanceFactory.Create();
-                server.StartServer(request.ClearStartupLockWhenReady);
+                server.StartServer();
                 return ServiceResult<IUnityCliLoopServerInstance>.SuccessResult(server);
             }
             catch (System.Exception ex)

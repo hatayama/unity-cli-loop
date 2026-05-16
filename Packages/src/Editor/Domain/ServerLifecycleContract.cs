@@ -3,41 +3,6 @@ using System.Diagnostics;
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
-    /// Domain-owned startup lock policies keep server lifecycle contracts independent from Unity tool DTOs.
-    /// </summary>
-    public enum ServerStartupLockReleasePolicy
-    {
-        ReleaseWhenReady = 0,
-        PreserveUntilExplicitRelease = 1
-    }
-
-    /// <summary>
-    /// Request value for server initialization use cases.
-    /// </summary>
-    public readonly struct ServerInitializationRequest
-    {
-        public ServerStartupLockReleasePolicy StartupLockReleasePolicy { get; }
-
-        public bool ClearStartupLockWhenReady =>
-            StartupLockReleasePolicy == ServerStartupLockReleasePolicy.ReleaseWhenReady;
-
-        public ServerInitializationRequest(ServerStartupLockReleasePolicy startupLockReleasePolicy)
-        {
-            StartupLockReleasePolicy = startupLockReleasePolicy;
-        }
-
-        public static ServerInitializationRequest ReleaseStartupLockWhenReady()
-        {
-            return new ServerInitializationRequest(ServerStartupLockReleasePolicy.ReleaseWhenReady);
-        }
-
-        public static ServerInitializationRequest PreserveStartupLockUntilExplicitRelease()
-        {
-            return new ServerInitializationRequest(ServerStartupLockReleasePolicy.PreserveUntilExplicitRelease);
-        }
-    }
-
-    /// <summary>
     /// Result value for server initialization use cases.
     /// </summary>
     /// <typeparam name="TServerInstance">Server instance type owned by the application boundary.</typeparam>

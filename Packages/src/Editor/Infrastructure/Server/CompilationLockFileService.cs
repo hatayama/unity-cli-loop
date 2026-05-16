@@ -1,4 +1,3 @@
-using System.IO;
 using UnityEditor;
 using UnityEditor.Compilation;
 
@@ -8,14 +7,13 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Application service responsible for compilation lock file management.
-    /// Single responsibility: Create/delete lock file during compilation for CLI detection.
-    /// Related classes: DomainReloadDetectionService (similar pattern for domain reload)
+    /// Application service responsible for publishing compilation readiness state.
+    /// Single responsibility: Mark the external readiness state while Unity is compiling.
+    /// Related classes: DomainReloadDetectionService (similar readiness state publishing)
     /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public sealed class CompilationLockFileService : ICompilationLockService
     {
-        private const string LOCK_FILE_NAME = "compiling.lock";
         private readonly ServerReadinessStateStore _stateStore;
         private ServerReadinessState _stateBeforeCompilation;
         private string _activeCompilationGenerationId;
@@ -24,8 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             _stateStore = stateStore ?? new ServerReadinessStateStore(UnityCliLoopPathResolver.GetProjectRoot());
         }
-
-        private static string LockFilePath => Path.Combine(UnityEngine.Application.dataPath, "..", "Temp", LOCK_FILE_NAME);
 
         public void RegisterForEditorStartup()
         {
@@ -42,7 +38,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private void OnCompilationFinished(object context)
         {
-            DeleteLockFileCore();
             string generationId = _activeCompilationGenerationId;
             ServerReadinessState stateBeforeCompilation = _stateBeforeCompilation;
             EditorApplication.delayCall += () =>
@@ -51,7 +46,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal void MarkCompilationStarted()
         {
-            CreateLockFile();
             _stateBeforeCompilation = _stateStore.Read();
             _activeCompilationGenerationId = ServerReadinessStateStore.CreateGenerationId();
             _stateStore.Write(
@@ -64,7 +58,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal void MarkCompilationFinished()
         {
-            DeleteLockFileCore();
             RestoreStateBeforeCompilationIfStillCurrent(
                 _activeCompilationGenerationId,
                 _stateBeforeCompilation);
@@ -94,36 +87,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             _stateStore.Write(stateBeforeCompilation);
-        }
-
-        private static void CreateLockFile()
-        {
-            string lockPath = LockFilePath;
-            string tempDir = Path.GetDirectoryName(lockPath);
-
-            if (!Directory.Exists(tempDir))
-            {
-                return;
-            }
-
-            File.WriteAllText(lockPath, System.DateTime.UtcNow.ToString("o"));
-        }
-
-        /// <summary>
-        /// Delete lock file. Called on server startup to handle crash recovery.
-        /// </summary>
-        public void DeleteLockFile()
-        {
-            DeleteLockFileCore();
-        }
-
-        private static void DeleteLockFileCore()
-        {
-            string lockPath = LockFilePath;
-            if (File.Exists(lockPath))
-            {
-                File.Delete(lockPath);
-            }
         }
     }
 }

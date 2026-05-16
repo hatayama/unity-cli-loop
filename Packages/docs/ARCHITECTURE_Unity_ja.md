@@ -146,12 +146,7 @@ classDiagram
     class UnityCliLoopServerInitializationUseCase {
         -securityService: ISecurityValidationService
         -startupService: UnityCliLoopServerStartupService
-        +ExecuteAsync(ServerInitializationRequest, CancellationToken): Task~ServerInitializationResult~
-    }
-
-    class ServerInitializationRequest {
-        +StartupLockReleasePolicy: ServerStartupLockReleasePolicy
-        +ClearStartupLockWhenReady: bool
+        +ExecuteAsync(CancellationToken): Task~ServerInitializationResult~
     }
 
     class ServerInitializationResult {
@@ -190,7 +185,6 @@ classDiagram
 
     CompileUseCase --> CompilationStateValidationService : uses
     CompileUseCase --> CompilationExecutionService : uses
-    UnityCliLoopServerInitializationUseCase --> ServerInitializationRequest : accepts
     UnityCliLoopServerInitializationUseCase --> ServerInitializationResult : returns
     IUnityTool <|.. CompileTool : implements
     CompileTool --> CompileUseCase : delegates to
