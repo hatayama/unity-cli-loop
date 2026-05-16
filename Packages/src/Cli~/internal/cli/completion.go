@@ -262,13 +262,7 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 }
 
 func printOptionsForTool(tool toolDefinition, stdout io.Writer) {
-	schema := tool.EffectiveInputSchema()
-	options := make([]string, 0, len(schema.Properties))
-	for propertyName, property := range schema.Properties {
-		options = append(options, "--"+optionNameForProperty(propertyName, property))
-	}
-	sort.Strings(options)
-	writeLine(stdout, strings.Join(options, "\n"))
+	writeLine(stdout, strings.Join(visibleOptionNamesForTool(tool), "\n"))
 }
 
 func detectShell() string {

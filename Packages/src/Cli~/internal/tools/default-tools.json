@@ -284,7 +284,8 @@
           },
           "CompileOnly": {
             "type": "boolean",
-            "description": "Compile only without execution"
+            "description": "Compile only without execution",
+            "hidden": true
           },
           "WaitForDomainReload": {
             "type": "boolean",

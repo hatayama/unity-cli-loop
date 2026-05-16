@@ -56,12 +56,6 @@ uloop execute-dynamic-code --code 'using UnityEngine; GameObject go = new GameOb
 uloop execute-dynamic-code --code 'int a = (int)parameters[0]; int b = (int)parameters[1]; return a * b;' --parameters '[6,7]'
 ```
 
-`compile-only` を試す。
-
-```sh
-uloop execute-dynamic-code --code 'using UnityEngine; Debug.Log("compile only sample"); return 123;' --compile-only
-```
-
 ## Medium Examples
 
 Camera 情報を列挙する。

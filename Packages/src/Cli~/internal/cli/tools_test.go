@@ -85,6 +85,23 @@ func TestBuildToolParamsConvertsExecuteDynamicCodeNoWaitFlag(t *testing.T) {
 	}
 }
 
+// Tests that hidden execute-dynamic-code options remain available for internal callers.
+func TestBuildToolParamsAcceptsHiddenExecuteDynamicCodeCompileOnlyFlag(t *testing.T) {
+	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
+	if !ok {
+		t.Fatal("execute-dynamic-code was not found in default tools")
+	}
+
+	params, _, err := buildToolParams([]string{"--compile-only"}, tool)
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+
+	if params[dynamicCodeCompileOnlyParam] != true {
+		t.Fatalf("CompileOnly mismatch: %#v", params[dynamicCodeCompileOnlyParam])
+	}
+}
+
 // Tests that boolean tool arguments reject the old explicit true/false value form.
 func TestBuildToolParamsRejectsExplicitBooleanValues(t *testing.T) {
 	tool := toolDefinition{

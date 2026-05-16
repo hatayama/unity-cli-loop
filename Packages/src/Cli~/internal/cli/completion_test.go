@@ -81,6 +81,9 @@ func TestCompletionListOptionsUsesExecuteDynamicCodeNoWaitFlag(t *testing.T) {
 	if strings.Contains(output, "--wait-for-domain-reload") {
 		t.Fatalf("execute-dynamic-code wait option should be negated only: %s", output)
 	}
+	if strings.Contains(output, "--compile-only") {
+		t.Fatalf("execute-dynamic-code internal compile-only option should stay hidden: %s", output)
+	}
 }
 
 func TestCompletionListOptionsUsesEmbeddedExecuteDynamicCodeDefinition(t *testing.T) {
