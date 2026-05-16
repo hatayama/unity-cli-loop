@@ -66,6 +66,10 @@ run_uloop_json() {
         printf '%s\n' "$output" >&2
         fail "uloop $* failed"
     }
+    if printf '%s\n' "$output" | grep -Eq '"Success"[[:space:]]*:[[:space:]]*false'; then
+        printf '%s\n' "$output" >&2
+        fail "uloop $* returned Success=false"
+    fi
 
     printf '%s\n' "$output"
 }
@@ -113,7 +117,11 @@ return "OK: activated for replay";
 }
 
 save_log() {
-    escaped_path=$(printf '%s\n' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    unity_path=$1
+    if command -v cygpath >/dev/null 2>&1; then
+        unity_path=$(cygpath -w "$1")
+    fi
+    escaped_path=$(printf '%s\n' "$unity_path" | sed 's/\\/\\\\/g; s/"/\\"/g')
     rm -f "$1"
     json=$(run_uloop_json execute-dynamic-code --code "
 var cube = GameObject.Find(\"VerificationCube\");
@@ -204,6 +212,7 @@ RECORDING_INPUT_PATH=$(printf '%s\n' "$RECORD_STOP_RESULT" | sed -n 's/.*"Output
 
 echo "[6/9] Saving recording event log..."
 save_log "$RECORDING_LOG"
+[ -s "$RECORDING_LOG" ] || fail "Recording event log is empty"
 
 # ---- Phase 2: Replay via CLI ----
 
@@ -253,6 +262,7 @@ sleep 1
 
 echo "[9/9] Saving replay event log..."
 save_log "$REPLAY_LOG"
+[ -s "$REPLAY_LOG" ] || fail "Replay event log is empty"
 
 # ---- Phase 3: Compare ----
 
