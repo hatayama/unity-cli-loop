@@ -19,6 +19,17 @@ type serverState struct {
 	LastError    string `json:"lastError"`
 }
 
+type serverStoppedError struct {
+	state serverState
+}
+
+func (err serverStoppedError) Error() string {
+	if err.state.Reason != "" {
+		return fmt.Sprintf("unity cli loop server stopped during %s", err.state.Reason)
+	}
+	return "unity cli loop server is stopped"
+}
+
 func readServerState(projectRoot string) (serverState, bool, error) {
 	statePath := filepath.Join(projectRoot, serverStateRelativePath)
 	content, ok, err := readServerStateFile(statePath)
@@ -66,6 +77,10 @@ func isServerStateBusy(state serverState) bool {
 	default:
 		return false
 	}
+}
+
+func isServerStateStopped(state serverState) bool {
+	return state.Phase == "stopped"
 }
 
 func waitForRecoveringServerIfNeeded(

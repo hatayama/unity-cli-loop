@@ -35,6 +35,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private void OnCompilationStarted(object context)
         {
+            MarkCompilationStarted();
+        }
+
+        private void OnCompilationFinished(object context)
+        {
+            MarkCompilationFinished();
+        }
+
+        internal void MarkCompilationStarted()
+        {
             CreateLockFile();
             _stateStore.Write(
                 ServerReadinessPhase.Compiling,
@@ -44,15 +54,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 null);
         }
 
-        private void OnCompilationFinished(object context)
+        internal void MarkCompilationFinished()
         {
             DeleteLockFileCore();
-            _stateStore.Write(
-                ServerReadinessPhase.Ready,
-                ServerReadinessStateStore.CreateGenerationId(),
-                "compilation-finished",
-                null,
-                null);
         }
 
         private static void CreateLockFile()

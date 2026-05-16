@@ -26,3 +26,19 @@ func TestToolReadinessDoneErrorReportsTimeoutWhenParentIsActive(t *testing.T) {
 		t.Fatalf("timeout error mismatch: %v", err)
 	}
 }
+
+// Verifies that recovery waits exit immediately when Unity reports an intentional stop.
+func TestWaitForRecoveringToolReadinessStopsWhenServerStateStopped(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeReadinessServerStateForTest(t, projectRoot, `{"phase":"stopped","reason":"manual-stop"}`)
+
+	err := waitForRecoveringToolReadiness(context.Background(), projectRoot)
+
+	var stoppedErr serverStoppedError
+	if !errors.As(err, &stoppedErr) {
+		t.Fatalf("expected stopped error, got %v", err)
+	}
+	if stoppedErr.state.Reason != "manual-stop" {
+		t.Fatalf("stopped reason mismatch: %#v", stoppedErr.state)
+	}
+}

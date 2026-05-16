@@ -109,6 +109,28 @@ func classifyError(err error, context errorContext) cliError {
 		}
 	}
 
+	var stoppedErr serverStoppedError
+	if errors.As(err, &stoppedErr) {
+		return cliError{
+			ErrorCode:   errorCodeUnityNotReachable,
+			Phase:       errorPhaseConnection,
+			Message:     "The Unity CLI Loop server stopped before it became ready.",
+			Retryable:   true,
+			SafeToRetry: true,
+			ProjectRoot: context.projectRoot,
+			Command:     context.command,
+			NextActions: []string{
+				"If Unity is closed, run `uloop launch`.",
+				"If you intentionally stopped the bridge, start it from Unity settings or relaunch Unity.",
+				"Retry after Unity finishes starting, compiling, or reloading scripts.",
+			},
+			Details: map[string]any{
+				"phase":  stoppedErr.state.Phase,
+				"reason": stoppedErr.state.Reason,
+			},
+		}
+	}
+
 	var rpcErr *unityipc.RPCError
 	if errors.As(err, &rpcErr) {
 		details := map[string]any{

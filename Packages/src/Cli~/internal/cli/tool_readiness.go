@@ -19,7 +19,22 @@ const (
 
 const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`
 
+type toolReadinessWaitMode int
+
+const (
+	toolReadinessWaitThroughStopped toolReadinessWaitMode = iota
+	toolReadinessStopWhenServerStops
+)
+
 func waitForToolReadiness(ctx context.Context, projectRoot string) error {
+	return waitForToolReadinessWithMode(ctx, projectRoot, toolReadinessWaitThroughStopped)
+}
+
+func waitForRecoveringToolReadiness(ctx context.Context, projectRoot string) error {
+	return waitForToolReadinessWithMode(ctx, projectRoot, toolReadinessStopWhenServerStops)
+}
+
+func waitForToolReadinessWithMode(ctx context.Context, projectRoot string, mode toolReadinessWaitMode) error {
 	// Why: launch and compile can both recreate Unity's project IPC server; a real
 	// tool request proves the user-visible command will not be the cold transport probe.
 	timeoutContext, cancel := context.WithTimeout(ctx, toolReadinessTimeout)
@@ -33,6 +48,9 @@ func waitForToolReadiness(ctx context.Context, projectRoot string) error {
 		if ok {
 			if failure := serverStateFailureError(state); failure != nil {
 				return failure
+			}
+			if mode == toolReadinessStopWhenServerStops && isServerStateStopped(state) {
+				return serverStoppedError{state: state}
 			}
 			if isServerStateBusy(state) {
 				select {

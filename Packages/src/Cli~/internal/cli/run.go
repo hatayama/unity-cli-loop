@@ -63,7 +63,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 1
 	}
 	if shouldWaitForServerReadinessBeforeCommand(command) {
-		if err := waitForRecoveringServerIfNeeded(ctx, connection.ProjectRoot, waitForToolReadiness); err != nil {
+		if err := waitForRecoveringServerIfNeeded(ctx, connection.ProjectRoot, waitForRecoveringToolReadiness); err != nil {
 			writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: command})
 			return 1
 		}
