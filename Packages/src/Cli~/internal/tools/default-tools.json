@@ -1,5 +1,5 @@
 {
-  "version": "3.0.0-beta.8",
+  "version": "3.0.0-beta.9",
   "tools": [
     {
       "name": "compile",
@@ -284,7 +284,13 @@
           },
           "CompileOnly": {
             "type": "boolean",
-            "description": "Compile only without execution"
+            "description": "Compile only without execution",
+            "hidden": true
+          },
+          "WaitForDomainReload": {
+            "type": "boolean",
+            "description": "Wait for domain reload completion before returning",
+            "default": true
           },
           "YieldToForegroundRequests": {
             "type": "boolean",

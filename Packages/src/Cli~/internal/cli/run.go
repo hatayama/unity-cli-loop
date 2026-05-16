@@ -127,6 +127,9 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 	if shouldWaitForCompileDomainReload(command, params) {
 		return runCompileWithDomainReloadWait(ctx, connection, params, stdout, stderr)
 	}
+	if shouldWaitForExecuteDynamicCodeDomainReload(command, params) {
+		return runExecuteDynamicCodeWithDomainReloadWait(ctx, connection, params, stdout, stderr)
+	}
 
 	applyDebugTimingParams(command, params)
 	startedAt := time.Now()
@@ -151,6 +154,59 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 	}
 	writeJSON(stdout, stripDebugTimingResult(command, outcome.Result))
 	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
+	return 0
+}
+
+func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
+	applyDebugTimingParams(executeDynamicCodeCommandName, params)
+	startedAt := time.Now()
+	spinner := newToolSpinner(stderr, executeDynamicCodeCommandName)
+	client := unityipc.NewClient(connection, version)
+	outcome, err := client.SendWithProgressOutcome(
+		ctx,
+		executeDynamicCodeCommandName,
+		params,
+		func(string) {
+			spinner.Update("Executing execute-dynamic-code...")
+		},
+	)
+	if err != nil {
+		if shouldWaitForExecuteDynamicCodeDisconnect(err, outcome) {
+			spinner.Update("Connection lost during execute-dynamic-code. Waiting for domain reload to complete...")
+			if waitErr := waitForToolReadiness(ctx, connection.ProjectRoot); waitErr != nil {
+				spinner.Stop()
+				writeClassifiedError(stderr, waitErr, errorContext{
+					projectRoot: connection.ProjectRoot,
+					command:     executeDynamicCodeCommandName,
+				})
+				return 1
+			}
+		}
+		spinner.Stop()
+		writeDebugTiming(stderr, executeDynamicCodeCommandName, time.Since(startedAt), outcome)
+		writeToolFailure(stderr, err, outcome, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     executeDynamicCodeCommandName,
+		})
+		return 1
+	}
+
+	if executeDynamicCodeDomainReloadWaitRequired(outcome.Result) {
+		spinner.Update("Waiting for domain reload to complete...")
+		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
+			spinner.Stop()
+			writeClassifiedError(stderr, err, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     executeDynamicCodeCommandName,
+			})
+			return 1
+		}
+	}
+
+	spinner.Stop()
+	result := stripExecuteDynamicCodeControlResult(outcome.Result)
+	writeJSON(stdout, stripDebugTimingResult(executeDynamicCodeCommandName, result))
+	writeDebugTiming(stderr, executeDynamicCodeCommandName, time.Since(startedAt), outcome)
 	return 0
 }
 

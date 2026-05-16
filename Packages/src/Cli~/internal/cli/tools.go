@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -294,6 +295,19 @@ func optionNameForProperty(propertyName string, property toolProperty) string {
 		return "no-" + kebabName
 	}
 	return kebabName
+}
+
+func visibleOptionNamesForTool(tool toolDefinition) []string {
+	schema := tool.EffectiveInputSchema()
+	options := make([]string, 0, len(schema.Properties))
+	for propertyName, property := range schema.Properties {
+		if property.Hidden {
+			continue
+		}
+		options = append(options, "--"+optionNameForProperty(propertyName, property))
+	}
+	sort.Strings(options)
+	return options
 }
 
 func isBooleanProperty(property toolProperty) bool {

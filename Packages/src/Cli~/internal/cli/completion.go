@@ -246,19 +246,23 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 		writeLine(stdout, "")
 		return
 	}
+	if command == executeDynamicCodeCommandName {
+		if tool, ok := findTool(loadDefaultTools(), command); ok {
+			printOptionsForTool(tool, stdout)
+		}
+		return
+	}
 
 	tool, ok := findTool(cache, command)
 	if !ok {
 		return
 	}
 
-	schema := tool.EffectiveInputSchema()
-	options := make([]string, 0, len(schema.Properties))
-	for propertyName, property := range schema.Properties {
-		options = append(options, "--"+optionNameForProperty(propertyName, property))
-	}
-	sort.Strings(options)
-	writeLine(stdout, strings.Join(options, "\n"))
+	printOptionsForTool(tool, stdout)
+}
+
+func printOptionsForTool(tool toolDefinition, stdout io.Writer) {
+	writeLine(stdout, strings.Join(visibleOptionNamesForTool(tool), "\n"))
 }
 
 func detectShell() string {

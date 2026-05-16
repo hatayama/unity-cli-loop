@@ -4,6 +4,7 @@ using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
 
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 using ComponentModelDescriptionAttribute = System.ComponentModel.DescriptionAttribute;
 
@@ -42,6 +43,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Assert.That(attribute, Is.Null, $"{schemaType.FullName}.{property.Name}");
                 }
             }
+        }
+
+        [Test]
+        public void ExecuteDynamicCodeSchema_WhenCreated_ShouldWaitForDomainReloadByDefault()
+        {
+            // Tests that execute-dynamic-code keeps CLI calls on the safe post-reload path by default.
+            ExecuteDynamicCodeSchema schema = new();
+
+            Assert.That(schema.WaitForDomainReload, Is.True);
         }
     }
 }

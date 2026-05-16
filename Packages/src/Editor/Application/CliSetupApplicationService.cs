@@ -115,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         public string GetMinimumRequiredCliReleaseTag()
         {
-            return CliConstants.CLI_RELEASE_TAG_PREFIX + GetMinimumRequiredCliVersion();
+            return CliConstants.MINIMUM_REQUIRED_CLI_RELEASE_TAG;
         }
 
         public bool IsPackageOwnedCurrentUserInstallPath(

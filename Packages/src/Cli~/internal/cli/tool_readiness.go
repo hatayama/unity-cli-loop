@@ -144,6 +144,7 @@ func executeDynamicCodeReadinessProbeParams() map[string]any {
 	return map[string]any{
 		"Code":                      executeDynamicCodeReadinessProbe,
 		"CompileOnly":               false,
+		domainReloadWaitParam:       false,
 		"YieldToForegroundRequests": false,
 	}
 }
