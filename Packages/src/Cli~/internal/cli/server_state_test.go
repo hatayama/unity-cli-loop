@@ -119,8 +119,8 @@ func TestReadServerStateReadsSharedTempPath(t *testing.T) {
 	}
 }
 
-// Verifies that a state write in the .tmp phase is still visible to CLI waiters.
-func TestReadServerStateReadsTempSidecarWhenTargetIsMissing(t *testing.T) {
+// Verifies that a completed temp sidecar is still visible to CLI waiters.
+func TestReadServerStateReadsCompletedTempSidecarWhenTargetIsMissing(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeReadinessServerStateSidecarForTest(t, projectRoot, ".tmp", `{"phase":"recovering","generationId":"tmp"}`)
 
@@ -131,6 +131,21 @@ func TestReadServerStateReadsTempSidecarWhenTargetIsMissing(t *testing.T) {
 
 	if !ok || state.Phase != "recovering" || state.GenerationID != "tmp" {
 		t.Fatalf("server state sidecar mismatch: ok=%v state=%#v", ok, state)
+	}
+}
+
+// Verifies that a temp file still being written is ignored until Unity publishes it.
+func TestReadServerStateIgnoresInProgressTempSidecar(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeReadinessServerStateSidecarForTest(t, projectRoot, ".tmp.write", `{"phase":"recovering","generationId":"in-progress"}`)
+
+	_, ok, err := readServerState(projectRoot)
+	if err != nil {
+		t.Fatalf("readServerState failed: %v", err)
+	}
+
+	if ok {
+		t.Fatal("in-progress server state sidecar should not be reported as present")
 	}
 }
 
