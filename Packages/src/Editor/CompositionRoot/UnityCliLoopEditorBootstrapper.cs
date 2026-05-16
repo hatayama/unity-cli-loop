@@ -12,12 +12,10 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
     internal sealed class UnityCliLoopEditorBootstrapper
     {
         private readonly UnityCliLoopApplicationRegistration _applicationRegistration;
-        private readonly UnityCliLoopFirstPartyServerLifecycleBinding _firstPartyServerLifecycleBinding;
 
         internal UnityCliLoopEditorBootstrapper()
         {
             _applicationRegistration = new UnityCliLoopApplicationRegistration();
-            _firstPartyServerLifecycleBinding = new UnityCliLoopFirstPartyServerLifecycleBinding();
         }
 
         internal void Initialize()
@@ -25,7 +23,6 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             UnityCliLoopApplicationServices applicationServices = _applicationRegistration.Register();
             ApplicationEditorStartup.Initialize(applicationServices.DomainReloadDetectionService);
             FirstPartyToolsEditorStartup.Initialize();
-            _firstPartyServerLifecycleBinding.Initialize();
             InfrastructureEditorStartup.Initialize(applicationServices.EditorSettingsService);
             PresentationEditorStartup.Initialize(applicationServices.EditorSettingsService);
         }

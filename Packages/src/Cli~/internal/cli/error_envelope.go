@@ -294,7 +294,7 @@ func compileWaitTimeoutError(projectRoot string) cliError {
 		ProjectRoot: projectRoot,
 		Command:     compileCommandName,
 		NextActions: []string{
-			"Run `uloop fix` to remove stale lock files.",
+			"Run `uloop fix` to remove stale recovery state files.",
 			"Retry `uloop compile` after Unity becomes responsive.",
 		},
 	}

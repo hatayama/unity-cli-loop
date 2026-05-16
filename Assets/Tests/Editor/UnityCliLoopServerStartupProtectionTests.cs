@@ -89,11 +89,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UnityCliLoopServerLifecycleRegistryService();
             UnityCliLoopEditorSettingsService editorSettingsService =
                 UnityCliLoopEditorSettingsTestFactory.CreateService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(editorSettingsService),
-                editorSettingsService);
+                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
+                editorSettingsService,
+                stateStore,
+                new TestReadinessProbe());
+        }
+
+        private static ServerReadinessStateStore CreateTestStateStore()
+        {
+            string projectRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "unity-cli-loop-tests",
+                System.Guid.NewGuid().ToString("N"));
+            return new ServerReadinessStateStore(projectRoot);
+        }
+
+        /// <summary>
+        /// Test support type that makes readiness probing deterministic and side-effect free.
+        /// </summary>
+        private sealed class TestReadinessProbe : IUnityCliLoopServerReadinessProbe
+        {
+            public System.Threading.Tasks.Task ProbeAsync(System.Threading.CancellationToken ct)
+            {
+                return System.Threading.Tasks.Task.CompletedTask;
+            }
         }
 
         /// <summary>

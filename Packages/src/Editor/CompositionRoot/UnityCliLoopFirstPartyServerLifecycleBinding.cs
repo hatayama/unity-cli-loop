@@ -4,27 +4,29 @@ using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 {
     /// <summary>
-    /// Binds platform server lifecycle notifications to bundled tool lifecycle hooks.
+    /// Resets bundled tool lifecycle state and proves execute-dynamic-code readiness before the server is published as ready.
     /// </summary>
-    internal sealed class UnityCliLoopFirstPartyServerLifecycleBinding
+    internal sealed class UnityCliLoopFirstPartyServerLifecycleBinding : IUnityCliLoopServerReadinessProbe
     {
-        private readonly ProjectIpcWarmupClient _projectIpcWarmupClient = new();
+        private readonly ProjectIpcWarmupClient _projectIpcWarmupClient;
 
-        internal void Initialize()
+        internal UnityCliLoopFirstPartyServerLifecycleBinding(ProjectIpcWarmupClient projectIpcWarmupClient)
         {
-            UnityCliLoopServerApplicationFacade.AddServerStartedHandler(OnServerStarted);
+            System.Diagnostics.Debug.Assert(projectIpcWarmupClient != null, "projectIpcWarmupClient must not be null");
+
+            _projectIpcWarmupClient = projectIpcWarmupClient
+                ?? throw new System.ArgumentNullException(nameof(projectIpcWarmupClient));
         }
 
-        private void OnServerStarted()
+        public Task ProbeAsync(CancellationToken ct)
         {
-            ResetServerScopedServicesAndWarmProjectIpcAsync(CancellationToken.None).Forget();
+            return ResetServerScopedServicesAndWarmProjectIpcAsync(ct);
         }
 
         private async Task ResetServerScopedServicesAndWarmProjectIpcAsync(CancellationToken ct)

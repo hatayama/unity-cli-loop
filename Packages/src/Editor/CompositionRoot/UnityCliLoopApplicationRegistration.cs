@@ -1,6 +1,7 @@
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 {
@@ -15,13 +16,17 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             ToolSettingsService toolSettingsService = new(toolSettingsRepository);
             UnityCliLoopEditorSettingsRepository editorSettingsRepository = new();
             UnityCliLoopEditorSettingsService editorSettingsService = new(editorSettingsRepository);
+            ServerReadinessStateStore serverReadinessStateStore = new(UnityCliLoopPathResolver.GetProjectRoot());
+            UnityCliLoopFirstPartyServerLifecycleBinding serverReadinessProbe = new(new ProjectIpcWarmupClient());
             ULoopSettingsRepository uLoopSettingsRepository = new(
                 toolSettingsService,
                 editorSettingsService);
-            DomainReloadDetectionFileService domainReloadDetectionService = new(editorSettingsService);
+            DomainReloadDetectionFileService domainReloadDetectionService = new(
+                editorSettingsService,
+                serverReadinessStateStore);
             ULoopSettings.RegisterService(uLoopSettingsRepository);
             MainThreadSwitcher.RegisterService(new EditorMainThreadDispatcher());
-            CompilationLockService.RegisterService(new CompilationLockFileService());
+            CompilationLockService.RegisterService(new CompilationLockFileService(serverReadinessStateStore));
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new SkillInstallLayoutInternalToolNameProvider(),
                 toolSettingsService,
@@ -46,7 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 serverFactory,
                 lifecycleRegistry,
                 domainReloadDetectionService,
-                editorSettingsService);
+                editorSettingsService,
+                serverReadinessStateStore,
+                serverReadinessProbe);
             UnityCliLoopServerApplicationService applicationService = new(controllerService);
             UnityCliLoopServerApplicationFacade.RegisterService(applicationService);
             controllerService.InitializeForEditorStartup();

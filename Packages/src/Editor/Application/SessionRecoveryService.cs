@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 ?? throw new System.ArgumentNullException(nameof(editorSettingsService));
         }
 
-        public ValidationResult RestoreServerStateIfNeeded(CancellationToken ct)
+        public async Task<ValidationResult> RestoreServerStateIfNeededAsync(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -73,14 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             if (wasRunning && (currentServer == null || !currentServer.IsRunning))
             {
-                _ = _recoveryCoordinator.StartRecoveryIfNeededAsync(isAfterCompile, ct).ContinueWith(task =>
-                {
-                    if (task.IsFaulted)
-                    {
-                        VibeLogger.LogError("server_startup_restore_failed",
-                            $"Failed to restore server: {task.Exception?.GetBaseException().Message}");
-                    }
-                }, TaskScheduler.FromCurrentSynchronizationContext());
+                await _recoveryCoordinator.StartRecoveryIfNeededAsync(isAfterCompile, ct);
             }
 
             return ValidationResult.Success();

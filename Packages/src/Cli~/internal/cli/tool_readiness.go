@@ -26,6 +26,24 @@ func waitForToolReadiness(ctx context.Context, projectRoot string) error {
 	defer cancel()
 
 	for {
+		state, ok, err := readServerState(projectRoot)
+		if err != nil {
+			return err
+		}
+		if ok {
+			if failure := serverStateFailureError(state); failure != nil {
+				return failure
+			}
+			if isServerStateBusy(state) {
+				select {
+				case <-timeoutContext.Done():
+					return toolReadinessDoneError(ctx)
+				case <-time.After(toolReadinessPoll):
+				}
+				continue
+			}
+		}
+
 		if err := probeToolReadinessSequence(timeoutContext, projectRoot); err == nil {
 			return nil
 		}

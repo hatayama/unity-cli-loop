@@ -114,11 +114,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UnityCliLoopServerLifecycleRegistryService();
             UnityCliLoopEditorSettingsService editorSettingsService =
                 UnityCliLoopEditorSettingsTestFactory.CreateService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(editorSettingsService),
-                editorSettingsService);
+                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
+                editorSettingsService,
+                stateStore,
+                new TestReadinessProbe());
             string claimedLockPath = null;
             ServerStartingLockService.OnOwnedLockFileClaimedForDeletionForTests = path => claimedLockPath = path;
 
@@ -136,6 +139,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        [Test]
+        public async Task StartRecoveryIfNeededAsync_WhenReadinessSucceeds_ShouldPublishReadyState()
+        {
+            // Tests that recovery writes the ready state only after the readiness probe succeeds.
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            UnityCliLoopEditorSettingsService editorSettingsService =
+                UnityCliLoopEditorSettingsTestFactory.CreateService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
+            TestReadinessProbe readinessProbe = new();
+            int serverStartedCount = 0;
+            lifecycleRegistry.ServerStarted += () => serverStartedCount++;
+            UnityCliLoopServerControllerService service = new(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
+                editorSettingsService,
+                stateStore,
+                readinessProbe);
+
+            await service.StartRecoveryIfNeededAsync(isAfterCompile: false, CancellationToken.None);
+
+            ServerReadinessState state = stateStore.Read();
+            Assert.That(readinessProbe.CallCount, Is.EqualTo(1));
+            Assert.That(serverStartedCount, Is.EqualTo(1));
+            Assert.That(state.Phase, Is.EqualTo("ready"));
+            Assert.That(state.Endpoint, Is.EqualTo("test"));
+        }
+
         private static UnityCliLoopServerControllerService CreateControllerService()
         {
             TestServerInstanceFactory serverInstanceFactory = new();
@@ -143,11 +176,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UnityCliLoopServerLifecycleRegistryService();
             UnityCliLoopEditorSettingsService editorSettingsService =
                 UnityCliLoopEditorSettingsTestFactory.CreateService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(editorSettingsService),
-                editorSettingsService);
+                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
+                editorSettingsService,
+                stateStore,
+                new TestReadinessProbe());
+        }
+
+        private static ServerReadinessStateStore CreateTestStateStore()
+        {
+            string projectRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "unity-cli-loop-tests",
+                System.Guid.NewGuid().ToString("N"));
+            return new ServerReadinessStateStore(projectRoot);
+        }
+
+        /// <summary>
+        /// Test support type that makes readiness probing deterministic and side-effect free.
+        /// </summary>
+        private sealed class TestReadinessProbe : IUnityCliLoopServerReadinessProbe
+        {
+            public int CallCount { get; private set; }
+
+            public Task ProbeAsync(CancellationToken ct)
+            {
+                CallCount++;
+                return Task.CompletedTask;
+            }
         }
 
         /// <summary>

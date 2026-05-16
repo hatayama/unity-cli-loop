@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private bool _originalIsServerRunning;
         private UnityCliLoopEditorSettingsService _editorSettingsService;
         private IDomainReloadDetectionService _domainReloadDetectionService;
+        private ServerReadinessStateStore _stateStore;
 
         [SetUp]
         public void SetUp()
@@ -24,7 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Save original session state
             _editorSettingsService = UnityCliLoopEditorSettingsTestFactory.CreateService();
             _originalIsServerRunning = _editorSettingsService.GetIsServerRunning();
-            _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService);
+            _stateStore = CreateTestStateStore();
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService, _stateStore);
         }
 
         [TearDown]
@@ -43,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             // Clean up lock file created by ExecuteBeforeDomainReload
             _domainReloadDetectionService.DeleteLockFile();
+            _stateStore.Delete();
         }
 
         [Test]
@@ -88,30 +91,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Arrange
             _editorSettingsService.SetIsServerRunning(true);
 
-            // Create a running server instance
-            UnityCliLoopBridgeServer server = null;
-            try
-            {
-                server = new UnityCliLoopBridgeServer(
-                    _domainReloadDetectionService,
-                    _editorSettingsService);
-                server.StartServer();
+            TestServerInstance server = new TestServerInstance();
+            server.StartServer();
 
-                DomainReloadRecoveryUseCase useCase = CreateUseCase(
-                    _domainReloadDetectionService,
-                    _editorSettingsService);
+            DomainReloadRecoveryUseCase useCase = CreateUseCase(
+                _domainReloadDetectionService,
+                _editorSettingsService);
 
-                // Act
-                ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(server);
+            // Act
+            ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(server);
 
-                // Assert
-                Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
-                Assert.IsFalse(server.IsRunning, "Running server instance should be stopped before domain reload");
-            }
-            finally
-            {
-                server?.Dispose();
-            }
+            // Assert
+            Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
+            Assert.IsFalse(server.IsRunning, "Running server instance should be stopped before domain reload");
+        }
+
+        private static ServerReadinessStateStore CreateTestStateStore()
+        {
+            string projectRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "unity-cli-loop-tests",
+                System.Guid.NewGuid().ToString("N"));
+            return new ServerReadinessStateStore(projectRoot);
         }
 
         private static DomainReloadRecoveryUseCase CreateUseCase(
@@ -140,6 +141,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task StartRecoveryIfNeededAsync(bool isAfterCompile, CancellationToken cancellationToken)
             {
                 return Task.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
+        private sealed class TestServerInstance : IUnityCliLoopServerInstance
+        {
+            public bool IsRunning { get; private set; }
+
+            public string Endpoint => "test";
+
+            public void StartServer(bool clearServerStartingLockWhenReady = true)
+            {
+                IsRunning = true;
+            }
+
+            public void StopServer()
+            {
+                IsRunning = false;
+            }
+
+            public void Dispose()
+            {
+                IsRunning = false;
             }
         }
     }

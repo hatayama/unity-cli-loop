@@ -14,17 +14,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     public sealed class DomainReloadDetectionFileService : IDomainReloadDetectionService
     {
         private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
+        private readonly ServerReadinessStateStore _stateStore;
 
         public DomainReloadDetectionFileService()
             : this(new UnityCliLoopEditorSettingsService(new UnityCliLoopEditorSettingsRepository()))
         {
         }
 
-        internal DomainReloadDetectionFileService(UnityCliLoopEditorSettingsService editorSettingsService)
+        internal DomainReloadDetectionFileService(
+            UnityCliLoopEditorSettingsService editorSettingsService,
+            ServerReadinessStateStore stateStore = null)
         {
             UnityEngine.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
 
             _editorSettingsService = editorSettingsService ?? throw new ArgumentNullException(nameof(editorSettingsService));
+            _stateStore = stateStore ?? new ServerReadinessStateStore(UnityCliLoopPathResolver.GetProjectRoot());
         }
 
         private static bool IsBackgroundUnityProcess()
@@ -47,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
         }
 
-        private static void OnBeforeAssemblyReload()
+        private void OnBeforeAssemblyReload()
         {
             if (IsBackgroundUnityProcess())
             {
@@ -55,9 +59,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             CreateLockFile();
+            _stateStore.Write(
+                ServerReadinessPhase.Reloading,
+                ServerReadinessStateStore.CreateGenerationId(),
+                "assembly-reload-before",
+                null,
+                null);
         }
 
-        private static void OnAfterAssemblyReload()
+        private void OnAfterAssemblyReload()
         {
             // Lock file is deleted when server startup completes.
             // to avoid a gap between domain reload end and server ready
@@ -82,6 +92,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // Create lock file for external process detection (e.g., CLI tools)
             CreateLockFile();
+            _stateStore.Write(
+                ServerReadinessPhase.Reloading,
+                correlationId,
+                "domain-reload-before",
+                null,
+                null);
 
             // Save session state if server is running
             if (serverIsRunning)
@@ -134,6 +150,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // Lock file is deleted when server startup completes.
             // to avoid a gap between domain reload completion and server ready
+            _stateStore.Write(
+                ServerReadinessPhase.Recovering,
+                correlationId,
+                "domain-reload-after",
+                null,
+                null);
 
             // Clear Domain Reload completion flag
             _editorSettingsService.ClearDomainReloadFlag();
@@ -166,6 +188,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             });
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
             DeleteLockFile();
+            _stateStore.Write(
+                ServerReadinessPhase.Failed,
+                correlationId,
+                "domain-reload-rollback",
+                null,
+                "Failed to stop the server before domain reload.");
 
             VibeLogger.LogWarning(
                 "domain_reload_start_rollback",

@@ -82,19 +82,16 @@ func TestPrepareCompileWaitParamsForcesDomainReloadWait(t *testing.T) {
 	}
 }
 
-func TestWaitForCompileCompletionReadsResultAfterLocksClear(t *testing.T) {
+// Verifies that compile wait returns the persisted result only after the server state becomes ready.
+func TestWaitForCompileCompletionReadsResultAfterRecoveryStateBecomesReady(t *testing.T) {
 	projectRoot := t.TempDir()
 	requestID := "compile_test"
 	resultDir := filepath.Join(projectRoot, compileResultRelativeDir)
 	if err := os.MkdirAll(resultDir, 0o755); err != nil {
 		t.Fatalf("failed to create result dir: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(projectRoot, "Temp"), 0o755); err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	lockPath := filepath.Join(projectRoot, "Temp", "domainreload.lock")
-	if err := os.WriteFile(lockPath, []byte("busy"), 0o644); err != nil {
-		t.Fatalf("failed to write lock: %v", err)
+	if err := writeServerStateForTest(projectRoot, "reloading", ""); err != nil {
+		t.Fatalf("failed to write server state: %v", err)
 	}
 	if err := os.WriteFile(
 		filepath.Join(resultDir, requestID+".json"),
@@ -106,7 +103,7 @@ func TestWaitForCompileCompletionReadsResultAfterLocksClear(t *testing.T) {
 
 	go func() {
 		time.Sleep(20 * time.Millisecond)
-		_ = os.Remove(lockPath)
+		_ = writeServerStateForTest(projectRoot, "ready", "")
 	}()
 
 	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
@@ -127,20 +124,13 @@ func TestWaitForCompileCompletionReadsResultAfterLocksClear(t *testing.T) {
 	}
 }
 
-func TestWaitForCompileCompletionWaitsForServerStartingLock(t *testing.T) {
+// Verifies that compile wait stops early when recovery publishes a failed server state.
+func TestWaitForCompileCompletionStopsWhenServerStateFailed(t *testing.T) {
 	projectRoot := t.TempDir()
 	requestID := "compile_test"
 	resultDir := filepath.Join(projectRoot, compileResultRelativeDir)
 	if err := os.MkdirAll(resultDir, 0o755); err != nil {
 		t.Fatalf("failed to create result dir: %v", err)
-	}
-	tempPath := filepath.Join(projectRoot, "Temp")
-	if err := os.MkdirAll(tempPath, 0o755); err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	lockPath := filepath.Join(tempPath, "serverstarting.lock")
-	if err := os.WriteFile(lockPath, []byte("busy"), 0o644); err != nil {
-		t.Fatalf("failed to write lock: %v", err)
 	}
 	if err := os.WriteFile(
 		filepath.Join(resultDir, requestID+".json"),
@@ -149,27 +139,19 @@ func TestWaitForCompileCompletionWaitsForServerStartingLock(t *testing.T) {
 	); err != nil {
 		t.Fatalf("failed to write result: %v", err)
 	}
+	if err := writeServerStateForTest(projectRoot, "failed", "readiness probe failed"); err != nil {
+		t.Fatalf("failed to write server state: %v", err)
+	}
 
-	go func() {
-		time.Sleep(20 * time.Millisecond)
-		_ = os.Remove(lockPath)
-	}()
-
-	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+	_, _, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
 		projectRoot:  projectRoot,
 		requestID:    requestID,
 		timeout:      time.Second,
 		pollInterval: 5 * time.Millisecond,
 		lockGrace:    10 * time.Millisecond,
 	})
-	if err != nil {
-		t.Fatalf("waitForCompileCompletion failed: %v", err)
-	}
-	if !completed {
-		t.Fatal("compile wait did not complete")
-	}
-	if string(result) != "{\"Success\":true}" {
-		t.Fatalf("result mismatch: %s", result)
+	if err == nil || !strings.Contains(err.Error(), "readiness probe failed") {
+		t.Fatalf("expected failed server state error, got %v", err)
 	}
 }
 
@@ -208,4 +190,16 @@ func TestWritePostCompileWarmupWarningReportsNonFatalFailure(t *testing.T) {
 	if !strings.Contains(stderr.String(), "warning: post-compile warmup skipped: probe failed") {
 		t.Fatalf("warning mismatch: %s", stderr.String())
 	}
+}
+
+func writeServerStateForTest(projectRoot string, phase string, lastError string) error {
+	statePath := filepath.Join(projectRoot, serverStateRelativePath)
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		return err
+	}
+	content := fmt.Sprintf(
+		`{"phase":%q,"generationId":"test","updatedAt":"2026-05-16T00:00:00Z","reason":"test","endpoint":"test","lastError":%q}`,
+		phase,
+		lastError)
+	return os.WriteFile(statePath, []byte(content), 0o644)
 }

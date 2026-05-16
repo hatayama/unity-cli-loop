@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -15,6 +16,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     public sealed class CompilationLockFileService : ICompilationLockService
     {
         private const string LOCK_FILE_NAME = "compiling.lock";
+        private readonly ServerReadinessStateStore _stateStore;
+
+        internal CompilationLockFileService(ServerReadinessStateStore stateStore = null)
+        {
+            _stateStore = stateStore ?? new ServerReadinessStateStore(UnityCliLoopPathResolver.GetProjectRoot());
+        }
 
         private static string LockFilePath => Path.Combine(UnityEngine.Application.dataPath, "..", "Temp", LOCK_FILE_NAME);
 
@@ -26,14 +33,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CompilationPipeline.compilationFinished += OnCompilationFinished;
         }
 
-        private static void OnCompilationStarted(object context)
+        private void OnCompilationStarted(object context)
         {
             CreateLockFile();
+            _stateStore.Write(
+                ServerReadinessPhase.Compiling,
+                ServerReadinessStateStore.CreateGenerationId(),
+                "compilation-started",
+                null,
+                null);
         }
 
-        private static void OnCompilationFinished(object context)
+        private void OnCompilationFinished(object context)
         {
             DeleteLockFileCore();
+            _stateStore.Write(
+                ServerReadinessPhase.Ready,
+                ServerReadinessStateStore.CreateGenerationId(),
+                "compilation-finished",
+                null,
+                null);
         }
 
         private static void CreateLockFile()
