@@ -21,12 +21,12 @@ type serverState struct {
 
 func readServerState(projectRoot string) (serverState, bool, error) {
 	statePath := filepath.Join(projectRoot, serverStateRelativePath)
-	content, err := os.ReadFile(statePath)
+	content, ok, err := readServerStateFile(statePath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return serverState{}, false, nil
-		}
 		return serverState{}, false, err
+	}
+	if !ok {
+		return serverState{}, false, nil
 	}
 
 	var state serverState
@@ -34,6 +34,29 @@ func readServerState(projectRoot string) (serverState, bool, error) {
 		return serverState{}, false, fmt.Errorf("server readiness state is unreadable: %w", err)
 	}
 	return state, true, nil
+}
+
+func readServerStateFile(statePath string) ([]byte, bool, error) {
+	content, err := os.ReadFile(statePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, false, err
+		}
+	} else {
+		return content, true, nil
+	}
+
+	for _, sidecarPath := range []string{statePath + ".tmp", statePath + ".bak"} {
+		sidecarContent, sidecarErr := os.ReadFile(sidecarPath)
+		if sidecarErr == nil {
+			return sidecarContent, true, nil
+		}
+		if !os.IsNotExist(sidecarErr) {
+			return nil, false, fmt.Errorf("server readiness state sidecar is unreadable: %w", sidecarErr)
+		}
+	}
+
+	return nil, false, nil
 }
 
 func isServerStateBusy(state serverState) bool {

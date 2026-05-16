@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -38,7 +39,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ct.ThrowIfCancellationRequested();
                 using Stream stream = await ConnectToEndpointAsync(endpoint, ct);
                 await WriteFrameAsync(stream, requestJson, ct);
-                await ReadResponseFrameAsync(stream, ct);
+                string responseJson = await ReadResponseFrameAsync(stream, ct);
+                ValidateJsonRpcSuccessResponse(responseJson);
             }, ct);
         }
 
@@ -121,11 +123,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             await stream.WriteAsync(payload, 0, payload.Length, ct);
         }
 
-        private async Task ReadResponseFrameAsync(Stream stream, CancellationToken ct)
+        private async Task<string> ReadResponseFrameAsync(Stream stream, CancellationToken ct)
         {
             int contentLength = await ReadContentLengthAsync(stream, ct);
             byte[] payload = new byte[contentLength];
             await ReadPayloadAsync(stream, payload, ct);
+            return Encoding.UTF8.GetString(payload);
         }
 
         private async Task<int> ReadContentLengthAsync(Stream stream, CancellationToken ct)
@@ -190,6 +193,30 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             throw new InvalidOperationException("Project IPC warmup response did not include Content-Length.");
+        }
+
+        internal void ValidateJsonRpcSuccessResponse(string responseJson)
+        {
+            System.Diagnostics.Debug.Assert(!string.IsNullOrWhiteSpace(responseJson), "responseJson must not be empty");
+
+            JObject response = JObject.Parse(responseJson);
+            JToken errorToken = response["error"];
+            if (errorToken != null && errorToken.Type != JTokenType.Null)
+            {
+                string errorMessage = errorToken["message"]?.ToString();
+                if (string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    errorMessage = errorToken.ToString();
+                }
+
+                throw new InvalidOperationException($"Project IPC warmup returned JSON-RPC error: {errorMessage}");
+            }
+
+            JToken resultToken = response["result"];
+            if (resultToken == null || resultToken.Type == JTokenType.Null)
+            {
+                throw new InvalidOperationException("Project IPC warmup response did not include a JSON-RPC result.");
+            }
         }
 
         private async Task WaitForConnectAsync(Task connectTask, Socket socket, CancellationToken ct)

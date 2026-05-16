@@ -119,6 +119,52 @@ func TestReadServerStateReadsSharedTempPath(t *testing.T) {
 	}
 }
 
+// Verifies that a state write in the .tmp phase is still visible to CLI waiters.
+func TestReadServerStateReadsTempSidecarWhenTargetIsMissing(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeReadinessServerStateSidecarForTest(t, projectRoot, ".tmp", `{"phase":"recovering","generationId":"tmp"}`)
+
+	state, ok, err := readServerState(projectRoot)
+	if err != nil {
+		t.Fatalf("readServerState failed: %v", err)
+	}
+
+	if !ok || state.Phase != "recovering" || state.GenerationID != "tmp" {
+		t.Fatalf("server state sidecar mismatch: ok=%v state=%#v", ok, state)
+	}
+}
+
+// Verifies that a crash leaving only the .bak sidecar still preserves recovery state for CLI waiters.
+func TestReadServerStateReadsBackupSidecarWhenTargetIsMissing(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeReadinessServerStateSidecarForTest(t, projectRoot, ".bak", `{"phase":"starting","generationId":"bak"}`)
+
+	state, ok, err := readServerState(projectRoot)
+	if err != nil {
+		t.Fatalf("readServerState failed: %v", err)
+	}
+
+	if !ok || state.Phase != "starting" || state.GenerationID != "bak" {
+		t.Fatalf("server state backup mismatch: ok=%v state=%#v", ok, state)
+	}
+}
+
+// Verifies that .tmp wins over .bak because it represents the newer atomic-write sidecar.
+func TestReadServerStatePrefersTempSidecarOverBackup(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeReadinessServerStateSidecarForTest(t, projectRoot, ".bak", `{"phase":"ready","generationId":"bak"}`)
+	writeReadinessServerStateSidecarForTest(t, projectRoot, ".tmp", `{"phase":"recovering","generationId":"tmp"}`)
+
+	state, ok, err := readServerState(projectRoot)
+	if err != nil {
+		t.Fatalf("readServerState failed: %v", err)
+	}
+
+	if !ok || state.GenerationID != "tmp" {
+		t.Fatalf("server state sidecar priority mismatch: ok=%v state=%#v", ok, state)
+	}
+}
+
 func writeReadinessServerStateForTest(t *testing.T, projectRoot string, content string) {
 	t.Helper()
 
@@ -128,5 +174,17 @@ func writeReadinessServerStateForTest(t *testing.T, projectRoot string, content 
 	}
 	if err := os.WriteFile(statePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write server state: %v", err)
+	}
+}
+
+func writeReadinessServerStateSidecarForTest(t *testing.T, projectRoot string, suffix string, content string) {
+	t.Helper()
+
+	statePath := filepath.Join(projectRoot, serverStateRelativePath)
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		t.Fatalf("failed to create state directory: %v", err)
+	}
+	if err := os.WriteFile(statePath+suffix, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write server state sidecar: %v", err)
 	}
 }

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -169,7 +170,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(state.Endpoint, Is.EqualTo("test"));
         }
 
+        [Test]
+        public async Task ProbeReadinessWithTimeoutAsync_WhenProbeDoesNotComplete_ThrowsTimeout()
+        {
+            // Tests that readiness probing fails fast instead of leaving startup state stuck forever.
+            TestReadinessProbe readinessProbe = new(neverCompletes: true);
+            UnityCliLoopServerControllerService service = CreateControllerService(readinessProbe);
+
+            System.TimeoutException exception = null;
+            try
+            {
+                await service.ProbeReadinessWithTimeoutAsync(CancellationToken.None, 1);
+            }
+            catch (System.TimeoutException ex)
+            {
+                exception = ex;
+            }
+
+            Assert.That(exception, Is.Not.Null);
+            Assert.That(exception.Message, Does.Contain("timed out"));
+            Assert.That(readinessProbe.CallCount, Is.EqualTo(1));
+        }
+
         private static UnityCliLoopServerControllerService CreateControllerService()
+        {
+            return CreateControllerService(new TestReadinessProbe());
+        }
+
+        private static UnityCliLoopServerControllerService CreateControllerService(TestReadinessProbe readinessProbe)
         {
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
@@ -183,7 +211,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new DomainReloadDetectionFileService(editorSettingsService, stateStore),
                 editorSettingsService,
                 stateStore,
-                new TestReadinessProbe());
+                readinessProbe);
         }
 
         private static ServerReadinessStateStore CreateTestStateStore()
@@ -200,11 +228,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestReadinessProbe : IUnityCliLoopServerReadinessProbe
         {
+            private readonly bool _neverCompletes;
+
+            public TestReadinessProbe(bool neverCompletes = false)
+            {
+                _neverCompletes = neverCompletes;
+            }
+
             public int CallCount { get; private set; }
 
             public Task ProbeAsync(CancellationToken ct)
             {
                 CallCount++;
+                if (_neverCompletes)
+                {
+                    return TimerDelay.Wait(60000, ct);
+                }
+
                 return Task.CompletedTask;
             }
         }

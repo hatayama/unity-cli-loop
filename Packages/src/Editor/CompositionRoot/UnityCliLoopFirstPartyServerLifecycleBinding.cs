@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using Newtonsoft.Json;
@@ -44,13 +45,17 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 ct);
         }
 
-        private static string CreateExecuteDynamicCodeReadinessRequestJson(string code)
+        internal static string CreateExecuteDynamicCodeReadinessRequestJson(string code)
         {
             JObject request = new()
             {
                 ["jsonrpc"] = "2.0",
                 ["method"] = "execute-dynamic-code",
                 ["id"] = 1,
+                ["uloop"] = new JObject
+                {
+                    ["cliVersion"] = CliConstants.MINIMUM_REQUIRED_CLI_VERSION
+                },
                 ["params"] = new JObject
                 {
                     ["Code"] = code,

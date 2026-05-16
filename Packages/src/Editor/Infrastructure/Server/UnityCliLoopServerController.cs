@@ -694,7 +694,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             try
             {
-                await _readinessProbe.ProbeAsync(cancellationToken);
+                await ProbeReadinessWithTimeoutAsync(cancellationToken, UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS);
             }
             catch (Exception ex)
             {
@@ -705,6 +705,42 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             WriteServerState(ServerReadinessPhase.Ready, generationId, reason, null);
             _serverLifecycleRegistry.PublishServerStarted();
+        }
+
+        internal async Task ProbeReadinessWithTimeoutAsync(
+            CancellationToken cancellationToken,
+            int timeoutMilliseconds)
+        {
+            Debug.Assert(timeoutMilliseconds > 0, "timeoutMilliseconds must be positive");
+
+            using (CancellationTokenSource probeCancellation =
+                   CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            {
+                Task probeTask = _readinessProbe.ProbeAsync(probeCancellation.Token);
+                Task timeoutTask = TimerDelay.Wait(timeoutMilliseconds, cancellationToken);
+                Task completedTask = await Task.WhenAny(probeTask, timeoutTask).ConfigureAwait(false);
+                if (completedTask == probeTask)
+                {
+                    await probeTask.ConfigureAwait(false);
+                    return;
+                }
+
+                probeCancellation.Cancel();
+                ObserveTimedOutReadinessProbe(probeTask);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new TimeoutException(
+                $"Readiness probe timed out after {timeoutMilliseconds}ms while waiting for project IPC warmup.");
+        }
+
+        private static void ObserveTimedOutReadinessProbe(Task probeTask)
+        {
+            _ = probeTask.ContinueWith(
+                completedTask => _ = completedTask.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
         }
 
         private void WriteServerState(
