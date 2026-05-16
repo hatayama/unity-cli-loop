@@ -54,6 +54,10 @@ func main() {
 		}
 		fmt.Println(`{"DisplayedCount":0,"Logs":[],"MaxCount":1,"TotalCount":0}`)
 	case "compile":
+		if os.Getenv("ULOOP_FAKE_COMPILE_WITHOUT_SUCCESS") == "1" {
+			fmt.Println(`{"ErrorCount":0,"WarningCount":0}`)
+			return
+		}
 		fmt.Println(`{"Success":true,"ErrorCount":0,"WarningCount":0}`)
 	case "execute-dynamic-code":
 		fmt.Println(`{"Success":true,"Result":"cli-recovery-readiness-e2e"}`)
@@ -118,9 +122,20 @@ if ! CALL_LOG="$CALL_LOG" go run "$ROOT_DIR/scripts/smoke-cli-recovery-readiness
 fi
 
 grep -F "launch" "$CALL_LOG" >/dev/null
-grep -E '\|compile\|$' "$CALL_LOG" >/dev/null
+grep -F "compile|--wait-for-domain-reload" "$CALL_LOG" >/dev/null
 grep -F "execute-dynamic-code" "$CALL_LOG" >/dev/null
 grep -F "fix" "$CALL_LOG" >/dev/null
 grep -F "stale recovery-state check passed" "$TMP_DIR/output.txt" >/dev/null
+
+if CALL_LOG="$CALL_LOG" ULOOP_FAKE_COMPILE_WITHOUT_SUCCESS=1 go run "$ROOT_DIR/scripts/smoke-cli-recovery-readiness.go" \
+    --project-path "$PROJECT_PATH" \
+    --uloop-path "$FAKE_ULOOP" \
+    --timeout 2 \
+    --launch-timeout 2 > "$TMP_DIR/missing-success-output.txt" 2>&1; then
+    cat "$TMP_DIR/missing-success-output.txt"
+    echo "expected compile payload without Success to fail" >&2
+    exit 1
+fi
+grep -F "compile with domain reload wait returned invalid success payload" "$TMP_DIR/missing-success-output.txt" >/dev/null
 
 echo "smoke-cli-recovery-readiness harness test passed"

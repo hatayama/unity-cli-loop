@@ -177,19 +177,19 @@ func runLiveRecoverySequence(opts options) error {
 	); err != nil {
 		return err
 	}
-	if _, err := assertJSONSuccess(
+	if _, err := assertJSONResponse(
 		runUloop(opts.uloopPath, opts.projectPath, []string{"get-logs", "--max-count", "1"}, opts.timeout),
 		"initial get-logs readiness check",
 	); err != nil {
 		return err
 	}
 	if _, err := assertJSONSuccess(
-		runUloop(opts.uloopPath, opts.projectPath, []string{"compile"}, opts.timeout),
+		runUloop(opts.uloopPath, opts.projectPath, []string{"compile", "--wait-for-domain-reload"}, opts.timeout),
 		"compile with domain reload wait",
 	); err != nil {
 		return err
 	}
-	if _, err := assertJSONSuccess(
+	if _, err := assertJSONResponse(
 		runUloop(opts.uloopPath, opts.projectPath, []string{"get-logs", "--max-count", "1"}, opts.timeout),
 		"immediate get-logs after compile",
 	); err != nil {
@@ -300,7 +300,7 @@ func assertSuccess(result commandResult, label string) error {
 	return errors.New(label)
 }
 
-func assertJSONSuccess(result commandResult, label string) (map[string]any, error) {
+func assertJSONResponse(result commandResult, label string) (map[string]any, error) {
 	if err := assertSuccess(result, label); err != nil {
 		return nil, err
 	}
@@ -311,9 +311,18 @@ func assertJSONSuccess(result commandResult, label string) (map[string]any, erro
 		return nil, fmt.Errorf("%s did not return JSON: %w", label, err)
 	}
 
-	if success, ok := payload["Success"].(bool); ok && !success {
+	return payload, nil
+}
+
+func assertJSONSuccess(result commandResult, label string) (map[string]any, error) {
+	payload, err := assertJSONResponse(result, label)
+	if err != nil {
+		return nil, err
+	}
+
+	if success, ok := payload["Success"].(bool); !ok || !success {
 		printCommandContext(label, result)
-		return nil, fmt.Errorf("%s returned Success=false", label)
+		return nil, fmt.Errorf("%s returned invalid success payload: %v", label, payload)
 	}
 
 	return payload, nil
