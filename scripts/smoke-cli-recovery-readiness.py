@@ -116,7 +116,7 @@ def format_command(args: list[str]) -> str:
     return " ".join(args)
 
 
-def assert_json_success(result: CommandResult, label: str) -> dict[str, Any]:
+def assert_json_response(result: CommandResult, label: str) -> dict[str, Any]:
     assert_success(result, label)
     try:
         payload = json.loads(result.stdout)
@@ -124,9 +124,18 @@ def assert_json_success(result: CommandResult, label: str) -> dict[str, Any]:
         print_command_context(label, result)
         raise AssertionError(f"{label} did not return JSON: {err}") from err
 
-    if payload.get("Success") is False:
+    if not isinstance(payload, dict):
         print_command_context(label, result)
-        raise AssertionError(f"{label} returned Success=false")
+        raise AssertionError(f"{label} returned non-object JSON payload: {payload}")
+
+    return payload
+
+
+def assert_json_success(result: CommandResult, label: str) -> dict[str, Any]:
+    payload = assert_json_response(result, label)
+    if payload.get("Success") is not True:
+        print_command_context(label, result)
+        raise AssertionError(f"{label} returned invalid success payload: {payload}")
 
     return payload
 
@@ -160,7 +169,7 @@ def run_live_recovery_sequence(uloop_path: str, project_path: str, timeout: floa
         run_uloop(uloop_path, project_path, ["launch"], launch_timeout),
         "launch or reuse Unity",
     )
-    assert_json_success(
+    assert_json_response(
         run_uloop(uloop_path, project_path, ["get-logs", "--max-count", "1"], timeout),
         "initial get-logs readiness check",
     )
@@ -168,7 +177,7 @@ def run_live_recovery_sequence(uloop_path: str, project_path: str, timeout: floa
         run_uloop(uloop_path, project_path, ["compile", "--wait-for-domain-reload"], timeout),
         "compile with domain reload wait",
     )
-    assert_json_success(
+    assert_json_response(
         run_uloop(uloop_path, project_path, ["get-logs", "--max-count", "1"], timeout),
         "immediate get-logs after compile",
     )
@@ -247,7 +256,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     project_path = os.path.abspath(args.project_path)
-    uloop_path = os.path.abspath(args.uloop_path)
+    uloop_path = os.path.abspath(args.uloop_path) if args.uloop_path else ""
     validate_paths(project_path, uloop_path)
 
     print("=== CLI recovery/readiness smoke ===")

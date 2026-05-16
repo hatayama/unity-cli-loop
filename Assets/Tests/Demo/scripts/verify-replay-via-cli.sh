@@ -194,7 +194,7 @@ else
     echo "  Press ENTER here when done."
     echo "========================================="
     echo ""
-    read dummy
+    read -r _
 fi
 
 echo "[5/9] Stopping recording via CLI..."

@@ -51,7 +51,7 @@ case "$command_name" in
 JSON
             exit 1
         fi
-        echo '{"Success":true,"Logs":[]}'
+        echo '{"DisplayedCount":0,"Logs":[],"MaxCount":1,"TotalCount":0}'
         ;;
     compile)
         echo '{"Success":true,"ErrorCount":0,"WarningCount":0}'
