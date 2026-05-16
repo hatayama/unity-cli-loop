@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -11,49 +12,49 @@ using Newtonsoft.Json.Linq;
 namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 {
     /// <summary>
-    /// Binds platform server lifecycle notifications to bundled tool lifecycle hooks.
+    /// Resets bundled tool lifecycle state and proves get-version IPC readiness before the server is published as ready.
     /// </summary>
-    internal sealed class UnityCliLoopFirstPartyServerLifecycleBinding
+    internal sealed class UnityCliLoopFirstPartyServerLifecycleBinding : IUnityCliLoopServerReadinessProbe
     {
-        private readonly ProjectIpcWarmupClient _projectIpcWarmupClient = new();
+        private readonly ProjectIpcWarmupClient _projectIpcWarmupClient;
 
-        internal void Initialize()
+        internal UnityCliLoopFirstPartyServerLifecycleBinding(ProjectIpcWarmupClient projectIpcWarmupClient)
         {
-            UnityCliLoopServerApplicationFacade.AddServerStartedHandler(OnServerStarted);
+            System.Diagnostics.Debug.Assert(projectIpcWarmupClient != null, "projectIpcWarmupClient must not be null");
+
+            _projectIpcWarmupClient = projectIpcWarmupClient
+                ?? throw new System.ArgumentNullException(nameof(projectIpcWarmupClient));
         }
 
-        private void OnServerStarted()
+        public Task ProbeAsync(CancellationToken ct)
         {
-            ResetServerScopedServicesAndWarmProjectIpcAsync(CancellationToken.None).Forget();
+            return ResetServerScopedServicesAndWarmProjectIpcAsync(ct);
         }
 
         private async Task ResetServerScopedServicesAndWarmProjectIpcAsync(CancellationToken ct)
         {
             FirstPartyToolsEditorStartup.ResetServerScopedServices();
-            string requestJson = CreateExecuteDynamicCodeReadinessRequestJson(
-                FirstPartyToolsEditorStartup.CreateExecuteDynamicCodeReadinessProbeCode());
+            string requestJson = CreateGetVersionReadinessRequestJson();
 
             // Why: after server recovery, the next external CLI request otherwise pays the cold
             // project IPC and editor-thread wakeup cost. The composition root owns this transport
-            // readiness work so execute-dynamic-code stays focused on executing user code.
+            // readiness work through an internal command so user-disabled tools do not block startup.
             await _projectIpcWarmupClient.SendProjectIpcRequestAsync(
                 UnityEngine.Application.dataPath + "/..",
                 requestJson,
                 ct);
         }
 
-        private static string CreateExecuteDynamicCodeReadinessRequestJson(string code)
+        internal static string CreateGetVersionReadinessRequestJson()
         {
             JObject request = new()
             {
                 ["jsonrpc"] = "2.0",
-                ["method"] = "execute-dynamic-code",
+                ["method"] = UnityCliLoopConstants.COMMAND_NAME_GET_VERSION,
                 ["id"] = 1,
-                ["params"] = new JObject
+                ["uloop"] = new JObject
                 {
-                    ["Code"] = code,
-                    ["CompileOnly"] = false,
-                    ["YieldToForegroundRequests"] = false
+                    ["cliVersion"] = CliConstants.MINIMUM_REQUIRED_CLI_VERSION
                 }
             };
             return request.ToString(Formatting.None);

@@ -111,7 +111,7 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 		if err != nil {
 			return nil, false, err
 		}
-		busy, err := isUnityBusyByCompileLocks(options.projectRoot)
+		busy, err := isUnityBusyByServerState(options.projectRoot)
 		if err != nil {
 			return nil, false, err
 		}
@@ -158,17 +158,18 @@ func tryReadCompileResult(projectRoot string, requestID string) (json.RawMessage
 	return json.RawMessage(content), nil
 }
 
-func isUnityBusyByCompileLocks(projectRoot string) (bool, error) {
-	for _, lockFile := range []string{"compiling.lock", "domainreload.lock", "serverstarting.lock"} {
-		_, err := os.Stat(filepath.Join(projectRoot, "Temp", lockFile))
-		if err == nil {
-			return true, nil
-		}
-		if !os.IsNotExist(err) {
-			return false, err
-		}
+func isUnityBusyByServerState(projectRoot string) (bool, error) {
+	state, ok, err := readServerState(projectRoot)
+	if err != nil {
+		return false, err
 	}
-	return false, nil
+	if !ok {
+		return false, nil
+	}
+	if failure := serverStateFailureError(state); failure != nil {
+		return false, failure
+	}
+	return isServerStateBusy(state), nil
 }
 
 func shouldWaitForCompileResult(err error, outcome unityipc.UnitySendOutcome) bool {

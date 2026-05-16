@@ -96,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         /// Execute recovery processing after Domain Reload completion
         /// </summary>
         /// <returns>Processing result</returns>
-        public Task<ServiceResult<string>> ExecuteAfterDomainReloadAsync(CancellationToken cancellationToken = default)
+        public async Task<ServiceResult<string>> ExecuteAfterDomainReloadAsync(CancellationToken cancellationToken = default)
         {
             // 1. Generate tracking ID for related operations
             string correlationId = VibeLogger.GenerateCorrelationId();
@@ -112,13 +112,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             // 4. Restore server state
             ValidationResult restoreResult =
-                _sessionRecoveryService.RestoreServerStateIfNeeded(cancellationToken);
+                await _sessionRecoveryService.RestoreServerStateIfNeededAsync(cancellationToken);
             if (!restoreResult.IsValid)
             {
-                return Task.FromResult(ServiceResult<string>.FailureResult($"Server restoration failed: {restoreResult.ErrorMessage}"));
+                return ServiceResult<string>.FailureResult($"Server restoration failed: {restoreResult.ErrorMessage}");
             }
 
-            return Task.FromResult(ServiceResult<string>.SuccessResult(correlationId));
+            return ServiceResult<string>.SuccessResult(correlationId);
         }
 
         private static void LogServerStoppingBeforeDomainReload(string correlationId)

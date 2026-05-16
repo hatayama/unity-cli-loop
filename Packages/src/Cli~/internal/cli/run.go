@@ -62,6 +62,12 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		writeClassifiedError(stderr, err, errorContext{command: command})
 		return 1
 	}
+	if shouldWaitForServerReadinessBeforeCommand(command) {
+		if err := waitForRecoveringServerIfNeeded(ctx, connection.ProjectRoot, waitForRecoveringToolReadiness); err != nil {
+			writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: command})
+			return 1
+		}
+	}
 
 	switch command {
 	case "list":
@@ -105,6 +111,15 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 			return 1
 		}
 		return runTool(ctx, connection, command, params, stdout, stderr)
+	}
+}
+
+func shouldWaitForServerReadinessBeforeCommand(command string) bool {
+	switch command {
+	case "fix", "focus-window":
+		return false
+	default:
+		return true
 	}
 }
 

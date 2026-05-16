@@ -51,13 +51,13 @@ Returns JSON:
 
 Diagnose the failure mode before retrying.
 
-**Stale lock files** (CLI hangs or shows "Unity is busy" while Unity Editor *is* running):
+**Stale recovery state** (CLI hangs or shows recovery/startup state while Unity Editor *is* running):
 
 ```bash
 uloop fix
 ```
 
-This removes any leftover lock files (`compiling.lock`, `domainreload.lock`, `serverstarting.lock`) from the Unity project's Temp directory. Then retry `uloop compile`.
+This removes the Unity CLI Loop readiness state file and any leftover legacy lock files from the Unity project's Temp directory. Then retry `uloop compile`.
 
 **Unity Editor not running** (CLI returns a connection failure and no Unity process is alive):
 

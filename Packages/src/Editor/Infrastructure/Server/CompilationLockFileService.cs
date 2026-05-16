@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -15,6 +16,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     public sealed class CompilationLockFileService : ICompilationLockService
     {
         private const string LOCK_FILE_NAME = "compiling.lock";
+        private readonly ServerReadinessStateStore _stateStore;
+        private ServerReadinessState _stateBeforeCompilation;
+        private string _activeCompilationGenerationId;
+
+        internal CompilationLockFileService(ServerReadinessStateStore stateStore = null)
+        {
+            _stateStore = stateStore ?? new ServerReadinessStateStore(UnityCliLoopPathResolver.GetProjectRoot());
+        }
 
         private static string LockFilePath => Path.Combine(UnityEngine.Application.dataPath, "..", "Temp", LOCK_FILE_NAME);
 
@@ -26,14 +35,65 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CompilationPipeline.compilationFinished += OnCompilationFinished;
         }
 
-        private static void OnCompilationStarted(object context)
+        private void OnCompilationStarted(object context)
         {
-            CreateLockFile();
+            MarkCompilationStarted();
         }
 
-        private static void OnCompilationFinished(object context)
+        private void OnCompilationFinished(object context)
         {
             DeleteLockFileCore();
+            string generationId = _activeCompilationGenerationId;
+            ServerReadinessState stateBeforeCompilation = _stateBeforeCompilation;
+            EditorApplication.delayCall += () =>
+                RestoreStateBeforeCompilationIfStillCurrent(generationId, stateBeforeCompilation);
+        }
+
+        internal void MarkCompilationStarted()
+        {
+            CreateLockFile();
+            _stateBeforeCompilation = _stateStore.Read();
+            _activeCompilationGenerationId = ServerReadinessStateStore.CreateGenerationId();
+            _stateStore.Write(
+                ServerReadinessPhase.Compiling,
+                _activeCompilationGenerationId,
+                "compilation-started",
+                null,
+                null);
+        }
+
+        internal void MarkCompilationFinished()
+        {
+            DeleteLockFileCore();
+            RestoreStateBeforeCompilationIfStillCurrent(
+                _activeCompilationGenerationId,
+                _stateBeforeCompilation);
+        }
+
+        private void RestoreStateBeforeCompilationIfStillCurrent(
+            string compilationGenerationId,
+            ServerReadinessState stateBeforeCompilation)
+        {
+            if (string.IsNullOrWhiteSpace(compilationGenerationId))
+            {
+                return;
+            }
+
+            ServerReadinessState currentState = _stateStore.Read();
+            if (currentState == null ||
+                currentState.GenerationId != compilationGenerationId ||
+                currentState.Phase != "compiling")
+            {
+                return;
+            }
+
+            if (stateBeforeCompilation == null)
+            {
+                _stateStore.Delete();
+                return;
+            }
+
+            _stateStore.Write(stateBeforeCompilation);
         }
 
         private static void CreateLockFile()

@@ -21,8 +21,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         IUnityCliLoopServerInstanceFactory,
         IUnityCliLoopServerLifecycleSource
     {
-        public event Action ServerStarted;
-        public event Action ServerStopping;
+        public event Action ServerStarted
+        {
+            add { }
+            remove { }
+        }
+
+        public event Action ServerStopping
+        {
+            add { }
+            remove { }
+        }
         public event Action ServerLoopExited;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
         private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
@@ -53,21 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public IUnityCliLoopServerInstance Create()
         {
             UnityCliLoopBridgeServer server = new(_domainReloadDetectionService, _editorSettingsService);
-            server.ServerStarted += NotifyServerStarted;
-            server.ServerStopping += NotifyServerStopping;
             server.ServerLoopExited += NotifyServerLoopExited;
 
             return server;
-        }
-
-        private void NotifyServerStarted()
-        {
-            ServerStarted?.Invoke();
-        }
-
-        private void NotifyServerStopping()
-        {
-            ServerStopping?.Invoke();
         }
 
         private void NotifyServerLoopExited()
@@ -231,11 +228,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             _isRunning = false;
 
+            CancellationTokenSource cancellationTokenSource = TakeCancellationTokenSource();
+            cancellationTokenSource?.Cancel();
+
             // Explicitly disconnect all connected clients before stopping the server
             DisconnectAllClients();
-            
-            // Request cancellation.
-            _cancellationTokenSource?.Cancel();
             
             try
             {
@@ -245,30 +242,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 _transportListener = null;
             }
-            
-            // Wait for the server task to complete.
-            try
+
+            Task serverTask = _serverTask;
+            _serverTask = null;
+            DisposeCancellationSourceAfterServerTaskAsync(serverTask, cancellationTokenSource).Forget();
+        }
+
+        private CancellationTokenSource TakeCancellationTokenSource()
+        {
+            return Interlocked.Exchange(ref _cancellationTokenSource, null);
+        }
+
+        private static async Task DisposeCancellationSourceAfterServerTaskAsync(
+            Task serverTask,
+            CancellationTokenSource cancellationTokenSource)
+        {
+            if (serverTask != null)
             {
-                _serverTask?.Wait(TimeSpan.FromSeconds(UnityCliLoopServerConfig.SHUTDOWN_TIMEOUT_SECONDS));
+                await Task.WhenAny(
+                    serverTask,
+                    Task.Delay(TimeSpan.FromSeconds(UnityCliLoopServerConfig.SHUTDOWN_TIMEOUT_SECONDS)));
             }
-            finally
-            {
-                // Set the server task to null regardless of success/failure
-                _serverTask = null;
-            }
-            
-            // Dispose of the cancellation token source.
-            try
-            {
-                _cancellationTokenSource?.Dispose();
-            }
-            finally
-            {
-                // Set the cancellation token source to null regardless of success/failure
-                _cancellationTokenSource = null;
-            }
-            
-            
+
+            cancellationTokenSource?.Dispose();
         }
 
         /// <summary>
@@ -324,15 +320,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             DisconnectAllClients();
 
-            try
-            {
-                _cancellationTokenSource?.Cancel();
-            }
-            finally
-            {
-                _cancellationTokenSource?.Dispose();
-                _cancellationTokenSource = null;
-            }
+            CancellationTokenSource cancellationTokenSource = TakeCancellationTokenSource();
+            cancellationTokenSource?.Cancel();
+            cancellationTokenSource?.Dispose();
 
             try
             {
@@ -632,7 +622,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void Dispose()
         {
             StopServer();
-            _cancellationTokenSource?.Dispose();
+            CancellationTokenSource cancellationTokenSource = TakeCancellationTokenSource();
+            cancellationTokenSource?.Dispose();
             _transportListener = null;
             _serverTask = null;
         }

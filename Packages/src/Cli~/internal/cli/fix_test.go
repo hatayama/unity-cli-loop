@@ -63,3 +63,49 @@ func TestCleanupStaleLockFilesReturnsUnexpectedStatError(t *testing.T) {
 		t.Fatal("expected stat error")
 	}
 }
+
+// Verifies that fix cleanup removes the state file and older lock hints together.
+func TestCleanupStaleRecoveryStateRemovesServerStateAndLegacyLocks(t *testing.T) {
+	projectRoot := t.TempDir()
+	tempDirectory := filepath.Join(projectRoot, "Temp")
+	statePath := filepath.Join(projectRoot, serverStateRelativePath)
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		t.Fatalf("failed to create state directory: %v", err)
+	}
+	if err := os.MkdirAll(tempDirectory, 0o755); err != nil {
+		t.Fatalf("failed to create Temp directory: %v", err)
+	}
+	if err := os.WriteFile(statePath, []byte(`{"phase":"failed"}`), 0o644); err != nil {
+		t.Fatalf("failed to seed state file: %v", err)
+	}
+	if err := os.WriteFile(statePath+serverStateCompletedTempSuffix, []byte(`{"phase":"starting"}`), 0o644); err != nil {
+		t.Fatalf("failed to seed temp state file: %v", err)
+	}
+	if err := os.WriteFile(statePath+serverStateInProgressTempSuffix, []byte(`{"phase":"recovering"}`), 0o644); err != nil {
+		t.Fatalf("failed to seed in-progress temp state file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDirectory, "domainreload.lock"), []byte("lock"), 0o644); err != nil {
+		t.Fatalf("failed to seed legacy lock file: %v", err)
+	}
+
+	cleaned, err := cleanupStaleRecoveryState(projectRoot)
+	if err != nil {
+		t.Fatalf("cleanupStaleRecoveryState failed: %v", err)
+	}
+
+	if cleaned != 4 {
+		t.Fatalf("cleaned count mismatch: %d", cleaned)
+	}
+	if _, err := os.Stat(statePath); err == nil {
+		t.Fatal("server state file was not removed")
+	}
+	if _, err := os.Stat(statePath + serverStateCompletedTempSuffix); err == nil {
+		t.Fatal("temporary server state file was not removed")
+	}
+	if _, err := os.Stat(statePath + serverStateInProgressTempSuffix); err == nil {
+		t.Fatal("in-progress temporary server state file was not removed")
+	}
+	if _, err := os.Stat(filepath.Join(tempDirectory, "domainreload.lock")); err == nil {
+		t.Fatal("legacy lock file was not removed")
+	}
+}
