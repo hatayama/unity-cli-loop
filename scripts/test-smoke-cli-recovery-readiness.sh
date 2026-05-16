@@ -122,7 +122,7 @@ if ! CALL_LOG="$CALL_LOG" go run "$ROOT_DIR/scripts/smoke-cli-recovery-readiness
 fi
 
 grep -F "launch" "$CALL_LOG" >/dev/null
-grep -F "compile|--wait-for-domain-reload" "$CALL_LOG" >/dev/null
+grep -E '\|compile\|$' "$CALL_LOG" >/dev/null
 grep -F "execute-dynamic-code" "$CALL_LOG" >/dev/null
 grep -F "fix" "$CALL_LOG" >/dev/null
 grep -F "stale recovery-state check passed" "$TMP_DIR/output.txt" >/dev/null

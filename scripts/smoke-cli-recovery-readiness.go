@@ -184,7 +184,7 @@ func runLiveRecoverySequence(opts options) error {
 		return err
 	}
 	if _, err := assertJSONSuccess(
-		runUloop(opts.uloopPath, opts.projectPath, []string{"compile", "--wait-for-domain-reload"}, opts.timeout),
+		runUloop(opts.uloopPath, opts.projectPath, []string{"compile"}, opts.timeout),
 		"compile with domain reload wait",
 	); err != nil {
 		return err
