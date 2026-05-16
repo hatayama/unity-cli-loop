@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
             DynamicCodeSecurityLevel editorLevel = DynamicCodeSecurityLevel.Restricted;
+            DynamicCodeDomainReloadWaitSignal domainReloadWaitSignal = DynamicCodeDomainReloadWaitSignal.Start(parameters);
 
             try
             {
@@ -79,6 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     originalCode);
                 response.SecurityLevel = editorLevel.ToString();
                 response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
+                response.DomainReloadWaitRequired = await domainReloadWaitSignal.ShouldWaitAsync(cancellationToken);
                 return response;
             }
             catch (OperationCanceledException)
@@ -93,6 +95,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ExecuteDynamicCodeResponse response = CreateExceptionResponse(ex, editorLevel);
                 response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
                 return response;
+            }
+            finally
+            {
+                domainReloadWaitSignal.Dispose();
             }
         }
 

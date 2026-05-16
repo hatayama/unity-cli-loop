@@ -118,6 +118,9 @@ func TestExecuteDynamicCodeReadinessProbeParamsUseForegroundWarmup(t *testing.T)
 	if params["YieldToForegroundRequests"] != false {
 		t.Fatalf("readiness probe should use foreground warmup: %#v", params["YieldToForegroundRequests"])
 	}
+	if params[domainReloadWaitParam] != false {
+		t.Fatalf("readiness probe should not wait for its own reload check: %#v", params[domainReloadWaitParam])
+	}
 }
 
 func TestNewUnityLaunchCommandIsNotContextCancelable(t *testing.T) {

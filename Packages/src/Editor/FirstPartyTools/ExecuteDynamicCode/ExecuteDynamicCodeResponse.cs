@@ -54,6 +54,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public List<CompilationErrorDto> Diagnostics { get; set; } = new();
 
         /// <summary>
+        /// Why: the native CLI needs an explicit Unity-side reload signal before it can safely wait.
+        /// </summary>
+        public bool DomainReloadWaitRequired { get; set; } = false;
+
+        /// <summary>
         /// Lightweight internal timings for benchmark comparison.
         /// </summary>
         public List<string> Timings { get; set; } = new();
@@ -82,6 +87,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeEmitTimingsInJsonResponse()
         {
             return false;
+        }
+
+        public bool ShouldSerializeDomainReloadWaitRequired()
+        {
+            return DomainReloadWaitRequired;
         }
     }
     
