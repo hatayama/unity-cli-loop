@@ -293,14 +293,7 @@ func runSkillsUninstall(projectRoot string, skills []skillDefinition, options sk
 	writeLine(stdout, "")
 	for _, target := range options.targets {
 		grouped := groupManagedSkillsForOptions(options)
-		removed := 0
-		notFound := 0
-		var err error
-		if grouped {
-			removed, notFound, err = uninstallSkillsForTarget(projectRoot, target, skills, options.global, grouped)
-		} else {
-			removed, notFound, err = uninstallSkillsForTargetFromAllLayouts(projectRoot, target, skills, options.global)
-		}
+		removed, notFound, err := uninstallSkillsForTarget(projectRoot, target, skills, options.global, grouped)
 		if err != nil {
 			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
 			return 1
@@ -409,35 +402,6 @@ func uninstallSkillsForTarget(projectRoot string, target skillTarget, skills []s
 			return removed, notFound, err
 		}
 		removed++
-	}
-	return removed, notFound, nil
-}
-
-func uninstallSkillsForTargetFromAllLayouts(projectRoot string, target skillTarget, skills []skillDefinition, global bool) (int, int, error) {
-	removed := 0
-	notFound := 0
-	baseDir, err := getSkillsBaseDir(projectRoot, target, global)
-	if err != nil {
-		return removed, notFound, err
-	}
-	deprecatedRemoved, err := removeDeprecatedSkillDirs(baseDir)
-	if err != nil {
-		return removed, notFound, err
-	}
-	removed += deprecatedRemoved
-	for _, skill := range skills {
-		exists, err := removeSkillFromAllLayoutsIfExists(baseDir, skill.name)
-		if err != nil {
-			return removed, notFound, err
-		}
-		if !exists {
-			notFound++
-			continue
-		}
-		removed++
-	}
-	if err := removeEmptyDir(getPreferredSkillDir(baseDir, managedSkillsDir, false)); err != nil {
-		return removed, notFound, err
 	}
 	return removed, notFound, nil
 }

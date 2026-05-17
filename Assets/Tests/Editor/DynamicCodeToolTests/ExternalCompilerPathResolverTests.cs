@@ -73,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string contentsPath = CreateDirectory("Contents");
             CreateDirectory(Path.Combine("Contents", "NetCoreRuntime"));
             CreateDirectory(Path.Combine("Contents", "DotNetSdkRoslyn"));
+            CreateFile(Path.Combine("Contents", "DotNetSdkRoslyn", "csc.dll"));
 
             string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
 
@@ -87,6 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string expectedScriptingRootPath = CreateDirectory(Path.Combine("Contents", "Resources", "Scripting"));
             CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "NetCoreRuntime"));
             CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "DotNetSdkRoslyn"));
+            CreateFile(Path.Combine("Contents", "Resources", "Scripting", "DotNetSdkRoslyn", "csc.dll"));
 
             string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
 
@@ -114,9 +116,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string contentsPath = CreateDirectory("Contents");
             CreateDirectory(Path.Combine("Contents", "NetCoreRuntime"));
             CreateDirectory(Path.Combine("Contents", "DotNetSdkRoslyn"));
+            CreateFile(Path.Combine("Contents", "DotNetSdkRoslyn", "csc.dll"));
             string expectedScriptingRootPath = CreateDirectory(Path.Combine("Contents", "Resources", "Scripting"));
             CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "NetCoreRuntime"));
             CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "DotNetSdkRoslyn"));
+            CreateFile(Path.Combine("Contents", "Resources", "Scripting", "DotNetSdkRoslyn", "csc.dll"));
 
             string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
 
@@ -130,6 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string expectedScriptingRootPath = CreateDirectory(Path.Combine("Contents", "PlaybackEngines", "Custom", "Scripting"));
             CreateDirectory(Path.Combine("Contents", "PlaybackEngines", "Custom", "Scripting", "NetCoreRuntime"));
             CreateDirectory(Path.Combine("Contents", "PlaybackEngines", "Custom", "Scripting", "DotNetSdkRoslyn"));
+            CreateFile(Path.Combine("Contents", "PlaybackEngines", "Custom", "Scripting", "DotNetSdkRoslyn", "csc.dll"));
 
             string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
 
@@ -142,6 +147,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             // Verifies legacy compiler roots keep resolving to DotNetSdkRoslyn.
             string scriptingRootPath = CreateDirectory("Scripting");
             string expectedCompilerDirectoryPath = CreateDirectory(Path.Combine("Scripting", "DotNetSdkRoslyn"));
+            CreateFile(Path.Combine("Scripting", "DotNetSdkRoslyn", "csc.dll"));
+
+            string resolvedCompilerDirectoryPath = ExternalCompilerPathResolver.ResolveCompilerDirectoryPath(scriptingRootPath);
+
+            Assert.That(resolvedCompilerDirectoryPath, Is.EqualTo(expectedCompilerDirectoryPath));
+        }
+
+        [Test]
+        public void ResolveCompilerDirectoryPath_WhenLegacyLayoutIsIncomplete_ShouldUseDotNetSdkLayout()
+        {
+            // Verifies stale legacy compiler roots fall back to the versioned DotNetSdk layout.
+            string scriptingRootPath = CreateDirectory("Scripting");
+            CreateDirectory(Path.Combine("Scripting", "DotNetSdkRoslyn"));
+            string expectedCompilerDirectoryPath = CreateDirectory(Path.Combine("Scripting", "DotNetSdk", "sdk", "8.0.318", "Roslyn", "bincore"));
 
             string resolvedCompilerDirectoryPath = ExternalCompilerPathResolver.ResolveCompilerDirectoryPath(scriptingRootPath);
 
@@ -167,6 +186,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string directoryPath = Path.Combine(_tempDirectoryPath, relativePath);
             Directory.CreateDirectory(directoryPath);
             return directoryPath;
+        }
+
+        private string CreateFile(string relativePath)
+        {
+            string filePath = Path.Combine(_tempDirectoryPath, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+            File.WriteAllText(filePath, string.Empty);
+            return filePath;
         }
     }
 }

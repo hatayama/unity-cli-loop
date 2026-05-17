@@ -199,12 +199,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string legacyCompilerDirectoryPath = Path.Combine(scriptingRootPath, DotNetSdkRoslynDirectoryName);
-            if (Directory.Exists(legacyCompilerDirectoryPath))
+            if (IsUsableCompilerDirectory(legacyCompilerDirectoryPath))
             {
                 return legacyCompilerDirectoryPath;
             }
 
             return ResolveDotNetSdkCompilerDirectoryPath(scriptingRootPath);
+        }
+
+        private static bool IsUsableCompilerDirectory(string compilerDirectoryPath)
+        {
+            return Directory.Exists(compilerDirectoryPath)
+                && File.Exists(Path.Combine(compilerDirectoryPath, CompilerDllFileName));
         }
 
         private static string ResolveDotNetSdkCompilerDirectoryPath(string scriptingRootPath)

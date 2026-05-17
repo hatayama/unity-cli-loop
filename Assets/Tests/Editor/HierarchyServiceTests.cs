@@ -133,6 +133,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(rootNode.components, Contains.Item("Rigidbody"));
             Assert.That(rootNode.components, Contains.Item("Transform"));
         }
+
+#if UNITY_6000_4_OR_NEWER
+        [Test]
+        public void GetHierarchyNodes_WithEntityId_UsesUnityEntityIdString()
+        {
+            // Verifies Unity 6.0.4+ hierarchy IDs use the EntityId public string representation.
+            HierarchyOptions options = new();
+            string expectedObjectId = testRoot.GetEntityId().ToString();
+
+            List<HierarchyNode> nodes = service.GetHierarchyNodes(options);
+
+            HierarchyNode rootNode = nodes.Find(n => n.name == testRoot.name);
+            Assert.That(rootNode, Is.Not.Null);
+            Assert.That(rootNode.id, Is.EqualTo(expectedObjectId));
+        }
+#endif
         
         [Test]
         public void GetHierarchyNodes_WithRootPathIncludingRootName_ReturnsChild()

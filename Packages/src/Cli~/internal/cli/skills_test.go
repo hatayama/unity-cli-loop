@@ -578,8 +578,8 @@ func TestRunSkillsListDefaultsToFlatLayout(t *testing.T) {
 	}
 }
 
-// Tests that the public uninstall command removes every managed layout by default.
-func TestRunSkillsUninstallDefaultsToRemovingBothLayouts(t *testing.T) {
+// Tests that the public uninstall command removes only the flat layout by default.
+func TestRunSkillsUninstallDefaultsToFlatLayout(t *testing.T) {
 	projectRoot := t.TempDir()
 	skill := skillDefinition{
 		name:    "uloop-sample",
@@ -608,8 +608,8 @@ func TestRunSkillsUninstallDefaultsToRemovingBothLayouts(t *testing.T) {
 	if _, err := os.Stat(flatDir); err == nil {
 		t.Fatal("flat skill should be removed")
 	}
-	if _, err := os.Stat(groupedDir); err == nil {
-		t.Fatal("grouped skill should be removed")
+	if _, err := os.Stat(groupedDir); err != nil {
+		t.Fatalf("grouped skill should remain: %v", err)
 	}
 }
 

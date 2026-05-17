@@ -122,8 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string GetStoredObjectReferenceId(SerializedProperty property)
         {
 #if UNITY_6000_4_OR_NEWER
-            ulong entityId = UnityEngine.EntityId.ToULong(property.objectReferenceEntityIdValue);
-            return entityId.ToString(CultureInfo.InvariantCulture);
+            return property.objectReferenceEntityIdValue.ToString();
 #else
             int instanceId = property.objectReferenceInstanceIDValue;
             return instanceId.ToString(CultureInfo.InvariantCulture);
@@ -135,8 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityEngine.Debug.Assert(obj != null, "Unity Object must exist before reading its identifier.");
 
 #if UNITY_6000_4_OR_NEWER
-            ulong entityId = UnityEngine.EntityId.ToULong(obj.GetEntityId());
-            return entityId.ToString(CultureInfo.InvariantCulture);
+            return obj.GetEntityId().ToString();
 #else
             int instanceId = obj.GetInstanceID();
             return instanceId.ToString(CultureInfo.InvariantCulture);
