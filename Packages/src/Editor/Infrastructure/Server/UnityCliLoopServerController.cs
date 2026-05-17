@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly SessionRecoveryService _sessionRecoveryService;
         private readonly ServerReadinessStateStore _stateStore;
         private readonly IUnityCliLoopServerReadinessProbe _readinessProbe;
+        private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
         private IUnityCliLoopServerInstance _bridgeServer;
         private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
         private long _startupProtectionUntilTicks = 0;
@@ -37,7 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             IDomainReloadDetectionService domainReloadDetectionService,
             UnityCliLoopEditorSettingsService editorSettingsService,
             ServerReadinessStateStore stateStore,
-            IUnityCliLoopServerReadinessProbe readinessProbe)
+            IUnityCliLoopServerReadinessProbe readinessProbe,
+            IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
@@ -45,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
             System.Diagnostics.Debug.Assert(stateStore != null, "stateStore must not be null");
             System.Diagnostics.Debug.Assert(readinessProbe != null, "readinessProbe must not be null");
+            System.Diagnostics.Debug.Assert(domainReloadLifecycle != null, "domainReloadLifecycle must not be null");
 
             _serverInstanceFactory = serverInstanceFactory ?? throw new ArgumentNullException(nameof(serverInstanceFactory));
             _serverLifecycleRegistry = serverLifecycleRegistry ?? throw new ArgumentNullException(nameof(serverLifecycleRegistry));
@@ -52,6 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _editorSettingsService = editorSettingsService ?? throw new ArgumentNullException(nameof(editorSettingsService));
             _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
             _readinessProbe = readinessProbe ?? throw new ArgumentNullException(nameof(readinessProbe));
+            _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
             _sessionRecoveryService = new SessionRecoveryService(
                 this,
                 _domainReloadDetectionService,
@@ -289,6 +293,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal void OnBeforeAssemblyReload()
         {
             ClearStartupProtection();
+            _domainReloadLifecycle.PrepareForDomainReload();
             string generationId = ServerReadinessStateStore.CreateGenerationId();
             WriteServerState(ServerReadinessPhase.Reloading, generationId, "domain-reload-before", null);
 

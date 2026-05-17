@@ -82,6 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ResolveScriptingRootPath_WhenResourcesScriptingLayoutExists_ShouldReturnResourcesScriptingPath()
         {
+            // Verifies Unity's Resources/Scripting compiler layout is preferred when present.
             string contentsPath = CreateDirectory("Contents");
             string expectedScriptingRootPath = CreateDirectory(Path.Combine("Contents", "Resources", "Scripting"));
             CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "NetCoreRuntime"));
@@ -93,8 +94,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
+        public void ResolveScriptingRootPath_WhenResourcesScriptingDotNetSdkLayoutExists_ShouldReturnResourcesScriptingPath()
+        {
+            // Verifies Unity 6.5 DotNetSdk compiler layouts are accepted under Resources/Scripting.
+            string contentsPath = CreateDirectory("Contents");
+            string expectedScriptingRootPath = CreateDirectory(Path.Combine("Contents", "Resources", "Scripting"));
+            CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "NetCoreRuntime"));
+            CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "DotNetSdk", "sdk", "8.0.318", "Roslyn", "bincore"));
+
+            string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
+
+            Assert.That(resolvedScriptingRootPath, Is.EqualTo(expectedScriptingRootPath));
+        }
+
+        [Test]
         public void ResolveScriptingRootPath_WhenBothLayoutsExist_ShouldPreferResourcesScriptingLayout()
         {
+            // Verifies the current Resources/Scripting layout wins over the legacy contents-root layout.
             string contentsPath = CreateDirectory("Contents");
             CreateDirectory(Path.Combine("Contents", "NetCoreRuntime"));
             CreateDirectory(Path.Combine("Contents", "DotNetSdkRoslyn"));
@@ -118,6 +134,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
 
             Assert.That(resolvedScriptingRootPath, Is.EqualTo(expectedScriptingRootPath));
+        }
+
+        [Test]
+        public void ResolveCompilerDirectoryPath_WhenLegacyLayoutExists_ShouldReturnDotNetSdkRoslynPath()
+        {
+            // Verifies legacy compiler roots keep resolving to DotNetSdkRoslyn.
+            string scriptingRootPath = CreateDirectory("Scripting");
+            string expectedCompilerDirectoryPath = CreateDirectory(Path.Combine("Scripting", "DotNetSdkRoslyn"));
+
+            string resolvedCompilerDirectoryPath = ExternalCompilerPathResolver.ResolveCompilerDirectoryPath(scriptingRootPath);
+
+            Assert.That(resolvedCompilerDirectoryPath, Is.EqualTo(expectedCompilerDirectoryPath));
+        }
+
+        [Test]
+        public void ResolveCompilerDirectoryPath_WhenDotNetSdkLayoutHasMultipleSdkVersions_ShouldChooseHighestSdkRoslynBincorePath()
+        {
+            // Verifies Unity 6.5 SDK layouts choose the newest versioned Roslyn compiler directory.
+            string scriptingRootPath = CreateDirectory("Scripting");
+            CreateDirectory(Path.Combine("Scripting", "DotNetSdk", "sdk", "8.0.100", "Roslyn", "bincore"));
+            string expectedCompilerDirectoryPath = CreateDirectory(Path.Combine("Scripting", "DotNetSdk", "sdk", "8.0.318", "Roslyn", "bincore"));
+            CreateDirectory(Path.Combine("Scripting", "DotNetSdk", "sdk", "current", "Roslyn", "bincore"));
+
+            string resolvedCompilerDirectoryPath = ExternalCompilerPathResolver.ResolveCompilerDirectoryPath(scriptingRootPath);
+
+            Assert.That(resolvedCompilerDirectoryPath, Is.EqualTo(expectedCompilerDirectoryPath));
         }
 
         private string CreateDirectory(string relativePath)

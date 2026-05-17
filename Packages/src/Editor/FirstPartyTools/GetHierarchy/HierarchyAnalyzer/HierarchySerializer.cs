@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
 
             // Group by scene
-            var groups = nodes
+            List<SceneHierarchyGroup> groups = nodes
                 .GroupBy(n => n.sceneName)
                 .Select(g => BuildGroupForScene(g.Key ?? string.Empty, g.ToList(), options))
                 .ToList();
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private SceneHierarchyGroup BuildGroupForScene(string sceneName, List<HierarchyNode> sceneNodes, HierarchySerializationOptions options)
         {
             // Build nested structure per scene
-            Dictionary<int, HierarchyNodeNested> nodeDict = new();
+            Dictionary<string, HierarchyNodeNested> nodeDict = new();
 
             foreach (HierarchyNode flat in sceneNodes)
             {
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     roots.Add(nested);
                 }
-                else if (nodeDict.TryGetValue(flat.parent.Value, out var parentNested))
+                else if (nodeDict.TryGetValue(flat.parent, out HierarchyNodeNested parentNested))
                 {
                     parentNested.children.Add(nested);
                 }
@@ -109,11 +109,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (options.UseComponentsLut == "false") return false;
             // auto heuristic: high duplication of component names
             List<string> all = new();
-            foreach (var n in sceneNodes)
+            foreach (HierarchyNode node in sceneNodes)
             {
-                if (n.components != null && n.components.Length > 0)
+                if (node.components != null && node.components.Length > 0)
                 {
-                    all.AddRange(n.components);
+                    all.AddRange(node.components);
                 }
             }
             if (all.Count < 50) return false;
@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return unique * 2 < all.Count; // more than 50% duplicates
         }
 
-        private static List<string> BuildComponentsLutAndApply(List<HierarchyNode> sceneNodes, Dictionary<int, HierarchyNodeNested> nodeDict)
+        private static List<string> BuildComponentsLutAndApply(List<HierarchyNode> sceneNodes, Dictionary<string, HierarchyNodeNested> nodeDict)
         {
             Dictionary<string, int> lutIndex = new();
             List<string> lut = new();

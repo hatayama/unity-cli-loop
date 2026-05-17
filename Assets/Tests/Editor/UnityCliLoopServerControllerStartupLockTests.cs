@@ -103,7 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new DomainReloadDetectionFileService(editorSettingsService, stateStore),
                 editorSettingsService,
                 stateStore,
-                readinessProbe);
+                readinessProbe,
+                new TestDomainReloadLifecycle());
 
             await service.StartRecoveryIfNeededAsync(isAfterCompile: false, CancellationToken.None);
 
@@ -155,7 +156,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new DomainReloadDetectionFileService(editorSettingsService, stateStore),
                 editorSettingsService,
                 stateStore,
-                readinessProbe);
+                readinessProbe,
+                new TestDomainReloadLifecycle());
         }
 
         private static ServerReadinessStateStore CreateTestStateStore()
@@ -190,6 +192,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 }
 
                 return Task.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// Test support type that keeps domain reload lifecycle behavior side-effect free.
+        /// </summary>
+        private sealed class TestDomainReloadLifecycle : IUnityCliLoopServerDomainReloadLifecycle
+        {
+            public void PrepareForDomainReload()
+            {
             }
         }
 

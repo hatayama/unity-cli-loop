@@ -94,6 +94,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void RuntimeAsmdef_WhenLoaded_TargetsEditorOnly()
+        {
+            // Tests that runtime overlay code remains excluded from player builds.
+            string[] includePlatforms = ReadIncludePlatforms("Packages/src/Runtime/uLoopMCP.Runtime.asmdef");
+
+            Assert.That(includePlatforms, Is.EquivalentTo(new[] { "Editor" }));
+        }
+
+        [Test]
         public void CompilationDiagnosticMessageParser_WhenLoaded_CompilesUnderDomainAssembly()
         {
             // Tests that first-party dynamic-code parsing stays inside the bundled tool assembly.
@@ -1185,6 +1194,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
             return asmdef["references"]?.Values<string>().ToArray() ?? new string[0];
+        }
+
+        private static string[] ReadIncludePlatforms(string relativeAsmdefPath)
+        {
+            string asmdefPath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), relativeAsmdefPath);
+            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
+            return asmdef["includePlatforms"]?.Values<string>().ToArray() ?? new string[0];
         }
 
         private static string[] ReadProductionAsmdefPaths()

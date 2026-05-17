@@ -39,6 +39,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
+    /// Handles server-scoped cleanup that must happen before Unity tears down editor assemblies.
+    /// </summary>
+    public interface IUnityCliLoopServerDomainReloadLifecycle
+    {
+        void PrepareForDomainReload();
+    }
+
+    /// <summary>
     /// Defines the control operations needed for Unity CLI Loop Server behavior.
     /// </summary>
     public interface IUnityCliLoopServerController
