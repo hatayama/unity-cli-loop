@@ -59,7 +59,7 @@ uloop simulate-mouse-input --action <action> [options]
 | Scenario | Tool |
 |----------|------|
 | Click a Unity UI Button (IPointerClickHandler) | `simulate-mouse-ui` |
-| Destroy a block in Minecraft (reads `Mouse.current.leftButton`) | `simulate-mouse-input` when the project uses the New Input System; otherwise prefer `execute-dynamic-code` for a project-specific workaround |
+| Destroy a block in Minecraft (reads `Mouse.current.leftButton`) | `simulate-mouse-input` when the project uses the New Input System |
 | Place a block with right-click | `simulate-mouse-input --button Right` when the project uses the New Input System |
 | Drag a UI slider | `simulate-mouse-ui --action Drag` |
 | Look around with mouse (FPS camera) | `simulate-mouse-input --action MoveDelta` when the project uses the New Input System |
@@ -95,7 +95,7 @@ uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --dura
 - Unity must be in **PlayMode**
 - **Input System package** must be installed (`com.unity.inputsystem`)
 - Game code must read input via Input System API (e.g. `Mouse.current.leftButton.wasPressedThisFrame`)
-- Use this only when the project already uses the New Input System; otherwise prefer `execute-dynamic-code` for project-specific input handling.
+- Use this only when the project already uses the New Input System.
 
 ## Output
 

@@ -44,7 +44,7 @@ Replay injects the exact same input frame-by-frame, but the game must also be de
 
 - Unity must be in **PlayMode**
 - **Input System package** must be installed (`com.unity.inputsystem`)
-- Use this only when the project already uses the New Input System; otherwise prefer `execute-dynamic-code` for project-specific input handling.
+- Use this only when the project already uses the New Input System.
 
 ## Output
 
