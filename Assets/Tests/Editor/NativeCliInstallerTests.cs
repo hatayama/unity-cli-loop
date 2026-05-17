@@ -1,5 +1,6 @@
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -271,6 +272,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task WaitForUninstallTargetRemovalAsync_WhenDeferredRemovalCompletesReturnsSuccess()
+        {
+            // Verifies that Settings uninstall waits for deferred launcher self-removal before refreshing CLI status.
+            int remainingExistingChecks = 2;
+            int delayCount = 0;
+
+            CliInstallResult result = await NativeCliInstaller.WaitForUninstallTargetRemovalAsync(
+                "C:\\Users\\masamichi\\AppData\\Local\\Programs\\uloop\\bin\\uloop.exe",
+                CancellationToken.None,
+                1000,
+                100,
+                executablePath => remainingExistingChecks-- > 0,
+                (delayMs, ct) =>
+                {
+                    delayCount++;
+                    return Task.CompletedTask;
+                });
+
+            Assert.That(result.Success, Is.True, result.ErrorOutput);
+            Assert.That(delayCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public async Task WaitForUninstallTargetRemovalAsync_WhenTargetRemainsReturnsFailure()
+        {
+            // Verifies that delayed launcher removal failures do not recache a stale installed CLI.
+            int delayCount = 0;
+
+            CliInstallResult result = await NativeCliInstaller.WaitForUninstallTargetRemovalAsync(
+                "C:\\Users\\masamichi\\AppData\\Local\\Programs\\uloop\\bin\\uloop.exe",
+                CancellationToken.None,
+                250,
+                100,
+                executablePath => true,
+                (delayMs, ct) =>
+                {
+                    delayCount++;
+                    return Task.CompletedTask;
+                });
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorOutput, Does.Contain("Timed out waiting for uLoop CLI uninstall"));
+            Assert.That(delayCount, Is.EqualTo(3));
+        }
+
+        [Test]
         public void BuildUninstallCommand_OnMacRunsInstalledLauncher()
         {
             // Verifies that editor uninstall delegates removal to the installed uloop command.
@@ -407,98 +454,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildPathWithoutInstallDirectory_OnWindowsRemovesNativeInstallDir()
-        {
-            // Verifies that uninstall removes every matching native CLI PATH entry.
-            string result = NativeCliInstaller.BuildPathWithoutInstallDirectory(
-                "C:\\npm;C:\\Users\\masamichi\\Programs\\uloop\\bin;C:\\Other;C:\\USERS\\MASAMICHI\\PROGRAMS\\ULOOP\\BIN",
-                "C:\\Users\\masamichi\\Programs\\uloop\\bin",
-                RuntimePlatform.WindowsEditor);
-
-            Assert.That(result, Is.EqualTo("C:\\npm;C:\\Other"));
-        }
-
-        [Test]
-        public void RemoveInstallDirectoryFromUserPath_OnWindowsUpdatesUserPath()
-        {
-            // Verifies that uninstall persists removal from Windows User PATH.
-            string capturedName = null;
-            string capturedValue = null;
-            System.EnvironmentVariableTarget capturedTarget = default;
-
-            CliInstallResult result = NativeCliInstaller.RemoveInstallDirectoryFromUserPath(
-                "C:\\Users\\masamichi\\Programs\\uloop\\bin",
-                RuntimePlatform.WindowsEditor,
-                (name, target) => "C:\\npm;C:\\Users\\masamichi\\Programs\\uloop\\bin",
-                (name, value, target) =>
-                {
-                    capturedName = name;
-                    capturedValue = value;
-                    capturedTarget = target;
-                });
-
-            Assert.That(result.Success, Is.True);
-            Assert.That(capturedName, Is.EqualTo("Path"));
-            Assert.That(capturedValue, Is.EqualTo("C:\\npm"));
-            Assert.That(capturedTarget, Is.EqualTo(System.EnvironmentVariableTarget.User));
-        }
-
-        [Test]
-        public void RemoveInstallDirectoryFromUserPath_OnMacDoesNothing()
-        {
-            // Verifies that POSIX uninstalls do not attempt unsupported .NET User PATH writes.
-            bool wroteUserPath = false;
-
-            CliInstallResult result = NativeCliInstaller.RemoveInstallDirectoryFromUserPath(
-                "/Users/masamichi/.local/bin",
-                RuntimePlatform.OSXEditor,
-                (name, target) => "/Users/masamichi/.local/bin",
-                (name, value, target) => { wroteUserPath = true; });
-
-            Assert.That(result.Success, Is.True);
-            Assert.That(wroteUserPath, Is.False);
-        }
-
-        [Test]
-        public void UninstallGlobalCli_OnWindowsDeletesCommandAndEmptyNativeInstallTree()
-        {
-            // Verifies that uninstall removes the native CLI binary and empty package-owned directories.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-installer-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string nativeRoot = Path.Combine(tempRoot, "Programs", "uloop");
-            string installDir = Path.Combine(nativeRoot, "bin");
-            string installPath = NativeCliInstaller.GetGlobalCliInstallPath(
-                installDir,
-                RuntimePlatform.WindowsEditor);
-            string stagedInstallPath = Path.Combine(installDir, ".uloop.exe.install-test");
-
-            Directory.CreateDirectory(installDir);
-            File.WriteAllText(installPath, "native-binary");
-            File.WriteAllText(stagedInstallPath, "staged-binary");
-
-            try
-            {
-                CliInstallResult result = NativeCliInstaller.UninstallGlobalCli(
-                    installDir,
-                    RuntimePlatform.WindowsEditor);
-
-                Assert.That(result.Success, Is.True, result.ErrorOutput);
-                Assert.That(File.Exists(installPath), Is.False);
-                Assert.That(File.Exists(stagedInstallPath), Is.False);
-                Assert.That(Directory.Exists(nativeRoot), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
         public void FinishSuccessfulInstall_WhenPathPersistenceFailsReturnsPathFailure()
         {
             // Verifies that PATH persistence failure is reported after the current process PATH is updated.
@@ -545,36 +500,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void IsDefaultInstallDirectoryForCurrentUser_WhenWindowsDefaultDirectoryReturnsTrue()
-        {
-            // Verifies that uninstall can clean PATH entries for the package-owned default directory.
-            bool result = NativeCliInstaller.IsDefaultInstallDirectoryForCurrentUser(
-                System.IO.Path.Combine(
-                    "C:\\Users\\masamichi\\AppData\\Local",
-                    "Programs",
-                    "uloop",
-                    "bin"),
-                RuntimePlatform.WindowsEditor,
-                null,
-                "C:\\Users\\masamichi\\AppData\\Local");
-
-            Assert.That(result, Is.True);
-        }
-
-        [Test]
-        public void IsDefaultInstallDirectoryForCurrentUser_WhenWindowsSharedDirectoryReturnsFalse()
-        {
-            // Verifies that uninstall preserves user-owned shared PATH directories such as C:\Tools.
-            bool result = NativeCliInstaller.IsDefaultInstallDirectoryForCurrentUser(
-                "C:\\Tools",
-                RuntimePlatform.WindowsEditor,
-                null,
-                "C:\\Users\\masamichi\\AppData\\Local");
-
-            Assert.That(result, Is.False);
-        }
-
-        [Test]
         public void IsPackageOwnedInstallPath_WhenExecutableMatchesInstallDirectoryReturnsTrue()
         {
             // Verifies that uninstall is available only for the package-owned command path.
@@ -598,47 +523,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.False);
         }
 
-        [Test]
-        public void ShouldRemoveInstallDirectoryFromPath_WhenWindowsDefaultDirectoryReturnsTrue()
-        {
-            // Verifies that Windows uninstalls can remove the package-owned default PATH directory.
-            bool result = NativeCliInstaller.ShouldRemoveInstallDirectoryFromPath(
-                System.IO.Path.Combine(
-                    "C:\\Users\\masamichi\\AppData\\Local",
-                    "Programs",
-                    "uloop",
-                    "bin"),
-                RuntimePlatform.WindowsEditor,
-                null,
-                "C:\\Users\\masamichi\\AppData\\Local");
-
-            Assert.That(result, Is.True);
-        }
-
-        [Test]
-        public void ShouldRemoveInstallDirectoryFromPath_WhenMacDefaultDirectoryReturnsFalse()
-        {
-            // Verifies that POSIX uninstalls preserve shared directories such as ~/.local/bin.
-            bool result = NativeCliInstaller.ShouldRemoveInstallDirectoryFromPath(
-                System.IO.Path.Combine("/Users/masamichi", ".local", "bin"),
-                RuntimePlatform.OSXEditor,
-                "/Users/masamichi",
-                null);
-
-            Assert.That(result, Is.False);
-        }
-
-        [Test]
-        public void ShouldRemoveInstallDirectoryFromPath_WhenWindowsSharedDirectoryReturnsFalse()
-        {
-            // Verifies that Windows uninstalls preserve user-owned shared PATH directories.
-            bool result = NativeCliInstaller.ShouldRemoveInstallDirectoryFromPath(
-                "C:\\Tools",
-                RuntimePlatform.WindowsEditor,
-                null,
-                "C:\\Users\\masamichi\\AppData\\Local");
-
-            Assert.That(result, Is.False);
-        }
     }
 }
