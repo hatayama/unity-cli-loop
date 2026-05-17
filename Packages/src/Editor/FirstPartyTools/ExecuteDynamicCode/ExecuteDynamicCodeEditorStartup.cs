@@ -18,5 +18,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             DynamicCodeServices.ResetServerScopedServices();
         }
+
+        internal static void ResetServerScopedServicesBeforeDomainReload()
+        {
+            DynamicCodeServices.ResetServerScopedServicesBeforeDomainReload();
+        }
     }
 }

@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             UnityCliLoopEditorSettingsRepository editorSettingsRepository = new();
             UnityCliLoopEditorSettingsService editorSettingsService = new(editorSettingsRepository);
             ServerReadinessStateStore serverReadinessStateStore = new(UnityCliLoopPathResolver.GetProjectRoot());
-            UnityCliLoopFirstPartyServerLifecycleBinding serverReadinessProbe = new(new ProjectIpcWarmupClient());
+            UnityCliLoopFirstPartyServerLifecycleBinding firstPartyServerLifecycle = new(new ProjectIpcWarmupClient());
             ULoopSettingsRepository uLoopSettingsRepository = new(
                 toolSettingsService,
                 editorSettingsService);
@@ -53,7 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 domainReloadDetectionService,
                 editorSettingsService,
                 serverReadinessStateStore,
-                serverReadinessProbe);
+                firstPartyServerLifecycle,
+                firstPartyServerLifecycle);
             UnityCliLoopServerApplicationService applicationService = new(controllerService);
             UnityCliLoopServerApplicationFacade.RegisterService(applicationService);
             controllerService.InitializeForEditorStartup();

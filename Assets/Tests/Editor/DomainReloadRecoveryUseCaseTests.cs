@@ -103,6 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Assert
             Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
             Assert.IsFalse(server.IsRunning, "Running server instance should be stopped before domain reload");
+            Assert.That(server.StopCallCount, Is.EqualTo(1));
+            Assert.That(server.DisposeCallCount, Is.EqualTo(0));
         }
 
         [Test]
@@ -183,6 +185,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public bool IsRunning { get; private set; }
 
+            public int StopCallCount { get; private set; }
+
+            public int DisposeCallCount { get; private set; }
+
             public string Endpoint => "test";
 
             public void StartServer()
@@ -192,11 +198,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public void StopServer()
             {
+                StopCallCount++;
                 IsRunning = false;
             }
 
             public void Dispose()
             {
+                DisposeCallCount++;
                 IsRunning = false;
             }
         }

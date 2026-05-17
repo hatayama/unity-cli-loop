@@ -14,7 +14,9 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
     /// <summary>
     /// Resets bundled tool lifecycle state and proves get-version IPC readiness before the server is published as ready.
     /// </summary>
-    internal sealed class UnityCliLoopFirstPartyServerLifecycleBinding : IUnityCliLoopServerReadinessProbe
+    internal sealed class UnityCliLoopFirstPartyServerLifecycleBinding :
+        IUnityCliLoopServerReadinessProbe,
+        IUnityCliLoopServerDomainReloadLifecycle
     {
         private readonly ProjectIpcWarmupClient _projectIpcWarmupClient;
 
@@ -29,6 +31,11 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         public Task ProbeAsync(CancellationToken ct)
         {
             return ResetServerScopedServicesAndWarmProjectIpcAsync(ct);
+        }
+
+        public void PrepareForDomainReload()
+        {
+            FirstPartyToolsEditorStartup.ResetServerScopedServicesBeforeDomainReload();
         }
 
         private async Task ResetServerScopedServicesAndWarmProjectIpcAsync(CancellationToken ct)

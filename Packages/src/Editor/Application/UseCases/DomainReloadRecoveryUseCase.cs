@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     LogServerStoppingBeforeDomainReload(correlationId);
 
                     // 4.2. Stop server
-                    currentServer.Dispose();
+                    currentServer.StopServer();
 
                     LogServerStoppedAfterDomainReload(correlationId);
 

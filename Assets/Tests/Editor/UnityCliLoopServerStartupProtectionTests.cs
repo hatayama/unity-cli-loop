@@ -58,6 +58,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void OnBeforeAssemblyReload_ShouldPrepareDomainReloadLifecycle()
+        {
+            // Tests that bundled server-scoped services are reset through the domain-reload lifecycle hook.
+            TestDomainReloadLifecycle domainReloadLifecycle = new();
+            UnityCliLoopServerControllerService service = CreateControllerService(domainReloadLifecycle);
+
+            service.OnBeforeAssemblyReload();
+
+            Assert.That(domainReloadLifecycle.PrepareCallCount, Is.EqualTo(1));
+        }
+
+        [Test]
         public void PrepareForServerShutdown_ShouldClearStartupProtectionBeforeShutdown()
         {
             // Tests that explicit shutdown clears the startup protection window before stopping.
@@ -83,6 +95,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static UnityCliLoopServerControllerService CreateControllerService()
         {
+            return CreateControllerService(new TestDomainReloadLifecycle());
+        }
+
+        private static UnityCliLoopServerControllerService CreateControllerService(TestDomainReloadLifecycle domainReloadLifecycle)
+        {
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
@@ -95,7 +112,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new DomainReloadDetectionFileService(editorSettingsService, stateStore),
                 editorSettingsService,
                 stateStore,
-                new TestReadinessProbe());
+                new TestReadinessProbe(),
+                domainReloadLifecycle);
         }
 
         private static ServerReadinessStateStore CreateTestStateStore()
@@ -115,6 +133,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public System.Threading.Tasks.Task ProbeAsync(System.Threading.CancellationToken ct)
             {
                 return System.Threading.Tasks.Task.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// Test support type that records domain reload lifecycle calls.
+        /// </summary>
+        private sealed class TestDomainReloadLifecycle : IUnityCliLoopServerDomainReloadLifecycle
+        {
+            public int PrepareCallCount { get; private set; }
+
+            public void PrepareForDomainReload()
+            {
+                PrepareCallCount++;
             }
         }
 

@@ -2,7 +2,9 @@
     "name": "uLoopMCP.Runtime",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.Runtime",
     "references": [],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
