@@ -35,9 +35,9 @@ func TestTrimTrailingSeparators_WhenWindowsPathIsNotRoot_ShouldRemoveTrailingSep
 	}
 
 	// Verifies that a normal Windows project path matches the Editor endpoint input.
-	path := trimTrailingSeparators(`C:\Users\booql\oss\unity-cli-loop\`)
+	path := trimTrailingSeparators(`C:\Users\ExampleUser\Projects\unity-cli-loop\`)
 
-	if path != `C:\Users\booql\oss\unity-cli-loop` {
+	if path != `C:\Users\ExampleUser\Projects\unity-cli-loop` {
 		t.Fatalf("path should not keep trailing separator: %s", path)
 	}
 }
