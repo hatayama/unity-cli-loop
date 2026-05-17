@@ -41,13 +41,13 @@ func TestParseWindowsUnityProcessesExtractsProjectPath(t *testing.T) {
 
 func TestExtractProjectPathSupportsEqualsAndSpaces(t *testing.T) {
 	cases := map[string]string{
-		`Unity -projectPath="/Users/ExampleUser/My Project" -useHub`:                                                        "/Users/ExampleUser/My Project",
-		`Unity -projectpath '/Users/ExampleUser/Other Project' -flag`:                                                       "/Users/ExampleUser/Other Project",
-		`Unity -projectPath /Users/ExampleUser/Plain -flag`:                                                                 "/Users/ExampleUser/Plain",
-		`Unity Hub -- --silent -- -projectPath /Users/ExampleUser/vision-client-3/vision-client -cacheServerEnableUpload`:   "/Users/ExampleUser/vision-client-3/vision-client",
-		`Unity -projectPath /Users/ExampleUser/vision-client-3/vision-client -acceptSoftwareTermsForThisRunOnly -useHub`:    "/Users/ExampleUser/vision-client-3/vision-client",
-		`Unity -projectPath /Users/ExampleUser/vision-client-3/vision-client -cacheServerEnableDownload=false -useHub`:      "/Users/ExampleUser/vision-client-3/vision-client",
-		`Unity -projectPath /Users/ExampleUser/vision-client-3/vision-client -hubSessionId 715810a5-220d-411e-a7d2-28cf46f`: "/Users/ExampleUser/vision-client-3/vision-client",
+		`Unity -projectPath="/Users/ExampleUser/My Project" -useHub`:                                                             "/Users/ExampleUser/My Project",
+		`Unity -projectpath '/Users/ExampleUser/Other Project' -flag`:                                                            "/Users/ExampleUser/Other Project",
+		`Unity -projectPath /Users/ExampleUser/Plain -flag`:                                                                      "/Users/ExampleUser/Plain",
+		`Unity Hub -- --silent -- -projectPath /Users/ExampleUser/SampleWorkspace/SampleUnityProject -cacheServerEnableUpload`:   "/Users/ExampleUser/SampleWorkspace/SampleUnityProject",
+		`Unity -projectPath /Users/ExampleUser/SampleWorkspace/SampleUnityProject -acceptSoftwareTermsForThisRunOnly -useHub`:    "/Users/ExampleUser/SampleWorkspace/SampleUnityProject",
+		`Unity -projectPath /Users/ExampleUser/SampleWorkspace/SampleUnityProject -cacheServerEnableDownload=false -useHub`:      "/Users/ExampleUser/SampleWorkspace/SampleUnityProject",
+		`Unity -projectPath /Users/ExampleUser/SampleWorkspace/SampleUnityProject -hubSessionId 715810a5-220d-411e-a7d2-28cf46f`: "/Users/ExampleUser/SampleWorkspace/SampleUnityProject",
 	}
 
 	for command, expected := range cases {

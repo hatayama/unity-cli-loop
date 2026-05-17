@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void CreateCompileRequestCommand_WhenPathIsWindowsAbsolutePath_ShouldEncodeAsciiPayload()
         {
             string requestFilePath =
-                @"C:\Users\ExampleUser\Documents\unity\vision-client_02\vision-client\Temp\UnityCliLoopCompilation\DynamicCommand_1.worker";
+                @"C:\Users\ExampleUser\Documents\unity\SampleWorkspace\SampleUnityProject\Temp\UnityCliLoopCompilation\DynamicCommand_1.worker";
 
             string command = SharedRoslynCompilerWorkerHost.CreateCompileRequestCommandForTests(requestFilePath);
 

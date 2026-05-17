@@ -1706,7 +1706,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string skillDir = Path.Combine(
                 projectRoot,
                 "Assets",
-                "Vision",
+                "SampleFeature",
                 "Editor",
                 "McpExtensions",
                 toolDirectoryName);
