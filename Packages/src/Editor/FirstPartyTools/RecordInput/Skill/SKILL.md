@@ -1,7 +1,7 @@
 ---
 name: uloop-record-input
 toolName: record-input
-description: "Record keyboard and mouse input during PlayMode to JSON. Use to capture gameplay, bug repro, or E2E input sequences for replay. Requires PlayMode and the New Input System."
+description: "Record PlayMode keyboard and mouse input to JSON. Use to capture gameplay, bug repro, or E2E input sequences for replay."
 ---
 
 # uloop record-input

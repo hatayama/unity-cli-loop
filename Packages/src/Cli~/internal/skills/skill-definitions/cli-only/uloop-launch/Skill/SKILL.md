@@ -1,6 +1,6 @@
 ---
 name: uloop-launch
-description: "Launch or restart a Unity project with the matching Editor version. Use to open Unity or apply restart-required changes."
+description: "Launch or restart Unity Editor. Use when Unity needs to be opened or restarted."
 ---
 
 # uloop launch
