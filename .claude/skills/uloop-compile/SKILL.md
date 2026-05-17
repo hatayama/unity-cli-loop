@@ -1,5 +1,6 @@
 ---
 name: uloop-compile
+toolName: compile
 description: "Compile Unity project and report errors/warnings. Use when you need to: (1) Verify code compiles after C# file edits, (2) Check for compile errors before testing, (3) Force full recompilation with Domain Reload. Returns error and warning counts."
 ---
 
@@ -10,7 +11,7 @@ Execute Unity project compilation.
 ## Usage
 
 ```bash
-uloop compile [--force-recompile] [--wait-for-domain-reload]
+uloop compile [--force-recompile] [--no-wait-for-domain-reload]
 ```
 
 ## Parameters
@@ -18,7 +19,7 @@ uloop compile [--force-recompile] [--wait-for-domain-reload]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--force-recompile` | boolean | `false` | Force full recompilation (triggers Domain Reload) |
-| `--wait-for-domain-reload` | boolean | `false` | Wait until Domain Reload completes before returning |
+| `--no-wait-for-domain-reload` | boolean | `false` | Return before Domain Reload completion |
 
 ## Global Options
 
@@ -32,14 +33,11 @@ uloop compile [--force-recompile] [--wait-for-domain-reload]
 # Check compilation
 uloop compile
 
-# Force full recompilation
+# Force full recompilation and wait for Domain Reload completion
 uloop compile --force-recompile
 
-# Force recompilation and wait for Domain Reload completion
-uloop compile --force-recompile --wait-for-domain-reload
-
-# Wait for Domain Reload completion even without force recompilation
-uloop compile --wait-for-domain-reload
+# Start compilation without waiting for Domain Reload completion
+uloop compile --no-wait-for-domain-reload
 ```
 
 ## Output
@@ -53,13 +51,13 @@ Returns JSON:
 
 Diagnose the failure mode before retrying.
 
-**Stale lock files** (CLI hangs or shows "Unity is busy" while Unity Editor *is* running):
+**Stale recovery state** (CLI hangs or shows recovery/startup state while Unity Editor *is* running):
 
 ```bash
 uloop fix
 ```
 
-This removes any leftover lock files (`compiling.lock`, `domainreload.lock`, `serverstarting.lock`) from the Unity project's Temp directory. Then retry `uloop compile`.
+This removes stale Unity CLI Loop readiness state files from the Unity project's Temp directory. Then retry `uloop compile`.
 
 **Unity Editor not running** (CLI returns a connection failure and no Unity process is alive):
 
