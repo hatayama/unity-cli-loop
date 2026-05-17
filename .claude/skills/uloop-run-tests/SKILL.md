@@ -1,12 +1,14 @@
 ---
 name: uloop-run-tests
 toolName: run-tests
-description: "Execute Unity Test Runner and get detailed results. Use when you need to: (1) Run EditMode or PlayMode unit tests, (2) Verify code changes pass all tests, (3) Diagnose test failures with error messages and stack traces. Single-flight only — never run multiple `uloop run-tests` in parallel."
+description: "Run Unity Test Runner and report detailed results. Use for EditMode/PlayMode tests, change verification, or failure diagnosis."
 ---
 
 # uloop run-tests
 
 Execute Unity Test Runner. When tests fail, NUnit XML results with error messages and stack traces are automatically saved. Read the XML file at `XmlPath` for detailed failure diagnosis.
+
+`uloop run-tests` is single-flight. Do not run multiple `uloop run-tests` commands in parallel against the same Unity Editor.
 
 Before executing tests, `uloop run-tests` checks for unsaved loaded Scene changes and unsaved current Prefab Stage changes. If any are found, it returns `Success: false`, keeps `TestCount` at `0`, lists the unsaved items in `Message`, and does not start the Unity Test Runner. Save or discard those editor changes, then rerun the command. Use `--save-before-run` only when the user explicitly asks to save editor changes before continuing.
 
