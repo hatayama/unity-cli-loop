@@ -25,6 +25,8 @@ func TestPrintLauncherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T) {
 		"uloop list",
 		"--project-path <path>",
 		"uloop --project-path /path/to/project list",
+		"uloop <command> --help",
+		"Show help for native and Unity tool commands",
 		"uloop --list-options <command>",
 	} {
 		if !strings.Contains(output, expected) {
