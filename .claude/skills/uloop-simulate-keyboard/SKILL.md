@@ -1,5 +1,6 @@
 ---
 name: uloop-simulate-keyboard
+toolName: simulate-keyboard
 description: "Simulate keyboard key input in PlayMode via Input System. Use when you need to: (1) Press game control keys like WASD, Space, or Shift during PlayMode, (2) Hold keys down for continuous movement or actions, (3) Combine multiple held keys for complex input like Shift+W for sprint. Injects into Unity Input System (`Keyboard.current`); requires PlayMode and the New Input System."
 context: fork
 ---
