@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.13](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.12...v3.0.0-beta.13) (2026-05-17)
+
+
+### Bug Fixes
+
+* Settings no longer shows the CLI as installed after uninstall ([#1154](https://github.com/hatayama/unity-cli-loop/issues/1154)) ([090f0a3](https://github.com/hatayama/unity-cli-loop/commit/090f0a3a180a5d3e7c74dd7b6dbc1b7aab884835))
+
 ## [3.0.0-beta.12](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.11...v3.0.0-beta.12) (2026-05-17)
 
 
