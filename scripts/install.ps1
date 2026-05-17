@@ -246,7 +246,7 @@ function Expand-UloopArchive {
     [System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $DestinationPath)
 }
 
-$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("uloop-install-" + [System.Guid]::NewGuid().ToString("N"))
+$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("uloop-stage-" + [System.Guid]::NewGuid().ToString("N"))
 $StagedUloopPath = $null
 $LegacyUloopBeforeInstallCommand = Get-Command uloop -ErrorAction SilentlyContinue | Select-Object -First 1
 New-Item -ItemType Directory -Path $TempDir | Out-Null
@@ -265,7 +265,7 @@ try {
     Expand-UloopArchive -ArchivePath $ArchivePath -DestinationPath $TempDir
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    $StagedUloopPath = Join-Path $InstallDir ("uloop-install-" + [System.Guid]::NewGuid().ToString("N") + ".exe")
+    $StagedUloopPath = Join-Path $InstallDir ("uloop-staged-" + [System.Guid]::NewGuid().ToString("N") + ".exe")
     Copy-Item -Path (Join-Path $TempDir "uloop.exe") -Destination $StagedUloopPath -Force
     Assert-UloopVersionSucceeds -UloopPath $StagedUloopPath -Quiet
     $FinalUloopPath = Join-Path $InstallDir "uloop.exe"
