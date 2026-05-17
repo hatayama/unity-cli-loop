@@ -11,15 +11,16 @@ import (
 )
 
 const (
-	skillsCommandName   = "skills"
-	managedSkillsDir    = "unity-cli-loop"
-	skillFileName       = "SKILL.md"
-	uloopSettingsDir    = ".uloop"
-	toolSettingsFile    = "settings.tools.json"
-	manifestFileName    = "manifest.json"
-	packageName         = "io.github.hatayama.uloopmcp"
-	packageNameAlias    = "io.github.hatayama.uLoopMCP"
-	skillSearchMaxDepth = 3
+	skillsCommandName    = "skills"
+	managedSkillsDir     = "unity-cli-loop"
+	skillFileName        = "SKILL.md"
+	uloopSettingsDir     = ".uloop"
+	toolSettingsFile     = "settings.tools.json"
+	manifestFileName     = "manifest.json"
+	packageName          = "io.github.hatayama.uloopmcp"
+	packageNameAlias     = "io.github.hatayama.uLoopMCP"
+	skillSearchMaxDepth  = 3
+	groupSkillsByDefault = false
 
 	utf16LittleEndianBOMFirstByte  = 0xff
 	utf16LittleEndianBOMSecondByte = 0xfe
@@ -185,6 +186,13 @@ func isKnownSkillsSubcommand(subcommand string) bool {
 	}
 }
 
+func groupManagedSkillsForOptions(options skillCommandOptions) bool {
+	if options.flat {
+		return false
+	}
+	return groupSkillsByDefault
+}
+
 func unknownSkillsSubcommandError(subcommand string, context errorContext) cliError {
 	return (&argumentError{
 		message:     "Unknown skills command: " + subcommand,
@@ -239,7 +247,7 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 		writeFormat(stdout, "Location: %s\n", baseDir)
 		writeLine(stdout, strings.Repeat("=", 50))
 		for _, skill := range skills {
-			status, err := getSkillStatus(baseDir, skill, !options.flat)
+			status, err := getSkillStatus(baseDir, skill, groupManagedSkillsForOptions(options))
 			if err != nil {
 				writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
 				return 1
@@ -257,7 +265,7 @@ func runSkillsInstall(projectRoot string, skills []skillDefinition, options skil
 	writeFormat(stdout, "Installing uloop skills (%s)...\n", skillLocationName(options.global))
 	writeLine(stdout, "")
 	for _, target := range options.targets {
-		result, err := installSkillsForTarget(projectRoot, target, skills, options.global, !options.flat)
+		result, err := installSkillsForTarget(projectRoot, target, skills, options.global, groupManagedSkillsForOptions(options))
 		if err != nil {
 			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
 			return 1
@@ -284,7 +292,15 @@ func runSkillsUninstall(projectRoot string, skills []skillDefinition, options sk
 	writeFormat(stdout, "Uninstalling uloop skills (%s)...\n", skillLocationName(options.global))
 	writeLine(stdout, "")
 	for _, target := range options.targets {
-		removed, notFound, err := uninstallSkillsForTarget(projectRoot, target, skills, options.global, !options.flat)
+		grouped := groupManagedSkillsForOptions(options)
+		removed := 0
+		notFound := 0
+		var err error
+		if grouped {
+			removed, notFound, err = uninstallSkillsForTarget(projectRoot, target, skills, options.global, grouped)
+		} else {
+			removed, notFound, err = uninstallSkillsForTargetFromAllLayouts(projectRoot, target, skills, options.global)
+		}
 		if err != nil {
 			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
 			return 1
@@ -393,6 +409,35 @@ func uninstallSkillsForTarget(projectRoot string, target skillTarget, skills []s
 			return removed, notFound, err
 		}
 		removed++
+	}
+	return removed, notFound, nil
+}
+
+func uninstallSkillsForTargetFromAllLayouts(projectRoot string, target skillTarget, skills []skillDefinition, global bool) (int, int, error) {
+	removed := 0
+	notFound := 0
+	baseDir, err := getSkillsBaseDir(projectRoot, target, global)
+	if err != nil {
+		return removed, notFound, err
+	}
+	deprecatedRemoved, err := removeDeprecatedSkillDirs(baseDir)
+	if err != nil {
+		return removed, notFound, err
+	}
+	removed += deprecatedRemoved
+	for _, skill := range skills {
+		exists, err := removeSkillFromAllLayoutsIfExists(baseDir, skill.name)
+		if err != nil {
+			return removed, notFound, err
+		}
+		if !exists {
+			notFound++
+			continue
+		}
+		removed++
+	}
+	if err := removeEmptyDir(getPreferredSkillDir(baseDir, managedSkillsDir, false)); err != nil {
+		return removed, notFound, err
 	}
 	return removed, notFound, nil
 }
