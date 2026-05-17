@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.12](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.11...v3.0.0-beta.12) (2026-05-17)
+
+
+### Bug Fixes
+
+* Windows CLI install no longer fails during binary verification ([#1152](https://github.com/hatayama/unity-cli-loop/issues/1152)) ([04abc42](https://github.com/hatayama/unity-cli-loop/commit/04abc42b69360111907454ac43d38f1836c8bc3d))
+
 ## [3.0.0-beta.11](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.10...v3.0.0-beta.11) (2026-05-17)
 
 
