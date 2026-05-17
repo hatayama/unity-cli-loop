@@ -7,8 +7,7 @@ early_access: true
 reviews:
   profile: "chill"
   request_changes_workflow: true
-  high_level_summary: true
-  high_level_summary_instructions: "Do not add colors to mermaid diagrams. Use Class diagrams."
+  high_level_summary: false
   poem: false
   auto_review:
     enabled: true
