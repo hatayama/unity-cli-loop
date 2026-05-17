@@ -83,6 +83,6 @@ Returns JSON with:
 ## Prerequisites
 
 - Unity must be in **PlayMode**
-- **Input System package** (`com.unity.inputsystem`) must be installed
-- Active Input Handling must be set to **Input System Package (New)** or **Both** in Player Settings
+- **Input System package** must be installed (`com.unity.inputsystem`)
+- Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings
 - Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`
