@@ -1,17 +1,10 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 )
-
-var staleLockFileNames = []string{
-	"compiling.lock",
-	"domainreload.lock",
-	"serverstarting.lock",
-}
 
 // TODO: Extend fix to remove only project-owned stale IPC sockets after proving the listener is dead.
 func runFix(projectRoot string, stdout io.Writer, stderr io.Writer) int {
@@ -31,16 +24,7 @@ func runFix(projectRoot string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func cleanupStaleRecoveryState(projectRoot string) (int, error) {
-	cleaned, err := cleanupServerStateFiles(projectRoot)
-	if err != nil {
-		return cleaned, err
-	}
-
-	lockCleaned, err := cleanupStaleLockFiles(projectRoot)
-	if err != nil {
-		return cleaned, err
-	}
-	return cleaned + lockCleaned, nil
+	return cleanupServerStateFiles(projectRoot)
 }
 
 func cleanupServerStateFiles(projectRoot string) (int, error) {
@@ -59,36 +43,6 @@ func cleanupServerStateFiles(projectRoot string) (int, error) {
 			continue
 		}
 		if err := os.Remove(path); err != nil {
-			return cleaned, err
-		}
-		cleaned++
-	}
-	return cleaned, nil
-}
-
-func cleanupStaleLockFiles(projectRoot string) (int, error) {
-	cleaned := 0
-	tempDirectory := filepath.Join(projectRoot, "Temp")
-	tempInfo, err := os.Stat(tempDirectory)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cleaned, nil
-		}
-		return cleaned, err
-	}
-	if !tempInfo.IsDir() {
-		return cleaned, fmt.Errorf("temp path is not a directory: %s", tempDirectory)
-	}
-
-	for _, lockFileName := range staleLockFileNames {
-		lockFilePath := filepath.Join(tempDirectory, lockFileName)
-		if _, err := os.Stat(lockFilePath); err != nil {
-			if !os.IsNotExist(err) {
-				return cleaned, err
-			}
-			continue
-		}
-		if err := os.Remove(lockFilePath); err != nil {
 			return cleaned, err
 		}
 		cleaned++

@@ -14,7 +14,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// <summary>
     /// Unit tests for GetLogsUseCase
     /// Related classes: GetLogsUseCase, LogRetrievalService, LogFilteringService
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// Test philosophy: Following Kent Beck's TDD and t-wada's testing principles
     /// </summary>
     [TestFixture]

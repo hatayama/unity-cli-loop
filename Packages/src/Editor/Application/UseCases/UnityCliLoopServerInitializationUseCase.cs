@@ -22,9 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             _startupService = startupService ?? throw new System.ArgumentNullException(nameof(startupService));
         }
 
-        public Task<ServerInitializationResult<IUnityCliLoopServerInstance>> ExecuteAsync(
-            ServerInitializationRequest request,
-            CancellationToken ct)
+        public Task<ServerInitializationResult<IUnityCliLoopServerInstance>> ExecuteAsync(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -39,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             ct.ThrowIfCancellationRequested();
 
             ServiceResult<IUnityCliLoopServerInstance> serverResult =
-                _startupService.StartServer(request);
+                _startupService.StartServer();
             if (!serverResult.Success)
             {
                 ServerInitializationResult<IUnityCliLoopServerInstance> startupFailure =

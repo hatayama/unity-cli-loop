@@ -10,7 +10,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Responsible for temporal cohesion of GameObject search processing
     /// Processing sequence: 1. Search criteria validation, 2. GameObject search execution, 3. Result conversion and formatting
     /// Related classes: FindGameObjectsTool, GameObjectFinderService, ComponentSerializer
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     public class FindGameObjectsUseCase : IUnityCliLoopGameObjectSearchService
     {

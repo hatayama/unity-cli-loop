@@ -24,7 +24,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _stateStore = CreateTestStateStore();
             _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService, _stateStore);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
-            _domainReloadDetectionService.DeleteLockFile();
         }
 
         [TearDown]
@@ -32,13 +31,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             _editorSettingsService.SaveSettings(_originalSettings);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
-            _domainReloadDetectionService.DeleteLockFile();
             _stateStore.Delete();
         }
 
         [Test]
-        public void RollbackDomainReloadStart_ClearsTemporaryFlagsProviderStateAndLockFile()
+        public void RollbackDomainReloadStart_ClearsTemporaryFlagsProviderStateAndPublishesFailureState()
         {
+            // Verifies rollback clears transient reload state and records a failed readiness phase.
             const string correlationId = "test-correlation";
             UnityCliLoopEditorDomainReloadStateProvider provider = new();
 
@@ -52,7 +51,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(startedSettings.showReconnectingUI, Is.True);
             Assert.That(startedSettings.showPostCompileReconnectingUI, Is.True);
             Assert.That(provider.IsDomainReloadInProgress(), Is.True);
-            Assert.That(_domainReloadDetectionService.IsLockFilePresent(), Is.True);
 
             _domainReloadDetectionService.RollbackDomainReloadStart(correlationId);
 
@@ -64,7 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(rolledBackSettings.showReconnectingUI, Is.False);
             Assert.That(rolledBackSettings.showPostCompileReconnectingUI, Is.False);
             Assert.That(provider.IsDomainReloadInProgress(), Is.False);
-            Assert.That(_domainReloadDetectionService.IsLockFilePresent(), Is.False);
+            ServerReadinessState state = _stateStore.Read();
+            Assert.That(state.Phase, Is.EqualTo("failed"));
+            Assert.That(state.LastError, Is.Not.Empty);
         }
 
         private static UnityCliLoopEditorSettingsData CloneSettings(UnityCliLoopEditorSettingsData settings)

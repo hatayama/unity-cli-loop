@@ -153,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         public event Action<string> OnError;
 
-        public void StartServer(bool clearServerStartingLockWhenReady = true)
+        public void StartServer()
         {
             if (_isRunning)
             {
@@ -185,14 +185,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         );
                     }
                 }, TaskScheduler.Default);
-
-                // Server is now ready to accept connections - clean up compilation/reload locks.
-                CompilationLockService.DeleteLockFile();
-                _domainReloadDetectionService.DeleteLockFile();
-                if (clearServerStartingLockWhenReady)
-                {
-                    ServerStartingLockService.DeleteLockFile();
-                }
 
                 ServerStarted?.Invoke();
                 

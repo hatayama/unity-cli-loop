@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -9,7 +8,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Infrastructure implementation that persists Domain Reload detection state through files and editor settings.
+    /// Infrastructure implementation that persists Domain Reload readiness state through server state and editor settings.
     /// </summary>
     public sealed class DomainReloadDetectionFileService : IDomainReloadDetectionService
     {
@@ -47,8 +46,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
-            AssemblyReloadEvents.afterAssemblyReload -= OnAfterAssemblyReload;
-            AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
         }
 
         private void OnBeforeAssemblyReload()
@@ -58,7 +55,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            CreateLockFile();
             _stateStore.Write(
                 ServerReadinessPhase.Reloading,
                 ServerReadinessStateStore.CreateGenerationId(),
@@ -66,16 +62,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 null,
                 null);
         }
-
-        private void OnAfterAssemblyReload()
-        {
-            // Lock file is deleted when server startup completes.
-            // to avoid a gap between domain reload end and server ready
-        }
-
-        private const string LOCK_FILE_NAME = "domainreload.lock";
-
-        private static string LockFilePath => Path.Combine(UnityEngine.Application.dataPath, "..", "Temp", LOCK_FILE_NAME);
 
         /// <summary>
         /// Execute Domain Reload start processing
@@ -90,8 +76,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            // Create lock file for external process detection (e.g., CLI tools)
-            CreateLockFile();
             _stateStore.Write(
                 ServerReadinessPhase.Reloading,
                 correlationId,
@@ -148,13 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            // Lock file is deleted when server startup completes.
-            // to avoid a gap between domain reload completion and server ready
             bool serverWillRecover = _editorSettingsService.GetIsServerRunning();
-            if (!serverWillRecover)
-            {
-                DeleteLockFile();
-            }
 
             _stateStore.Write(
                 serverWillRecover ? ServerReadinessPhase.Recovering : ServerReadinessPhase.Stopped,
@@ -193,7 +171,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 showPostCompileReconnectingUI = false
             });
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
-            DeleteLockFile();
             _stateStore.Write(
                 ServerReadinessPhase.Failed,
                 correlationId,
@@ -215,41 +192,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public bool ShouldShowReconnectingUI()
         {
             return _editorSettingsService.GetShowReconnectingUI();
-        }
-
-        private static void CreateLockFile()
-        {
-            string lockPath = LockFilePath;
-            string tempDir = Path.GetDirectoryName(lockPath);
-
-            if (!Directory.Exists(tempDir))
-            {
-                return;
-            }
-
-            File.WriteAllText(lockPath, System.DateTime.UtcNow.ToString("o"));
-        }
-
-        /// <summary>
-        /// Delete lock file to signal Domain Reload completion.
-        /// </summary>
-        public void DeleteLockFile()
-        {
-            string lockPath = LockFilePath;
-            if (File.Exists(lockPath))
-            {
-                File.Delete(lockPath);
-            }
-        }
-
-        /// <summary>
-        /// Check if Domain Reload lock file exists.
-        /// Used by external processes to detect Domain Reload state.
-        /// </summary>
-        /// <returns>True if lock file exists</returns>
-        public bool IsLockFilePresent()
-        {
-            return File.Exists(LockFilePath);
         }
     }
 }

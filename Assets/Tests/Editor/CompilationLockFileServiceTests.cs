@@ -19,7 +19,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TearDown]
         public void TearDown()
         {
-            _service.DeleteLockFile();
             _stateStore.Delete();
         }
 
