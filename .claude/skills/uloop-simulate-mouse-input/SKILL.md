@@ -1,5 +1,6 @@
 ---
 name: uloop-simulate-mouse-input
+toolName: simulate-mouse-input
 description: "Simulate mouse input in PlayMode for gameplay code that reads Unity Input System Mouse.current. Use when you need to: (1) Click or right-click in games that read Mouse.current button state, (2) Inject mouse delta for FPS camera control, (3) Inject scroll wheel for hotbar switching or zoom. Requires PlayMode and the New Input System; for EventSystem UI elements, use simulate-mouse-ui instead."
 context: fork
 ---
