@@ -8,7 +8,7 @@ import (
 func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
 	// Verifies macOS uninstall removes the launcher binary from the selected install directory.
 	command, err := CommandForOS("darwin", Options{
-		InstallDir: "/Users/test/.local/bin",
+		InstallDir: "/Users/ExampleUser/.local/bin",
 		CurrentPID: 1234,
 	})
 	if err != nil {
@@ -19,13 +19,13 @@ func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
 		t.Fatalf("command name mismatch: %s", command.Name)
 	}
 	joinedArgs := strings.Join(command.Args, " ")
-	if !strings.Contains(joinedArgs, "/Users/test/.local/bin/uloop") {
+	if !strings.Contains(joinedArgs, "/Users/ExampleUser/.local/bin/uloop") {
 		t.Fatalf("target path missing: %s", joinedArgs)
 	}
 	if !strings.Contains(joinedArgs, "rm -f") {
 		t.Fatalf("remove command missing: %s", joinedArgs)
 	}
-	if command.TargetPath != "/Users/test/.local/bin/uloop" {
+	if command.TargetPath != "/Users/ExampleUser/.local/bin/uloop" {
 		t.Fatalf("target path mismatch: %s", command.TargetPath)
 	}
 }
@@ -33,7 +33,7 @@ func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
 func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T) {
 	// Verifies Windows uninstall defers deletion until the running launcher process exits.
 	command, err := CommandForOS("windows", Options{
-		InstallDir: `C:\Users\test\AppData\Local\Programs\uloop\bin`,
+		InstallDir: `C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin`,
 		CurrentPID: 5678,
 	})
 	if err != nil {
@@ -56,7 +56,7 @@ func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T)
 	if !command.Deferred {
 		t.Fatal("windows uninstall should be deferred")
 	}
-	if command.TargetPath != `C:\Users\test\AppData\Local\Programs\uloop\bin\uloop.exe` {
+	if command.TargetPath != `C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin\uloop.exe` {
 		t.Fatalf("target path mismatch: %s", command.TargetPath)
 	}
 }

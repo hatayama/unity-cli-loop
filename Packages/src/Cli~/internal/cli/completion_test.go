@@ -510,18 +510,18 @@ func TestGetHomeDirectoryForShellOnWindowsPowerShellIgnoresHomeOverride(t *testi
 			"windows",
 			func() (string, error) {
 				environmentHomeCalls++
-				return "/c/Users/masamichi", nil
+				return "/c/Users/ExampleUser", nil
 			},
 			func() (string, error) {
 				userHomeCalls++
-				return `C:\Users\masamichi`, nil
+				return `C:\Users\ExampleUser`, nil
 			},
 		)
 		if err != nil {
 			t.Fatalf("getHomeDirectoryForShell failed: %v", err)
 		}
 
-		if home != `C:\Users\masamichi` {
+		if home != `C:\Users\ExampleUser` {
 			t.Fatalf("windows %s home mismatch: %s", shellName, home)
 		}
 	}
@@ -543,18 +543,18 @@ func TestGetHomeDirectoryForShellOnWindowsBashNormalizesMsysHome(t *testing.T) {
 		"windows",
 		func() (string, error) {
 			environmentHomeCalls++
-			return "/c/Users/masamichi", nil
+			return "/c/Users/ExampleUser", nil
 		},
 		func() (string, error) {
 			userHomeCalls++
-			return `C:\Users\masamichi`, nil
+			return `C:\Users\ExampleUser`, nil
 		},
 	)
 	if err != nil {
 		t.Fatalf("getHomeDirectoryForShell failed: %v", err)
 	}
 
-	if home != `C:\Users\masamichi` {
+	if home != `C:\Users\ExampleUser` {
 		t.Fatalf("windows bash home mismatch: %s", home)
 	}
 	if environmentHomeCalls != 1 {
@@ -571,17 +571,17 @@ func TestGetHomeDirectoryForShellOnWindowsZshNormalizesWslHome(t *testing.T) {
 		"zsh",
 		"windows",
 		func() (string, error) {
-			return "/mnt/c/Users/masamichi", nil
+			return "/mnt/c/Users/ExampleUser", nil
 		},
 		func() (string, error) {
-			return `C:\Users\ignored`, nil
+			return `C:\Users\IgnoredUser`, nil
 		},
 	)
 	if err != nil {
 		t.Fatalf("getHomeDirectoryForShell failed: %v", err)
 	}
 
-	if home != `C:\Users\masamichi` {
+	if home != `C:\Users\ExampleUser` {
 		t.Fatalf("windows zsh home mismatch: %s", home)
 	}
 }
@@ -595,7 +595,7 @@ func TestGetHomeDirectoryForShellOnWindowsBashNormalizesWslDriveRoot(t *testing.
 			return "/mnt/c/", nil
 		},
 		func() (string, error) {
-			return `C:\Users\ignored`, nil
+			return `C:\Users\IgnoredUser`, nil
 		},
 	)
 	if err != nil {
