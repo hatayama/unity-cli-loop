@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.11](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.10...v3.0.0-beta.11) (2026-05-17)
+
+
+### Bug Fixes
+
+* Improve Unity reload recovery and skill setup reliability ([#1150](https://github.com/hatayama/unity-cli-loop/issues/1150)) ([4556535](https://github.com/hatayama/unity-cli-loop/commit/4556535e69a15a0e8dc117131d860e5a597a84bd))
+* Make Unity tool skill descriptions more concise ([#1148](https://github.com/hatayama/unity-cli-loop/issues/1148)) ([c09a5af](https://github.com/hatayama/unity-cli-loop/commit/c09a5afa01deccea694413bd640787c42f40e54d))
+
 ## [3.0.0-beta.10](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.9...v3.0.0-beta.10) (2026-05-17)
 
 
