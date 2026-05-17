@@ -1,7 +1,7 @@
 ---
 name: uloop-get-logs
 toolName: get-logs
-description: "Read current Unity Console entries. Use after compile, tests, PlayMode, or dynamic code to inspect logs, warnings, errors, and stack traces; use log files for startup/crash/freeze issues."
+description: "Read current Unity Console entries from a running Editor. Use during bug investigation after compile, tests, PlayMode, or dynamic code to inspect logs, warnings, errors, and stack traces."
 ---
 
 # uloop get-logs

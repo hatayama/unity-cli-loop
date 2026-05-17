@@ -1,6 +1,6 @@
 ---
 name: uloop-focus-window
-description: "Bring the Unity Editor window to front. Use before screenshots, visual checks, or user-facing Unity interaction."
+description: "Bring the Unity Editor window to front. Use when Unity must be visible for visual checks or user-facing interaction."
 ---
 
 # uloop focus-window

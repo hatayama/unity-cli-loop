@@ -1,7 +1,7 @@
 ---
 name: uloop-execute-dynamic-code
 toolName: execute-dynamic-code
-description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for scene, prefab, SerializedObject, menu, or PlayMode automation; not for file I/O or script authoring."
+description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for scene, prefab, SerializedObject, menu, or PlayMode automation."
 context: fork
 ---
 

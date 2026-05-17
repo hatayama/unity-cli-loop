@@ -1,7 +1,7 @@
 ---
 name: uloop-find-game-objects
 toolName: find-game-objects
-description: "Find or inspect Unity GameObjects, especially the current Hierarchy selection. Use for object details, components, tags, layers, or name/path searches; use get-hierarchy for child trees."
+description: "Use first when the user asks about the currently selected GameObject in the Unity Hierarchy. Inspect selected object details with `--search-mode Selected` before using `execute-dynamic-code`. Use when you need to: (1) Get details and component properties for selected GameObject(s), (2) Search for objects by name, regex, or path, (3) Find objects with specific components, tags, or layers. Use get-hierarchy when the child tree under the selection is needed. Returns hierarchy paths, active state, tags, layers, and components (or writes to a file when multiple GameObjects are selected)."
 ---
 
 # uloop find-game-objects
