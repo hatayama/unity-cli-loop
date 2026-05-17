@@ -267,7 +267,7 @@ Dedicated tools exist only for operations that dynamic code execution cannot han
 ### 1. compile - Execute Compilation
 Performs AssetDatabase.Refresh() and then compiles, returning the results after Domain Reload completes. Can detect errors and warnings that built-in linters cannot find.
 You can choose between incremental compilation and forced full compilation.
-Use `WaitForDomainReload=false` only when you need the fire-and-forget path.
+Use `--no-wait-for-domain-reload` only when you need the fire-and-forget path.
 ```text
 → Execute compile, analyze error and warning content
 → Automatically fix relevant files

@@ -202,7 +202,7 @@ func classifyError(err error, context errorContext) cliError {
 			Command:     context.command,
 			NextActions: []string{
 				"Run the command from inside a Unity project.",
-				"Pass `--project-path <path>` before the command.",
+				"Pass `--project-path <path>` when targeting another Unity project.",
 			},
 		}
 	}

@@ -57,6 +57,47 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 	}
 }
 
+func TestCompletionListOptionsUsesEmbeddedFirstPartyToolSchema(t *testing.T) {
+	// Verifies stale project caches do not re-expose removed first-party options.
+	var stdout bytes.Buffer
+	cache := toolsCache{
+		Tools: []toolDefinition{
+			{
+				Name: "compile",
+				InputSchema: inputSchema{
+					Type: "object",
+					Properties: map[string]toolProperty{
+						"ForceRecompile":      {Type: "boolean"},
+						"WaitForDomainReload": {Type: "boolean", Default: false},
+					},
+				},
+			},
+		},
+	}
+
+	handled, code := tryHandleCompletionRequest(
+		[]string{"--list-options", "compile"},
+		cache,
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "--no-wait-for-domain-reload") {
+		t.Fatalf("embedded compile options were not used: %s", output)
+	}
+	if strings.Contains(output, "--wait-for-domain-reload") {
+		t.Fatalf("stale wait option should not be listed: %s", output)
+	}
+}
+
 func TestCompletionListOptionsUsesExecuteDynamicCodeNoWaitFlag(t *testing.T) {
 	// Verifies shell completion exposes the default-on reload wait as a negated flag.
 	var stdout bytes.Buffer
@@ -189,6 +230,31 @@ func TestCompletionCommandListOptionsUsesNativeCompletionOptions(t *testing.T) {
 	for _, option := range []string{"--install", "--shell"} {
 		if !strings.Contains(output, option) {
 			t.Fatalf("completion option %s was not listed: %s", option, output)
+		}
+	}
+}
+
+func TestCompletionHelpDocumentsMachineReadableHelpers(t *testing.T) {
+	// Verifies completion-specific probes are documented outside the main help surface.
+	var stdout bytes.Buffer
+	handled, code := tryHandleCompletionRequest(
+		[]string{completionCommand, "--help"},
+		loadDefaultTools(),
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+
+	output := stdout.String()
+	for _, expected := range []string{"uloop --list-commands", "uloop --list-options <command>"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("completion help missing %q:\n%s", expected, output)
 		}
 	}
 }

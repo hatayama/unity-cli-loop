@@ -24,6 +24,10 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 	if len(args) == 0 || args[0] != updateCommandName {
 		return false, 0
 	}
+	if containsHelpRequest(args[1:]) {
+		printUpdateHelp(stdout)
+		return true, 0
+	}
 	options, err := parseUpdateOptions(args[1:])
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{command: updateCommandName})
@@ -75,6 +79,11 @@ func updateCommandForOSWithOptions(goos string, options updateOptions) (string, 
 		return "", nil, err
 	}
 	return command.Name, command.Args, nil
+}
+
+func printUpdateHelp(stdout io.Writer) {
+	writeLine(stdout, "Usage:")
+	writeLine(stdout, "  uloop update [--to-version <version>]")
 }
 
 func parseUpdateOptions(args []string) (updateOptions, error) {

@@ -268,7 +268,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 ### 1. compile - コンパイルの実行
 AssetDatabase.Refresh()をした後、Domain Reload完了まで待ってコンパイル結果を返却します。内蔵のLinterでは発見できないエラー・警告を見つける事ができます。
 差分コンパイルと強制全体コンパイルを選択できます。
-即時に戻したい場合だけ `WaitForDomainReload=false` を指定します。
+即時に戻したい場合だけ `--no-wait-for-domain-reload` を指定します。
 ```text
 → compile実行、エラー・警告内容を解析
 → 該当ファイルを自動修正
