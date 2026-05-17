@@ -3,19 +3,17 @@ using System.Diagnostics;
 
 namespace io.github.hatayama.UnityCliLoop.Application
 {
-    // Port for the compilation lock file used by external CLI processes.
     /// <summary>
-    /// Defines the Compilation Lock operations required by the owning workflow.
+    /// Defines the Compilation Readiness operations required by the owning workflow.
     /// </summary>
     public interface ICompilationLockService
     {
         void RegisterForEditorStartup();
-        void DeleteLockFile();
     }
 
     // Static facade retained for Unity callbacks and server cleanup paths outside constructor control.
     /// <summary>
-    /// Provides Compilation Lock operations for its owning module.
+    /// Provides Compilation Readiness operations for its owning module.
     /// </summary>
     public static class CompilationLockService
     {
@@ -33,18 +31,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Service.RegisterForEditorStartup();
         }
 
-        public static void DeleteLockFile()
-        {
-            Service.DeleteLockFile();
-        }
-
         private static ICompilationLockService Service
         {
             get
             {
                 if (ServiceValue == null)
                 {
-                    throw new InvalidOperationException("Unity CLI Loop compilation lock service is not registered.");
+                    throw new InvalidOperationException("Unity CLI Loop compilation readiness service is not registered.");
                 }
 
                 return ServiceValue;

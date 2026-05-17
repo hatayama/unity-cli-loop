@@ -57,7 +57,7 @@ Diagnose the failure mode before retrying.
 uloop fix
 ```
 
-This removes the Unity CLI Loop readiness state file and any leftover legacy lock files from the Unity project's Temp directory. Then retry `uloop compile`.
+This removes stale Unity CLI Loop readiness state files from the Unity project's Temp directory. Then retry `uloop compile`.
 
 **Unity Editor not running** (CLI returns a connection failure and no Unity process is alive):
 

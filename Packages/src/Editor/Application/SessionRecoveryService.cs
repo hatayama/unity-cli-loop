@@ -52,13 +52,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             IUnityCliLoopServerInstance currentServer = _recoveryCoordinator.CurrentServer;
             if (currentServer?.IsRunning == true)
             {
-                CompilationLockService.DeleteLockFile();
-                _domainReloadDetectionService.DeleteLockFile();
-                // Why: only the startup generation that created serverstarting.lock knows whether
-                // the canonical lock still belongs to it or has already been replaced by a newer
-                // generation. Why not delete it here: a stale domain-reload recovery path can race
-                // with an active startup/prewarm sequence and tear down another generation's lock.
-
                 if (isAfterCompile)
                 {
                     _editorSettingsService.ClearAfterCompileFlag();

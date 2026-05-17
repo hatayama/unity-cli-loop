@@ -327,7 +327,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public string Endpoint => "test";
 
-            public void StartServer(bool clearServerStartingLockWhenReady = true)
+            public void StartServer()
             {
             }
 

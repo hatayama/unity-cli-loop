@@ -44,8 +44,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 showPostCompileReconnectingUI = false
             });
 
-            // Clean up lock file created by ExecuteBeforeDomainReload
-            _domainReloadDetectionService.DeleteLockFile();
             _stateStore.Delete();
         }
 
@@ -118,7 +116,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             ServerReadinessState state = _stateStore.Read();
             Assert.That(state.Phase, Is.EqualTo("stopped"));
-            Assert.That(_domainReloadDetectionService.IsLockFilePresent(), Is.False);
         }
 
         [Test]
@@ -188,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public string Endpoint => "test";
 
-            public void StartServer(bool clearServerStartingLockWhenReady = true)
+            public void StartServer()
             {
                 IsRunning = true;
             }

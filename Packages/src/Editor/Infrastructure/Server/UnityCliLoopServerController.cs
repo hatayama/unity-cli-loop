@@ -213,12 +213,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new UnityCliLoopServerInitializationUseCase(
                     new EditorSecurityValidationService(),
                     startupService);
-            ServerInitializationRequest request =
-                ServerInitializationRequest.ReleaseStartupLockWhenReady();
             System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
 
             ServerInitializationResult<IUnityCliLoopServerInstance> result =
-                await useCase.ExecuteAsync(request, cancellationToken);
+                await useCase.ExecuteAsync(cancellationToken);
 
             if (!result.Success)
             {
@@ -527,16 +525,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 isAfterCompile ? "post-compile-recovery" : "server-recovery",
                 null);
 
-            // Ensure stale reload locks are cleaned up before recovery.
-            // Why not clear serverstarting.lock here: a previous generation may still be finishing
-            // and ownership is now tracked per startup token below.
-            _domainReloadDetectionService.DeleteLockFile();
-            CompilationLockService.DeleteLockFile();
-
             VibeLogger.LogInfo("startup_request", "transport=project_ipc");
 
             await _startupSemaphore.WaitAsync(cancellationToken);
-            string serverStartingLockToken = null;
             try
             {
                 // If any server is already running, ignore this request to prevent double-binding
@@ -546,8 +537,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     await MarkServerReadyAsync(generationId, "already-running", cancellationToken);
                     return;
                 }
-
-                serverStartingLockToken = CreateOptionalServerStartingLock();
 
                 // Ensure previous instance is fully disposed before trying to bind a new one
                 if (_bridgeServer != null)
@@ -570,10 +559,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 bool started = await TryBindWithWaitAsync(
                     5000,
                     250,
-                    cancellationToken,
-                    // Why: the endpoint can bind before recovery warmup finishes, and deleting
-                    // the lock at bind time lets the next CLI request block on the main thread.
-                    clearServerStartingLockWhenReady: false);
+                    cancellationToken);
 
                 if (!started)
                 {
@@ -596,14 +582,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 await MarkServerReadyAsync(generationId, "server-recovery", cancellationToken);
 
                 ActivateStartupProtection(5000);
-                // Why: external CLI waiters should observe readiness only after recovery
-                // warmup has finished on the Unity main thread.
-                ServerStartingLockService.DeleteOwnedLockFile(serverStartingLockToken);
-            }
-            catch
-            {
-                ServerStartingLockService.DeleteOwnedLockFile(serverStartingLockToken);
-                throw;
             }
             finally
             {
@@ -614,8 +592,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private async Task<bool> TryBindWithWaitAsync(
             int maxWaitMs,
             int stepMs,
-            CancellationToken cancellationToken,
-            bool clearServerStartingLockWhenReady = true)
+            CancellationToken cancellationToken)
         {
             int remainingMs = maxWaitMs;
             while (true)
@@ -643,7 +620,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     }
 
                     server = _serverInstanceFactory.Create();
-                    server.StartServer(clearServerStartingLockWhenReady);
+                    server.StartServer();
                     _bridgeServer = server;
                     VibeLogger.LogInfo("binding_success", $"endpoint={server.Endpoint}");
                     return true;
@@ -753,25 +730,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string endpoint = _bridgeServer?.Endpoint;
             _stateStore.Write(phase, generationId, reason, endpoint, lastError);
-        }
-
-        internal string CreateOptionalServerStartingLock(Func<string> createLockFile = null)
-        {
-            Func<string> createLockFileCore = createLockFile ?? ServerStartingLockService.CreateLockFile;
-            string serverStartingLockToken = createLockFileCore();
-            if (!string.IsNullOrEmpty(serverStartingLockToken))
-            {
-                return serverStartingLockToken;
-            }
-
-            // Why: serverstarting.lock only improves busy diagnostics for external callers; the
-            // listener itself can still start and recover safely without it.
-            // Why not fail fast here: a transient file lock would otherwise turn an optional
-            // readiness hint into a full startup outage for launch and recovery paths.
-            VibeLogger.LogWarning(
-                "server_starting_lock_optional",
-                "Proceeding without serverstarting.lock because the readiness hint could not be created.");
-            return null;
         }
 
         public void AddServerStateChangedHandler(Action handler)
