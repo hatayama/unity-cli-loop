@@ -57,6 +57,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        internal void ResetServerScopedServicesBeforeDomainReload()
+        {
+            IDynamicCodeExecutionRuntime runtimeFacade;
+
+            lock (_serverScopedServicesLock)
+            {
+                runtimeFacade = _runtimeFacade;
+                _runtimeFacade = null;
+                _serverScopedDrainTask = Task.CompletedTask;
+            }
+
+            SignalRuntimeShutdownBeforeDomainReload(runtimeFacade);
+            SharedRoslynCompilerWorkerHost.ShutdownForServerReset();
+        }
+
+        internal void SetRuntimeFacadeForTests(IDynamicCodeExecutionRuntime runtimeFacade)
+        {
+            lock (_serverScopedServicesLock)
+            {
+                _runtimeFacade = runtimeFacade;
+                _serverScopedDrainTask = Task.CompletedTask;
+            }
+        }
+
+        internal Task GetServerScopedDrainTaskForTests()
+        {
+            lock (_serverScopedServicesLock)
+            {
+                return _serverScopedDrainTask;
+            }
+        }
+
         private IDynamicCodeExecutionRuntime GetRuntimeFacade()
         {
             lock (_serverScopedServicesLock)
@@ -86,6 +118,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return Task.CompletedTask;
+        }
+
+        private static void SignalRuntimeShutdownBeforeDomainReload(IDynamicCodeExecutionRuntime runtimeFacade)
+        {
+            if (runtimeFacade is IShutdownAwareDynamicCodeExecutionRuntime shutdownAwareRuntime)
+            {
+                Task shutdownTask = shutdownAwareRuntime.ShutdownAsync();
+                _ = ObserveDrainTask(shutdownTask);
+                return;
+            }
+
+            if (runtimeFacade is IDisposable disposableRuntime)
+            {
+                disposableRuntime.Dispose();
+            }
         }
 
         private static Task ChainDrainTask(Task currentDrainTask, Task nextDrainTask)
@@ -180,6 +227,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void ResetServerScopedServices()
         {
             GetRegistry().ResetServerScopedServices();
+        }
+
+        internal static void ResetServerScopedServicesBeforeDomainReload()
+        {
+            GetRegistry().ResetServerScopedServicesBeforeDomainReload();
         }
     }
 }

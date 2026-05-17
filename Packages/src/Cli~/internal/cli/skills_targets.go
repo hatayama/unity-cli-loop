@@ -87,12 +87,22 @@ func removeDeprecatedSkillDir(baseDir string, skillName string, grouped bool) (b
 }
 
 func removeSkillFromAllLayouts(baseDir string, skillName string) error {
+	_, err := removeSkillFromAllLayoutsIfExists(baseDir, skillName)
+	return err
+}
+
+func removeSkillFromAllLayoutsIfExists(baseDir string, skillName string) (bool, error) {
+	removed := false
 	for _, grouped := range []bool{true, false} {
-		if _, err := removeDirIfExists(getPreferredSkillDir(baseDir, skillName, grouped)); err != nil {
-			return err
+		exists, err := removeDirIfExists(getPreferredSkillDir(baseDir, skillName, grouped))
+		if err != nil {
+			return removed, err
+		}
+		if exists {
+			removed = true
 		}
 	}
-	return nil
+	return removed, nil
 }
 
 func removeDirIfExists(path string) (bool, error) {

@@ -24,6 +24,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExecuteDynamicCodeEditorStartup.ResetServerScopedServices();
         }
 
+        public static void ResetServerScopedServicesBeforeDomainReload()
+        {
+            ExecuteDynamicCodeEditorStartup.ResetServerScopedServicesBeforeDomainReload();
+        }
+
         public static string CreateExecuteDynamicCodeReadinessProbeCode()
         {
             // Why: composition root can only depend on the bundled-tool facade assembly,

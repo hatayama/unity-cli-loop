@@ -507,6 +507,112 @@ name: uloop-sample
 	}
 }
 
+// Tests that the public install command writes skills to the flat layout by default.
+func TestRunSkillsInstallDefaultsToFlatLayout(t *testing.T) {
+	projectRoot := t.TempDir()
+	sourceDir := filepath.Join(projectRoot, "source", "Skill")
+	writeSkillFile(t, sourceDir, `---
+name: uloop-sample
+---
+
+# sample
+`)
+
+	skill := skillDefinition{
+		name:            "uloop-sample",
+		content:         []byte("---\nname: uloop-sample\n---\n\n# sample\n"),
+		sourceDirectory: sourceDir,
+	}
+	target := targetConfigs["claude"]
+	options := skillCommandOptions{
+		targets: []skillTarget{target},
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsInstall(projectRoot, []skillDefinition{skill}, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("install should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	flatDir := getPreferredSkillDir(baseDir, skill.name, false)
+	groupedDir := getPreferredSkillDir(baseDir, skill.name, true)
+	if _, err := os.Stat(filepath.Join(flatDir, "SKILL.md")); err != nil {
+		t.Fatalf("flat skill should be installed: %v", err)
+	}
+	if _, err := os.Stat(groupedDir); err == nil {
+		t.Fatal("grouped skill should not be installed by default")
+	}
+}
+
+// Tests that the public list command reads the flat layout by default.
+func TestRunSkillsListDefaultsToFlatLayout(t *testing.T) {
+	projectRoot := t.TempDir()
+	skill := skillDefinition{
+		name:    "uloop-sample",
+		content: []byte("---\nname: uloop-sample\n---\n\n# sample\n"),
+	}
+	target := targetConfigs["claude"]
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	writeSkillFile(t, getPreferredSkillDir(baseDir, skill.name, false), string(skill.content))
+	options := skillCommandOptions{
+		targets: []skillTarget{target},
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsList(projectRoot, []skillDefinition{skill}, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("list should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "uloop-sample (installed)") {
+		t.Fatalf("flat skill should be reported as installed: %s", stdout.String())
+	}
+}
+
+// Tests that the public uninstall command removes only the flat layout by default.
+func TestRunSkillsUninstallDefaultsToFlatLayout(t *testing.T) {
+	projectRoot := t.TempDir()
+	skill := skillDefinition{
+		name:    "uloop-sample",
+		content: []byte("sample"),
+	}
+	target := targetConfigs["claude"]
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	flatDir := getPreferredSkillDir(baseDir, skill.name, false)
+	groupedDir := getPreferredSkillDir(baseDir, skill.name, true)
+	writeSkillFile(t, flatDir, "# flat\n")
+	writeSkillFile(t, groupedDir, "# grouped\n")
+	options := skillCommandOptions{
+		targets: []skillTarget{target},
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsUninstall(projectRoot, []skillDefinition{skill}, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("uninstall should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(flatDir); err == nil {
+		t.Fatal("flat skill should be removed")
+	}
+	if _, err := os.Stat(groupedDir); err != nil {
+		t.Fatalf("grouped skill should remain: %v", err)
+	}
+}
+
 // Tests that uninstalling uses only the selected layout and leaves the other layout intact.
 func TestUninstallSkillsForTargetUsesSelectedLayoutOnly(t *testing.T) {
 	projectRoot := t.TempDir()

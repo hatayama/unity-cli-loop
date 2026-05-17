@@ -70,6 +70,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(provider.CreatedExecutors[0].DisposeCallCount, Is.EqualTo(1));
         }
 
+        [Test]
+        public void ResetServerScopedServicesBeforeDomainReload_ShouldSignalShutdownWithoutWaitingForRuntimeDrain()
+        {
+            // Tests that domain reload reset does not leave a pending drain task that can block Unity teardown.
+            DynamicCodeServicesRegistry registry = new();
+            FakeShutdownAwareRuntime runtime = new();
+            registry.SetRuntimeFacadeForTests(runtime);
+
+            registry.ResetServerScopedServicesBeforeDomainReload();
+
+            Assert.That(runtime.ShutdownCallCount, Is.EqualTo(1));
+            Assert.That(runtime.DisposeCallCount, Is.EqualTo(0));
+            Assert.That(registry.GetServerScopedDrainTaskForTests().IsCompleted, Is.True);
+
+            runtime.CompleteShutdown();
+        }
+
         private static DynamicCodeExecutionRequest CreateRequest(
             DynamicCodeSecurityLevel securityLevel,
             string code)
@@ -130,6 +147,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             public ExecutionStatistics GetStatistics()
             {
                 return new ExecutionStatistics();
+            }
+
+            public void Dispose()
+            {
+                DisposeCallCount++;
+            }
+        }
+
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
+        private sealed class FakeShutdownAwareRuntime : IShutdownAwareDynamicCodeExecutionRuntime, System.IDisposable
+        {
+            private readonly TaskCompletionSource<bool> _shutdownCompletionSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public int ShutdownCallCount { get; private set; }
+
+            public int DisposeCallCount { get; private set; }
+
+            public Task<ExecutionResult> ExecuteAsync(
+                DynamicCodeExecutionRequest request,
+                CancellationToken cancellationToken = default)
+            {
+                throw new System.NotSupportedException();
+            }
+
+            public Task<(bool Entered, ExecutionResult Result)> TryExecuteIfIdleAsync(
+                DynamicCodeExecutionRequest request,
+                CancellationToken cancellationToken = default)
+            {
+                throw new System.NotSupportedException();
+            }
+
+            public Task ShutdownAsync()
+            {
+                ShutdownCallCount++;
+                return _shutdownCompletionSource.Task;
+            }
+
+            public void CompleteShutdown()
+            {
+                _shutdownCompletionSource.SetResult(true);
             }
 
             public void Dispose()

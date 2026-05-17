@@ -94,6 +94,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void RuntimeAsmdef_WhenLoaded_TargetsEditorOnly()
+        {
+            // Tests that runtime overlay code remains excluded from player builds.
+            string[] includePlatforms = ReadIncludePlatforms("Packages/src/Runtime/uLoopMCP.Runtime.asmdef");
+
+            Assert.That(includePlatforms, Is.EquivalentTo(new[] { "Editor" }));
+        }
+
+        [Test]
+        public void ProjectAsmdefsReferencingEditorOnlyPackageAssemblies_WhenLoaded_TargetEditorOnly()
+        {
+            // Tests that assemblies depending on package editor code stay out of player builds.
+            HashSet<string> editorOnlyPackageAssemblyNames = ReadProductionPackageAsmdefPaths()
+                .Where(IsEditorOnlyAsmdef)
+                .Select(ReadAsmdefName)
+                .ToHashSet(StringComparer.Ordinal);
+
+            string[] offendingAssemblyNames = ReadProjectAsmdefPaths()
+                .Where(path => !IsUnityIncludeTestsAsmdef(path))
+                .Where(path => !IsEditorOnlyAsmdef(path))
+                .Where(path => ReadResolvedReferencesFromAbsolutePath(path).Any(editorOnlyPackageAssemblyNames.Contains))
+                .Select(ReadAsmdefName)
+                .OrderBy(assemblyName => assemblyName)
+                .ToArray();
+
+            Assert.That(offendingAssemblyNames, Is.Empty);
+        }
+
+        [Test]
         public void CompilationDiagnosticMessageParser_WhenLoaded_CompilesUnderDomainAssembly()
         {
             // Tests that first-party dynamic-code parsing stays inside the bundled tool assembly.
@@ -1187,10 +1216,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return asmdef["references"]?.Values<string>().ToArray() ?? new string[0];
         }
 
+        private static string[] ReadIncludePlatforms(string relativeAsmdefPath)
+        {
+            string asmdefPath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), relativeAsmdefPath);
+            return ReadIncludePlatformsFromAbsolutePath(asmdefPath);
+        }
+
+        private static string[] ReadIncludePlatformsFromAbsolutePath(string asmdefPath)
+        {
+            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
+            return asmdef["includePlatforms"]?.Values<string>().ToArray() ?? new string[0];
+        }
+
+        private static bool IsEditorOnlyAsmdef(string asmdefPath)
+        {
+            string[] includePlatforms = ReadIncludePlatformsFromAbsolutePath(asmdefPath);
+            return includePlatforms.SequenceEqual(new[] { "Editor" });
+        }
+
+        private static bool IsUnityIncludeTestsAsmdef(string asmdefPath)
+        {
+            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
+            string[] defineConstraints = asmdef["defineConstraints"]?.Values<string>().ToArray() ?? new string[0];
+            return defineConstraints.Contains("UNITY_INCLUDE_TESTS");
+        }
+
         private static string[] ReadProductionAsmdefPaths()
         {
             string editorRoot = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), "Packages", "src", "Editor");
             return Directory.GetFiles(editorRoot, "*.asmdef", SearchOption.AllDirectories);
+        }
+
+        private static string[] ReadProductionPackageAsmdefPaths()
+        {
+            string packageSourceRoot = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), "Packages", "src");
+            return Directory.GetFiles(packageSourceRoot, "*.asmdef", SearchOption.AllDirectories);
         }
 
         private static string[] ReadPresentationSourcePaths()
