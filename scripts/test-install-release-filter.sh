@@ -598,6 +598,11 @@ test_powershell_installer_avoids_optional_archive_cmdlets() {
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Expand-Archive"
 }
 
+test_powershell_installer_uses_non_installer_staged_executable_name() {
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '"uloop-staged-"'
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" '"uloop-install-"'
+}
+
 test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
 test_posix_skips_default_npm_cleanup_when_native_command_is_first
@@ -608,3 +613,4 @@ test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets
 test_git_bash_latest_installs_windows_zip_asset
 test_powershell_installer_avoids_optional_archive_cmdlets
+test_powershell_installer_uses_non_installer_staged_executable_name
