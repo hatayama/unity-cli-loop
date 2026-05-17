@@ -84,5 +84,5 @@ Returns JSON with:
 
 - Unity must be in **PlayMode**
 - **Input System package** must be installed (`com.unity.inputsystem`)
-- Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings
+- Use this only when the project already uses the New Input System; otherwise prefer `execute-dynamic-code` for project-specific input handling.
 - Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`
