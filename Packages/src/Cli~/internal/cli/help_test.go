@@ -140,3 +140,94 @@ func TestRunProjectLocalHelpWithProjectPathShowsCachedProjectTools(t *testing.T)
 		}
 	}
 }
+
+// Tests that first-party tool help is available without Unity project resolution.
+func TestRunProjectLocalCompileHelpDoesNotRequireUnityProject(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"compile", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("compile help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"Usage:",
+		"uloop compile",
+		"--force-recompile",
+		"--no-wait-for-domain-reload",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("compile help missing %q:\n%s", expected, output)
+		}
+	}
+	if strings.Contains(output, "--wait-for-domain-reload") {
+		t.Fatalf("compile help exposed removed wait flag:\n%s", output)
+	}
+}
+
+// Tests that first-party test help lists options without contacting Unity.
+func TestRunProjectLocalRunTestsHelpDoesNotRequireUnityProject(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"run-tests", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("run-tests help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"Usage:",
+		"uloop run-tests",
+		"--test-mode",
+		"--filter-type",
+		"--filter-value",
+		"--save-before-run",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("run-tests help missing %q:\n%s", expected, output)
+		}
+	}
+}
+
+// Tests that update help is available before installer execution.
+func TestRunProjectLocalUpdateHelpDoesNotExecuteInstaller(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"update", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("update help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, expected := range []string{"Usage:", "uloop update", "--to-version <version>"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("update help missing %q:\n%s", expected, output)
+		}
+	}
+}
+
+// Tests that skills subcommand help is available before project resolution.
+func TestRunProjectLocalSkillsSubcommandHelpDoesNotRequireUnityProject(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"skills", "install", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("skills install help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, expected := range []string{"Usage:", "uloop skills install", "--claude", "--codex"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("skills install help missing %q:\n%s", expected, output)
+		}
+	}
+}

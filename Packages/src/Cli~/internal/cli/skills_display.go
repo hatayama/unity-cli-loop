@@ -58,6 +58,22 @@ func printSkillsHelp(stdout io.Writer) {
 	writeLine(stdout, "  uloop skills uninstall [options]")
 }
 
+func printSkillsSubcommandHelp(command string, stdout io.Writer) {
+	writeLine(stdout, "Usage:")
+	writeFormat(stdout, "  uloop skills %s [options]\n", command)
+	writeLine(stdout, "")
+	writeLine(stdout, "Options:")
+	writeLine(stdout, "  -g, --global")
+	writeLine(stdout, "      --flat")
+	writeLine(stdout, "      --claude")
+	writeLine(stdout, "      --codex")
+	writeLine(stdout, "      --cursor")
+	writeLine(stdout, "      --gemini")
+	writeLine(stdout, "      --agents")
+	writeLine(stdout, "      --windsurf")
+	writeLine(stdout, "      --antigravity")
+}
+
 func printSkillsTargetGuidance(command string, stdout io.Writer) {
 	writeFormat(stdout, "\nPlease specify at least one target for '%s':\n\n", command)
 	writeLine(stdout, "Available targets:")

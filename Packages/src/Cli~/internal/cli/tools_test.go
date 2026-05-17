@@ -85,6 +85,19 @@ func TestBuildToolParamsConvertsExecuteDynamicCodeNoWaitFlag(t *testing.T) {
 	}
 }
 
+func TestBuildToolParamsRejectsCompileWaitForDomainReloadFlag(t *testing.T) {
+	// Verifies the removed positive domain-reload wait flag is not accepted by the public CLI parser.
+	tool, ok := findTool(loadDefaultTools(), compileCommandName)
+	if !ok {
+		t.Fatal("compile was not found in default tools")
+	}
+
+	_, _, err := buildToolParams([]string{"--wait-for-domain-reload"}, tool)
+	if err == nil {
+		t.Fatal("expected removed wait flag to be rejected")
+	}
+}
+
 // Tests that hidden execute-dynamic-code options remain available for internal callers.
 func TestBuildToolParamsAcceptsHiddenExecuteDynamicCodeCompileOnlyFlag(t *testing.T) {
 	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)

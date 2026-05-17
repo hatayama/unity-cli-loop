@@ -108,6 +108,10 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 		writeErrorEnvelope(stderr, unknownSkillsSubcommandError(subcommand, errorContext{command: skillsCommandName}))
 		return true, 1
 	}
+	if len(args) == 3 && isHelpRequest(args[2:]) {
+		printSkillsSubcommandHelp(subcommand, stdout)
+		return true, 0
+	}
 	options, err := parseSkillsOptions(args[2:])
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{command: skillsCommandName})

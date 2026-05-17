@@ -246,10 +246,8 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 		writeLine(stdout, "")
 		return
 	}
-	if command == executeDynamicCodeCommandName {
-		if tool, ok := findTool(loadDefaultTools(), command); ok {
-			printOptionsForTool(tool, stdout)
-		}
+	if tool, ok := findDefaultTool(command); ok {
+		printOptionsForTool(tool, stdout)
 		return
 	}
 

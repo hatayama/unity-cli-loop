@@ -56,6 +56,11 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	if handled, code := tryHandleSkillsRequest(remainingArgs, startPath, projectPath, stdout, stderr); handled {
 		return code
 	}
+	if len(commandArgs) == 1 && isHelpRequest(commandArgs) {
+		if handled, code := tryHandleCommandHelp(command, startPath, projectPath, stdout, stderr); handled {
+			return code
+		}
+	}
 
 	connection, err := project.ResolveConnection(startPath, projectPath)
 	if err != nil {
@@ -102,11 +107,11 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		}
 		if nestedProjectPath != "" && nestedProjectPath != connection.ProjectRoot {
 			writeErrorEnvelope(stderr, (&argumentError{
-				message:      "--project-path must be passed before the command in the native CLI",
+				message:      "--project-path must target the same Unity project for this command",
 				option:       "--project-path",
 				expectedType: "path",
 				command:      command,
-				nextActions:  []string{"Move `--project-path <path>` before the command name."},
+				nextActions:  []string{"Use one `--project-path <path>` value for the target Unity project."},
 			}).toCLIError(errorContext{projectRoot: connection.ProjectRoot, command: command}))
 			return 1
 		}
