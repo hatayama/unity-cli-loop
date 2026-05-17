@@ -82,7 +82,7 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 		return true, 0
 	}
 
-	if len(args) == 2 && isHelpRequest(args[1:]) {
+	if containsHelpRequest(args[1:]) {
 		printCompletionHelp(stdout)
 		return true, 0
 	}
@@ -246,10 +246,8 @@ func printOptionsForCommand(command string, cache toolsCache, stdout io.Writer) 
 		writeLine(stdout, "")
 		return
 	}
-	if command == executeDynamicCodeCommandName {
-		if tool, ok := findTool(loadDefaultTools(), command); ok {
-			printOptionsForTool(tool, stdout)
-		}
+	if tool, ok := findDefaultTool(command); ok {
+		printOptionsForTool(tool, stdout)
 		return
 	}
 
@@ -490,4 +488,8 @@ func isPowerShellShell(shellName string) bool {
 func printCompletionHelp(stdout io.Writer) {
 	writeLine(stdout, "Usage:")
 	writeLine(stdout, "  uloop completion [--shell bash|zsh|powershell|pwsh] [--install]")
+	writeLine(stdout, "")
+	writeLine(stdout, "Completion helpers:")
+	writeLine(stdout, "  uloop --list-commands           Print command names for completion")
+	writeLine(stdout, "  uloop --list-options <command>  Print options for a command")
 }

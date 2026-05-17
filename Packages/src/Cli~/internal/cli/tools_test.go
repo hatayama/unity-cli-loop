@@ -85,6 +85,19 @@ func TestBuildToolParamsConvertsExecuteDynamicCodeNoWaitFlag(t *testing.T) {
 	}
 }
 
+func TestBuildToolParamsRejectsCompileWaitForDomainReloadFlag(t *testing.T) {
+	// Verifies the removed positive domain-reload wait flag is not accepted by the public CLI parser.
+	tool, ok := findTool(loadDefaultTools(), compileCommandName)
+	if !ok {
+		t.Fatal("compile was not found in default tools")
+	}
+
+	_, _, err := buildToolParams([]string{"--wait-for-domain-reload"}, tool)
+	if err == nil {
+		t.Fatal("expected removed wait flag to be rejected")
+	}
+}
+
 // Tests that hidden execute-dynamic-code options remain available for internal callers.
 func TestBuildToolParamsAcceptsHiddenExecuteDynamicCodeCompileOnlyFlag(t *testing.T) {
 	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
@@ -428,6 +441,27 @@ func TestParseGlobalProjectPathAcceptsLeadingOption(t *testing.T) {
 		t.Fatalf("project path mismatch: %s", projectPath)
 	}
 	expected := []string{"compile", "--force-recompile"}
+	if len(remaining) != len(expected) {
+		t.Fatalf("remaining length mismatch: %#v", remaining)
+	}
+	for index, value := range expected {
+		if remaining[index] != value {
+			t.Fatalf("remaining mismatch: %#v", remaining)
+		}
+	}
+}
+
+// Tests that similarly prefixed option names are not consumed as --project-path.
+func TestParseGlobalProjectPathRequiresExactFlagName(t *testing.T) {
+	remaining, projectPath, err := parseGlobalProjectPath([]string{"--project-pathology"})
+	if err != nil {
+		t.Fatalf("parseGlobalProjectPath failed: %v", err)
+	}
+
+	if projectPath != "" {
+		t.Fatalf("project path should be empty, got %q", projectPath)
+	}
+	expected := []string{"--project-pathology"}
 	if len(remaining) != len(expected) {
 		t.Fatalf("remaining length mismatch: %#v", remaining)
 	}
