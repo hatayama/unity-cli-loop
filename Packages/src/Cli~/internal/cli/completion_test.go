@@ -234,6 +234,31 @@ func TestCompletionCommandListOptionsUsesNativeCompletionOptions(t *testing.T) {
 	}
 }
 
+func TestCompletionHelpDocumentsMachineReadableHelpers(t *testing.T) {
+	// Verifies completion-specific probes are documented outside the main help surface.
+	var stdout bytes.Buffer
+	handled, code := tryHandleCompletionRequest(
+		[]string{completionCommand, "--help"},
+		loadDefaultTools(),
+		&stdout,
+		&bytes.Buffer{},
+	)
+
+	if !handled {
+		t.Fatal("completion request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+
+	output := stdout.String()
+	for _, expected := range []string{"uloop --list-commands", "uloop --list-options <command>"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("completion help missing %q:\n%s", expected, output)
+		}
+	}
+}
+
 func TestCompletionListOptionsIgnoresCachedToolSchemaForNativeCommand(t *testing.T) {
 	// Verifies native commands keep priority when a cached Unity tool has the same name.
 	var stdout bytes.Buffer

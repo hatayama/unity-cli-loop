@@ -48,7 +48,7 @@ func tryHandleLaunchRequest(
 	if len(args) == 0 || args[0] != launchCommandName {
 		return false, 0
 	}
-	if len(args) == 2 && isHelpRequest(args[1:]) {
+	if containsHelpRequest(args[1:]) {
 		printLaunchHelp(stdout)
 		return true, 0
 	}
@@ -418,4 +418,6 @@ func printLaunchHelp(stdout io.Writer) {
 	writeLine(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
 	writeLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
 	writeLine(stdout, "      --max-depth <n>    Accepted for compatibility when searching from the current directory")
+	writeLine(stdout, "")
+	printGlobalOptionsHelp(stdout)
 }

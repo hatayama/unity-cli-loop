@@ -57,6 +57,10 @@ func printNativeSingleCommandHelp(command string, stdout io.Writer) {
 		for _, option := range sortedStrings(options) {
 			writeFormat(stdout, "  %s\n", option)
 		}
+		if nativeCommandUsesProject(command) {
+			writeLine(stdout, "")
+			printGlobalOptionsHelp(stdout)
+		}
 		return
 	}
 
@@ -64,6 +68,10 @@ func printNativeSingleCommandHelp(command string, stdout io.Writer) {
 	if description, ok := nativeCommandDescription(command); ok {
 		writeLine(stdout, "")
 		writeLine(stdout, description)
+	}
+	if nativeCommandUsesProject(command) {
+		writeLine(stdout, "")
+		printGlobalOptionsHelp(stdout)
 	}
 }
 
@@ -181,6 +189,15 @@ func nativeCommandDescription(command string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func nativeCommandUsesProject(command string) bool {
+	switch command {
+	case launchCommandName, "list", "sync", "focus-window", "fix", skillsCommandName:
+		return true
+	default:
+		return false
+	}
 }
 
 func sortedStrings(values []string) []string {

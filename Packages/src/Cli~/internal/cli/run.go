@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/internal/project"
@@ -44,6 +45,14 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 			return code
 		}
 	}
+	if isUnknownLeadingOption(command) {
+		writeClassifiedError(stderr, &argumentError{
+			message:     "Unknown global option: " + command,
+			option:      command,
+			nextActions: []string{"Run `uloop --help` to inspect supported global options."},
+		}, errorContext{})
+		return 1
+	}
 	if handled, code := tryHandleUpdateRequest(ctx, remainingArgs, stdout, stderr); handled {
 		return code
 	}
@@ -56,7 +65,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	if handled, code := tryHandleSkillsRequest(remainingArgs, startPath, projectPath, stdout, stderr); handled {
 		return code
 	}
-	if len(commandArgs) == 1 && isHelpRequest(commandArgs) {
+	if containsHelpRequest(commandArgs) {
 		if handled, code := tryHandleCommandHelp(command, startPath, projectPath, stdout, stderr); handled {
 			return code
 		}
@@ -126,6 +135,10 @@ func shouldWaitForServerReadinessBeforeCommand(command string) bool {
 	default:
 		return true
 	}
+}
+
+func isUnknownLeadingOption(command string) bool {
+	return strings.HasPrefix(command, "-")
 }
 
 func runTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stdout io.Writer, stderr io.Writer) int {

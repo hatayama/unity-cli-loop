@@ -8,7 +8,10 @@ import (
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/internal/project"
 )
 
-const nativeCLIDescription = "Native CLI. Runs uloop commands and dispatches live Unity tool commands."
+const (
+	nativeCLIDescription            = "Native CLI. Runs uloop commands and dispatches live Unity tool commands."
+	maxCommandListDescriptionLength = 96
+)
 
 func isVersionRequest(args []string) bool {
 	return len(args) == 1 && (args[0] == "--version" || args[0] == "-v")
@@ -16,6 +19,15 @@ func isVersionRequest(args []string) bool {
 
 func isHelpRequest(args []string) bool {
 	return len(args) == 1 && (args[0] == "--help" || args[0] == "-h")
+}
+
+func containsHelpRequest(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
+	}
+	return false
 }
 
 func printHelp(stdout io.Writer) {
@@ -68,8 +80,7 @@ func printMainHelp(stdout io.Writer, description string, cache toolsCache, hasPr
 	writeLine(stdout, "  uloop list                                  Show the live Unity tool list")
 	writeLine(stdout, "  uloop --project-path /path/to/project list  Show tools for another Unity project")
 	writeLine(stdout, "  uloop <command> --help                      Show help for native and Unity tool commands")
-	writeLine(stdout, "  uloop --list-commands                       Print command names for completion")
-	writeLine(stdout, "  uloop --list-options <command>              Print options for a Unity tool command")
+	writeLine(stdout, "  uloop completion --help                     Show shell completion setup and helpers")
 }
 
 func printNativeCommandHelp(stdout io.Writer) {
@@ -102,7 +113,7 @@ func printUnityToolCommandHelp(stdout io.Writer, cache toolsCache, hasProjectToo
 		if isNativeCommandName(tool.Name) {
 			continue
 		}
-		writeFormat(stdout, "  %-22s %s\n", tool.Name, firstHelpLine(tool.Description))
+		writeFormat(stdout, "  %-22s %s\n", tool.Name, commandListDescription(tool.Description))
 	}
 	writeLine(stdout, "  Run `uloop sync` after the Editor tool set changes to refresh this list.")
 }
@@ -124,6 +135,21 @@ func firstHelpLine(description string) string {
 		}
 	}
 	return ""
+}
+
+func commandListDescription(description string) string {
+	line := firstHelpLine(description)
+	for index, value := range line {
+		if value == '.' || value == '!' || value == '?' {
+			return strings.TrimSpace(line[:index+len(string(value))])
+		}
+	}
+
+	runes := []rune(line)
+	if len(runes) <= maxCommandListDescriptionLength {
+		return line
+	}
+	return strings.TrimSpace(string(runes[:maxCommandListDescriptionLength-3])) + "..."
 }
 
 func loadCompletionTools(startPath string, projectPath string) toolsCache {

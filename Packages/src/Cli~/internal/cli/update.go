@@ -24,7 +24,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 	if len(args) == 0 || args[0] != updateCommandName {
 		return false, 0
 	}
-	if len(args) == 2 && isHelpRequest(args[1:]) {
+	if containsHelpRequest(args[1:]) {
 		printUpdateHelp(stdout)
 		return true, 0
 	}

@@ -179,7 +179,7 @@ func parseGlobalProjectPath(args []string) ([]string, string, error) {
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		if !strings.HasPrefix(arg, "--"+projectPathFlagName) {
+		if arg != "--"+projectPathFlagName && !strings.HasPrefix(arg, "--"+projectPathFlagName+"=") {
 			remaining = append(remaining, arg)
 			continue
 		}

@@ -451,6 +451,27 @@ func TestParseGlobalProjectPathAcceptsLeadingOption(t *testing.T) {
 	}
 }
 
+// Tests that similarly prefixed option names are not consumed as --project-path.
+func TestParseGlobalProjectPathRequiresExactFlagName(t *testing.T) {
+	remaining, projectPath, err := parseGlobalProjectPath([]string{"--project-pathology"})
+	if err != nil {
+		t.Fatalf("parseGlobalProjectPath failed: %v", err)
+	}
+
+	if projectPath != "" {
+		t.Fatalf("project path should be empty, got %q", projectPath)
+	}
+	expected := []string{"--project-pathology"}
+	if len(remaining) != len(expected) {
+		t.Fatalf("remaining length mismatch: %#v", remaining)
+	}
+	for index, value := range expected {
+		if remaining[index] != value {
+			t.Fatalf("remaining mismatch: %#v", remaining)
+		}
+	}
+}
+
 func writeToolCache(t *testing.T, projectRoot string, content string) {
 	t.Helper()
 	cachePath := filepath.Join(projectRoot, cacheDirectoryName, cacheFileName)

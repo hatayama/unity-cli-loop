@@ -23,7 +23,7 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 	if len(args) == 0 || args[0] != uninstallCommandName {
 		return false, 0
 	}
-	if len(args) == 2 && isHelpRequest(args[1:]) {
+	if containsHelpRequest(args[1:]) {
 		printUninstallHelp(stdout)
 		return true, 0
 	}

@@ -56,6 +56,8 @@ func printSkillsHelp(stdout io.Writer) {
 	writeLine(stdout, "  uloop skills list [options]")
 	writeLine(stdout, "  uloop skills install [options]")
 	writeLine(stdout, "  uloop skills uninstall [options]")
+	writeLine(stdout, "")
+	printGlobalOptionsHelp(stdout)
 }
 
 func printSkillsSubcommandHelp(command string, stdout io.Writer) {
@@ -72,6 +74,8 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	writeLine(stdout, "      --agents")
 	writeLine(stdout, "      --windsurf")
 	writeLine(stdout, "      --antigravity")
+	writeLine(stdout, "")
+	printGlobalOptionsHelp(stdout)
 }
 
 func printSkillsTargetGuidance(command string, stdout io.Writer) {
