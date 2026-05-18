@@ -11,6 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// </summary>
     internal static class UnityCliLoopEditorStateGuard
     {
+        private const string UnityCompileOperationName = "unity-compile";
+        private const string UnityAssetDatabaseUpdateOperationName = "unity-asset-database-update";
+
         [Flags]
         private enum GuardCondition
         {
@@ -39,12 +42,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             if ((condition & GuardCondition.NotCompiling) != 0 && isCompiling)
             {
-                throw new InvalidOperationException($"Cannot execute '{toolName}' while Unity is compiling.");
+                throw new UnityCliLoopToolBusyException(UnityCompileOperationName, toolName);
             }
 
             if ((condition & GuardCondition.NotUpdating) != 0 && isUpdating)
             {
-                throw new InvalidOperationException($"Cannot execute '{toolName}' while Unity is updating.");
+                throw new UnityCliLoopToolBusyException(UnityAssetDatabaseUpdateOperationName, toolName);
             }
         }
 

@@ -1,4 +1,3 @@
-using System;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -11,25 +10,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ValidateForState_WhenDynamicCodeRunsDuringCompilation_ShouldThrow()
         {
-            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            UnityCliLoopToolBusyException exception = Assert.Throws<UnityCliLoopToolBusyException>(
                 () => UnityCliLoopEditorStateGuard.ValidateForState(
                     UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
                     true,
                     false));
 
-            Assert.That(exception.Message, Does.Contain("compiling"));
+            Assert.That(exception.RunningToolName, Is.Not.Empty);
+            Assert.That(exception.RequestedToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
         }
 
         [Test]
         public void ValidateForState_WhenPlayModeControlRunsDuringEditorUpdate_ShouldThrow()
         {
-            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            UnityCliLoopToolBusyException exception = Assert.Throws<UnityCliLoopToolBusyException>(
                 () => UnityCliLoopEditorStateGuard.ValidateForState(
                     UnityCliLoopConstants.TOOL_NAME_CONTROL_PLAY_MODE,
                     false,
                     true));
 
-            Assert.That(exception.Message, Does.Contain("updating"));
+            Assert.That(exception.RunningToolName, Is.Not.Empty);
+            Assert.That(exception.RequestedToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_CONTROL_PLAY_MODE));
         }
 
         [Test]

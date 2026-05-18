@@ -115,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly ConcurrentDictionary<string, Stream> _clientStreams = new();
         private readonly ConcurrentDictionary<int, Task> _clientTasks = new();
         private int _nextClientTaskId;
+        private const int ClientDisconnectMonitorPollMilliseconds = 100;
 
         public UnityCliLoopBridgeServer()
             : this(CreateDefaultEditorSettingsService())
@@ -513,7 +514,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         {
                             if (string.IsNullOrWhiteSpace(requestJson)) continue;
 
-                            await ProcessRequestFrameAsync(stream, requestJson, cancellationToken);
+                            await ProcessRequestFrameAsync(client, stream, requestJson, cancellationToken);
                         }
                         
                         // Validate reassembler state and clear if needed
@@ -604,6 +605,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         private async Task ProcessRequestFrameAsync(
+            BridgeClientConnection client,
             Stream stream,
             string requestJson,
             CancellationToken serverCancellationToken)
@@ -621,7 +623,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         {
                             await WriteJsonResponseAsync(stream, responseJsonValue, serverCancellationToken);
                             clientDisconnectMonitorTask =
-                                MonitorClientDisconnectAsync(stream, requestCancellationTokenSource);
+                                MonitorClientDisconnectAsync(client, requestCancellationTokenSource);
                         });
 
                     await WriteJsonResponseAsync(stream, responseJson, serverCancellationToken);
@@ -636,32 +638,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         private static async Task MonitorClientDisconnectAsync(
-            Stream stream,
+            BridgeClientConnection client,
             CancellationTokenSource requestCancellationTokenSource)
         {
-            byte[] buffer = new byte[1];
-            try
+            while (!requestCancellationTokenSource.IsCancellationRequested)
             {
-                int bytesRead = await stream.ReadAsync(
-                    buffer,
-                    0,
-                    buffer.Length,
-                    requestCancellationTokenSource.Token);
-                if (bytesRead == 0)
+                if (!client.IsConnected)
                 {
                     requestCancellationTokenSource.Cancel();
+                    return;
                 }
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (ObjectDisposedException)
-            {
-                requestCancellationTokenSource.Cancel();
-            }
-            catch (IOException)
-            {
-                requestCancellationTokenSource.Cancel();
+
+                await Task.Delay(ClientDisconnectMonitorPollMilliseconds);
             }
         }
 

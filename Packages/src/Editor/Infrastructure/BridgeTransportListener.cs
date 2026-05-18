@@ -11,14 +11,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal sealed class BridgeClientConnection : IDisposable
     {
+        private readonly Func<bool> _isConnected;
+
         public string Endpoint { get; }
         public Stream Stream { get; }
 
-        public BridgeClientConnection(string endpoint, Stream stream)
+        public BridgeClientConnection(string endpoint, Stream stream, Func<bool> isConnected)
         {
+            System.Diagnostics.Debug.Assert(!string.IsNullOrWhiteSpace(endpoint), "endpoint must not be null or whitespace");
+            System.Diagnostics.Debug.Assert(stream != null, "stream must not be null");
+            System.Diagnostics.Debug.Assert(isConnected != null, "isConnected must not be null");
+
             Endpoint = endpoint;
             Stream = stream;
+            _isConnected = isConnected;
         }
+
+        public bool IsConnected => _isConnected();
 
         public void Dispose()
         {
@@ -108,7 +117,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             string clientEndpoint = $"{Endpoint.Path}#{Interlocked.Increment(ref _nextClientId)}";
-            return new BridgeClientConnection(clientEndpoint, new NetworkStream(client, ownsSocket: true));
+            return new BridgeClientConnection(
+                clientEndpoint,
+                new NetworkStream(client, ownsSocket: true),
+                () => IsSocketConnected(client));
         }
 
         public void Stop()
@@ -124,6 +136,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void Dispose()
         {
             Stop();
+        }
+
+        private static bool IsSocketConnected(Socket socket)
+        {
+            return socket.Connected && !(socket.Poll(0, SelectMode.SelectRead) && socket.Available == 0);
         }
     }
 
@@ -175,7 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 connected = true;
                 string clientEndpoint = $"{Endpoint.Path}#{Interlocked.Increment(ref _nextClientId)}";
-                return new BridgeClientConnection(clientEndpoint, pipe);
+                return new BridgeClientConnection(clientEndpoint, pipe, () => pipe.IsConnected);
             }
             finally
             {

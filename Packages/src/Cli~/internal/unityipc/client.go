@@ -10,14 +10,16 @@ import (
 )
 
 const requestTimeout = 180 * time.Second
+const finalResponseTimeout = 30 * time.Minute
 
 const rpcResponsePhaseAccepted = "accepted"
 
 type Client struct {
-	connection    Connection
-	requestID     int
-	clientVersion string
-	acceptTimeout time.Duration
+	connection      Connection
+	requestID       int
+	clientVersion   string
+	acceptTimeout   time.Duration
+	responseTimeout time.Duration
 }
 
 type ProgressFunc = func(message string)
@@ -157,7 +159,7 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		}
 
 		cancelAccept()
-		if err := clearConnectionDeadline(conn); err != nil {
+		if err := setConnectionDeadlineFromNow(conn, client.getResponseTimeout()); err != nil {
 			timing.Total = time.Since(startedAt)
 			outcome.Timing = timing
 			return outcome, err
@@ -204,8 +206,15 @@ func (client *Client) getAcceptTimeout() time.Duration {
 	return requestTimeout
 }
 
-func clearConnectionDeadline(conn net.Conn) error {
-	return conn.SetDeadline(time.Time{})
+func (client *Client) getResponseTimeout() time.Duration {
+	if client.responseTimeout > 0 {
+		return client.responseTimeout
+	}
+	return finalResponseTimeout
+}
+
+func setConnectionDeadlineFromNow(conn net.Conn, timeout time.Duration) error {
+	return conn.SetDeadline(time.Now().Add(timeout))
 }
 
 func watchConnectionCancellation(ctx context.Context, conn net.Conn) func() {
