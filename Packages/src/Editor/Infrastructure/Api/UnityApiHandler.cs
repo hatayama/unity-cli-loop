@@ -53,6 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopToolResponse response;
             if (InternalBridgeCommandRouter.IsInternalCommand(commandName))
             {
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+                ct.ThrowIfCancellationRequested();
                 response = InternalBridgeCommandRouter.Execute(commandName, paramsToken);
                 return response;
             }

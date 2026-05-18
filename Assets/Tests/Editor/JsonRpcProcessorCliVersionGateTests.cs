@@ -198,6 +198,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        [Test]
+        public async Task ProcessRequest_WhenInternalBridgeCommandRuns_SwitchesToMainThread()
+        {
+            // Verifies CLI-only bridge commands keep Unity API access on the editor thread.
+            CapturingMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            Task<string> responseTask = null;
+            try
+            {
+                responseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequest(UnityCliLoopConstants.COMMAND_NAME_GET_VERSION, 1),
+                    CancellationToken.None,
+                    _ => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
+                Assert.That(responseTask.IsCompleted, Is.False);
+
+                dispatcher.RunContinuations();
+                string response = await AwaitWithTimeout(responseTask, TimeSpan.FromMilliseconds(200));
+                JObject parsed = JObject.Parse(response);
+
+                Assert.That(parsed["error"], Is.Null);
+                Assert.That(parsed["result"], Is.Not.Null);
+            }
+            finally
+            {
+                dispatcher.RunContinuations();
+                await DrainTaskIfNeeded(responseTask);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
         private static string BuildGetVersionRequest(string cliVersion)
         {
             return
