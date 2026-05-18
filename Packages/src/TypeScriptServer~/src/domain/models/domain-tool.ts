@@ -1,9 +1,6 @@
 /**
  * Domain Tool Model - Pure Business Logic without External Dependencies
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#CleanArchitecture
- *
  * This model represents the core business concept of a "Tool" in our domain,
  * completely independent of any external framework or library (like MCP SDK).
  *

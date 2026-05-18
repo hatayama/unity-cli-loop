@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Application service responsible for client notification processing
     /// Single responsibility: Sending notifications to MCP clients
     /// Related classes: McpBridgeServer, CustomToolManager
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public static class ClientNotificationService
     {

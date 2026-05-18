@@ -9,7 +9,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Handles temporal cohesion for test execution processing
     /// Processing sequence: 1. Test filter creation, 2. Test execution, 3. Result processing
     /// Related classes: RunTestsTool, TestFilterCreationService, TestExecutionService
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     public class RunTestsUseCase : AbstractUseCase<RunTestsSchema, RunTestsResponse>
     {

@@ -8,7 +8,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Application service responsible for session recovery processing
     /// Single responsibility: Server session recovery and retry control
     /// Related classes: McpSessionManager, McpBridgeServer, NetworkUtility
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public static class SessionRecoveryService
     {

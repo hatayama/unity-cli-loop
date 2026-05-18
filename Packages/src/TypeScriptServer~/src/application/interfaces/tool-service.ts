@@ -1,9 +1,6 @@
 /**
  * Tool Service Interface
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#IToolService
- *
  * Related classes:
  * - UnityToolManager (existing implementation class)
  * - ToolManagementAppService (new application service implementation)

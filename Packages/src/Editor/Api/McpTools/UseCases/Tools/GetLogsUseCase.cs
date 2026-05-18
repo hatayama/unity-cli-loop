@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Handles temporal cohesion for log retrieval processing
     /// Processing sequence: 1. Log retrieval, 2. Filtering, 3. Limiting and formatting
     /// Related classes: GetLogsTool, LogRetrievalService, LogFilteringService
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     public class GetLogsUseCase : AbstractUseCase<GetLogsSchema, GetLogsResponse>
     {

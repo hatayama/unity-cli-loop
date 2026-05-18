@@ -8,7 +8,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Application service responsible for compilation lock file management.
     /// Single responsibility: Create/delete lock file during compilation for CLI detection.
     /// Related classes: DomainReloadDetectionService (similar pattern for domain reload)
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     [InitializeOnLoad]
     public static class CompilationLockService

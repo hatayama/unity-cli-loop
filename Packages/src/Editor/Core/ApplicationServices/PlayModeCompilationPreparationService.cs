@@ -6,7 +6,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Play Mode compilation preparation service
     /// Single function: Determine preparation action based on Play Mode state and settings
     /// Related classes: CompileUseCase, CompilationStateValidationService
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public class PlayModeCompilationPreparationService
     {

@@ -1,9 +1,6 @@
 /**
  * Connection Service Interface
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#IConnectionService
- *
  * Related classes:
  * - UnityConnectionManager (existing implementation class)
  * - ConnectionAppService (new application service implementation)

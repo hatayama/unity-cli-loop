@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Test execution tool handler - Type-safe implementation using Schema and Response
     /// Executes tests using Unity Test Runner and returns the results
     /// 
-    /// Design Reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// 
     /// This Tool class delegates to RunTestsUseCase for business logic execution,
     /// following the UseCase + Tool pattern for separation of concerns.

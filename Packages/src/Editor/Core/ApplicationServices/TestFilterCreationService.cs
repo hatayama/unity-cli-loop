@@ -6,7 +6,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Test filter creation service
     /// Single function: Create filters for test execution
     /// Related classes: RunTestsTool, RunTestsUseCase, TestExecutionFilter
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public class TestFilterCreationService
     {

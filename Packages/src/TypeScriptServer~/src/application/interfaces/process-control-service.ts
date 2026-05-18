@@ -1,9 +1,6 @@
 /**
  * Process Control Service Interface
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#Interface-Segregation
- *
  * Related classes:
  * - UnityEventHandler (implementation class)
  * - Used by server initialization for process management

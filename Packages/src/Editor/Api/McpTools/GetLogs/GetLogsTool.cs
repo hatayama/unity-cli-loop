@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// GetLogs tool handler - Type-safe implementation using Schema and Response
     /// Retrieves Unity console logs with filtering options
     /// 
-    /// Design Reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// 
     /// This Tool class delegates to GetLogsUseCase for business logic execution,
     /// following the UseCase + Tool pattern for separation of concerns.

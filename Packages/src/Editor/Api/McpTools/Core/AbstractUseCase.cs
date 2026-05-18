@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// UseCase base class - Responsible for temporal cohesion
     /// New instances are created each time and disposed after Execute completion
     /// Related classes: AbstractUnityTool, BaseToolSchema, BaseToolResponse
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase Layer (Domain Workflow Orchestration)
     /// </summary>
     /// <typeparam name="TSchema">Schema type for tool parameters</typeparam>
     /// <typeparam name="TResponse">Response type for tool results</typeparam>

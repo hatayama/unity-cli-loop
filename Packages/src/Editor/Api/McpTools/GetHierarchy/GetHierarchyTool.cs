@@ -6,7 +6,6 @@ namespace io.github.hatayama.uLoopMCP
     /// <summary>
     /// Tool to retrieve Unity Hierarchy information in AI-friendly format
     /// 
-    /// Design Reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// 
     /// This Tool class delegates to GetHierarchyUseCase for business logic execution,
     /// following the UseCase + Tool pattern for separation of concerns.

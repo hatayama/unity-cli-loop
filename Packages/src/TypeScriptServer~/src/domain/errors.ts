@@ -1,9 +1,6 @@
 /**
  * ドメインエラー階層の定義
  *
- * 設計ドキュメント参照:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#エラーハンドリング
- *
  * 関連クラス:
  * - UseCase実装クラス群（domain/use-cases/）
  * - ApplicationService実装クラス群（application/services/）

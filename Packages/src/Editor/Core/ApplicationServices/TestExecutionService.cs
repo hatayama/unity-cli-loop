@@ -6,7 +6,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Test execution service
     /// Single function: Execute tests using Unity Test Runner
     /// Related classes: PlayModeTestExecuter, RunTestsUseCase, RunTestsTool
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public class TestExecutionService
     {

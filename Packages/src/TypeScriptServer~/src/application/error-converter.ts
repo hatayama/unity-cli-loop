@@ -1,9 +1,6 @@
 /**
  * Error Conversion Service
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#エラーハンドリング
- *
  * Related classes:
  * - DomainError (domain/errors.ts) - conversion target
  * - InfrastructureError (infrastructure/errors.ts) - conversion source
