@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -33,10 +34,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// Process JSON-RPC request and generate response
         /// </summary>
-        public static async Task<string> ProcessRequest(string jsonRequest)
+        public static async Task<string> ProcessRequest(string jsonRequest, CancellationToken ct)
+        {
+            return await ProcessRequestWithEarlyResponseAsync(jsonRequest, ct, null);
+        }
+
+        internal static async Task<string> ProcessRequestWithEarlyResponseAsync(
+            string jsonRequest,
+            CancellationToken ct,
+            Func<string, Task> earlyResponseWriter)
         {
             try
             {
+                ct.ThrowIfCancellationRequested();
                 JsonRpcRequest request = ParseRequest(jsonRequest);
                 
                 if (request.IsNotification)
@@ -45,13 +55,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return null;
                 }
                 
-                return await ProcessRpcRequest(request, jsonRequest);
+                return await ProcessRpcRequest(request, jsonRequest, ct, earlyResponseWriter);
             }
             catch (JsonReaderException ex)
             {
                 return CreateErrorResponse(null, ex);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!(ex is OperationCanceledException))
             {
                 return CreateErrorResponse(null, ex);
             }
@@ -68,6 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Method = request["method"]?.ToString(),
                 Params = request["params"],
                 ClientCliVersion = ReadClientCliVersion(request),
+                AcceptsDispatchAck = ReadAcceptsDispatchAck(request),
                 Id = request["id"]?.ToObject<object>()
             };
         }
@@ -82,6 +93,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string cliVersion = metadata["cliVersion"]?.ToString();
             return string.IsNullOrWhiteSpace(cliVersion) ? null : cliVersion;
+        }
+
+        private static bool ReadAcceptsDispatchAck(JObject request)
+        {
+            JObject metadata = request["uloop"] as JObject;
+            if (metadata == null)
+            {
+                return false;
+            }
+
+            return metadata["acceptsDispatchAck"]?.Value<bool>() ?? false;
         }
 
         /// <summary>
@@ -122,27 +144,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// Process RPC request and return response JSON
         /// </summary>
-        private static async Task<string> ProcessRpcRequest(JsonRpcRequest request, string originalJson)
+        private static async Task<string> ProcessRpcRequest(
+            JsonRpcRequest request,
+            string originalJson,
+            CancellationToken ct,
+            Func<string, Task> earlyResponseWriter)
         {
             try
             {
+                ct.ThrowIfCancellationRequested();
                 if (IsCliUpdateRequired(request.ClientCliVersion))
                 {
                     return CreateCliUpdateRequiredResponse(request.Id, request.ClientCliVersion);
                 }
 
+                if (request.AcceptsDispatchAck && earlyResponseWriter != null)
+                {
+                    await earlyResponseWriter(CreateDispatchAcceptedResponse(request.Id));
+                }
+
                 Stopwatch requestStopwatch = Stopwatch.StartNew();
-                Stopwatch mainThreadSwitchStopwatch = Stopwatch.StartNew();
-                await MainThreadSwitcher.SwitchToMainThread();
-                mainThreadSwitchStopwatch.Stop();
 
                 Stopwatch executeMethodStopwatch = Stopwatch.StartNew();
-                UnityCliLoopToolResponse result = await ExecuteMethod(request.Method, request.Params);
+                UnityCliLoopToolResponse result = await ExecuteMethod(request.Method, request.Params, ct);
                 executeMethodStopwatch.Stop();
 
-                AppendTimingIfRequested(
-                    result,
-                    $"[Perf] RpcSwitchToMainThread: {mainThreadSwitchStopwatch.Elapsed.TotalMilliseconds:F1}ms");
                 AppendTimingIfRequested(
                     result,
                     $"[Perf] RpcExecuteMethod: {executeMethodStopwatch.Elapsed.TotalMilliseconds:F1}ms");
@@ -163,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 LogUnityCliLoopToolParameterValidationException(ex);
                 return CreateErrorResponse(request.Id, ex);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!(ex is OperationCanceledException))
             {
                 UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
                 return CreateErrorResponse(request.Id, ex);
@@ -206,6 +232,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return JsonConvert.SerializeObject(errorResponse, Formatting.None, settings);
         }
 
+        private static string CreateDispatchAcceptedResponse(object id)
+        {
+            object response = new
+            {
+                jsonrpc = UnityCliLoopServerConfig.JSONRPC_VERSION,
+                id,
+                result = new
+                {
+                    accepted = true
+                },
+                uloop = new
+                {
+                    phase = JsonRpcResponsePhases.Accepted
+                }
+            };
+
+            JsonSerializerSettings settings = new()
+            {
+                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
+            };
+
+            return JsonConvert.SerializeObject(response, Formatting.None, settings);
+        }
+
         private static void AppendTimingIfRequested(UnityCliLoopToolResponse result, string timing)
         {
             if (result is not IUnityCliLoopTimingResponse timingResponse)
@@ -234,7 +285,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <param name="result">Command execution result</param>
         private static string CreateSuccessResponse(object id, UnityCliLoopToolResponse result)
         {
-            JsonSerializerSettings settings = new()            {
+            JsonSerializerSettings settings = new()
+            {
                 ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
                 MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
             };
@@ -285,6 +337,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 errorData = new SecurityBlockedErrorData(secEx.ToolName, secEx.SecurityReason, exceptionResponse.Explanation ?? ex.Message);
             }
+            else if (ex is UnityCliLoopToolBusyException busyEx)
+            {
+                errorData = new ServerBusyErrorData(
+                    busyEx.RunningToolName,
+                    busyEx.RequestedToolName,
+                    exceptionResponse.Explanation ?? ex.Message);
+            }
             else
             {
                 errorData = new InternalErrorData(exceptionResponse.Explanation ?? ex.Message);
@@ -296,7 +355,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new JsonRpcError(UnityCliLoopServerConfig.INTERNAL_ERROR_CODE, errorMessage, errorData)
             );
             
-            JsonSerializerSettings settings = new()            {
+            JsonSerializerSettings settings = new()
+            {
                 ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
                 MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
             };
@@ -308,9 +368,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// Execute appropriate handler according to method name
         /// Use new command-based structure
         /// </summary>
-        private static async Task<UnityCliLoopToolResponse> ExecuteMethod(string method, JToken paramsToken)
+        private static async Task<UnityCliLoopToolResponse> ExecuteMethod(
+            string method,
+            JToken paramsToken,
+            CancellationToken ct)
         {
-            return await UnityApiHandler.ExecuteCommandAsync(method, paramsToken);
+            return await UnityApiHandler.ExecuteCommandAsync(method, paramsToken, ct);
         }
     }
 
@@ -322,6 +385,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public const string SecurityBlocked = "security_blocked";
         public const string InternalError = "internal_error";
         public const string CliUpdateRequired = "cli_update_required";
+        public const string ServerBusy = "server_busy";
+    }
+
+    public static class JsonRpcResponsePhases
+    {
+        public const string Accepted = "accepted";
     }
 
     /// <summary>
@@ -366,6 +435,28 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         
         public InternalErrorData(string message) : base(message)
         {
+        }
+    }
+
+    /// <summary>
+    /// Keeps busy responses machine-readable so CLI clients can classify them as retryable.
+    /// </summary>
+    public class ServerBusyErrorData : JsonRpcErrorData
+    {
+        public override string type => JsonRpcErrorTypes.ServerBusy;
+
+        public string runningToolName { get; }
+
+        public string requestedToolName { get; }
+
+        public ServerBusyErrorData(
+            string runningToolName,
+            string requestedToolName,
+            string message)
+            : base(message)
+        {
+            this.runningToolName = runningToolName;
+            this.requestedToolName = requestedToolName;
         }
     }
 

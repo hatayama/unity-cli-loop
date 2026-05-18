@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
         private IEnumerator RunTool(JObject parameters)
         {
-            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
                 task.IsCompleted || Time.realtimeSinceStartup >= timeoutAt);

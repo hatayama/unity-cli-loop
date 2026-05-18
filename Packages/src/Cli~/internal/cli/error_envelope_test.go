@@ -184,6 +184,26 @@ func TestClassifyCliUpdateRequiredRPCError(t *testing.T) {
 	}
 }
 
+func TestClassifyServerBusyRPCError(t *testing.T) {
+	err := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "Unity tool execution is busy",
+		Data: json.RawMessage(
+			`{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"Retry after the current command completes."}`),
+	}
+
+	cliErr := classifyError(err, errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"})
+	if cliErr.ErrorCode != errorCodeUnityServerBusy {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if cliErr.Phase != errorPhaseDispatch {
+		t.Fatalf("phase mismatch: %#v", cliErr)
+	}
+	if !cliErr.Retryable || !cliErr.SafeToRetry {
+		t.Fatalf("retry flags mismatch: %#v", cliErr)
+	}
+}
+
 func TestWriteToolFailureClassifiesDispatchedDisconnect(t *testing.T) {
 	var stderr bytes.Buffer
 
@@ -206,6 +226,60 @@ func TestWriteToolFailureClassifiesDispatchedDisconnect(t *testing.T) {
 	}
 }
 
+func TestWriteToolFailureClassifiesAcceptedDisconnect(t *testing.T) {
+	var stderr bytes.Buffer
+
+	writeToolFailure(
+		&stderr,
+		errors.New("EOF"),
+		unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+		errorContext{projectRoot: "/tmp/MyProject", command: "execute-dynamic-code"},
+	)
+
+	var envelope cliErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
+	}
+	if envelope.Error.ErrorCode != errorCodeUnityDisconnectedAfterAccept {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if envelope.Error.Phase != errorPhaseResponseWaiting {
+		t.Fatalf("phase mismatch: %#v", envelope.Error)
+	}
+	if envelope.Error.SafeToRetry {
+		t.Fatalf("stateful accepted command should not be safe to retry: %#v", envelope.Error)
+	}
+}
+
+func TestWriteToolFailureClassifiesAcceptedResponseTimeout(t *testing.T) {
+	// Verifies accepted requests that outlive the final response deadline stay retryable and response-scoped.
+	var stderr bytes.Buffer
+
+	writeToolFailure(
+		&stderr,
+		timeoutTestError{},
+		unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+		errorContext{projectRoot: "/tmp/MyProject", command: "execute-dynamic-code"},
+	)
+
+	var envelope cliErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
+	}
+	if envelope.Error.ErrorCode != errorCodeUnityResponseTimeoutAfterAccept {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if envelope.Error.Phase != errorPhaseResponseWaiting {
+		t.Fatalf("phase mismatch: %#v", envelope.Error)
+	}
+	if !envelope.Error.Retryable {
+		t.Fatalf("accepted response timeout should be retryable: %#v", envelope.Error)
+	}
+	if envelope.Error.SafeToRetry {
+		t.Fatalf("stateful accepted command should not be safe to retry: %#v", envelope.Error)
+	}
+}
+
 func TestUnknownCommandErrorIncludesAvailableCommands(t *testing.T) {
 	cliErr := unknownCommandError(
 		"missing",
@@ -223,6 +297,20 @@ func TestUnknownCommandErrorIncludesAvailableCommands(t *testing.T) {
 	if len(available) == 0 || available[len(available)-1] != "compile" {
 		t.Fatalf("available commands mismatch: %#v", available)
 	}
+}
+
+type timeoutTestError struct{}
+
+func (timeoutTestError) Error() string {
+	return "i/o timeout"
+}
+
+func (timeoutTestError) Timeout() bool {
+	return true
+}
+
+func (timeoutTestError) Temporary() bool {
+	return true
 }
 
 func TestClassifyProjectNotFound(t *testing.T) {

@@ -61,6 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string ULOOP_TOOL_SETTINGS_FILE_NAME = "settings.tools.json";
 
         // Command name constants
+        public const string TOOL_NAME_CONTROL_PLAY_MODE = "control-play-mode";
         public const string TOOL_NAME_EXECUTE_DYNAMIC_CODE = "execute-dynamic-code";
         public const string TOOL_NAME_RUN_TESTS = "run-tests";
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";

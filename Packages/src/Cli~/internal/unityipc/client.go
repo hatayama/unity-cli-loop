@@ -5,15 +5,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"time"
 )
 
-const requestTimeout = 180 * time.Second
+const (
+	requestTimeout       = 180 * time.Second
+	finalResponseTimeout = 30 * time.Minute
+)
+
+const rpcResponsePhaseAccepted = "accepted"
 
 type Client struct {
-	connection    Connection
-	requestID     int
-	clientVersion string
+	connection      Connection
+	requestID       int
+	clientVersion   string
+	acceptTimeout   time.Duration
+	responseTimeout time.Duration
 }
 
 type ProgressFunc = func(message string)
@@ -27,14 +35,20 @@ type rpcRequest struct {
 }
 
 type rpcClientMetadata struct {
-	CLIVersion string `json:"cliVersion"`
+	CLIVersion         string `json:"cliVersion"`
+	AcceptsDispatchAck bool   `json:"acceptsDispatchAck"`
 }
 
 type rpcResponse struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *rpcError       `json:"error,omitempty"`
+	ULoop   rpcResponseMeta `json:"uloop,omitempty"`
 	ID      int             `json:"id"`
+}
+
+type rpcResponseMeta struct {
+	Phase string `json:"phase,omitempty"`
 }
 
 type rpcError struct {
@@ -81,14 +95,14 @@ func (client *Client) SendWithProgress(ctx context.Context, method string, param
 }
 
 func (client *Client) SendWithProgressOutcome(ctx context.Context, method string, params map[string]any, progress ProgressFunc) (UnitySendOutcome, error) {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
+	acceptCtx, cancelAccept := context.WithTimeout(ctx, client.getAcceptTimeout())
+	defer cancelAccept()
 
 	startedAt := time.Now()
 	timing := UnitySendTiming{}
 
 	dialStartedAt := time.Now()
-	conn, err := dialEndpoint(ctx, client.connection.Endpoint)
+	conn, err := dialEndpoint(acceptCtx, client.connection.Endpoint)
 	timing.Dial = time.Since(dialStartedAt)
 	if err != nil {
 		timing.Total = time.Since(startedAt)
@@ -108,7 +122,8 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		Method:  method,
 		Params:  params,
 		ULoop: rpcClientMetadata{
-			CLIVersion: client.clientVersion,
+			CLIVersion:         client.clientVersion,
+			AcceptsDispatchAck: true,
 		},
 		ID: client.requestID,
 	}
@@ -118,7 +133,7 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		return UnitySendOutcome{}, err
 	}
 
-	if deadline, ok := ctx.Deadline(); ok {
+	if deadline, ok := acceptCtx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	}
 
@@ -131,24 +146,40 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 	timing.Write = time.Since(writeStartedAt)
 	outcome := UnitySendOutcome{RequestDispatched: true}
 
-	readStartedAt := time.Now()
-	responsePayload, err := Read(bufio.NewReader(conn))
-	timing.Read = time.Since(readStartedAt)
+	reader := bufio.NewReader(conn)
+	response, err := readRPCResponse(reader, &timing)
 	if err != nil {
 		timing.Total = time.Since(startedAt)
 		outcome.Timing = timing
 		return outcome, err
 	}
 
-	decodeStartedAt := time.Now()
-	var response rpcResponse
-	if err := json.Unmarshal(responsePayload, &response); err != nil {
-		timing.Decode = time.Since(decodeStartedAt)
-		timing.Total = time.Since(startedAt)
-		outcome.Timing = timing
-		return outcome, err
+	if response.ULoop.Phase == rpcResponsePhaseAccepted {
+		outcome.RequestAccepted = true
+		if progress != nil {
+			progress("accepted")
+		}
+
+		cancelAccept()
+		if err := setConnectionDeadlineFromNow(conn, client.getResponseTimeout()); err != nil {
+			timing.Total = time.Since(startedAt)
+			outcome.Timing = timing
+			return outcome, err
+		}
+		stopCancelWatcher := watchConnectionCancellation(ctx, conn)
+		defer stopCancelWatcher()
+
+		response, err = readRPCResponse(reader, &timing)
+		if err != nil {
+			timing.Total = time.Since(startedAt)
+			outcome.Timing = timing
+			if ctx.Err() != nil {
+				return outcome, ctx.Err()
+			}
+			return outcome, err
+		}
 	}
-	timing.Decode = time.Since(decodeStartedAt)
+
 	if response.Error != nil {
 		timing.Total = time.Since(startedAt)
 		outcome.Timing = timing
@@ -168,6 +199,56 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 	timing.Total = time.Since(startedAt)
 	outcome.Timing = timing
 	return outcome, nil
+}
+
+func (client *Client) getAcceptTimeout() time.Duration {
+	if client.acceptTimeout > 0 {
+		return client.acceptTimeout
+	}
+	return requestTimeout
+}
+
+func (client *Client) getResponseTimeout() time.Duration {
+	if client.responseTimeout > 0 {
+		return client.responseTimeout
+	}
+	return finalResponseTimeout
+}
+
+func setConnectionDeadlineFromNow(conn net.Conn, timeout time.Duration) error {
+	return conn.SetDeadline(time.Now().Add(timeout))
+}
+
+func watchConnectionCancellation(ctx context.Context, conn net.Conn) func() {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.SetDeadline(time.Now())
+		case <-done:
+		}
+	}()
+	return func() {
+		close(done)
+	}
+}
+
+func readRPCResponse(reader *bufio.Reader, timing *UnitySendTiming) (rpcResponse, error) {
+	readStartedAt := time.Now()
+	responsePayload, err := Read(reader)
+	timing.Read += time.Since(readStartedAt)
+	if err != nil {
+		return rpcResponse{}, err
+	}
+
+	decodeStartedAt := time.Now()
+	var response rpcResponse
+	if err := json.Unmarshal(responsePayload, &response); err != nil {
+		timing.Decode += time.Since(decodeStartedAt)
+		return rpcResponse{}, err
+	}
+	timing.Decode += time.Since(decodeStartedAt)
+	return response, nil
 }
 
 func formatConnectionAttemptError(connection Connection, err error) error {

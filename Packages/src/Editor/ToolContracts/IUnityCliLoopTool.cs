@@ -1,6 +1,7 @@
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
-using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
@@ -25,8 +26,9 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// Execute tool
         /// </summary>
         /// <param name="paramsToken">JSON token for parameters</param>
+        /// <param name="ct">Cancellation token for the current request</param>
         /// <returns>Execution result</returns>
-        Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken);
+        Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct);
     }
 
     /// <summary>

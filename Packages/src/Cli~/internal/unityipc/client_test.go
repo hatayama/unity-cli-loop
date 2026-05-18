@@ -7,7 +7,9 @@ import (
 	"errors"
 	"net"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t *testing.T) {
@@ -108,5 +110,278 @@ func TestSendIncludesCliVersionWithoutProjectIdentityMetadata(t *testing.T) {
 		if metadata["cliVersion"] != "3.0.0-beta.6" {
 			t.Fatalf("cli version metadata mismatch: %#v", metadata)
 		}
+		if metadata["acceptsDispatchAck"] != true {
+			t.Fatalf("dispatch ack metadata mismatch: %#v", metadata)
+		}
+	}
+}
+
+func TestSendWithProgressOutcomeReadsDispatchAckBeforeFinalResponse(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		if _, err := Read(bufio.NewReader(conn)); err != nil {
+			serverErr <- err
+			return
+		}
+
+		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
+		if err := Write(conn, accepted); err != nil {
+			serverErr <- err
+			return
+		}
+
+		final := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
+		if err := Write(conn, final); err != nil {
+			serverErr <- err
+			return
+		}
+	}()
+
+	connection := Connection{
+		Endpoint: Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: "/tmp/MyProject",
+	}
+	client := NewClient(connection, "3.0.0-beta.6")
+	outcome, err := client.SendWithProgressOutcome(context.Background(), "get-logs", map[string]any{}, nil)
+	if err != nil {
+		t.Fatalf("Send failed: %v", err)
+	}
+	if outcome.RequestAccepted != true {
+		t.Fatalf("request accepted flag mismatch: %#v", outcome)
+	}
+	if string(outcome.Result) != `{"ok":true}` {
+		t.Fatalf("final result mismatch: %s", outcome.Result)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
+func TestSendWithProgressOutcomeWaitsForFinalResponseAfterDispatchAckWithoutAcceptTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		if _, err := Read(bufio.NewReader(conn)); err != nil {
+			serverErr <- err
+			return
+		}
+
+		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
+		if err := Write(conn, accepted); err != nil {
+			serverErr <- err
+			return
+		}
+
+		time.Sleep(150 * time.Millisecond)
+
+		final := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
+		if err := Write(conn, final); err != nil {
+			serverErr <- err
+			return
+		}
+	}()
+
+	connection := Connection{
+		Endpoint: Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: "/tmp/MyProject",
+	}
+	client := NewClient(connection, "3.0.0-beta.6")
+	client.acceptTimeout = 50 * time.Millisecond
+
+	outcome, err := client.SendWithProgressOutcome(context.Background(), "execute-dynamic-code", map[string]any{}, nil)
+	if err != nil {
+		t.Fatalf("Send failed: %v", err)
+	}
+	if outcome.RequestAccepted != true {
+		t.Fatalf("request accepted flag mismatch: %#v", outcome)
+	}
+	if string(outcome.Result) != `{"ok":true}` {
+		t.Fatalf("final result mismatch: %s", outcome.Result)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
+func TestSendWithProgressOutcomeTimesOutFinalResponseAfterDispatchAck(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		if _, err := Read(bufio.NewReader(conn)); err != nil {
+			serverErr <- err
+			return
+		}
+
+		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
+		if err := Write(conn, accepted); err != nil {
+			serverErr <- err
+			return
+		}
+
+		time.Sleep(250 * time.Millisecond)
+	}()
+
+	connection := Connection{
+		Endpoint: Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: "/tmp/MyProject",
+	}
+	client := NewClient(connection, "3.0.0-beta.6")
+	client.acceptTimeout = time.Second
+	client.responseTimeout = 50 * time.Millisecond
+
+	outcome, err := client.SendWithProgressOutcome(context.Background(), "execute-dynamic-code", map[string]any{}, nil)
+	if err == nil || !strings.Contains(err.Error(), "i/o timeout") {
+		t.Fatalf("expected final response timeout, got %v", err)
+	}
+	if outcome.RequestAccepted != true {
+		t.Fatalf("request accepted flag mismatch: %#v", outcome)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
+func TestSendWithProgressOutcomeStillHonorsParentCancellationAfterDispatchAck(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		if _, err := Read(bufio.NewReader(conn)); err != nil {
+			serverErr <- err
+			return
+		}
+
+		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
+		if err := Write(conn, accepted); err != nil {
+			serverErr <- err
+			return
+		}
+
+		time.Sleep(250 * time.Millisecond)
+	}()
+
+	connection := Connection{
+		Endpoint: Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: "/tmp/MyProject",
+	}
+	client := NewClient(connection, "3.0.0-beta.6")
+	client.acceptTimeout = time.Second
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	outcome, err := client.SendWithProgressOutcome(ctx, "execute-dynamic-code", map[string]any{}, nil)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected parent context deadline, got %v", err)
+	}
+	if outcome.RequestAccepted != true {
+		t.Fatalf("request accepted flag mismatch: %#v", outcome)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
 	}
 }

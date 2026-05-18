@@ -18,6 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public string ClientCliVersion { get; set; }
 
+        public bool AcceptsDispatchAck { get; set; }
+
         /// <summary>
         /// JSON-RPC 2.0 spec requires id type to match the request.
         /// Must be string, number, or null - same as received.

@@ -14,6 +14,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// </summary>
     internal sealed class UnityCliLoopToolExecutionService
     {
+        private const string UnknownToolName = "unknown";
+
+        private readonly object _executionStateLock = new();
+        private string _runningToolName;
+        private int _runningExecutionCount;
+
         internal async Task<UnityCliLoopToolResponse> ExecuteToolAsync(
             UnityCliLoopToolRegistry registry,
             string toolName,
@@ -41,16 +47,81 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 throw new UnityCliLoopSecurityException(toolName, "Tool is blocked by security settings");
             }
 
-            await MainThreadSwitcher.SwitchToMainThread();
-            ct.ThrowIfCancellationRequested();
-
-            UnityCliLoopToolResponse response = await tool.ExecuteAsync(paramsToken);
-            if (response == null)
+            if (!TryEnterExecution(toolName, out string runningToolName))
             {
-                throw new InvalidOperationException($"Tool returned null response: {toolName}");
+                throw new UnityCliLoopToolBusyException(runningToolName, toolName);
             }
 
-            return response;
+            try
+            {
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+                ct.ThrowIfCancellationRequested();
+                UnityCliLoopEditorStateGuard.Validate(toolName);
+
+                UnityCliLoopToolResponse response = await tool.ExecuteAsync(paramsToken, ct);
+                if (response == null)
+                {
+                    throw new InvalidOperationException($"Tool returned null response: {toolName}");
+                }
+
+                return response;
+            }
+            finally
+            {
+                ExitExecution();
+            }
+        }
+
+        private bool TryEnterExecution(string toolName, out string runningToolName)
+        {
+            lock (_executionStateLock)
+            {
+                if (_runningExecutionCount == 0)
+                {
+                    _runningToolName = toolName;
+                    _runningExecutionCount = 1;
+                    runningToolName = toolName;
+                    return true;
+                }
+
+                if (CanShareExecutionSlot(_runningToolName, toolName))
+                {
+                    _runningExecutionCount++;
+                    runningToolName = _runningToolName;
+                    return true;
+                }
+
+                runningToolName = GetRunningToolNameInsideLock();
+                return false;
+            }
+        }
+
+        private void ExitExecution()
+        {
+            lock (_executionStateLock)
+            {
+                Debug.Assert(_runningExecutionCount > 0, "running execution count must be positive before exit");
+                _runningExecutionCount--;
+                if (_runningExecutionCount > 0)
+                {
+                    return;
+                }
+
+                _runningToolName = null;
+            }
+        }
+
+        private static bool CanShareExecutionSlot(string runningToolName, string requestedToolName)
+        {
+            return runningToolName == UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE
+                   && requestedToolName == UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE;
+        }
+
+        private string GetRunningToolNameInsideLock()
+        {
+            return string.IsNullOrWhiteSpace(_runningToolName)
+                ? UnknownToolName
+                : _runningToolName;
         }
     }
 }

@@ -281,7 +281,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that get-version still works as a CLI-only bridge command after leaving the tool registry.
             UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
                 UnityCliLoopConstants.COMMAND_NAME_GET_VERSION,
-                new JObject());
+                new JObject(),
+                CancellationToken.None);
 
             GetVersionResponse getVersionResponse = response as GetVersionResponse;
             Assert.That(getVersionResponse, Is.Not.Null);
@@ -304,7 +305,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that CLI catalog access still works without registering the catalog command as a tool.
             UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
                 UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS,
-                new JObject());
+                new JObject(),
+                CancellationToken.None);
 
             GetToolDetailsResponse getToolDetailsResponse = response as GetToolDetailsResponse;
             Assert.That(getToolDetailsResponse, Is.Not.Null);
@@ -355,7 +357,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 includeTimestamp = false
             });
 
-            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync("hello-world", parameters);
+            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
+                "hello-world",
+                parameters,
+                CancellationToken.None);
             JObject serializedResponse = JObject.FromObject(response);
 
             Assert.That(serializedResponse.Value<string>("Message"), Is.EqualTo("Bonjour, Masamichi!"));
@@ -367,7 +372,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteCommandAsync_WhenParamsAreOmitted_UsesDefaultSchema()
         {
             // Tests that JSON-RPC requests may omit params and still use schema defaults.
-            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync("hello-world", null);
+            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
+                "hello-world",
+                null,
+                CancellationToken.None);
             JObject serializedResponse = JObject.FromObject(response);
 
             Assert.That(serializedResponse.Value<string>("Message"), Is.EqualTo("Hello, World!"));
@@ -551,7 +559,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public string ToolName => "manual-registration-test";
             public ToolParameterSchema ParameterSchema { get; } = new();
 
-            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken)
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
             {
                 UnityCliLoopToolResponse response = new ManualRegistrationResponse();
                 return Task.FromResult(response);
