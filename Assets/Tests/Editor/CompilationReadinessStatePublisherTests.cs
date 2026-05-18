@@ -4,16 +4,16 @@ using io.github.hatayama.UnityCliLoop.Infrastructure;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
-    public class CompilationLockFileServiceTests
+    public class CompilationReadinessStatePublisherTests
     {
         private ServerReadinessStateStore _stateStore;
-        private CompilationLockFileService _service;
+        private CompilationReadinessStatePublisher _service;
 
         [SetUp]
         public void SetUp()
         {
             _stateStore = CreateTestStateStore();
-            _service = new CompilationLockFileService(_stateStore);
+            _service = new CompilationReadinessStatePublisher(_stateStore);
         }
 
         [TearDown]

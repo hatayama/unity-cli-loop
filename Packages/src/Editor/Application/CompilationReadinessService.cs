@@ -6,7 +6,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// <summary>
     /// Defines the Compilation Readiness operations required by the owning workflow.
     /// </summary>
-    public interface ICompilationLockService
+    public interface ICompilationReadinessService
     {
         void RegisterForEditorStartup();
     }
@@ -15,11 +15,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// <summary>
     /// Provides Compilation Readiness operations for its owning module.
     /// </summary>
-    public static class CompilationLockService
+    public static class CompilationReadinessService
     {
-        private static ICompilationLockService ServiceValue;
+        private static ICompilationReadinessService ServiceValue;
 
-        internal static void RegisterService(ICompilationLockService service)
+        internal static void RegisterService(ICompilationReadinessService service)
         {
             Debug.Assert(service != null, "service must not be null");
 
@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Service.RegisterForEditorStartup();
         }
 
-        private static ICompilationLockService Service
+        private static ICompilationReadinessService Service
         {
             get
             {

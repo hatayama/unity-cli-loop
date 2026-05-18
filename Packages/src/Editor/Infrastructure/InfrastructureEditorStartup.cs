@@ -14,7 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopPackageRemovalSettingsResetter packageRemovalSettingsResetter = new(editorSettingsService);
             packageRemovalSettingsResetter.RegisterForEditorStartup();
             UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsService);
-            CompilationLockService.RegisterForEditorStartup();
+            CompilationReadinessService.RegisterForEditorStartup();
         }
     }
 }
