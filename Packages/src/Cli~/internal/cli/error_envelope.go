@@ -4,23 +4,25 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"strings"
 
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/internal/unityipc"
 )
 
 const (
-	errorCodeInvalidArgument                = "INVALID_ARGUMENT"
-	errorCodeUnknownCommand                 = "UNKNOWN_COMMAND"
-	errorCodeProjectNotFound                = "PROJECT_NOT_FOUND"
-	errorCodeUnityNotReachable              = "UNITY_NOT_REACHABLE"
-	errorCodeUnityDisconnectedAfterDispatch = "UNITY_DISCONNECTED_AFTER_DISPATCH"
-	errorCodeUnityDisconnectedAfterAccept   = "UNITY_DISCONNECTED_AFTER_ACCEPT"
-	errorCodeUnityRPCError                  = "UNITY_RPC_ERROR"
-	errorCodeUnityServerBusy                = "UNITY_SERVER_BUSY"
-	errorCodeCLIUpdateRequired              = "CLI_UPDATE_REQUIRED"
-	errorCodeCompileWaitTimeout             = "COMPILE_WAIT_TIMEOUT"
-	errorCodeInternalError                  = "INTERNAL_ERROR"
+	errorCodeInvalidArgument                 = "INVALID_ARGUMENT"
+	errorCodeUnknownCommand                  = "UNKNOWN_COMMAND"
+	errorCodeProjectNotFound                 = "PROJECT_NOT_FOUND"
+	errorCodeUnityNotReachable               = "UNITY_NOT_REACHABLE"
+	errorCodeUnityDisconnectedAfterDispatch  = "UNITY_DISCONNECTED_AFTER_DISPATCH"
+	errorCodeUnityDisconnectedAfterAccept    = "UNITY_DISCONNECTED_AFTER_ACCEPT"
+	errorCodeUnityResponseTimeoutAfterAccept = "UNITY_RESPONSE_TIMEOUT_AFTER_ACCEPT"
+	errorCodeUnityRPCError                   = "UNITY_RPC_ERROR"
+	errorCodeUnityServerBusy                 = "UNITY_SERVER_BUSY"
+	errorCodeCLIUpdateRequired               = "CLI_UPDATE_REQUIRED"
+	errorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
+	errorCodeInternalError                   = "INTERNAL_ERROR"
 
 	errorPhaseArgumentParsing = "argument_parsing"
 	errorPhaseProjectResolve  = "project_resolution"
@@ -72,17 +74,50 @@ func writeClassifiedError(writer io.Writer, err error, context errorContext) {
 }
 
 func writeToolFailure(writer io.Writer, err error, outcome unityipc.UnitySendOutcome, context errorContext) {
-	if err != nil && isTransportDisconnectError(err) {
-		if outcome.RequestAccepted {
-			writeErrorEnvelope(writer, disconnectedAfterAcceptError(err, context))
+	if err != nil {
+		if outcome.RequestAccepted && isResponseTimeoutError(err) {
+			writeErrorEnvelope(writer, responseTimeoutAfterAcceptError(err, context))
 			return
 		}
-		if outcome.RequestDispatched {
-			writeErrorEnvelope(writer, disconnectedAfterDispatchError(err, context))
-			return
+		if isTransportDisconnectError(err) {
+			if outcome.RequestAccepted {
+				writeErrorEnvelope(writer, disconnectedAfterAcceptError(err, context))
+				return
+			}
+			if outcome.RequestDispatched {
+				writeErrorEnvelope(writer, disconnectedAfterDispatchError(err, context))
+				return
+			}
 		}
 	}
 	writeClassifiedError(writer, err, context)
+}
+
+func isResponseTimeoutError(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout()
+	}
+	return false
+}
+
+func responseTimeoutAfterAcceptError(err error, context errorContext) cliError {
+	return cliError{
+		ErrorCode:   errorCodeUnityResponseTimeoutAfterAccept,
+		Phase:       errorPhaseResponseWaiting,
+		Message:     "Unity accepted the request but did not return a final response before the CLI response timeout.",
+		Retryable:   true,
+		SafeToRetry: isSafeRetryCommand(context.command),
+		ProjectRoot: context.projectRoot,
+		Command:     context.command,
+		NextActions: []string{
+			"Check Unity Console logs because Unity may still be running the accepted request.",
+			"Retry after Unity finishes the command, compiling, reloading scripts, or restarting the bridge.",
+		},
+		Details: map[string]any{
+			"cause": err.Error(),
+		},
+	}
 }
 
 func classifyError(err error, context errorContext) cliError {
