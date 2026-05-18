@@ -27,7 +27,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _isConnected = isConnected;
         }
 
-        public bool IsConnected => _isConnected();
+        public bool IsConnected
+        {
+            get
+            {
+                try
+                {
+                    return _isConnected();
+                }
+                catch (ObjectDisposedException)
+                {
+                    return false;
+                }
+            }
+        }
 
         public void Dispose()
         {
