@@ -116,8 +116,65 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     return;
                 }
 
-                MainThreadSwitcher.AddContinuation(continuation);
+                MainThreadSwitchContinuation queuedContinuation = new MainThreadSwitchContinuation(continuation);
+                queuedContinuation.RegisterCancellation(cancellationToken);
+                MainThreadSwitcher.AddContinuation(queuedContinuation.InvokeFromEditorQueue);
             }
+        }
+    }
+
+    // Cancellation can happen while Unity is stalled, so the editor queue and cancellation share one resume path.
+    internal sealed class MainThreadSwitchContinuation
+    {
+        private readonly Action _continuation;
+        private CancellationTokenRegistration _cancellationRegistration;
+        private int _hasInvoked;
+
+        internal MainThreadSwitchContinuation(Action continuation)
+        {
+            Debug.Assert(continuation != null, "continuation must not be null");
+
+            _continuation = continuation ?? throw new ArgumentNullException(nameof(continuation));
+        }
+
+        internal void RegisterCancellation(CancellationToken ct)
+        {
+            if (!ct.CanBeCanceled)
+            {
+                return;
+            }
+
+            CancellationTokenRegistration registration = ct.Register(InvokeFromCancellation);
+            _cancellationRegistration = registration;
+            if (Interlocked.CompareExchange(ref _hasInvoked, 0, 0) != 0)
+            {
+                registration.Dispose();
+            }
+        }
+
+        internal void InvokeFromEditorQueue()
+        {
+            Invoke(true);
+        }
+
+        private void InvokeFromCancellation()
+        {
+            Invoke(false);
+        }
+
+        private void Invoke(bool disposeCancellationRegistration)
+        {
+            if (Interlocked.Exchange(ref _hasInvoked, 1) != 0)
+            {
+                return;
+            }
+
+            if (disposeCancellationRegistration)
+            {
+                _cancellationRegistration.Dispose();
+            }
+
+            _continuation();
         }
     }
 

@@ -231,6 +231,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        [Test]
+        public async Task ProcessRequest_WhenMainThreadSwitchIsCanceled_ReleasesExecutionGateWithoutError()
+        {
+            // Verifies client disconnects stop waiting requests before Unity pumps delayed editor continuations.
+            CapturingMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            UnityCliLoopToolRegistrar.RegisterService(service);
+            service.RegisterCustomTool(new SingleFlightTestTool());
+
+            using CancellationTokenSource cancellationSource = new CancellationTokenSource();
+            Task<string> canceledResponseTask = null;
+            Task<string> secondResponseTask = null;
+            try
+            {
+                canceledResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequest(SingleFlightTestTool.Name, 1),
+                    cancellationSource.Token,
+                    _ => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
+
+                cancellationSource.Cancel();
+                await AwaitCancellationWithTimeout(canceledResponseTask, TimeSpan.FromMilliseconds(200));
+
+                secondResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequest(SingleFlightTestTool.Name, 2),
+                    CancellationToken.None,
+                    _ => Task.CompletedTask);
+
+                Assert.That(secondResponseTask.IsCompleted, Is.False);
+
+                dispatcher.RunContinuations();
+                string secondResponse = await AwaitWithTimeout(secondResponseTask, TimeSpan.FromMilliseconds(200));
+                JObject parsed = JObject.Parse(secondResponse);
+
+                Assert.That(parsed["error"], Is.Null);
+                Assert.That(parsed["result"], Is.Not.Null);
+            }
+            finally
+            {
+                dispatcher.RunContinuations();
+                await DrainTaskIfNeeded(canceledResponseTask);
+                await DrainTaskIfNeeded(secondResponseTask);
+                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
         private static string BuildGetVersionRequest(string cliVersion)
         {
             return
@@ -267,6 +322,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Task completedTask = await Task.WhenAny(task, timeoutTask);
             Assert.That(completedTask, Is.SameAs(task), $"Task did not complete within {timeout.TotalMilliseconds}ms.");
             return await task;
+        }
+
+        private static async Task AwaitCancellationWithTimeout(Task<string> task, TimeSpan timeout)
+        {
+            Task timeoutTask = Task.Delay(timeout);
+            Task completedTask = await Task.WhenAny(task, timeoutTask);
+            Assert.That(completedTask, Is.SameAs(task), $"Task did not cancel within {timeout.TotalMilliseconds}ms.");
+            Assert.That(task.IsCanceled, Is.True, "Request cancellation should bubble out without becoming a JSON-RPC error.");
         }
 
         private static async Task DrainTaskIfNeeded(Task<string> task)

@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 return CreateErrorResponse(null, ex);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!(ex is OperationCanceledException))
             {
                 return CreateErrorResponse(null, ex);
             }
@@ -189,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 LogUnityCliLoopToolParameterValidationException(ex);
                 return CreateErrorResponse(request.Id, ex);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!(ex is OperationCanceledException))
             {
                 UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
                 return CreateErrorResponse(request.Id, ex);
