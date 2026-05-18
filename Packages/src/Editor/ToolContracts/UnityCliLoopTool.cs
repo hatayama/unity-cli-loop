@@ -1,7 +1,7 @@
-using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json;
 using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
@@ -27,26 +27,23 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             UnityCliLoopToolParameterSchemaGenerator.FromDto<TSchema>();
 
         /// <summary>
-        /// Execute tool with type-safe Schema parameters
-        /// Note: This method is called from the main thread context. 
-        /// MainThreadSwitcher.SwitchToMainThread() is already handled by the upper layer (JsonRpcProcessor),
-        /// so individual tools do not need to call it again.
+        /// Execute tool with type-safe Schema parameters.
         /// </summary>
         /// <param name="parameters">Strongly typed parameters</param>
-        /// <param name="cancellationToken">Cancellation token for timeout control</param>
+        /// <param name="ct">Cancellation token for timeout control</param>
         /// <returns>Strongly typed tool execution result</returns>
-        protected abstract Task<TResponse> ExecuteAsync(TSchema parameters, CancellationToken cancellationToken);
+        protected abstract Task<TResponse> ExecuteAsync(TSchema parameters, CancellationToken ct);
 
         /// <summary>
         /// IUnityCliLoopTool implementation - converts JToken to Schema and returns UnityCliLoopToolResponse
         /// </summary>
-        public async Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken)
+        public async Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
         {
             // Convert JToken to strongly typed Schema
             TSchema parameters = ConvertToSchema(paramsToken);
 
             // Execute with type-safe parameters
-            TResponse response = await ExecuteAsync(parameters, CancellationToken.None);
+            TResponse response = await ExecuteAsync(parameters, ct);
 
             // Return as UnityCliLoopToolResponse for IUnityCliLoopTool interface compatibility
             return response;
@@ -65,7 +62,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             
             // Create JsonSerializerSettings with CamelCasePropertyNamesContractResolver
             // This allows client side to use camelCase while C# uses PascalCase
-            JsonSerializerSettings settings = new()            {
+            JsonSerializerSettings settings = new()
+            {
                 ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
             };
             

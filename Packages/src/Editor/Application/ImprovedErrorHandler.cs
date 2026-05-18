@@ -66,6 +66,19 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 };
             }
 
+            if (exception is UnityCliLoopToolBusyException busyException)
+            {
+                return new TranslationOutput
+                {
+                    FriendlyMessage = "Unity tool execution is busy",
+                    Explanation = busyException.Message,
+                    Solutions = new List<string>
+                    {
+                        "Retry after the current command completes"
+                    }
+                };
+            }
+
             if (exception is TimeoutException)
             {
                 return new TranslationOutput
@@ -139,6 +152,10 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 if (exception is UnityCliLoopSecurityException)
                 {
                     return ErrorSeverity.High;
+                }
+                if (exception is UnityCliLoopToolBusyException)
+                {
+                    return ErrorSeverity.Medium;
                 }
                 if (exception is TimeoutException)
                 {

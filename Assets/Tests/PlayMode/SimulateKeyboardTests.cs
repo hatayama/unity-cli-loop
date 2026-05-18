@@ -535,7 +535,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
         private IEnumerator RunTool(JObject parameters)
         {
-            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
             yield return WaitForTask(task);
             lastResponse = (SimulateKeyboardResponse)task.Result;
         }

@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             
             try
             {
-                UnityCliLoopToolResponse response = await tool.ExecuteAsync(parameters);
+                UnityCliLoopToolResponse response = await tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
                 
                 if (response is FindGameObjectsResponse findResponse)
                 {
@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             try
             {
                 Debug.Log("[FindGameObjectsTestMenu] Executing search for Main Camera...");
-                UnityCliLoopToolResponse response = await tool.ExecuteAsync(parameters);
+                UnityCliLoopToolResponse response = await tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
                 
                 if (response is FindGameObjectsResponse findResponse)
                 {

@@ -11,13 +11,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// Single responsibility: Mark the external readiness state while Unity is compiling.
     /// Related classes: DomainReloadDetectionService (similar readiness state publishing)
     /// </summary>
-    public sealed class CompilationLockFileService : ICompilationLockService
+    public sealed class CompilationReadinessStatePublisher : ICompilationReadinessService
     {
         private readonly ServerReadinessStateStore _stateStore;
         private ServerReadinessState _stateBeforeCompilation;
         private string _activeCompilationGenerationId;
 
-        internal CompilationLockFileService(ServerReadinessStateStore stateStore = null)
+        internal CompilationReadinessStatePublisher(ServerReadinessStateStore stateStore = null)
         {
             _stateStore = stateStore ?? new ServerReadinessStateStore(UnityCliLoopPathResolver.GetProjectRoot());
         }

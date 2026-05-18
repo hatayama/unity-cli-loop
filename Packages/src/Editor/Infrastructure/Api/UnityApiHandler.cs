@@ -45,11 +45,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <param name="commandName">Command name</param>
         /// <param name="paramsToken">Parameters</param>
         /// <returns>Execution result</returns>
-        public static async Task<UnityCliLoopToolResponse> ExecuteCommandAsync(string commandName, JToken paramsToken)
+        public static async Task<UnityCliLoopToolResponse> ExecuteCommandAsync(
+            string commandName,
+            JToken paramsToken,
+            CancellationToken ct)
         {
             UnityCliLoopToolResponse response;
             if (InternalBridgeCommandRouter.IsInternalCommand(commandName))
             {
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+                ct.ThrowIfCancellationRequested();
                 response = InternalBridgeCommandRouter.Execute(commandName, paramsToken);
                 return response;
             }
@@ -57,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             response = await UnityCliLoopToolRegistrar.ExecuteToolAsync(
                 commandName,
                 paramsToken,
-                CancellationToken.None);
+                ct);
             return response;
         }
     }

@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 serverReadinessStateStore);
             ULoopSettings.RegisterService(uLoopSettingsRepository);
             MainThreadSwitcher.RegisterService(new EditorMainThreadDispatcher());
-            CompilationLockService.RegisterService(new CompilationLockFileService(serverReadinessStateStore));
+            CompilationReadinessService.RegisterService(new CompilationReadinessStatePublisher(serverReadinessStateStore));
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new SkillInstallLayoutInternalToolNameProvider(),
                 toolSettingsService,
