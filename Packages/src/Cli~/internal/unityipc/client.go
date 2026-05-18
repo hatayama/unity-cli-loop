@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type Client struct {
 	connection    Connection
 	requestID     int
 	clientVersion string
+	acceptTimeout time.Duration
 }
 
 type ProgressFunc = func(message string)
@@ -89,14 +91,14 @@ func (client *Client) SendWithProgress(ctx context.Context, method string, param
 }
 
 func (client *Client) SendWithProgressOutcome(ctx context.Context, method string, params map[string]any, progress ProgressFunc) (UnitySendOutcome, error) {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
+	acceptCtx, cancelAccept := context.WithTimeout(ctx, client.getAcceptTimeout())
+	defer cancelAccept()
 
 	startedAt := time.Now()
 	timing := UnitySendTiming{}
 
 	dialStartedAt := time.Now()
-	conn, err := dialEndpoint(ctx, client.connection.Endpoint)
+	conn, err := dialEndpoint(acceptCtx, client.connection.Endpoint)
 	timing.Dial = time.Since(dialStartedAt)
 	if err != nil {
 		timing.Total = time.Since(startedAt)
@@ -127,7 +129,7 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 		return UnitySendOutcome{}, err
 	}
 
-	if deadline, ok := ctx.Deadline(); ok {
+	if deadline, ok := acceptCtx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	}
 
@@ -154,10 +156,22 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 			progress("accepted")
 		}
 
+		cancelAccept()
+		if err := clearConnectionDeadline(conn); err != nil {
+			timing.Total = time.Since(startedAt)
+			outcome.Timing = timing
+			return outcome, err
+		}
+		stopCancelWatcher := watchConnectionCancellation(ctx, conn)
+		defer stopCancelWatcher()
+
 		response, err = readRPCResponse(reader, &timing)
 		if err != nil {
 			timing.Total = time.Since(startedAt)
 			outcome.Timing = timing
+			if ctx.Err() != nil {
+				return outcome, ctx.Err()
+			}
 			return outcome, err
 		}
 	}
@@ -181,6 +195,31 @@ func (client *Client) SendWithProgressOutcome(ctx context.Context, method string
 	timing.Total = time.Since(startedAt)
 	outcome.Timing = timing
 	return outcome, nil
+}
+
+func (client *Client) getAcceptTimeout() time.Duration {
+	if client.acceptTimeout > 0 {
+		return client.acceptTimeout
+	}
+	return requestTimeout
+}
+
+func clearConnectionDeadline(conn net.Conn) error {
+	return conn.SetDeadline(time.Time{})
+}
+
+func watchConnectionCancellation(ctx context.Context, conn net.Conn) func() {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.SetDeadline(time.Now())
+		case <-done:
+		}
+	}()
+	return func() {
+		close(done)
+	}
 }
 
 func readRPCResponse(reader *bufio.Reader, timing *UnitySendTiming) (rpcResponse, error) {

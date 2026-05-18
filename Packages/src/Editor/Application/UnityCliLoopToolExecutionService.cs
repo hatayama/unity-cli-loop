@@ -57,6 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             {
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 ct.ThrowIfCancellationRequested();
+                UnityCliLoopEditorStateGuard.Validate(toolName);
 
                 UnityCliLoopToolResponse response = await tool.ExecuteAsync(paramsToken, ct);
                 if (response == null)

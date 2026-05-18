@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -112,6 +113,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private int _unexpectedExitCleanupStarted = 0;
         
         private readonly ConcurrentDictionary<string, Stream> _clientStreams = new();
+        private readonly ConcurrentDictionary<int, Task> _clientTasks = new();
+        private int _nextClientTaskId;
 
         public UnityCliLoopBridgeServer()
             : this(CreateDefaultEditorSettingsService())
@@ -236,8 +239,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             Task serverTask = _serverTask;
+            Task[] clientTasks = GetActiveClientTasks();
             _serverTask = null;
-            DisposeCancellationSourceAfterServerTaskAsync(serverTask, cancellationTokenSource).Forget();
+            DisposeCancellationSourceAfterServerTaskAsync(serverTask, clientTasks, cancellationTokenSource).Forget();
         }
 
         private CancellationTokenSource TakeCancellationTokenSource()
@@ -247,16 +251,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static async Task DisposeCancellationSourceAfterServerTaskAsync(
             Task serverTask,
+            Task[] clientTasks,
             CancellationTokenSource cancellationTokenSource)
         {
-            if (serverTask != null)
+            Task[] tasks = BuildShutdownWaitTasks(serverTask, clientTasks);
+            if (tasks.Length > 0)
             {
                 await Task.WhenAny(
-                    serverTask,
+                    Task.WhenAll(tasks),
                     Task.Delay(TimeSpan.FromSeconds(UnityCliLoopServerConfig.SHUTDOWN_TIMEOUT_SECONDS)));
             }
 
             cancellationTokenSource?.Dispose();
+        }
+
+        private static Task[] BuildShutdownWaitTasks(Task serverTask, Task[] clientTasks)
+        {
+            List<Task> tasks = new();
+            if (serverTask != null)
+            {
+                tasks.Add(serverTask);
+            }
+
+            if (clientTasks != null)
+            {
+                tasks.AddRange(clientTasks.Where(task => task != null));
+            }
+
+            return tasks.ToArray();
         }
 
         /// <summary>
@@ -341,8 +363,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         BridgeClientConnection client = await AcceptClientAsync(_transportListener, cancellationToken);
                         if (client != null)
                         {
-                            // Execute client handling in a separate task (fire-and-forget).
-                            Task.Run(() => HandleClientAsync(client, cancellationToken)).Forget();
+                            StartClientHandler(client, cancellationToken);
                         }
                     }
                     catch (ObjectDisposedException)
@@ -394,6 +415,30 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     ServerLoopExited?.Invoke();
                 }
             }
+        }
+
+        private void StartClientHandler(BridgeClientConnection client, CancellationToken cancellationToken)
+        {
+            int taskId = Interlocked.Increment(ref _nextClientTaskId);
+            Task clientTask = Task.Run(() => HandleClientAsync(client, cancellationToken));
+            _clientTasks.TryAdd(taskId, clientTask);
+            clientTask.ContinueWith(
+                task =>
+                {
+                    _clientTasks.TryRemove(taskId, out _);
+                    if (task.IsFaulted && task.Exception != null)
+                    {
+                        OnError?.Invoke(task.Exception.GetBaseException().Message);
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        private Task[] GetActiveClientTasks()
+        {
+            return _clientTasks.Values.ToArray();
         }
 
         private async Task<BridgeClientConnection> AcceptClientAsync(IBridgeTransportListener listener, CancellationToken cancellationToken)
@@ -467,13 +512,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         foreach (string requestJson in completeJsonMessages)
                         {
                             if (string.IsNullOrWhiteSpace(requestJson)) continue;
-                            
-                            string responseJson = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
-                                requestJson,
-                                cancellationToken,
-                                responseJsonValue => WriteJsonResponseAsync(stream, responseJsonValue, cancellationToken));
-                            
-                            await WriteJsonResponseAsync(stream, responseJson, cancellationToken);
+
+                            await ProcessRequestFrameAsync(stream, requestJson, cancellationToken);
                         }
                         
                         // Validate reassembler state and clear if needed
@@ -561,6 +601,81 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string framedResponse = CreateContentLengthFrame(responseJson);
             byte[] responseData = Encoding.UTF8.GetBytes(framedResponse);
             await stream.WriteAsync(responseData, 0, responseData.Length, ct);
+        }
+
+        private async Task ProcessRequestFrameAsync(
+            Stream stream,
+            string requestJson,
+            CancellationToken serverCancellationToken)
+        {
+            using (CancellationTokenSource requestCancellationTokenSource =
+                   CancellationTokenSource.CreateLinkedTokenSource(serverCancellationToken))
+            {
+                Task clientDisconnectMonitorTask = null;
+                try
+                {
+                    string responseJson = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                        requestJson,
+                        requestCancellationTokenSource.Token,
+                        async responseJsonValue =>
+                        {
+                            await WriteJsonResponseAsync(stream, responseJsonValue, serverCancellationToken);
+                            clientDisconnectMonitorTask =
+                                MonitorClientDisconnectAsync(stream, requestCancellationTokenSource);
+                        });
+
+                    await WriteJsonResponseAsync(stream, responseJson, serverCancellationToken);
+                }
+                finally
+                {
+                    await StopClientDisconnectMonitorAsync(
+                        clientDisconnectMonitorTask,
+                        requestCancellationTokenSource);
+                }
+            }
+        }
+
+        private static async Task MonitorClientDisconnectAsync(
+            Stream stream,
+            CancellationTokenSource requestCancellationTokenSource)
+        {
+            byte[] buffer = new byte[1];
+            try
+            {
+                int bytesRead = await stream.ReadAsync(
+                    buffer,
+                    0,
+                    buffer.Length,
+                    requestCancellationTokenSource.Token);
+                if (bytesRead == 0)
+                {
+                    requestCancellationTokenSource.Cancel();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+                requestCancellationTokenSource.Cancel();
+            }
+            catch (IOException)
+            {
+                requestCancellationTokenSource.Cancel();
+            }
+        }
+
+        private static async Task StopClientDisconnectMonitorAsync(
+            Task clientDisconnectMonitorTask,
+            CancellationTokenSource requestCancellationTokenSource)
+        {
+            if (clientDisconnectMonitorTask == null)
+            {
+                return;
+            }
+
+            requestCancellationTokenSource.Cancel();
+            await clientDisconnectMonitorTask;
         }
 
         /// <summary>
