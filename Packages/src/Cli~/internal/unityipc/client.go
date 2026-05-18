@@ -9,8 +9,10 @@ import (
 	"time"
 )
 
-const requestTimeout = 180 * time.Second
-const finalResponseTimeout = 30 * time.Minute
+const (
+	requestTimeout       = 180 * time.Second
+	finalResponseTimeout = 30 * time.Minute
+)
 
 const rpcResponsePhaseAccepted = "accepted"
 
