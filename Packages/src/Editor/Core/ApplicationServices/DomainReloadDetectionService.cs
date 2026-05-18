@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Application service responsible for Domain Reload detection and state management
     /// Single responsibility: Domain Reload lifecycle management
     /// Related classes: McpSessionManager, McpServerController
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     [InitializeOnLoad]
     public static class DomainReloadDetectionService

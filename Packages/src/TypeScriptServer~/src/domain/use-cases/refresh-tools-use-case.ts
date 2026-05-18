@@ -1,9 +1,6 @@
 /**
  * Refresh Tools UseCase
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#RefreshToolsUseCase
- *
  * Related classes:
  * - IConnectionService (application/interfaces/connection-service.ts)
  * - IToolManagementService (application/interfaces/tool-management-service.ts)

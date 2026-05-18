@@ -3,7 +3,6 @@ namespace io.github.hatayama.uLoopMCP
     /// <summary>
     /// Data model representing validation result
     /// Used in Application Service Layer
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public class ValidationResult
     {

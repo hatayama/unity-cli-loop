@@ -1,9 +1,6 @@
 /**
  * Tool Management Service Interface
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#Interface-Segregation
- *
  * Related classes:
  * - UnityToolManager (implementation class)
  * - Used by UseCases that need tool lifecycle management

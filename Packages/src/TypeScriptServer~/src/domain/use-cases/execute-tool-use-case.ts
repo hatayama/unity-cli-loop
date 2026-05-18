@@ -1,9 +1,6 @@
 /**
  * Execute Tool UseCase
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#ExecuteToolUseCase
- *
  * Related classes:
  * - IConnectionService (application/interfaces/connection-service.ts)
  * - IToolQueryService (application/interfaces/tool-query-service.ts)

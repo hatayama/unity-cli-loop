@@ -12,7 +12,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Handles temporal cohesion for compilation processing
     /// Processing sequence: 1. Play Mode preparation, 2. Compilation state validation, 3. Compilation execution, 4. Result formatting
     /// Related classes: CompileTool, PlayModeCompilationPreparationService, CompilationStateValidationService, CompilationExecutionService
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     public class CompileUseCase : AbstractUseCase<CompileSchema, CompileResponse>
     {

@@ -6,7 +6,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Log retrieval service
     /// Single function: Retrieve Unity Console logs
     /// Related classes: LogGetter, GetLogsTool, GetLogsUseCase
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public class LogRetrievalService
     {

@@ -1,9 +1,6 @@
 /**
  * Unity Event Service Interface
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#Interface-Segregation
- *
  * Related classes:
  * - UnityEventHandler (implementation class)
  * - Used by UseCases that need Unity event handling

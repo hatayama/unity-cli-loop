@@ -6,7 +6,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Compilation state validation service
     /// Single function: Validate state before compilation execution
     /// Related classes: CompileTool, CompileUseCase, McpSessionManager
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public class CompilationStateValidationService
     {

@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// ClearConsole tool handler - Type-safe implementation using Schema and Response
     /// Clears Unity console logs for clean development workflow
     /// Related classes: ClearConsoleUseCase, ConsoleUtility, ClearConsoleSchema, ClearConsoleResponse
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     [McpTool(Description = "Clear Unity console logs")]
     public class ClearConsoleTool : AbstractUnityTool<ClearConsoleSchema, ClearConsoleResponse>

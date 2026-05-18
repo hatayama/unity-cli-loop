@@ -8,7 +8,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Application service responsible for server starting lock file management.
     /// Single responsibility: Create/delete lock file during server startup for CLI detection.
     /// Related classes: CompilationLockService, DomainReloadDetectionService (similar patterns)
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public static class ServerStartingLockService
     {

@@ -1,9 +1,6 @@
 /**
  * DDD（ドメイン駆動設計）パターンの基底インターフェース
  *
- * 設計ドキュメント参照:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md
- *
  * 関連クラス:
  * - UseCaseクラス群（domain/use-cases/）
  * - ApplicationServiceクラス群（application/services/）

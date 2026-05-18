@@ -6,7 +6,6 @@ namespace io.github.hatayama.uLoopMCP
     /// <summary>
     /// Tool to find multiple GameObjects with advanced search criteria
     /// 
-    /// Design Reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// 
     /// This Tool class delegates to FindGameObjectsUseCase for business logic execution,
     /// following the UseCase + Tool pattern for separation of concerns.

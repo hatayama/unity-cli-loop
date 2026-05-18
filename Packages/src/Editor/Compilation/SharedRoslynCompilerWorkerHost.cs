@@ -381,16 +381,6 @@ namespace io.github.hatayama.uLoopMCP
             workerProcess.StandardInput.Flush();
         }
 
-        internal static string CreateCompileRequestCommandForTests(string requestFilePath)
-        {
-            return CreateCompileRequestCommand(requestFilePath);
-        }
-
-        internal static string CreateProgramSourceForTests()
-        {
-            return CreateProgramSource();
-        }
-
         private static string CreateCompileRequestCommand(string requestFilePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(requestFilePath), "requestFilePath must not be empty");
@@ -946,26 +936,6 @@ namespace io.github.hatayama.uLoopMCP
                 .Replace(SharedCompilerWorkerEndMarkerToken, SharedCompilerWorkerEndMarker)
                 .Replace(SharedCompilerWorkerQuitCommandToken, SharedCompilerWorkerQuitCommand)
                 .Replace(CompileRequestPathPrefixToken, CompileRequestPathPrefix);
-        }
-
-        internal static string GetWorkerProgramTemplatePathForTests()
-        {
-            return GetWorkerProgramTemplatePath();
-        }
-
-        internal static string GetSharedCompilerWorkerResultPrefixForTests()
-        {
-            return SharedCompilerWorkerResultPrefix;
-        }
-
-        internal static string GetSharedCompilerWorkerEndMarkerForTests()
-        {
-            return SharedCompilerWorkerEndMarker;
-        }
-
-        internal static string GetSharedCompilerWorkerQuitCommandForTests()
-        {
-            return SharedCompilerWorkerQuitCommand;
         }
 
         private static string GetWorkerProgramTemplatePath()

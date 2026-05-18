@@ -8,7 +8,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Responsible for temporal cohesion of Console clear processing
     /// Processing sequence: 1. Get current log count, 2. Execute console clear, 3. Add confirmation message, 4. Create result
     /// Related classes: ClearConsoleTool, ConsoleUtility
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     public class ClearConsoleUseCase : AbstractUseCase<ClearConsoleSchema, ClearConsoleResponse>
     {

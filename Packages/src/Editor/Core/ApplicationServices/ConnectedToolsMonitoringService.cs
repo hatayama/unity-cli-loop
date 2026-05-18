@@ -12,7 +12,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Application service responsible for monitoring connected LLM tools
     /// Single responsibility: Track connected/disconnected tools and persist state
     /// Related classes: McpBridgeServer, McpEditorSettings, ConnectedLLMToolData
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     [InitializeOnLoad]
     public static class ConnectedToolsMonitoringService

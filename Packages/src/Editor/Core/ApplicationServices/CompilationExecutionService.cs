@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Compilation execution service
     /// Single function: Execute Unity project compilation
     /// Related classes: CompileController, CompileUseCase, CompileTool
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - Application Service Layer (Single Function Implementation)
     /// </summary>
     public class CompilationExecutionService
     {

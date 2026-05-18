@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Responsible for temporal cohesion of Unity Hierarchy retrieval processing
     /// Processing sequence: 1. Hierarchy information retrieval, 2. Data conversion, 3. Response size determination and file output
     /// Related classes: GetHierarchyTool, HierarchyService, HierarchySerializer, HierarchyResultExporter
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     public class GetHierarchyUseCase : AbstractUseCase<GetHierarchySchema, GetHierarchyResponse>
     {

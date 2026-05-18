@@ -1,9 +1,6 @@
 /**
  * Request Models for UseCase Layer
  *
- * Design document reference:
- * - /Packages/docs/ARCHITECTURE_TypeScript.md#データモデル
- *
  * Related classes:
  * - UseCase implementations use these as TRequest type parameters
  * - Response models defined in responses.ts

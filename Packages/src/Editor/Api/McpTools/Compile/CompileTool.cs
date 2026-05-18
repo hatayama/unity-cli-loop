@@ -7,7 +7,6 @@ namespace io.github.hatayama.uLoopMCP
     /// Compile tool handler - Type-safe implementation using Schema and Response
     /// Handles Unity project compilation with optional force recompile
     /// Related classes: CompileUseCase, CompilationStateValidationService, CompilationExecutionService
-    /// Design reference: @Packages/docs/ARCHITECTURE_Unity.md - UseCase + Tool Pattern (DDD Integration)
     /// </summary>
     [McpTool(Description = "Execute Unity project compilation")]
     public class CompileTool : AbstractUnityTool<CompileSchema, CompileResponse>
