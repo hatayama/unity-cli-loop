@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that the bundled hierarchy tool executes without host-service injection.
             JObject parameters = new();
             
-            UnityCliLoopToolResponse baseResponse = await _tool.ExecuteAsync(parameters);
+            UnityCliLoopToolResponse baseResponse = await _tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
             GetHierarchyResponse response = baseResponse as GetHierarchyResponse;
             
             Assert.That(response, Is.Not.Null);
@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ["MaxDepth"] = 1
             };
             
-            UnityCliLoopToolResponse baseResponse = await _tool.ExecuteAsync(parameters);
+            UnityCliLoopToolResponse baseResponse = await _tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
             GetHierarchyResponse response = baseResponse as GetHierarchyResponse;
             
             Assert.That(response, Is.Not.Null);
@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ["IncludeComponents"] = false
             };
             
-            UnityCliLoopToolResponse baseResponse = await _tool.ExecuteAsync(parameters);
+            UnityCliLoopToolResponse baseResponse = await _tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
             GetHierarchyResponse response = baseResponse as GetHierarchyResponse;
             
             Assert.That(response, Is.Not.Null);

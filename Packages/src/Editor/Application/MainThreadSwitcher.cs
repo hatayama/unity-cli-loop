@@ -50,9 +50,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Service.AddContinuation(continuation);
         }
 
-        public static SwitchToMainThreadAwaitable SwitchToMainThread()
+        public static SwitchToMainThreadAwaitable SwitchToMainThread(CancellationToken ct = default)
         {
-            return new SwitchToMainThreadAwaitable(CancellationToken.None);
+            return new SwitchToMainThreadAwaitable(ct);
         }
 
         private static IMainThreadDispatcher Service

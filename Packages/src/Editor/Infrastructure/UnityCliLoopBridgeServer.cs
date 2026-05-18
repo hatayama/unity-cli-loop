@@ -468,22 +468,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         {
                             if (string.IsNullOrWhiteSpace(requestJson)) continue;
                             
-                            string responseJson = await JsonRpcProcessor.ProcessRequest(requestJson);
+                            string responseJson = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                                requestJson,
+                                cancellationToken,
+                                responseJsonValue => WriteJsonResponseAsync(stream, responseJsonValue, cancellationToken));
                             
-                            if (!string.IsNullOrEmpty(responseJson))
-                            {
-                                // Check stream and client state before attempting write
-                                if (!stream.CanWrite || cancellationToken.IsCancellationRequested)
-                                {
-                                    return; // Skip the write operation
-                                }
-                                
-                                // Send response with Content-Length framing
-                                string framedResponse = CreateContentLengthFrame(responseJson);
-                                byte[] responseData = Encoding.UTF8.GetBytes(framedResponse);
-                                
-                                await stream.WriteAsync(responseData, 0, responseData.Length, cancellationToken);
-                            }
+                            await WriteJsonResponseAsync(stream, responseJson, cancellationToken);
                         }
                         
                         // Validate reassembler state and clear if needed
@@ -551,6 +541,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             
             // Create the framed message: Content-Length: <n>\r\n\r\n<json_content>
             return $"Content-Length: {contentLength}\r\n\r\n{jsonContent}";
+        }
+
+        private async Task WriteJsonResponseAsync(
+            Stream stream,
+            string responseJson,
+            CancellationToken ct)
+        {
+            if (string.IsNullOrEmpty(responseJson))
+            {
+                return;
+            }
+
+            if (!stream.CanWrite || ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            string framedResponse = CreateContentLengthFrame(responseJson);
+            byte[] responseData = Encoding.UTF8.GetBytes(framedResponse);
+            await stream.WriteAsync(responseData, 0, responseData.Length, ct);
         }
 
         /// <summary>

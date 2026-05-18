@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 using Newtonsoft.Json.Linq;
@@ -17,7 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCliVersionSatisfiesMinimum_AllowsRequest()
         {
             // Verifies compatible CLI clients can execute bridge commands.
-            string response = await JsonRpcProcessor.ProcessRequest(BuildGetVersionRequest(CliConstants.MINIMUM_REQUIRED_CLI_VERSION));
+            string response = await JsonRpcProcessor.ProcessRequest(
+                BuildGetVersionRequest(CliConstants.MINIMUM_REQUIRED_CLI_VERSION),
+                CancellationToken.None);
             JObject parsed = JObject.Parse(response);
 
             Assert.That(parsed["error"], Is.Null);
@@ -28,7 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCliVersionIsTooOld_ReturnsCliUpdateRequiredError()
         {
             // Verifies old CLI clients receive an exact update command before any tool runs.
-            string response = await JsonRpcProcessor.ProcessRequest(BuildGetVersionRequest("3.0.0-beta.5"));
+            string response = await JsonRpcProcessor.ProcessRequest(
+                BuildGetVersionRequest("3.0.0-beta.5"),
+                CancellationToken.None);
             JObject data = ParseErrorData(response);
 
             Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
@@ -48,7 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies legacy clients without metadata are stopped with upgrade instructions.
             string response = await JsonRpcProcessor.ProcessRequest(
-                "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1}");
+                "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1}",
+                CancellationToken.None);
             JObject data = ParseErrorData(response);
 
             Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
@@ -59,7 +65,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCliVersionIsInvalid_ReturnsCliUpdateRequiredError()
         {
             // Verifies malformed CLI versions cannot bypass the compatibility gate.
-            string response = await JsonRpcProcessor.ProcessRequest(BuildGetVersionRequest("not-a-version"));
+            string response = await JsonRpcProcessor.ProcessRequest(
+                BuildGetVersionRequest("not-a-version"),
+                CancellationToken.None);
             JObject data = ParseErrorData(response);
 
             Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));

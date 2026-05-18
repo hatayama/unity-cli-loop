@@ -8,6 +8,7 @@ import (
 type UnitySendOutcome struct {
 	Result            json.RawMessage
 	RequestDispatched bool
+	RequestAccepted   bool
 	Timing            UnitySendTiming
 }
 
