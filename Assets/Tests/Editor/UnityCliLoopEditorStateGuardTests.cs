@@ -10,6 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ValidateForState_WhenDynamicCodeRunsDuringCompilation_ShouldThrow()
         {
+            // Tests that compile-time editor state is reported as retryable tool busy.
             UnityCliLoopToolBusyException exception = Assert.Throws<UnityCliLoopToolBusyException>(
                 () => UnityCliLoopEditorStateGuard.ValidateForState(
                     UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
@@ -23,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ValidateForState_WhenPlayModeControlRunsDuringEditorUpdate_ShouldThrow()
         {
+            // Tests that asset-update editor state is reported as retryable tool busy.
             UnityCliLoopToolBusyException exception = Assert.Throws<UnityCliLoopToolBusyException>(
                 () => UnityCliLoopEditorStateGuard.ValidateForState(
                     UnityCliLoopConstants.TOOL_NAME_CONTROL_PLAY_MODE,
@@ -36,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ValidateForState_WhenReadOnlyToolRunsDuringBusyEditorState_ShouldAllow()
         {
+            // Tests that read-only tools bypass state guards that only protect mutating commands.
             Assert.DoesNotThrow(
                 () => UnityCliLoopEditorStateGuard.ValidateForState(
                     "get-logs",
