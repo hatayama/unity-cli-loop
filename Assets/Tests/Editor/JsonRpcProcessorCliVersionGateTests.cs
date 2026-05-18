@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             try
             {
                 firstResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
-                    BuildSingleFlightToolRequest(1),
+                    BuildToolRequest(SingleFlightTestTool.Name, 1),
                     CancellationToken.None,
                     _ => Task.CompletedTask);
 
@@ -113,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new Regex("\\[JsonRpcProcessor\\] Error: Unity tool execution is busy running 'single-flight-test'"));
 
                 secondResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
-                    BuildSingleFlightToolRequest(2),
+                    BuildToolRequest(SingleFlightTestTool.Name, 2),
                     CancellationToken.None,
                     _ => Task.CompletedTask);
 
@@ -134,6 +134,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        [Test]
+        public async Task ProcessRequest_WhenExecuteDynamicCodeWaitsForMainThread_AllowsSecondExecuteDynamicCode()
+        {
+            // Verifies dynamic-code handoff stays inside the dynamic-code scheduler while other tools stay single-flight.
+            CapturingMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            UnityCliLoopToolRegistrar.RegisterService(service);
+            service.RegisterCustomTool(new ExecuteDynamicCodeTestTool());
+            service.RegisterCustomTool(new SingleFlightTestTool());
+
+            Task<string> firstDynamicCodeTask = null;
+            Task<string> secondDynamicCodeTask = null;
+            Task<string> otherToolTask = null;
+            try
+            {
+                firstDynamicCodeTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE, 1),
+                    CancellationToken.None,
+                    _ => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
+
+                secondDynamicCodeTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE, 2),
+                    CancellationToken.None,
+                    _ => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(2));
+                Assert.That(secondDynamicCodeTask.IsCompleted, Is.False);
+
+                LogAssert.Expect(
+                    LogType.Error,
+                    new Regex("\\[JsonRpcProcessor\\] Error: Unity tool execution is busy running 'execute-dynamic-code'"));
+
+                otherToolTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequest(SingleFlightTestTool.Name, 3),
+                    CancellationToken.None,
+                    _ => Task.CompletedTask);
+
+                string otherToolResponse = await AwaitWithTimeout(otherToolTask, TimeSpan.FromMilliseconds(200));
+                JObject data = ParseErrorData(otherToolResponse);
+
+                Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
+                Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
+                Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
+            }
+            finally
+            {
+                dispatcher.RunContinuations();
+                await DrainTaskIfNeeded(firstDynamicCodeTask);
+                await DrainTaskIfNeeded(secondDynamicCodeTask);
+                await DrainTaskIfNeeded(otherToolTask);
+                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
         private static string BuildGetVersionRequest(string cliVersion)
         {
             return
@@ -142,11 +206,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "\"}}";
         }
 
-        private static string BuildSingleFlightToolRequest(int id)
+        private static string BuildToolRequest(string toolName, int id)
         {
             return
                 "{\"jsonrpc\":\"2.0\",\"method\":\"" +
-                SingleFlightTestTool.Name +
+                toolName +
                 "\",\"params\":{},\"id\":" +
                 id +
                 ",\"uloop\":{\"cliVersion\":\"" +
@@ -222,6 +286,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public const string Name = "single-flight-test";
 
             public string ToolName => Name;
+
+            public ToolParameterSchema ParameterSchema => new();
+
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
+            {
+                return Task.FromResult<UnityCliLoopToolResponse>(new SingleFlightTestResponse());
+            }
+        }
+
+        private sealed class ExecuteDynamicCodeTestTool : IUnityCliLoopTool
+        {
+            public string ToolName => UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE;
 
             public ToolParameterSchema ParameterSchema => new();
 
