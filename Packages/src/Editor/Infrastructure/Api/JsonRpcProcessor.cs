@@ -164,18 +164,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 Stopwatch requestStopwatch = Stopwatch.StartNew();
-                Stopwatch mainThreadSwitchStopwatch = Stopwatch.StartNew();
-                await MainThreadSwitcher.SwitchToMainThread(ct);
-                ct.ThrowIfCancellationRequested();
-                mainThreadSwitchStopwatch.Stop();
 
                 Stopwatch executeMethodStopwatch = Stopwatch.StartNew();
                 UnityCliLoopToolResponse result = await ExecuteMethod(request.Method, request.Params, ct);
                 executeMethodStopwatch.Stop();
 
-                AppendTimingIfRequested(
-                    result,
-                    $"[Perf] RpcSwitchToMainThread: {mainThreadSwitchStopwatch.Elapsed.TotalMilliseconds:F1}ms");
                 AppendTimingIfRequested(
                     result,
                     $"[Perf] RpcExecuteMethod: {executeMethodStopwatch.Elapsed.TotalMilliseconds:F1}ms");
