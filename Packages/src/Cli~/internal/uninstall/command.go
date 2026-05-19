@@ -13,7 +13,6 @@ const (
 	UnsupportedOSMessage = "native uninstall is only supported on macOS and Windows"
 	PosixCommandName     = "uloop"
 	WindowsCommandName   = "uloop.exe"
-	WindowsLegacyMarker  = "uloop.uninstalled"
 )
 
 type Options struct {
@@ -101,17 +100,9 @@ if ($UserPath) {
 if (Test-Path -LiteralPath $Target) {
     Remove-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
 }
-$LegacyMarker = Join-Path $InstallDir %s
-if (Test-Path -LiteralPath $LegacyMarker) {
-    Remove-Item -LiteralPath $LegacyMarker -Force -ErrorAction SilentlyContinue
-}
-if (-not (Test-Path -LiteralPath $InstallDir)) {
-    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-}
 `,
 		powerShellSingleQuote(targetPath),
 		currentPID,
-		powerShellSingleQuote(WindowsLegacyMarker),
 	)
 }
 
