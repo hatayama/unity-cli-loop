@@ -48,7 +48,13 @@ func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T)
 		t.Fatalf("encoded command flag missing: %s", joinedArgs)
 	}
 	deletionScript := windowsDeletionScript(command.TargetPath, 5678)
-	for _, expected := range []string{"Wait-Process -Id $ParentPid", "$ParentPid = 5678"} {
+	for _, expected := range []string{
+		"Get-Process -Id $ParentPid",
+		"$ParentProcess | Wait-Process",
+		"$ParentPid = 5678",
+		`return $Path.Trim().Trim('"').TrimEnd([char[]]@('\','/')).Replace('/','\')`,
+		"[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')",
+	} {
 		if !strings.Contains(deletionScript, expected) {
 			t.Fatalf("expected %s in deletion script: %s", expected, deletionScript)
 		}
@@ -58,6 +64,25 @@ func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T)
 	}
 	if command.TargetPath != `C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin\uloop.exe` {
 		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+}
+
+func TestCommandForWindowsRemovesUserPathBeforeDeletingLauncher(t *testing.T) {
+	// Verifies Unity does not observe launcher removal before persistent PATH cleanup finishes.
+	deletionScript := windowsDeletionScript(
+		`C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin\uloop.exe`,
+		5678)
+
+	pathRemovalIndex := strings.Index(deletionScript, "[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')")
+	targetRemovalIndex := strings.Index(deletionScript, "Remove-Item -LiteralPath $Target")
+	if pathRemovalIndex < 0 {
+		t.Fatalf("path removal missing from deletion script: %s", deletionScript)
+	}
+	if targetRemovalIndex < 0 {
+		t.Fatalf("target removal missing from deletion script: %s", deletionScript)
+	}
+	if pathRemovalIndex > targetRemovalIndex {
+		t.Fatalf("target removal must happen after User PATH cleanup: %s", deletionScript)
 	}
 }
 
