@@ -76,8 +76,17 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 	} else {
 		writeFormat(stdout, "Removed uloop launcher: %s\n", uninstallCommand.TargetPath)
 	}
-	writeLine(stdout, "PATH settings were not changed. Remove the install directory from PATH manually if it is no longer needed.")
+	writeUninstallPathCompletion(stdout, runtime.GOOS)
 	return true, 0
+}
+
+func writeUninstallPathCompletion(stdout io.Writer, goos string) {
+	if goos == "windows" {
+		writeLine(stdout, "The package-owned User PATH entry will be removed after this process exits.")
+		return
+	}
+
+	writeLine(stdout, "PATH settings were not changed. Remove the install directory from PATH manually if it is no longer needed.")
 }
 
 func printUninstallHelp(stdout io.Writer) {
@@ -86,7 +95,8 @@ func printUninstallHelp(stdout io.Writer) {
 	writeLine(stdout, "")
 	writeLine(stdout, "Removes the global uloop launcher binary from the install directory.")
 	writeLine(stdout, "Set ULOOP_INSTALL_DIR to uninstall from a custom install directory.")
-	writeLine(stdout, "PATH settings are not changed automatically.")
+	writeLine(stdout, "On Windows, also removes the package-owned install directory from User PATH.")
+	writeLine(stdout, "On macOS, PATH settings are not changed automatically.")
 }
 
 func resolveUninstallInstallDir(goos string) (string, error) {

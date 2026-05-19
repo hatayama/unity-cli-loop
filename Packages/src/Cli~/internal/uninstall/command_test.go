@@ -48,7 +48,13 @@ func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T)
 		t.Fatalf("encoded command flag missing: %s", joinedArgs)
 	}
 	deletionScript := windowsDeletionScript(command.TargetPath, 5678)
-	for _, expected := range []string{"Wait-Process -Id $ParentPid", "$ParentPid = 5678"} {
+	for _, expected := range []string{
+		"Wait-Process -Id $ParentPid",
+		"$ParentPid = 5678",
+		"[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')",
+		"$LegacyMarker = Join-Path $InstallDir 'uloop.uninstalled'",
+		"Remove-Item -LiteralPath $InstallDir",
+	} {
 		if !strings.Contains(deletionScript, expected) {
 			t.Fatalf("expected %s in deletion script: %s", expected, deletionScript)
 		}

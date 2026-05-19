@@ -13,6 +13,7 @@ const (
 	UnsupportedOSMessage = "native uninstall is only supported on macOS and Windows"
 	PosixCommandName     = "uloop"
 	WindowsCommandName   = "uloop.exe"
+	WindowsLegacyMarker  = "uloop.uninstalled"
 )
 
 type Options struct {
@@ -74,9 +75,40 @@ func windowsUninstallArgs(targetPath string, currentPID int) []string {
 
 func windowsDeletionScript(targetPath string, currentPID int) string {
 	return fmt.Sprintf(
-		"$Target = %s\n$ParentPid = %d\nWait-Process -Id $ParentPid -ErrorAction SilentlyContinue\nif (Test-Path -LiteralPath $Target) {\n    Remove-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue\n}\n",
+		`$Target = %s
+$ParentPid = %d
+$InstallDir = Split-Path -Parent $Target
+$NormalizePath = {
+    param([string]$Path)
+    if (-not $Path) {
+        return ''
+    }
+    return $Path.Trim().TrimEnd([char[]]@('\','/'))
+}
+Wait-Process -Id $ParentPid -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $Target) {
+    Remove-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
+}
+$LegacyMarker = Join-Path $InstallDir %s
+if (Test-Path -LiteralPath $LegacyMarker) {
+    Remove-Item -LiteralPath $LegacyMarker -Force -ErrorAction SilentlyContinue
+}
+$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if ($UserPath) {
+    $NormalizedInstallDir = & $NormalizePath $InstallDir
+    $PathEntries = $UserPath -split ';' | Where-Object { $_ -and -not [string]::Equals((& $NormalizePath $_), $NormalizedInstallDir, [System.StringComparison]::OrdinalIgnoreCase) }
+    $NewUserPath = [string]::Join(';', $PathEntries)
+    if (-not [string]::Equals($UserPath, $NewUserPath, [System.StringComparison]::Ordinal)) {
+        [Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')
+    }
+}
+if ((Test-Path -LiteralPath $InstallDir) -and -not (Get-ChildItem -LiteralPath $InstallDir -Force | Select-Object -First 1)) {
+    Remove-Item -LiteralPath $InstallDir -Force -ErrorAction SilentlyContinue
+}
+`,
 		powerShellSingleQuote(targetPath),
 		currentPID,
+		powerShellSingleQuote(WindowsLegacyMarker),
 	)
 }
 

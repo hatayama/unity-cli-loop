@@ -544,13 +544,19 @@ test_powershell_latest_skips_prerelease_assets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($ReleaseChannel -eq "stable" -and $Release.prerelease) {'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($ReleaseChannel -eq "beta" `'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Test-LegacyNpmUloopPath'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Remove-LegacyNpmArtifacts'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Get-LegacyNpmUloopPathsFromPath'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Invoke-AllLegacyNpmPackageRemoval'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Set-UserPathWithInstallDirectoryFirst'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '"uninstall", "-g", "--prefix", $LegacyPrefix, "uloop-cli"'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if (-not $LegacyPrefix) {'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" '$NpmArgs = @("uninstall", "-g", "uloop-cli")'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$LegacyCommandIsNpmShim = $LegacyCommandShadowsNative `'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$ReleaseChannel = if ($Version -eq $LatestBetaVersion) { "beta" } else { "stable" }'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$LegacyUloopIsNpmShimBeforeInstall = Test-LegacyNpmUloopPath -CommandPath $LegacyUloopBeforeInstallPath'
-  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($LegacyUloopIsNpmShimBeforeInstall -and -not $LegacyNpmRemovedBeforeInstall) {'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'Set-UserPathWithInstallDirectoryFirst -Directory $InstallDir'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '[Environment]::SetEnvironmentVariable("Path", $NewUserPath, "User")'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if (-not (Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $FinalUloopPath)) {'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "ULOOP_REMOVE_LEGACY"
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "Remove-LegacyUloopShims"
 }
