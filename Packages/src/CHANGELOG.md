@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.0-beta.14](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.13...v3.0.0-beta.14) (2026-05-19)
+
+
+### Bug Fixes
+
+* Busy responses no longer create Unity Console errors ([#1168](https://github.com/hatayama/unity-cli-loop/issues/1168)) ([be7aa80](https://github.com/hatayama/unity-cli-loop/commit/be7aa80d0048374b53170c5df34c54600425cb12))
+* Prevent stale server recovery after Editor restarts ([#1166](https://github.com/hatayama/unity-cli-loop/issues/1166)) ([5b7835d](https://github.com/hatayama/unity-cli-loop/commit/5b7835d43e72d53cfd7997c97a4f9cf15be3f2e4))
+* Unity tool requests no longer overlap during long-running work ([#1164](https://github.com/hatayama/unity-cli-loop/issues/1164)) ([c5a583b](https://github.com/hatayama/unity-cli-loop/commit/c5a583ba457e2c330b8c5150cc101e81b790fb45))
+* Windows CLI uninstall no longer leaves stale commands behind ([#1169](https://github.com/hatayama/unity-cli-loop/issues/1169)) ([62a7c88](https://github.com/hatayama/unity-cli-loop/commit/62a7c887af62e31c02d7d0fefdd204f37f8f070b))
+
 ## [3.0.0-beta.13](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.12...v3.0.0-beta.13) (2026-05-17)
 
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.12](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.11...cli-v3.0.0-beta.12) (2026-05-19)
+
+
+### Bug Fixes
+
+* Unity tool requests no longer overlap during long-running work ([#1164](https://github.com/hatayama/unity-cli-loop/issues/1164)) ([c5a583b](https://github.com/hatayama/unity-cli-loop/commit/c5a583ba457e2c330b8c5150cc101e81b790fb45))
+* Windows CLI uninstall no longer leaves stale commands behind ([#1169](https://github.com/hatayama/unity-cli-loop/issues/1169)) ([62a7c88](https://github.com/hatayama/unity-cli-loop/commit/62a7c887af62e31c02d7d0fefdd204f37f8f070b))
+
 ## [3.0.0-beta.11](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.10...cli-v3.0.0-beta.11) (2026-05-17)
 
 
