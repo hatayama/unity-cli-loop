@@ -105,8 +105,8 @@ $LegacyMarker = Join-Path $InstallDir %s
 if (Test-Path -LiteralPath $LegacyMarker) {
     Remove-Item -LiteralPath $LegacyMarker -Force -ErrorAction SilentlyContinue
 }
-if ((Test-Path -LiteralPath $InstallDir) -and -not (Get-ChildItem -LiteralPath $InstallDir -Force | Select-Object -First 1)) {
-    Remove-Item -LiteralPath $InstallDir -Force -ErrorAction SilentlyContinue
+if (-not (Test-Path -LiteralPath $InstallDir)) {
+    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 `,
 		powerShellSingleQuote(targetPath),

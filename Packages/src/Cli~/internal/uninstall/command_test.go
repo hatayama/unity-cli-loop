@@ -54,7 +54,7 @@ func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T)
 		"$ParentPid = 5678",
 		"[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')",
 		"$LegacyMarker = Join-Path $InstallDir 'uloop.uninstalled'",
-		"Remove-Item -LiteralPath $InstallDir",
+		"New-Item -ItemType Directory -Path $InstallDir -Force",
 	} {
 		if !strings.Contains(deletionScript, expected) {
 			t.Fatalf("expected %s in deletion script: %s", expected, deletionScript)
@@ -65,6 +65,25 @@ func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T)
 	}
 	if command.TargetPath != `C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin\uloop.exe` {
 		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+}
+
+func TestCommandForWindowsLeavesEmptyInstallDirForStaleProcessPath(t *testing.T) {
+	// Verifies stale Unity Hub PATH entries do not resolve to a deleted directory after uninstall.
+	deletionScript := windowsDeletionScript(
+		`C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin\uloop.exe`,
+		5678)
+
+	for _, forbidden := range []string{
+		"Remove-Item -LiteralPath $InstallDir",
+		"Remove-Item -LiteralPath $InstallRoot",
+	} {
+		if strings.Contains(deletionScript, forbidden) {
+			t.Fatalf("install directory removal must not be present: %s", deletionScript)
+		}
+	}
+	if !strings.Contains(deletionScript, "New-Item -ItemType Directory -Path $InstallDir -Force") {
+		t.Fatalf("empty install directory preservation missing: %s", deletionScript)
 	}
 }
 
