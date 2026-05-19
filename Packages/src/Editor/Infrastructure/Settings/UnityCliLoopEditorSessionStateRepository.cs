@@ -1,0 +1,90 @@
+using UnityEditor;
+
+using io.github.hatayama.UnityCliLoop.Domain;
+
+namespace io.github.hatayama.UnityCliLoop.Infrastructure
+{
+    /// <summary>
+    /// Stores Unity CLI Loop runtime flags in Unity SessionState for the current Editor session.
+    /// </summary>
+    public sealed class UnityCliLoopEditorSessionStateRepository : IUnityCliLoopEditorSessionStatePort
+    {
+        private const string KeyPrefix = "io.github.hatayama.uloopmcp.editorSession.";
+        private const string IsServerRunningKey = KeyPrefix + "isServerRunning";
+        private const string IsAfterCompileKey = KeyPrefix + "isAfterCompile";
+        private const string IsDomainReloadInProgressKey = KeyPrefix + "isDomainReloadInProgress";
+        private const string IsReconnectingKey = KeyPrefix + "isReconnecting";
+        private const string ShowReconnectingUIKey = KeyPrefix + "showReconnectingUI";
+        private const string ShowPostCompileReconnectingUIKey = KeyPrefix + "showPostCompileReconnectingUI";
+
+        public bool GetIsServerRunning()
+        {
+            return GetBool(IsServerRunningKey);
+        }
+
+        public void SetIsServerRunning(bool isServerRunning)
+        {
+            SetBool(IsServerRunningKey, isServerRunning);
+        }
+
+        public bool GetIsAfterCompile()
+        {
+            return GetBool(IsAfterCompileKey);
+        }
+
+        public void SetIsAfterCompile(bool isAfterCompile)
+        {
+            SetBool(IsAfterCompileKey, isAfterCompile);
+        }
+
+        public bool GetIsDomainReloadInProgress()
+        {
+            return GetBool(IsDomainReloadInProgressKey);
+        }
+
+        public void SetIsDomainReloadInProgress(bool isDomainReloadInProgress)
+        {
+            SetBool(IsDomainReloadInProgressKey, isDomainReloadInProgress);
+        }
+
+        public bool GetIsReconnecting()
+        {
+            return GetBool(IsReconnectingKey);
+        }
+
+        public void SetIsReconnecting(bool isReconnecting)
+        {
+            SetBool(IsReconnectingKey, isReconnecting);
+        }
+
+        public bool GetShowReconnectingUI()
+        {
+            return GetBool(ShowReconnectingUIKey);
+        }
+
+        public void SetShowReconnectingUI(bool showReconnectingUI)
+        {
+            SetBool(ShowReconnectingUIKey, showReconnectingUI);
+        }
+
+        public bool GetShowPostCompileReconnectingUI()
+        {
+            return GetBool(ShowPostCompileReconnectingUIKey);
+        }
+
+        public void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI)
+        {
+            SetBool(ShowPostCompileReconnectingUIKey, showPostCompileReconnectingUI);
+        }
+
+        private static bool GetBool(string key)
+        {
+            return SessionState.GetBool(key, false);
+        }
+
+        private static void SetBool(string key, bool value)
+        {
+            SessionState.SetBool(key, value);
+        }
+    }
+}

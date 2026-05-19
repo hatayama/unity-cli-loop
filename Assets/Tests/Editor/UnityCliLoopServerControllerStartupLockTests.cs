@@ -14,6 +14,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class UnityCliLoopServerControllerRecoveryTests
     {
+        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _sessionStateService.ClearAll();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _originalSessionState.Restore(_sessionStateService);
+        }
+
         [Test]
         public void ScheduleStartupRecovery_WhenCalled_ExposesRecoveryTaskBeforeDeferredActionRuns()
         {
@@ -91,8 +108,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
-            UnityCliLoopEditorSettingsService editorSettingsService =
-                UnityCliLoopEditorSettingsTestFactory.CreateService();
             ServerReadinessStateStore stateStore = CreateTestStateStore();
             TestReadinessProbe readinessProbe = new();
             int serverStartedCount = 0;
@@ -100,8 +115,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
-                editorSettingsService,
+                new DomainReloadDetectionFileService(_sessionStateService, stateStore),
+                _sessionStateService,
                 stateStore,
                 readinessProbe,
                 new TestDomainReloadLifecycle());
@@ -137,24 +152,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(readinessProbe.CallCount, Is.EqualTo(1));
         }
 
-        private static UnityCliLoopServerControllerService CreateControllerService()
+        private UnityCliLoopServerControllerService CreateControllerService()
         {
             return CreateControllerService(new TestReadinessProbe());
         }
 
-        private static UnityCliLoopServerControllerService CreateControllerService(TestReadinessProbe readinessProbe)
+        private UnityCliLoopServerControllerService CreateControllerService(TestReadinessProbe readinessProbe)
         {
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
-            UnityCliLoopEditorSettingsService editorSettingsService =
-                UnityCliLoopEditorSettingsTestFactory.CreateService();
             ServerReadinessStateStore stateStore = CreateTestStateStore();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
-                editorSettingsService,
+                new DomainReloadDetectionFileService(_sessionStateService, stateStore),
+                _sessionStateService,
                 stateStore,
                 readinessProbe,
                 new TestDomainReloadLifecycle());

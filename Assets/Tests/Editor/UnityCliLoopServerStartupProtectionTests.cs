@@ -11,6 +11,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class UnityCliLoopServerStartupProtectionTests
     {
+        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _sessionStateService.ClearAll();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _originalSessionState.Restore(_sessionStateService);
+        }
+
         [Test]
         public void ClearStartupProtection_ResetsProtectionWindow()
         {
@@ -31,30 +48,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that assembly-reload recovery clears the startup protection window before shutdown.
             UnityCliLoopServerControllerService service = CreateControllerService();
-            UnityCliLoopEditorSettingsService editorSettingsService =
-                UnityCliLoopEditorSettingsTestFactory.CreateService();
+            service.RegisterRecoveredServer(new TestServerInstance());
+            service.ActivateStartupProtection(60000);
 
-            UnityCliLoopEditorSettingsData originalSettings = CloneSettings(editorSettingsService.GetSettings());
+            Assert.IsTrue(service.IsStartupProtectionActive(), "Startup protection should be active before reload");
 
-            try
-            {
-                service.RegisterRecoveredServer(new TestServerInstance());
-                service.ActivateStartupProtection(60000);
+            service.OnBeforeAssemblyReload();
 
-                Assert.IsTrue(service.IsStartupProtectionActive(), "Startup protection should be active before reload");
-
-                service.OnBeforeAssemblyReload();
-
-                Assert.IsFalse(
-                    service.IsStartupProtectionActive(),
-                    "Assembly reload recovery should clear startup protection so the server can restart"
-                );
-            }
-            finally
-            {
-                editorSettingsService.SaveSettings(originalSettings);
-                service.ClearStartupProtection();
-            }
+            Assert.IsFalse(
+                service.IsStartupProtectionActive(),
+                "Assembly reload recovery should clear startup protection so the server can restart"
+            );
         }
 
         [Test]
@@ -87,30 +91,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             );
         }
 
-        private static UnityCliLoopEditorSettingsData CloneSettings(UnityCliLoopEditorSettingsData settings)
-        {
-            string json = UnityEngine.JsonUtility.ToJson(settings);
-            return UnityEngine.JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(json);
-        }
-
-        private static UnityCliLoopServerControllerService CreateControllerService()
+        private UnityCliLoopServerControllerService CreateControllerService()
         {
             return CreateControllerService(new TestDomainReloadLifecycle());
         }
 
-        private static UnityCliLoopServerControllerService CreateControllerService(TestDomainReloadLifecycle domainReloadLifecycle)
+        private UnityCliLoopServerControllerService CreateControllerService(TestDomainReloadLifecycle domainReloadLifecycle)
         {
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
-            UnityCliLoopEditorSettingsService editorSettingsService =
-                UnityCliLoopEditorSettingsTestFactory.CreateService();
             ServerReadinessStateStore stateStore = CreateTestStateStore();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(editorSettingsService, stateStore),
-                editorSettingsService,
+                new DomainReloadDetectionFileService(_sessionStateService, stateStore),
+                _sessionStateService,
                 stateStore,
                 new TestReadinessProbe(),
                 domainReloadLifecycle);

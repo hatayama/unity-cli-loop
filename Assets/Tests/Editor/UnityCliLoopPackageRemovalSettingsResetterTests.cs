@@ -100,7 +100,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(resetSettings.showDeveloperTools, Is.EqualTo(settings.showDeveloperTools));
             Assert.That(resetSettings.showToolSettings, Is.EqualTo(settings.showToolSettings));
             Assert.That(resetSettings.installSkillsFlat, Is.EqualTo(settings.installSkillsFlat));
-            Assert.That(resetSettings.isServerRunning, Is.EqualTo(settings.isServerRunning));
         }
 
         [Test]
@@ -121,7 +120,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(updatedSettings.showDeveloperTools, Is.EqualTo(settings.showDeveloperTools));
             Assert.That(updatedSettings.showToolSettings, Is.EqualTo(settings.showToolSettings));
             Assert.That(updatedSettings.installSkillsFlat, Is.EqualTo(settings.installSkillsFlat));
-            Assert.That(updatedSettings.isServerRunning, Is.EqualTo(settings.isServerRunning));
         }
 
         private static UnityCliLoopEditorSettingsData CreateSettingsWithNonWizardPreferences()
@@ -133,13 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 suppressSetupWizardAutoShow = true,
                 showUnityCliLoopSecuritySetting = false,
                 showToolSettings = false,
-                installSkillsFlat = false,
-                isServerRunning = false,
-                isAfterCompile = true,
-                isDomainReloadInProgress = true,
-                isReconnecting = true,
-                showReconnectingUI = true,
-                showPostCompileReconnectingUI = true
+                installSkillsFlat = false
             };
         }
 

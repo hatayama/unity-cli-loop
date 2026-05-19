@@ -7,9 +7,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     internal static class PresentationEditorStartup
     {
-        internal static void Initialize(UnityCliLoopEditorSettingsService editorSettingsService)
+        internal static void Initialize(
+            UnityCliLoopEditorSettingsService editorSettingsService,
+            UnityCliLoopEditorSessionStateService sessionStateService)
         {
-            UnityCliLoopSettingsWindow.InitializeEditorServices(editorSettingsService);
+            UnityCliLoopSettingsWindow.InitializeEditorServices(editorSettingsService, sessionStateService);
             SetupWizardWindow.InitializeForEditorStartup(editorSettingsService);
             ThirdPartyToolMigrationWizardWindow.InitializeForEditorStartup();
         }

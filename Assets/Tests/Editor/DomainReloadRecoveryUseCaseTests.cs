@@ -15,35 +15,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class DomainReloadRecoveryUseCaseTests
     {
-        private bool _originalIsServerRunning;
-        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
         private IDomainReloadDetectionService _domainReloadDetectionService;
         private ServerReadinessStateStore _stateStore;
 
         [SetUp]
         public void SetUp()
         {
-            // Save original session state
-            _editorSettingsService = UnityCliLoopEditorSettingsTestFactory.CreateService();
-            _originalIsServerRunning = _editorSettingsService.GetIsServerRunning();
+            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _sessionStateService.ClearAll();
             _stateStore = CreateTestStateStore();
-            _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService, _stateStore);
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(_sessionStateService, _stateStore);
         }
 
         [TearDown]
         public void TearDown()
         {
-            // Restore original session state
-            _editorSettingsService.UpdateSettings(s => s with
-            {
-                isServerRunning = _originalIsServerRunning,
-                isAfterCompile = false,
-                isDomainReloadInProgress = false,
-                isReconnecting = false,
-                showReconnectingUI = false,
-                showPostCompileReconnectingUI = false
-            });
-
+            _originalSessionState.Restore(_sessionStateService);
             _stateStore.Delete();
         }
 
@@ -51,51 +41,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ExecuteBeforeDomainReload_ShouldUseSessionState_WhenServerInstanceIsNull()
         {
             // Arrange
-            _editorSettingsService.SetIsServerRunning(true);
+            _sessionStateService.SetIsServerRunning(true);
 
             DomainReloadRecoveryUseCase useCase = CreateUseCase(
                 _domainReloadDetectionService,
-                _editorSettingsService);
+                _sessionStateService);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
 
             // Assert
             Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
-            Assert.IsTrue(_editorSettingsService.GetIsAfterCompile(), "IsAfterCompile should be set to true");
+            Assert.IsTrue(_sessionStateService.GetIsAfterCompile(), "IsAfterCompile should be set to true");
         }
 
         [Test]
         public void ExecuteBeforeDomainReload_ShouldNotSaveState_WhenBothInstanceAndSessionAreNotRunning()
         {
             // Arrange
-            _editorSettingsService.SetIsServerRunning(false);
-            _editorSettingsService.UpdateSettings(s => s with { isAfterCompile = false });
+            _sessionStateService.SetIsServerRunning(false);
+            _sessionStateService.SetIsAfterCompile(false);
 
             DomainReloadRecoveryUseCase useCase = CreateUseCase(
                 _domainReloadDetectionService,
-                _editorSettingsService);
+                _sessionStateService);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
 
             // Assert
             Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
-            Assert.IsFalse(_editorSettingsService.GetIsAfterCompile(), "IsAfterCompile should remain false when server was not running");
+            Assert.IsFalse(_sessionStateService.GetIsAfterCompile(), "IsAfterCompile should remain false when server was not running");
         }
 
         [Test]
         public void ExecuteBeforeDomainReload_ShouldPreferInstanceState_WhenInstanceIsRunning()
         {
             // Arrange
-            _editorSettingsService.SetIsServerRunning(true);
+            _sessionStateService.SetIsServerRunning(true);
 
             TestServerInstance server = new TestServerInstance();
             server.StartServer();
 
             DomainReloadRecoveryUseCase useCase = CreateUseCase(
                 _domainReloadDetectionService,
-                _editorSettingsService);
+                _sessionStateService);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(server);
@@ -111,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CompleteDomainReload_WhenServerWasNotRunning_ShouldPublishStoppedState()
         {
             // Verifies that a domain reload with no server to recover does not leave CLI waiters in recovering state.
-            _editorSettingsService.SetIsServerRunning(false);
+            _sessionStateService.SetIsServerRunning(false);
             _domainReloadDetectionService.StartDomainReload("test-correlation", serverIsRunning: false);
 
             _domainReloadDetectionService.CompleteDomainReload("test-correlation");
@@ -124,13 +114,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task RestoreServerStateIfNeededAsync_WhenRecoveryDoesNotStartServer_ShouldFail()
         {
             // Verifies that recovery is only reported as successful after a running server instance exists.
-            _editorSettingsService.SetIsServerRunning(true);
-            _editorSettingsService.UpdateSettings(s => s with { isAfterCompile = false });
+            _sessionStateService.SetIsServerRunning(true);
+            _sessionStateService.SetIsAfterCompile(false);
             TestRecoveryCoordinator recoveryCoordinator = new();
             SessionRecoveryService service = new(
                 recoveryCoordinator,
                 _domainReloadDetectionService,
-                _editorSettingsService);
+                _sessionStateService);
 
             ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
 
@@ -151,18 +141,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static DomainReloadRecoveryUseCase CreateUseCase(
             IDomainReloadDetectionService domainReloadDetectionService,
-            UnityCliLoopEditorSettingsService editorSettingsService)
+            UnityCliLoopEditorSessionStateService sessionStateService)
         {
             TestRecoveryCoordinator recoveryCoordinator = new();
             SessionRecoveryService sessionRecoveryService =
                 new SessionRecoveryService(
                     recoveryCoordinator,
                     domainReloadDetectionService,
-                    editorSettingsService);
+                    sessionStateService);
             return new DomainReloadRecoveryUseCase(
                 sessionRecoveryService,
                 domainReloadDetectionService,
-                editorSettingsService);
+                sessionStateService);
         }
 
         /// <summary>
