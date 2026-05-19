@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const int INSTALL_PROCESS_TIMEOUT_MS = 300000;
         private const int INSTALL_PROCESS_WAIT_SLICE_MS = 250;
-        private const int UNINSTALL_TARGET_REMOVAL_TIMEOUT_MS = 5000;
+        internal const int UNINSTALL_COMPLETION_TIMEOUT_MS = 30000;
         private const string WINDOWS_FILE_PATH_SEPARATOR = "\\";
         private const string POSIX_FILE_PATH_SEPARATOR = "/";
 
@@ -144,7 +144,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Could not resolve the global CLI install directory. Set {CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE} and try again.");
             }
 
-            NativeCliInstallCommand command = BuildUninstallCommand(installDirectory, platform);
+            string packageCliPath = ResolvePackageLocalCliPath(platform, UnityCliLoopConstants.PackageResolvedPath);
+            bool requireUserPathRemoval = !string.IsNullOrEmpty(packageCliPath);
+            NativeCliInstallCommand command = string.IsNullOrEmpty(packageCliPath)
+                ? BuildUninstallCommand(installDirectory, platform)
+                : BuildLauncherUninstallCommand(packageCliPath);
             CliInstallResult result = await Task.Run(
                 () => RunUninstallCommand(command, installDirectory, ct, INSTALL_PROCESS_TIMEOUT_MS),
                 ct);
@@ -154,15 +158,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             string installPath = GetGlobalCliInstallPath(installDirectory, platform);
-            CliInstallResult removalResult = await WaitForUninstallTargetRemovalAsync(
+            CliInstallResult removalResult = await WaitForUninstallCompletionAsync(
                 installPath,
+                installDirectory,
+                platform,
                 ct,
-                UNINSTALL_TARGET_REMOVAL_TIMEOUT_MS,
+                UNINSTALL_COMPLETION_TIMEOUT_MS,
                 INSTALL_PROCESS_WAIT_SLICE_MS,
                 File.Exists,
+                requireUserPathRemoval,
+                Environment.GetEnvironmentVariable,
                 Task.Delay);
+            if (!removalResult.Success)
+            {
+                return removalResult;
+            }
 
-            return removalResult.Success ? result : removalResult;
+            RemoveInstallDirectoryFromCurrentProcessPath(platform);
+            return result;
         }
 
         internal static NativeCliInstallCommand BuildUninstallCommand(
@@ -176,6 +189,32 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 installPath,
                 "uninstall",
                 $"{QuoteProcessArgument(installPath)} uninstall");
+        }
+
+        internal static NativeCliInstallCommand BuildCurrentPackageUninstallCommand(
+            string installDirectory,
+            RuntimePlatform platform,
+            string packageResolvedPath)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+
+            string packageCliPath = ResolvePackageLocalCliPath(platform, packageResolvedPath);
+            if (string.IsNullOrEmpty(packageCliPath))
+            {
+                return BuildUninstallCommand(installDirectory, platform);
+            }
+
+            return BuildLauncherUninstallCommand(packageCliPath);
+        }
+
+        private static NativeCliInstallCommand BuildLauncherUninstallCommand(string launcherPath)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(launcherPath), "launcherPath must not be null or empty");
+
+            return new NativeCliInstallCommand(
+                launcherPath,
+                "uninstall",
+                $"{QuoteProcessArgument(launcherPath)} uninstall");
         }
 
         internal static CliInstallResult RunInstallCommand(
@@ -337,6 +376,59 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new CliInstallResult(true, "");
         }
 
+        internal static async Task<CliInstallResult> WaitForUninstallCompletionAsync(
+            string targetPath,
+            string installDirectory,
+            RuntimePlatform platform,
+            CancellationToken ct,
+            int timeoutMs,
+            int pollMs,
+            Func<string, bool> fileExists,
+            bool requireUserPathRemoval,
+            Func<string, EnvironmentVariableTarget, string> getEnvironmentVariable,
+            Func<int, CancellationToken, Task> delayAsync)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(targetPath), "targetPath must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+            UnityEngine.Debug.Assert(timeoutMs > 0, "timeoutMs must be greater than zero");
+            UnityEngine.Debug.Assert(pollMs > 0, "pollMs must be greater than zero");
+            UnityEngine.Debug.Assert(fileExists != null, "fileExists must not be null");
+            UnityEngine.Debug.Assert(getEnvironmentVariable != null, "getEnvironmentVariable must not be null");
+            UnityEngine.Debug.Assert(delayAsync != null, "delayAsync must not be null");
+
+            int elapsedMs = 0;
+            while (true)
+            {
+                bool targetStillExists = fileExists(targetPath);
+                bool userPathStillContainsInstallDirectory = ShouldWaitForUserPathRemoval(
+                    requireUserPathRemoval,
+                    installDirectory,
+                    platform,
+                    getEnvironmentVariable);
+                if (!targetStillExists && !userPathStillContainsInstallDirectory)
+                {
+                    return new CliInstallResult(true, "");
+                }
+
+                ct.ThrowIfCancellationRequested();
+                if (elapsedMs >= timeoutMs)
+                {
+                    return new CliInstallResult(
+                        false,
+                        BuildUninstallCompletionTimeoutFailure(
+                            targetPath,
+                            installDirectory,
+                            platform,
+                            targetStillExists,
+                            userPathStillContainsInstallDirectory));
+                }
+
+                int delayMs = Math.Min(pollMs, timeoutMs - elapsedMs);
+                await delayAsync(delayMs, ct);
+                elapsedMs += delayMs;
+            }
+        }
+
         internal static string GetGlobalCliInstallPath(string installDirectory, RuntimePlatform platform)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installDirectory), "installDirectory must not be null or empty");
@@ -439,6 +531,50 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return builder.ToString();
         }
 
+        internal static string BuildPathWithoutInstallDirectory(
+            string currentPath,
+            string installDirectory,
+            RuntimePlatform platform)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+
+            string normalizedPath = currentPath ?? "";
+            if (string.IsNullOrEmpty(normalizedPath))
+            {
+                return "";
+            }
+
+            string separator = GetPathSeparator(platform);
+            string[] entries = normalizedPath.Split(
+                new[] { separator },
+                StringSplitOptions.RemoveEmptyEntries);
+            string normalizedInstallDirectory = NormalizePathForComparison(installDirectory, platform);
+            StringComparison comparison = GetPathComparison(platform);
+            StringBuilder builder = new StringBuilder();
+            foreach (string entry in entries)
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                {
+                    continue;
+                }
+
+                string normalizedEntry = NormalizePathForComparison(entry, platform);
+                if (string.Equals(normalizedEntry, normalizedInstallDirectory, comparison))
+                {
+                    continue;
+                }
+
+                if (builder.Length > 0)
+                {
+                    builder.Append(separator);
+                }
+
+                builder.Append(entry);
+            }
+
+            return builder.ToString();
+        }
+
         internal static string GetDefaultInstallDirectoryFromRoots(
             RuntimePlatform platform,
             string homeDirectory,
@@ -480,6 +616,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string pathVariableName = GetPathEnvironmentVariableName(platform);
             string currentPath = Environment.GetEnvironmentVariable(pathVariableName);
             string updatedPath = BuildPathWithInstallDirectory(currentPath, installDirectory, platform);
+            Environment.SetEnvironmentVariable(pathVariableName, updatedPath);
+        }
+
+        private static void RemoveInstallDirectoryFromCurrentProcessPath(RuntimePlatform platform)
+        {
+            string installDirectory = GetInstallDirectoryForCurrentUser(platform);
+            if (string.IsNullOrEmpty(installDirectory))
+            {
+                return;
+            }
+
+            string pathVariableName = GetPathEnvironmentVariableName(platform);
+            string currentPath = Environment.GetEnvironmentVariable(pathVariableName);
+            string updatedPath = BuildPathWithoutInstallDirectory(currentPath, installDirectory, platform);
             Environment.SetEnvironmentVariable(pathVariableName, updatedPath);
         }
 
@@ -587,6 +737,97 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return normalizedPath.TrimEnd('\\', '/').Replace('/', '\\');
+        }
+
+        private static bool DoesUserPathContainInstallDirectory(
+            string installDirectory,
+            RuntimePlatform platform,
+            Func<string, EnvironmentVariableTarget, string> getEnvironmentVariable)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+            UnityEngine.Debug.Assert(getEnvironmentVariable != null, "getEnvironmentVariable must not be null");
+
+            if (platform != RuntimePlatform.WindowsEditor)
+            {
+                return false;
+            }
+
+            string pathVariableName = GetPathEnvironmentVariableName(platform);
+            string currentUserPath = getEnvironmentVariable(pathVariableName, EnvironmentVariableTarget.User);
+            return DoesPathContainInstallDirectory(currentUserPath, installDirectory, platform);
+        }
+
+        private static bool ShouldWaitForUserPathRemoval(
+            bool requireUserPathRemoval,
+            string installDirectory,
+            RuntimePlatform platform,
+            Func<string, EnvironmentVariableTarget, string> getEnvironmentVariable)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+            UnityEngine.Debug.Assert(getEnvironmentVariable != null, "getEnvironmentVariable must not be null");
+
+            return requireUserPathRemoval
+                && DoesUserPathContainInstallDirectory(installDirectory, platform, getEnvironmentVariable);
+        }
+
+        private static bool DoesPathContainInstallDirectory(
+            string currentPath,
+            string installDirectory,
+            RuntimePlatform platform)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+
+            string normalizedPath = currentPath ?? "";
+            if (string.IsNullOrEmpty(normalizedPath))
+            {
+                return false;
+            }
+
+            string separator = GetPathSeparator(platform);
+            string[] entries = normalizedPath.Split(
+                new[] { separator },
+                StringSplitOptions.RemoveEmptyEntries);
+            string normalizedInstallDirectory = NormalizePathForComparison(installDirectory, platform);
+            StringComparison comparison = GetPathComparison(platform);
+            foreach (string entry in entries)
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                {
+                    continue;
+                }
+
+                string normalizedEntry = NormalizePathForComparison(entry, platform);
+                if (string.Equals(normalizedEntry, normalizedInstallDirectory, comparison))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string BuildUninstallCompletionTimeoutFailure(
+            string targetPath,
+            string installDirectory,
+            RuntimePlatform platform,
+            bool targetStillExists,
+            bool userPathStillContainsInstallDirectory)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(targetPath), "targetPath must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+            UnityEngine.Debug.Assert(targetStillExists || userPathStillContainsInstallDirectory, "at least one uninstall cleanup condition must still be pending");
+
+            if (platform != RuntimePlatform.WindowsEditor || !userPathStillContainsInstallDirectory)
+            {
+                return $"Timed out waiting for uLoop CLI uninstall to remove {targetPath}.";
+            }
+
+            if (!targetStillExists)
+            {
+                return $"Timed out waiting for uLoop CLI uninstall to remove {installDirectory} from Windows User PATH.";
+            }
+
+            return $"Timed out waiting for uLoop CLI uninstall to remove {targetPath} and remove {installDirectory} from Windows User PATH.";
         }
 
         private static CliInstallResult BuildUserPathPersistenceFailure(Exception ex)
@@ -772,6 +1013,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return scriptPath;
+        }
+
+        internal static string ResolvePackageLocalCliPath(RuntimePlatform platform, string packageResolvedPath)
+        {
+            if (platform != RuntimePlatform.WindowsEditor || string.IsNullOrWhiteSpace(packageResolvedPath))
+            {
+                return null;
+            }
+
+            string cliPath = Path.Combine(
+                packageResolvedPath,
+                CliConstants.CLI_PACKAGE_DIR_NAME,
+                CliConstants.DIST_DIR_NAME,
+                CliConstants.WINDOWS_AMD64_DIST_DIR_NAME,
+                CliConstants.GLOBAL_WINDOWS_COMMAND_NAME);
+            return File.Exists(cliPath) ? cliPath : null;
         }
 
         private static string QuotePosixShellValue(string value)
