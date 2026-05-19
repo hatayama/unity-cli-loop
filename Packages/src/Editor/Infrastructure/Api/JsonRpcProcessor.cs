@@ -191,9 +191,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))
             {
-                UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
+                LogRpcExceptionIfNeeded(ex);
                 return CreateErrorResponse(request.Id, ex);
             }
+        }
+
+        private static void LogRpcExceptionIfNeeded(Exception ex)
+        {
+            if (ex is UnityCliLoopToolBusyException)
+            {
+                return;
+            }
+
+            UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
         }
 
         private static bool IsCliUpdateRequired(string currentCliVersion)
