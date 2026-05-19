@@ -397,26 +397,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityEngine.Debug.Assert(delayAsync != null, "delayAsync must not be null");
 
             int elapsedMs = 0;
-            while (fileExists(targetPath) || ShouldWaitForUserPathRemoval(
-                requireUserPathRemoval,
-                installDirectory,
-                platform,
-                getEnvironmentVariable))
+            while (true)
             {
+                bool targetStillExists = fileExists(targetPath);
+                bool userPathStillContainsInstallDirectory = ShouldWaitForUserPathRemoval(
+                    requireUserPathRemoval,
+                    installDirectory,
+                    platform,
+                    getEnvironmentVariable);
+                if (!targetStillExists && !userPathStillContainsInstallDirectory)
+                {
+                    return new CliInstallResult(true, "");
+                }
+
                 ct.ThrowIfCancellationRequested();
                 if (elapsedMs >= timeoutMs)
                 {
                     return new CliInstallResult(
                         false,
-                        BuildUninstallCompletionTimeoutFailure(targetPath, installDirectory, platform));
+                        BuildUninstallCompletionTimeoutFailure(
+                            targetPath,
+                            installDirectory,
+                            platform,
+                            targetStillExists,
+                            userPathStillContainsInstallDirectory));
                 }
 
                 int delayMs = Math.Min(pollMs, timeoutMs - elapsedMs);
                 await delayAsync(delayMs, ct);
                 elapsedMs += delayMs;
             }
-
-            return new CliInstallResult(true, "");
         }
 
         internal static string GetGlobalCliInstallPath(string installDirectory, RuntimePlatform platform)
@@ -799,14 +809,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static string BuildUninstallCompletionTimeoutFailure(
             string targetPath,
             string installDirectory,
-            RuntimePlatform platform)
+            RuntimePlatform platform,
+            bool targetStillExists,
+            bool userPathStillContainsInstallDirectory)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(targetPath), "targetPath must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+            UnityEngine.Debug.Assert(targetStillExists || userPathStillContainsInstallDirectory, "at least one uninstall cleanup condition must still be pending");
 
-            if (platform != RuntimePlatform.WindowsEditor)
+            if (platform != RuntimePlatform.WindowsEditor || !userPathStillContainsInstallDirectory)
             {
                 return $"Timed out waiting for uLoop CLI uninstall to remove {targetPath}.";
+            }
+
+            if (!targetStillExists)
+            {
+                return $"Timed out waiting for uLoop CLI uninstall to remove {installDirectory} from Windows User PATH.";
             }
 
             return $"Timed out waiting for uLoop CLI uninstall to remove {targetPath} and remove {installDirectory} from Windows User PATH.";

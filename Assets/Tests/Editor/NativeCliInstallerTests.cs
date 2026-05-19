@@ -371,7 +371,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain("Windows User PATH"));
+            Assert.That(result.ErrorOutput, Does.Not.Contain("\\uloop.exe"));
             Assert.That(delayCount, Is.EqualTo(3));
+        }
+
+        [Test]
+        public async Task WaitForUninstallCompletionAsync_WhenUserPathRemovalIsNotRequiredReportsTargetTimeoutOnly()
+        {
+            // Verifies fallback uninstall failures do not claim ownership of Windows User PATH cleanup.
+            string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
+
+            CliInstallResult result = await NativeCliInstaller.WaitForUninstallCompletionAsync(
+                installDirectory + "\\uloop.exe",
+                installDirectory,
+                RuntimePlatform.WindowsEditor,
+                CancellationToken.None,
+                250,
+                100,
+                executablePath => true,
+                false,
+                (name, target) => installDirectory + ";C:\\npm",
+                (delayMs, ct) => Task.CompletedTask);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorOutput, Does.Contain("\\uloop.exe"));
+            Assert.That(result.ErrorOutput, Does.Not.Contain("Windows User PATH"));
         }
 
         [Test]
