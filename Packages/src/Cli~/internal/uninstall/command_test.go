@@ -52,6 +52,7 @@ func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T)
 		"Get-Process -Id $ParentPid",
 		"$ParentProcess | Wait-Process",
 		"$ParentPid = 5678",
+		`return $Path.Trim().Trim('"').TrimEnd([char[]]@('\','/')).Replace('/','\')`,
 		"[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')",
 	} {
 		if !strings.Contains(deletionScript, expected) {

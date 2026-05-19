@@ -144,10 +144,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Could not resolve the global CLI install directory. Set {CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE} and try again.");
             }
 
-            NativeCliInstallCommand command = BuildCurrentPackageUninstallCommand(
-                installDirectory,
-                platform,
-                UnityCliLoopConstants.PackageResolvedPath);
+            string packageCliPath = ResolvePackageLocalCliPath(platform, UnityCliLoopConstants.PackageResolvedPath);
+            bool requireUserPathRemoval = !string.IsNullOrEmpty(packageCliPath);
+            NativeCliInstallCommand command = string.IsNullOrEmpty(packageCliPath)
+                ? BuildUninstallCommand(installDirectory, platform)
+                : BuildLauncherUninstallCommand(packageCliPath);
             CliInstallResult result = await Task.Run(
                 () => RunUninstallCommand(command, installDirectory, ct, INSTALL_PROCESS_TIMEOUT_MS),
                 ct);
@@ -165,6 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 UNINSTALL_COMPLETION_TIMEOUT_MS,
                 INSTALL_PROCESS_WAIT_SLICE_MS,
                 File.Exists,
+                requireUserPathRemoval,
                 Environment.GetEnvironmentVariable,
                 Task.Delay);
             if (!removalResult.Success)
@@ -202,10 +204,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return BuildUninstallCommand(installDirectory, platform);
             }
 
+            return BuildLauncherUninstallCommand(packageCliPath);
+        }
+
+        private static NativeCliInstallCommand BuildLauncherUninstallCommand(string launcherPath)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(launcherPath), "launcherPath must not be null or empty");
+
             return new NativeCliInstallCommand(
-                packageCliPath,
+                launcherPath,
                 "uninstall",
-                $"{QuoteProcessArgument(packageCliPath)} uninstall");
+                $"{QuoteProcessArgument(launcherPath)} uninstall");
         }
 
         internal static CliInstallResult RunInstallCommand(
@@ -375,6 +384,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             int timeoutMs,
             int pollMs,
             Func<string, bool> fileExists,
+            bool requireUserPathRemoval,
             Func<string, EnvironmentVariableTarget, string> getEnvironmentVariable,
             Func<int, CancellationToken, Task> delayAsync)
         {
@@ -387,7 +397,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityEngine.Debug.Assert(delayAsync != null, "delayAsync must not be null");
 
             int elapsedMs = 0;
-            while (fileExists(targetPath) || DoesUserPathContainInstallDirectory(installDirectory, platform, getEnvironmentVariable))
+            while (fileExists(targetPath) || ShouldWaitForUserPathRemoval(
+                requireUserPathRemoval,
+                installDirectory,
+                platform,
+                getEnvironmentVariable))
             {
                 ct.ThrowIfCancellationRequested();
                 if (elapsedMs >= timeoutMs)
@@ -731,6 +745,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string pathVariableName = GetPathEnvironmentVariableName(platform);
             string currentUserPath = getEnvironmentVariable(pathVariableName, EnvironmentVariableTarget.User);
             return DoesPathContainInstallDirectory(currentUserPath, installDirectory, platform);
+        }
+
+        private static bool ShouldWaitForUserPathRemoval(
+            bool requireUserPathRemoval,
+            string installDirectory,
+            RuntimePlatform platform,
+            Func<string, EnvironmentVariableTarget, string> getEnvironmentVariable)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+            UnityEngine.Debug.Assert(getEnvironmentVariable != null, "getEnvironmentVariable must not be null");
+
+            return requireUserPathRemoval
+                && DoesUserPathContainInstallDirectory(installDirectory, platform, getEnvironmentVariable);
         }
 
         private static bool DoesPathContainInstallDirectory(

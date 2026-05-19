@@ -82,7 +82,7 @@ $NormalizePath = {
     if (-not $Path) {
         return ''
     }
-    return $Path.Trim().TrimEnd([char[]]@('\','/'))
+    return $Path.Trim().Trim('"').TrimEnd([char[]]@('\','/')).Replace('/','\')
 }
 $ParentProcess = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
 if ($ParentProcess) {

@@ -261,7 +261,7 @@ function Invoke-LegacyNpmPackageRemoval {
 
     if ($NpmCommand) {
         $NpmArgs = @("uninstall", "-g", "--prefix", $LegacyPrefix, "uloop-cli")
-        & $NpmCommand.Source @NpmArgs
+        $null = & $NpmCommand.Source @NpmArgs
     }
 
     if ((-not $NpmCommand) -or $LASTEXITCODE -ne 0 -or (Test-LegacyNpmArtifactsExist -LegacyUloopPath $LegacyUloopPath -LegacyPrefix $LegacyPrefix)) {
@@ -283,7 +283,7 @@ function Invoke-DefaultLegacyNpmPackageRemoval {
         return
     }
 
-    & $NpmCommand.Source @("uninstall", "-g", "uloop-cli")
+    $null = & $NpmCommand.Source @("uninstall", "-g", "uloop-cli")
 }
 
 function Get-LegacyNpmUloopPathsFromPath {
@@ -387,6 +387,49 @@ function Set-UserPathWithInstallDirectoryFirst {
     $env:Path = [string]::Join(";", @($Directory) + $CurrentPathEntries)
 }
 
+function Get-FirstUloopCommandFromPath {
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$PathValue
+    )
+
+    if (-not $PathValue) {
+        return $null
+    }
+
+    foreach ($PathEntry in ($PathValue -split ";")) {
+        if (-not $PathEntry) {
+            continue
+        }
+
+        foreach ($ShimName in @("uloop.exe", "uloop.cmd", "uloop.ps1", "uloop")) {
+            $CandidatePath = Join-Path $PathEntry $ShimName
+            if (Test-Path $CandidatePath -PathType Leaf) {
+                return $CandidatePath
+            }
+        }
+    }
+
+    return $null
+}
+
+function Test-PersistedUloopCommandResolvesToExpectedPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedUloopPath
+    )
+
+    $MachinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $ResolvedPath = Get-FirstUloopCommandFromPath -PathValue ([string]::Join(";", @($MachinePath, $UserPath)))
+    if (-not $ResolvedPath) {
+        return $false
+    }
+
+    return [string]::Equals($ResolvedPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Assert-UloopVersionSucceeds {
     param(
         [Parameter(Mandatory = $true)]
@@ -481,7 +524,8 @@ try {
     Set-UserPathWithInstallDirectoryFirst -Directory $InstallDir
 
     Assert-UloopVersionSucceeds -UloopPath $FinalUloopPath
-    if (-not (Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $FinalUloopPath)) {
+    $LegacyCleanupSucceeded = Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $FinalUloopPath
+    if ((-not $LegacyCleanupSucceeded) -and (-not (Test-PersistedUloopCommandResolvesToExpectedPath -ExpectedUloopPath $FinalUloopPath))) {
         throw "Failed to remove the legacy npm uloop-cli package."
     }
 
