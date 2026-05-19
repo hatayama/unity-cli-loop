@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security;
 
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -10,6 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal interface IUnityCliLoopEditorLegacySessionStateReader
     {
         UnityCliLoopEditorLegacySessionState Read();
+        void Clear();
     }
 
     internal readonly struct UnityCliLoopEditorLegacySessionState
@@ -44,6 +46,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal sealed class UnityCliLoopEditorLegacySessionStateReader : IUnityCliLoopEditorLegacySessionStateReader
     {
+        private static readonly string[] LegacySessionStateKeys =
+        {
+            "isServerRunning",
+            "isAfterCompile",
+            "isDomainReloadInProgress",
+            "isReconnecting",
+            "showReconnectingUI",
+            "showPostCompileReconnectingUI"
+        };
+
         private string SettingsFilePath => Path.Combine(
             UnityCliLoopConstants.USER_SETTINGS_FOLDER,
             UnityCliLoopConstants.SETTINGS_FILE_NAME);
@@ -80,6 +92,44 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ReadBool(settingsObject, "isReconnecting"),
                 ReadBool(settingsObject, "showReconnectingUI"),
                 ReadBool(settingsObject, "showPostCompileReconnectingUI"));
+        }
+
+        public void Clear()
+        {
+            if (!File.Exists(SettingsFilePath))
+            {
+                return;
+            }
+
+            FileInfo fileInfo = new(SettingsFilePath);
+            if (fileInfo.Length > UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES)
+            {
+                throw new SecurityException("Settings file exceeds size limit");
+            }
+
+            JToken settingsToken;
+            using (StreamReader reader = File.OpenText(SettingsFilePath))
+            {
+                settingsToken = JToken.ReadFrom(new JsonTextReader(reader));
+            }
+
+            if (settingsToken is not JObject settingsObject)
+            {
+                return;
+            }
+
+            bool removed = false;
+            foreach (string legacyKey in LegacySessionStateKeys)
+            {
+                removed |= settingsObject.Remove(legacyKey);
+            }
+
+            if (!removed)
+            {
+                return;
+            }
+
+            AtomicFileWriter.Write(SettingsFilePath, settingsToken.ToString(Formatting.Indented));
         }
 
         private static bool ReadBool(JObject settingsObject, string propertyName)

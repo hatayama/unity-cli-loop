@@ -208,6 +208,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 _sessionStateService.SetShowPostCompileReconnectingUI(true);
             }
+
+            _legacySessionStateReader.Clear();
         }
     }
 }

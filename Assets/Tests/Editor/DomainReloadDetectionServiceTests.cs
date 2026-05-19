@@ -1,8 +1,11 @@
+using System.IO;
+
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -11,14 +14,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class DomainReloadDetectionServiceTests
     {
+        private static readonly string SettingsFilePath =
+            Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
+
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
         private IDomainReloadDetectionService _domainReloadDetectionService;
         private ServerReadinessStateStore _stateStore;
+        private bool _settingsFileExisted;
+        private string _settingsFileContent;
 
         [SetUp]
         public void SetUp()
         {
+            _settingsFileExisted = File.Exists(SettingsFilePath);
+            _settingsFileContent = _settingsFileExisted ? File.ReadAllText(SettingsFilePath) : null;
+            if (!Directory.Exists(UnityCliLoopConstants.USER_SETTINGS_FOLDER))
+            {
+                Directory.CreateDirectory(UnityCliLoopConstants.USER_SETTINGS_FOLDER);
+            }
+
+            DeleteIfExists(SettingsFilePath);
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
             _sessionStateService.ClearAll();
@@ -33,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _originalSessionState.Restore(_sessionStateService);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
             _stateStore.Delete();
+            RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
         }
 
         [Test]
@@ -117,6 +134,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(state.Phase, Is.EqualTo("stopped"));
         }
 
+        [Test]
+        public void CompleteDomainReload_WhenLegacyReloadStateWasMigrated_DoesNotReapplyLegacyJson()
+        {
+            // Verifies that legacy JSON recovery state is consumed after the first migration reload.
+            File.WriteAllText(
+                SettingsFilePath,
+                "{" +
+                "\"isServerRunning\":true," +
+                "\"isAfterCompile\":true," +
+                "\"isDomainReloadInProgress\":true," +
+                "\"isReconnecting\":true," +
+                "\"showReconnectingUI\":true," +
+                "\"showPostCompileReconnectingUI\":true" +
+                "}");
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(
+                _sessionStateService,
+                _stateStore,
+                new UnityCliLoopEditorLegacySessionStateReader());
+
+            _domainReloadDetectionService.CompleteDomainReload("first-correlation");
+            _sessionStateService.ClearAll();
+
+            _domainReloadDetectionService.CompleteDomainReload("second-correlation");
+
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.False);
+            Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
+            ServerReadinessState state = _stateStore.Read();
+            Assert.That(state.Phase, Is.EqualTo("stopped"));
+        }
+
         private static ServerReadinessStateStore CreateTestStateStore()
         {
             string projectRoot = System.IO.Path.Combine(
@@ -124,6 +172,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "unity-cli-loop-tests",
                 System.Guid.NewGuid().ToString("N"));
             return new ServerReadinessStateStore(projectRoot);
+        }
+
+        private static void RestoreFile(string path, bool existed, string content)
+        {
+            if (existed)
+            {
+                File.WriteAllText(path, content);
+                return;
+            }
+
+            DeleteIfExists(path);
+        }
+
+        private static void DeleteIfExists(string path)
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
 
         private sealed class TestLegacySessionStateReader : IUnityCliLoopEditorLegacySessionStateReader
@@ -138,6 +205,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public UnityCliLoopEditorLegacySessionState Read()
             {
                 return _legacySessionState;
+            }
+
+            public void Clear()
+            {
             }
         }
     }

@@ -65,8 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             RegisteredEditorSettingsService = editorSettingsService
                 ?? throw new ArgumentNullException(nameof(editorSettingsService));
-            RegisteredSessionStateService = sessionStateService
-                ?? throw new ArgumentNullException(nameof(sessionStateService));
+            RegisteredSessionStateService = sessionStateService;
         }
 
         private void OnEnable()
