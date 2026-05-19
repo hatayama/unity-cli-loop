@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const int INSTALL_PROCESS_TIMEOUT_MS = 300000;
         private const int INSTALL_PROCESS_WAIT_SLICE_MS = 250;
-        private const int UNINSTALL_TARGET_REMOVAL_TIMEOUT_MS = 5000;
+        internal const int UNINSTALL_COMPLETION_TIMEOUT_MS = 30000;
         private const string WINDOWS_FILE_PATH_SEPARATOR = "\\";
         private const string POSIX_FILE_PATH_SEPARATOR = "/";
 
@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 installDirectory,
                 platform,
                 ct,
-                UNINSTALL_TARGET_REMOVAL_TIMEOUT_MS,
+                UNINSTALL_COMPLETION_TIMEOUT_MS,
                 INSTALL_PROCESS_WAIT_SLICE_MS,
                 File.Exists,
                 Environment.GetEnvironmentVariable,

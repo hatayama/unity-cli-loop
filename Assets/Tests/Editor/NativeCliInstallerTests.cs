@@ -373,6 +373,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void UninstallCompletionTimeout_IsLongEnoughForDeferredWindowsPowerShellCleanup()
+        {
+            // Verifies Settings uninstall does not report failure before Windows deferred cleanup can finish.
+            Assert.That(NativeCliInstaller.UNINSTALL_COMPLETION_TIMEOUT_MS, Is.GreaterThanOrEqualTo(30000));
+        }
+
+        [Test]
         public void BuildUninstallCommand_OnMacRunsInstalledLauncher()
         {
             // Verifies that editor uninstall delegates removal to the installed uloop command.
