@@ -16,19 +16,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void SetShowUnityCliLoopSecuritySetting(bool showUnityCliLoopSecuritySetting);
         void SetShowToolSettings(bool showToolSettings);
         void SetInstallSkillsFlat(bool installSkillsFlat);
-        bool GetIsServerRunning();
-        void SetIsServerRunning(bool isServerRunning);
-        bool GetIsAfterCompile();
-        bool GetIsDomainReloadInProgress();
-        void SetIsDomainReloadInProgress(bool isDomainReloadInProgress);
-        void SetIsReconnecting(bool isReconnecting);
-        bool GetShowReconnectingUI();
-        void SetShowReconnectingUI(bool showReconnectingUI);
-        void ClearServerSession();
-        void ClearAfterCompileFlag();
-        void ClearReconnectingFlags();
-        void ClearPostCompileReconnectingUI();
-        void ClearDomainReloadFlag();
     }
 
     /// <summary>
@@ -98,71 +85,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public void SetInstallSkillsFlat(bool installSkillsFlat)
         {
             _settingsPort.SetInstallSkillsFlat(installSkillsFlat);
-        }
-
-        public bool GetIsServerRunning()
-        {
-            return _settingsPort.GetIsServerRunning();
-        }
-
-        public void SetIsServerRunning(bool isServerRunning)
-        {
-            _settingsPort.SetIsServerRunning(isServerRunning);
-        }
-
-        public bool GetIsAfterCompile()
-        {
-            return _settingsPort.GetIsAfterCompile();
-        }
-
-        public bool GetIsDomainReloadInProgress()
-        {
-            return _settingsPort.GetIsDomainReloadInProgress();
-        }
-
-        public void SetIsDomainReloadInProgress(bool isDomainReloadInProgress)
-        {
-            _settingsPort.SetIsDomainReloadInProgress(isDomainReloadInProgress);
-        }
-
-        public void SetIsReconnecting(bool isReconnecting)
-        {
-            _settingsPort.SetIsReconnecting(isReconnecting);
-        }
-
-        public bool GetShowReconnectingUI()
-        {
-            return _settingsPort.GetShowReconnectingUI();
-        }
-
-        public void SetShowReconnectingUI(bool showReconnectingUI)
-        {
-            _settingsPort.SetShowReconnectingUI(showReconnectingUI);
-        }
-
-        public void ClearServerSession()
-        {
-            _settingsPort.ClearServerSession();
-        }
-
-        public void ClearAfterCompileFlag()
-        {
-            _settingsPort.ClearAfterCompileFlag();
-        }
-
-        public void ClearReconnectingFlags()
-        {
-            _settingsPort.ClearReconnectingFlags();
-        }
-
-        public void ClearPostCompileReconnectingUI()
-        {
-            _settingsPort.ClearPostCompileReconnectingUI();
-        }
-
-        public void ClearDomainReloadFlag()
-        {
-            _settingsPort.ClearDomainReloadFlag();
         }
     }
 }

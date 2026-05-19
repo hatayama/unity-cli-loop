@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const int ToolSettingsRegistryWarmupMaxAttempts = 5;
 
         private static UnityCliLoopEditorSettingsService RegisteredEditorSettingsService;
+        private static UnityCliLoopEditorSessionStateService RegisteredSessionStateService;
 
         private UnityCliLoopSettingsWindowUI _view;
         private UnityCliLoopSettingsModel _model;
@@ -31,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private SkillSetupUseCase _skillSetupUseCase;
         private ToolSettingsUseCase _toolSettingsUseCase;
         private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private UnityCliLoopEditorSessionStateService _sessionStateService;
 
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private bool _installSkillsFlat;
@@ -54,12 +56,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             window.Show();
         }
 
-        internal static void InitializeEditorServices(UnityCliLoopEditorSettingsService editorSettingsService)
+        internal static void InitializeEditorServices(
+            UnityCliLoopEditorSettingsService editorSettingsService,
+            UnityCliLoopEditorSessionStateService sessionStateService)
         {
             System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
             RegisteredEditorSettingsService = editorSettingsService
                 ?? throw new ArgumentNullException(nameof(editorSettingsService));
+            RegisteredSessionStateService = sessionStateService
+                ?? throw new ArgumentNullException(nameof(sessionStateService));
         }
 
         private void OnEnable()
@@ -106,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
             _toolSettingsUseCase = ToolSettingsUseCaseRegistry.GetRegisteredUseCase();
             _editorSettingsService = GetEditorSettingsService();
+            _sessionStateService = GetSessionStateService();
         }
 
         private void InitializeView()
@@ -156,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private async void HandlePostCompileMode()
         {
             _model.EnablePostCompileMode();
-            _editorSettingsService.SetShowReconnectingUI(false);
+            _sessionStateService.SetShowReconnectingUI(false);
 
             Task recoveryTask = UnityCliLoopServerApplicationFacade.RecoveryTask;
             if (recoveryTask != null && !recoveryTask.IsCompleted)
@@ -164,11 +172,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 await recoveryTask;
             }
 
-            bool isAfterCompile = _editorSettingsService.GetIsAfterCompile();
+            bool isAfterCompile = _sessionStateService.GetIsAfterCompile();
 
             if (isAfterCompile)
             {
-                _editorSettingsService.ClearAfterCompileFlag();
+                _sessionStateService.ClearAfterCompileFlag();
                 return;
             }
 
@@ -864,6 +872,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return RegisteredEditorSettingsService;
+        }
+
+        private static UnityCliLoopEditorSessionStateService GetSessionStateService()
+        {
+            if (RegisteredSessionStateService == null)
+            {
+                throw new InvalidOperationException("Unity CLI Loop editor session state service is not registered.");
+            }
+
+            return RegisteredSessionStateService;
         }
 
         private void HandleRefreshSkillsState()
