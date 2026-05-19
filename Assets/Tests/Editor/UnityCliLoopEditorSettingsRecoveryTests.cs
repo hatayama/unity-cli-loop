@@ -34,6 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _tempFileContent;
         private UnityCliLoopEditorSettingsService _editorSettingsService;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
+        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
         public void SetUp()
@@ -62,6 +64,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _editorSettingsService =
                 UnityCliLoopEditorSettingsTestFactory.CreateServiceWithRepository(out _editorSettingsRepository);
             _editorSettingsRepository.InvalidateCache();
+            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _sessionStateService.ClearAll();
         }
 
         [TearDown]
@@ -71,6 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RestoreFile(LegacySettingsFilePath, _legacySettingsFileExisted, _legacySettingsFileContent);
             RestoreFile(BackupFilePath, _backupFileExisted, _backupFileContent);
             RestoreFile(TempFilePath, _tempFileExisted, _tempFileContent);
+            _originalSessionState.Restore(_sessionStateService);
             _editorSettingsRepository.InvalidateCache();
         }
 
@@ -237,6 +243,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "\"serverTransportKind\":\"tcp\"," +
                 "\"projectRootPath\":\"/stale/project\"," +
                 "\"serverSessionId\":\"stale-session\"," +
+                "\"isServerRunning\":true," +
+                "\"isAfterCompile\":true," +
+                "\"isDomainReloadInProgress\":true," +
+                "\"isReconnecting\":true," +
+                "\"showReconnectingUI\":true," +
+                "\"showPostCompileReconnectingUI\":true," +
                 "\"connectedLLMTools\":[{\"Name\":\"codex\",\"Endpoint\":\"/tmp/uloop/test.sock#1\",\"Port\":18449}]" +
                 "}");
 
@@ -248,6 +260,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             StringAssert.DoesNotContain("serverTransportKind", recoveredJson);
             StringAssert.DoesNotContain("projectRootPath", recoveredJson);
             StringAssert.DoesNotContain("serverSessionId", recoveredJson);
+            StringAssert.DoesNotContain("isServerRunning", recoveredJson);
+            StringAssert.DoesNotContain("isAfterCompile", recoveredJson);
+            StringAssert.DoesNotContain("isDomainReloadInProgress", recoveredJson);
+            StringAssert.DoesNotContain("isReconnecting", recoveredJson);
+            StringAssert.DoesNotContain("showReconnectingUI", recoveredJson);
+            StringAssert.DoesNotContain("showPostCompileReconnectingUI", recoveredJson);
             StringAssert.DoesNotContain("connectedLLMTools", recoveredJson);
             StringAssert.DoesNotContain("\"Port\"", recoveredJson);
         }
@@ -274,16 +292,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void UpdateSessionState_WhenStartingServer_ShouldNotPersistRuntimeIdentity()
         {
+            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData { showDeveloperTools = true });
             UnityCliLoopServerStartupService service =
                 new UnityCliLoopServerStartupService(
                     new TestServerInstanceFactory(),
-                    _editorSettingsService);
+                    _sessionStateService);
 
             ServiceResult<bool> result = service.UpdateSessionState(true);
 
             Assert.IsTrue(result.Success, "Session update should succeed");
-            Assert.IsTrue(_editorSettingsService.GetIsServerRunning(), "Server running state should be persisted");
+            Assert.IsTrue(_sessionStateService.GetIsServerRunning(), "Server running state should be kept for this Editor session");
             string savedJson = File.ReadAllText(SettingsFilePath);
+            StringAssert.DoesNotContain("isServerRunning", savedJson);
             StringAssert.DoesNotContain("projectRootPath", savedJson);
             StringAssert.DoesNotContain("serverSessionId", savedJson);
         }

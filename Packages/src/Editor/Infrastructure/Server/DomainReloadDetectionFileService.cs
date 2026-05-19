@@ -8,26 +8,30 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Infrastructure implementation that persists Domain Reload readiness state through server state and editor settings.
+    /// Infrastructure implementation that persists Domain Reload readiness state through server state and Editor SessionState.
     /// </summary>
     public sealed class DomainReloadDetectionFileService : IDomainReloadDetectionService
     {
-        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
+        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
         private readonly ServerReadinessStateStore _stateStore;
+        private readonly IUnityCliLoopEditorLegacySessionStateReader _legacySessionStateReader;
 
         public DomainReloadDetectionFileService()
-            : this(new UnityCliLoopEditorSettingsService(new UnityCliLoopEditorSettingsRepository()))
+            : this(new UnityCliLoopEditorSessionStateService(new UnityCliLoopEditorSessionStateRepository()))
         {
         }
 
         internal DomainReloadDetectionFileService(
-            UnityCliLoopEditorSettingsService editorSettingsService,
-            ServerReadinessStateStore stateStore = null)
+            UnityCliLoopEditorSessionStateService sessionStateService,
+            ServerReadinessStateStore stateStore = null,
+            IUnityCliLoopEditorLegacySessionStateReader legacySessionStateReader = null)
         {
-            UnityEngine.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            UnityEngine.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
-            _editorSettingsService = editorSettingsService ?? throw new ArgumentNullException(nameof(editorSettingsService));
+            _sessionStateService = sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
             _stateStore = stateStore ?? new ServerReadinessStateStore(UnityCliLoopPathResolver.GetProjectRoot());
+            _legacySessionStateReader =
+                legacySessionStateReader ?? new UnityCliLoopEditorLegacySessionStateReader();
         }
 
         private static bool IsBackgroundUnityProcess()
@@ -83,28 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 null,
                 null);
 
-            // Save session state if server is running
-            if (serverIsRunning)
-            {
-                _editorSettingsService.UpdateSettings(s =>
-                {
-                    UnityCliLoopEditorSettingsData updatedSettings = s with
-                    {
-                        isDomainReloadInProgress = true,
-                        isServerRunning = true,
-                        isAfterCompile = true,
-                        isReconnecting = true,
-                        showReconnectingUI = true,
-                        showPostCompileReconnectingUI = true
-                    };
-
-                    return updatedSettings;
-                });
-            }
-            else
-            {
-                _editorSettingsService.SetIsDomainReloadInProgress(true);
-            }
+            _sessionStateService.MarkDomainReloadStarted(serverIsRunning);
 
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(true);
 
@@ -132,7 +115,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            bool serverWillRecover = _editorSettingsService.GetIsServerRunning();
+            MigrateLegacySessionStateIfNeeded();
+            bool serverWillRecover = _sessionStateService.GetIsServerRunning();
 
             _stateStore.Write(
                 serverWillRecover ? ServerReadinessPhase.Recovering : ServerReadinessPhase.Stopped,
@@ -142,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 null);
 
             // Clear Domain Reload completion flag
-            _editorSettingsService.ClearDomainReloadFlag();
+            _sessionStateService.ClearDomainReloadFlag();
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
 
             // Log recording
@@ -162,14 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            _editorSettingsService.UpdateSettings(s => s with
-            {
-                isDomainReloadInProgress = false,
-                isAfterCompile = false,
-                isReconnecting = false,
-                showReconnectingUI = false,
-                showPostCompileReconnectingUI = false
-            });
+            _sessionStateService.ClearDomainReloadRecoveryFlags();
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
             _stateStore.Write(
                 ServerReadinessPhase.Failed,
@@ -191,7 +168,48 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <returns>True if reconnection UI display is required</returns>
         public bool ShouldShowReconnectingUI()
         {
-            return _editorSettingsService.GetShowReconnectingUI();
+            return _sessionStateService.GetShowReconnectingUI();
+        }
+
+        private void MigrateLegacySessionStateIfNeeded()
+        {
+            UnityCliLoopEditorLegacySessionState legacySessionState = _legacySessionStateReader.Read();
+            if (!legacySessionState.HasDomainReloadRecoveryState)
+            {
+                return;
+            }
+
+            if (legacySessionState.IsServerRunning)
+            {
+                _sessionStateService.SetIsServerRunning(true);
+            }
+
+            if (legacySessionState.IsAfterCompile)
+            {
+                _sessionStateService.SetIsAfterCompile(true);
+            }
+
+            if (legacySessionState.IsDomainReloadInProgress)
+            {
+                _sessionStateService.SetIsDomainReloadInProgress(true);
+            }
+
+            if (legacySessionState.IsReconnecting)
+            {
+                _sessionStateService.SetIsReconnecting(true);
+            }
+
+            if (legacySessionState.ShowReconnectingUI)
+            {
+                _sessionStateService.SetShowReconnectingUI(true);
+            }
+
+            if (legacySessionState.ShowPostCompileReconnectingUI)
+            {
+                _sessionStateService.SetShowPostCompileReconnectingUI(true);
+            }
+
+            _legacySessionStateReader.Clear();
         }
     }
 }

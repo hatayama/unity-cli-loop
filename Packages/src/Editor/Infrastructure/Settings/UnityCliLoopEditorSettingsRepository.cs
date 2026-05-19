@@ -28,7 +28,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             "serverTransportKind",
             "projectRootPath",
             "serverSessionId",
-            "connectedLLMTools"
+            "connectedLLMTools",
+            "isServerRunning",
+            "isAfterCompile",
+            "isDomainReloadInProgress",
+            "isReconnecting",
+            "showReconnectingUI",
+            "showPostCompileReconnectingUI"
         };
 
         private UnityCliLoopEditorSettingsData _cachedSettings;
@@ -152,125 +158,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopEditorSettingsData settings = GetSettings();
             UnityCliLoopEditorSettingsData newSettings = settings with { installSkillsFlat = installSkillsFlat };
             SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Gets the server running state.
-        /// </summary>
-        public bool GetIsServerRunning()
-        {
-            return GetSettings().isServerRunning;
-        }
-
-        /// <summary>
-        /// Sets the server running state.
-        /// </summary>
-        public void SetIsServerRunning(bool isServerRunning)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { isServerRunning = isServerRunning };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Gets the after compile flag.
-        /// </summary>
-        public bool GetIsAfterCompile()
-        {
-            return GetSettings().isAfterCompile;
-        }
-
-        /// <summary>
-        /// Gets the domain reload in progress flag.
-        /// </summary>
-        public bool GetIsDomainReloadInProgress()
-        {
-            return GetSettings().isDomainReloadInProgress;
-        }
-
-        /// <summary>
-        /// Sets the domain reload in progress flag.
-        /// </summary>
-        public void SetIsDomainReloadInProgress(bool isDomainReloadInProgress)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { isDomainReloadInProgress = isDomainReloadInProgress };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Sets the reconnecting flag.
-        /// </summary>
-        public void SetIsReconnecting(bool isReconnecting)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { isReconnecting = isReconnecting };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Gets the show reconnecting UI flag.
-        /// </summary>
-        public bool GetShowReconnectingUI()
-        {
-            return GetSettings().showReconnectingUI;
-        }
-
-        /// <summary>
-        /// Sets the show reconnecting UI flag.
-        /// </summary>
-        public void SetShowReconnectingUI(bool showReconnectingUI)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { showReconnectingUI = showReconnectingUI };
-            SaveSettings(newSettings);
-        }
-
-        /// <summary>
-        /// Clear server session.
-        /// </summary>
-        public void ClearServerSession()
-        {
-            UpdateSettings(settings => settings with
-            {
-                isServerRunning = false
-            });
-        }
-
-        /// <summary>
-        /// Clear after compile flag.
-        /// </summary>
-        public void ClearAfterCompileFlag()
-        {
-            UpdateSettings(s => s with { isAfterCompile = false });
-        }
-
-        /// <summary>
-        /// Clear reconnecting flags.
-        /// </summary>
-        public void ClearReconnectingFlags()
-        {
-            UpdateSettings(s => s with
-            {
-                isReconnecting = false,
-                showReconnectingUI = false
-            });
-        }
-
-        /// <summary>
-        /// Clear post compile reconnecting UI.
-        /// </summary>
-        public void ClearPostCompileReconnectingUI()
-        {
-            UpdateSettings(s => s with { showPostCompileReconnectingUI = false });
-        }
-
-        /// <summary>
-        /// Clear domain reload flag.
-        /// </summary>
-        public void ClearDomainReloadFlag()
-        {
-            SetIsDomainReloadInProgress(false);
         }
 
         /// <summary>

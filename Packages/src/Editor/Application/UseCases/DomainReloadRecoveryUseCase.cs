@@ -15,23 +15,23 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private readonly SessionRecoveryService _sessionRecoveryService;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
-        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
+        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
 
         public DomainReloadRecoveryUseCase(
             SessionRecoveryService sessionRecoveryService,
             IDomainReloadDetectionService domainReloadDetectionService,
-            UnityCliLoopEditorSettingsService editorSettingsService)
+            UnityCliLoopEditorSessionStateService sessionStateService)
         {
             System.Diagnostics.Debug.Assert(sessionRecoveryService != null, "sessionRecoveryService must not be null");
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
-            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
             _sessionRecoveryService = sessionRecoveryService
                 ?? throw new System.ArgumentNullException(nameof(sessionRecoveryService));
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new System.ArgumentNullException(nameof(domainReloadDetectionService));
-            _editorSettingsService = editorSettingsService
-                ?? throw new System.ArgumentNullException(nameof(editorSettingsService));
+            _sessionStateService = sessionStateService
+                ?? throw new System.ArgumentNullException(nameof(sessionStateService));
         }
 
         /// <summary>
@@ -49,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             // 3. Fallback to session state if instance is null but session says server was running
             // Handles case where bridge server instance became null unexpectedly
-            if (currentServer == null && _editorSettingsService.GetIsServerRunning())
+            if (currentServer == null && _sessionStateService.GetIsServerRunning())
             {
                 serverRunning = true;
                 VibeLogger.LogWarning(

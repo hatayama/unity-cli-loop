@@ -16,13 +16,15 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             ToolSettingsService toolSettingsService = new(toolSettingsRepository);
             UnityCliLoopEditorSettingsRepository editorSettingsRepository = new();
             UnityCliLoopEditorSettingsService editorSettingsService = new(editorSettingsRepository);
+            UnityCliLoopEditorSessionStateRepository sessionStateRepository = new();
+            UnityCliLoopEditorSessionStateService sessionStateService = new(sessionStateRepository);
             ServerReadinessStateStore serverReadinessStateStore = new(UnityCliLoopPathResolver.GetProjectRoot());
             UnityCliLoopFirstPartyServerLifecycleBinding firstPartyServerLifecycle = new(new ProjectIpcWarmupClient());
             ULoopSettingsRepository uLoopSettingsRepository = new(
                 toolSettingsService,
                 editorSettingsService);
             DomainReloadDetectionFileService domainReloadDetectionService = new(
-                editorSettingsService,
+                sessionStateService,
                 serverReadinessStateStore);
             ULoopSettings.RegisterService(uLoopSettingsRepository);
             MainThreadSwitcher.RegisterService(new EditorMainThreadDispatcher());
@@ -42,16 +44,14 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             CliSetupApplicationFacade.RegisterService(new CliSetupApplicationService(
                 new CliInstallationDetector(),
                 new NativeCliInstallerService()));
-            UnityCliLoopBridgeServerInstanceFactory serverFactory = new(
-                domainReloadDetectionService,
-                editorSettingsService);
+            UnityCliLoopBridgeServerInstanceFactory serverFactory = new(domainReloadDetectionService);
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry = new();
             lifecycleRegistry.RegisterSource(serverFactory);
             UnityCliLoopServerControllerService controllerService = new(
                 serverFactory,
                 lifecycleRegistry,
                 domainReloadDetectionService,
-                editorSettingsService,
+                sessionStateService,
                 serverReadinessStateStore,
                 firstPartyServerLifecycle,
                 firstPartyServerLifecycle);
@@ -61,7 +61,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 
             return new UnityCliLoopApplicationServices(
                 domainReloadDetectionService,
-                editorSettingsService);
+                editorSettingsService,
+                sessionStateService);
         }
     }
 
@@ -69,13 +70,16 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
     {
         internal UnityCliLoopApplicationServices(
             IDomainReloadDetectionService domainReloadDetectionService,
-            UnityCliLoopEditorSettingsService editorSettingsService)
+            UnityCliLoopEditorSettingsService editorSettingsService,
+            UnityCliLoopEditorSessionStateService sessionStateService)
         {
             DomainReloadDetectionService = domainReloadDetectionService;
             EditorSettingsService = editorSettingsService;
+            SessionStateService = sessionStateService;
         }
 
         internal IDomainReloadDetectionService DomainReloadDetectionService { get; }
         internal UnityCliLoopEditorSettingsService EditorSettingsService { get; }
+        internal UnityCliLoopEditorSessionStateService SessionStateService { get; }
     }
 }

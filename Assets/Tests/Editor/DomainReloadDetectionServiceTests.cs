@@ -1,8 +1,11 @@
+using System.IO;
+
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -11,27 +14,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class DomainReloadDetectionServiceTests
     {
-        private UnityCliLoopEditorSettingsData _originalSettings;
-        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private static readonly string SettingsFilePath =
+            Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
+
+        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
         private IDomainReloadDetectionService _domainReloadDetectionService;
         private ServerReadinessStateStore _stateStore;
+        private bool _settingsFileExisted;
+        private string _settingsFileContent;
 
         [SetUp]
         public void SetUp()
         {
-            _editorSettingsService = UnityCliLoopEditorSettingsTestFactory.CreateService();
-            _originalSettings = CloneSettings(_editorSettingsService.GetSettings());
+            _settingsFileExisted = File.Exists(SettingsFilePath);
+            _settingsFileContent = _settingsFileExisted ? File.ReadAllText(SettingsFilePath) : null;
+            if (!Directory.Exists(UnityCliLoopConstants.USER_SETTINGS_FOLDER))
+            {
+                Directory.CreateDirectory(UnityCliLoopConstants.USER_SETTINGS_FOLDER);
+            }
+
+            DeleteIfExists(SettingsFilePath);
+            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _sessionStateService.ClearAll();
             _stateStore = CreateTestStateStore();
-            _domainReloadDetectionService = new DomainReloadDetectionFileService(_editorSettingsService, _stateStore);
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(_sessionStateService, _stateStore);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
         }
 
         [TearDown]
         public void TearDown()
         {
-            _editorSettingsService.SaveSettings(_originalSettings);
+            _originalSessionState.Restore(_sessionStateService);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
             _stateStore.Delete();
+            RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
         }
 
         [Test]
@@ -43,34 +61,108 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             _domainReloadDetectionService.StartDomainReload(correlationId, true);
 
-            UnityCliLoopEditorSettingsData startedSettings = _editorSettingsService.GetSettings();
-            Assert.That(startedSettings.isServerRunning, Is.True);
-            Assert.That(startedSettings.isAfterCompile, Is.True);
-            Assert.That(startedSettings.isDomainReloadInProgress, Is.True);
-            Assert.That(startedSettings.isReconnecting, Is.True);
-            Assert.That(startedSettings.showReconnectingUI, Is.True);
-            Assert.That(startedSettings.showPostCompileReconnectingUI, Is.True);
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.True);
+            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.True);
+            Assert.That(_sessionStateService.GetIsDomainReloadInProgress(), Is.True);
+            Assert.That(_sessionStateService.GetIsReconnecting(), Is.True);
+            Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.True);
+            Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.True);
             Assert.That(provider.IsDomainReloadInProgress(), Is.True);
 
             _domainReloadDetectionService.RollbackDomainReloadStart(correlationId);
 
-            UnityCliLoopEditorSettingsData rolledBackSettings = _editorSettingsService.GetSettings();
-            Assert.That(rolledBackSettings.isServerRunning, Is.True);
-            Assert.That(rolledBackSettings.isAfterCompile, Is.False);
-            Assert.That(rolledBackSettings.isDomainReloadInProgress, Is.False);
-            Assert.That(rolledBackSettings.isReconnecting, Is.False);
-            Assert.That(rolledBackSettings.showReconnectingUI, Is.False);
-            Assert.That(rolledBackSettings.showPostCompileReconnectingUI, Is.False);
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.True);
+            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.False);
+            Assert.That(_sessionStateService.GetIsDomainReloadInProgress(), Is.False);
+            Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
+            Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.False);
+            Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
             Assert.That(provider.IsDomainReloadInProgress(), Is.False);
             ServerReadinessState state = _stateStore.Read();
             Assert.That(state.Phase, Is.EqualTo("failed"));
             Assert.That(state.LastError, Is.Not.Empty);
         }
 
-        private static UnityCliLoopEditorSettingsData CloneSettings(UnityCliLoopEditorSettingsData settings)
+        [Test]
+        public void CompleteDomainReload_WhenLegacyReloadStateExists_MigratesRecoveryFlagsToSessionState()
         {
-            string json = UnityEngine.JsonUtility.ToJson(settings);
-            return UnityEngine.JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(json);
+            // Verifies that the first reload after migration preserves old JSON recovery state.
+            UnityCliLoopEditorLegacySessionState legacySessionState = new(
+                isServerRunning: true,
+                isAfterCompile: true,
+                isDomainReloadInProgress: true,
+                isReconnecting: true,
+                showReconnectingUI: true,
+                showPostCompileReconnectingUI: true);
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(
+                _sessionStateService,
+                _stateStore,
+                new TestLegacySessionStateReader(legacySessionState));
+
+            _domainReloadDetectionService.CompleteDomainReload("test-correlation");
+
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.True);
+            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.True);
+            Assert.That(_sessionStateService.GetIsDomainReloadInProgress(), Is.False);
+            Assert.That(_sessionStateService.GetIsReconnecting(), Is.True);
+            Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.True);
+            Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.True);
+            ServerReadinessState state = _stateStore.Read();
+            Assert.That(state.Phase, Is.EqualTo("recovering"));
+        }
+
+        [Test]
+        public void CompleteDomainReload_WhenLegacyStateOnlySaysRunning_IgnoresStaleRunningFlag()
+        {
+            // Verifies that stale running-only JSON does not opt into recovery after the migration.
+            UnityCliLoopEditorLegacySessionState legacySessionState = new(
+                isServerRunning: true,
+                isAfterCompile: false,
+                isDomainReloadInProgress: false,
+                isReconnecting: false,
+                showReconnectingUI: false,
+                showPostCompileReconnectingUI: false);
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(
+                _sessionStateService,
+                _stateStore,
+                new TestLegacySessionStateReader(legacySessionState));
+
+            _domainReloadDetectionService.CompleteDomainReload("test-correlation");
+
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
+            ServerReadinessState state = _stateStore.Read();
+            Assert.That(state.Phase, Is.EqualTo("stopped"));
+        }
+
+        [Test]
+        public void CompleteDomainReload_WhenLegacyReloadStateWasMigrated_DoesNotReapplyLegacyJson()
+        {
+            // Verifies that legacy JSON recovery state is consumed after the first migration reload.
+            File.WriteAllText(
+                SettingsFilePath,
+                "{" +
+                "\"isServerRunning\":true," +
+                "\"isAfterCompile\":true," +
+                "\"isDomainReloadInProgress\":true," +
+                "\"isReconnecting\":true," +
+                "\"showReconnectingUI\":true," +
+                "\"showPostCompileReconnectingUI\":true" +
+                "}");
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(
+                _sessionStateService,
+                _stateStore,
+                new UnityCliLoopEditorLegacySessionStateReader());
+
+            _domainReloadDetectionService.CompleteDomainReload("first-correlation");
+            _sessionStateService.ClearAll();
+
+            _domainReloadDetectionService.CompleteDomainReload("second-correlation");
+
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.False);
+            Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
+            ServerReadinessState state = _stateStore.Read();
+            Assert.That(state.Phase, Is.EqualTo("stopped"));
         }
 
         private static ServerReadinessStateStore CreateTestStateStore()
@@ -80,6 +172,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "unity-cli-loop-tests",
                 System.Guid.NewGuid().ToString("N"));
             return new ServerReadinessStateStore(projectRoot);
+        }
+
+        private static void RestoreFile(string path, bool existed, string content)
+        {
+            if (existed)
+            {
+                File.WriteAllText(path, content);
+                return;
+            }
+
+            DeleteIfExists(path);
+        }
+
+        private static void DeleteIfExists(string path)
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+
+        private sealed class TestLegacySessionStateReader : IUnityCliLoopEditorLegacySessionStateReader
+        {
+            private readonly UnityCliLoopEditorLegacySessionState _legacySessionState;
+
+            internal TestLegacySessionStateReader(UnityCliLoopEditorLegacySessionState legacySessionState)
+            {
+                _legacySessionState = legacySessionState;
+            }
+
+            public UnityCliLoopEditorLegacySessionState Read()
+            {
+                return _legacySessionState;
+            }
+
+            public void Clear()
+            {
+            }
         }
     }
 }
