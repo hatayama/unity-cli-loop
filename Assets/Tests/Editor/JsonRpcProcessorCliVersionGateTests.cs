@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -108,10 +107,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
 
-                LogAssert.Expect(
-                    LogType.Error,
-                    new Regex("\\[JsonRpcProcessor\\] Error: Unity tool execution is busy running 'single-flight-test'"));
-
                 secondResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 2),
                     CancellationToken.None,
@@ -123,6 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
+                LogAssert.NoUnexpectedReceived();
             }
             finally
             {
@@ -171,10 +167,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(2));
                 Assert.That(secondDynamicCodeTask.IsCompleted, Is.False);
 
-                LogAssert.Expect(
-                    LogType.Error,
-                    new Regex("\\[JsonRpcProcessor\\] Error: Unity tool execution is busy running 'execute-dynamic-code'"));
-
                 otherToolTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 3),
                     CancellationToken.None,
@@ -186,6 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
+                LogAssert.NoUnexpectedReceived();
             }
             finally
             {
