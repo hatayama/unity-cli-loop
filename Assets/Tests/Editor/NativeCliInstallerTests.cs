@@ -318,6 +318,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task WaitForUninstallCompletionAsync_OnWindowsWaitsForUserPathRemoval()
+        {
+            // Verifies that Settings uninstall waits until Windows User PATH no longer resolves the native CLI directory.
+            string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
+            string userPath = installDirectory + ";C:\\npm";
+            int delayCount = 0;
+
+            CliInstallResult result = await NativeCliInstaller.WaitForUninstallCompletionAsync(
+                installDirectory + "\\uloop.exe",
+                installDirectory,
+                RuntimePlatform.WindowsEditor,
+                CancellationToken.None,
+                1000,
+                100,
+                executablePath => false,
+                (name, target) => userPath,
+                (delayMs, ct) =>
+                {
+                    delayCount++;
+                    userPath = "C:\\npm";
+                    return Task.CompletedTask;
+                });
+
+            Assert.That(result.Success, Is.True, result.ErrorOutput);
+            Assert.That(delayCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task WaitForUninstallCompletionAsync_OnWindowsFailsWhenUserPathRemains()
+        {
+            // Verifies that uninstall cannot report success while Windows User PATH still contains the native CLI directory.
+            string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
+            int delayCount = 0;
+
+            CliInstallResult result = await NativeCliInstaller.WaitForUninstallCompletionAsync(
+                installDirectory + "\\uloop.exe",
+                installDirectory,
+                RuntimePlatform.WindowsEditor,
+                CancellationToken.None,
+                250,
+                100,
+                executablePath => false,
+                (name, target) => installDirectory + ";C:\\npm",
+                (delayMs, ct) =>
+                {
+                    delayCount++;
+                    return Task.CompletedTask;
+                });
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorOutput, Does.Contain("Windows User PATH"));
+            Assert.That(delayCount, Is.EqualTo(3));
+        }
+
+        [Test]
         public void BuildUninstallCommand_OnMacRunsInstalledLauncher()
         {
             // Verifies that editor uninstall delegates removal to the installed uloop command.
@@ -395,6 +450,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 RuntimePlatform.OSXEditor);
 
             Assert.That(result, Is.EqualTo("/Users/ExampleUser/.local/bin:/usr/local/bin"));
+        }
+
+        [Test]
+        public void BuildPathWithoutInstallDirectory_OnWindowsRemovesNativeInstallDir()
+        {
+            // Verifies that Windows uninstall removes the native CLI directory from PATH without removing npm.
+            string result = NativeCliInstaller.BuildPathWithoutInstallDirectory(
+                "C:\\npm;C:\\USERS\\EXAMPLEUSER\\PROGRAMS\\ULOOP\\BIN\\;C:\\Tools",
+                "C:\\Users\\ExampleUser\\Programs\\uloop\\bin",
+                RuntimePlatform.WindowsEditor);
+
+            Assert.That(result, Is.EqualTo("C:\\npm;C:\\Tools"));
         }
 
         [Test]

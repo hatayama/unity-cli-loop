@@ -85,13 +85,9 @@ $NormalizePath = {
     }
     return $Path.Trim().TrimEnd([char[]]@('\','/'))
 }
-Wait-Process -Id $ParentPid -ErrorAction SilentlyContinue
-if (Test-Path -LiteralPath $Target) {
-    Remove-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
-}
-$LegacyMarker = Join-Path $InstallDir %s
-if (Test-Path -LiteralPath $LegacyMarker) {
-    Remove-Item -LiteralPath $LegacyMarker -Force -ErrorAction SilentlyContinue
+$ParentProcess = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
+if ($ParentProcess) {
+    $ParentProcess | Wait-Process -ErrorAction SilentlyContinue
 }
 $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if ($UserPath) {
@@ -101,6 +97,13 @@ if ($UserPath) {
     if (-not [string]::Equals($UserPath, $NewUserPath, [System.StringComparison]::Ordinal)) {
         [Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')
     }
+}
+if (Test-Path -LiteralPath $Target) {
+    Remove-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
+}
+$LegacyMarker = Join-Path $InstallDir %s
+if (Test-Path -LiteralPath $LegacyMarker) {
+    Remove-Item -LiteralPath $LegacyMarker -Force -ErrorAction SilentlyContinue
 }
 if ((Test-Path -LiteralPath $InstallDir) -and -not (Get-ChildItem -LiteralPath $InstallDir -Force | Select-Object -First 1)) {
     Remove-Item -LiteralPath $InstallDir -Force -ErrorAction SilentlyContinue
