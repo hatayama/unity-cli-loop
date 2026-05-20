@@ -61,7 +61,7 @@
     "prettier": "3.8.3",
     "ts-jest": "29.4.10",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.59.3"
+    "typescript-eslint": "8.59.4"
   },
   "overrides": {
     "minimatch": "10.2.4"
