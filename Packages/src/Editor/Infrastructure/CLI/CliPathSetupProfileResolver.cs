@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     configRoot,
                     FishConfigDirectoryName,
                     FishConfigFileName);
-                string configurationLine = $"fish_add_path \"{EscapeDoubleQuotedPathValue(profileInstallDirectory, false)}\"";
+                string configurationLine = $"fish_add_path --move \"{EscapeDoubleQuotedPathValue(profileInstallDirectory, false)}\"";
                 return CreateSupportedPlan(
                     CliPathSetupShellKind.Fish,
                     shellName,
@@ -149,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 installDirectory,
                 "",
                 "",
-                "export PATH=" + QuotePosixShellValue(installDirectory) + ":\"$PATH\"");
+                "");
         }
 
         private static string SelectBashProfilePath(string homeDirectory, Func<string, bool> fileExists)

@@ -212,9 +212,9 @@ print_path_setup_guidance() {
       profile_path=$(detect_fish_profile_path)
       echo "Detected shell: fish"
       echo "Add this line to $profile_path:"
-      echo "  fish_add_path \"$INSTALL_DIR\""
+      echo "  fish_add_path --move \"$INSTALL_DIR\""
       echo "Or run:"
-      print_fish_append_command "fish_add_path \"$INSTALL_DIR\"" "$profile_path"
+      print_fish_append_command "fish_add_path --move \"$INSTALL_DIR\"" "$profile_path"
       ;;
     *)
       echo "Add this directory to PATH in your shell profile:"

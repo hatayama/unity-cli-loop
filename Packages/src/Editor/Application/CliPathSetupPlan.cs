@@ -19,11 +19,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
             Debug.Assert(!string.IsNullOrWhiteSpace(profileInstallDirectory), "profileInstallDirectory must not be null or empty");
-            Debug.Assert(!string.IsNullOrWhiteSpace(manualCommand), "manualCommand must not be null or empty");
             if (canApplyAutomatically)
             {
                 Debug.Assert(!string.IsNullOrWhiteSpace(configurationFilePath), "configurationFilePath must not be null or empty");
                 Debug.Assert(!string.IsNullOrWhiteSpace(configurationLine), "configurationLine must not be null or empty");
+                Debug.Assert(!string.IsNullOrWhiteSpace(manualCommand), "manualCommand must not be null or empty");
             }
 
             ShellKind = shellKind;
@@ -33,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             ProfileInstallDirectory = profileInstallDirectory;
             ConfigurationFilePath = configurationFilePath ?? string.Empty;
             ConfigurationLine = configurationLine ?? string.Empty;
-            ManualCommand = manualCommand;
+            ManualCommand = manualCommand ?? string.Empty;
         }
 
         public CliPathSetupShellKind ShellKind { get; }

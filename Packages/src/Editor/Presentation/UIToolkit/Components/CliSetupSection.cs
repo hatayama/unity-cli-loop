@@ -213,15 +213,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
+            if (needsCliPathSetup)
+            {
+                return isInstallingCli ? "Fixing PATH..." : "Fix PATH";
+            }
+
             bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade, canUninstallCli);
             if (isInstallingCli)
             {
                 return isUninstallAction ? "Uninstalling..." : "Installing...";
-            }
-
-            if (needsCliPathSetup)
-            {
-                return "Fix PATH";
             }
 
             if (!isCliInstalled)

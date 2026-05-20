@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(true, false, false, true, false, true, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
         [TestCase(true, false, false, false, true, true, false, "3.1.0", "3.0.0", "Downgrade CLI (v3.1.0 \u2192 v3.0.0)")]
         [TestCase(true, true, false, false, false, true, false, "3.0.0", "3.0.0", "Uninstalling...")]
+        [TestCase(true, true, false, false, false, true, true, "3.0.0", "3.0.0", "Fixing PATH...")]
         [TestCase(false, true, false, false, false, false, false, null, "3.0.0", "Installing...")]
         [TestCase(false, false, true, false, false, false, false, null, "3.0.0", "Checking...")]
         public void GetInstallCliButtonText_ReturnsExpectedText(

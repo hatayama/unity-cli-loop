@@ -32,6 +32,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (result.Status == CliPathSetupFlowStatus.ManualSetupRequired)
             {
+                if (string.IsNullOrWhiteSpace(result.Plan.ManualCommand))
+                {
+                    EditorUtility.DisplayDialog(
+                        "Finish uLoop CLI PATH Setup",
+                        BuildManualSetupMessage(result.Plan),
+                        "OK");
+                    return;
+                }
+
                 bool copyCommand = EditorUtility.DisplayDialog(
                     "Finish uLoop CLI PATH Setup",
                     BuildManualSetupMessage(result.Plan),
@@ -50,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 EditorUtility.DisplayDialog(
                     "PATH Setup Failed",
                     $"Could not update your shell profile.\n\n{result.ErrorOutput}\n\n"
-                    + $"You can run this manually:\n{result.Plan.ManualCommand}",
+                    + BuildManualCommandFallback(result.Plan),
                     "OK");
                 return;
             }
@@ -61,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     "PATH Setup Still Needed",
                     "PATH setup was updated, but a fresh terminal still cannot find uloop.\n\n"
                     + $"Profile: {result.Plan.ConfigurationFilePath}\n\n"
-                    + $"You can run this manually:\n{result.Plan.ManualCommand}",
+                    + BuildManualCommandFallback(result.Plan),
                     "OK");
                 return;
             }
@@ -80,8 +89,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return "The uLoop CLI was installed, but your terminal cannot find the uloop command yet.\n\n"
                 + $"Detected shell: {shellName}\n"
                 + $"Install directory: {plan.InstallDirectory}\n\n"
-                + "Add the install directory to PATH in your shell profile.\n\n"
-                + plan.ManualCommand;
+                + "Add the install directory to PATH in your shell profile."
+                + BuildOptionalManualCommand(plan);
+        }
+
+        private static string BuildOptionalManualCommand(CliPathSetupPlan plan)
+        {
+            return string.IsNullOrWhiteSpace(plan.ManualCommand)
+                ? ""
+                : "\n\n" + plan.ManualCommand;
+        }
+
+        private static string BuildManualCommandFallback(CliPathSetupPlan plan)
+        {
+            return string.IsNullOrWhiteSpace(plan.ManualCommand)
+                ? $"Add this directory to PATH in your shell profile:\n{plan.InstallDirectory}"
+                : $"You can run this manually:\n{plan.ManualCommand}";
         }
 
         private static string BuildCompleteMessage(CliPathSetupFlowResult result)

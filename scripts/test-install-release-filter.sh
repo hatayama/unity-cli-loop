@@ -471,8 +471,8 @@ test_posix_prints_fish_path_guidance_without_writing_profile() {
 
   assert_contains "$work_dir/output.txt" "Detected shell: fish"
   assert_contains "$work_dir/output.txt" "Add this line to $profile_path:"
-  assert_contains "$work_dir/output.txt" "  fish_add_path \"$install_dir\""
-  assert_contains "$work_dir/output.txt" "mkdir -p '$xdg_config_home/fish' && printf '\\n%s\\n' 'fish_add_path \"$install_dir\"' >> '$profile_path'"
+  assert_contains "$work_dir/output.txt" "  fish_add_path --move \"$install_dir\""
+  assert_contains "$work_dir/output.txt" "mkdir -p '$xdg_config_home/fish' && printf '\\n%s\\n' 'fish_add_path --move \"$install_dir\"' >> '$profile_path'"
   assert_file_not_exists "$profile_path"
 }
 

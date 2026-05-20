@@ -18,7 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that fresh shell visibility is the authority and no profile write happens when uloop is visible.
             FakeCliInstallationDetector detector = new(true);
-            FakeNativeCliInstaller installer = new(CreateSupportedPlan());
+            FakeNativeCliInstaller installer = new FakeNativeCliInstaller(
+                CreateSupportedPlan(),
+                CreateAppliedResult());
             CliSetupApplicationService service = new(detector, installer);
 
             CliPathSetupFlowResult result = await service.EnsureCliVisibleFromShellAsync(
@@ -34,7 +36,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that PATH setup is only considered complete after a second fresh shell check passes.
             FakeCliInstallationDetector detector = new(false, true);
-            FakeNativeCliInstaller installer = new(CreateSupportedPlan());
+            FakeNativeCliInstaller installer = new FakeNativeCliInstaller(
+                CreateSupportedPlan(),
+                CreateAppliedResult());
             CliSetupApplicationService service = new(detector, installer);
 
             CliPathSetupFlowResult result = await service.EnsureCliVisibleFromShellAsync(
@@ -51,7 +55,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that unsupported shells never receive automatic profile edits.
             FakeCliInstallationDetector detector = new(false);
-            FakeNativeCliInstaller installer = new(CreateUnsupportedPlan());
+            FakeNativeCliInstaller installer = new FakeNativeCliInstaller(
+                CreateUnsupportedPlan(),
+                CreateAppliedResult());
             CliSetupApplicationService service = new(detector, installer);
 
             CliPathSetupFlowResult result = await service.EnsureCliVisibleFromShellAsync(
@@ -60,6 +66,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result.Status, Is.EqualTo(CliPathSetupFlowStatus.ManualSetupRequired));
             Assert.That(installer.ApplyCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task EnsureCliVisibleFromShellAsync_WhenProfileApplyFailsReturnsFailure()
+        {
+            // Verifies that profile write failures become user-facing PATH setup failures.
+            FakeCliInstallationDetector detector = new(false);
+            CliPathSetupApplyResult applyResult = new CliPathSetupApplyResult(
+                false,
+                CliPathSetupApplyStatus.Failed,
+                "profile is read-only");
+            FakeNativeCliInstaller installer = new FakeNativeCliInstaller(CreateSupportedPlan(), applyResult);
+            CliSetupApplicationService service = new CliSetupApplicationService(detector, installer);
+
+            CliPathSetupFlowResult result = await service.EnsureCliVisibleFromShellAsync(
+                RuntimePlatform.OSXEditor,
+                CancellationToken.None);
+
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupFlowStatus.Failed));
+            Assert.That(result.ErrorOutput, Does.Contain("profile is read-only"));
+            Assert.That(installer.ApplyCount, Is.EqualTo(1));
+            Assert.That(detector.VisibilityCheckCount, Is.EqualTo(1));
         }
 
         private static CliPathSetupPlan CreateUnsupportedPlan()
@@ -72,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "/Users/ExampleUser/.local/bin",
                 "",
                 "",
-                "export PATH='/Users/ExampleUser/.local/bin':\"$PATH\"");
+                "");
         }
 
         private static CliPathSetupPlan CreateSupportedPlan()
@@ -86,6 +114,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "/Users/ExampleUser/.zshrc",
                 "export PATH=\"$HOME/.local/bin:$PATH\"",
                 "printf '\\n%s\\n' 'export PATH=\"$HOME/.local/bin:$PATH\"' >> '/Users/ExampleUser/.zshrc'");
+        }
+
+        private static CliPathSetupApplyResult CreateAppliedResult()
+        {
+            return new CliPathSetupApplyResult(true, CliPathSetupApplyStatus.Applied, "");
         }
 
         private sealed class FakeCliInstallationDetector : ICliInstallationDetector
@@ -119,10 +152,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private sealed class FakeNativeCliInstaller : INativeCliInstaller
         {
             private readonly CliPathSetupPlan _plan;
+            private readonly CliPathSetupApplyResult _applyResult;
 
-            public FakeNativeCliInstaller(CliPathSetupPlan plan)
+            public FakeNativeCliInstaller(CliPathSetupPlan plan, CliPathSetupApplyResult applyResult)
             {
                 _plan = plan;
+                _applyResult = applyResult;
             }
 
             public int ApplyCount { get; private set; }
@@ -158,7 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public CliPathSetupApplyResult ApplyGlobalCliPathSetup(CliPathSetupPlan plan)
             {
                 ApplyCount++;
-                return new CliPathSetupApplyResult(true, CliPathSetupApplyStatus.Applied, "");
+                return _applyResult;
             }
 
             public NativeCliInstallCommand GetGlobalCliInstallCommand(

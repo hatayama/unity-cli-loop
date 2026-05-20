@@ -701,14 +701,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
+            if (needsCliPathSetup)
+            {
+                return isInstallingCli ? "Fixing PATH..." : "Fix PATH";
+            }
+
             if (isInstallingCli)
             {
                 return "Installing...";
-            }
-
-            if (needsCliPathSetup)
-            {
-                return "Fix PATH";
             }
 
             if (!cliInstalled)

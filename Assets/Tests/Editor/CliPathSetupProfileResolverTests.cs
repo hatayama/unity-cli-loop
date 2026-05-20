@@ -64,13 +64,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 plan.ConfigurationFilePath,
                 Is.EqualTo("/Users/ExampleUser/Library/Application Support/fish/config.fish"));
-            Assert.That(plan.ConfigurationLine, Is.EqualTo("fish_add_path \"$HOME/.local/bin\""));
+            Assert.That(plan.ConfigurationLine, Is.EqualTo("fish_add_path --move \"$HOME/.local/bin\""));
         }
 
         [Test]
         public void ResolvePlan_WhenUnsupportedShellDisablesAutomaticApply()
         {
-            // Verifies that unknown shells fall back to a manual command instead of guessing a profile file.
+            // Verifies that unknown shells do not expose a command written for a different shell syntax.
             CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
                 RuntimePlatform.OSXEditor,
                 "/bin/tcsh",
@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(plan.ShellKind, Is.EqualTo(CliPathSetupShellKind.Unsupported));
             Assert.That(plan.CanApplyAutomatically, Is.False);
-            Assert.That(plan.ManualCommand, Does.Contain("/Users/ExampleUser/.local/bin"));
+            Assert.That(plan.ManualCommand, Is.Empty);
         }
     }
 }

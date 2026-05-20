@@ -42,6 +42,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
+        [TestCase(true, "3.0.0", "3.0.0", true, "RepairPath")]
+        [TestCase(false, "3.0.0", "3.0.0", true, "Uninstall")]
+        [TestCase(false, "2.9.0", "3.0.0", true, "InstallOrUpdate")]
+        [TestCase(false, null, "3.0.0", true, "InstallOrUpdate")]
+        public void ResolveCliPrimaryButtonAction_ReturnsClickedPrimaryAction(
+            bool needsCliPathSetup,
+            string cliVersion,
+            string requiredCliVersion,
+            bool canUninstallCli,
+            string expected)
+        {
+            // Verifies that the Settings window preserves the primary action chosen before refresh.
+            UnityCliLoopSettingsWindow.CliPrimaryButtonAction result =
+                UnityCliLoopSettingsWindow.ResolveCliPrimaryButtonAction(
+                    needsCliPathSetup,
+                    cliVersion,
+                    requiredCliVersion,
+                    canUninstallCli);
+
+            Assert.That(result.ToString(), Is.EqualTo(expected));
+        }
+
         [TestCase(RuntimePlatform.OSXEditor, true, true)]
         [TestCase(RuntimePlatform.OSXEditor, false, false)]
         [TestCase(RuntimePlatform.LinuxEditor, true, true)]

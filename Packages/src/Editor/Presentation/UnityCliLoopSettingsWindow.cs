@@ -17,6 +17,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     public class UnityCliLoopSettingsWindow : EditorWindow
     {
+        internal enum CliPrimaryButtonAction
+        {
+            InstallOrUpdate,
+            RepairPath,
+            Uninstall
+        }
+
         private const bool ForceFlatSkillInstall = true;
         private const double DeferredInitialRefreshDelaySeconds = 0.05;
         private const double ToolSettingsRegistryWarmupInitialDelaySeconds = 0.05;
@@ -760,15 +767,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async void HandleInstallCli()
         {
+            CliPrimaryButtonAction clickedAction = GetCurrentCliPrimaryButtonAction();
+
             await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
 
-            if (ShouldRepairCliPathFromPrimaryButton(_needsCliPathSetup))
+            if (clickedAction == CliPrimaryButtonAction.RepairPath)
             {
                 await HandleRepairCliPathSetup();
                 return;
             }
 
-            if (ShouldUninstallCliFromPrimaryButton())
+            if (clickedAction == CliPrimaryButtonAction.Uninstall)
             {
                 await HandleUninstallCli();
                 return;
@@ -811,6 +820,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
+        private CliPrimaryButtonAction GetCurrentCliPrimaryButtonAction()
+        {
+            string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
+            bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
+                cliExecutablePath,
+                UnityEngine.Application.platform);
+            return ResolveCliPrimaryButtonAction(
+                _needsCliPathSetup,
+                cliVersion,
+                GetMinimumRequiredCliVersion(),
+                canUninstallCli);
+        }
+
         private bool ShouldUninstallCliFromPrimaryButton()
         {
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
@@ -832,6 +855,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isCliInstalled = cliVersion != null;
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredCliVersion);
             return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade: false, canUninstallCli);
+        }
+
+        internal static CliPrimaryButtonAction ResolveCliPrimaryButtonAction(
+            bool needsCliPathSetup,
+            string cliVersion,
+            string requiredCliVersion,
+            bool canUninstallCli)
+        {
+            if (ShouldRepairCliPathFromPrimaryButton(needsCliPathSetup))
+            {
+                return CliPrimaryButtonAction.RepairPath;
+            }
+
+            if (ShouldUninstallCliFromPrimaryButton(cliVersion, requiredCliVersion, canUninstallCli))
+            {
+                return CliPrimaryButtonAction.Uninstall;
+            }
+
+            return CliPrimaryButtonAction.InstallOrUpdate;
         }
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(bool needsCliPathSetup)

@@ -363,6 +363,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(true, false, false, false, true, "3.0.0", "3.0.0", "Fix PATH")]
         [TestCase(true, false, false, true, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
         [TestCase(true, true, false, false, false, "3.0.0", "3.0.0", "Installing...")]
+        [TestCase(true, true, false, false, true, "3.0.0", "3.0.0", "Fixing PATH...")]
         [TestCase(false, false, true, false, false, null, "3.0.0", "Checking...")]
         public void GetCliButtonTextForSetupWizard_ReturnsExpectedLabel(
             bool cliInstalled,

@@ -41,7 +41,7 @@ fish の `$status` だけは POSIX shell と異なるため、shell kind ごと�
 自動追記する行は canonical line だけにする。
 
 - zsh / bash: `export PATH="$HOME/.local/bin:$PATH"`
-- fish: `fish_add_path "$HOME/.local/bin"`
+- fish: `fish_add_path --move "$HOME/.local/bin"`
 
 既存設定判定は次の順で十分とする。
 
