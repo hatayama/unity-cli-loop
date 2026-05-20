@@ -120,6 +120,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void BuildShellCliDetectionCommandForShell_WhenRuntimeShellIsFish_UsesFishStatusSyntax()
+        {
+            // Verifies that command syntax follows the actual shell process, not PATH setup support.
+            string command = CliInstallationDetector.BuildShellCliDetectionCommandForShell(
+                "uloop",
+                "/opt/homebrew/bin/fish");
+
+            Assert.That(command, Does.Contain("set uloop_version_status $status"));
+            Assert.That(command, Does.Not.Contain("uloop_version_status=$?"));
+        }
+
+        [Test]
         public void ParseShellCliInstallationOutput_WhenPathAndVersionExist_ReturnsDetection()
         {
             // Verifies that shell detection keeps terminal-visible path data as auxiliary UI context.

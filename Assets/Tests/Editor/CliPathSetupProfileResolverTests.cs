@@ -84,5 +84,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(plan.CanApplyAutomatically, Is.False);
             Assert.That(plan.ManualCommand, Is.Empty);
         }
+
+        [Test]
+        public void ResolvePlan_WhenInstallDirectoryIsMissingDoesNotUseExecutableNameAsDirectory()
+        {
+            // Verifies that missing install roots do not produce misleading PATH directory guidance.
+            CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
+                RuntimePlatform.OSXEditor,
+                "/bin/zsh",
+                "/Users/ExampleUser",
+                null,
+                null,
+                "",
+                path => false);
+
+            Assert.That(plan.ShellKind, Is.EqualTo(CliPathSetupShellKind.Unsupported));
+            Assert.That(plan.CanApplyAutomatically, Is.False);
+            Assert.That(plan.InstallDirectory, Is.Empty);
+            Assert.That(plan.ProfileInstallDirectory, Is.Empty);
+            Assert.That(plan.ManualCommand, Is.Empty);
+        }
     }
 }

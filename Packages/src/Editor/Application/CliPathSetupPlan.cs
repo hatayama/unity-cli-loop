@@ -17,10 +17,10 @@ namespace io.github.hatayama.UnityCliLoop.Application
             string configurationLine,
             string manualCommand)
         {
-            Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
-            Debug.Assert(!string.IsNullOrWhiteSpace(profileInstallDirectory), "profileInstallDirectory must not be null or empty");
             if (canApplyAutomatically)
             {
+                Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+                Debug.Assert(!string.IsNullOrWhiteSpace(profileInstallDirectory), "profileInstallDirectory must not be null or empty");
                 Debug.Assert(!string.IsNullOrWhiteSpace(configurationFilePath), "configurationFilePath must not be null or empty");
                 Debug.Assert(!string.IsNullOrWhiteSpace(configurationLine), "configurationLine must not be null or empty");
                 Debug.Assert(!string.IsNullOrWhiteSpace(manualCommand), "manualCommand must not be null or empty");
@@ -29,8 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
             ShellKind = shellKind;
             ShellName = shellName ?? string.Empty;
             CanApplyAutomatically = canApplyAutomatically;
-            InstallDirectory = installDirectory;
-            ProfileInstallDirectory = profileInstallDirectory;
+            InstallDirectory = installDirectory ?? string.Empty;
+            ProfileInstallDirectory = profileInstallDirectory ?? string.Empty;
             ConfigurationFilePath = configurationFilePath ?? string.Empty;
             ConfigurationLine = configurationLine ?? string.Empty;
             ManualCommand = manualCommand ?? string.Empty;

@@ -27,14 +27,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public static CliPathSetupPlan ResolveCurrentUserPlan(RuntimePlatform platform)
         {
             string installDirectory = NativeCliInstaller.GetCurrentUserGlobalCliInstallDirectory(platform);
+            string shellPath = NodeEnvironmentResolver.GetUserShell();
             if (string.IsNullOrWhiteSpace(installDirectory))
             {
-                return CreateUnsupportedPlan("unknown", CliConstants.EXECUTABLE_NAME);
+                return CreateUnsupportedPlan(GetShellName(shellPath), string.Empty);
             }
 
             return ResolvePlan(
                 platform,
-                NodeEnvironmentResolver.GetUserShell(),
+                shellPath,
                 Environment.GetEnvironmentVariable(CliConstants.POSIX_HOME_ENVIRONMENT_VARIABLE),
                 Environment.GetEnvironmentVariable("ZDOTDIR"),
                 Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
@@ -51,8 +52,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string installDirectory,
             Func<string, bool> fileExists)
         {
-            Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
             Debug.Assert(fileExists != null, "fileExists must not be null");
+
+            string shellName = GetShellName(shellPath);
+            if (string.IsNullOrWhiteSpace(installDirectory))
+            {
+                return CreateUnsupportedPlan(shellName, string.Empty);
+            }
 
             if (platform == RuntimePlatform.WindowsEditor)
             {
@@ -62,7 +68,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string resolvedHomeDirectory = string.IsNullOrWhiteSpace(homeDirectory)
                 ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
                 : homeDirectory;
-            string shellName = GetShellName(shellPath);
             string profileInstallDirectory = FormatInstallDirectoryForProfile(
                 installDirectory,
                 resolvedHomeDirectory);
@@ -141,12 +146,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static CliPathSetupPlan CreateUnsupportedPlan(string shellName, string installDirectory)
         {
+            string displayShellName = string.IsNullOrWhiteSpace(shellName) ? "unknown" : shellName;
+            string displayInstallDirectory = installDirectory ?? string.Empty;
             return new CliPathSetupPlan(
                 CliPathSetupShellKind.Unsupported,
-                shellName,
+                displayShellName,
                 false,
-                installDirectory,
-                installDirectory,
+                displayInstallDirectory,
+                displayInstallDirectory,
                 "",
                 "",
                 "");

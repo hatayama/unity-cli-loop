@@ -198,9 +198,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ProcessStartInfo startInfo = new()
             {
                 FileName = shell,
-                Arguments = "-l -i -c " + QuoteProcessArgument(BuildShellCliDetectionCommandForPlan(
+                Arguments = "-l -i -c " + QuoteProcessArgument(BuildShellCliDetectionCommandForShell(
                     CliConstants.EXECUTABLE_NAME,
-                    pathSetupPlan)),
+                    shell)),
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -235,11 +235,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CliConstants.MINIMUM_REQUIRED_CLI_VERSION);
         }
 
-        internal static string BuildShellCliDetectionCommandForPlan(
+        internal static string BuildShellCliDetectionCommandForShell(
             string executableName,
-            CliPathSetupPlan pathSetupPlan)
+            string shellPath)
         {
-            if (pathSetupPlan.ShellKind == CliPathSetupShellKind.Fish)
+            string shellName = string.IsNullOrWhiteSpace(shellPath)
+                ? string.Empty
+                : Path.GetFileName(shellPath.Trim()).ToLowerInvariant();
+            if (string.Equals(shellName, "fish", StringComparison.Ordinal))
             {
                 return BuildFishShellCliDetectionCommand(executableName);
             }

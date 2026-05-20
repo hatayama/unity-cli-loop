@@ -88,9 +88,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 : plan.ShellName;
             return "The uLoop CLI was installed, but your terminal cannot find the uloop command yet.\n\n"
                 + $"Detected shell: {shellName}\n"
-                + $"Install directory: {plan.InstallDirectory}\n\n"
+                + BuildInstallDirectoryLine(plan)
                 + "Add the install directory to PATH in your shell profile."
                 + BuildOptionalManualCommand(plan);
+        }
+
+        private static string BuildInstallDirectoryLine(CliPathSetupPlan plan)
+        {
+            return string.IsNullOrWhiteSpace(plan.InstallDirectory)
+                ? "Install directory: unavailable\n\n"
+                : $"Install directory: {plan.InstallDirectory}\n\n";
         }
 
         private static string BuildOptionalManualCommand(CliPathSetupPlan plan)
@@ -102,9 +109,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private static string BuildManualCommandFallback(CliPathSetupPlan plan)
         {
-            return string.IsNullOrWhiteSpace(plan.ManualCommand)
-                ? $"Add this directory to PATH in your shell profile:\n{plan.InstallDirectory}"
-                : $"You can run this manually:\n{plan.ManualCommand}";
+            if (!string.IsNullOrWhiteSpace(plan.ManualCommand))
+            {
+                return $"You can run this manually:\n{plan.ManualCommand}";
+            }
+
+            return string.IsNullOrWhiteSpace(plan.InstallDirectory)
+                ? "Could not determine the CLI install directory. Add the directory that contains uloop to PATH manually."
+                : $"Add this directory to PATH in your shell profile:\n{plan.InstallDirectory}";
         }
 
         private static string BuildCompleteMessage(CliPathSetupFlowResult result)

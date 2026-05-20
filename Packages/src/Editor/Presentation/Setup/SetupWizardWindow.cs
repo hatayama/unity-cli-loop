@@ -1021,12 +1021,23 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _installCliButton.SetEnabled(false);
             _installCliButton.text = "Checking...";
 
-            await CliSetupApplicationFacade.ForceRefreshCliVersionAsync(ct);
+            try
+            {
+                await CliSetupApplicationFacade.ForceRefreshCliVersionAsync(ct);
+                _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(ct);
+            }
+            finally
+            {
+                RefreshCliStepFromCachedState();
+            }
+        }
+
+        private void RefreshCliStepFromCachedState()
+        {
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
             string requiredCliVersion = GetMinimumRequiredCliVersion();
             bool cliInstalled = IsCliInstalled(cliVersion);
             bool cliVersionMatched = IsCliVersionSatisfied(cliVersion, requiredCliVersion) && cliInstalled;
-            _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(ct);
             UpdateCliStep(cliInstalled, cliVersion, requiredCliVersion, cliVersionMatched);
         }
 
