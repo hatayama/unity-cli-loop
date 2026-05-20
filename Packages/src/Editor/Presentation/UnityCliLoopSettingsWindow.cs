@@ -19,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         internal enum CliPrimaryButtonAction
         {
+            None,
             InstallOrUpdate,
             RepairPath,
             Uninstall
@@ -770,14 +771,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             CliPrimaryButtonAction clickedAction = GetCurrentCliPrimaryButtonAction();
 
             await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
+            CliPrimaryButtonAction refreshedAction = GetCurrentCliPrimaryButtonAction();
+            CliPrimaryButtonAction executableAction = ResolveExecutableCliPrimaryButtonAction(
+                clickedAction,
+                refreshedAction);
+            if (executableAction == CliPrimaryButtonAction.None)
+            {
+                return;
+            }
 
-            if (clickedAction == CliPrimaryButtonAction.RepairPath)
+            if (executableAction == CliPrimaryButtonAction.RepairPath)
             {
                 await HandleRepairCliPathSetup();
                 return;
             }
 
-            if (clickedAction == CliPrimaryButtonAction.Uninstall)
+            if (executableAction == CliPrimaryButtonAction.Uninstall)
             {
                 await HandleUninstallCli();
                 return;
@@ -874,6 +883,24 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return CliPrimaryButtonAction.InstallOrUpdate;
+        }
+
+        internal static CliPrimaryButtonAction ResolveExecutableCliPrimaryButtonAction(
+            CliPrimaryButtonAction clickedAction,
+            CliPrimaryButtonAction refreshedAction)
+        {
+            if (clickedAction == refreshedAction)
+            {
+                return clickedAction;
+            }
+
+            if (clickedAction == CliPrimaryButtonAction.InstallOrUpdate
+                && refreshedAction == CliPrimaryButtonAction.RepairPath)
+            {
+                return CliPrimaryButtonAction.RepairPath;
+            }
+
+            return CliPrimaryButtonAction.None;
         }
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(bool needsCliPathSetup)

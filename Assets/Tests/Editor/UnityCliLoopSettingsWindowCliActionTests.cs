@@ -64,6 +64,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.ToString(), Is.EqualTo(expected));
         }
 
+        [TestCase("InstallOrUpdate", "InstallOrUpdate", "InstallOrUpdate")]
+        [TestCase("RepairPath", "RepairPath", "RepairPath")]
+        [TestCase("Uninstall", "Uninstall", "Uninstall")]
+        [TestCase("InstallOrUpdate", "RepairPath", "RepairPath")]
+        [TestCase("InstallOrUpdate", "Uninstall", "None")]
+        [TestCase("Uninstall", "InstallOrUpdate", "None")]
+        [TestCase("RepairPath", "Uninstall", "None")]
+        public void ResolveExecutableCliPrimaryButtonAction_IgnoresUnsafeStaleActions(
+            string clickedAction,
+            string refreshedAction,
+            string expected)
+        {
+            // Verifies that a refreshed Settings state cannot turn a stale click into a destructive action.
+            UnityCliLoopSettingsWindow.CliPrimaryButtonAction result =
+                UnityCliLoopSettingsWindow.ResolveExecutableCliPrimaryButtonAction(
+                    ParseAction(clickedAction),
+                    ParseAction(refreshedAction));
+
+            Assert.That(result.ToString(), Is.EqualTo(expected));
+        }
+
         [TestCase(RuntimePlatform.OSXEditor, true, true)]
         [TestCase(RuntimePlatform.OSXEditor, false, false)]
         [TestCase(RuntimePlatform.LinuxEditor, true, true)]
@@ -93,6 +114,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, requiredCliVersion);
 
             Assert.That(result, Is.EqualTo(expected));
+        }
+
+        private static UnityCliLoopSettingsWindow.CliPrimaryButtonAction ParseAction(string action)
+        {
+            return (UnityCliLoopSettingsWindow.CliPrimaryButtonAction)
+                System.Enum.Parse(typeof(UnityCliLoopSettingsWindow.CliPrimaryButtonAction), action);
         }
     }
 }

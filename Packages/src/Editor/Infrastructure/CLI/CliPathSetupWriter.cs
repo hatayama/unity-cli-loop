@@ -76,6 +76,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 return CreateFailedResult(ex);
             }
+            catch (ArgumentException ex)
+            {
+                return CreateFailedResult(ex);
+            }
+            catch (NotSupportedException ex)
+            {
+                return CreateFailedResult(ex);
+            }
             catch (UnauthorizedAccessException ex)
             {
                 return CreateFailedResult(ex);

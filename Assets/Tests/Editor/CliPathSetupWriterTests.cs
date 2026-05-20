@@ -285,6 +285,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.ErrorOutput, Does.Contain("profile directory cannot be created"));
         }
 
+        [Test]
+        public void Apply_WhenProfilePathIsInvalidReturnsFailedResult()
+        {
+            // Verifies that invalid profile paths fall back to the manual setup result path.
+            CliPathSetupPlan plan = CreateZshPlan();
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                plan,
+                path => throw new ArgumentException("profile path is invalid"),
+                path => string.Empty,
+                path => new DirectoryInfo(path),
+                (path, content) => { });
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.Failed));
+            Assert.That(result.ErrorOutput, Does.Contain("profile path is invalid"));
+        }
+
+        [Test]
+        public void Apply_WhenProfilePathIsNotSupportedReturnsFailedResult()
+        {
+            // Verifies that unsupported profile path formats fall back to the manual setup result path.
+            CliPathSetupPlan plan = CreateZshPlan();
+
+            CliPathSetupApplyResult result = CliPathSetupWriter.Apply(
+                plan,
+                path => throw new NotSupportedException("profile path is not supported"),
+                path => string.Empty,
+                path => new DirectoryInfo(path),
+                (path, content) => { });
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Status, Is.EqualTo(CliPathSetupApplyStatus.Failed));
+            Assert.That(result.ErrorOutput, Does.Contain("profile path is not supported"));
+        }
+
         private static CliPathSetupPlan CreateZshPlan()
         {
             return new CliPathSetupPlan(
