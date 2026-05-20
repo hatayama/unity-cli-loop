@@ -50,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsUpdate: false,
                 needsDowngrade: false,
                 canUninstallCli: true,
+                needsCliPathSetup: false,
                 isInstallingCli: false,
                 isChecking: false,
                 isClaudeSkillsInstalled: true,

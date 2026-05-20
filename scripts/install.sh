@@ -115,6 +115,116 @@ print_legacy_npm_manual_removal() {
   echo "  npm uninstall -g uloop-cli"
 }
 
+quote_for_single_quoted_shell() {
+  printf "%s" "$1" | sed "s/'/'\\\\''/g"
+}
+
+print_append_command() {
+  append_line=$1
+  profile_path=$2
+  quoted_line=$(quote_for_single_quoted_shell "$append_line")
+  quoted_profile=$(quote_for_single_quoted_shell "$profile_path")
+
+  printf "%s\n" "  printf '\n%s\n' '$quoted_line' >> '$quoted_profile'"
+}
+
+detect_user_shell_name() {
+  shell_path=${SHELL:-}
+
+  if [ -z "$shell_path" ]; then
+    echo ""
+    return
+  fi
+
+  echo "${shell_path##*/}"
+}
+
+detect_bash_profile_path() {
+  if [ -f "$HOME/.bash_profile" ]; then
+    echo "$HOME/.bash_profile"
+    return
+  fi
+
+  if [ -f "$HOME/.bash_login" ]; then
+    echo "$HOME/.bash_login"
+    return
+  fi
+
+  if [ -f "$HOME/.profile" ]; then
+    echo "$HOME/.profile"
+    return
+  fi
+
+  echo "$HOME/.bash_profile"
+}
+
+detect_zsh_profile_path() {
+  if [ -n "${ZDOTDIR:-}" ]; then
+    echo "$ZDOTDIR/.zshrc"
+    return
+  fi
+
+  echo "$HOME/.zshrc"
+}
+
+detect_fish_profile_path() {
+  if [ -n "${XDG_CONFIG_HOME:-}" ]; then
+    echo "$XDG_CONFIG_HOME/fish/config.fish"
+    return
+  fi
+
+  echo "$HOME/.config/fish/config.fish"
+}
+
+print_fish_append_command() {
+  append_line=$1
+  profile_path=$2
+  profile_dir=${profile_path%/*}
+  quoted_line=$(quote_for_single_quoted_shell "$append_line")
+  quoted_profile=$(quote_for_single_quoted_shell "$profile_path")
+  quoted_profile_dir=$(quote_for_single_quoted_shell "$profile_dir")
+
+  printf "%s\n" "  mkdir -p '$quoted_profile_dir' && printf '\n%s\n' '$quoted_line' >> '$quoted_profile'"
+}
+
+print_path_setup_guidance() {
+  shell_name=$(detect_user_shell_name)
+
+  echo "Installed uloop to $INSTALL_DIR, but that directory is not in PATH."
+  case "$shell_name" in
+    zsh)
+      profile_path=$(detect_zsh_profile_path)
+      echo "Detected shell: zsh"
+      echo "Add this line to $profile_path:"
+      echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+      echo "Or run:"
+      print_append_command "export PATH=\"$INSTALL_DIR:\$PATH\"" "$profile_path"
+      ;;
+    bash)
+      profile_path=$(detect_bash_profile_path)
+      echo "Detected shell: bash"
+      echo "Add this line to $profile_path:"
+      echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+      echo "Or run:"
+      print_append_command "export PATH=\"$INSTALL_DIR:\$PATH\"" "$profile_path"
+      ;;
+    fish)
+      profile_path=$(detect_fish_profile_path)
+      echo "Detected shell: fish"
+      echo "Add this line to $profile_path:"
+      echo "  fish_add_path \"$INSTALL_DIR\""
+      echo "Or run:"
+      print_fish_append_command "fish_add_path \"$INSTALL_DIR\"" "$profile_path"
+      ;;
+    *)
+      echo "Add this directory to PATH in your shell profile:"
+      echo "  $INSTALL_DIR"
+      ;;
+  esac
+
+  echo "Open a new terminal after updating the profile."
+}
+
 try_remove_legacy_npm_package() {
   legacy_uloop=$1
   expected_uloop=$2
@@ -318,9 +428,7 @@ fi
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
   *)
-    echo "Installed uloop to $INSTALL_DIR, but that directory is not in PATH."
-    echo "Add this to your shell profile:"
-    echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+    print_path_setup_guidance
     ;;
 esac
 

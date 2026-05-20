@@ -357,16 +357,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldShow, Is.True);
         }
 
-        [TestCase(false, false, false, false, null, "3.0.0", "Install CLI")]
-        [TestCase(true, false, false, false, "3.0.0", "3.0.0", "Installed")]
-        [TestCase(true, false, false, true, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
-        [TestCase(true, true, false, false, "3.0.0", "3.0.0", "Installing...")]
-        [TestCase(false, false, true, false, null, "3.0.0", "Checking...")]
+        [TestCase(false, false, false, false, false, null, "3.0.0", "Install CLI")]
+        [TestCase(false, false, false, false, true, null, "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, false, false, "3.0.0", "3.0.0", "Installed")]
+        [TestCase(true, false, false, false, true, "3.0.0", "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, true, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, true, false, false, false, "3.0.0", "3.0.0", "Installing...")]
+        [TestCase(false, false, true, false, false, null, "3.0.0", "Checking...")]
         public void GetCliButtonTextForSetupWizard_ReturnsExpectedLabel(
             bool cliInstalled,
             bool isInstallingCli,
             bool isChecking,
             bool needsUpdate,
+            bool needsCliPathSetup,
             string cliVersion,
             string requiredCliVersion,
             string expectedLabel)
@@ -376,20 +379,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isInstallingCli,
                 isChecking,
                 needsUpdate,
+                needsCliPathSetup,
                 cliVersion,
                 requiredCliVersion);
 
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
-        [TestCase(false, false, false, false, true)]
-        [TestCase(true, false, false, false, true)]
-        [TestCase(true, true, false, false, false)]
-        [TestCase(false, false, true, false, false)]
-        [TestCase(false, false, false, true, false)]
+        [TestCase(false, false, false, false, false, true)]
+        [TestCase(true, false, true, false, false, true)]
+        [TestCase(true, false, false, false, false, true)]
+        [TestCase(true, true, false, false, false, false)]
+        [TestCase(false, false, false, true, false, false)]
+        [TestCase(false, false, false, false, true, false)]
         public void IsCliButtonEnabledForSetupWizard_ReturnsExpectedValue(
             bool cliInstalled,
             bool cliVersionMatched,
+            bool needsCliPathSetup,
             bool isInstallingCli,
             bool isChecking,
             bool expectedEnabled)
@@ -397,10 +403,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool enabled = SetupWizardWindow.IsCliButtonEnabledForSetupWizard(
                 cliInstalled,
                 cliVersionMatched,
+                needsCliPathSetup,
                 isInstallingCli,
                 isChecking);
 
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
+        }
+
+        [TestCase(false, false)]
+        [TestCase(true, true)]
+        public void ShouldRepairCliPathFromPrimaryButton_ReturnsExpectedAction(
+            bool needsCliPathSetup,
+            bool expected)
+        {
+            // Verifies that setup wizard chooses PATH repair for installed terminal-invisible CLIs.
+            bool result = SetupWizardWindow.ShouldRepairCliPathFromPrimaryButton(needsCliPathSetup);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
+        [TestCase(RuntimePlatform.OSXEditor, true, true)]
+        [TestCase(RuntimePlatform.OSXEditor, false, false)]
+        [TestCase(RuntimePlatform.WindowsEditor, true, false)]
+        public void ShouldCheckCliPathSetupForSetupWizard_RequiresPackageOwnedCli(
+            RuntimePlatform platform,
+            bool hasPackageOwnedCurrentUserInstall,
+            bool expected)
+        {
+            // Verifies that setup wizard only repairs PATH for package-owned POSIX CLIs.
+            bool result = SetupWizardWindow.ShouldCheckCliPathSetupForSetupWizard(
+                platform,
+                hasPackageOwnedCurrentUserInstall);
+
+            Assert.That(result, Is.EqualTo(expected));
         }
 
         [Test]

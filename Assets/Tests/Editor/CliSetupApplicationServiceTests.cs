@@ -87,6 +87,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public string GetCachedCliExecutablePath() => "";
             public bool IsCheckCompleted() => true;
             public Task RefreshCliVersionAsync(CancellationToken ct) => Task.CompletedTask;
+            public Task<bool> IsCliVisibleFromShellAsync(RuntimePlatform platform, CancellationToken ct)
+                => Task.FromResult(true);
 
             public Task ForceRefreshCliVersionAsync(CancellationToken ct)
             {
@@ -110,6 +112,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return false;
             }
 
+            public bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)
+            {
+                return false;
+            }
+
             public Task<CliInstallResult> InstallGlobalCliAsync(
                 RuntimePlatform platform,
                 string cliReleaseTag,
@@ -122,6 +129,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
             {
                 return Task.FromResult(new CliInstallResult(true, ""));
+            }
+
+            public Task<CliPathSetupPlan> GetGlobalCliPathSetupPlanAsync(RuntimePlatform platform, CancellationToken ct)
+            {
+                return Task.FromResult(new CliPathSetupPlan(
+                    CliPathSetupShellKind.Zsh,
+                    "zsh",
+                    true,
+                    "/Users/ExampleUser/.local/bin",
+                    "$HOME/.local/bin",
+                    "/Users/ExampleUser/.zshrc",
+                    "export PATH=\"$HOME/.local/bin:$PATH\"",
+                    "printf '\\n%s\\n' 'export PATH=\"$HOME/.local/bin:$PATH\"' >> '/Users/ExampleUser/.zshrc'"));
+            }
+
+            public CliPathSetupApplyResult ApplyGlobalCliPathSetup(CliPathSetupPlan plan)
+            {
+                return new CliPathSetupApplyResult(true, CliPathSetupApplyStatus.Applied, "");
             }
 
             public NativeCliInstallCommand GetGlobalCliInstallCommand(

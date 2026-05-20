@@ -35,6 +35,15 @@ assert_not_contains() {
   fi
 }
 
+assert_file_not_exists() {
+  file=$1
+
+  if [ -e "$file" ]; then
+    echo "Expected $file not to exist" >&2
+    exit 1
+  fi
+}
+
 write_releases_json() {
   output_path=$1
 
@@ -285,7 +294,7 @@ write_required_tool_links() {
   tool_bin=$1
   mkdir -p "$tool_bin"
 
-  for command_name in awk cat chmod grep install mkdir mktemp mv readlink rm; do
+  for command_name in awk cat chmod grep install mkdir mktemp mv readlink rm sed; do
     command_path=$(command -v "$command_name")
     {
       printf '%s\n' '#!/bin/sh'
@@ -359,6 +368,143 @@ test_posix_latest_beta_selects_prerelease_assets() {
   assert_contains "$curl_log" "v3.0.0-beta.2/uloop-darwin-arm64.tar.gz.sha256"
   assert_not_contains "$curl_log" "v2.0.0/uloop-darwin-arm64.tar.gz"
   assert_not_contains "$npm_log" "uninstall -g uloop-cli"
+}
+
+test_posix_prints_zsh_path_guidance_without_writing_profile() {
+  work_dir="$TMP_DIR/posix-zsh-path-guidance"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  home_dir="$work_dir/home"
+  zdot_dir="$work_dir/zdot"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  profile_path="$zdot_dir/.zshrc"
+  mkdir -p "$work_dir" "$home_dir" "$zdot_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="$home_dir" \
+    ZDOTDIR="$zdot_dir" \
+    SHELL="/bin/zsh" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$work_dir/output.txt" "Detected shell: zsh"
+  assert_contains "$work_dir/output.txt" "Add this line to $profile_path:"
+  assert_contains "$work_dir/output.txt" "  export PATH=\"$install_dir:\$PATH\""
+  assert_contains "$work_dir/output.txt" "printf '\\n%s\\n' 'export PATH=\"$install_dir:\$PATH\"' >> '$profile_path'"
+  assert_file_not_exists "$profile_path"
+}
+
+test_posix_prints_bash_path_guidance_without_modifying_existing_profile() {
+  work_dir="$TMP_DIR/posix-bash-path-guidance"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  home_dir="$work_dir/home"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  profile_path="$home_dir/.bash_login"
+  mkdir -p "$work_dir" "$home_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  printf '%s\n' "existing bash profile" > "$profile_path"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="$home_dir" \
+    SHELL="/bin/bash" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$work_dir/output.txt" "Detected shell: bash"
+  assert_contains "$work_dir/output.txt" "Add this line to $profile_path:"
+  assert_contains "$work_dir/output.txt" "  export PATH=\"$install_dir:\$PATH\""
+  if [ "$(cat "$profile_path")" != "existing bash profile" ]; then
+    echo "Expected bash profile to remain unchanged: $profile_path" >&2
+    exit 1
+  fi
+}
+
+test_posix_prints_fish_path_guidance_without_writing_profile() {
+  work_dir="$TMP_DIR/posix-fish-path-guidance"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  home_dir="$work_dir/home"
+  xdg_config_home="$work_dir/xdg"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  profile_path="$xdg_config_home/fish/config.fish"
+  mkdir -p "$work_dir" "$home_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="$home_dir" \
+    XDG_CONFIG_HOME="$xdg_config_home" \
+    SHELL="/opt/homebrew/bin/fish" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$work_dir/output.txt" "Detected shell: fish"
+  assert_contains "$work_dir/output.txt" "Add this line to $profile_path:"
+  assert_contains "$work_dir/output.txt" "  fish_add_path \"$install_dir\""
+  assert_contains "$work_dir/output.txt" "mkdir -p '$xdg_config_home/fish' && printf '\\n%s\\n' 'fish_add_path \"$install_dir\"' >> '$profile_path'"
+  assert_file_not_exists "$profile_path"
+}
+
+test_posix_prints_generic_path_guidance_for_unknown_shell() {
+  work_dir="$TMP_DIR/posix-generic-path-guidance"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  home_dir="$work_dir/home"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir" "$home_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="$home_dir" \
+    SHELL="/bin/ksh" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$work_dir/output.txt" "Add this directory to PATH in your shell profile:"
+  assert_contains "$work_dir/output.txt" "  $install_dir"
+  assert_not_contains "$work_dir/output.txt" "Detected shell:"
+  assert_file_not_exists "$home_dir/.kshrc"
 }
 
 test_posix_skips_default_npm_cleanup_when_native_command_is_first() {
@@ -616,6 +762,10 @@ test_powershell_installer_uses_non_installer_staged_executable_name() {
 
 test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
+test_posix_prints_zsh_path_guidance_without_writing_profile
+test_posix_prints_bash_path_guidance_without_modifying_existing_profile
+test_posix_prints_fish_path_guidance_without_writing_profile
+test_posix_prints_generic_path_guidance_for_unknown_shell
 test_posix_skips_default_npm_cleanup_when_native_command_is_first
 test_posix_does_not_infer_npm_prefix_from_non_npm_command
 test_posix_prints_prefix_manual_cleanup_when_npm_is_unavailable
