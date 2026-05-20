@@ -92,6 +92,25 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _cacheInitialized = true;
         }
 
+        public Task<bool> IsCliVisibleFromShellAsync(RuntimePlatform platform, CancellationToken ct)
+        {
+            if (platform == RuntimePlatform.WindowsEditor)
+            {
+                return Task.FromResult(true);
+            }
+
+            return Task.Run(
+                () =>
+                {
+                    CliInstallationDetection detection = DetectShellCliInstallationBlocking(platform, ct);
+                    return IsShellDetectionUsableForPathSetup(
+                        detection,
+                        platform,
+                        NativeCliInstaller.IsPackageOwnedCurrentUserInstallPath);
+                },
+                ct);
+        }
+
         public void InvalidateCache()
         {
             _cachedCliVersion = null;
@@ -145,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             if (platform != RuntimePlatform.WindowsEditor)
             {
-                return DetectShellCliInstallationFromLoginShell(ct);
+                return DetectShellCliInstallationFromLoginShell(platform, ct);
             }
 
             string executablePath = NodeEnvironmentResolver.FindExecutablePathAtPlatform(
@@ -154,21 +173,81 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return DetectCliInstallationAtExecutablePath(executablePath, ct);
         }
 
-        private static CliInstallationDetection DetectShellCliInstallationFromLoginShell(CancellationToken ct)
+        private static CliInstallationDetection DetectShellCliInstallationFromLoginShell(RuntimePlatform platform, CancellationToken ct)
         {
             string shell = NodeEnvironmentResolver.GetUserShell();
+            CliPathSetupPlan pathSetupPlan = CliPathSetupProfileResolver.ResolveCurrentUserPlan(platform);
+            ProcessStartInfo startInfo = BuildShellCliDetectionStartInfo(
+                shell,
+                platform,
+                pathSetupPlan,
+                Environment.GetEnvironmentVariable(CliConstants.POSIX_PATH_ENVIRONMENT_VARIABLE));
+
+            string output = ExecuteAndGetOutput(startInfo, ct);
+            return ParseShellCliInstallationOutput(output);
+        }
+
+        internal static ProcessStartInfo BuildShellCliDetectionStartInfo(
+            string shell,
+            RuntimePlatform platform,
+            CliPathSetupPlan pathSetupPlan,
+            string currentPath)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(shell), "shell must not be null or empty");
+
             ProcessStartInfo startInfo = new()
             {
                 FileName = shell,
-                Arguments = "-l -i -c " + QuoteProcessArgument(BuildShellCliDetectionCommand(CliConstants.EXECUTABLE_NAME)),
+                Arguments = "-l -i -c " + QuoteProcessArgument(BuildShellCliDetectionCommandForShell(
+                    CliConstants.EXECUTABLE_NAME,
+                    shell)),
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            if (platform != RuntimePlatform.WindowsEditor)
+            {
+                startInfo.EnvironmentVariables[CliConstants.POSIX_PATH_ENVIRONMENT_VARIABLE] =
+                    NativeCliInstaller.BuildPathWithoutInstallDirectory(
+                        currentPath,
+                        pathSetupPlan.InstallDirectory,
+                        platform);
+            }
 
-            string output = ExecuteAndGetOutput(startInfo, ct);
-            return ParseShellCliInstallationOutput(output);
+            return startInfo;
+        }
+
+        internal static bool IsShellDetectionUsableForPathSetup(
+            CliInstallationDetection detection,
+            RuntimePlatform platform,
+            Func<string, RuntimePlatform, bool> isPackageOwnedCurrentUserInstallPath)
+        {
+            UnityEngine.Debug.Assert(isPackageOwnedCurrentUserInstallPath != null, "isPackageOwnedCurrentUserInstallPath must not be null");
+
+            if (isPackageOwnedCurrentUserInstallPath(detection.ExecutablePath, platform))
+            {
+                return true;
+            }
+
+            return CliVersionComparer.IsVersionGreaterThanOrEqual(
+                detection.Version,
+                CliConstants.MINIMUM_REQUIRED_CLI_VERSION);
+        }
+
+        internal static string BuildShellCliDetectionCommandForShell(
+            string executableName,
+            string shellPath)
+        {
+            string shellName = string.IsNullOrWhiteSpace(shellPath)
+                ? string.Empty
+                : Path.GetFileName(shellPath.Trim()).ToLowerInvariant();
+            if (string.Equals(shellName, "fish", StringComparison.Ordinal))
+            {
+                return BuildFishShellCliDetectionCommand(executableName);
+            }
+
+            return BuildShellCliDetectionCommand(executableName);
         }
 
         internal static string BuildShellCliDetectionCommand(string executableName)
@@ -181,6 +260,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 + "echo " + SHELL_VERSION_START_MARKER + "\n"
                 + executableName + " " + CliConstants.SHORT_VERSION_FLAG + "\n"
                 + "uloop_version_status=$?\n"
+                + "echo " + SHELL_VERSION_END_MARKER + "\n"
+                + "echo " + SHELL_VERSION_STATUS_START_MARKER + "\n"
+                + "echo $uloop_version_status\n"
+                + "echo " + SHELL_VERSION_STATUS_END_MARKER;
+        }
+
+        private static string BuildFishShellCliDetectionCommand(string executableName)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(executableName), "executableName must not be null or empty");
+
+            return "echo " + SHELL_PATH_START_MARKER + "\n"
+                + "command -v " + executableName + "\n"
+                + "echo " + SHELL_PATH_END_MARKER + "\n"
+                + "echo " + SHELL_VERSION_START_MARKER + "\n"
+                + executableName + " " + CliConstants.SHORT_VERSION_FLAG + "\n"
+                + "set uloop_version_status $status\n"
                 + "echo " + SHELL_VERSION_END_MARKER + "\n"
                 + "echo " + SHELL_VERSION_STATUS_START_MARKER + "\n"
                 + "echo $uloop_version_status\n"

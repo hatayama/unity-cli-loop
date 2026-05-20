@@ -118,6 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 data.NeedsUpdate,
                 data.NeedsDowngrade,
                 data.CanUninstallCli,
+                data.NeedsCliPathSetup,
                 data.CliVersion,
                 data.RequiredCliVersion);
             bool enabled = IsInstallCliButtonEnabled(
@@ -203,12 +204,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsUpdate,
             bool needsDowngrade,
             bool canUninstallCli,
+            bool needsCliPathSetup,
             string cliVersion,
             string requiredCliVersion)
         {
             if (isChecking)
             {
                 return "Checking...";
+            }
+
+            if (needsCliPathSetup)
+            {
+                return isInstallingCli ? "Fixing PATH..." : "Fix PATH";
             }
 
             bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade, canUninstallCli);

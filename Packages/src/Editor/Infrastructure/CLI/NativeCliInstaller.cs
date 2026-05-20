@@ -680,6 +680,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 : GetGlobalCliInstallPath(installDirectory, platform);
         }
 
+        internal static string GetCurrentUserGlobalCliInstallDirectory(RuntimePlatform platform)
+        {
+            return GetInstallDirectoryForCurrentUser(platform);
+        }
+
+        internal static bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)
+        {
+            string executablePath = GetCurrentUserGlobalCliInstallPath(platform);
+            return !string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath);
+        }
+
         private static string GetInstallDirectoryForCurrentUser(RuntimePlatform platform)
         {
             string configuredInstallDirectory = Environment.GetEnvironmentVariable(CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE);
@@ -1087,6 +1098,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return NativeCliInstaller.IsPackageOwnedCurrentUserInstallPath(cliExecutablePath, platform);
         }
 
+        public bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)
+        {
+            return NativeCliInstaller.HasPackageOwnedCurrentUserInstall(platform);
+        }
+
         public Task<CliInstallResult> InstallGlobalCliAsync(
             RuntimePlatform platform,
             string cliReleaseTag,
@@ -1100,6 +1116,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             ct.ThrowIfCancellationRequested();
             return NativeCliInstaller.UninstallAsync(platform, ct);
+        }
+
+        public Task<CliPathSetupPlan> GetGlobalCliPathSetupPlanAsync(RuntimePlatform platform, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(CliPathSetupProfileResolver.ResolveCurrentUserPlan(platform));
+        }
+
+        public CliPathSetupApplyResult ApplyGlobalCliPathSetup(CliPathSetupPlan plan)
+        {
+            return CliPathSetupWriter.ApplyToFileSystem(plan);
         }
 
         public NativeCliInstallCommand GetGlobalCliInstallCommand(

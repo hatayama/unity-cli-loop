@@ -17,6 +17,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     public class UnityCliLoopSettingsWindow : EditorWindow
     {
+        internal enum CliPrimaryButtonAction
+        {
+            None,
+            InstallOrUpdate,
+            RepairPath,
+            Uninstall
+        }
+
         private const bool ForceFlatSkillInstall = true;
         private const double DeferredInitialRefreshDelaySeconds = 0.05;
         private const double ToolSettingsRegistryWarmupInitialDelaySeconds = 0.05;
@@ -39,6 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private bool _isInstallingCli;
         private bool _isInstallingSkills;
         private bool _isRefreshingVersion;
+        private bool _isRefreshingCliPathSetup;
+        private bool _needsCliPathSetup;
         private bool _isToolSettingsCatalogDirty = true;
         private bool _isDeferredInitialRefreshScheduled;
         private bool _hasCompletedDeferredInitialRefresh;
@@ -282,6 +292,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (runExpensiveChecks)
             {
                 RefreshCliVersionInBackground();
+                RefreshCliPathSetupInBackground();
                 if (refreshSkillInstallState)
                 {
                     RefreshSelectedTargetInstallStateInBackground();
@@ -304,8 +315,39 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             await CliSetupApplicationFacade.RefreshCliVersionAsync(CancellationToken.None);
+            RefreshCliPathSetupInBackground();
             RefreshCliSetupSection();
             RefreshSelectedTargetInstallStateInBackground();
+        }
+
+        private async void RefreshCliPathSetupInBackground()
+        {
+            if (_isRefreshingCliPathSetup)
+            {
+                return;
+            }
+
+            if (!ShouldCheckCliPathSetup())
+            {
+                _needsCliPathSetup = false;
+                return;
+            }
+
+            _isRefreshingCliPathSetup = true;
+            RefreshCliSetupSection();
+
+            try
+            {
+                bool isCliVisibleFromShell = await CliSetupApplicationFacade.IsCliVisibleFromShellAsync(
+                    UnityEngine.Application.platform,
+                    CancellationToken.None);
+                _needsCliPathSetup = !isCliVisibleFromShell;
+            }
+            finally
+            {
+                _isRefreshingCliPathSetup = false;
+                RefreshCliSetupSection();
+            }
         }
 
         private async void HandleRefreshCliVersion()
@@ -323,6 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 Task forceRefresh = CliSetupApplicationFacade.ForceRefreshCliVersionAsync(CancellationToken.None);
                 Task minimumDelay = Task.Delay(500);
                 await Task.WhenAll(forceRefresh, minimumDelay);
+                RefreshCliPathSetupInBackground();
             }
             finally
             {
@@ -577,12 +620,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
             string requiredCliVersion = GetMinimumRequiredCliVersion();
 
-            bool isCliInstalled = cliVersion != null;
+            bool isCliInstalled = cliVersion != null || _needsCliPathSetup;
             bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);
             bool isChecking = !CliSetupApplicationFacade.IsCliCheckCompleted()
                 || _isRefreshingVersion
+                || _isRefreshingCliPathSetup
                 || !includeSkillDirectoryChecks;
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredCliVersion);
             bool needsDowngrade = false;
@@ -598,6 +642,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 needsUpdate,
                 needsDowngrade,
                 canUninstallCli,
+                _needsCliPathSetup,
                 _isInstallingCli,
                 isChecking,
                 isClaudeSkillsInstalled: false,
@@ -615,6 +660,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static string GetMinimumRequiredCliVersion()
         {
             return CliSetupApplicationFacade.GetMinimumRequiredCliVersion();
+        }
+
+        private static bool ShouldCheckCliPathSetup()
+        {
+            return ShouldCheckCliPathSetupForPlatform(
+                UnityEngine.Application.platform,
+                CliSetupApplicationFacade.HasPackageOwnedCurrentUserInstall(UnityEngine.Application.platform));
+        }
+
+        internal static bool ShouldCheckCliPathSetupForPlatform(
+            RuntimePlatform platform,
+            bool hasPackageOwnedCurrentUserInstall)
+        {
+            return platform != RuntimePlatform.WindowsEditor && hasPackageOwnedCurrentUserInstall;
         }
 
         private void RefreshSelectedTargetInstallStateFast()
@@ -709,13 +768,32 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async void HandleInstallCli()
         {
-            if (ShouldUninstallCliFromPrimaryButton())
+            CliPrimaryButtonAction clickedAction = GetCurrentCliPrimaryButtonAction();
+
+            await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
+            CliPrimaryButtonAction refreshedAction = GetCurrentCliPrimaryButtonAction();
+            CliPrimaryButtonAction executableAction = ResolveExecutableCliPrimaryButtonAction(
+                clickedAction,
+                refreshedAction);
+            if (executableAction == CliPrimaryButtonAction.None)
+            {
+                return;
+            }
+
+            if (executableAction == CliPrimaryButtonAction.RepairPath)
+            {
+                await HandleRepairCliPathSetup();
+                return;
+            }
+
+            if (executableAction == CliPrimaryButtonAction.Uninstall)
             {
                 await HandleUninstallCli();
                 return;
             }
 
             bool wasCliInstalledBeforeInstall = CliSetupApplicationFacade.IsCliInstalled();
+            _needsCliPathSetup = false;
             _isInstallingCli = true;
             RefreshCliSetupSection();
 
@@ -736,6 +814,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                         "OK");
                     return;
                 }
+
+                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
+                    UnityEngine.Application.platform,
+                    CancellationToken.None);
+                await RefreshCliPathSetupAsync(CancellationToken.None);
             }
             finally
             {
@@ -744,6 +827,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     refreshSkillInstallState:
                     CliInstallRefreshPolicy.ShouldRefreshSkillsAfterCliInstall(wasCliInstalledBeforeInstall));
             }
+        }
+
+        private CliPrimaryButtonAction GetCurrentCliPrimaryButtonAction()
+        {
+            string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
+            bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
+                cliExecutablePath,
+                UnityEngine.Application.platform);
+            return ResolveCliPrimaryButtonAction(
+                _needsCliPathSetup,
+                cliVersion,
+                GetMinimumRequiredCliVersion(),
+                canUninstallCli);
         }
 
         private bool ShouldUninstallCliFromPrimaryButton()
@@ -767,6 +864,98 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isCliInstalled = cliVersion != null;
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredCliVersion);
             return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade: false, canUninstallCli);
+        }
+
+        internal static CliPrimaryButtonAction ResolveCliPrimaryButtonAction(
+            bool needsCliPathSetup,
+            string cliVersion,
+            string requiredCliVersion,
+            bool canUninstallCli)
+        {
+            if (ShouldRepairCliPathFromPrimaryButton(needsCliPathSetup))
+            {
+                return CliPrimaryButtonAction.RepairPath;
+            }
+
+            if (ShouldUninstallCliFromPrimaryButton(cliVersion, requiredCliVersion, canUninstallCli))
+            {
+                return CliPrimaryButtonAction.Uninstall;
+            }
+
+            return CliPrimaryButtonAction.InstallOrUpdate;
+        }
+
+        internal static CliPrimaryButtonAction ResolveExecutableCliPrimaryButtonAction(
+            CliPrimaryButtonAction clickedAction,
+            CliPrimaryButtonAction refreshedAction)
+        {
+            if (clickedAction == refreshedAction)
+            {
+                return clickedAction;
+            }
+
+            if (clickedAction == CliPrimaryButtonAction.InstallOrUpdate
+                && refreshedAction == CliPrimaryButtonAction.RepairPath)
+            {
+                return CliPrimaryButtonAction.RepairPath;
+            }
+
+            return CliPrimaryButtonAction.None;
+        }
+
+        internal static bool ShouldRepairCliPathFromPrimaryButton(bool needsCliPathSetup)
+        {
+            return needsCliPathSetup;
+        }
+
+        private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)
+        {
+            _isRefreshingVersion = true;
+            RefreshCliSetupSection();
+
+            try
+            {
+                await CliSetupApplicationFacade.ForceRefreshCliVersionAsync(ct);
+                await RefreshCliPathSetupAsync(ct);
+            }
+            finally
+            {
+                _isRefreshingVersion = false;
+                RefreshCliSetupSection();
+            }
+        }
+
+        private async Task RefreshCliPathSetupAsync(CancellationToken ct)
+        {
+            if (!ShouldCheckCliPathSetup())
+            {
+                _needsCliPathSetup = false;
+                return;
+            }
+
+            bool isCliVisibleFromShell = await CliSetupApplicationFacade.IsCliVisibleFromShellAsync(
+                UnityEngine.Application.platform,
+                ct);
+            _needsCliPathSetup = !isCliVisibleFromShell;
+        }
+
+        private async Task HandleRepairCliPathSetup()
+        {
+            _isInstallingCli = true;
+            RefreshCliSetupSection();
+
+            try
+            {
+                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
+                    UnityEngine.Application.platform,
+                    CancellationToken.None);
+                await RefreshCliPathSetupAsync(CancellationToken.None);
+            }
+            finally
+            {
+                _isInstallingCli = false;
+                RefreshAllSections();
+            }
         }
 
         internal static bool IsCliUpdateNeeded(string cliVersion, string requiredCliVersion)

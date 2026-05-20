@@ -13,14 +13,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class CliSetupSectionTests
     {
-        [TestCase(false, false, false, false, false, false, null, "3.0.0", "Install CLI")]
-        [TestCase(true, false, false, false, false, true, "3.0.0", "3.0.0", "Uninstall CLI")]
-        [TestCase(true, false, false, false, false, false, "3.0.0", "3.0.0", "Install CLI")]
-        [TestCase(true, false, false, true, false, true, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
-        [TestCase(true, false, false, false, true, true, "3.1.0", "3.0.0", "Downgrade CLI (v3.1.0 \u2192 v3.0.0)")]
-        [TestCase(true, true, false, false, false, true, "3.0.0", "3.0.0", "Uninstalling...")]
-        [TestCase(false, true, false, false, false, false, null, "3.0.0", "Installing...")]
-        [TestCase(false, false, true, false, false, false, null, "3.0.0", "Checking...")]
+        [TestCase(false, false, false, false, false, false, false, null, "3.0.0", "Install CLI")]
+        [TestCase(false, false, false, false, false, false, true, null, "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, false, false, true, false, "3.0.0", "3.0.0", "Uninstall CLI")]
+        [TestCase(true, false, false, false, false, false, false, "3.0.0", "3.0.0", "Install CLI")]
+        [TestCase(true, false, false, false, false, true, true, "3.0.0", "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, true, false, true, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, false, false, false, true, true, false, "3.1.0", "3.0.0", "Downgrade CLI (v3.1.0 \u2192 v3.0.0)")]
+        [TestCase(true, true, false, false, false, true, false, "3.0.0", "3.0.0", "Uninstalling...")]
+        [TestCase(true, true, false, false, false, true, true, "3.0.0", "3.0.0", "Fixing PATH...")]
+        [TestCase(false, true, false, false, false, false, false, null, "3.0.0", "Installing...")]
+        [TestCase(false, false, true, false, false, false, false, null, "3.0.0", "Checking...")]
         public void GetInstallCliButtonText_ReturnsExpectedText(
             bool isCliInstalled,
             bool isInstallingCli,
@@ -28,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool needsUpdate,
             bool needsDowngrade,
             bool canUninstallCli,
+            bool needsCliPathSetup,
             string cliVersion,
             string requiredCliVersion,
             string expectedText)
@@ -39,6 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsUpdate,
                 needsDowngrade,
                 canUninstallCli,
+                needsCliPathSetup,
                 cliVersion,
                 requiredCliVersion);
 
@@ -191,6 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsUpdate: false,
                 needsDowngrade: false,
                 canUninstallCli: true,
+                needsCliPathSetup: false,
                 isInstallingCli: false,
                 isChecking,
                 isClaudeSkillsInstalled: false,

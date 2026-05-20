@@ -37,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         bool IsCheckCompleted();
         Task RefreshCliVersionAsync(CancellationToken ct);
         Task ForceRefreshCliVersionAsync(CancellationToken ct);
+        Task<bool> IsCliVisibleFromShellAsync(RuntimePlatform platform, CancellationToken ct);
         void InvalidateCache();
     }
 
@@ -46,8 +47,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
     public interface INativeCliInstaller
     {
         bool IsPackageOwnedCurrentUserInstallPath(string cliExecutablePath, RuntimePlatform platform);
+        bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform);
         Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, string cliReleaseTag, CancellationToken ct);
         Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct);
+        Task<CliPathSetupPlan> GetGlobalCliPathSetupPlanAsync(RuntimePlatform platform, CancellationToken ct);
+        CliPathSetupApplyResult ApplyGlobalCliPathSetup(CliPathSetupPlan plan);
         NativeCliInstallCommand GetGlobalCliInstallCommand(
             RuntimePlatform platform,
             string cliReleaseTag,
@@ -103,6 +107,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _cliInstallationDetector.ForceRefreshCliVersionAsync(ct);
         }
 
+        public Task<bool> IsCliVisibleFromShellAsync(RuntimePlatform platform, CancellationToken ct)
+        {
+            return _cliInstallationDetector.IsCliVisibleFromShellAsync(platform, ct);
+        }
+
         public void InvalidateCliCache()
         {
             _cliInstallationDetector.InvalidateCache();
@@ -125,6 +134,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _nativeCliInstaller.IsPackageOwnedCurrentUserInstallPath(cliExecutablePath, platform);
         }
 
+        public bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)
+        {
+            return _nativeCliInstaller.HasPackageOwnedCurrentUserInstall(platform);
+        }
+
         public bool IsCliVersionLessThan(string leftVersion, string rightVersion)
         {
             return CliVersionComparer.IsVersionLessThan(leftVersion, rightVersion);
@@ -145,6 +159,55 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 ct);
             _cliInstallationDetector.InvalidateCache();
             return result;
+        }
+
+        public async Task<CliPathSetupFlowResult> EnsureCliVisibleFromShellAsync(
+            RuntimePlatform platform,
+            CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            bool isVisible = await _cliInstallationDetector.IsCliVisibleFromShellAsync(platform, ct);
+            if (isVisible)
+            {
+                return new CliPathSetupFlowResult(
+                    CliPathSetupFlowStatus.AlreadyVisible,
+                    default,
+                    "");
+            }
+
+            CliPathSetupPlan plan = await _nativeCliInstaller.GetGlobalCliPathSetupPlanAsync(platform, ct);
+            if (!plan.CanApplyAutomatically)
+            {
+                return new CliPathSetupFlowResult(
+                    CliPathSetupFlowStatus.ManualSetupRequired,
+                    plan,
+                    "");
+            }
+
+            CliPathSetupApplyResult applyResult = _nativeCliInstaller.ApplyGlobalCliPathSetup(plan);
+            if (!applyResult.Success)
+            {
+                return new CliPathSetupFlowResult(
+                    CliPathSetupFlowStatus.Failed,
+                    plan,
+                    applyResult.ErrorOutput);
+            }
+
+            _cliInstallationDetector.InvalidateCache();
+            bool isVisibleAfterApply = await _cliInstallationDetector.IsCliVisibleFromShellAsync(platform, ct);
+            if (!isVisibleAfterApply)
+            {
+                return new CliPathSetupFlowResult(
+                    CliPathSetupFlowStatus.AppliedButStillMissing,
+                    plan,
+                    "");
+            }
+
+            CliPathSetupFlowStatus status = applyResult.Status == CliPathSetupApplyStatus.AlreadyConfigured
+                ? CliPathSetupFlowStatus.AlreadyConfiguredAndVisible
+                : CliPathSetupFlowStatus.AppliedAndVisible;
+            return new CliPathSetupFlowResult(status, plan, "");
         }
 
         public async Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
@@ -221,6 +284,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return GetService().ForceRefreshCliVersionAsync(ct);
         }
 
+        public static Task<bool> IsCliVisibleFromShellAsync(RuntimePlatform platform, CancellationToken ct)
+        {
+            return GetService().IsCliVisibleFromShellAsync(platform, ct);
+        }
+
         public static void InvalidateCliCache()
         {
             GetService().InvalidateCliCache();
@@ -243,6 +311,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return GetService().IsPackageOwnedCurrentUserInstallPath(cliExecutablePath, platform);
         }
 
+        public static bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)
+        {
+            return GetService().HasPackageOwnedCurrentUserInstall(platform);
+        }
+
         public static bool IsCliVersionLessThan(string leftVersion, string rightVersion)
         {
             return GetService().IsCliVersionLessThan(leftVersion, rightVersion);
@@ -256,6 +329,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public static Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
         {
             return GetService().InstallGlobalCliAsync(platform, ct);
+        }
+
+        public static Task<CliPathSetupFlowResult> EnsureCliVisibleFromShellAsync(
+            RuntimePlatform platform,
+            CancellationToken ct)
+        {
+            return GetService().EnsureCliVisibleFromShellAsync(platform, ct);
         }
 
         public static Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
