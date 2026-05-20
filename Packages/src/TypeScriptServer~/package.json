@@ -88,7 +88,7 @@
     "ts-jest": "29.4.10",
     "tsx": "4.22.1",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.59.3"
+    "typescript-eslint": "8.59.4"
   },
   "overrides": {
     "@hono/node-server": "1.19.13",
