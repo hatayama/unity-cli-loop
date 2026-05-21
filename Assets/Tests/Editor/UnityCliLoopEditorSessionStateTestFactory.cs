@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     internal readonly struct UnityCliLoopEditorSessionStateSnapshot
     {
         private readonly bool _isServerRunning;
+        private readonly bool _isServerManuallyStopped;
         private readonly bool _isAfterCompile;
         private readonly bool _isDomainReloadInProgress;
         private readonly bool _isReconnecting;
@@ -36,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private UnityCliLoopEditorSessionStateSnapshot(UnityCliLoopEditorSessionStateService service)
         {
             _isServerRunning = service.GetIsServerRunning();
+            _isServerManuallyStopped = service.GetIsServerManuallyStopped();
             _isAfterCompile = service.GetIsAfterCompile();
             _isDomainReloadInProgress = service.GetIsDomainReloadInProgress();
             _isReconnecting = service.GetIsReconnecting();
@@ -53,6 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         internal void Restore(UnityCliLoopEditorSessionStateService service)
         {
             service.SetIsServerRunning(_isServerRunning);
+            service.SetIsServerManuallyStopped(_isServerManuallyStopped);
             service.SetIsAfterCompile(_isAfterCompile);
             service.SetIsDomainReloadInProgress(_isDomainReloadInProgress);
             service.SetIsReconnecting(_isReconnecting);

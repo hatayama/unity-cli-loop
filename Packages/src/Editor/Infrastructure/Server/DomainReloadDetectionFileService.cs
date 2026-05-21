@@ -116,12 +116,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             MigrateLegacySessionStateIfNeeded();
-            bool serverWillRecover = _sessionStateService.GetIsServerRunning();
+            bool serverWillRecover = !_sessionStateService.GetIsServerManuallyStopped();
 
             _stateStore.Write(
                 serverWillRecover ? ServerReadinessPhase.Recovering : ServerReadinessPhase.Stopped,
                 correlationId,
-                serverWillRecover ? "domain-reload-after" : "domain-reload-after-no-server",
+                serverWillRecover ? "domain-reload-after" : "manual-stop",
                 null,
                 null);
 
@@ -132,7 +132,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // Log recording
             VibeLogger.LogInfo(
                 "domain_reload_complete",
-                "Domain reload completed - starting server recovery process",
+                serverWillRecover
+                    ? "Domain reload completed - starting server recovery process"
+                    : "Domain reload completed - server was manually stopped before recovery",
                 new { transport = "project_ipc" },
                 correlationId
             );
@@ -181,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (legacySessionState.IsServerRunning)
             {
-                _sessionStateService.SetIsServerRunning(true);
+                _sessionStateService.MarkServerStarted();
             }
 
             if (legacySessionState.IsAfterCompile)

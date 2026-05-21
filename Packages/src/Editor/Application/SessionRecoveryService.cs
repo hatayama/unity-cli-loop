@@ -46,7 +46,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             ct.ThrowIfCancellationRequested();
 
-            bool wasRunning = _sessionStateService.GetIsServerRunning();
             bool isAfterCompile = _sessionStateService.GetIsAfterCompile();
 
             IUnityCliLoopServerInstance currentServer = _recoveryCoordinator.CurrentServer;
@@ -64,15 +63,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 _sessionStateService.ClearAfterCompileFlag();
             }
 
-            if (wasRunning && (currentServer == null || !currentServer.IsRunning))
+            if (_sessionStateService.GetIsServerManuallyStopped())
             {
-                await _recoveryCoordinator.StartRecoveryIfNeededAsync(isAfterCompile, ct);
-                IUnityCliLoopServerInstance recoveredServer = _recoveryCoordinator.CurrentServer;
-                if (recoveredServer?.IsRunning != true)
-                {
-                    return ValidationResult.Failure(
-                        "Unity CLI Loop server recovery finished, but no running server instance is available.");
-                }
+                return ValidationResult.Success();
+            }
+
+            await _recoveryCoordinator.StartRecoveryIfNeededAsync(isAfterCompile, ct);
+            IUnityCliLoopServerInstance recoveredServer = _recoveryCoordinator.CurrentServer;
+            if (recoveredServer?.IsRunning != true)
+            {
+                return ValidationResult.Failure(
+                    "Unity CLI Loop server recovery finished, but no running server instance is available.");
             }
 
             return ValidationResult.Success();

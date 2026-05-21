@@ -98,10 +98,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CompleteDomainReload_WhenServerWasNotRunning_ShouldPublishStoppedState()
+        public void CompleteDomainReload_WhenServerWasNotRunning_ShouldPublishRecoveringState()
         {
-            // Verifies that a domain reload with no server to recover does not leave CLI waiters in recovering state.
+            // Verifies that no-server domain reload completion matches the automatic recovery that follows it.
             _sessionStateService.SetIsServerRunning(false);
+            _domainReloadDetectionService.StartDomainReload("test-correlation", serverIsRunning: false);
+
+            _domainReloadDetectionService.CompleteDomainReload("test-correlation");
+
+            ServerReadinessState state = _stateStore.Read();
+            Assert.That(state.Phase, Is.EqualTo("recovering"));
+        }
+
+        [Test]
+        public void CompleteDomainReload_WhenServerWasManuallyStopped_ShouldPublishStoppedState()
+        {
+            // Verifies that explicit Stop Server remains terminal across Domain Reload completion.
+            _sessionStateService.MarkServerManuallyStopped();
             _domainReloadDetectionService.StartDomainReload("test-correlation", serverIsRunning: false);
 
             _domainReloadDetectionService.CompleteDomainReload("test-correlation");
@@ -128,6 +141,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 result.ErrorMessage,
                 Is.EqualTo("Unity CLI Loop server recovery finished, but no running server instance is available."));
+        }
+
+        [Test]
+        public async Task RestoreServerStateIfNeededAsync_WhenNoServerWasRunning_ShouldStillStartRecovery()
+        {
+            // Verifies launch-time reload recovery starts the server even when no previous bridge session existed.
+            _sessionStateService.SetIsServerRunning(false);
+            _sessionStateService.SetIsAfterCompile(false);
+            TestRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
+            SessionRecoveryService service = new(
+                recoveryCoordinator,
+                _domainReloadDetectionService,
+                _sessionStateService);
+
+            ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
+
+            Assert.That(result.IsValid, Is.True);
+            Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task RestoreServerStateIfNeededAsync_WhenServerWasManuallyStopped_ShouldSkipRecovery()
+        {
+            // Verifies explicit Stop Server is preserved across Domain Reload.
+            _sessionStateService.MarkServerManuallyStopped();
+            TestRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
+            SessionRecoveryService service = new(
+                recoveryCoordinator,
+                _domainReloadDetectionService,
+                _sessionStateService);
+
+            ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
+
+            Assert.That(result.IsValid, Is.True);
+            Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(0));
         }
 
         private static ServerReadinessStateStore CreateTestStateStore()
@@ -160,10 +208,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestRecoveryCoordinator : IUnityCliLoopServerRecoveryCoordinator
         {
-            public IUnityCliLoopServerInstance CurrentServer => null;
+            private readonly bool _recoverServer;
+            private readonly TestServerInstance _server = new();
+
+            public TestRecoveryCoordinator(bool recoverServer = false)
+            {
+                _recoverServer = recoverServer;
+            }
+
+            public int StartRecoveryCallCount { get; private set; }
+
+            public IUnityCliLoopServerInstance CurrentServer => _server.IsRunning ? _server : null;
 
             public Task StartRecoveryIfNeededAsync(bool isAfterCompile, CancellationToken cancellationToken)
             {
+                StartRecoveryCallCount++;
+                if (_recoverServer)
+                {
+                    _server.StartServer();
+                }
+
                 return Task.CompletedTask;
             }
         }

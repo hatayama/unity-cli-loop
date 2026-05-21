@@ -7,6 +7,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         bool GetIsServerRunning();
         void SetIsServerRunning(bool isServerRunning);
+        bool GetIsServerManuallyStopped();
+        void SetIsServerManuallyStopped(bool isServerManuallyStopped);
         bool GetIsAfterCompile();
         void SetIsAfterCompile(bool isAfterCompile);
         bool GetIsDomainReloadInProgress();
@@ -43,6 +45,16 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public void SetIsServerRunning(bool isServerRunning)
         {
             _sessionStatePort.SetIsServerRunning(isServerRunning);
+        }
+
+        public bool GetIsServerManuallyStopped()
+        {
+            return _sessionStatePort.GetIsServerManuallyStopped();
+        }
+
+        public void SetIsServerManuallyStopped(bool isServerManuallyStopped)
+        {
+            _sessionStatePort.SetIsServerManuallyStopped(isServerManuallyStopped);
         }
 
         public bool GetIsAfterCompile()
@@ -125,10 +137,23 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             SetIsServerRunning(true);
+            SetIsServerManuallyStopped(false);
             SetIsAfterCompile(true);
             SetIsReconnecting(true);
             SetShowReconnectingUI(true);
             SetShowPostCompileReconnectingUI(true);
+        }
+
+        public void MarkServerStarted()
+        {
+            SetIsServerRunning(true);
+            SetIsServerManuallyStopped(false);
+        }
+
+        public void MarkServerManuallyStopped()
+        {
+            ClearServerSession();
+            SetIsServerManuallyStopped(true);
         }
 
         public void ClearServerSession()
@@ -171,6 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             ClearServerSession();
             ClearDomainReloadRecoveryFlags();
             SetShouldAutoScanThirdPartyToolMigration(false);
+            SetIsServerManuallyStopped(false);
         }
     }
 }
