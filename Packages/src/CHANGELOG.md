@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.4](https://github.com/hatayama/unity-cli-loop/compare/v2.1.3...v2.1.4) (2026-05-21)
+
+
+### Bug Fixes
+
+* Make bundled skill guidance more concise ([#1178](https://github.com/hatayama/unity-cli-loop/issues/1178)) ([dbcc38e](https://github.com/hatayama/unity-cli-loop/commit/dbcc38e7d239ba3203685b0fc606d661e5d454b0))
+
 ## [2.1.3](https://github.com/hatayama/unity-cli-loop/compare/v2.1.2...v2.1.3) (2026-05-14)
 
 
