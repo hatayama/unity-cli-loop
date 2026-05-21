@@ -12,17 +12,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class ThirdPartyToolMigrationWizardWindowTests
     {
-        [TestCase(true, true)]
-        [TestCase(false, false)]
-        public void ShouldAutoShowForMigrationTargets_ReturnsDetectionResult(
-            bool hasMigrationTargets,
+        [TestCase(false, true, false)]
+        [TestCase(true, false, false)]
+        [TestCase(true, true, true)]
+        public void ShouldStartInitialRefresh_ReturnsExpectedValue(
+            bool shouldRefreshAfterCreateGui,
+            bool shouldAutoScanThirdPartyToolMigration,
             bool expected)
         {
-            // Verifies that migration startup is controlled only by migration target detection.
-            bool shouldAutoShow =
-                ThirdPartyToolMigrationWizardWindow.ShouldAutoShowForMigrationTargets(hasMigrationTargets);
+            // Verifies that automatic scanning requires both auto-open intent and the session scan flag.
+            bool shouldStartInitialRefresh =
+                ThirdPartyToolMigrationWizardWindow.ShouldStartInitialRefresh(
+                    shouldRefreshAfterCreateGui,
+                    shouldAutoScanThirdPartyToolMigration);
 
-            Assert.That(shouldAutoShow, Is.EqualTo(expected));
+            Assert.That(shouldStartInitialRefresh, Is.EqualTo(expected));
         }
 
         [TestCase(
@@ -77,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void PrepareForOpen_PopulatesWindowStateBeforeShowing()
         {
-            // Verifies that startup-created migration windows can preview immediately after CreateGUI.
+            // Verifies that auto-opened migration windows can request an initial session-gated scan.
             ThirdPartyToolMigrationWizardWindow window =
                 ScriptableObject.CreateInstance<ThirdPartyToolMigrationWizardWindow>();
             try
@@ -99,6 +103,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(window.minSize, Is.EqualTo(new Vector2(360f, 120f)));
                 Assert.That(refreshProperty, Is.Not.Null);
                 Assert.That(refreshProperty.boolValue, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(window);
+            }
+        }
+
+        [Test]
+        public void PrepareForOpen_WhenManualOpen_PopulatesWindowStateWithoutInitialRefresh()
+        {
+            // Verifies that manually opened migration windows wait for the Check button.
+            ThirdPartyToolMigrationWizardWindow window =
+                ScriptableObject.CreateInstance<ThirdPartyToolMigrationWizardWindow>();
+            try
+            {
+                Rect position = new(12f, 34f, 360f, 220f);
+
+                ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
+                    window,
+                    "Unity CLI Loop Migration",
+                    position,
+                    false);
+
+                SerializedObject serializedWindow = new(window);
+                SerializedProperty refreshProperty =
+                    serializedWindow.FindProperty("_shouldRefreshAfterCreateGui");
+
+                Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Migration"));
+                Assert.That(window.position, Is.EqualTo(position));
+                Assert.That(window.minSize, Is.EqualTo(new Vector2(360f, 120f)));
+                Assert.That(refreshProperty, Is.Not.Null);
+                Assert.That(refreshProperty.boolValue, Is.False);
             }
             finally
             {

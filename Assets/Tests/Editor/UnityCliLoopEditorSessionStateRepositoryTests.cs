@@ -37,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
             Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.False);
             Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
+            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
         }
 
         [Test]
@@ -57,10 +58,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetShouldAutoScanThirdPartyToolMigration_WhenServiceIsRecreated_ReadsExistingSessionValue()
+        {
+            // Verifies that the one-session migration scan request survives Domain Reload service recreation.
+            _sessionStateService.SetShouldAutoScanThirdPartyToolMigration(true);
+
+            UnityCliLoopEditorSessionStateService recreatedService =
+                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+
+            Assert.That(recreatedService.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
+        }
+
+        [Test]
+        public void ConsumeShouldAutoScanThirdPartyToolMigration_WhenFlagIsSet_ReturnsTrueOnce()
+        {
+            // Verifies that the startup migration scan request is consumed exactly once.
+            _sessionStateService.SetShouldAutoScanThirdPartyToolMigration(true);
+
+            bool firstConsume = _sessionStateService.ConsumeShouldAutoScanThirdPartyToolMigration();
+            bool secondConsume = _sessionStateService.ConsumeShouldAutoScanThirdPartyToolMigration();
+
+            Assert.That(firstConsume, Is.True);
+            Assert.That(secondConsume, Is.False);
+            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
+        }
+
+        [Test]
         public void ClearAll_WhenFlagsAreSet_ClearsEveryTransientFlag()
         {
             // Verifies that test and shutdown cleanup can reset all runtime SessionState flags together.
             _sessionStateService.MarkDomainReloadStarted(serverIsRunning: true);
+            _sessionStateService.SetShouldAutoScanThirdPartyToolMigration(true);
 
             _sessionStateService.ClearAll();
 
@@ -70,6 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
             Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.False);
             Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
+            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
         }
     }
 }

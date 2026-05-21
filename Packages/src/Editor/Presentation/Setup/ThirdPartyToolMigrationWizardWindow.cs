@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private const string WindowTitle = "Unity CLI Loop Migration";
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
+        private const string MigrationNotCheckedText = "Migration status has not been checked.";
         private const string MigrationCheckingText = "Scanning project for V3 custom tool migration...";
         private const string NoMigrationTargetsText = "No V3 custom tool migration is needed.";
         private const string MigrationButtonReadyText = "Migrate";
@@ -25,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string MigrationButtonNoTargetsText = "Nothing to migrate";
         private static readonly Vector2 InitialWindowSize = new(360f, 220f);
         private static readonly Vector2 MinimumWindowSize = new(360f, 120f);
+        private static UnityCliLoopEditorSessionStateService RegisteredSessionStateService;
 
         private ScrollView _mainScrollView;
         private VisualElement _migrationSection;
@@ -42,23 +44,30 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private CancellationTokenSource _migrationPreviewCts;
         private ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
 
-        internal static void InitializeForEditorStartup()
+        internal static void InitializeEditorServices(UnityCliLoopEditorSessionStateService sessionStateService)
         {
-            if (AssetDatabase.IsAssetImportWorkerProcess()) return;
-            if (UnityEngine.Application.isBatchMode) return;
+            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
-            EditorApplication.delayCall += TryShowOnMigrationTargets;
+            RegisteredSessionStateService = sessionStateService
+                ?? throw new System.ArgumentNullException(nameof(sessionStateService));
         }
 
         [MenuItem("Window/Unity CLI Loop/Custom Tool Migration", priority = 4)]
         public static void ShowWindow()
         {
+            ShowWindowInternal(false);
+        }
+
+        internal static void ShowWindowForAutoScan()
+        {
             ShowWindowInternal(true);
         }
 
-        internal static bool ShouldAutoShowForMigrationTargets(bool hasMigrationTargets)
+        internal static bool ShouldStartInitialRefresh(
+            bool shouldRefreshAfterCreateGui,
+            bool shouldAutoScanThirdPartyToolMigration)
         {
-            return hasMigrationTargets;
+            return shouldRefreshAfterCreateGui && shouldAutoScanThirdPartyToolMigration;
         }
 
         internal static void PrepareForOpen(
@@ -129,40 +138,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return hasMigrationTargets ? MigrationButtonReadyText : MigrationButtonNoTargetsText;
         }
 
-        private static void TryShowOnMigrationTargets()
-        {
-            TryShowOnMigrationTargetsAsync(CancellationToken.None);
-        }
-
-        private static async void TryShowOnMigrationTargetsAsync(CancellationToken ct)
-        {
-            bool hasMigrationTargets = await HasMigrationTargetsAsync(ct);
-            if (ct.IsCancellationRequested)
-            {
-                return;
-            }
-
-            if (!ShouldAutoShowForMigrationTargets(hasMigrationTargets))
-            {
-                return;
-            }
-
-            EditorApplication.delayCall += ShowWindow;
-        }
-
-        private static async Task<bool> HasMigrationTargetsAsync(CancellationToken ct)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            return await ThirdPartyToolMigrationUseCaseRegistry
-                .GetRegisteredUseCase()
-                .HasMigrationTargetsAsync(projectRoot, ct);
-        }
-
         private static void ShowWindowInternal(bool shouldRefreshAfterCreateGui)
         {
             if (HasOpenInstances<ThirdPartyToolMigrationWizardWindow>())
             {
-                FocusWindowIfItsOpen<ThirdPartyToolMigrationWizardWindow>();
+                FocusExistingWindow(shouldRefreshAfterCreateGui);
                 return;
             }
 
@@ -182,8 +162,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             BuildLayout();
             BindEvents();
             BindSizeUpdates();
-            ShowInitialState();
-            ScheduleInitialRefresh();
+            bool shouldStartInitialRefresh = ConsumeShouldStartInitialRefresh();
+            ShowInitialState(shouldStartInitialRefresh);
+            ScheduleInitialRefresh(shouldStartInitialRefresh);
             ScheduleResizeToContent();
         }
 
@@ -249,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             footer.Add(footerButtonRow);
 
             _refreshButton = new Button();
-            _refreshButton.text = "Refresh";
+            _refreshButton.text = "Check";
             _refreshButton.AddToClassList("setup-button");
             _refreshButton.AddToClassList("setup-button--primary");
             footerButtonRow.Add(_refreshButton);
@@ -286,20 +267,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             });
         }
 
-        private void ShowInitialState()
+        private void ShowInitialState(bool shouldStartInitialRefresh)
         {
-            if (_shouldRefreshAfterCreateGui)
+            if (shouldStartInitialRefresh)
             {
                 ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
                 return;
             }
 
-            ShowNoMigrationTargetsState();
+            ShowNotCheckedState();
         }
 
-        private void ScheduleInitialRefresh()
+        private void ScheduleInitialRefresh(bool shouldStartInitialRefresh)
         {
-            if (!_shouldRefreshAfterCreateGui)
+            if (!shouldStartInitialRefresh)
             {
                 return;
             }
@@ -317,7 +298,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             System.IProgress<ThirdPartyToolMigrationProgress> progress =
                 new ThirdPartyToolMigrationPreviewProgress(this, ct);
             ThirdPartyToolMigrationPreview preview =
-                await _thirdPartyToolMigrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct);
+                await Task.Run(async () =>
+                    await _thirdPartyToolMigrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct));
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await MainThreadSwitcher.SwitchToMainThread();
             if (ct.IsCancellationRequested)
             {
                 return;
@@ -352,6 +340,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _isMigrating = false;
                 RefreshUI();
             }
+        }
+
+        private void ShowNotCheckedState()
+        {
+            _migrationStatusLabel.text = MigrationNotCheckedText;
+            ViewDataBinder.SetVisible(_migrationProgressBar, false);
+            _migrateButton.SetEnabled(false);
+            _migrateButton.text = GetMigrationButtonText(_isMigrating, false);
+            ScheduleResizeToContent();
         }
 
         private void ShowMigrationTargetsState(int fileCount)
@@ -487,6 +484,62 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationPreviewCts = null;
         }
 
+        private static UnityCliLoopEditorSessionStateService GetSessionStateService()
+        {
+            if (RegisteredSessionStateService == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Migration Wizard session-state service is not initialized.");
+            }
+
+            return RegisteredSessionStateService;
+        }
+
+        private static void FocusExistingWindow(bool shouldRefreshAfterCreateGui)
+        {
+            ThirdPartyToolMigrationWizardWindow[] windows =
+                Resources.FindObjectsOfTypeAll<ThirdPartyToolMigrationWizardWindow>();
+            if (windows.Length == 0)
+            {
+                return;
+            }
+
+            ThirdPartyToolMigrationWizardWindow window = windows[0];
+            window.Focus();
+            if (!shouldRefreshAfterCreateGui)
+            {
+                return;
+            }
+
+            window._shouldRefreshAfterCreateGui = true;
+            window.TryStartInitialRefresh();
+        }
+
+        private bool ConsumeShouldStartInitialRefresh()
+        {
+            if (!_shouldRefreshAfterCreateGui)
+            {
+                return false;
+            }
+
+            _shouldRefreshAfterCreateGui = false;
+            bool shouldAutoScanThirdPartyToolMigration =
+                GetSessionStateService().ConsumeShouldAutoScanThirdPartyToolMigration();
+            return ShouldStartInitialRefresh(true, shouldAutoScanThirdPartyToolMigration);
+        }
+
+        private void TryStartInitialRefresh()
+        {
+            bool shouldStartInitialRefresh = ConsumeShouldStartInitialRefresh();
+            if (!shouldStartInitialRefresh)
+            {
+                return;
+            }
+
+            ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
+            rootVisualElement.schedule.Execute(RefreshUI).StartingIn(0);
+        }
+
         private sealed class ThirdPartyToolMigrationPreviewProgress
             : System.IProgress<ThirdPartyToolMigrationProgress>
         {
@@ -506,6 +559,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             public void Report(ThirdPartyToolMigrationProgress value)
             {
                 if (_ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                _ = ReportAsync(value, _ct);
+            }
+
+            private async Task ReportAsync(ThirdPartyToolMigrationProgress value, CancellationToken ct)
+            {
+                await MainThreadSwitcher.SwitchToMainThread();
+                if (ct.IsCancellationRequested)
                 {
                     return;
                 }

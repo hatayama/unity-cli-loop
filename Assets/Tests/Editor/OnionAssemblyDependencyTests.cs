@@ -893,14 +893,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void MigrationWizardStartup_WhenLoaded_SchedulesTargetCheckInsteadOfPreviewingSynchronously()
+        public void MigrationWizardStartup_WhenLoaded_DoesNotScheduleTargetCheckOnEditorStartup()
         {
-            // Tests that migration target detection does not block the synchronous Editor startup hook.
+            // Tests that startup can open the migration window without scanning the project first.
+            string presentationStartupSource = ReadProductionSource(
+                "Packages/src/Editor/Presentation/PresentationEditorStartup.cs");
             string migrationWizardSource = ReadProductionSource(
                 "Packages/src/Editor/Presentation/Setup/ThirdPartyToolMigrationWizardWindow.cs");
 
-            Assert.That(migrationWizardSource, Does.Contain("EditorApplication.delayCall += TryShowOnMigrationTargets;"));
-            Assert.That(migrationWizardSource, Does.Not.Contain("\n            TryShowOnMigrationTargets();"));
+            Assert.That(
+                presentationStartupSource,
+                Does.Contain("ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(sessionStateService);"));
+            Assert.That(
+                presentationStartupSource,
+                Does.Not.Contain("ThirdPartyToolMigrationWizardWindow.InitializeForEditorStartup"));
+            Assert.That(migrationWizardSource, Does.Not.Contain("TryShowOnMigrationTargets"));
+            Assert.That(migrationWizardSource, Does.Not.Contain("ShouldAutoShowForMigrationTargets"));
+            Assert.That(migrationWizardSource, Does.Not.Contain("EditorApplication.delayCall += TryShowOnMigrationTargets"));
+            Assert.That(migrationWizardSource, Does.Not.Contain("ripgrep"));
+            Assert.That(migrationWizardSource, Does.Not.Contain("\"rg\""));
         }
 
         [Test]
