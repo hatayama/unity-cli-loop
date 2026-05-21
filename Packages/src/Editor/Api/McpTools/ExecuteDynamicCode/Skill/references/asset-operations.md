@@ -184,6 +184,8 @@ return $"Asset has {dependencies.Length} dependencies";
 
 ## Refresh AssetDatabase
 
+Use this after terminal-based asset file changes when Unity needs to import them and generate `.meta` files.
+
 ```csharp
 using UnityEditor;
 

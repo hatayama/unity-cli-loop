@@ -1,6 +1,6 @@
 ---
 name: uloop-replay-input
-description: "Replay recorded input during PlayMode with frame-precise injection. Use when you need to: (1) Reproduce recorded gameplay exactly, (2) Run E2E tests from recorded input, (3) Generate demo videos with consistent input. Deserializes the JSON recording and pushes captured device states back into Mouse.current / Keyboard.current frame-by-frame in PlayMode. Requires PlayMode and the New Input System."
+description: "Replay recorded PlayMode keyboard and mouse input. Use for exact gameplay reproduction, E2E runs, or consistent demos from JSON recordings."
 ---
 
 # uloop replay-input
@@ -38,6 +38,12 @@ uloop replay-input --action Stop
 ## Deterministic Replay
 
 Replay injects the exact same input frame-by-frame, but the game must also be deterministic to produce identical results. If replay output must be compared across runs, read [references/deterministic-replay.md](references/deterministic-replay.md) before interpreting failures.
+
+## Prerequisites
+
+- Unity must be in **PlayMode**
+- **Input System package** must be installed (`com.unity.inputsystem`)
+- Use this only when the project already uses the New Input System.
 
 ## Output
 

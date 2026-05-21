@@ -1,6 +1,6 @@
 ---
 name: uloop-compile
-description: "Compile Unity project and report errors/warnings. Use when you need to: (1) Verify code compiles after C# file edits, (2) Check for compile errors before testing, (3) Force full recompilation with Domain Reload. Returns error and warning counts."
+description: "Compile the Unity project and report errors/warnings. Use after C# edits or when a full Domain Reload compile is needed."
 ---
 
 # uloop compile

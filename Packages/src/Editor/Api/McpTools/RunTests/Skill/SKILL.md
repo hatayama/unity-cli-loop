@@ -1,6 +1,6 @@
 ---
 name: uloop-run-tests
-description: "Execute Unity Test Runner and get detailed results. Use when you need to: (1) Run EditMode or PlayMode unit tests, (2) Verify code changes pass all tests, (3) Diagnose test failures with error messages and stack traces. Single-flight only — never run multiple `uloop run-tests` in parallel."
+description: "Run Unity Test Runner and report detailed results. Use for EditMode/PlayMode tests, change verification, or failure diagnosis."
 ---
 
 # uloop run-tests
