@@ -12,8 +12,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             UnityCliLoopEditorSessionStateService sessionStateService)
         {
             UnityCliLoopSettingsWindow.InitializeEditorServices(editorSettingsService, sessionStateService);
-            SetupWizardWindow.InitializeForEditorStartup(editorSettingsService);
-            ThirdPartyToolMigrationWizardWindow.InitializeForEditorStartup();
+            ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(sessionStateService);
+            SetupWizardWindow.InitializeForEditorStartup(editorSettingsService, sessionStateService);
         }
     }
 }
