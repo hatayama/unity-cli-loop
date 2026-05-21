@@ -24,6 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string MigrationButtonReadyText = "Migrate";
         private const string MigrationButtonMigratingText = "Migrating...";
         private const string MigrationButtonNoTargetsText = "Nothing to migrate";
+        private const string MigrationButtonCheckRequiredText = "Check required";
+        private const int MigrationProgressUiUpdateIntervalMilliseconds = 100;
         private static readonly Vector2 InitialWindowSize = new(360f, 220f);
         private static readonly Vector2 MinimumWindowSize = new(360f, 120f);
         private static UnityCliLoopEditorSessionStateService RegisteredSessionStateService;
@@ -128,8 +130,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 $"{progress.ProcessedItemCount}/{progress.TotalItemCount} checks complete.";
         }
 
-        internal static string GetMigrationButtonText(bool isMigrating, bool hasMigrationTargets)
+        internal static string GetMigrationButtonText(
+            bool isMigrating,
+            bool hasMigrationTargets,
+            bool hasCheckedMigrationStatus)
         {
+            if (!hasCheckedMigrationStatus)
+            {
+                return MigrationButtonCheckRequiredText;
+            }
+
             if (isMigrating)
             {
                 return MigrationButtonMigratingText;
@@ -217,7 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             content.Add(migrationButtonRow);
 
             _migrateButton = new Button();
-            _migrateButton.text = GetMigrationButtonText(false, true);
+            _migrateButton.text = GetMigrationButtonText(false, false, false);
             _migrateButton.AddToClassList("setup-button");
             migrationButtonRow.Add(_migrateButton);
 
@@ -347,7 +357,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationStatusLabel.text = MigrationNotCheckedText;
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             _migrateButton.SetEnabled(false);
-            _migrateButton.text = GetMigrationButtonText(_isMigrating, false);
+            _migrateButton.text = GetMigrationButtonText(_isMigrating, false, false);
             ScheduleResizeToContent();
         }
 
@@ -356,7 +366,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationStatusLabel.text = GetMigrationStatusText(fileCount);
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             _migrateButton.SetEnabled(!_isMigrating);
-            _migrateButton.text = GetMigrationButtonText(_isMigrating, true);
+            _migrateButton.text = GetMigrationButtonText(_isMigrating, true, true);
             ScheduleResizeToContent();
         }
 
@@ -365,7 +375,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationStatusLabel.text = NoMigrationTargetsText;
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             _migrateButton.SetEnabled(false);
-            _migrateButton.text = GetMigrationButtonText(_isMigrating, false);
+            _migrateButton.text = GetMigrationButtonText(_isMigrating, false, true);
             ScheduleResizeToContent();
         }
 
@@ -375,7 +385,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.SetVisible(_migrationProgressBar, true);
             UpdateMigrationProgressBar(progress);
             _migrateButton.SetEnabled(false);
-            _migrateButton.text = GetMigrationButtonText(_isMigrating, true);
+            _migrateButton.text = GetMigrationButtonText(_isMigrating, true, true);
             ScheduleResizeToContent();
         }
 
@@ -540,11 +550,38 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             rootVisualElement.schedule.Execute(RefreshUI).StartingIn(0);
         }
 
+        internal static bool ShouldReportMigrationProgress(
+            long lastReportTimestamp,
+            long currentTimestamp,
+            ThirdPartyToolMigrationProgress progress,
+            long stopwatchFrequency,
+            int updateIntervalMilliseconds)
+        {
+            Debug.Assert(currentTimestamp >= 0, "currentTimestamp must not be negative");
+            Debug.Assert(stopwatchFrequency > 0, "stopwatchFrequency must be positive");
+            Debug.Assert(updateIntervalMilliseconds >= 0, "updateIntervalMilliseconds must not be negative");
+
+            if (lastReportTimestamp == 0)
+            {
+                return true;
+            }
+
+            if (progress.TotalItemCount > 0 && progress.ProcessedItemCount >= progress.TotalItemCount)
+            {
+                return true;
+            }
+
+            long elapsedTicks = currentTimestamp - lastReportTimestamp;
+            long requiredTicks = stopwatchFrequency * updateIntervalMilliseconds / 1000;
+            return elapsedTicks >= requiredTicks;
+        }
+
         private sealed class ThirdPartyToolMigrationPreviewProgress
             : System.IProgress<ThirdPartyToolMigrationProgress>
         {
             private readonly ThirdPartyToolMigrationWizardWindow _window;
             private readonly CancellationToken _ct;
+            private long _lastReportTimestamp;
 
             public ThirdPartyToolMigrationPreviewProgress(
                 ThirdPartyToolMigrationWizardWindow window,
@@ -563,6 +600,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     return;
                 }
 
+                long currentTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+                if (!ShouldReportMigrationProgress(
+                        _lastReportTimestamp,
+                        currentTimestamp,
+                        value,
+                        System.Diagnostics.Stopwatch.Frequency,
+                        MigrationProgressUiUpdateIntervalMilliseconds))
+                {
+                    return;
+                }
+
+                _lastReportTimestamp = currentTimestamp;
                 _ = ReportAsync(value, _ct);
             }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -33,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string LegacySecuritySettingsTypeName = "SecuritySettings";
         private const string CurrentSecuritySettingTypeName = "UnityCliLoopSecuritySetting";
         private const int MinimumRawStringDelimiterQuoteCount = 3;
+        private static readonly ConditionalWeakTable<string, CodeTextMaskHolder> CodeTextMaskCache = new();
 
         private static readonly string[] ExcludedDirectoryNames =
         {
@@ -1866,8 +1868,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(regex != null, "regex must not be null");
 
-            CodeTextMask codeTextMask = CodeTextMask.Create(source);
             MatchCollection matches = regex.Matches(source);
+            if (matches.Count == 0)
+            {
+                return false;
+            }
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
             foreach (Match match in matches)
             {
                 if (codeTextMask.IsCodeAt(match.Index))
@@ -2448,6 +2455,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 Debug.Assert(source != null, "source must not be null");
 
+                return CodeTextMaskCache.GetValue(source, CreateCodeTextMaskHolder).Mask;
+            }
+
+            internal static CodeTextMask CreateUncached(string source)
+            {
+                Debug.Assert(source != null, "source must not be null");
+
                 bool[] codeCharacters = new bool[source.Length];
                 for (int i = 0; i < codeCharacters.Length; i++)
                 {
@@ -3024,6 +3038,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 return true;
             }
+        }
+
+        private sealed class CodeTextMaskHolder
+        {
+            public CodeTextMaskHolder(CodeTextMask mask)
+            {
+                Mask = mask;
+            }
+
+            public CodeTextMask Mask { get; }
+        }
+
+        private static CodeTextMaskHolder CreateCodeTextMaskHolder(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return new CodeTextMaskHolder(CodeTextMask.CreateUncached(source));
         }
     }
 

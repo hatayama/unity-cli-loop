@@ -52,6 +52,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ThirdPartyToolMigrationSourceFileCache_WhenFileIsReadTwice_UsesCachedSource()
+        {
+            // Verifies that async preview phases can reuse source text without repeated disk reads.
+            int readCount = 0;
+            ThirdPartyToolMigrationSourceFileCache cache = new(filePath =>
+            {
+                readCount++;
+                return $"source:{filePath}";
+            });
+
+            string firstSource = cache.ReadAllText("Assets/VendorTools/HelloTool.cs");
+            string secondSource = cache.ReadAllText("Assets/VendorTools/HelloTool.cs");
+
+            Assert.That(firstSource, Is.EqualTo("source:Assets/VendorTools/HelloTool.cs"));
+            Assert.That(secondSource, Is.EqualTo(firstSource));
+            Assert.That(readCount, Is.EqualTo(1));
+        }
+
+        [Test]
         public void TryReadJsonObjectForMigration_WhenReadThrowsIOException_ReturnsFalse()
         {
             // Verifies that migration scans skip unreadable assembly JSON files.
