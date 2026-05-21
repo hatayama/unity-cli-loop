@@ -12,17 +12,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class ThirdPartyToolMigrationWizardWindowTests
     {
-        [TestCase(true, true)]
-        [TestCase(false, false)]
-        public void ShouldAutoShowForMigrationTargets_ReturnsDetectionResult(
-            bool hasMigrationTargets,
+        [TestCase(false, true, false)]
+        [TestCase(true, false, false)]
+        [TestCase(true, true, true)]
+        public void ShouldStartInitialRefresh_ReturnsExpectedValue(
+            bool shouldRefreshAfterCreateGui,
+            bool shouldAutoScanThirdPartyToolMigration,
             bool expected)
         {
-            // Verifies that migration startup is controlled only by migration target detection.
-            bool shouldAutoShow =
-                ThirdPartyToolMigrationWizardWindow.ShouldAutoShowForMigrationTargets(hasMigrationTargets);
+            // Verifies that automatic scanning requires both auto-open intent and the session scan flag.
+            bool shouldStartInitialRefresh =
+                ThirdPartyToolMigrationWizardWindow.ShouldStartInitialRefresh(
+                    shouldRefreshAfterCreateGui,
+                    shouldAutoScanThirdPartyToolMigration);
 
-            Assert.That(shouldAutoShow, Is.EqualTo(expected));
+            Assert.That(shouldStartInitialRefresh, Is.EqualTo(expected));
         }
 
         [TestCase(
@@ -58,26 +62,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 checks complete."));
         }
 
-        [TestCase(false, true, "Migrate")]
-        [TestCase(true, true, "Migrating...")]
-        [TestCase(false, false, "Nothing to migrate")]
+        [TestCase(false, false, false, "Check required")]
+        [TestCase(false, true, true, "Migrate")]
+        [TestCase(true, true, true, "Migrating...")]
+        [TestCase(false, false, true, "Nothing to migrate")]
         public void GetMigrationButtonText_ReturnsExpectedLabel(
             bool isMigrating,
             bool hasMigrationTargets,
+            bool hasCheckedMigrationStatus,
             string expectedLabel)
         {
             // Verifies that the migration action communicates its current state.
             string label = ThirdPartyToolMigrationWizardWindow.GetMigrationButtonText(
                 isMigrating,
-                hasMigrationTargets);
+                hasMigrationTargets,
+                hasCheckedMigrationStatus);
 
             Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
+        [TestCase(0, 1, 1, 4, 1000, 100, true)]
+        [TestCase(10, 50, 1, 4, 1000, 100, false)]
+        [TestCase(10, 110, 1, 4, 1000, 100, true)]
+        [TestCase(10, 11, 4, 4, 1000, 100, true)]
+        public void ShouldReportMigrationProgress_ReturnsExpectedValue(
+            long lastReportTimestamp,
+            long currentTimestamp,
+            int processedItemCount,
+            int totalItemCount,
+            long stopwatchFrequency,
+            int updateIntervalMilliseconds,
+            bool expected)
+        {
+            // Verifies that migration progress updates are throttled while still reporting completion.
+            ThirdPartyToolMigrationProgress progress =
+                new(processedItemCount, totalItemCount);
+
+            bool shouldReport = ThirdPartyToolMigrationWizardWindow.ShouldReportMigrationProgress(
+                lastReportTimestamp,
+                currentTimestamp,
+                progress,
+                stopwatchFrequency,
+                updateIntervalMilliseconds);
+
+            Assert.That(shouldReport, Is.EqualTo(expected));
+        }
+
+        [TestCase(false, true, true)]
+        [TestCase(true, true, false)]
+        [TestCase(false, false, false)]
+        public void ShouldApplyMigrationProgress_ReturnsExpectedValue(
+            bool isCancellationRequested,
+            bool hasActivePreview,
+            bool expected)
+        {
+            // Verifies that stale migration progress cannot overwrite a rendered preview result.
+            bool shouldApply = ThirdPartyToolMigrationWizardWindow.ShouldApplyMigrationProgress(
+                isCancellationRequested,
+                hasActivePreview);
+
+            Assert.That(shouldApply, Is.EqualTo(expected));
         }
 
         [Test]
         public void PrepareForOpen_PopulatesWindowStateBeforeShowing()
         {
-            // Verifies that startup-created migration windows can preview immediately after CreateGUI.
+            // Verifies that auto-opened migration windows can request an initial session-gated scan.
             ThirdPartyToolMigrationWizardWindow window =
                 ScriptableObject.CreateInstance<ThirdPartyToolMigrationWizardWindow>();
             try
@@ -99,6 +149,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(window.minSize, Is.EqualTo(new Vector2(360f, 120f)));
                 Assert.That(refreshProperty, Is.Not.Null);
                 Assert.That(refreshProperty.boolValue, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(window);
+            }
+        }
+
+        [Test]
+        public void PrepareForOpen_WhenManualOpen_PopulatesWindowStateWithoutInitialRefresh()
+        {
+            // Verifies that manually opened migration windows wait for the Check button.
+            ThirdPartyToolMigrationWizardWindow window =
+                ScriptableObject.CreateInstance<ThirdPartyToolMigrationWizardWindow>();
+            try
+            {
+                Rect position = new(12f, 34f, 360f, 220f);
+
+                ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
+                    window,
+                    "Unity CLI Loop Migration",
+                    position,
+                    false);
+
+                SerializedObject serializedWindow = new(window);
+                SerializedProperty refreshProperty =
+                    serializedWindow.FindProperty("_shouldRefreshAfterCreateGui");
+
+                Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Migration"));
+                Assert.That(window.position, Is.EqualTo(position));
+                Assert.That(window.minSize, Is.EqualTo(new Vector2(360f, 120f)));
+                Assert.That(refreshProperty, Is.Not.Null);
+                Assert.That(refreshProperty.boolValue, Is.False);
             }
             finally
             {

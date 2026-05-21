@@ -26,12 +26,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string GITHUB_ICON_RELATIVE_PATH = "Editor/Presentation/Setup/GitHub_Invertocat_White.png";
         private const int PreferredWrappedTextLineCount = 2;
         private const bool ForceFlatSkillInstall = true;
+        private static readonly char[] VersionMajorSeparators = { '.', '-' };
         private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
         private static UnityCliLoopEditorSettingsService RegisteredEditorSettingsService;
+        private static UnityCliLoopEditorSessionStateService RegisteredSessionStateService;
 
-        internal static void InitializeForEditorStartup(UnityCliLoopEditorSettingsService editorSettingsService)
+        internal static void InitializeForEditorStartup(
+            UnityCliLoopEditorSettingsService editorSettingsService,
+            UnityCliLoopEditorSessionStateService sessionStateService)
         {
-            InitializeEditorServices(editorSettingsService);
+            InitializeEditorServices(editorSettingsService, sessionStateService);
 
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             if (UnityEngine.Application.isBatchMode) return;
@@ -39,12 +43,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             EditorApplication.delayCall += TryShowOnVersionChange;
         }
 
-        internal static void InitializeEditorServices(UnityCliLoopEditorSettingsService editorSettingsService)
+        internal static void InitializeEditorServices(
+            UnityCliLoopEditorSettingsService editorSettingsService,
+            UnityCliLoopEditorSessionStateService sessionStateService)
         {
             Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
             RegisteredEditorSettingsService = editorSettingsService
                 ?? throw new System.ArgumentNullException(nameof(editorSettingsService));
+            RegisteredSessionStateService = sessionStateService
+                ?? throw new System.ArgumentNullException(nameof(sessionStateService));
         }
 
         [MenuItem("Window/Unity CLI Loop/Setup Wizard", priority = 3)]
@@ -62,6 +71,36 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (!versionChanged) return false;
 
             return !suppressAutoShow;
+        }
+
+        internal static bool ShouldAutoScanThirdPartyToolMigration(string currentVersion, string lastSeenVersion)
+        {
+            if (string.IsNullOrEmpty(lastSeenVersion))
+            {
+                return false;
+            }
+
+            if (!TryGetMajorVersion(currentVersion, out int currentMajorVersion))
+            {
+                return false;
+            }
+
+            if (!TryGetMajorVersion(lastSeenVersion, out int lastSeenMajorVersion))
+            {
+                return false;
+            }
+
+            return lastSeenMajorVersion < 3 && currentMajorVersion == 3;
+        }
+
+        internal static void MaybeMarkThirdPartyToolMigrationAutoScan(bool shouldAutoScan)
+        {
+            if (!shouldAutoScan)
+            {
+                return;
+            }
+
+            GetSessionStateService().SetShouldAutoScanThirdPartyToolMigration(true);
         }
 
         internal static void MaybeRecordLastSeenVersion(bool shouldRecordVersion, string version)
@@ -96,10 +135,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            if (!ShouldAutoShowForVersion(
+            bool shouldAutoScanThirdPartyToolMigration = ShouldAutoScanThirdPartyToolMigration(
+                currentVersion,
+                lastSeenVersion);
+            MaybeScheduleThirdPartyToolMigrationAutoScan(shouldAutoScanThirdPartyToolMigration);
+
+            bool shouldAutoShow = ShouldAutoShowForVersion(
                 currentVersion,
                 lastSeenVersion,
-                suppressAutoShow))
+                suppressAutoShow);
+
+            if (!shouldAutoShow)
             {
                 MaybeRecordSuppressedVersion(suppressAutoShow, currentVersion);
                 return;
@@ -204,6 +250,40 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return RegisteredEditorSettingsService;
+        }
+
+        private static UnityCliLoopEditorSessionStateService GetSessionStateService()
+        {
+            if (RegisteredSessionStateService == null)
+            {
+                throw new System.InvalidOperationException("Setup Wizard session-state service is not initialized.");
+            }
+
+            return RegisteredSessionStateService;
+        }
+
+        private static void MaybeScheduleThirdPartyToolMigrationAutoScan(bool shouldAutoScan)
+        {
+            MaybeMarkThirdPartyToolMigrationAutoScan(shouldAutoScan);
+            if (!shouldAutoScan)
+            {
+                return;
+            }
+
+            EditorApplication.delayCall += ThirdPartyToolMigrationWizardWindow.ShowWindowForAutoScan;
+        }
+
+        private static bool TryGetMajorVersion(string version, out int majorVersion)
+        {
+            majorVersion = 0;
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                return false;
+            }
+
+            int separatorIndex = version.IndexOfAny(VersionMajorSeparators);
+            string majorText = separatorIndex < 0 ? version : version.Substring(0, separatorIndex);
+            return int.TryParse(majorText, out majorVersion);
         }
 
         // Prerequisite

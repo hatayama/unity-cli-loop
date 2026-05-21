@@ -26,6 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _settingsFileContent;
         private UnityCliLoopEditorSettingsService _editorSettingsService;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
+        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
         public void SetUp()
@@ -41,7 +43,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             DeleteIfExists(SettingsFilePath);
             _editorSettingsService =
                 UnityCliLoopEditorSettingsTestFactory.CreateServiceWithRepository(out _editorSettingsRepository);
-            SetupWizardWindow.InitializeEditorServices(_editorSettingsService);
+            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _sessionStateService.ClearAll();
+            SetupWizardWindow.InitializeEditorServices(_editorSettingsService, _sessionStateService);
             _editorSettingsRepository.InvalidateCache();
         }
 
@@ -50,6 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
             _editorSettingsRepository.InvalidateCache();
+            _originalSessionState.Restore(_sessionStateService);
         }
 
         [TestCase("", "1.7.3", false, true)]
@@ -71,6 +77,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     suppressAutoShow);
 
             Assert.That(shouldAutoShow, Is.EqualTo(expected));
+        }
+
+        [TestCase("2.1.1", "3.0.0-beta.7", true)]
+        [TestCase("1.9.0", "3.0.0", true)]
+        [TestCase("", "3.0.0-beta.7", false)]
+        [TestCase("3.0.0-beta.6", "3.0.0-beta.7", false)]
+        [TestCase("3.0.0-beta.7", "4.0.0", false)]
+        [TestCase("not-a-version", "3.0.0-beta.7", false)]
+        public void ShouldAutoScanThirdPartyToolMigration_ReturnsExpectedValue(
+            string lastSeenVersion,
+            string currentVersion,
+            bool expected)
+        {
+            // Verifies that only V2-or-older to V3 package upgrades request the migration scan.
+            bool shouldAutoScan =
+                SetupWizardWindow.ShouldAutoScanThirdPartyToolMigration(currentVersion, lastSeenVersion);
+
+            Assert.That(shouldAutoScan, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void MaybeMarkThirdPartyToolMigrationAutoScan_WhenEnabled_SetsSessionFlag()
+        {
+            // Verifies that the V2-to-V3 upgrade signal is stored only in the current Editor session.
+            SetupWizardWindow.MaybeMarkThirdPartyToolMigrationAutoScan(true);
+
+            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
+        }
+
+        [Test]
+        public void MaybeMarkThirdPartyToolMigrationAutoScan_WhenDisabled_KeepsSessionFlagFalse()
+        {
+            // Verifies that non-upgrade version checks do not request migration scans.
+            SetupWizardWindow.MaybeMarkThirdPartyToolMigrationAutoScan(false);
+
+            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
         }
 
         [Test]

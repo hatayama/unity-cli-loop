@@ -14,6 +14,41 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
+    /// Caches source text within one preview pass so analysis phases share a single disk read per file.
+    /// </summary>
+    internal sealed class ThirdPartyToolMigrationSourceFileCache
+    {
+        private readonly Func<string, string> _readAllText;
+        private readonly Dictionary<string, string> _sources = new(StringComparer.Ordinal);
+
+        internal ThirdPartyToolMigrationSourceFileCache()
+            : this(File.ReadAllText)
+        {
+        }
+
+        internal ThirdPartyToolMigrationSourceFileCache(Func<string, string> readAllText)
+        {
+            Debug.Assert(readAllText != null, "readAllText must not be null");
+
+            _readAllText = readAllText ?? throw new ArgumentNullException(nameof(readAllText));
+        }
+
+        internal string ReadAllText(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            if (_sources.TryGetValue(filePath, out string source))
+            {
+                return source;
+            }
+
+            string loadedSource = _readAllText(filePath);
+            _sources.Add(filePath, loadedSource);
+            return loadedSource;
+        }
+    }
+
+    /// <summary>
     /// Scans Unity project files and rewrites V2 custom tool source to the V3 public contract API.
     /// </summary>
     public sealed class ThirdPartyToolMigrationFileService : IThirdPartyToolMigrationPort
@@ -603,11 +638,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             MigrationProgressCounter progressCounter = new(GetPreviewWorkItemCount(inventory), progress);
+            ThirdPartyToolMigrationSourceFileCache sourceFileCache = new();
             MigrationAssemblyUsage assemblyUsage = await FindMigrationAssemblyUsageAsync(
                 projectRoot,
                 inventory.CSharpFilePaths,
                 inventory.AsmdefFilePaths,
                 inventory.AsmrefFilePaths,
+                sourceFileCache,
                 progressCounter,
                 ct);
             if (ct.IsCancellationRequested)
@@ -626,7 +663,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return MigrationPlan.Empty;
                 }
 
-                string source = File.ReadAllText(csharpFilePath);
+                string source = sourceFileCache.ReadAllText(csharpFilePath);
                 await progressCounter.ReportProcessedItemAsync(ct);
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source) &&
                     !ThirdPartyToolMigrationRules.ContainsLegacyTypeAliasReference(source, legacyToolInfoAliases))
@@ -690,7 +727,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     out requiresToolContractsReference,
                     out requiresApplicationReference,
                     out requiresDomainReference);
-                string source = File.ReadAllText(asmdefFilePath);
+                string source = sourceFileCache.ReadAllText(asmdefFilePath);
                 await progressCounter.ReportProcessedItemAsync(ct);
                 if (!hasAssemblyMigrationRequirement &&
                     !ThirdPartyToolMigrationRules.ContainsLegacyMigrationCandidateText(source))
@@ -953,6 +990,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             List<string> csharpFilePaths,
             List<string> asmdefFilePaths,
             List<string> asmrefFilePaths,
+            ThirdPartyToolMigrationSourceFileCache sourceFileCache,
             MigrationProgressCounter progressCounter,
             CancellationToken ct)
         {
@@ -960,6 +998,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(csharpFilePaths != null, "csharpFilePaths must not be null");
             Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
             Debug.Assert(asmrefFilePaths != null, "asmrefFilePaths must not be null");
+            Debug.Assert(sourceFileCache != null, "sourceFileCache must not be null");
             Debug.Assert(progressCounter != null, "progressCounter must not be null");
 
             List<string> asmdefDirectories = asmdefFilePaths
@@ -971,6 +1010,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 await CreateAssemblyReferenceDirectoriesAsync(
                     asmdefFilePaths,
                     asmrefFilePaths,
+                    sourceFileCache,
                     progressCounter,
                     ct);
             HashSet<string> legacyAssemblyDirectories = new(StringComparer.Ordinal);
@@ -1002,7 +1042,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         domainReferenceAssemblyDirectories);
                 }
 
-                string source = File.ReadAllText(csharpFilePath);
+                string source = sourceFileCache.ReadAllText(csharpFilePath);
                 await progressCounter.ReportProcessedItemAsync(ct);
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
                 {
@@ -1085,7 +1125,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         domainReferenceAssemblyDirectories);
                 }
 
-                string source = File.ReadAllText(csharpFilePath);
+                string source = sourceFileCache.ReadAllText(csharpFilePath);
                 await progressCounter.ReportProcessedItemAsync(ct);
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
                 {
@@ -1311,11 +1351,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static async Task<List<AssemblyReferenceDirectory>> CreateAssemblyReferenceDirectoriesAsync(
             List<string> asmdefFilePaths,
             List<string> asmrefFilePaths,
+            ThirdPartyToolMigrationSourceFileCache sourceFileCache,
             MigrationProgressCounter progressCounter,
             CancellationToken ct)
         {
             Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
             Debug.Assert(asmrefFilePaths != null, "asmrefFilePaths must not be null");
+            Debug.Assert(sourceFileCache != null, "sourceFileCache must not be null");
             Debug.Assert(progressCounter != null, "progressCounter must not be null");
 
             if (asmrefFilePaths.Count == 0)
@@ -1324,7 +1366,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             Dictionary<string, string> asmdefDirectoriesByReference =
-                await CreateAsmdefDirectoryMapAsync(asmdefFilePaths, progressCounter, ct);
+                await CreateAsmdefDirectoryMapAsync(asmdefFilePaths, sourceFileCache, progressCounter, ct);
             List<AssemblyReferenceDirectory> assemblyReferenceDirectories = new();
             foreach (string asmrefFilePath in asmrefFilePaths)
             {
@@ -1336,7 +1378,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         .ToList();
                 }
 
-                if (!TryReadJsonObjectFromFile(asmrefFilePath, out JObject asmref))
+                if (!TryReadJsonObjectFromCache(asmrefFilePath, sourceFileCache, out JObject asmref))
                 {
                     await progressCounter.ReportProcessedItemAsync(ct);
                     continue;
@@ -1400,10 +1442,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static async Task<Dictionary<string, string>> CreateAsmdefDirectoryMapAsync(
             List<string> asmdefFilePaths,
+            ThirdPartyToolMigrationSourceFileCache sourceFileCache,
             MigrationProgressCounter progressCounter,
             CancellationToken ct)
         {
             Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
+            Debug.Assert(sourceFileCache != null, "sourceFileCache must not be null");
             Debug.Assert(progressCounter != null, "progressCounter must not be null");
 
             Dictionary<string, string> asmdefDirectoriesByReference = new(StringComparer.Ordinal);
@@ -1421,7 +1465,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     continue;
                 }
 
-                if (!TryReadJsonObjectFromFile(asmdefFilePath, out JObject asmdef))
+                if (!TryReadJsonObjectFromCache(asmdefFilePath, sourceFileCache, out JObject asmdef))
                 {
                     await progressCounter.ReportProcessedItemAsync(ct);
                     continue;
@@ -1442,6 +1486,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static bool TryReadJsonObjectFromFile(string filePath, out JObject jsonObject)
         {
             return TryReadJsonObjectForMigration(filePath, File.ReadAllText, out jsonObject);
+        }
+
+        private static bool TryReadJsonObjectFromCache(
+            string filePath,
+            ThirdPartyToolMigrationSourceFileCache sourceFileCache,
+            out JObject jsonObject)
+        {
+            Debug.Assert(sourceFileCache != null, "sourceFileCache must not be null");
+
+            return TryReadJsonObjectForMigration(filePath, sourceFileCache.ReadAllText, out jsonObject);
         }
 
         internal static bool TryReadJsonObjectForMigration(

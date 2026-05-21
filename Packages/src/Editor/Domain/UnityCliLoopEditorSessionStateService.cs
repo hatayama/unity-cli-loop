@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void SetShowReconnectingUI(bool showReconnectingUI);
         bool GetShowPostCompileReconnectingUI();
         void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI);
+        bool GetShouldAutoScanThirdPartyToolMigration();
+        void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration);
     }
 
     /// <summary>
@@ -93,6 +95,27 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             _sessionStatePort.SetShowPostCompileReconnectingUI(showPostCompileReconnectingUI);
         }
 
+        public bool GetShouldAutoScanThirdPartyToolMigration()
+        {
+            return _sessionStatePort.GetShouldAutoScanThirdPartyToolMigration();
+        }
+
+        public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration)
+        {
+            _sessionStatePort.SetShouldAutoScanThirdPartyToolMigration(shouldAutoScanThirdPartyToolMigration);
+        }
+
+        public bool ConsumeShouldAutoScanThirdPartyToolMigration()
+        {
+            if (!GetShouldAutoScanThirdPartyToolMigration())
+            {
+                return false;
+            }
+
+            SetShouldAutoScanThirdPartyToolMigration(false);
+            return true;
+        }
+
         public void MarkDomainReloadStarted(bool serverIsRunning)
         {
             SetIsDomainReloadInProgress(true);
@@ -147,6 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         {
             ClearServerSession();
             ClearDomainReloadRecoveryFlags();
+            SetShouldAutoScanThirdPartyToolMigration(false);
         }
     }
 }

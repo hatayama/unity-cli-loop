@@ -16,6 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string IsReconnectingKey = KeyPrefix + "isReconnecting";
         private const string ShowReconnectingUIKey = KeyPrefix + "showReconnectingUI";
         private const string ShowPostCompileReconnectingUIKey = KeyPrefix + "showPostCompileReconnectingUI";
+        private const string ShouldAutoScanThirdPartyToolMigrationKey =
+            KeyPrefix + "shouldAutoScanThirdPartyToolMigration";
 
         public bool GetIsServerRunning()
         {
@@ -75,6 +77,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI)
         {
             SetBool(ShowPostCompileReconnectingUIKey, showPostCompileReconnectingUI);
+        }
+
+        public bool GetShouldAutoScanThirdPartyToolMigration()
+        {
+            return GetBool(ShouldAutoScanThirdPartyToolMigrationKey);
+        }
+
+        public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration)
+        {
+            SetBool(ShouldAutoScanThirdPartyToolMigrationKey, shouldAutoScanThirdPartyToolMigration);
         }
 
         private static bool GetBool(string key)

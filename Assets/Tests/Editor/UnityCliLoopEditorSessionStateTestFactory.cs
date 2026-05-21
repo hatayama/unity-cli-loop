@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private readonly bool _isReconnecting;
         private readonly bool _showReconnectingUI;
         private readonly bool _showPostCompileReconnectingUI;
+        private readonly bool _shouldAutoScanThirdPartyToolMigration;
 
         private UnityCliLoopEditorSessionStateSnapshot(UnityCliLoopEditorSessionStateService service)
         {
@@ -40,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _isReconnecting = service.GetIsReconnecting();
             _showReconnectingUI = service.GetShowReconnectingUI();
             _showPostCompileReconnectingUI = service.GetShowPostCompileReconnectingUI();
+            _shouldAutoScanThirdPartyToolMigration = service.GetShouldAutoScanThirdPartyToolMigration();
         }
 
         internal static UnityCliLoopEditorSessionStateSnapshot Capture(
@@ -56,6 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             service.SetIsReconnecting(_isReconnecting);
             service.SetShowReconnectingUI(_showReconnectingUI);
             service.SetShowPostCompileReconnectingUI(_showPostCompileReconnectingUI);
+            service.SetShouldAutoScanThirdPartyToolMigration(_shouldAutoScanThirdPartyToolMigration);
         }
     }
 }
