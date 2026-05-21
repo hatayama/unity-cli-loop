@@ -1,6 +1,6 @@
 ---
 name: uloop-simulate-keyboard
-description: "Simulate keyboard key input in PlayMode via Input System. Use when you need to: (1) Press game control keys like WASD, Space, or Shift during PlayMode, (2) Hold keys down for continuous movement or actions, (3) Combine multiple held keys for complex input like Shift+W for sprint. Injects into Unity Input System (`Keyboard.current`); requires PlayMode and the New Input System."
+description: "Simulate keyboard input in PlayMode through Unity Input System. Use for key presses, holds, releases, and game controls such as WASD or Space."
 context: fork
 ---
 
@@ -82,6 +82,6 @@ Returns JSON with:
 ## Prerequisites
 
 - Unity must be in **PlayMode**
-- **Input System package** (`com.unity.inputsystem`) must be installed
-- Active Input Handling must be set to **Input System Package (New)** or **Both** in Player Settings
+- **Input System package** must be installed (`com.unity.inputsystem`)
+- Use this only when the project already uses the New Input System.
 - Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`
