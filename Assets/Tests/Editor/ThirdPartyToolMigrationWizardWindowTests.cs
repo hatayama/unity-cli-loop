@@ -108,6 +108,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldReport, Is.EqualTo(expected));
         }
 
+        [TestCase(false, true, true)]
+        [TestCase(true, true, false)]
+        [TestCase(false, false, false)]
+        public void ShouldApplyMigrationProgress_ReturnsExpectedValue(
+            bool isCancellationRequested,
+            bool hasActivePreview,
+            bool expected)
+        {
+            // Verifies that stale migration progress cannot overwrite a rendered preview result.
+            bool shouldApply = ThirdPartyToolMigrationWizardWindow.ShouldApplyMigrationProgress(
+                isCancellationRequested,
+                hasActivePreview);
+
+            Assert.That(shouldApply, Is.EqualTo(expected));
+        }
+
         [Test]
         public void PrepareForOpen_PopulatesWindowStateBeforeShowing()
         {

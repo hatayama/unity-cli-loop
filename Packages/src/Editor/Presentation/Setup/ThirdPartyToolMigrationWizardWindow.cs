@@ -321,6 +321,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
+            CompleteMigrationPreview(ct);
+
             if (!preview.HasTargets)
             {
                 ShowNoMigrationTargetsState();
@@ -576,6 +578,29 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return elapsedTicks >= requiredTicks;
         }
 
+        internal static bool ShouldApplyMigrationProgress(
+            bool isCancellationRequested,
+            bool hasActivePreview)
+        {
+            return !isCancellationRequested && hasActivePreview;
+        }
+
+        private void CompleteMigrationPreview(CancellationToken ct)
+        {
+            if (!IsMigrationPreviewActive(ct))
+            {
+                return;
+            }
+
+            _migrationPreviewCts.Dispose();
+            _migrationPreviewCts = null;
+        }
+
+        private bool IsMigrationPreviewActive(CancellationToken ct)
+        {
+            return _migrationPreviewCts != null && _migrationPreviewCts.Token.Equals(ct);
+        }
+
         private sealed class ThirdPartyToolMigrationPreviewProgress
             : System.IProgress<ThirdPartyToolMigrationProgress>
         {
@@ -618,7 +643,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             private async Task ReportAsync(ThirdPartyToolMigrationProgress value, CancellationToken ct)
             {
                 await MainThreadSwitcher.SwitchToMainThread();
-                if (ct.IsCancellationRequested)
+                if (!ShouldApplyMigrationProgress(
+                        ct.IsCancellationRequested,
+                        _window.IsMigrationPreviewActive(ct)))
                 {
                     return;
                 }
