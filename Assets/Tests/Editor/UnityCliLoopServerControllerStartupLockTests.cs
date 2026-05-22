@@ -152,6 +152,103 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(readinessProbe.CallCount, Is.EqualTo(1));
         }
 
+        [Test]
+        public async Task RestoreServerStateIfNeeded_WhenServerWasManuallyStopped_ShouldSkipStartupRecovery()
+        {
+            // Tests that explicit Stop Server is preserved when startup recovery runs after Domain Reload.
+            _sessionStateService.MarkServerManuallyStopped();
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
+            UnityCliLoopServerControllerService service = new(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService(_sessionStateService, stateStore),
+                _sessionStateService,
+                stateStore,
+                new TestReadinessProbe(),
+                new TestDomainReloadLifecycle());
+
+            await service.RestoreServerStateIfNeeded();
+
+            Assert.That(serverInstanceFactory.LastCreated, Is.Null);
+        }
+
+        [Test]
+        public async Task StopServerWithUseCaseAsync_WhenStoppedByUser_ShouldMarkManualStop()
+        {
+            // Tests that the manual Stop Server path records explicit user stop intent.
+            UnityCliLoopServerControllerService service = CreateControllerService();
+            TestServerInstance runningServer = new();
+            runningServer.StartServer();
+            service.RegisterRecoveredServer(runningServer);
+
+            await service.StopServerWithUseCaseAsync();
+
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.True);
+        }
+
+        [Test]
+        public async Task StartServerWithUseCaseAsync_WhenRestartCleanupStartFails_ShouldNotMarkManualStop()
+        {
+            // Tests that internal restart cleanup is not mistaken for explicit user stop intent.
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                "Server startup failed: Failed to start server: start failed");
+            TestServerInstanceFactory serverInstanceFactory = new(throwOnCreate: true);
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
+            UnityCliLoopServerControllerService service = new(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService(_sessionStateService, stateStore),
+                _sessionStateService,
+                stateStore,
+                new TestReadinessProbe(),
+                new TestDomainReloadLifecycle());
+            TestServerInstance runningServer = new();
+            runningServer.StartServer();
+            service.RegisterRecoveredServer(runningServer);
+
+            await service.StartServerWithUseCaseAsync();
+
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
+        }
+
+        [Test]
+        public async Task StartServerWithUseCaseAsync_WhenRestartCleanupStopFails_ShouldNotStartNewServer()
+        {
+            // Tests that restart cleanup failure does not get hidden behind a second startup attempt.
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                "Server shutdown failed: Failed to stop server: dispose failed");
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
+            UnityCliLoopServerControllerService service = new(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService(_sessionStateService, stateStore),
+                _sessionStateService,
+                stateStore,
+                new TestReadinessProbe(),
+                new TestDomainReloadLifecycle());
+            TestServerInstance runningServer = new(throwOnDispose: true);
+            runningServer.StartServer();
+            service.RegisterRecoveredServer(runningServer);
+
+            await service.StartServerWithUseCaseAsync();
+
+            Assert.That(serverInstanceFactory.LastCreated, Is.Null);
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.True);
+            Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
+        }
+
         private UnityCliLoopServerControllerService CreateControllerService()
         {
             return CreateControllerService(new TestReadinessProbe());
@@ -223,10 +320,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestServerInstanceFactory : IUnityCliLoopServerInstanceFactory
         {
+            private readonly bool _throwOnCreate;
+
+            public TestServerInstanceFactory(bool throwOnCreate = false)
+            {
+                _throwOnCreate = throwOnCreate;
+            }
+
             public TestServerInstance LastCreated { get; private set; }
 
             public IUnityCliLoopServerInstance Create()
             {
+                if (_throwOnCreate)
+                {
+                    throw new System.InvalidOperationException("start failed");
+                }
+
                 LastCreated = new TestServerInstance();
                 return LastCreated;
             }
@@ -237,6 +346,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestServerInstance : IUnityCliLoopServerInstance
         {
+            private readonly bool _throwOnDispose;
+
+            public TestServerInstance(bool throwOnDispose = false)
+            {
+                _throwOnDispose = throwOnDispose;
+            }
+
             public bool IsRunning { get; private set; }
 
             public string Endpoint => "test";
@@ -253,6 +369,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public void Dispose()
             {
+                if (_throwOnDispose)
+                {
+                    throw new System.InvalidOperationException("dispose failed");
+                }
+
                 IsRunning = false;
             }
         }

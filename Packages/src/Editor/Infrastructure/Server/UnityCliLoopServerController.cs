@@ -19,6 +19,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         IUnityCliLoopServerRecoveryCoordinator,
         IUnityCliLoopServerStateReader
     {
+        private const string MANUAL_STOP_REASON = "manual-stop";
+        private const string MANUAL_START_CLEANUP_REASON = "manual-start-cleanup";
+
+        private enum ServerStopIntent
+        {
+            ManualStop,
+            RestartCleanup,
+        }
+
         private readonly IUnityCliLoopServerInstanceFactory _serverInstanceFactory;
         private readonly UnityCliLoopServerLifecycleRegistryService _serverLifecycleRegistry;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
@@ -194,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// Starts the server using new UseCase implementation.
         /// </summary>
-        private async Task StartServerWithUseCaseAsync()
+        internal async Task StartServerWithUseCaseAsync()
         {
             if (IsBackgroundUnityProcess())
             {
@@ -208,7 +217,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // Always stop the existing server first so the project IPC endpoint is released.
             if (_bridgeServer != null)
             {
-                await StopServerWithUseCaseAsync();
+                bool cleanupSucceeded = await StopServerForRestartAsync(CancellationToken.None);
+                if (!cleanupSucceeded)
+                {
+                    return;
+                }
             }
 
             UnityCliLoopServerStartupService startupService =
@@ -251,14 +264,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         internal async Task StopServerWithUseCaseAsync()
         {
+            await StopServerForIntentAsync(ServerStopIntent.ManualStop, CancellationToken.None);
+        }
+
+        private async Task<bool> StopServerForRestartAsync(CancellationToken ct)
+        {
+            return await StopServerForIntentAsync(ServerStopIntent.RestartCleanup, ct);
+        }
+
+        private async Task<bool> StopServerForIntentAsync(ServerStopIntent stopIntent, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+
             if (IsBackgroundUnityProcess())
             {
                 VibeLogger.LogInfo("server_stop_ignored", "background_process");
-                return;
+                return true;
             }
 
             string generationId = ServerReadinessStateStore.CreateGenerationId();
-            WriteServerState(ServerReadinessPhase.Stopping, generationId, "manual-stop", null);
+            string reason = stopIntent == ServerStopIntent.ManualStop ? MANUAL_STOP_REASON : MANUAL_START_CLEANUP_REASON;
+            WriteServerState(ServerReadinessPhase.Stopping, generationId, reason, null);
             _serverLifecycleRegistry.PublishServerStopping();
             PrepareForServerShutdown();
 
@@ -266,24 +292,32 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new UnityCliLoopServerStartupService(_serverInstanceFactory, _sessionStateService);
             UnityCliLoopServerShutdownUseCase useCase =
                 new UnityCliLoopServerShutdownUseCase(startupService, this);
-            System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
 
-            ServerShutdownResult result = await useCase.ExecuteAsync(cancellationToken);
+            ServerShutdownResult result = await useCase.ExecuteAsync(ct);
 
             if (result.Success)
             {
                 // Server stopped by UseCase, so clear the reference
                 _bridgeServer = null;
 
-                // Clear session state to reflect server stopped
-                _sessionStateService.ClearServerSession();
-                WriteServerState(ServerReadinessPhase.Stopped, generationId, "manual-stop", null);
+                if (stopIntent == ServerStopIntent.ManualStop)
+                {
+                    _sessionStateService.MarkServerManuallyStopped();
+                }
+                else
+                {
+                    _sessionStateService.ClearServerSession();
+                }
+
+                WriteServerState(ServerReadinessPhase.Stopped, generationId, reason, null);
+                return true;
             }
             else
             {
                 // Error message already handled by UseCase
-                WriteServerState(ServerReadinessPhase.Failed, generationId, "manual-stop", result.Message);
+                WriteServerState(ServerReadinessPhase.Failed, generationId, reason, result.Message);
                 UnityEngine.Debug.LogError($"Server shutdown failed: {result.Message}");
+                return false;
             }
         }
 
@@ -341,7 +375,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// Restores the server state if necessary.
         /// </summary>
-        private async Task RestoreServerStateIfNeeded()
+        internal async Task RestoreServerStateIfNeeded()
         {
             if (IsBackgroundUnityProcess())
             {
@@ -364,6 +398,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (isAfterCompile)
             {
                 _sessionStateService.ClearAfterCompileFlag();
+            }
+
+            if (_sessionStateService.GetIsServerManuallyStopped())
+            {
+                return;
             }
 
             await StartRecoveryIfNeededAsync(isAfterCompile, CancellationToken.None);
@@ -664,7 +703,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private void SaveRunningServerState()
         {
-            _sessionStateService.SetIsServerRunning(true);
+            _sessionStateService.MarkServerStarted();
         }
 
         private async Task MarkServerReadyAsync(

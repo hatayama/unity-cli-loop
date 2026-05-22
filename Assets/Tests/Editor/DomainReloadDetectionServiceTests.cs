@@ -112,9 +112,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CompleteDomainReload_WhenLegacyStateOnlySaysRunning_IgnoresStaleRunningFlag()
+        public void CompleteDomainReload_WhenLegacyStateOnlySaysRunning_DoesNotRestoreRunningSession()
         {
-            // Verifies that stale running-only JSON does not opt into recovery after the migration.
+            // Verifies that stale running-only JSON is not restored into SessionState.
             UnityCliLoopEditorLegacySessionState legacySessionState = new(
                 isServerRunning: true,
                 isAfterCompile: false,
@@ -131,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
             ServerReadinessState state = _stateStore.Read();
-            Assert.That(state.Phase, Is.EqualTo("stopped"));
+            Assert.That(state.Phase, Is.EqualTo("recovering"));
         }
 
         [Test]
@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetIsAfterCompile(), Is.False);
             Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
             ServerReadinessState state = _stateStore.Read();
-            Assert.That(state.Phase, Is.EqualTo("stopped"));
+            Assert.That(state.Phase, Is.EqualTo("recovering"));
         }
 
         private static ServerReadinessStateStore CreateTestStateStore()

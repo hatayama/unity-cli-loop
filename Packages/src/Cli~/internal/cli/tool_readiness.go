@@ -21,7 +21,11 @@ const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code pr
 
 type toolReadinessWaitMode int
 
-var findRunningUnityProcessForReadiness = findRunningUnityProcess
+var (
+	findRunningUnityProcessForReadiness = findRunningUnityProcess
+	stoppedServerStateGrace             = 2 * time.Second
+	stoppedServerStatePoll              = 100 * time.Millisecond
+)
 
 const (
 	toolReadinessWaitThroughStopped toolReadinessWaitMode = iota
@@ -54,6 +58,27 @@ func waitForToolReadinessWithMode(ctx context.Context, projectRoot string, mode 
 			if mode == toolReadinessStopWhenServerStops && isServerStateStopped(state) {
 				return serverStoppedError{state: state}
 			}
+			if mode == toolReadinessWaitThroughStopped && isServerStateStopped(state) {
+				changed, err := waitForStoppedServerStateChange(timeoutContext, ctx, projectRoot, state)
+				if err != nil {
+					return err
+				}
+				if !changed {
+					stale, err := isStoppedServerStateStale(timeoutContext, projectRoot)
+					if err != nil {
+						return err
+					}
+					if stale {
+						return serverStoppedError{state: state}
+					}
+					select {
+					case <-timeoutContext.Done():
+						return toolReadinessDoneError(ctx)
+					case <-time.After(toolReadinessPoll):
+					}
+				}
+				continue
+			}
 			if isServerStateBusy(state) {
 				stale, err := isBusyServerStateStale(timeoutContext, projectRoot)
 				if err != nil {
@@ -81,6 +106,50 @@ func waitForToolReadinessWithMode(ctx context.Context, projectRoot string, mode 
 		case <-time.After(toolReadinessPoll):
 		}
 	}
+}
+
+func waitForStoppedServerStateChange(timeoutCtx context.Context, parentCtx context.Context, projectRoot string, initialState serverState) (bool, error) {
+	if stoppedServerStateGrace <= 0 {
+		return false, nil
+	}
+
+	graceTimer := time.NewTimer(stoppedServerStateGrace)
+	defer graceTimer.Stop()
+
+	ticker := time.NewTicker(stoppedServerStatePoll)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			return false, toolReadinessDoneError(parentCtx)
+		case <-graceTimer.C:
+			return false, nil
+		case <-ticker.C:
+			state, ok, err := readServerState(projectRoot)
+			if err != nil {
+				return false, err
+			}
+			if !ok || !isSameStoppedServerState(state, initialState) {
+				return true, nil
+			}
+		}
+	}
+}
+
+func isSameStoppedServerState(state serverState, expected serverState) bool {
+	return state.Phase == "stopped" &&
+		expected.Phase == "stopped" &&
+		state.GenerationID == expected.GenerationID &&
+		state.Reason == expected.Reason
+}
+
+func isStoppedServerStateStale(ctx context.Context, projectRoot string) (bool, error) {
+	runningProcess, err := findRunningUnityProcessForReadiness(ctx, projectRoot)
+	if err != nil {
+		return false, err
+	}
+	return runningProcess == nil, nil
 }
 
 func isBusyServerStateStale(ctx context.Context, projectRoot string) (bool, error) {

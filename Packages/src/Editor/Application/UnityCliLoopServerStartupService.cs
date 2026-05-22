@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 return ServiceResult<bool>.SuccessResult(true);
             }
 
-            _sessionStateService.SetIsServerRunning(true);
+            _sessionStateService.MarkServerStarted();
             return ServiceResult<bool>.SuccessResult(true);
         }
     }
