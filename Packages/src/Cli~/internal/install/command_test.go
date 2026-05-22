@@ -95,6 +95,23 @@ func TestCommandForMacConfiguresShellPathAndLegacyCleanup(t *testing.T) {
 	}
 }
 
+func TestCommandForMacPreservesRootInstallDir(t *testing.T) {
+	// Verifies macOS install keeps the root directory when removing trailing separators.
+	command, err := CommandForOS("darwin", Options{
+		InstallDir: "/",
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	if command.InstallDir != "/" {
+		t.Fatalf("install dir mismatch: %s", command.InstallDir)
+	}
+	if command.TargetPath != "/uloop" {
+		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+}
+
 func shellProfileQuoteForTest(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }

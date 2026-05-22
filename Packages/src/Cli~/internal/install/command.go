@@ -35,7 +35,7 @@ func CommandForOS(goos string, options Options) (Command, error) {
 
 	switch goos {
 	case "darwin":
-		installDir := strings.TrimRight(options.InstallDir, `/`)
+		installDir := trimPosixInstallDir(options.InstallDir)
 		targetPath := path.Join(installDir, PosixCommandName)
 		return Command{
 			Name:         "sh",
@@ -59,6 +59,14 @@ func CommandForOS(goos string, options Options) (Command, error) {
 	default:
 		return Command{}, errors.New(UnsupportedOSMessage)
 	}
+}
+
+func trimPosixInstallDir(installDir string) string {
+	trimmedInstallDir := strings.TrimRight(installDir, `/`)
+	if trimmedInstallDir == "" {
+		return `/`
+	}
+	return trimmedInstallDir
 }
 
 func windowsInstallArgs(installDir string, targetPath string) []string {
