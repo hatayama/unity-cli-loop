@@ -268,6 +268,21 @@ func classifyError(err error, context errorContext) cliError {
 		}
 	}
 
+	if message == installUnsupportedOSMessage {
+		return cliError{
+			ErrorCode:   errorCodeInvalidArgument,
+			Phase:       errorPhaseExecution,
+			Message:     message,
+			Retryable:   false,
+			SafeToRetry: false,
+			Command:     context.command,
+			NextActions: []string{
+				"Run `uloop install` on Windows.",
+				"Use the platform-specific installer for this system.",
+			},
+		}
+	}
+
 	if message == uninstallUnsupportedOSMessage {
 		return cliError{
 			ErrorCode:   errorCodeInvalidArgument,

@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Security;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -121,12 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     result,
                     installDirectory,
                     platform,
-                    ApplyInstallDirectoryToCurrentProcessPath,
-                    (currentInstallDirectory, currentPlatform) => PersistInstallDirectoryToUserPath(
-                        currentInstallDirectory,
-                        currentPlatform,
-                        Environment.GetEnvironmentVariable,
-                        Environment.SetEnvironmentVariable));
+                    ApplyInstallDirectoryToCurrentProcessPath);
             }
 
             return result;
@@ -438,63 +432,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return normalizedInstallDirectory + separator + GetGlobalCliInstallFileName(platform);
         }
 
-        internal static CliInstallResult PersistInstallDirectoryToUserPath(
-            string installDirectory,
-            RuntimePlatform platform,
-            Func<string, EnvironmentVariableTarget, string> getEnvironmentVariable,
-            Action<string, string, EnvironmentVariableTarget> setEnvironmentVariable)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installDirectory), "installDirectory must not be null or empty");
-            UnityEngine.Debug.Assert(getEnvironmentVariable != null, "getEnvironmentVariable must not be null");
-            UnityEngine.Debug.Assert(setEnvironmentVariable != null, "setEnvironmentVariable must not be null");
-
-            if (platform != RuntimePlatform.WindowsEditor)
-            {
-                return new CliInstallResult(true, "");
-            }
-
-            string pathVariableName = GetPathEnvironmentVariableName(platform);
-            try
-            {
-                string currentUserPath = getEnvironmentVariable(pathVariableName, EnvironmentVariableTarget.User);
-                string updatedUserPath = BuildPathWithInstallDirectory(currentUserPath, installDirectory, platform);
-                if (string.Equals(currentUserPath, updatedUserPath, GetPathComparison(platform)))
-                {
-                    return new CliInstallResult(true, "");
-                }
-
-                setEnvironmentVariable(pathVariableName, updatedUserPath, EnvironmentVariableTarget.User);
-                return new CliInstallResult(true, "");
-            }
-            catch (SecurityException ex)
-            {
-                return BuildUserPathPersistenceFailure(ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return BuildUserPathPersistenceFailure(ex);
-            }
-        }
-
         internal static CliInstallResult FinishSuccessfulInstall(
             CliInstallResult installResult,
             string installDirectory,
             RuntimePlatform platform,
-            Action<RuntimePlatform> applyInstallDirectoryToCurrentProcessPath,
-            Func<string, RuntimePlatform, CliInstallResult> persistInstallDirectoryToUserPath)
+            Action<RuntimePlatform> applyInstallDirectoryToCurrentProcessPath)
         {
             UnityEngine.Debug.Assert(installResult.Success, "installResult must be successful");
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(installDirectory), "installDirectory must not be null or empty");
             UnityEngine.Debug.Assert(applyInstallDirectoryToCurrentProcessPath != null, "applyInstallDirectoryToCurrentProcessPath must not be null");
-            UnityEngine.Debug.Assert(persistInstallDirectoryToUserPath != null, "persistInstallDirectoryToUserPath must not be null");
 
             applyInstallDirectoryToCurrentProcessPath(platform);
-            CliInstallResult persistResult = persistInstallDirectoryToUserPath(installDirectory, platform);
-            if (!persistResult.Success)
-            {
-                return persistResult;
-            }
-
             return installResult;
         }
 
@@ -839,16 +787,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return $"Timed out waiting for uLoop CLI uninstall to remove {targetPath} and remove {installDirectory} from Windows User PATH.";
-        }
-
-        private static CliInstallResult BuildUserPathPersistenceFailure(Exception ex)
-        {
-            UnityEngine.Debug.Assert(ex != null, "ex must not be null");
-
-            string errorOutput =
-                "Installed the uLoop CLI binary, but failed to persist the uLoop CLI install directory in the Windows User PATH. "
-                + $"Update {CliConstants.WINDOWS_PATH_ENVIRONMENT_VARIABLE} manually or run the CLI-only installer.\n{ex.Message}";
-            return new CliInstallResult(false, errorOutput);
         }
 
         private static string BuildCliSetupCommandFailure(

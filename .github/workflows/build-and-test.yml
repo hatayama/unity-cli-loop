@@ -28,6 +28,7 @@ jobs:
           scripts/test-sync-release-please-package-releases.sh
           scripts/test-sync-release-please-go-cli-dist.sh
           scripts/test-notify-release-workflow-failure.sh
+          scripts/test-native-cli-publish-workflow.sh
           scripts/test-install-release-filter.sh
 
       - name: Setup Go

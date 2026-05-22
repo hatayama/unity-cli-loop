@@ -104,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetInstallCommand_OnWindowsDoesNotNeedLegacyCleanupFlag()
         {
-            // Verifies that Windows installs rely on the installer script's npm uninstall attempt.
+            // Verifies that Windows installs rely on the native CLI install command for legacy cleanup.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.WindowsEditor,
                 "3.0.0-beta.3",
@@ -575,76 +575,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void PersistInstallDirectoryToUserPath_OnWindowsUpdatesUserPath()
+        public void FinishSuccessfulInstall_WhenInstallerSucceededUpdatesCurrentProcessPathOnly()
         {
-            // Verifies that Windows editor installs survive Unity restarts by updating User PATH.
-            string capturedName = null;
-            string capturedValue = null;
-            System.EnvironmentVariableTarget capturedTarget = default;
-
-            CliInstallResult result = NativeCliInstaller.PersistInstallDirectoryToUserPath(
-                "C:\\Users\\ExampleUser\\Programs\\uloop\\bin",
-                RuntimePlatform.WindowsEditor,
-                (name, target) => "C:\\npm",
-                (name, value, target) =>
-                {
-                    capturedName = name;
-                    capturedValue = value;
-                    capturedTarget = target;
-                });
-
-            Assert.That(result.Success, Is.True);
-            Assert.That(capturedName, Is.EqualTo("Path"));
-            Assert.That(capturedValue, Is.EqualTo("C:\\Users\\ExampleUser\\Programs\\uloop\\bin;C:\\npm"));
-            Assert.That(capturedTarget, Is.EqualTo(System.EnvironmentVariableTarget.User));
-        }
-
-        [Test]
-        public void PersistInstallDirectoryToUserPath_OnMacDoesNothing()
-        {
-            // Verifies that POSIX editor installs do not attempt unsupported .NET User PATH writes.
-            bool wroteUserPath = false;
-
-            CliInstallResult result = NativeCliInstaller.PersistInstallDirectoryToUserPath(
-                "/Users/ExampleUser/.local/bin",
-                RuntimePlatform.OSXEditor,
-                (name, target) => "/usr/local/bin",
-                (name, value, target) => { wroteUserPath = true; });
-
-            Assert.That(result.Success, Is.True);
-            Assert.That(wroteUserPath, Is.False);
-        }
-
-        [Test]
-        public void PersistInstallDirectoryToUserPath_OnWindowsSurfacesPermissionFailure()
-        {
-            // Verifies that permission failures are reported instead of crashing the editor installer.
-            CliInstallResult result = NativeCliInstaller.PersistInstallDirectoryToUserPath(
-                "C:\\Users\\ExampleUser\\Programs\\uloop\\bin",
-                RuntimePlatform.WindowsEditor,
-                (name, target) => "C:\\npm",
-                (name, value, target) => throw new System.UnauthorizedAccessException("denied"));
-
-            Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorOutput, Does.Contain("failed to persist the uLoop CLI install directory"));
-            Assert.That(result.ErrorOutput, Does.Contain("denied"));
-        }
-
-        [Test]
-        public void FinishSuccessfulInstall_WhenPathPersistenceFailsReturnsPathFailure()
-        {
-            // Verifies that PATH persistence failure is reported after the current process PATH is updated.
+            // Verifies that User PATH persistence belongs to the native CLI install command, not the editor wrapper.
             bool appliedCurrentPath = false;
 
             CliInstallResult result = NativeCliInstaller.FinishSuccessfulInstall(
                 new CliInstallResult(true, ""),
                 "C:\\Users\\ExampleUser\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor,
-                platform => { appliedCurrentPath = true; },
-                (installDirectory, platform) => new CliInstallResult(false, "path failed"));
+                platform => { appliedCurrentPath = true; });
 
-            Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorOutput, Does.Contain("path failed"));
+            Assert.That(result.Success, Is.True);
             Assert.That(appliedCurrentPath, Is.True);
         }
 
