@@ -217,7 +217,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // Always stop the existing server first so the project IPC endpoint is released.
             if (_bridgeServer != null)
             {
-                await StopServerForRestartAsync(CancellationToken.None);
+                bool cleanupSucceeded = await StopServerForRestartAsync(CancellationToken.None);
+                if (!cleanupSucceeded)
+                {
+                    return;
+                }
             }
 
             UnityCliLoopServerStartupService startupService =
@@ -263,19 +267,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             await StopServerForIntentAsync(ServerStopIntent.ManualStop, CancellationToken.None);
         }
 
-        private async Task StopServerForRestartAsync(CancellationToken ct)
+        private async Task<bool> StopServerForRestartAsync(CancellationToken ct)
         {
-            await StopServerForIntentAsync(ServerStopIntent.RestartCleanup, ct);
+            return await StopServerForIntentAsync(ServerStopIntent.RestartCleanup, ct);
         }
 
-        private async Task StopServerForIntentAsync(ServerStopIntent stopIntent, CancellationToken ct)
+        private async Task<bool> StopServerForIntentAsync(ServerStopIntent stopIntent, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
             if (IsBackgroundUnityProcess())
             {
                 VibeLogger.LogInfo("server_stop_ignored", "background_process");
-                return;
+                return true;
             }
 
             string generationId = ServerReadinessStateStore.CreateGenerationId();
@@ -306,12 +310,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 WriteServerState(ServerReadinessPhase.Stopped, generationId, reason, null);
+                return true;
             }
             else
             {
                 // Error message already handled by UseCase
                 WriteServerState(ServerReadinessPhase.Failed, generationId, reason, result.Message);
                 UnityEngine.Debug.LogError($"Server shutdown failed: {result.Message}");
+                return false;
             }
         }
 

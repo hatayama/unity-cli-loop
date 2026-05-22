@@ -219,6 +219,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
         }
 
+        [Test]
+        public async Task StartServerWithUseCaseAsync_WhenRestartCleanupStopFails_ShouldNotStartNewServer()
+        {
+            // Tests that restart cleanup failure does not get hidden behind a second startup attempt.
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                "Server shutdown failed: Failed to stop server: dispose failed");
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            ServerReadinessStateStore stateStore = CreateTestStateStore();
+            UnityCliLoopServerControllerService service = new(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService(_sessionStateService, stateStore),
+                _sessionStateService,
+                stateStore,
+                new TestReadinessProbe(),
+                new TestDomainReloadLifecycle());
+            TestServerInstance runningServer = new(throwOnDispose: true);
+            runningServer.StartServer();
+            service.RegisterRecoveredServer(runningServer);
+
+            await service.StartServerWithUseCaseAsync();
+
+            Assert.That(serverInstanceFactory.LastCreated, Is.Null);
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.True);
+            Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
+        }
+
         private UnityCliLoopServerControllerService CreateControllerService()
         {
             return CreateControllerService(new TestReadinessProbe());
@@ -316,6 +346,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestServerInstance : IUnityCliLoopServerInstance
         {
+            private readonly bool _throwOnDispose;
+
+            public TestServerInstance(bool throwOnDispose = false)
+            {
+                _throwOnDispose = throwOnDispose;
+            }
+
             public bool IsRunning { get; private set; }
 
             public string Endpoint => "test";
@@ -332,6 +369,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public void Dispose()
             {
+                if (_throwOnDispose)
+                {
+                    throw new System.InvalidOperationException("dispose failed");
+                }
+
                 IsRunning = false;
             }
         }

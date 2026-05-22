@@ -121,12 +121,37 @@ func TestWaitForStoppedServerStateChangeDetectsRecoveryState(t *testing.T) {
 		writeReadinessServerStateForTest(t, projectRoot, `{"phase":"recovering","reason":"server-recovery"}`)
 	}()
 
-	changed, err := waitForStoppedServerStateChange(context.Background(), projectRoot, initialState)
+	changed, err := waitForStoppedServerStateChange(context.Background(), context.Background(), projectRoot, initialState)
 	if err != nil {
 		t.Fatalf("waitForStoppedServerStateChange failed: %v", err)
 	}
 	if !changed {
 		t.Fatal("stopped server state change was not detected")
+	}
+}
+
+// Verifies that stopped-state grace timeout uses the public readiness timeout message.
+func TestWaitForStoppedServerStateChangeWhenInternalTimeoutExpiresReportsReadinessTimeout(t *testing.T) {
+	originalGrace := stoppedServerStateGrace
+	originalPoll := stoppedServerStatePoll
+	stoppedServerStateGrace = 100 * time.Millisecond
+	stoppedServerStatePoll = time.Millisecond
+	t.Cleanup(func() {
+		stoppedServerStateGrace = originalGrace
+		stoppedServerStatePoll = originalPoll
+	})
+
+	projectRoot := t.TempDir()
+	initialState := serverState{Phase: "stopped", Reason: "domain-reload-after-no-server"}
+	writeReadinessServerStateForTest(t, projectRoot, `{"phase":"stopped","reason":"domain-reload-after-no-server"}`)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer cancel()
+	<-timeoutCtx.Done()
+
+	_, err := waitForStoppedServerStateChange(timeoutCtx, context.Background(), projectRoot, initialState)
+
+	if err == nil || err.Error() != "timed out waiting for Unity tool readiness" {
+		t.Fatalf("timeout error mismatch: %v", err)
 	}
 }
 

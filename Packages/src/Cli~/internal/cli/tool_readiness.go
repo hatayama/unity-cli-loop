@@ -59,7 +59,7 @@ func waitForToolReadinessWithMode(ctx context.Context, projectRoot string, mode 
 				return serverStoppedError{state: state}
 			}
 			if mode == toolReadinessWaitThroughStopped && isServerStateStopped(state) {
-				changed, err := waitForStoppedServerStateChange(timeoutContext, projectRoot, state)
+				changed, err := waitForStoppedServerStateChange(timeoutContext, ctx, projectRoot, state)
 				if err != nil {
 					return err
 				}
@@ -108,7 +108,7 @@ func waitForToolReadinessWithMode(ctx context.Context, projectRoot string, mode 
 	}
 }
 
-func waitForStoppedServerStateChange(ctx context.Context, projectRoot string, initialState serverState) (bool, error) {
+func waitForStoppedServerStateChange(timeoutCtx context.Context, parentCtx context.Context, projectRoot string, initialState serverState) (bool, error) {
 	if stoppedServerStateGrace <= 0 {
 		return false, nil
 	}
@@ -121,8 +121,8 @@ func waitForStoppedServerStateChange(ctx context.Context, projectRoot string, in
 
 	for {
 		select {
-		case <-ctx.Done():
-			return false, toolReadinessDoneError(ctx)
+		case <-timeoutCtx.Done():
+			return false, toolReadinessDoneError(parentCtx)
 		case <-graceTimer.C:
 			return false, nil
 		case <-ticker.C:
