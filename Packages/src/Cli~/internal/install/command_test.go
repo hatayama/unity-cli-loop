@@ -29,6 +29,8 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 	setupScript := windowsInstallScript(command.InstallDir, command.TargetPath)
 	for _, expected := range []string{
 		"[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')",
+		"GetExtension($CommandPath), '.exe'",
+		"foreach ($ShimName in @('uloop', 'uloop.cmd', 'uloop.ps1'))",
 		"Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $ExpectedUloopPath",
 		"npm uninstall -g --prefix",
 		"npm uninstall -g uloop-cli",
@@ -46,6 +48,9 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 	}
 	if command.TargetPath != `C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin\uloop.exe` {
 		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+	if strings.Contains(setupScript, "foreach ($ShimName in @('uloop', 'uloop.cmd', 'uloop.ps1', 'uloop.exe'))") {
+		t.Fatal("legacy npm shim detection should not content-scan native exe files")
 	}
 }
 

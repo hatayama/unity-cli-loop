@@ -89,6 +89,9 @@ function Test-LegacyNpmUloopPath {
     if (-not $CommandPath) {
         return $false
     }
+    if ([string]::Equals([System.IO.Path]::GetExtension($CommandPath), '.exe', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
     if (-not (Test-Path $CommandPath -PathType Leaf)) {
         return $false
     }
@@ -203,7 +206,7 @@ function Get-LegacyNpmUloopPathsFromPath {
             if (-not $PathEntry) {
                 continue
             }
-            foreach ($ShimName in @('uloop', 'uloop.cmd', 'uloop.ps1', 'uloop.exe')) {
+            foreach ($ShimName in @('uloop', 'uloop.cmd', 'uloop.ps1')) {
                 $CandidatePath = Join-Path $PathEntry $ShimName
                 if (-not (Test-LegacyNpmUloopPath -CommandPath $CandidatePath)) {
                     continue
