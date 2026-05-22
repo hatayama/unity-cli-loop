@@ -11,6 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const string KeyPrefix = "io.github.hatayama.uloopmcp.editorSession.";
         private const string IsServerRunningKey = KeyPrefix + "isServerRunning";
+        private const string IsServerManuallyStoppedKey = KeyPrefix + "isServerManuallyStopped";
         private const string IsAfterCompileKey = KeyPrefix + "isAfterCompile";
         private const string IsDomainReloadInProgressKey = KeyPrefix + "isDomainReloadInProgress";
         private const string IsReconnectingKey = KeyPrefix + "isReconnecting";
@@ -27,6 +28,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void SetIsServerRunning(bool isServerRunning)
         {
             SetBool(IsServerRunningKey, isServerRunning);
+        }
+
+        public bool GetIsServerManuallyStopped()
+        {
+            return GetBool(IsServerManuallyStoppedKey);
+        }
+
+        public void SetIsServerManuallyStopped(bool isServerManuallyStopped)
+        {
+            SetBool(IsServerManuallyStoppedKey, isServerManuallyStopped);
         }
 
         public bool GetIsAfterCompile()
