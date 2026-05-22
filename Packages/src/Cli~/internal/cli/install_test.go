@@ -79,3 +79,18 @@ func TestWriteInstallCompletionForWindowsMentionsPathAndLegacyCleanup(t *testing
 		}
 	}
 }
+
+func TestInstallSetupFailureErrorIncludesInstallerStderr(t *testing.T) {
+	// Verifies installer stderr is preserved inside the JSON error envelope details.
+	cliErr := installSetupFailureError(context.Canceled, "warning before failure\n")
+
+	if cliErr.ErrorCode != errorCodeInternalError {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if cliErr.Details["cause"] != context.Canceled.Error() {
+		t.Fatalf("cause detail mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["installerStderr"] != "warning before failure" {
+		t.Fatalf("installer stderr detail mismatch: %#v", cliErr.Details)
+	}
+}

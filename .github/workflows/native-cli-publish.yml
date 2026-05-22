@@ -97,7 +97,7 @@ jobs:
 
       - name: Attest native CLI release assets
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
-        uses: actions/attest@v4
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
         with:
           subject-path: Packages/src/Cli~/release/*
 

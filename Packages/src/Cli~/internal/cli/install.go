@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/internal/install"
 )
@@ -50,25 +52,35 @@ func tryHandleInstallRequest(ctx context.Context, args []string, stdout io.Write
 	writeLine(stdout, "Configuring global uloop launcher...")
 	command := exec.CommandContext(ctx, installCommand.Name, installCommand.Args...)
 	command.Stdout = stdout
-	command.Stderr = stderr
+	var installerStderr bytes.Buffer
+	command.Stderr = &installerStderr
 	if err := command.Run(); err != nil {
-		writeErrorEnvelope(stderr, cliError{
-			ErrorCode:   errorCodeInternalError,
-			Phase:       errorPhaseExecution,
-			Message:     "Install setup failed: " + err.Error(),
-			Retryable:   true,
-			SafeToRetry: true,
-			Command:     installCommandName,
-			NextActions: []string{"Retry `uloop install --dir <install-dir>` after checking PATH permissions."},
-			Details: map[string]any{
-				"cause": err.Error(),
-			},
-		})
+		writeErrorEnvelope(stderr, installSetupFailureError(err, installerStderr.String()))
 		return true, 1
 	}
 
 	writeInstallCompletion(stdout, runtime.GOOS)
 	return true, 0
+}
+
+func installSetupFailureError(err error, installerStderr string) cliError {
+	details := map[string]any{
+		"cause": err.Error(),
+	}
+	if stderrText := strings.TrimSpace(installerStderr); stderrText != "" {
+		details["installerStderr"] = stderrText
+	}
+
+	return cliError{
+		ErrorCode:   errorCodeInternalError,
+		Phase:       errorPhaseExecution,
+		Message:     "Install setup failed: " + err.Error(),
+		Retryable:   true,
+		SafeToRetry: true,
+		Command:     installCommandName,
+		NextActions: []string{"Retry `uloop install --dir <install-dir>` after checking PATH permissions."},
+		Details:     details,
+	}
 }
 
 func parseInstallOptions(args []string) (installOptions, error) {

@@ -40,7 +40,7 @@ test_attestation_permissions() {
 test_release_assets_are_attested() {
   assert_contains "$WORKFLOW" "      - name: Attest native CLI release assets"
   assert_contains "$WORKFLOW" "        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'"
-  assert_contains "$WORKFLOW" "        uses: actions/attest@v4"
+  assert_contains "$WORKFLOW" "        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26"
   assert_contains "$WORKFLOW" "          subject-path: Packages/src/Cli~/release/*"
   assert_before "$WORKFLOW" "      - name: Verify packaged release assets" "      - name: Attest native CLI release assets"
   assert_before "$WORKFLOW" "      - name: Attest native CLI release assets" "      - name: Upload native CLI assets"
