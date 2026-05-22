@@ -4,12 +4,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 	"unicode/utf16"
 )
 
 const (
-	UnsupportedOSMessage = "native install is only supported on Windows"
+	UnsupportedOSMessage = "native install is only supported on macOS and Windows"
+	PosixCommandName     = "uloop"
 	WindowsCommandName   = "uloop.exe"
 )
 
@@ -32,6 +34,17 @@ func CommandForOS(goos string, options Options) (Command, error) {
 	}
 
 	switch goos {
+	case "darwin":
+		installDir := strings.TrimRight(options.InstallDir, `/`)
+		targetPath := path.Join(installDir, PosixCommandName)
+		return Command{
+			Name:         "sh",
+			Args:         posixInstallArgs(installDir, targetPath),
+			TargetPath:   targetPath,
+			InstallDir:   installDir,
+			UpdatesPath:  true,
+			CleansLegacy: true,
+		}, nil
 	case "windows":
 		installDir := strings.TrimRight(options.InstallDir, `\/`)
 		targetPath := installDir + `\` + WindowsCommandName

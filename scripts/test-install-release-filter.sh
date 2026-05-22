@@ -217,6 +217,22 @@ fi
 
 cat > "$extract_dir/uloop" <<'ULOOP'
 #!/bin/sh
+set -eu
+
+if [ "${1:-}" = "install" ]; then
+  if [ "${MOCK_NATIVE_INSTALL_UNSUPPORTED:-0}" = "1" ]; then
+    exit 1
+  fi
+  if [ "${2:-}" = "--help" ]; then
+    echo "mock install help"
+    exit 0
+  fi
+  if [ -n "${NATIVE_INSTALL_LOG:-}" ]; then
+    printf '%s\n' "$*" >> "$NATIVE_INSTALL_LOG"
+  fi
+  exit "${MOCK_NATIVE_INSTALL_EXIT_CODE:-0}"
+fi
+
 echo "uloop mock version"
 ULOOP
   chmod +x "$extract_dir/uloop"
@@ -244,6 +260,22 @@ fi
 
 cat > "$extract_dir/uloop.exe" <<'ULOOP'
 #!/bin/sh
+set -eu
+
+if [ "${1:-}" = "install" ]; then
+  if [ "${MOCK_NATIVE_INSTALL_UNSUPPORTED:-0}" = "1" ]; then
+    exit 1
+  fi
+  if [ "${2:-}" = "--help" ]; then
+    echo "mock install help"
+    exit 0
+  fi
+  if [ -n "${NATIVE_INSTALL_LOG:-}" ]; then
+    printf '%s\n' "$*" >> "$NATIVE_INSTALL_LOG"
+  fi
+  exit "${MOCK_NATIVE_INSTALL_EXIT_CODE:-0}"
+fi
+
 echo "uloop mock version"
 ULOOP
 chmod +x "$extract_dir/uloop.exe"
@@ -329,6 +361,7 @@ test_posix_latest_skips_prerelease_assets() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="$legacy_uloop" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -361,6 +394,7 @@ test_posix_latest_beta_selects_prerelease_assets() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -368,6 +402,35 @@ test_posix_latest_beta_selects_prerelease_assets() {
   assert_contains "$curl_log" "v3.0.0-beta.2/uloop-darwin-arm64.tar.gz.sha256"
   assert_not_contains "$curl_log" "v2.0.0/uloop-darwin-arm64.tar.gz"
   assert_not_contains "$npm_log" "uninstall -g uloop-cli"
+}
+
+test_posix_invokes_native_install_setup() {
+  work_dir="$TMP_DIR/posix-native-install"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  native_install_log="$work_dir/native-install.log"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  : > "$native_install_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    NATIVE_INSTALL_LOG="$native_install_log" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$native_install_log" "install --dir $install_dir"
+  assert_contains "$work_dir/output.txt" "uloop mock version"
 }
 
 test_posix_prints_zsh_path_guidance_without_writing_profile() {
@@ -395,6 +458,7 @@ test_posix_prints_zsh_path_guidance_without_writing_profile() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -429,6 +493,7 @@ test_posix_prints_bash_path_guidance_without_modifying_existing_profile() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -466,6 +531,7 @@ test_posix_prints_fish_path_guidance_without_writing_profile() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -498,6 +564,7 @@ test_posix_prints_generic_path_guidance_for_unknown_shell() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -535,6 +602,7 @@ test_posix_skips_default_npm_cleanup_when_native_command_is_first() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="$legacy_uloop" \
     DEFAULT_LEGACY_ULOOP="$legacy_uloop" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
@@ -571,6 +639,7 @@ test_posix_does_not_infer_npm_prefix_from_non_npm_command() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -610,6 +679,7 @@ test_posix_prints_prefix_manual_cleanup_when_npm_is_unavailable() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="$legacy_uloop" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -640,6 +710,7 @@ test_posix_prints_manual_cleanup_when_npm_prefix_cannot_be_inferred() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="$legacy_uloop" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -674,6 +745,7 @@ test_posix_removes_npm_package_before_replacing_same_bin_path() {
     RELEASES_JSON="$releases_json" \
     CURL_LOG="$curl_log" \
     NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
     LEGACY_ULOOP="$legacy_uloop" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
@@ -753,6 +825,7 @@ test_powershell_installer_uses_non_installer_staged_executable_name() {
 
 test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
+test_posix_invokes_native_install_setup
 test_posix_prints_zsh_path_guidance_without_writing_profile
 test_posix_prints_bash_path_guidance_without_modifying_existing_profile
 test_posix_prints_fish_path_guidance_without_writing_profile
