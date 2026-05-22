@@ -335,6 +335,68 @@ func TestPosixInstallScriptRemovesAbsoluteLegacyNpmShimBeforePrependingPath(t *t
 	}
 }
 
+func TestPosixInstallScriptSkipsDefaultNpmCleanupForInstallPrefix(t *testing.T) {
+	// Verifies default npm cleanup does not remove the freshly installed native launcher.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	npmPrefix := filepath.Join(home, "npm-global")
+	installDir := filepath.Join(npmPrefix, "bin")
+	mockBin := filepath.Join(home, "mock-bin")
+	npmLog := filepath.Join(home, "npm.log")
+	for _, dir := range []string{installDir, mockBin} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("failed to create test directory: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(installDir, PosixCommandName), []byte("#!/bin/sh\necho native uloop\n"), 0o755); err != nil {
+		t.Fatalf("failed to write native uloop: %v", err)
+	}
+	npmScript := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"prefix\" ] && [ \"$2\" = \"-g\" ]; then\n" +
+		"  echo \"$NPM_PREFIX\"\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"printf '%s\\n' \"$*\" >> \"$NPM_LOG\"\n"
+	if err := os.WriteFile(filepath.Join(mockBin, "npm"), []byte(npmScript), 0o755); err != nil {
+		t.Fatalf("failed to write mock npm: %v", err)
+	}
+
+	command, err := CommandForOS("darwin", Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"ZDOTDIR=" + home,
+		"SHELL=/bin/zsh",
+		"NPM_LOG=" + npmLog,
+		"NPM_PREFIX=" + npmPrefix,
+		"PATH=" + installDir + ":" + mockBin + ":/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err != nil {
+		t.Fatalf("POSIX setup failed: %v\n%s", err, output)
+	}
+
+	npmLogContent, err := os.ReadFile(npmLog)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("failed to read npm log: %v\n%s", err, output)
+	}
+	if strings.Contains(string(npmLogContent), "uninstall -g uloop-cli") {
+		t.Fatalf("default npm cleanup should be skipped:\n%s", npmLogContent)
+	}
+	if _, err := os.Stat(filepath.Join(installDir, PosixCommandName)); err != nil {
+		t.Fatalf("native uloop should remain installed: %v", err)
+	}
+}
+
 func TestCommandForOSRejectsUnsupportedOS(t *testing.T) {
 	// Verifies unsupported platforms fail before building any setup command.
 	_, err := CommandForOS("linux", Options{

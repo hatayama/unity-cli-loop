@@ -255,9 +255,17 @@ try_remove_legacy_npm_package() {
 }
 
 try_remove_default_legacy_npm_package() {
-    if command -v npm >/dev/null 2>&1; then
-        npm uninstall -g uloop-cli >/dev/null 2>&1 || true
+    if ! command -v npm >/dev/null 2>&1; then
+        return
     fi
+    default_prefix=$(npm prefix -g 2>/dev/null || true)
+    if [ -n "$default_prefix" ]; then
+        default_uloop_path="$default_prefix/bin/uloop"
+        if [ "$(normalize_path "$default_uloop_path")" = "$(normalize_path "$ExpectedUloopPath")" ]; then
+            return
+        fi
+    fi
+    npm uninstall -g uloop-cli >/dev/null 2>&1 || true
 }
 
 configure_legacy_cleanup() {
