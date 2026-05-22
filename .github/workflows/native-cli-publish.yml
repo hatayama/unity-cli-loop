@@ -22,6 +22,9 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
   issues: write
   pull-requests: write
 
@@ -91,6 +94,27 @@ jobs:
       - name: Verify packaged release assets
         if: steps.release.outputs.publish == 'true'
         run: scripts/verify-native-cli-release-assets.sh
+
+      - name: Attest native CLI release assets
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        with:
+          subject-path: Packages/src/Cli~/release/*
+
+      - name: Verify native CLI asset attestations
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml
+        run: |
+          set -eu
+
+          for asset_path in Packages/src/Cli~/release/*; do
+            gh attestation verify "${asset_path}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --signer-workflow "${SIGNER_WORKFLOW}"
+          done
 
       - name: Upload packaged release assets artifact
         if: steps.release.outputs.publish == 'true'

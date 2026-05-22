@@ -34,7 +34,8 @@ var nativeCommandOptions = map[string][]string{
 		"--quit",
 		"--restart",
 	},
-	updateCommandName: {"--" + updateToVersionFlagName},
+	installCommandName: {"--" + installDirFlagName},
+	updateCommandName:  {"--" + updateToVersionFlagName},
 }
 
 func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Writer, stderr io.Writer) (bool, int) {

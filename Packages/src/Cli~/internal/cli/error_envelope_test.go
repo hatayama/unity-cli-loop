@@ -324,6 +324,25 @@ func TestClassifyProjectNotFound(t *testing.T) {
 	}
 }
 
+func TestClassifyInstallUnsupportedOS(t *testing.T) {
+	// Verifies install platform guards are reported as invalid command input.
+	cliErr := classifyError(
+		errors.New(installUnsupportedOSMessage),
+		errorContext{command: "install"},
+	)
+
+	if cliErr.ErrorCode != errorCodeInvalidArgument {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if cliErr.Phase != errorPhaseExecution {
+		t.Fatalf("phase mismatch: %#v", cliErr)
+	}
+	expectedAction := "Run `uloop install` on Windows."
+	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != expectedAction {
+		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
+	}
+}
+
 // Tests that compile wait timeout guidance uses the current value-less boolean flag syntax.
 func TestCompileWaitTimeoutError(t *testing.T) {
 	cliErr := compileWaitTimeoutError("/tmp/MyProject")
@@ -357,7 +376,7 @@ func TestClassifyConnectionAttemptUsesContextProjectRootFallback(t *testing.T) {
 
 func TestAvailableCommandNamesIncludesBuiltIns(t *testing.T) {
 	names := availableCommandNames(toolsCache{})
-	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "fix", "skills", "completion", "update"}
+	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "fix", "skills", "completion", "install", "update"}
 	for index, expected := range expectedBuiltIns {
 		if names[index] != expected {
 			t.Fatalf("built-in command mismatch: %#v", names)

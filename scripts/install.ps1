@@ -61,26 +61,95 @@ if ($Version -eq $LatestVersion -or $Version -eq $LatestBetaVersion) {
 }
 $ChecksumUrl = "$DownloadUrl.sha256"
 
-function Report-PathShadowing {
-    $ResolvedCommand = Get-Command uloop -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $ResolvedCommand) {
-        return
+function Assert-UloopVersionSucceeds {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$UloopPath,
+        [switch]$Quiet
+    )
+
+    if ($Quiet) {
+        & $UloopPath --version > $null
+    }
+    else {
+        & $UloopPath --version
     }
 
-    $ExpectedUloop = Join-Path $InstallDir "uloop.exe"
-    if ([string]::Equals($ResolvedCommand.Source, $ExpectedUloop, [System.StringComparison]::OrdinalIgnoreCase)) {
-        return
+    if ($LASTEXITCODE -ne 0) {
+        throw "uloop binary verification failed for $UloopPath"
+    }
+}
+
+function Get-UloopSha256Hash {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $Stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $HashBytes = $Sha256.ComputeHash($Stream)
+    }
+    finally {
+        $Stream.Dispose()
+        $Sha256.Dispose()
     }
 
-    Write-Host "Installed uloop to $ExpectedUloop, but PATH resolves uloop to:"
-    Write-Host "  $($ResolvedCommand.Source)"
-    Write-Host "Move $InstallDir earlier in PATH, or remove the legacy installation if it owns that command."
+    return ([System.BitConverter]::ToString($HashBytes) -replace "-", "").ToLowerInvariant()
+}
+
+function Expand-UloopArchive {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ArchivePath,
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationPath
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $DestinationPath)
+}
+
+function Invoke-UloopNativeInstall {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$UloopPath,
+        [Parameter(Mandatory = $true)]
+        [string]$Directory
+    )
+
+    $NativeInstallArgs = @("install", "--dir", $Directory)
+    & $UloopPath @NativeInstallArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "uloop native install setup failed for $UloopPath"
+    }
+}
+
+function Test-UloopNativeInstallSupported {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$UloopPath
+    )
+
+    & $UloopPath install --help > $null 2> $null
+    return $LASTEXITCODE -eq 0
+}
+
+function ConvertTo-NormalizedPath {
+    param(
+        [string]$Path
+    )
+
+    if (-not $Path) {
+        return ""
+    }
+
+    return $Path.Trim().Trim('"').TrimEnd([char[]]@('\', '/')).Replace('/', '\')
 }
 
 function Get-NpmPrefixFromUloopPath {
     param(
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$CommandPath
     )
 
@@ -103,8 +172,6 @@ function Get-NpmPrefixFromUloopPath {
 
 function Test-LegacyNpmUloopPath {
     param(
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$CommandPath
     )
 
@@ -112,22 +179,25 @@ function Test-LegacyNpmUloopPath {
         return $false
     }
 
+    if ([string]::Equals([System.IO.Path]::GetExtension($CommandPath), ".exe", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
+
     if (-not (Test-Path $CommandPath -PathType Leaf)) {
         return $false
     }
 
-    $CommandContent = Get-Content -Path $CommandPath -Raw
-    return $CommandContent.Contains("node_modules/uloop-cli") `
-        -or $CommandContent.Contains("node_modules\uloop-cli")
+    $CommandContent = Get-Content -Path $CommandPath -Raw -ErrorAction SilentlyContinue
+    if (-not $CommandContent) {
+        return $false
+    }
+
+    return $CommandContent.Contains("node_modules/uloop-cli") -or $CommandContent.Contains("node_modules\uloop-cli")
 }
 
 function Write-LegacyNpmManualRemoval {
     param(
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$LegacyUloopPath,
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$LegacyPrefix
     )
 
@@ -138,7 +208,7 @@ function Write-LegacyNpmManualRemoval {
 
     if ($LegacyPrefix) {
         Write-Host "Run this manually if that command still shadows the native CLI:"
-        Write-Host "  npm uninstall -g --prefix `"$LegacyPrefix`" uloop-cli"
+        Write-Host ('  npm uninstall -g --prefix "' + $LegacyPrefix + '" uloop-cli')
         return
     }
 
@@ -146,27 +216,9 @@ function Write-LegacyNpmManualRemoval {
     Write-Host "  npm uninstall -g uloop-cli"
 }
 
-function Normalize-PathForComparison {
-    param(
-        [AllowNull()]
-        [AllowEmptyString()]
-        [string]$Path
-    )
-
-    if (-not $Path) {
-        return ""
-    }
-
-    return $Path.Trim().TrimEnd([char[]]@('\', '/'))
-}
-
 function Remove-LegacyNpmArtifacts {
     param(
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$LegacyUloopPath,
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$LegacyPrefix
     )
 
@@ -192,11 +244,7 @@ function Remove-LegacyNpmArtifacts {
 
 function Test-LegacyNpmArtifactsExist {
     param(
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$LegacyUloopPath,
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$LegacyPrefix
     )
 
@@ -209,8 +257,7 @@ function Test-LegacyNpmArtifactsExist {
     }
 
     foreach ($ShimName in @("uloop", "uloop.cmd", "uloop.ps1")) {
-        if ((Test-Path (Join-Path $LegacyPrefix $ShimName) -PathType Leaf) `
-                -or (Test-Path (Join-Path (Join-Path $LegacyPrefix "bin") $ShimName) -PathType Leaf)) {
+        if ((Test-Path (Join-Path $LegacyPrefix $ShimName) -PathType Leaf) -or (Test-Path (Join-Path (Join-Path $LegacyPrefix "bin") $ShimName) -PathType Leaf)) {
             return $true
         }
     }
@@ -228,15 +275,11 @@ function Test-LegacyNpmArtifactsExist {
 
 function Invoke-LegacyNpmPackageRemoval {
     param(
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$LegacyUloopPath,
-        [Parameter(Mandatory = $true)]
         [string]$ExpectedUloopPath
     )
 
-    if ($LegacyUloopPath `
-        -and [string]::Equals($LegacyUloopPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if ($LegacyUloopPath -and [string]::Equals($LegacyUloopPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
         return $true
     }
 
@@ -246,10 +289,8 @@ function Invoke-LegacyNpmPackageRemoval {
 
     $NpmCommand = Get-Command npm -ErrorAction SilentlyContinue | Select-Object -First 1
     $LegacyPrefix = $null
-    $LegacyCommandShadowsNative = $LegacyUloopPath `
-        -and -not [string]::Equals($LegacyUloopPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)
-    $LegacyCommandIsNpmShim = $LegacyCommandShadowsNative `
-        -and (Test-LegacyNpmUloopPath -CommandPath $LegacyUloopPath)
+    $LegacyCommandShadowsNative = $LegacyUloopPath -and -not [string]::Equals($LegacyUloopPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)
+    $LegacyCommandIsNpmShim = $LegacyCommandShadowsNative -and (Test-LegacyNpmUloopPath -CommandPath $LegacyUloopPath)
     if ($LegacyCommandIsNpmShim) {
         $LegacyPrefix = Get-NpmPrefixFromUloopPath -CommandPath $LegacyUloopPath
     }
@@ -303,7 +344,7 @@ function Get-LegacyNpmUloopPathsFromPath {
                 continue
             }
 
-            foreach ($ShimName in @("uloop", "uloop.cmd", "uloop.ps1", "uloop.exe")) {
+            foreach ($ShimName in @("uloop", "uloop.cmd", "uloop.ps1")) {
                 $CandidatePath = Join-Path $PathEntry $ShimName
                 if (-not (Test-LegacyNpmUloopPath -CommandPath $CandidatePath)) {
                     continue
@@ -329,7 +370,6 @@ function Get-LegacyNpmUloopPathsFromPath {
 
 function Invoke-AllLegacyNpmPackageRemoval {
     param(
-        [Parameter(Mandatory = $true)]
         [string]$ExpectedUloopPath
     )
 
@@ -352,9 +392,23 @@ function Invoke-AllLegacyNpmPackageRemoval {
     return $RemovedAll
 }
 
+function Set-CurrentPathWithInstallDirectoryFirst {
+    param(
+        [string]$Directory
+    )
+
+    $CurrentPathEntries = @()
+    if ($env:Path) {
+        $CurrentPathEntries = $env:Path -split ";" | Where-Object {
+            $_ -and -not [string]::Equals((ConvertTo-NormalizedPath -Path $_), (ConvertTo-NormalizedPath -Path $Directory), [System.StringComparison]::OrdinalIgnoreCase)
+        }
+    }
+
+    $env:Path = [string]::Join(";", @($Directory) + $CurrentPathEntries)
+}
+
 function Set-UserPathWithInstallDirectoryFirst {
     param(
-        [Parameter(Mandatory = $true)]
         [string]$Directory
     )
 
@@ -362,10 +416,7 @@ function Set-UserPathWithInstallDirectoryFirst {
     $PathEntries = @()
     if ($UserPath) {
         $PathEntries = $UserPath -split ";" | Where-Object {
-            $_ -and -not [string]::Equals(
-                (Normalize-PathForComparison -Path $_),
-                (Normalize-PathForComparison -Path $Directory),
-                [System.StringComparison]::OrdinalIgnoreCase)
+            $_ -and -not [string]::Equals((ConvertTo-NormalizedPath -Path $_), (ConvertTo-NormalizedPath -Path $Directory), [System.StringComparison]::OrdinalIgnoreCase)
         }
     }
 
@@ -375,22 +426,11 @@ function Set-UserPathWithInstallDirectoryFirst {
         Write-Host "Added $Directory to User PATH. Open a new terminal to use it everywhere."
     }
 
-    $CurrentPathEntries = @()
-    if ($env:Path) {
-        $CurrentPathEntries = $env:Path -split ";" | Where-Object {
-            $_ -and -not [string]::Equals(
-                (Normalize-PathForComparison -Path $_),
-                (Normalize-PathForComparison -Path $Directory),
-                [System.StringComparison]::OrdinalIgnoreCase)
-        }
-    }
-    $env:Path = [string]::Join(";", @($Directory) + $CurrentPathEntries)
+    Set-CurrentPathWithInstallDirectoryFirst -Directory $Directory
 }
 
 function Get-FirstUloopCommandFromPath {
     param(
-        [AllowNull()]
-        [AllowEmptyString()]
         [string]$PathValue
     )
 
@@ -416,7 +456,6 @@ function Get-FirstUloopCommandFromPath {
 
 function Test-PersistedUloopCommandResolvesToExpectedPath {
     param(
-        [Parameter(Mandatory = $true)]
         [string]$ExpectedUloopPath
     )
 
@@ -430,59 +469,48 @@ function Test-PersistedUloopCommandResolvesToExpectedPath {
     return [string]::Equals($ResolvedPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
-function Assert-UloopVersionSucceeds {
+function Report-PathShadowing {
     param(
-        [Parameter(Mandatory = $true)]
-        [string]$UloopPath,
-        [switch]$Quiet
+        [string]$Directory,
+        [string]$ExpectedUloopPath
     )
 
-    if ($Quiet) {
-        & $UloopPath --version > $null
-    }
-    else {
-        & $UloopPath --version
+    $ResolvedCommand = Get-Command uloop -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $ResolvedCommand) {
+        return
     }
 
-    if ($LASTEXITCODE -ne 0) {
-        throw "uloop binary verification failed for $UloopPath"
+    if ([string]::Equals($ResolvedCommand.Source, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return
     }
+
+    Write-Host "Installed uloop to $ExpectedUloopPath, but PATH resolves uloop to:"
+    Write-Host "  $($ResolvedCommand.Source)"
+    Write-Host "Move $Directory earlier in PATH, or remove the legacy installation if it owns that command."
 }
 
-function Get-UloopSha256Hash {
+function Invoke-CompatibilityWindowsInstall {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Path
+        [string]$Directory,
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedUloopPath
     )
 
-    $Sha256 = [System.Security.Cryptography.SHA256]::Create()
-    $Stream = [System.IO.File]::OpenRead($Path)
-    try {
-        $HashBytes = $Sha256.ComputeHash($Stream)
-    }
-    finally {
-        $Stream.Dispose()
-        $Sha256.Dispose()
+    Write-Host "Configuring global uloop launcher..."
+    Set-UserPathWithInstallDirectoryFirst -Directory $Directory
+    $LegacyCleanupSucceeded = Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $ExpectedUloopPath
+    if ((-not $LegacyCleanupSucceeded) -and (-not (Test-PersistedUloopCommandResolvesToExpectedPath -ExpectedUloopPath $ExpectedUloopPath))) {
+        throw "Failed to remove the legacy npm uloop-cli package."
     }
 
-    return ([System.BitConverter]::ToString($HashBytes) -replace "-", "").ToLowerInvariant()
-}
-
-function Expand-UloopArchive {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$ArchivePath,
-        [Parameter(Mandatory = $true)]
-        [string]$DestinationPath
-    )
-
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $DestinationPath)
+    Report-PathShadowing -Directory $Directory -ExpectedUloopPath $ExpectedUloopPath
+    Write-Host "The package-owned User PATH entry was configured."
+    Write-Host "Legacy npm uloop-cli launchers were cleaned up when detected."
 }
 
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("uloop-stage-" + [System.Guid]::NewGuid().ToString("N"))
 $StagedUloopPath = $null
-$LegacyUloopBeforeInstallCommand = Get-Command uloop -ErrorAction SilentlyContinue | Select-Object -First 1
 New-Item -ItemType Directory -Path $TempDir | Out-Null
 
 try {
@@ -502,34 +530,21 @@ try {
     $StagedUloopPath = Join-Path $InstallDir ("uloop-staged-" + [System.Guid]::NewGuid().ToString("N") + ".exe")
     Copy-Item -Path (Join-Path $TempDir "uloop.exe") -Destination $StagedUloopPath -Force
     Assert-UloopVersionSucceeds -UloopPath $StagedUloopPath -Quiet
-    $FinalUloopPath = Join-Path $InstallDir "uloop.exe"
-    $LegacyUloopBeforeInstallPath = $LegacyUloopBeforeInstallCommand.Source
-    $LegacyUloopIsNpmShimBeforeInstall = Test-LegacyNpmUloopPath -CommandPath $LegacyUloopBeforeInstallPath
-    $LegacyNpmRemovedBeforeInstall = $false
-    if ($LegacyUloopBeforeInstallPath `
-        -and [string]::Equals($LegacyUloopBeforeInstallPath, $FinalUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-        if ($LegacyUloopIsNpmShimBeforeInstall) {
-            $LegacyNpmRemovedBeforeInstall = Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopBeforeInstallPath -ExpectedUloopPath ""
-            if (-not $LegacyNpmRemovedBeforeInstall) {
-                throw "Failed to remove the legacy npm uloop-cli package."
-            }
-        }
+    $NativeInstallSupported = Test-UloopNativeInstallSupported -UloopPath $StagedUloopPath
 
-        $LegacyUloopBeforeInstallPath = $null
-    }
+    $FinalUloopPath = Join-Path $InstallDir "uloop.exe"
     Copy-Item -Path $StagedUloopPath -Destination $FinalUloopPath -Force
     Remove-Item -Path $StagedUloopPath -Force
     $StagedUloopPath = $null
 
-    Set-UserPathWithInstallDirectoryFirst -Directory $InstallDir
-
-    Assert-UloopVersionSucceeds -UloopPath $FinalUloopPath
-    $LegacyCleanupSucceeded = Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $FinalUloopPath
-    if ((-not $LegacyCleanupSucceeded) -and (-not (Test-PersistedUloopCommandResolvesToExpectedPath -ExpectedUloopPath $FinalUloopPath))) {
-        throw "Failed to remove the legacy npm uloop-cli package."
+    if ($NativeInstallSupported) {
+        Invoke-UloopNativeInstall -UloopPath $FinalUloopPath -Directory $InstallDir
+        Set-CurrentPathWithInstallDirectoryFirst -Directory $InstallDir
     }
-
-    Report-PathShadowing
+    else {
+        Invoke-CompatibilityWindowsInstall -Directory $InstallDir -ExpectedUloopPath $FinalUloopPath
+    }
+    Assert-UloopVersionSucceeds -UloopPath $FinalUloopPath
 }
 finally {
     if ($StagedUloopPath -and (Test-Path $StagedUloopPath)) {
