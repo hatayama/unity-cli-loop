@@ -243,6 +243,41 @@ func TestPosixInstallScriptWritesThroughSymlinkedProfile(t *testing.T) {
 	}
 }
 
+func TestPosixInstallScriptFailsWhenSymlinkProfileTargetCannotBeWritten(t *testing.T) {
+	// Verifies macOS shell setup reports profile write failures to the installer.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	profilePath := filepath.Join(home, ".zshrc")
+	if err := os.Symlink(filepath.Join(string(os.PathSeparator), "dev", "null", "uloop"), profilePath); err != nil {
+		t.Fatalf("failed to create profile symlink: %v", err)
+	}
+
+	command, err := CommandForOS("darwin", Options{
+		InstallDir: filepath.Join(home, ".local", "bin"),
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"ZDOTDIR=" + home,
+		"SHELL=/bin/zsh",
+		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected POSIX setup failure:\n%s", output)
+	}
+	if !strings.Contains(string(output), "Could not create shell profile directory") {
+		t.Fatalf("setup failure did not include profile directory error:\n%s", output)
+	}
+}
+
 func TestPosixInstallScriptRemovesAbsoluteLegacyNpmShimBeforePrependingPath(t *testing.T) {
 	// Verifies macOS legacy cleanup sees the old npm shim before the native path is prepended.
 	if runtime.GOOS == "windows" {

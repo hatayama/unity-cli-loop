@@ -122,14 +122,14 @@ write_path_block() {
     tmp_path=$(mktemp)
     if [ -z "$tmp_path" ]; then
         echo "Could not create a temporary file for PATH setup." >&2
-        return 0
+        return 1
     fi
 
-    if [ -n "$profile_dir" ] && [ "$profile_dir" != "$profile_path" ]; then
+    if [ -n "$profile_dir" ] && [ "$profile_dir" != "$profile_write_path" ]; then
         if ! mkdir -p "$profile_dir"; then
             echo "Could not create shell profile directory: $profile_dir" >&2
             rm -f "$tmp_path"
-            return 0
+            return 1
         fi
     fi
 
@@ -156,12 +156,13 @@ write_path_block() {
 
     echo "Could not update shell profile: $profile_path" >&2
     rm -f "$tmp_path"
+    return 1
 }
 
 configure_shell_path() {
     if [ -z "${HOME:-}" ]; then
         echo "Could not resolve HOME for shell PATH setup." >&2
-        return
+        return 1
     fi
 
     shell_name=$(detect_user_shell_name)
@@ -234,10 +235,12 @@ print_legacy_npm_manual_removal() {
 try_remove_legacy_npm_package() {
     legacy_uloop=$1
     legacy_prefix=""
-    if is_legacy_npm_uloop_path "$legacy_uloop"; then
-        legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
+    if ! is_legacy_npm_uloop_path "$legacy_uloop"; then
+        return
     fi
+    legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
     if [ -z "$legacy_prefix" ]; then
+        print_legacy_npm_manual_removal "$legacy_uloop" ""
         return
     fi
     if ! command -v npm >/dev/null 2>&1; then
@@ -273,10 +276,12 @@ report_path_shadowing() {
     echo "Move $InstallDir earlier in PATH, or remove the legacy installation if it owns that command."
 }
 
-configure_shell_path
+shell_path_status=0
+configure_shell_path || shell_path_status=$?
 configure_legacy_cleanup
 prepend_current_path
 report_path_shadowing
+exit "$shell_path_status"
 `,
 		shellQuote(installDir),
 		shellQuote(targetPath),

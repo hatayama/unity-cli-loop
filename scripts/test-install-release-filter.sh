@@ -477,6 +477,80 @@ test_posix_help_only_native_probe_uses_fallback() {
   assert_contains "$work_dir/output.txt" "uloop mock version"
 }
 
+test_posix_native_failure_uses_fallback() {
+  work_dir="$TMP_DIR/posix-native-install-failure"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  home_dir="$work_dir/home"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  native_install_log="$work_dir/native-install.log"
+  mkdir -p "$work_dir" "$home_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  : > "$native_install_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="$home_dir" \
+    SHELL="/bin/zsh" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    NATIVE_INSTALL_LOG="$native_install_log" \
+    MOCK_NATIVE_INSTALL_EXIT_CODE=7 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$native_install_log" "install --dir $install_dir"
+  assert_contains "$work_dir/stderr.txt" "Native install setup failed."
+  assert_contains "$work_dir/output.txt" "Installed uloop to $install_dir, but that directory is not in PATH."
+  assert_contains "$work_dir/output.txt" "uloop mock version"
+}
+
+test_posix_native_path_cleans_preinstall_legacy_shim() {
+  work_dir="$TMP_DIR/posix-native-preinstall-legacy"
+  mock_bin="$work_dir/bin"
+  legacy_bin="$work_dir/npm-global/bin"
+  legacy_package_dist="$work_dir/npm-global/lib/node_modules/uloop-cli/dist"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  native_install_log="$work_dir/native-install.log"
+  legacy_uloop="$legacy_bin/uloop"
+  mkdir -p "$work_dir" "$legacy_bin" "$legacy_package_dist" "$install_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  : > "$native_install_log"
+  printf '%s\n' 'legacy node cli bundle' > "$legacy_package_dist/cli.bundle.cjs"
+  chmod +x "$legacy_package_dist/cli.bundle.cjs"
+  write_legacy_npm_uloop_shim "$legacy_uloop" "../lib/node_modules/uloop-cli/dist/cli.bundle.cjs"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$install_dir:$legacy_bin:$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    NATIVE_INSTALL_LOG="$native_install_log" \
+    LEGACY_ULOOP="$legacy_uloop" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_contains "$native_install_log" "install --dir $install_dir"
+  assert_contains "$npm_log" "uninstall -g --prefix $work_dir/npm-global uloop-cli"
+  if [ -e "$legacy_uloop" ]; then
+    echo "Expected pre-install legacy npm shim to be removed: $legacy_uloop" >&2
+    exit 1
+  fi
+}
+
 test_posix_prints_zsh_path_guidance_without_writing_profile() {
   work_dir="$TMP_DIR/posix-zsh-path-guidance"
   mock_bin="$work_dir/bin"
@@ -871,6 +945,8 @@ test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
 test_posix_invokes_native_install_setup
 test_posix_help_only_native_probe_uses_fallback
+test_posix_native_failure_uses_fallback
+test_posix_native_path_cleans_preinstall_legacy_shim
 test_posix_prints_zsh_path_guidance_without_writing_profile
 test_posix_prints_bash_path_guidance_without_modifying_existing_profile
 test_posix_prints_fish_path_guidance_without_writing_profile

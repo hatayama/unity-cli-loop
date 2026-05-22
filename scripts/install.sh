@@ -395,6 +395,31 @@ prepend_current_path() {
   esac
 }
 
+cleanup_preinstall_legacy_npm_if_needed() {
+  if [ "$legacy_npm_removed_before_install" -ne 0 ] || [ "$legacy_npm_uloop_detected_before_install" -ne 1 ]; then
+    return
+  fi
+  if [ -z "$legacy_uloop_before_install" ]; then
+    return
+  fi
+  if [ ! -e "$legacy_uloop_before_install" ] && [ ! -L "$legacy_uloop_before_install" ]; then
+    return
+  fi
+
+  try_remove_legacy_npm_package "$legacy_uloop_before_install" "$final_uloop_path"
+}
+
+run_compatibility_install_setup() {
+  cleanup_preinstall_legacy_npm_if_needed
+
+  case ":${PATH:-}:" in
+    *":$INSTALL_DIR:"*) ;;
+    *)
+      print_path_setup_guidance
+      ;;
+  esac
+}
+
 asset_name=$(detect_asset_name)
 installed_command_name=$(detect_installed_command_name)
 legacy_uloop_before_install=$(command -v uloop 2>/dev/null || true)
@@ -460,21 +485,15 @@ fi
 mv -f "$staged_uloop_path" "$final_uloop_path"
 staged_uloop_path=""
 if [ "$native_install_supported" -eq 1 ]; then
-  if ! invoke_uloop_native_install "$final_uloop_path"; then
+  if invoke_uloop_native_install "$final_uloop_path"; then
+    cleanup_preinstall_legacy_npm_if_needed
+    prepend_current_path
+  else
     echo "Native install setup failed. The uloop binary was installed, but PATH setup may need manual repair." >&2
+    run_compatibility_install_setup
   fi
-  prepend_current_path
 else
-  if [ "$legacy_npm_removed_before_install" -eq 0 ] && [ "$legacy_npm_uloop_detected_before_install" -eq 1 ]; then
-    try_remove_legacy_npm_package "$legacy_uloop_before_install" "$final_uloop_path"
-  fi
-
-  case ":${PATH:-}:" in
-    *":$INSTALL_DIR:"*) ;;
-    *)
-      print_path_setup_guidance
-      ;;
-  esac
+  run_compatibility_install_setup
 fi
 
 "$INSTALL_DIR/$installed_command_name" --version
