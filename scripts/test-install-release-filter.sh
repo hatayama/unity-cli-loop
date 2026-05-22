@@ -224,7 +224,12 @@ if [ "${1:-}" = "install" ]; then
     exit 1
   fi
   if [ "${2:-}" = "--help" ]; then
+    if [ "${MOCK_NATIVE_INSTALL_HELP_ONLY:-0}" = "1" ]; then
+      echo "mock install help"
+      exit 0
+    fi
     echo "mock install help"
+    echo "On macOS, updates shell PATH and removes legacy npm uloop-cli launchers."
     exit 0
   fi
   if [ -n "${NATIVE_INSTALL_LOG:-}" ]; then
@@ -267,7 +272,12 @@ if [ "${1:-}" = "install" ]; then
     exit 1
   fi
   if [ "${2:-}" = "--help" ]; then
+    if [ "${MOCK_NATIVE_INSTALL_HELP_ONLY:-0}" = "1" ]; then
+      echo "mock install help"
+      exit 0
+    fi
     echo "mock install help"
+    echo "On Windows, updates User PATH and removes legacy npm uloop-cli launchers."
     exit 0
   fi
   if [ -n "${NATIVE_INSTALL_LOG:-}" ]; then
@@ -430,6 +440,40 @@ test_posix_invokes_native_install_setup() {
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
   assert_contains "$native_install_log" "install --dir $install_dir"
+  assert_contains "$work_dir/output.txt" "uloop mock version"
+}
+
+test_posix_help_only_native_probe_uses_fallback() {
+  work_dir="$TMP_DIR/posix-help-only-native-probe"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  home_dir="$work_dir/home"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  native_install_log="$work_dir/native-install.log"
+  mkdir -p "$work_dir" "$home_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  : > "$native_install_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="$home_dir" \
+    SHELL="/bin/zsh" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    NATIVE_INSTALL_LOG="$native_install_log" \
+    MOCK_NATIVE_INSTALL_HELP_ONLY=1 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_not_contains "$native_install_log" "install --dir $install_dir"
+  assert_contains "$work_dir/output.txt" "Installed uloop to $install_dir, but that directory is not in PATH."
   assert_contains "$work_dir/output.txt" "uloop mock version"
 }
 
@@ -826,6 +870,7 @@ test_powershell_installer_uses_non_installer_staged_executable_name() {
 test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
 test_posix_invokes_native_install_setup
+test_posix_help_only_native_probe_uses_fallback
 test_posix_prints_zsh_path_guidance_without_writing_profile
 test_posix_prints_bash_path_guidance_without_modifying_existing_profile
 test_posix_prints_fish_path_guidance_without_writing_profile

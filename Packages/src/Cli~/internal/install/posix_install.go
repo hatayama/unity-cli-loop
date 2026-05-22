@@ -86,10 +86,39 @@ detect_fish_profile_path() {
     echo "$HOME/.config/fish/config.fish"
 }
 
+resolve_profile_write_path() {
+    profile_path=$1
+    if [ ! -L "$profile_path" ]; then
+        echo "$profile_path"
+        return
+    fi
+
+    link_target=$(readlink "$profile_path" 2>/dev/null || true)
+    if [ -z "$link_target" ]; then
+        echo "$profile_path"
+        return
+    fi
+
+    case "$link_target" in
+        /*)
+            echo "$link_target"
+            ;;
+        *)
+            profile_dir=${profile_path%%/*}
+            if [ "$profile_dir" = "$profile_path" ]; then
+                echo "$link_target"
+                return
+            fi
+            echo "$profile_dir/$link_target"
+            ;;
+    esac
+}
+
 write_path_block() {
     profile_path=$1
     path_line=$2
-    profile_dir=${profile_path%%/*}
+    profile_write_path=$(resolve_profile_write_path "$profile_path")
+    profile_dir=${profile_write_path%%/*}
     tmp_path=$(mktemp)
     if [ -z "$tmp_path" ]; then
         echo "Could not create a temporary file for PATH setup." >&2
@@ -104,12 +133,12 @@ write_path_block() {
         fi
     fi
 
-    if [ -f "$profile_path" ]; then
+    if [ -f "$profile_write_path" ]; then
         awk -v start="$PathBlockStart" -v end="$PathBlockEnd" '
             $0 == start { skipping = 1; next }
             $0 == end { skipping = 0; next }
             !skipping { print }
-        ' "$profile_path" > "$tmp_path"
+        ' "$profile_write_path" > "$tmp_path"
     else
         : > "$tmp_path"
     fi
@@ -120,7 +149,7 @@ write_path_block() {
         printf '%%s\n' "$PathBlockEnd"
     } >> "$tmp_path"
 
-    if mv "$tmp_path" "$profile_path"; then
+    if mv "$tmp_path" "$profile_write_path"; then
         echo "Added $InstallDir to PATH in $profile_path. Open a new terminal to use it everywhere."
         return 0
     fi

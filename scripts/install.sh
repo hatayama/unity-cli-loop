@@ -364,7 +364,18 @@ extract_asset() {
 test_uloop_native_install_supported() {
   uloop_path=$1
 
-  "$uloop_path" install --help >/dev/null 2>&1
+  help_output=$("$uloop_path" install --help 2>/dev/null) || return 1
+  case "$(uname -s)" in
+    Darwin)
+      printf '%s\n' "$help_output" | grep -F "On macOS," >/dev/null
+      ;;
+    MINGW*|MSYS*)
+      printf '%s\n' "$help_output" | grep -F "On Windows," >/dev/null
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 invoke_uloop_native_install() {

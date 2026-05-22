@@ -181,6 +181,68 @@ func TestPosixInstallScriptCreatesNestedFishProfile(t *testing.T) {
 	}
 }
 
+func TestPosixInstallScriptWritesThroughSymlinkedProfile(t *testing.T) {
+	// Verifies macOS shell setup preserves managed shell profile symlinks.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	dotfilesDir := filepath.Join(home, "dotfiles")
+	if err := os.MkdirAll(dotfilesDir, 0o755); err != nil {
+		t.Fatalf("failed to create dotfiles directory: %v", err)
+	}
+	targetProfile := filepath.Join(dotfilesDir, "zshrc")
+	if err := os.WriteFile(targetProfile, []byte("export EXISTING_PROFILE=1\n"), 0o644); err != nil {
+		t.Fatalf("failed to write target profile: %v", err)
+	}
+	profilePath := filepath.Join(home, ".zshrc")
+	if err := os.Symlink(filepath.Join("dotfiles", "zshrc"), profilePath); err != nil {
+		t.Fatalf("failed to create profile symlink: %v", err)
+	}
+
+	installDir := filepath.Join(home, ".local", "bin")
+	command, err := CommandForOS("darwin", Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"ZDOTDIR=" + home,
+		"SHELL=/bin/zsh",
+		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err != nil {
+		t.Fatalf("POSIX setup failed: %v\n%s", err, output)
+	}
+
+	profileInfo, err := os.Lstat(profilePath)
+	if err != nil {
+		t.Fatalf("failed to stat profile symlink: %v", err)
+	}
+	if profileInfo.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("profile symlink was replaced: %s", profileInfo.Mode())
+	}
+	profileContent, err := os.ReadFile(targetProfile)
+	if err != nil {
+		t.Fatalf("failed to read target profile: %v", err)
+	}
+	content := string(profileContent)
+	for _, expected := range []string{
+		"export EXISTING_PROFILE=1",
+		"export PATH=\"" + installDir + ":$PATH\"",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("profile target missing %q:\n%s", expected, content)
+		}
+	}
+}
+
 func TestPosixInstallScriptRemovesAbsoluteLegacyNpmShimBeforePrependingPath(t *testing.T) {
 	// Verifies macOS legacy cleanup sees the old npm shim before the native path is prepended.
 	if runtime.GOOS == "windows" {
