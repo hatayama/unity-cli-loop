@@ -34,6 +34,7 @@ assert_before() {
 test_attestation_permissions() {
   assert_contains "$WORKFLOW" "  id-token: write"
   assert_contains "$WORKFLOW" "  attestations: write"
+  assert_contains "$WORKFLOW" "  artifact-metadata: write"
 }
 
 test_release_assets_are_attested() {

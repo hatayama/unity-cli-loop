@@ -692,11 +692,13 @@ test_powershell_latest_skips_prerelease_assets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$ReleaseChannel = if ($Version -eq $LatestBetaVersion) { "beta" } else { "stable" }'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Invoke-UloopNativeInstall'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Test-UloopNativeInstallSupported'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Set-CurrentPathWithInstallDirectoryFirst'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Invoke-CompatibilityWindowsInstall'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$NativeInstallArgs = @("install", "--dir", $Directory)'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$NativeInstallSupported = Test-UloopNativeInstallSupported -UloopPath $StagedUloopPath'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($NativeInstallSupported) {'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-UloopNativeInstall -UloopPath $FinalUloopPath -Directory $InstallDir'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'Set-CurrentPathWithInstallDirectoryFirst -Directory $InstallDir'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-CompatibilityWindowsInstall -Directory $InstallDir -ExpectedUloopPath $FinalUloopPath'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "ULOOP_REMOVE_LEGACY"
 }

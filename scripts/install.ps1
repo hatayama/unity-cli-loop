@@ -392,6 +392,21 @@ function Invoke-AllLegacyNpmPackageRemoval {
     return $RemovedAll
 }
 
+function Set-CurrentPathWithInstallDirectoryFirst {
+    param(
+        [string]$Directory
+    )
+
+    $CurrentPathEntries = @()
+    if ($env:Path) {
+        $CurrentPathEntries = $env:Path -split ";" | Where-Object {
+            $_ -and -not [string]::Equals((ConvertTo-NormalizedPath -Path $_), (ConvertTo-NormalizedPath -Path $Directory), [System.StringComparison]::OrdinalIgnoreCase)
+        }
+    }
+
+    $env:Path = [string]::Join(";", @($Directory) + $CurrentPathEntries)
+}
+
 function Set-UserPathWithInstallDirectoryFirst {
     param(
         [string]$Directory
@@ -411,14 +426,7 @@ function Set-UserPathWithInstallDirectoryFirst {
         Write-Host "Added $Directory to User PATH. Open a new terminal to use it everywhere."
     }
 
-    $CurrentPathEntries = @()
-    if ($env:Path) {
-        $CurrentPathEntries = $env:Path -split ";" | Where-Object {
-            $_ -and -not [string]::Equals((ConvertTo-NormalizedPath -Path $_), (ConvertTo-NormalizedPath -Path $Directory), [System.StringComparison]::OrdinalIgnoreCase)
-        }
-    }
-
-    $env:Path = [string]::Join(";", @($Directory) + $CurrentPathEntries)
+    Set-CurrentPathWithInstallDirectoryFirst -Directory $Directory
 }
 
 function Get-FirstUloopCommandFromPath {
@@ -531,6 +539,7 @@ try {
 
     if ($NativeInstallSupported) {
         Invoke-UloopNativeInstall -UloopPath $FinalUloopPath -Directory $InstallDir
+        Set-CurrentPathWithInstallDirectoryFirst -Directory $InstallDir
     }
     else {
         Invoke-CompatibilityWindowsInstall -Directory $InstallDir -ExpectedUloopPath $FinalUloopPath
