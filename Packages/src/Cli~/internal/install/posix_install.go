@@ -245,8 +245,8 @@ report_path_shadowing() {
 }
 
 configure_shell_path
-prepend_current_path
 configure_legacy_cleanup
+prepend_current_path
 report_path_shadowing
 `,
 		shellQuote(installDir),

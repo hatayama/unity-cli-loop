@@ -138,6 +138,106 @@ func TestPosixInstallScriptWritesZshPathBlock(t *testing.T) {
 	}
 }
 
+func TestPosixInstallScriptCreatesNestedFishProfile(t *testing.T) {
+	// Verifies macOS shell setup creates nested shell profile directories when needed.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	installDir := filepath.Join(home, ".local", "bin")
+	command, err := CommandForOS("darwin", Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"SHELL=/opt/homebrew/bin/fish",
+		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err != nil {
+		t.Fatalf("POSIX setup failed: %v\n%s", err, output)
+	}
+
+	profilePath := filepath.Join(home, ".config", "fish", "config.fish")
+	profileContent, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("failed to read fish profile: %v\n%s", err, output)
+	}
+	content := string(profileContent)
+	for _, expected := range []string{
+		"# >>> uloop PATH >>>",
+		"fish_add_path --move \"" + installDir + "\"",
+		"# <<< uloop PATH <<<",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("profile content missing %q:\n%s", expected, content)
+		}
+	}
+}
+
+func TestPosixInstallScriptRemovesAbsoluteLegacyNpmShimBeforePrependingPath(t *testing.T) {
+	// Verifies macOS legacy cleanup sees the old npm shim before the native path is prepended.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	installDir := filepath.Join(home, ".local", "bin")
+	legacyPrefix := filepath.Join(home, "npm-global")
+	legacyBin := filepath.Join(legacyPrefix, "bin")
+	mockBin := filepath.Join(home, "mock-bin")
+	npmLog := filepath.Join(home, "npm.log")
+	for _, dir := range []string{installDir, legacyBin, mockBin} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("failed to create test directory: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(installDir, PosixCommandName), []byte("#!/bin/sh\necho native uloop\n"), 0o755); err != nil {
+		t.Fatalf("failed to write native uloop: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyBin, PosixCommandName), []byte("#!/bin/sh\n# node_modules/uloop-cli legacy shim\necho legacy uloop\n"), 0o755); err != nil {
+		t.Fatalf("failed to write legacy uloop: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(mockBin, "npm"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$NPM_LOG\"\n"), 0o755); err != nil {
+		t.Fatalf("failed to write mock npm: %v", err)
+	}
+
+	command, err := CommandForOS("darwin", Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"ZDOTDIR=" + home,
+		"SHELL=/bin/zsh",
+		"NPM_LOG=" + npmLog,
+		"PATH=" + legacyBin + ":" + mockBin + ":/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err != nil {
+		t.Fatalf("POSIX setup failed: %v\n%s", err, output)
+	}
+
+	npmLogContent, err := os.ReadFile(npmLog)
+	if err != nil {
+		t.Fatalf("failed to read npm log: %v\n%s", err, output)
+	}
+	expected := "uninstall -g --prefix " + legacyPrefix + " uloop-cli"
+	if !strings.Contains(string(npmLogContent), expected) {
+		t.Fatalf("npm log missing %q:\n%s", expected, npmLogContent)
+	}
+}
+
 func TestCommandForOSRejectsUnsupportedOS(t *testing.T) {
 	// Verifies unsupported platforms fail before building any setup command.
 	_, err := CommandForOS("linux", Options{
