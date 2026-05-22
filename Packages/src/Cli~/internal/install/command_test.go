@@ -95,6 +95,10 @@ func TestCommandForMacConfiguresShellPathAndLegacyCleanup(t *testing.T) {
 	}
 }
 
+func shellProfileQuoteForTest(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
 func TestPosixInstallScriptWritesZshPathBlock(t *testing.T) {
 	// Verifies macOS shell setup writes a replaceable profile block for future terminals.
 	if runtime.GOOS == "windows" {
@@ -129,7 +133,7 @@ func TestPosixInstallScriptWritesZshPathBlock(t *testing.T) {
 	content := string(profileContent)
 	for _, expected := range []string{
 		"# >>> uloop PATH >>>",
-		"export PATH=\"" + installDir + ":$PATH\"",
+		"export PATH=" + shellProfileQuoteForTest(installDir) + ":$PATH",
 		"# <<< uloop PATH <<<",
 	} {
 		if !strings.Contains(content, expected) {
@@ -172,7 +176,7 @@ func TestPosixInstallScriptCreatesNestedFishProfile(t *testing.T) {
 	content := string(profileContent)
 	for _, expected := range []string{
 		"# >>> uloop PATH >>>",
-		"fish_add_path --move \"" + installDir + "\"",
+		"fish_add_path --move " + shellProfileQuoteForTest(installDir),
 		"# <<< uloop PATH <<<",
 	} {
 		if !strings.Contains(content, expected) {
@@ -235,11 +239,122 @@ func TestPosixInstallScriptWritesThroughSymlinkedProfile(t *testing.T) {
 	content := string(profileContent)
 	for _, expected := range []string{
 		"export EXISTING_PROFILE=1",
-		"export PATH=\"" + installDir + ":$PATH\"",
+		"export PATH=" + shellProfileQuoteForTest(installDir) + ":$PATH",
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("profile target missing %q:\n%s", expected, content)
 		}
+	}
+}
+
+func TestPosixInstallScriptPreservesProfileWhenFilteringFails(t *testing.T) {
+	// Verifies macOS shell setup does not replace an existing profile when its current content cannot be read.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	mockBin := filepath.Join(home, "mock-bin")
+	if err := os.MkdirAll(mockBin, 0o755); err != nil {
+		t.Fatalf("failed to create mock bin: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(mockBin, "awk"), []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
+		t.Fatalf("failed to write mock awk: %v", err)
+	}
+	profilePath := filepath.Join(home, ".zshrc")
+	existingProfile := "export EXISTING_PROFILE=1\n"
+	if err := os.WriteFile(profilePath, []byte(existingProfile), 0o644); err != nil {
+		t.Fatalf("failed to write existing profile: %v", err)
+	}
+
+	command, err := CommandForOS("darwin", Options{
+		InstallDir: filepath.Join(home, ".local", "bin"),
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"ZDOTDIR=" + home,
+		"SHELL=/bin/zsh",
+		"PATH=" + mockBin + ":/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected POSIX setup failure:\n%s", output)
+	}
+	if !strings.Contains(string(output), "Could not read existing shell profile") {
+		t.Fatalf("setup failure did not include profile read error:\n%s", output)
+	}
+	profileContent, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("failed to read profile after setup failure: %v", err)
+	}
+	if string(profileContent) != existingProfile {
+		t.Fatalf("profile should remain unchanged:\n%s", profileContent)
+	}
+}
+
+func TestPosixInstallScriptEscapesInstallDirInProfiles(t *testing.T) {
+	// Verifies macOS shell setup writes literal install paths into persisted shell profile commands.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	installDir := filepath.Join(home, "bin with $HOME \"quote\" `date` 'single' (echo hi)")
+	for _, scenario := range []struct {
+		name        string
+		env         []string
+		profilePath string
+		expected    string
+	}{
+		{
+			name: "zsh",
+			env: []string{
+				"HOME=" + home,
+				"ZDOTDIR=" + home,
+				"SHELL=/bin/zsh",
+				"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+			},
+			profilePath: filepath.Join(home, ".zshrc"),
+			expected:    "export PATH=" + shellProfileQuoteForTest(installDir) + ":$PATH",
+		},
+		{
+			name: "fish",
+			env: []string{
+				"HOME=" + home,
+				"SHELL=/opt/homebrew/bin/fish",
+				"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+			},
+			profilePath: filepath.Join(home, ".config", "fish", "config.fish"),
+			expected:    "fish_add_path --move " + shellProfileQuoteForTest(installDir),
+		},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			command, err := CommandForOS("darwin", Options{
+				InstallDir: installDir,
+			})
+			if err != nil {
+				t.Fatalf("CommandForOS failed: %v", err)
+			}
+
+			process := exec.Command(command.Name, command.Args...)
+			process.Env = scenario.env
+			output, err := process.CombinedOutput()
+			if err != nil {
+				t.Fatalf("POSIX setup failed: %v\n%s", err, output)
+			}
+			profileContent, err := os.ReadFile(scenario.profilePath)
+			if err != nil {
+				t.Fatalf("failed to read shell profile: %v\n%s", err, output)
+			}
+			if !strings.Contains(string(profileContent), scenario.expected) {
+				t.Fatalf("profile content missing escaped install dir %q:\n%s", scenario.expected, profileContent)
+			}
+		})
 	}
 }
 

@@ -86,6 +86,12 @@ detect_fish_profile_path() {
     echo "$HOME/.config/fish/config.fish"
 }
 
+quote_for_shell_profile() {
+    printf "'"
+    printf '%%s' "$1" | sed "s/'/'\\\\''/g"
+    printf "'"
+}
+
 resolve_profile_write_path() {
     profile_path=$1
     if [ ! -L "$profile_path" ]; then
@@ -134,11 +140,15 @@ write_path_block() {
     fi
 
     if [ -f "$profile_write_path" ]; then
-        awk -v start="$PathBlockStart" -v end="$PathBlockEnd" '
+        if ! awk -v start="$PathBlockStart" -v end="$PathBlockEnd" '
             $0 == start { skipping = 1; next }
             $0 == end { skipping = 0; next }
             !skipping { print }
-        ' "$profile_write_path" > "$tmp_path"
+        ' "$profile_write_path" > "$tmp_path"; then
+            echo "Could not read existing shell profile: $profile_path" >&2
+            rm -f "$tmp_path"
+            return 1
+        fi
     else
         : > "$tmp_path"
     fi
@@ -168,13 +178,13 @@ configure_shell_path() {
     shell_name=$(detect_user_shell_name)
     case "$shell_name" in
         zsh)
-            write_path_block "$(detect_zsh_profile_path)" "export PATH=\"$InstallDir:\$PATH\""
+            write_path_block "$(detect_zsh_profile_path)" "export PATH=$(quote_for_shell_profile "$InstallDir"):\$PATH"
             ;;
         bash)
-            write_path_block "$(detect_bash_profile_path)" "export PATH=\"$InstallDir:\$PATH\""
+            write_path_block "$(detect_bash_profile_path)" "export PATH=$(quote_for_shell_profile "$InstallDir"):\$PATH"
             ;;
         fish)
-            write_path_block "$(detect_fish_profile_path)" "fish_add_path --move \"$InstallDir\""
+            write_path_block "$(detect_fish_profile_path)" "fish_add_path --move $(quote_for_shell_profile "$InstallDir")"
             ;;
         *)
             echo "Add this directory to PATH in your shell profile:"
