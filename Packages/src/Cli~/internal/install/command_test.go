@@ -278,6 +278,40 @@ func TestPosixInstallScriptFailsWhenSymlinkProfileTargetCannotBeWritten(t *testi
 	}
 }
 
+func TestPosixInstallScriptFailsWhenShellProfileIsUnknown(t *testing.T) {
+	// Verifies macOS shell setup reports manual PATH setup when no profile can be updated.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	installDir := filepath.Join(home, ".local", "bin")
+	command, err := CommandForOS("darwin", Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"SHELL=/bin/tcsh",
+		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected POSIX setup failure:\n%s", output)
+	}
+	outputText := string(output)
+	if !strings.Contains(outputText, "Add this directory to PATH in your shell profile:") {
+		t.Fatalf("setup failure should include manual PATH guidance:\n%s", outputText)
+	}
+	if !strings.Contains(outputText, installDir) {
+		t.Fatalf("manual PATH guidance should include install dir:\n%s", outputText)
+	}
+}
+
 func TestPosixInstallScriptRemovesAbsoluteLegacyNpmShimBeforePrependingPath(t *testing.T) {
 	// Verifies macOS legacy cleanup sees the old npm shim before the native path is prepended.
 	if runtime.GOOS == "windows" {

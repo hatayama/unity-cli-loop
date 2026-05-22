@@ -179,6 +179,7 @@ configure_shell_path() {
         *)
             echo "Add this directory to PATH in your shell profile:"
             echo "  $InstallDir"
+            return 1
             ;;
     esac
 }
