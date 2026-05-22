@@ -13,6 +13,7 @@ var nativeCommands = []nativeCommandEntry{
 	{name: "fix", description: "Remove stale uloop recovery state after an interrupted run"},
 	{name: "skills", description: "List, install, or uninstall agent skills"},
 	{name: "completion", description: "Print or install shell completion"},
+	{name: "install", description: "Configure the global uloop launcher binary"},
 	{name: "update", description: "Update the global uloop launcher binary"},
 	{name: "uninstall", description: "Remove the global uloop launcher binary"},
 }
