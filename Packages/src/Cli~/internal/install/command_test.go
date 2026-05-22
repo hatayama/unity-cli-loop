@@ -335,6 +335,67 @@ func TestPosixInstallScriptRemovesAbsoluteLegacyNpmShimBeforePrependingPath(t *t
 	}
 }
 
+func TestPosixInstallScriptReportsManualRemovalWhenLegacyShimRemains(t *testing.T) {
+	// Verifies macOS legacy cleanup does not report success when npm leaves the old shim behind.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell setup is not available on Windows")
+	}
+
+	home := t.TempDir()
+	installDir := filepath.Join(home, ".local", "bin")
+	legacyPrefix := filepath.Join(home, "npm-global")
+	legacyBin := filepath.Join(legacyPrefix, "bin")
+	mockBin := filepath.Join(home, "mock-bin")
+	for _, dir := range []string{installDir, legacyBin, mockBin} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("failed to create test directory: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(installDir, PosixCommandName), []byte("#!/bin/sh\necho native uloop\n"), 0o755); err != nil {
+		t.Fatalf("failed to write native uloop: %v", err)
+	}
+	legacyUloop := filepath.Join(legacyBin, PosixCommandName)
+	if err := os.WriteFile(legacyUloop, []byte("#!/bin/sh\n# node_modules/uloop-cli legacy shim\necho legacy uloop\n"), 0o755); err != nil {
+		t.Fatalf("failed to write legacy uloop: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(mockBin, "npm"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("failed to write mock npm: %v", err)
+	}
+
+	command, err := CommandForOS("darwin", Options{
+		InstallDir: installDir,
+	})
+	if err != nil {
+		t.Fatalf("CommandForOS failed: %v", err)
+	}
+
+	process := exec.Command(command.Name, command.Args...)
+	process.Env = []string{
+		"HOME=" + home,
+		"ZDOTDIR=" + home,
+		"SHELL=/bin/zsh",
+		"PATH=" + legacyBin + ":" + mockBin + ":/usr/bin:/bin:/usr/sbin:/sbin",
+	}
+	output, err := process.CombinedOutput()
+	if err != nil {
+		t.Fatalf("POSIX setup failed: %v\n%s", err, output)
+	}
+
+	outputText := string(output)
+	if strings.Contains(outputText, "Removed legacy npm package: uloop-cli") {
+		t.Fatalf("cleanup should not report success while the legacy shim remains:\n%s", outputText)
+	}
+	if !strings.Contains(outputText, "Could not remove the legacy npm package automatically.") {
+		t.Fatalf("cleanup should print manual removal guidance:\n%s", outputText)
+	}
+	if !strings.Contains(outputText, "npm uninstall -g --prefix \""+legacyPrefix+"\" uloop-cli") {
+		t.Fatalf("manual removal guidance should include the inferred prefix:\n%s", outputText)
+	}
+	if _, err := os.Stat(legacyUloop); err != nil {
+		t.Fatalf("legacy uloop should remain for this scenario: %v", err)
+	}
+}
+
 func TestPosixInstallScriptSkipsDefaultNpmCleanupForInstallPrefix(t *testing.T) {
 	// Verifies default npm cleanup does not remove the freshly installed native launcher.
 	if runtime.GOOS == "windows" {

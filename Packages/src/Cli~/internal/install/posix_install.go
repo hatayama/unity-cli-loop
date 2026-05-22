@@ -248,8 +248,10 @@ try_remove_legacy_npm_package() {
         return
     fi
     if npm uninstall -g --prefix "$legacy_prefix" uloop-cli; then
-        echo "Removed legacy npm package: uloop-cli"
-        return
+        if ! is_legacy_npm_uloop_path "$legacy_uloop"; then
+            echo "Removed legacy npm package: uloop-cli"
+            return
+        fi
     fi
     print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
 }
