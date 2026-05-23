@@ -1013,16 +1013,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(assetName), "assetName must not be null or empty");
 
-            return $"{CliConstants.RAW_CONTENT_BASE_URL}/{SelectInstallerSourceRef(releaseTag)}/{CliConstants.SCRIPTS_DIR_NAME}/{assetName}";
-        }
-
-        internal static string SelectInstallerSourceRef(string releaseTag)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
-
-            return releaseTag.IndexOf(CliConstants.BETA_VERSION_MARKER, StringComparison.OrdinalIgnoreCase) >= 0
-                ? CliConstants.BETA_INSTALLER_SOURCE_REF
-                : CliConstants.STABLE_INSTALLER_SOURCE_REF;
+            return $"{CliConstants.RAW_CONTENT_BASE_URL}/{releaseTag}/{CliConstants.SCRIPTS_DIR_NAME}/{assetName}";
         }
     }
 

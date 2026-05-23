@@ -63,6 +63,12 @@ jobs:
         shell: powershell
         run: |
           $null = [scriptblock]::Create((Get-Content -Raw scripts/install.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw scripts/check-release-installer.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw scripts/test-check-release-installer.ps1))
+
+      - name: Test release installer smoke helper
+        shell: powershell
+        run: .\scripts\test-check-release-installer.ps1
 
   test-unity-package:
     runs-on: ubuntu-latest
