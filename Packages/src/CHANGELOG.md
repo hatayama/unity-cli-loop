@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.0.0-beta.15](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.14...v3.0.0-beta.15) (2026-05-23)
+
+
+### Features
+
+* Improve Windows CLI installs and release provenance ([#1186](https://github.com/hatayama/unity-cli-loop/issues/1186)) ([3dead33](https://github.com/hatayama/unity-cli-loop/commit/3dead3341dc2286031e3287d1ef47da7bfd6ce9c))
+* Install uloop natively on macOS ([#1187](https://github.com/hatayama/unity-cli-loop/issues/1187)) ([1c12b49](https://github.com/hatayama/unity-cli-loop/commit/1c12b4991d1da53701ae97f1c1ed6a2fcb032c96))
+
+
+### Bug Fixes
+
+* Startup no longer freezes during migration checks ([#1181](https://github.com/hatayama/unity-cli-loop/issues/1181)) ([78b5b22](https://github.com/hatayama/unity-cli-loop/commit/78b5b22a2fe7ee00944e2d3b37a0bcd9e31284ae))
+* Unity CLI install repairs missing terminal command setup ([#1176](https://github.com/hatayama/unity-cli-loop/issues/1176)) ([c633a8e](https://github.com/hatayama/unity-cli-loop/commit/c633a8e5934bc68aa31f3989aacd9edd735b5c16))
+* Unity commands recover reliably after editor reloads ([#1182](https://github.com/hatayama/unity-cli-loop/issues/1182)) ([7c035ec](https://github.com/hatayama/unity-cli-loop/commit/7c035eccb7beb4a173dc75378c588c3a4e5dcb02))
+
 ## [3.0.0-beta.14](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.13...v3.0.0-beta.14) (2026-05-19)
 
 
