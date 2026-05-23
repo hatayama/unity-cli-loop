@@ -137,6 +137,11 @@ func writeInstallCompletion(stdout io.Writer, goos string) {
 		writeLine(stdout, "Legacy npm uloop-cli launchers were cleaned up when detected.")
 		return
 	}
+	if goos == "darwin" {
+		writeLine(stdout, "The package-owned shell PATH entry was configured.")
+		writeLine(stdout, "Legacy npm uloop-cli launchers were cleaned up when detected.")
+		return
+	}
 
 	writeLine(stdout, "Install setup completed.")
 }
@@ -148,6 +153,7 @@ func printInstallHelp(stdout io.Writer) {
 	writeLine(stdout, "Configures the global uloop launcher after the installer places the binary.")
 	writeLine(stdout, "Set ULOOP_INSTALL_DIR or pass --dir to choose the install directory.")
 	writeLine(stdout, "On Windows, updates User PATH and removes legacy npm uloop-cli launchers.")
+	writeLine(stdout, "On macOS, updates shell PATH and removes legacy npm uloop-cli launchers.")
 }
 
 func resolveNativeInstallDir(goos string, explicitInstallDir string) (string, error) {

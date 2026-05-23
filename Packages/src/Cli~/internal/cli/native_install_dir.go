@@ -2,7 +2,7 @@ package cli
 
 import (
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -23,5 +23,5 @@ func joinNativeInstallPath(goos string, elements ...string) string {
 	if goos == "windows" {
 		return strings.Join(elements, `\`)
 	}
-	return filepath.Join(elements...)
+	return path.Join(elements...)
 }

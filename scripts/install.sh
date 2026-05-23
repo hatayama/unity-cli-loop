@@ -361,6 +361,65 @@ extract_asset() {
   esac
 }
 
+test_uloop_native_install_supported() {
+  uloop_path=$1
+
+  help_output=$("$uloop_path" install --help 2>/dev/null) || return 1
+  case "$(uname -s)" in
+    Darwin)
+      printf '%s\n' "$help_output" | grep -F "On macOS," >/dev/null
+      ;;
+    MINGW*|MSYS*)
+      printf '%s\n' "$help_output" | grep -F "On Windows," >/dev/null
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+invoke_uloop_native_install() {
+  uloop_path=$1
+
+  echo "Configuring global uloop launcher..."
+  "$uloop_path" install --dir "$INSTALL_DIR"
+}
+
+prepend_current_path() {
+  case ":${PATH:-}:" in
+    *":$INSTALL_DIR:"*) ;;
+    *)
+      PATH="$INSTALL_DIR:${PATH:-}"
+      export PATH
+      ;;
+  esac
+}
+
+cleanup_preinstall_legacy_npm_if_needed() {
+  if [ "$legacy_npm_removed_before_install" -ne 0 ] || [ "$legacy_npm_uloop_detected_before_install" -ne 1 ]; then
+    return
+  fi
+  if [ -z "$legacy_uloop_before_install" ]; then
+    return
+  fi
+  if [ ! -e "$legacy_uloop_before_install" ] && [ ! -L "$legacy_uloop_before_install" ]; then
+    return
+  fi
+
+  try_remove_legacy_npm_package "$legacy_uloop_before_install" "$final_uloop_path"
+}
+
+run_compatibility_install_setup() {
+  cleanup_preinstall_legacy_npm_if_needed
+
+  case ":${PATH:-}:" in
+    *":$INSTALL_DIR:"*) ;;
+    *)
+      print_path_setup_guidance
+      ;;
+  esac
+}
+
 asset_name=$(detect_asset_name)
 installed_command_name=$(detect_installed_command_name)
 legacy_uloop_before_install=$(command -v uloop 2>/dev/null || true)
@@ -410,6 +469,10 @@ if [ "$installed_command_name" = "uloop.exe" ]; then
 fi
 install -m 0755 "$tmp_dir/$installed_command_name" "$staged_uloop_path"
 "$staged_uloop_path" --version >/dev/null
+native_install_supported=0
+if test_uloop_native_install_supported "$staged_uloop_path"; then
+  native_install_supported=1
+fi
 final_uloop_path="$INSTALL_DIR/$installed_command_name"
 legacy_npm_removed_before_install=0
 if [ "$legacy_uloop_before_install" = "$final_uloop_path" ] || [ "$legacy_uloop_before_install.exe" = "$final_uloop_path" ]; then
@@ -421,16 +484,17 @@ if [ "$legacy_uloop_before_install" = "$final_uloop_path" ] || [ "$legacy_uloop_
 fi
 mv -f "$staged_uloop_path" "$final_uloop_path"
 staged_uloop_path=""
-if [ "$legacy_npm_removed_before_install" -eq 0 ] && [ "$legacy_npm_uloop_detected_before_install" -eq 1 ]; then
-  try_remove_legacy_npm_package "$legacy_uloop_before_install" "$final_uloop_path"
+if [ "$native_install_supported" -eq 1 ]; then
+  if invoke_uloop_native_install "$final_uloop_path"; then
+    cleanup_preinstall_legacy_npm_if_needed
+    prepend_current_path
+  else
+    echo "Native install setup failed. The uloop binary was installed, but PATH setup may need manual repair." >&2
+    run_compatibility_install_setup
+  fi
+else
+  run_compatibility_install_setup
 fi
-
-case ":$PATH:" in
-  *":$INSTALL_DIR:"*) ;;
-  *)
-    print_path_setup_guidance
-    ;;
-esac
 
 "$INSTALL_DIR/$installed_command_name" --version
 report_path_shadowing
