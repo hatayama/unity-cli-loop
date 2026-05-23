@@ -19,7 +19,7 @@ func TestRunProjectLocalInstallHelpDoesNotRequireUnityProject(t *testing.T) {
 		t.Fatalf("install help failed: code=%d stderr=%s", code, stderr.String())
 	}
 	output := stdout.String()
-	for _, expected := range []string{"Usage:", "uloop install", "--dir <install-dir>", "User PATH"} {
+	for _, expected := range []string{"Usage:", "uloop install", "--dir <install-dir>", "shell PATH", "legacy npm"} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("install help missing %q:\n%s", expected, output)
 		}
@@ -66,6 +66,32 @@ func TestResolveNativeInstallDirForWindowsUsesLocalAppData(t *testing.T) {
 	}
 }
 
+func TestResolveNativeInstallDirForMacUsesHome(t *testing.T) {
+	// Verifies the native install command resolves the same default macOS install directory as the installer.
+	previousGetenv := getenv
+	previousNativeUserHomeDir := nativeUserHomeDir
+	defer func() {
+		getenv = previousGetenv
+		nativeUserHomeDir = previousNativeUserHomeDir
+	}()
+	getenv = func(name string) string {
+		return ""
+	}
+	nativeUserHomeDir = func() (string, error) {
+		return "/Users/ExampleUser", nil
+	}
+
+	installDir, err := resolveNativeInstallDir("darwin", "")
+	if err != nil {
+		t.Fatalf("resolveNativeInstallDir failed: %v", err)
+	}
+
+	expected := "/Users/ExampleUser/.local/bin"
+	if installDir != expected {
+		t.Fatalf("install dir mismatch: %s", installDir)
+	}
+}
+
 func TestWriteInstallCompletionForWindowsMentionsPathAndLegacyCleanup(t *testing.T) {
 	// Verifies Windows install output explains both native setup responsibilities.
 	var stdout bytes.Buffer
@@ -74,6 +100,20 @@ func TestWriteInstallCompletionForWindowsMentionsPathAndLegacyCleanup(t *testing
 
 	output := stdout.String()
 	for _, expected := range []string{"User PATH", "Legacy npm uloop-cli"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("install completion missing %q:\n%s", expected, output)
+		}
+	}
+}
+
+func TestWriteInstallCompletionForMacMentionsPathAndLegacyCleanup(t *testing.T) {
+	// Verifies macOS install output explains both native setup responsibilities.
+	var stdout bytes.Buffer
+
+	writeInstallCompletion(&stdout, "darwin")
+
+	output := stdout.String()
+	for _, expected := range []string{"shell PATH", "Legacy npm uloop-cli"} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("install completion missing %q:\n%s", expected, output)
 		}
