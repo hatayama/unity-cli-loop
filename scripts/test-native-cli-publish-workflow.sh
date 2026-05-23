@@ -57,6 +57,15 @@ test_release_asset_attestations_are_verified() {
   assert_before "$WORKFLOW" "      - name: Verify native CLI asset attestations" "      - name: Upload native CLI assets"
 }
 
+test_release_tagged_installer_scripts_are_verified() {
+  assert_contains "$WORKFLOW" "      - name: Verify release-tagged installer scripts"
+  assert_contains "$WORKFLOW" "        shell: pwsh"
+  assert_contains "$WORKFLOW" "          ./scripts/check-release-installer.ps1 -Version \$env:RELEASE_TAG"
+  assert_before "$WORKFLOW" "      - name: Create or reuse draft release" "      - name: Verify release-tagged installer scripts"
+  assert_before "$WORKFLOW" "      - name: Verify release-tagged installer scripts" "      - name: Upload native CLI assets"
+}
+
 test_attestation_permissions
 test_release_assets_are_attested
 test_release_asset_attestations_are_verified
+test_release_tagged_installer_scripts_are_verified
