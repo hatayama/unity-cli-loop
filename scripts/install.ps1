@@ -132,8 +132,15 @@ function Test-UloopNativeInstallSupported {
         [string]$UloopPath
     )
 
-    & $UloopPath install --help > $null 2> $null
-    return $LASTEXITCODE -eq 0
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & $UloopPath install --help > $null 2> $null
+        return $LASTEXITCODE -eq 0
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
 }
 
 function ConvertTo-NormalizedPath {

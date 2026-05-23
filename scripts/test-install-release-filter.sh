@@ -941,6 +941,12 @@ test_powershell_installer_uses_non_installer_staged_executable_name() {
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" '"uloop-install-"'
 }
 
+test_powershell_native_probe_restores_error_action_preference() {
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$PreviousErrorActionPreference = $ErrorActionPreference'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$ErrorActionPreference = "Continue"'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$ErrorActionPreference = $PreviousErrorActionPreference'
+}
+
 test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
 test_posix_invokes_native_install_setup
@@ -960,3 +966,4 @@ test_powershell_latest_skips_prerelease_assets
 test_git_bash_latest_installs_windows_zip_asset
 test_powershell_installer_avoids_optional_archive_cmdlets
 test_powershell_installer_uses_non_installer_staged_executable_name
+test_powershell_native_probe_restores_error_action_preference
