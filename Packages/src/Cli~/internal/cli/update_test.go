@@ -72,7 +72,7 @@ func TestUpdateCommandForDarwinUsesRequestedVersion(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	if !strings.Contains(joinedArgs, "v3-beta/scripts/install.sh") {
+	if !strings.Contains(joinedArgs, "cli-v3.0.0-beta.6/scripts/install.sh") {
 		t.Fatalf("installer URL mismatch: %s", joinedArgs)
 	}
 	if !strings.Contains(joinedArgs, "ULOOP_VERSION='cli-v3.0.0-beta.6'") {
@@ -114,7 +114,7 @@ func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	if !strings.Contains(joinedArgs, "main/scripts/install.ps1") {
+	if !strings.Contains(joinedArgs, "cli-v3.0.0/scripts/install.ps1") {
 		t.Fatalf("installer URL mismatch: %s", joinedArgs)
 	}
 	if !strings.Contains(joinedArgs, "$env:ULOOP_VERSION='cli-v3.0.0'") {

@@ -11,8 +11,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string VERSION_FLAG = "--version";
         public const string SHORT_VERSION_FLAG = "-v";
         public const string RAW_CONTENT_BASE_URL = "https://raw.githubusercontent.com/hatayama/unity-cli-loop";
-        public const string STABLE_INSTALLER_SOURCE_REF = "main";
-        public const string BETA_INSTALLER_SOURCE_REF = "v3-beta";
         public const string SCRIPTS_DIR_NAME = "scripts";
         public const string POSIX_INSTALL_SCRIPT_NAME = "install.sh";
         public const string WINDOWS_INSTALL_SCRIPT_NAME = "install.ps1";

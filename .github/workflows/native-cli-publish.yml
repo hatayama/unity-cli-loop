@@ -205,6 +205,14 @@ jobs:
 
           echo "release_published=false" >> "$GITHUB_OUTPUT"
 
+      - name: Verify release-tagged installer scripts
+        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          ./scripts/check-release-installer.ps1 -Version $env:RELEASE_TAG
+
       - name: Upload native CLI assets
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
         env:

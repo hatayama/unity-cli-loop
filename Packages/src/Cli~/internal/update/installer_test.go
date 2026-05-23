@@ -2,21 +2,21 @@ package update
 
 import "testing"
 
-func TestScriptURLForBetaVersionUsesV3BetaInstaller(t *testing.T) {
-	// Verifies beta CLI installs use the beta branch installer script.
+func TestScriptURLForBetaVersionUsesReleaseInstaller(t *testing.T) {
+	// Verifies beta CLI installs use the installer script shipped with the selected release.
 	url := ScriptURL("3.0.0-beta.3", PosixScriptName)
 
-	expected := "https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.sh"
+	expected := "https://raw.githubusercontent.com/hatayama/unity-cli-loop/cli-v3.0.0-beta.3/scripts/install.sh"
 	if url != expected {
 		t.Fatalf("script URL mismatch: got %q want %q", url, expected)
 	}
 }
 
-func TestScriptURLForStableVersionUsesMainInstaller(t *testing.T) {
-	// Verifies stable CLI installs use the stable branch installer script.
+func TestScriptURLForStableVersionUsesReleaseInstaller(t *testing.T) {
+	// Verifies stable CLI installs use the installer script shipped with the selected release.
 	url := ScriptURL("3.0.0", WindowsScriptName)
 
-	expected := "https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1"
+	expected := "https://raw.githubusercontent.com/hatayama/unity-cli-loop/cli-v3.0.0/scripts/install.ps1"
 	if url != expected {
 		t.Fatalf("script URL mismatch: got %q want %q", url, expected)
 	}

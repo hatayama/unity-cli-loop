@@ -15,22 +15,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class NativeCliInstallerTests
     {
+        private const string TestBetaCliVersion = "3.0.0-beta.3";
+        private const string TestBetaReleaseTag = "cli-v3.0.0-beta.3";
+        private const string TestStableReleaseTag = "cli-v3.0.0";
+
         [Test]
         public void GetInstallCommand_OnMacKeepsCliOnlyCurlInstallerAvailable()
         {
             // Verifies that editor and CLI installs use the same channel installer script, not npm.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
-                "3.0.0-beta.3",
+                TestBetaCliVersion,
                 false,
                 "/bin/zsh");
 
             Assert.That(command.FileName, Is.EqualTo("/bin/zsh"));
             Assert.That(command.Arguments, Does.Contain("-l -i -c"));
-            Assert.That(command.Arguments, Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.sh"));
+            Assert.That(command.Arguments, Does.Contain($"https://raw.githubusercontent.com/hatayama/unity-cli-loop/{TestBetaReleaseTag}/scripts/install.sh"));
             Assert.That(command.Arguments, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
             Assert.That(command.Arguments, Does.Contain("ULOOP_VERSION"));
-            Assert.That(command.Arguments, Does.Contain("cli-v3.0.0-beta.3"));
+            Assert.That(command.Arguments, Does.Contain(TestBetaReleaseTag));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
@@ -42,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that fish or other login shells only load environment before POSIX script execution.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
-                "3.0.0-beta.3",
+                TestBetaCliVersion,
                 false,
                 "/opt/homebrew/bin/fish");
 
@@ -59,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that editor installs do not report success when curl fails before script execution.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
-                "3.0.0-beta.3",
+                TestBetaCliVersion,
                 false,
                 "/bin/zsh");
 
@@ -75,13 +79,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that editor and CLI installs use the same channel PowerShell installer script.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.WindowsEditor,
-                "3.0.0-beta.3",
+                TestBetaCliVersion,
                 false,
                 "/bin/zsh");
 
             Assert.That(command.FileName, Is.EqualTo("powershell"));
-            Assert.That(command.Arguments, Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.ps1"));
-            Assert.That(command.Arguments, Does.Contain("$env:ULOOP_VERSION='cli-v3.0.0-beta.3'"));
+            Assert.That(command.Arguments, Does.Contain($"https://raw.githubusercontent.com/hatayama/unity-cli-loop/{TestBetaReleaseTag}/scripts/install.ps1"));
+            Assert.That(command.Arguments, Does.Contain($"$env:ULOOP_VERSION='{TestBetaReleaseTag}'"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Contain("irm"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
@@ -93,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that macOS manual commands do not expose old cleanup flags.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
-                "3.0.0-beta.3",
+                TestBetaCliVersion,
                 true,
                 "/bin/zsh");
 
@@ -107,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that Windows installs rely on the native CLI install command for legacy cleanup.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.WindowsEditor,
-                "3.0.0-beta.3",
+                TestBetaCliVersion,
                 true,
                 "/bin/zsh");
 
@@ -138,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                     RuntimePlatform.OSXEditor,
-                    "3.0.0-beta.3",
+                    TestBetaCliVersion,
                     false,
                     "/bin/zsh",
                     packageResolvedPath);
@@ -148,7 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(command.ManualCommand, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
                 Assert.That(command.ManualCommand, Does.Contain(scriptPath));
                 Assert.That(command.ManualCommand, Does.Contain("ULOOP_VERSION"));
-                Assert.That(command.ManualCommand, Does.Contain("cli-v3.0.0-beta.3"));
+                Assert.That(command.ManualCommand, Does.Contain(TestBetaReleaseTag));
                 Assert.That(command.ManualCommand, Does.Not.Contain("curl -fsSL"));
                 Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
             }
@@ -184,14 +188,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                     RuntimePlatform.WindowsEditor,
-                    "3.0.0-beta.3",
+                    TestBetaCliVersion,
                     false,
                     "/bin/zsh",
                     packageResolvedPath);
 
                 Assert.That(command.FileName, Is.EqualTo("powershell"));
                 Assert.That(command.ManualCommand, Does.Contain($"& '{scriptPath}'"));
-                Assert.That(command.ManualCommand, Does.Contain("$env:ULOOP_VERSION='cli-v3.0.0-beta.3'"));
+                Assert.That(command.ManualCommand, Does.Contain($"$env:ULOOP_VERSION='{TestBetaReleaseTag}'"));
                 Assert.That(command.ManualCommand, Does.Not.Contain("irm"));
                 Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
             }
@@ -205,25 +209,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildInstallerScriptUrl_WhenBetaVersionUsesV3BetaInstallerScript()
+        public void BuildInstallerScriptUrl_WhenBetaVersionUsesReleaseInstallerScript()
         {
-            // Verifies that beta editor installs call the same beta installer script as CLI commands.
+            // Verifies that beta editor installs use the script shipped with the selected CLI release.
             string url = NativeCliInstaller.BuildInstallerScriptUrl(
-                "cli-v3.0.0-beta.3",
+                TestBetaReleaseTag,
                 CliConstants.POSIX_INSTALL_SCRIPT_NAME);
 
-            Assert.That(url, Is.EqualTo("https://raw.githubusercontent.com/hatayama/unity-cli-loop/v3-beta/scripts/install.sh"));
+            Assert.That(url, Is.EqualTo($"https://raw.githubusercontent.com/hatayama/unity-cli-loop/{TestBetaReleaseTag}/scripts/install.sh"));
         }
 
         [Test]
-        public void BuildInstallerScriptUrl_WhenStableVersionUsesMainInstallerScript()
+        public void BuildInstallerScriptUrl_WhenStableVersionUsesReleaseInstallerScript()
         {
-            // Verifies that stable editor installs call the stable installer script.
+            // Verifies that stable editor installs use the script shipped with the selected CLI release.
             string url = NativeCliInstaller.BuildInstallerScriptUrl(
-                "cli-v3.0.0",
+                TestStableReleaseTag,
                 CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
 
-            Assert.That(url, Is.EqualTo("https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1"));
+            Assert.That(url, Is.EqualTo($"https://raw.githubusercontent.com/hatayama/unity-cli-loop/{TestStableReleaseTag}/scripts/install.ps1"));
         }
 
         [Test]
