@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.16](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.15...v3.0.0-beta.16) (2026-05-23)
+
+
+### Bug Fixes
+
+* CLI updates use installer scripts from the selected release ([#1190](https://github.com/hatayama/unity-cli-loop/issues/1190)) ([761a8c6](https://github.com/hatayama/unity-cli-loop/commit/761a8c6354f8c8fa497ac046a02a76b2b5b0cb47))
+* Windows CLI updates no longer fail when upgrading from older versions ([#1189](https://github.com/hatayama/unity-cli-loop/issues/1189)) ([79f60fd](https://github.com/hatayama/unity-cli-loop/commit/79f60fdf4d4a163bb26fb3d7647de15b9fa13fed))
+
 ## [3.0.0-beta.15](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.14...v3.0.0-beta.15) (2026-05-23)
 
 
