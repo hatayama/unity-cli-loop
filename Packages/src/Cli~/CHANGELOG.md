@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.14](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.13...cli-v3.0.0-beta.14) (2026-05-23)
+
+
+### Bug Fixes
+
+* CLI updates use installer scripts from the selected release ([#1190](https://github.com/hatayama/unity-cli-loop/issues/1190)) ([761a8c6](https://github.com/hatayama/unity-cli-loop/commit/761a8c6354f8c8fa497ac046a02a76b2b5b0cb47))
+
 ## [3.0.0-beta.13](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.12...cli-v3.0.0-beta.13) (2026-05-23)
 
 
