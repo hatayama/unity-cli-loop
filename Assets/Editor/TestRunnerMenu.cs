@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using System.Threading;
 using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
@@ -17,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         {
             Debug.Log("Running EditMode tests!");
 
-            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest();
+            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(null, CancellationToken.None);
 
             LogTestResult(result);
         }
@@ -27,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         {
             Debug.Log("Running PlayMode tests!");
 
-            SerializableTestResult result = await PlayModeTestExecuter.ExecutePlayModeTest();
+            SerializableTestResult result = await PlayModeTestExecuter.ExecutePlayModeTest(null, CancellationToken.None);
 
             LogTestResult(result);
         }
@@ -49,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             Debug.Log("Running only CompileCommandTests!");
             
             TestExecutionFilter filter = TestExecutionFilter.ByClassName("io.github.hatayama.UnityCliLoop.CompileCommandTests");
-            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter);
+            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter, CancellationToken.None);
                 
             LogTestResult(result);
         }
@@ -60,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             Debug.Log("Running only GetLogsCommandTests!");
             
             TestExecutionFilter filter = TestExecutionFilter.ByClassName("io.github.hatayama.UnityCliLoop.GetLogsCommandTests");
-            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter);
+            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter, CancellationToken.None);
                 
             LogTestResult(result);
         }
@@ -71,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             Debug.Log("Running only MainThreadSwitcherTests!");
             
             TestExecutionFilter filter = TestExecutionFilter.ByClassName("io.github.hatayama.UnityCliLoop.MainThreadSwitcherTests");
-            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter);
+            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter, CancellationToken.None);
                 
             LogTestResult(result);
         }
@@ -82,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             Debug.Log("Running only SampleEditModeTest!");
             
             TestExecutionFilter filter = TestExecutionFilter.ByClassName("Tests.SampleEditModeTest");
-            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter);
+            SerializableTestResult result = await PlayModeTestExecuter.ExecuteEditModeTest(filter, CancellationToken.None);
                 
             LogTestResult(result);
         }
@@ -119,4 +120,4 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             }
         }
     }
-} 
+}
