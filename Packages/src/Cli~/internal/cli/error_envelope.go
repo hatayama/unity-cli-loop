@@ -130,6 +130,27 @@ func classifyError(err error, context errorContext) cliError {
 		return argumentErr.toCLIError(context)
 	}
 
+	var notRespondingErr unityServerNotRespondingError
+	if errors.As(err, &notRespondingErr) {
+		return cliError{
+			ErrorCode:   errorCodeUnityNotReachable,
+			Phase:       errorPhaseConnection,
+			Message:     "Unity is running for this project, but the Unity CLI Loop server is not responding.",
+			Retryable:   true,
+			SafeToRetry: true,
+			ProjectRoot: firstNonEmpty(context.projectRoot, notRespondingErr.projectRoot),
+			Command:     context.command,
+			NextActions: []string{
+				"Run `uloop launch -r` to restart this Unity project.",
+				"Retry the original command after Unity finishes starting, compiling, or reloading scripts.",
+			},
+			Details: map[string]any{
+				"endpoint": notRespondingErr.endpoint,
+				"cause":    notRespondingErr.causeText(),
+			},
+		}
+	}
+
 	var connectionErr *unityipc.ConnectionAttemptError
 	if errors.As(err, &connectionErr) {
 		return cliError{
@@ -148,27 +169,6 @@ func classifyError(err error, context errorContext) cliError {
 			Details: map[string]any{
 				"endpoint": connectionErr.Endpoint,
 				"cause":    connectionAttemptCause(connectionErr),
-			},
-		}
-	}
-
-	var notRespondingErr unityServerNotRespondingError
-	if errors.As(err, &notRespondingErr) {
-		return cliError{
-			ErrorCode:   errorCodeUnityNotReachable,
-			Phase:       errorPhaseConnection,
-			Message:     "Unity is running for this project, but the Unity CLI Loop server is not responding.",
-			Retryable:   true,
-			SafeToRetry: true,
-			ProjectRoot: firstNonEmpty(context.projectRoot, notRespondingErr.projectRoot),
-			Command:     context.command,
-			NextActions: []string{
-				"Run `uloop launch -r` to restart this Unity project.",
-				"Retry the original command after Unity finishes starting, compiling, or reloading scripts.",
-			},
-			Details: map[string]any{
-				"endpoint": notRespondingErr.endpoint,
-				"cause":    notRespondingErr.causeText(),
 			},
 		}
 	}

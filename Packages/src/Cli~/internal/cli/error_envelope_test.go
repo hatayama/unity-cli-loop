@@ -108,12 +108,16 @@ func TestClassifyConnectionAttemptAllowsNilCause(t *testing.T) {
 }
 
 func TestClassifyUnityServerNotRespondingError(t *testing.T) {
-	// Verifies live Unity processes with no responding server get restart guidance.
+	// Verifies live Unity processes with no responding server keep restart guidance even when the cause is a connection error.
 	cliErr := classifyError(
 		unityServerNotRespondingError{
 			projectRoot: "/tmp/MyProject",
 			endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
-			cause:       errors.New("connect failed"),
+			cause: &unityipc.ConnectionAttemptError{
+				ProjectRoot: "/tmp/MyProject",
+				Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+				Cause:       errors.New("connect failed"),
+			},
 		},
 		errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"},
 	)
