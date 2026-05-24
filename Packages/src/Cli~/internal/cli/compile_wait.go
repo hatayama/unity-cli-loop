@@ -100,12 +100,8 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 		if err != nil {
 			return nil, false, err
 		}
-		busy, err := isUnityBusyByServerState(options.projectRoot)
-		if err != nil {
-			return nil, false, err
-		}
 
-		if len(result) > 0 && !busy {
+		if len(result) > 0 {
 			if idleSince.IsZero() {
 				idleSince = time.Now()
 			}
@@ -145,20 +141,6 @@ func tryReadCompileResult(projectRoot string, requestID string) (json.RawMessage
 		return nil, nil
 	}
 	return json.RawMessage(content), nil
-}
-
-func isUnityBusyByServerState(projectRoot string) (bool, error) {
-	state, ok, err := readServerState(projectRoot)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-	if failure := serverStateFailureError(state); failure != nil {
-		return false, failure
-	}
-	return isServerStateBusy(state), nil
 }
 
 func shouldWaitForCompileResult(err error, outcome unityipc.UnitySendOutcome) bool {

@@ -48,7 +48,13 @@ Interpret scanner output conservatively:
 When running `uloop` commands for this project during CLI development, do not use the `uloop` command resolved from `PATH`. Run this checkout's checked-in development binary directly so validation uses the code under review:
 
 ```bash
-Packages/src/Cli~/dist/darwin-arm64/uloop compile --project-path /Users/a12115/ghq/hatayama/unity-cli-loop2
+Packages/src/Cli~/dist/darwin-arm64/uloop compile --project-path "$(git rev-parse --show-toplevel)"
+```
+
+Before running a command with `--project-path`, confirm that the path is the intended Unity project for the current task. Do not copy a sibling checkout path from another repository or prior session. When intentionally validating a different Unity project, use an explicit placeholder in notes and replace it at execution time:
+
+```bash
+Packages/src/Cli~/dist/darwin-arm64/uloop compile --project-path <UNITY_PROJECT_ROOT>
 ```
 
 If CLI source changes affect the command behavior you are validating, rebuild the development binary before running it.

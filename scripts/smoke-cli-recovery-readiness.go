@@ -61,7 +61,7 @@ func run() error {
 	if err := runLiveRecoverySequence(opts); err != nil {
 		return err
 	}
-	if err := runStaleRecoveryStateSequence(opts.uloopPath, opts.timeout); err != nil {
+	if err := runStaleRecoveryStateIgnoredSequence(opts.uloopPath, opts.timeout); err != nil {
 		return err
 	}
 
@@ -211,7 +211,7 @@ func runLiveRecoverySequence(opts options) error {
 	return assertDynamicCodeResult(dynamicPayload)
 }
 
-func runStaleRecoveryStateSequence(uloopPath string, timeout time.Duration) error {
+func runStaleRecoveryStateIgnoredSequence(uloopPath string, timeout time.Duration) error {
 	projectPath, err := os.MkdirTemp("", "uloop-stale-state-")
 	if err != nil {
 		return err
@@ -226,36 +226,43 @@ func runStaleRecoveryStateSequence(uloopPath string, timeout time.Duration) erro
 	}
 
 	fmt.Printf("stale_state_project=%s\n", projectPath)
-	staleResult := runUloop(uloopPath, projectPath, []string{"get-logs", "--max-count", "1"}, timeout)
-	if err := assertStaleRecoveryStateError(staleResult); err != nil {
-		return err
-	}
-	if err := assertSuccess(
-		runUloop(uloopPath, projectPath, []string{"fix"}, timeout),
-		"cleanup stale recovery state",
-	); err != nil {
+	staleResult := runUloopWithEnv(
+		uloopPath,
+		projectPath,
+		[]string{"get-logs", "--max-count", "1"},
+		timeout,
+		[]string{"ULOOP_FAKE_CONNECTION_FAILURE=1"},
+	)
+	if err := assertStaleRecoveryStateIgnored(staleResult); err != nil {
 		return err
 	}
 
 	statePath := filepath.Join(projectPath, filepath.FromSlash(stateRelativePath))
-	if isFile(statePath) {
-		return fmt.Errorf("stale recovery state was not removed: %s", statePath)
+	if !isFile(statePath) {
+		return fmt.Errorf("stale recovery state should be ignored, not removed: %s", statePath)
 	}
 	return nil
 }
 
 func runUloop(uloopPath string, projectPath string, args []string, timeout time.Duration) commandResult {
-	command := append([]string{uloopPath, "--project-path", projectPath}, args...)
-	return runCommand(command, projectPath, timeout)
+	return runUloopWithEnv(uloopPath, projectPath, args, timeout, nil)
 }
 
-func runCommand(args []string, cwd string, timeout time.Duration) commandResult {
+func runUloopWithEnv(uloopPath string, projectPath string, args []string, timeout time.Duration, extraEnv []string) commandResult {
+	command := append([]string{uloopPath, "--project-path", projectPath}, args...)
+	return runCommand(command, projectPath, timeout, extraEnv)
+}
+
+func runCommand(args []string, cwd string, timeout time.Duration, extraEnv []string) commandResult {
 	startedAt := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = cwd
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -336,25 +343,35 @@ func assertDynamicCodeResult(payload map[string]any) error {
 	return fmt.Errorf("execute-dynamic-code result mismatch: %v", payload)
 }
 
-func assertStaleRecoveryStateError(result commandResult) error {
+func assertStaleRecoveryStateIgnored(result commandResult) error {
 	if result.exitCode == 0 || result.timedOut {
-		printCommandContext("stale recovery-state check", result)
-		return errors.New("stale recovery-state check should fail without timing out")
+		printCommandContext("stale recovery-state ignored", result)
+		return errors.New("stale recovery-state ignored check should fail without timing out")
 	}
 
 	combinedOutput := result.stdout + result.stderr
 	requiredFragments := []string{
-		"stale Unity CLI Loop recovery state file",
-		"Run `uloop fix` to remove stale recovery state files.",
+		"UNITY_NOT_REACHABLE",
+		"Unity CLI Loop server is not reachable",
 	}
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(combinedOutput, fragment) {
-			printCommandContext("stale recovery-state check", result)
-			return fmt.Errorf("stale recovery-state output missing: %s", fragment)
+			printCommandContext("stale recovery-state ignored", result)
+			return fmt.Errorf("stale recovery-state ignored output missing: %s", fragment)
+		}
+	}
+	forbiddenFragments := []string{
+		"uloop " + "fix",
+		"stale Unity CLI Loop recovery state",
+	}
+	for _, fragment := range forbiddenFragments {
+		if strings.Contains(combinedOutput, fragment) {
+			printCommandContext("stale recovery-state ignored", result)
+			return fmt.Errorf("stale recovery-state ignored output should not contain: %s", fragment)
 		}
 	}
 
-	fmt.Printf("stale recovery-state check passed in %.1fs\n", result.elapsed.Seconds())
+	fmt.Printf("stale recovery-state ignored in %.1fs\n", result.elapsed.Seconds())
 	return nil
 }
 

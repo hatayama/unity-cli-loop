@@ -1,4 +1,3 @@
-using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -14,7 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopPackageRemovalSettingsResetter packageRemovalSettingsResetter = new(editorSettingsService);
             packageRemovalSettingsResetter.RegisterForEditorStartup();
             UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsService);
-            CompilationReadinessService.RegisterForEditorStartup();
         }
     }
 }

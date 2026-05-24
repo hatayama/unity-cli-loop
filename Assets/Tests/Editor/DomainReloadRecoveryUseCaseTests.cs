@@ -18,7 +18,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
         private IDomainReloadDetectionService _domainReloadDetectionService;
-        private ServerReadinessStateStore _stateStore;
 
         [SetUp]
         public void SetUp()
@@ -26,15 +25,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
             _sessionStateService.ClearAll();
-            _stateStore = CreateTestStateStore();
-            _domainReloadDetectionService = new DomainReloadDetectionFileService(_sessionStateService, _stateStore);
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(_sessionStateService);
         }
 
         [TearDown]
         public void TearDown()
         {
             _originalSessionState.Restore(_sessionStateService);
-            _stateStore.Delete();
         }
 
         [Test]
@@ -98,32 +95,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CompleteDomainReload_WhenServerWasNotRunning_ShouldPublishRecoveringState()
-        {
-            // Verifies that no-server domain reload completion matches the automatic recovery that follows it.
-            _sessionStateService.SetIsServerRunning(false);
-            _domainReloadDetectionService.StartDomainReload("test-correlation", serverIsRunning: false);
-
-            _domainReloadDetectionService.CompleteDomainReload("test-correlation");
-
-            ServerReadinessState state = _stateStore.Read();
-            Assert.That(state.Phase, Is.EqualTo("recovering"));
-        }
-
-        [Test]
-        public void CompleteDomainReload_WhenServerWasManuallyStopped_ShouldPublishStoppedState()
-        {
-            // Verifies that explicit Stop Server remains terminal across Domain Reload completion.
-            _sessionStateService.MarkServerManuallyStopped();
-            _domainReloadDetectionService.StartDomainReload("test-correlation", serverIsRunning: false);
-
-            _domainReloadDetectionService.CompleteDomainReload("test-correlation");
-
-            ServerReadinessState state = _stateStore.Read();
-            Assert.That(state.Phase, Is.EqualTo("stopped"));
-        }
-
-        [Test]
         public async Task RestoreServerStateIfNeededAsync_WhenRecoveryDoesNotStartServer_ShouldFail()
         {
             // Verifies that recovery is only reported as successful after a running server instance exists.
@@ -176,15 +147,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(0));
-        }
-
-        private static ServerReadinessStateStore CreateTestStateStore()
-        {
-            string projectRoot = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "unity-cli-loop-tests",
-                System.Guid.NewGuid().ToString("N"));
-            return new ServerReadinessStateStore(projectRoot);
         }
 
         private static DomainReloadRecoveryUseCase CreateUseCase(

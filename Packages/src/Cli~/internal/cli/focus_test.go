@@ -76,3 +76,45 @@ func TestBuildFocusUnityProcessWindowsScriptThrowsOnFailures(t *testing.T) {
 		t.Fatalf("script should not silently return: %s", script)
 	}
 }
+
+// Verifies the Windows focus-with-restore script captures the previous foreground window.
+func TestBuildFocusUnityProcessWindowsWithRestoreScriptCapturesForegroundWindow(t *testing.T) {
+	script := buildFocusUnityProcessWindowsWithRestoreScript(123)
+
+	for _, expected := range []string{
+		"GetForegroundWindow",
+		"$previous = [Win32Interop]::GetForegroundWindow()",
+		"Write-Output $previous.ToInt64()",
+		"$focused = $shell.AppActivate(123)",
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("script missing %q: %s", expected, script)
+		}
+	}
+}
+
+// Verifies the Windows restore script fails when the saved foreground window cannot be restored.
+func TestBuildRestoreWindowsForegroundWindowScriptThrowsOnRestoreFailure(t *testing.T) {
+	script := buildRestoreWindowsForegroundWindowScript(123)
+
+	for _, expected := range []string{
+		"$handle = [IntPtr]::new(123)",
+		"if ($handle -eq [IntPtr]::Zero) { throw 'Saved foreground window handle is invalid' }",
+		"$restored = [Win32Interop]::SetForegroundWindow($handle)",
+		"if (-not $restored) { throw 'Failed to restore previous foreground window' }",
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("script missing %q: %s", expected, script)
+		}
+	}
+}
+
+// Verifies Windows foreground handle parsing ignores invalid saved state output.
+func TestParseWindowsForegroundHandle(t *testing.T) {
+	if parseWindowsForegroundHandle("123\r\n") != 123 {
+		t.Fatal("expected numeric handle to parse")
+	}
+	if parseWindowsForegroundHandle("not-a-handle") != 0 {
+		t.Fatal("expected invalid handle to be ignored")
+	}
+}

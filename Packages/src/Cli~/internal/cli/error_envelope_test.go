@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/internal/unityipc"
@@ -107,39 +108,66 @@ func TestClassifyConnectionAttemptAllowsNilCause(t *testing.T) {
 	}
 }
 
-func TestClassifyServerStoppedError(t *testing.T) {
-	// Verifies stopped readiness state uses the same retryable connection guidance as unreachable Unity.
+func TestClassifyUnityServerNotRespondingError(t *testing.T) {
+	// Verifies live Unity processes with no responding server avoid restart guidance even when the cause is a connection error.
 	cliErr := classifyError(
-		serverStoppedError{state: serverState{Phase: "stopped", Reason: "manual-stop"}},
+		unityServerNotRespondingError{
+			projectRoot: "/tmp/MyProject",
+			endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+			cause: &unityipc.ConnectionAttemptError{
+				ProjectRoot: "/tmp/MyProject",
+				Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+				Cause:       errors.New("connect failed"),
+			},
+		},
 		errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"},
 	)
 
 	if cliErr.ErrorCode != errorCodeUnityNotReachable {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	if !cliErr.Retryable || !cliErr.SafeToRetry {
-		t.Fatalf("retry flags mismatch: %#v", cliErr)
+	if len(cliErr.NextActions) == 0 ||
+		cliErr.NextActions[0] != "Wait and retry; Unity may be starting, importing assets, compiling, or reloading scripts." {
+		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
 	}
-	if cliErr.Details["reason"] != "manual-stop" {
+	for _, action := range cliErr.NextActions {
+		if strings.Contains(action, "launch -r") || strings.Contains(strings.ToLower(action), "restart") {
+			t.Fatalf("next action should not guide restart: %#v", cliErr.NextActions)
+		}
+	}
+	if cliErr.Details["endpoint"] != "/tmp/uloop/UnityCliLoop-sample.sock" {
 		t.Fatalf("details mismatch: %#v", cliErr.Details)
 	}
 }
 
-func TestClassifyStaleServerStateError(t *testing.T) {
-	// Verifies stale recovery state tells users how to clear the external readiness signal.
-	cliErr := classifyError(
-		staleServerStateError{state: serverState{Phase: "recovering", Reason: "domain-reload-after"}},
-		errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"},
+func TestWriteToolFailureWhenServerStopsBeforeAcceptingDispatchedRequestIsNotSafeToRetry(t *testing.T) {
+	// Verifies pre-accept server silence does not advertise a dispatched state-changing command as safe to retry.
+	var stderr bytes.Buffer
+
+	writeToolFailure(
+		&stderr,
+		unityServerNotRespondingError{
+			projectRoot: "/tmp/MyProject",
+			endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+			cause:       errors.New("read timeout"),
+		},
+		unityipc.UnitySendOutcome{RequestDispatched: true},
+		errorContext{projectRoot: "/tmp/MyProject", command: "execute-dynamic-code"},
 	)
 
-	if cliErr.ErrorCode != errorCodeUnityNotReachable {
-		t.Fatalf("error code mismatch: %#v", cliErr)
+	var envelope cliErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
 	}
-	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != "Run `uloop fix` to remove stale recovery state files." {
-		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
+	if envelope.Error.ErrorCode != errorCodeUnityNotReachable {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
-	if cliErr.Details["phase"] != "recovering" {
-		t.Fatalf("details mismatch: %#v", cliErr.Details)
+	if !envelope.Error.Retryable || envelope.Error.SafeToRetry {
+		t.Fatalf("retry flags mismatch: %#v", envelope.Error)
+	}
+	if len(envelope.Error.NextActions) == 0 ||
+		!strings.Contains(envelope.Error.NextActions[0], "may have received the request") {
+		t.Fatalf("next actions mismatch: %#v", envelope.Error.NextActions)
 	}
 }
 
@@ -357,7 +385,7 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 		t.Fatalf("project root mismatch: %#v", cliErr)
 	}
 	expectedRetryAction := "Retry `uloop compile` after Unity becomes responsive."
-	if len(cliErr.NextActions) < 2 || cliErr.NextActions[1] != expectedRetryAction {
+	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != expectedRetryAction {
 		t.Fatalf("retry action mismatch: %#v", cliErr.NextActions)
 	}
 }
@@ -376,7 +404,7 @@ func TestClassifyConnectionAttemptUsesContextProjectRootFallback(t *testing.T) {
 
 func TestAvailableCommandNamesIncludesBuiltIns(t *testing.T) {
 	names := availableCommandNames(toolsCache{})
-	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "fix", "skills", "completion", "install", "update"}
+	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "skills", "completion", "install", "update"}
 	for index, expected := range expectedBuiltIns {
 		if names[index] != expected {
 			t.Fatalf("built-in command mismatch: %#v", names)

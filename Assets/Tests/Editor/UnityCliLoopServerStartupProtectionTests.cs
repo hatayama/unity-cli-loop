@@ -101,24 +101,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
-            ServerReadinessStateStore stateStore = CreateTestStateStore();
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(_sessionStateService, stateStore),
+                new DomainReloadDetectionFileService(_sessionStateService),
                 _sessionStateService,
-                stateStore,
                 new TestReadinessProbe(),
                 domainReloadLifecycle);
-        }
-
-        private static ServerReadinessStateStore CreateTestStateStore()
-        {
-            string projectRoot = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "unity-cli-loop-tests",
-                System.Guid.NewGuid().ToString("N"));
-            return new ServerReadinessStateStore(projectRoot);
         }
 
         /// <summary>

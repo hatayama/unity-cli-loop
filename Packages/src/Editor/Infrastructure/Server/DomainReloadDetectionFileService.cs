@@ -8,12 +8,11 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Infrastructure implementation that persists Domain Reload readiness state through server state and Editor SessionState.
+    /// Infrastructure implementation that persists Domain Reload recovery state through Editor SessionState.
     /// </summary>
     public sealed class DomainReloadDetectionFileService : IDomainReloadDetectionService
     {
         private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
-        private readonly ServerReadinessStateStore _stateStore;
         private readonly IUnityCliLoopEditorLegacySessionStateReader _legacySessionStateReader;
 
         public DomainReloadDetectionFileService()
@@ -23,13 +22,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal DomainReloadDetectionFileService(
             UnityCliLoopEditorSessionStateService sessionStateService,
-            ServerReadinessStateStore stateStore = null,
             IUnityCliLoopEditorLegacySessionStateReader legacySessionStateReader = null)
         {
             UnityEngine.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
             _sessionStateService = sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
-            _stateStore = stateStore ?? new ServerReadinessStateStore(UnityCliLoopPathResolver.GetProjectRoot());
             _legacySessionStateReader =
                 legacySessionStateReader ?? new UnityCliLoopEditorLegacySessionStateReader();
         }
@@ -45,26 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (IsBackgroundUnityProcess())
             {
                 VibeLogger.LogInfo("domain_reload_hook_skip", "Skipping domain reload hooks in background Unity process.");
-                return;
             }
-
-            AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
-            AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
-        }
-
-        private void OnBeforeAssemblyReload()
-        {
-            if (IsBackgroundUnityProcess())
-            {
-                return;
-            }
-
-            _stateStore.Write(
-                ServerReadinessPhase.Reloading,
-                ServerReadinessStateStore.CreateGenerationId(),
-                "assembly-reload-before",
-                null,
-                null);
         }
 
         /// <summary>
@@ -79,13 +57,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 VibeLogger.LogInfo("domain_reload_start_ignored", "background_process", correlationId: correlationId);
                 return;
             }
-
-            _stateStore.Write(
-                ServerReadinessPhase.Reloading,
-                correlationId,
-                "domain-reload-before",
-                null,
-                null);
 
             _sessionStateService.MarkDomainReloadStarted(serverIsRunning);
 
@@ -118,13 +89,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             MigrateLegacySessionStateIfNeeded();
             bool serverWillRecover = !_sessionStateService.GetIsServerManuallyStopped();
 
-            _stateStore.Write(
-                serverWillRecover ? ServerReadinessPhase.Recovering : ServerReadinessPhase.Stopped,
-                correlationId,
-                serverWillRecover ? "domain-reload-after" : "manual-stop",
-                null,
-                null);
-
             // Clear Domain Reload completion flag
             _sessionStateService.ClearDomainReloadFlag();
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
@@ -150,12 +114,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             _sessionStateService.ClearDomainReloadRecoveryFlags();
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
-            _stateStore.Write(
-                ServerReadinessPhase.Failed,
-                correlationId,
-                "domain-reload-rollback",
-                null,
-                "Failed to stop the server before domain reload.");
 
             VibeLogger.LogWarning(
                 "domain_reload_start_rollback",
