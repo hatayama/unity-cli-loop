@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"Failed to save NUnit XML result file: {exception.Message}");
+                Debug.LogWarning($"Failed to save NUnit XML result file: {exception}");
                 return null;
             }
         }
