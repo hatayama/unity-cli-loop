@@ -133,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public int VisibilityCheckCount { get; private set; }
 
             public bool IsCliInstalled() => true;
-            public string GetCachedCliVersion() => "3.0.0-beta.9";
+            public string GetCachedCliVersion() => "3.0.0-beta.14";
             public string GetCachedCliExecutablePath() => "/Users/ExampleUser/.local/bin/uloop";
             public bool IsCheckCompleted() => true;
             public Task RefreshCliVersionAsync(CancellationToken ct) => Task.CompletedTask;

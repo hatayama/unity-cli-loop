@@ -31,14 +31,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetMinimumRequiredCliVersion_RequiresDynamicCodeDomainReloadWaitCliRelease()
+        public void GetMinimumRequiredCliVersion_RequiresServerStateFreeCliRelease()
         {
-            // Verifies this package release rejects CLIs without dynamic-code domain reload waiting.
+            // Verifies this package release rejects CLIs that still depend on server-state readiness files.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.9"));
+            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.14"));
         }
 
         [Test]
@@ -49,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo("cli-v3.0.0-beta.9"));
+            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo("cli-v3.0.0-beta.14"));
         }
 
         [Test]
