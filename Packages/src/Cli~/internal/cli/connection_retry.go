@@ -12,6 +12,7 @@ import (
 
 var (
 	findRunningUnityProcessForConnectionRetry = findRunningUnityProcess
+	focusUnityProcessForConnectionRetry       = focusUnityProcess
 	serverConnectionRetryTimeout              = 10 * time.Second
 	serverConnectionRetryPoll                 = 1 * time.Second
 )
@@ -52,6 +53,7 @@ func sendWithTransientConnectionRetry(
 
 	var lastOutcome unityipc.UnitySendOutcome
 	var lastErr error
+	focusAttempted := false
 	for {
 		outcome, err := unityipc.NewClient(connection, version).
 			SendWithProgressOutcome(retryContext, method, params, progress)
@@ -65,6 +67,10 @@ func sendWithTransientConnectionRetry(
 		}
 		if runningProcess == nil {
 			return outcome, err
+		}
+		if !focusAttempted {
+			_ = focusUnityProcessForConnectionRetry(retryContext, runningProcess.pid)
+			focusAttempted = true
 		}
 
 		lastOutcome = outcome

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/internal/unityipc"
@@ -108,7 +109,7 @@ func TestClassifyConnectionAttemptAllowsNilCause(t *testing.T) {
 }
 
 func TestClassifyUnityServerNotRespondingError(t *testing.T) {
-	// Verifies live Unity processes with no responding server keep restart guidance even when the cause is a connection error.
+	// Verifies live Unity processes with no responding server avoid restart guidance even when the cause is a connection error.
 	cliErr := classifyError(
 		unityServerNotRespondingError{
 			projectRoot: "/tmp/MyProject",
@@ -125,8 +126,14 @@ func TestClassifyUnityServerNotRespondingError(t *testing.T) {
 	if cliErr.ErrorCode != errorCodeUnityNotReachable {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != "Run `uloop launch -r` to restart this Unity project." {
+	if len(cliErr.NextActions) == 0 ||
+		cliErr.NextActions[0] != "Wait and retry; Unity may be starting, importing assets, compiling, or reloading scripts." {
 		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
+	}
+	for _, action := range cliErr.NextActions {
+		if strings.Contains(action, "launch -r") || strings.Contains(strings.ToLower(action), "restart") {
+			t.Fatalf("next action should not guide restart: %#v", cliErr.NextActions)
+		}
 	}
 	if cliErr.Details["endpoint"] != "/tmp/uloop/UnityCliLoop-sample.sock" {
 		t.Fatalf("details mismatch: %#v", cliErr.Details)

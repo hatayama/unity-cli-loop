@@ -141,8 +141,9 @@ func classifyError(err error, context errorContext) cliError {
 			ProjectRoot: firstNonEmpty(context.projectRoot, notRespondingErr.projectRoot),
 			Command:     context.command,
 			NextActions: []string{
-				"Run `uloop launch -r` to restart this Unity project.",
-				"Retry the original command after Unity finishes starting, compiling, or reloading scripts.",
+				"Wait and retry; Unity may be starting, importing assets, compiling, or reloading scripts.",
+				"Run `uloop focus-window` if Unity appears stalled in the background.",
+				"Confirm that the command targets the intended Unity project and the Editor package is installed.",
 			},
 			Details: map[string]any{
 				"endpoint": notRespondingErr.endpoint,
