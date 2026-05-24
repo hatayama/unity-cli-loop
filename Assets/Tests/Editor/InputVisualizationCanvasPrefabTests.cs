@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(asmdef["autoReferenced"]?.Value<bool>(), Is.False);
             Assert.That(includePlatforms, Is.Not.Null);
+            Assert.That(includePlatforms!.Type, Is.EqualTo(JTokenType.Array));
             Assert.That(includePlatforms!.HasValues, Is.False);
         }
 
