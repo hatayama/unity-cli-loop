@@ -89,6 +89,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _currentFrame = 0;
             _loop = loop;
             _showOverlay = showOverlay;
+            if (_showOverlay)
+            {
+                RecordReplayOverlayFactory.EnsureReplayOverlay();
+            }
+
             _replayHeldKeys.Clear();
             _replayHeldButtons.Clear();
             _hasMousePosition = DetectMousePositionEvents(data!);

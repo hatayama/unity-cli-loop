@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Editor")]
+[assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Common.InputRecording.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.RecordInput.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.ReplayInput.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.SimulateKeyboard.Editor")]
