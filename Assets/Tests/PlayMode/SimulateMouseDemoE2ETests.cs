@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
     {
         private const string SCENE_PATH = "Assets/Scenes/SimulateMouseDemoScene.unity";
         private const string FIXTURE_DIR = "Assets/Tests/PlayMode/Fixtures/SimulateMouseDemoScene";
-        private const string FIXTURE_GAME_VIEW_SIZE = "2048x1152";
+        private const string FIXTURE_GAME_VIEW_SIZE = "1920x1080";
         private const float REPLAY_TIMEOUT_SECONDS = 30f;
 
         private bool _replayCompleted;
