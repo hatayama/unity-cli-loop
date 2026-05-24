@@ -75,6 +75,16 @@ func sendWithTransientConnectionRetry(
 
 		runningProcess, processErr := findRunningUnityProcessForConnectionRetry(retryContext, connection.ProjectRoot)
 		if processErr != nil {
+			if retryContext.Err() != nil {
+				if ctx.Err() != nil {
+					return outcome, ctx.Err()
+				}
+				return outcome, unityServerNotRespondingError{
+					projectRoot: connection.ProjectRoot,
+					endpoint:    connection.Endpoint.Address,
+					cause:       err,
+				}
+			}
 			return outcome, processErr
 		}
 		if runningProcess == nil {

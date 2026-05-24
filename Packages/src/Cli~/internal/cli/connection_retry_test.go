@@ -66,6 +66,44 @@ func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *test
 	}
 }
 
+// Verifies process probe timeouts keep the structured server-not-responding error.
+func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testing.T) {
+	originalFinder := findRunningUnityProcessForConnectionRetry
+	originalTimeout := serverConnectionRetryTimeout
+	originalPoll := serverConnectionRetryPoll
+	findRunningUnityProcessForConnectionRetry = func(ctx context.Context, projectRoot string) (*unityProcess, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	serverConnectionRetryTimeout = time.Nanosecond
+	serverConnectionRetryPoll = time.Nanosecond
+	t.Cleanup(func() {
+		findRunningUnityProcessForConnectionRetry = originalFinder
+		serverConnectionRetryTimeout = originalTimeout
+		serverConnectionRetryPoll = originalPoll
+	})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "unix",
+			Address: t.TempDir() + "/missing.sock",
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	_, err := sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil)
+
+	var notRespondingErr unityServerNotRespondingError
+	if !errors.As(err, &notRespondingErr) {
+		t.Fatalf("expected unityServerNotRespondingError, got %v", err)
+	}
+}
+
 // Verifies accepted RPCs can outlive the pre-dispatch connection retry timeout.
 func TestSendWithTransientConnectionRetryDoesNotCancelAcceptedRequestAtRetryTimeout(t *testing.T) {
 	if runtime.GOOS == "windows" {
