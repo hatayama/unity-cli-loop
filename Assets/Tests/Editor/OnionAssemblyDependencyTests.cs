@@ -94,12 +94,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void RuntimeAsmdef_WhenLoaded_TargetsEditorOnly()
+        public void RuntimeAsmdef_WhenLoaded_AllowsPrefabAttachmentWithoutAutoReference()
         {
-            // Tests that runtime overlay code remains excluded from player builds.
+            // Tests that runtime overlay code can attach to prefabs without implicit project references.
             string[] includePlatforms = ReadIncludePlatforms("Packages/src/Runtime/uLoopMCP.Runtime.asmdef");
+            bool autoReferenced = ReadAutoReferenced("Packages/src/Runtime/uLoopMCP.Runtime.asmdef");
 
-            Assert.That(includePlatforms, Is.EquivalentTo(new[] { "Editor" }));
+            Assert.That(includePlatforms, Is.Empty);
+            Assert.That(autoReferenced, Is.False);
+        }
+
+        [Test]
+        public void ProjectAsmdefs_WhenLoaded_AutoReferenceOnlyPublicToolContracts()
+        {
+            // Tests that internal assemblies require explicit asmdef references.
+            string[] offendingAssemblyNames = ReadProjectAsmdefPaths()
+                .Where(ReadAutoReferencedFromAbsolutePath)
+                .Select(ReadAsmdefName)
+                .Where(assemblyName => !string.Equals(
+                    assemblyName,
+                    ToolContractsAssemblyName,
+                    StringComparison.Ordinal))
+                .OrderBy(assemblyName => assemblyName)
+                .ToArray();
+
+            Assert.That(offendingAssemblyNames, Is.Empty);
         }
 
         [Test]
@@ -1274,6 +1293,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static bool ReadAutoReferenced(string relativeAsmdefPath)
         {
             string asmdefPath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), relativeAsmdefPath);
+            return ReadAutoReferencedFromAbsolutePath(asmdefPath);
+        }
+
+        private static bool ReadAutoReferencedFromAbsolutePath(string asmdefPath)
+        {
             JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
             return asmdef["autoReferenced"]?.Value<bool>() ?? true;
         }
