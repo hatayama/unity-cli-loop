@@ -18,10 +18,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string UnityEditorTestRunnerAssemblyName = "UnityEditor.TestRunner";
         private const string UnityEngineTestRunnerAssemblyName = "UnityEngine.TestRunner";
         private const string TestAssembliesOptionalReference = "TestAssemblies";
+        private const string FirstPartyToolsAsmdefPath =
+            "Packages/src/Editor/FirstPartyTools/UnityCLILoop.FirstPartyTools.Editor.asmdef";
+        private const string FirstPartyToolsEditorStartupPath =
+            "Packages/src/Editor/FirstPartyTools/FirstPartyToolsEditorStartup.cs";
         private const string RunTestsAsmdefPath =
             "Packages/src/Editor/FirstPartyTools/RunTests/UnityCLILoop.FirstPartyTools.RunTests.Editor.asmdef";
         private const string RunTestsTestFrameworkAsmdefPath =
             "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/UnityCLILoop.FirstPartyTools.RunTests.TestFramework.Editor.asmdef";
+        private const string RunTestsTestFrameworkGuidReference = "GUID:a338f3f8ae84147109d351d16d557552";
         private static readonly string[] UnityTestRunnerApiFiles =
         {
             "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/PlayModeTestExecuter.cs",
@@ -57,6 +62,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ?.Any(DefinesUnityTestFrameworkSymbol) == true;
 
             Assert.That(hasVersionDefine, Is.True);
+        }
+
+        [Test]
+        public void FirstPartyToolsAssemblyDefinition_WhenScanned_GatesOptionalTestFrameworkAdapterReference()
+        {
+            // Verifies that the startup facade can reach the optional Test Framework adapter only when available.
+            JObject asmdef = ReadJson(FirstPartyToolsAsmdefPath);
+            string[] references = ReadStringArray(asmdef, "references");
+            bool hasVersionDefine = asmdef["versionDefines"]
+                ?.Any(DefinesUnityTestFrameworkSymbol) == true;
+
+            Assert.That(references, Does.Contain(RunTestsTestFrameworkGuidReference));
+            Assert.That(hasVersionDefine, Is.True);
+        }
+
+        [Test]
+        public void FirstPartyToolsEditorStartup_WhenScanned_InitializesOptionalTestFrameworkAdapter()
+        {
+            // Verifies that optional Test Framework registration is owned by the composition-root startup path.
+            string content = ReadText(FirstPartyToolsEditorStartupPath);
+
+            Assert.That(content, Does.Contain("#if " + UnityCliLoopConstants.SCRIPTING_DEFINE_HAS_TEST_FRAMEWORK));
+            Assert.That(content, Does.Contain("RunTestsTestFrameworkStartup.Initialize();"));
         }
 
         [Test]

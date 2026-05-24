@@ -10,6 +10,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ExecuteDynamicCodeEditorStartup.Initialize();
             GetLogsEditorStartup.Initialize();
+#if ULOOP_HAS_TEST_FRAMEWORK
+            RunTestsTestFrameworkStartup.Initialize();
+#endif
 #if ULOOP_HAS_INPUT_SYSTEM
             RecordInputEditorStartup.Initialize();
             ReplayInputEditorStartup.Initialize();
