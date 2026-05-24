@@ -152,46 +152,23 @@ func classifyError(err error, context errorContext) cliError {
 		}
 	}
 
-	var stoppedErr serverStoppedError
-	if errors.As(err, &stoppedErr) {
+	var notRespondingErr unityServerNotRespondingError
+	if errors.As(err, &notRespondingErr) {
 		return cliError{
 			ErrorCode:   errorCodeUnityNotReachable,
 			Phase:       errorPhaseConnection,
-			Message:     "The Unity CLI Loop server stopped before it became ready.",
+			Message:     "Unity is running for this project, but the Unity CLI Loop server is not responding.",
 			Retryable:   true,
 			SafeToRetry: true,
-			ProjectRoot: context.projectRoot,
+			ProjectRoot: firstNonEmpty(context.projectRoot, notRespondingErr.projectRoot),
 			Command:     context.command,
 			NextActions: []string{
-				"If Unity is closed, run `uloop launch`.",
-				"If you intentionally stopped the bridge, start it from Unity settings or relaunch Unity.",
-				"Retry after Unity finishes starting, compiling, or reloading scripts.",
+				"Run `uloop launch -r` to restart this Unity project.",
+				"Retry the original command after Unity finishes starting, compiling, or reloading scripts.",
 			},
 			Details: map[string]any{
-				"phase":  stoppedErr.state.Phase,
-				"reason": stoppedErr.state.Reason,
-			},
-		}
-	}
-
-	var staleStateErr staleServerStateError
-	if errors.As(err, &staleStateErr) {
-		return cliError{
-			ErrorCode:   errorCodeUnityNotReachable,
-			Phase:       errorPhaseConnection,
-			Message:     "Unity is not running, but a stale Unity CLI Loop recovery state file says it is still busy.",
-			Retryable:   true,
-			SafeToRetry: true,
-			ProjectRoot: context.projectRoot,
-			Command:     context.command,
-			NextActions: []string{
-				"Run `uloop fix` to remove stale recovery state files.",
-				"Run `uloop launch` if Unity should be started for this project.",
-				"Retry the original command after the stale state is cleared.",
-			},
-			Details: map[string]any{
-				"phase":  staleStateErr.state.Phase,
-				"reason": staleStateErr.state.Reason,
+				"endpoint": notRespondingErr.endpoint,
+				"cause":    notRespondingErr.causeText(),
 			},
 		}
 	}
@@ -435,7 +412,6 @@ func compileWaitTimeoutError(projectRoot string) cliError {
 		ProjectRoot: projectRoot,
 		Command:     compileCommandName,
 		NextActions: []string{
-			"Run `uloop fix` to remove stale recovery state files.",
 			"Retry `uloop compile` after Unity becomes responsive.",
 		},
 	}

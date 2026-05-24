@@ -107,38 +107,24 @@ func TestClassifyConnectionAttemptAllowsNilCause(t *testing.T) {
 	}
 }
 
-func TestClassifyServerStoppedError(t *testing.T) {
-	// Verifies stopped readiness state uses the same retryable connection guidance as unreachable Unity.
+func TestClassifyUnityServerNotRespondingError(t *testing.T) {
+	// Verifies live Unity processes with no responding server get restart guidance.
 	cliErr := classifyError(
-		serverStoppedError{state: serverState{Phase: "stopped", Reason: "manual-stop"}},
+		unityServerNotRespondingError{
+			projectRoot: "/tmp/MyProject",
+			endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+			cause:       errors.New("connect failed"),
+		},
 		errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"},
 	)
 
 	if cliErr.ErrorCode != errorCodeUnityNotReachable {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	if !cliErr.Retryable || !cliErr.SafeToRetry {
-		t.Fatalf("retry flags mismatch: %#v", cliErr)
-	}
-	if cliErr.Details["reason"] != "manual-stop" {
-		t.Fatalf("details mismatch: %#v", cliErr.Details)
-	}
-}
-
-func TestClassifyStaleServerStateError(t *testing.T) {
-	// Verifies stale recovery state tells users how to clear the external readiness signal.
-	cliErr := classifyError(
-		staleServerStateError{state: serverState{Phase: "recovering", Reason: "domain-reload-after"}},
-		errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"},
-	)
-
-	if cliErr.ErrorCode != errorCodeUnityNotReachable {
-		t.Fatalf("error code mismatch: %#v", cliErr)
-	}
-	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != "Run `uloop fix` to remove stale recovery state files." {
+	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != "Run `uloop launch -r` to restart this Unity project." {
 		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
 	}
-	if cliErr.Details["phase"] != "recovering" {
+	if cliErr.Details["endpoint"] != "/tmp/uloop/UnityCliLoop-sample.sock" {
 		t.Fatalf("details mismatch: %#v", cliErr.Details)
 	}
 }
@@ -357,7 +343,7 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 		t.Fatalf("project root mismatch: %#v", cliErr)
 	}
 	expectedRetryAction := "Retry `uloop compile` after Unity becomes responsive."
-	if len(cliErr.NextActions) < 2 || cliErr.NextActions[1] != expectedRetryAction {
+	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != expectedRetryAction {
 		t.Fatalf("retry action mismatch: %#v", cliErr.NextActions)
 	}
 }
@@ -376,7 +362,7 @@ func TestClassifyConnectionAttemptUsesContextProjectRootFallback(t *testing.T) {
 
 func TestAvailableCommandNamesIncludesBuiltIns(t *testing.T) {
 	names := availableCommandNames(toolsCache{})
-	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "fix", "skills", "completion", "install", "update"}
+	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "skills", "completion", "install", "update"}
 	for index, expected := range expectedBuiltIns {
 		if names[index] != expected {
 			t.Fatalf("built-in command mismatch: %#v", names)

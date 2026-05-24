@@ -51,13 +51,13 @@ Returns JSON:
 
 Diagnose the failure mode before retrying.
 
-**Stale recovery state** (CLI hangs or shows recovery/startup state while Unity Editor *is* running):
+**Unity Editor running but not responding** (CLI cannot reach the project IPC server while a Unity process is alive):
 
 ```bash
-uloop fix
+uloop launch -r
 ```
 
-This removes stale Unity CLI Loop readiness state files from the Unity project's Temp directory. Then retry `uloop compile`.
+This restarts the target Unity project. After Unity finishes launching, retry `uloop compile`.
 
 **Unity Editor not running** (CLI returns a connection failure and no Unity process is alive):
 

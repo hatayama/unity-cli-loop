@@ -52,7 +52,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string TEMP_DIR = "Temp";
         public const string UNITYCLILOOP_DIR = "UnityCliLoop";
         public const string COMPILE_RESULTS_DIR = "compile-results";
-        public const string SERVER_STATE_FILE_NAME = "server-state.json";
         public const string JSON_FILE_EXTENSION = ".json";
         
         // .uloop directory

@@ -18,17 +18,14 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             UnityCliLoopEditorSettingsService editorSettingsService = new(editorSettingsRepository);
             UnityCliLoopEditorSessionStateRepository sessionStateRepository = new();
             UnityCliLoopEditorSessionStateService sessionStateService = new(sessionStateRepository);
-            ServerReadinessStateStore serverReadinessStateStore = new(UnityCliLoopPathResolver.GetProjectRoot());
             UnityCliLoopFirstPartyServerLifecycleBinding firstPartyServerLifecycle = new(new ProjectIpcWarmupClient());
             ULoopSettingsRepository uLoopSettingsRepository = new(
                 toolSettingsService,
                 editorSettingsService);
             DomainReloadDetectionFileService domainReloadDetectionService = new(
-                sessionStateService,
-                serverReadinessStateStore);
+                sessionStateService);
             ULoopSettings.RegisterService(uLoopSettingsRepository);
             MainThreadSwitcher.RegisterService(new EditorMainThreadDispatcher());
-            CompilationReadinessService.RegisterService(new CompilationReadinessStatePublisher(serverReadinessStateStore));
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new SkillInstallLayoutInternalToolNameProvider(),
                 toolSettingsService,
@@ -52,7 +49,6 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 lifecycleRegistry,
                 domainReloadDetectionService,
                 sessionStateService,
-                serverReadinessStateStore,
                 firstPartyServerLifecycle,
                 firstPartyServerLifecycle);
             UnityCliLoopServerApplicationService applicationService = new(controllerService);

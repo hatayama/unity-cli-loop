@@ -19,9 +19,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         IUnityCliLoopServerRecoveryCoordinator,
         IUnityCliLoopServerStateReader
     {
-        private const string MANUAL_STOP_REASON = "manual-stop";
-        private const string MANUAL_START_CLEANUP_REASON = "manual-start-cleanup";
-
         private enum ServerStopIntent
         {
             ManualStop,
@@ -33,7 +30,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
         private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
         private readonly SessionRecoveryService _sessionRecoveryService;
-        private readonly ServerReadinessStateStore _stateStore;
         private readonly IUnityCliLoopServerReadinessProbe _readinessProbe;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
         private IUnityCliLoopServerInstance _bridgeServer;
@@ -46,7 +42,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopServerLifecycleRegistryService serverLifecycleRegistry,
             IDomainReloadDetectionService domainReloadDetectionService,
             UnityCliLoopEditorSessionStateService sessionStateService,
-            ServerReadinessStateStore stateStore,
             IUnityCliLoopServerReadinessProbe readinessProbe,
             IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle)
         {
@@ -54,7 +49,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
             System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
-            System.Diagnostics.Debug.Assert(stateStore != null, "stateStore must not be null");
             System.Diagnostics.Debug.Assert(readinessProbe != null, "readinessProbe must not be null");
             System.Diagnostics.Debug.Assert(domainReloadLifecycle != null, "domainReloadLifecycle must not be null");
 
@@ -62,7 +56,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _serverLifecycleRegistry = serverLifecycleRegistry ?? throw new ArgumentNullException(nameof(serverLifecycleRegistry));
             _domainReloadDetectionService = domainReloadDetectionService ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
             _sessionStateService = sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
-            _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
             _readinessProbe = readinessProbe ?? throw new ArgumentNullException(nameof(readinessProbe));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
             _sessionRecoveryService = new SessionRecoveryService(
@@ -211,9 +204,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            string generationId = ServerReadinessStateStore.CreateGenerationId();
-            WriteServerState(ServerReadinessPhase.Starting, generationId, "manual-start", null);
-
             // Always stop the existing server first so the project IPC endpoint is released.
             if (_bridgeServer != null)
             {
@@ -238,7 +228,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (!result.Success)
             {
                 // Error message already handled by UseCase
-                WriteServerState(ServerReadinessPhase.Failed, generationId, "manual-start", result.Message);
                 UnityEngine.Debug.LogError($"Server startup failed: {result.Message}");
                 return;
             }
@@ -248,7 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _bridgeServer = result.ServerInstance;
 
             UnityCliLoopToolRegistrar.WarmupRegistry();
-            await MarkServerReadyAsync(generationId, "manual-start", cancellationToken);
+            await MarkServerReadyAsync("manual-start", cancellationToken);
         }
 
         /// <summary>
@@ -282,9 +271,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return true;
             }
 
-            string generationId = ServerReadinessStateStore.CreateGenerationId();
-            string reason = stopIntent == ServerStopIntent.ManualStop ? MANUAL_STOP_REASON : MANUAL_START_CLEANUP_REASON;
-            WriteServerState(ServerReadinessPhase.Stopping, generationId, reason, null);
             _serverLifecycleRegistry.PublishServerStopping();
             PrepareForServerShutdown();
 
@@ -309,13 +295,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     _sessionStateService.ClearServerSession();
                 }
 
-                WriteServerState(ServerReadinessPhase.Stopped, generationId, reason, null);
                 return true;
             }
             else
             {
                 // Error message already handled by UseCase
-                WriteServerState(ServerReadinessPhase.Failed, generationId, reason, result.Message);
                 UnityEngine.Debug.LogError($"Server shutdown failed: {result.Message}");
                 return false;
             }
@@ -328,8 +312,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             ClearStartupProtection();
             _domainReloadLifecycle.PrepareForDomainReload();
-            string generationId = ServerReadinessStateStore.CreateGenerationId();
-            WriteServerState(ServerReadinessPhase.Reloading, generationId, "domain-reload-before", null);
 
             DomainReloadRecoveryUseCase useCase =
                 new DomainReloadRecoveryUseCase(
@@ -365,9 +347,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 await useCase.ExecuteAfterDomainReloadAsync(cancellationToken);
             if (!result.Success)
             {
-                string generationId = ServerReadinessStateStore.CreateGenerationId();
                 string message = $"Domain reload recovery failed after Unity finished reloading assemblies. {result.ErrorMessage}";
-                WriteServerState(ServerReadinessPhase.Failed, generationId, "domain-reload-after", message);
                 throw new InvalidOperationException(message);
             }
         }
@@ -410,14 +390,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         /// <summary>
         /// Cleanup on Unity exit.
-        /// Disposes the bridge listener and marks the server as stopped so the CLI
-        /// does not attempt to connect to a stale IPC endpoint after the editor closes.
+        /// Disposes the bridge listener and clears the in-editor server session before the editor closes.
         /// </summary>
         private void OnEditorQuitting()
         {
-            string generationId = ServerReadinessStateStore.CreateGenerationId();
-            WriteServerState(ServerReadinessPhase.Stopping, generationId, "editor-quitting", null);
-
             if (_bridgeServer != null)
             {
                 try
@@ -430,7 +406,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
             _sessionStateService.ClearServerSession();
-            WriteServerState(ServerReadinessPhase.Stopped, generationId, "editor-quitting", null);
         }
 
         /// <summary>
@@ -482,9 +457,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             catch (Exception ex)
             {
-                string generationId = ServerReadinessStateStore.CreateGenerationId();
                 string message = $"Unity CLI Loop server recovery failed before the bridge became ready. {ex.GetBaseException().Message}";
-                WriteServerState(ServerReadinessPhase.Failed, generationId, "tracked-recovery", message);
                 VibeLogger.LogError(
                     "server_recovery_failed",
                     message);
@@ -548,26 +521,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            string generationId = ServerReadinessStateStore.CreateGenerationId();
             if (IsStartupProtectionActive())
             {
                 VibeLogger.LogInfo("server_start_ignored", "startup_protection_active");
                 if (_bridgeServer?.IsRunning == true)
                 {
-                    await MarkServerReadyAsync(generationId, "startup-protection-active", cancellationToken);
+                    await MarkServerReadyAsync("startup-protection-active", cancellationToken);
                     return;
                 }
 
-                string blockedMessage = "Unity CLI Loop server recovery was skipped because startup protection is active and no running bridge instance is available.";
-                WriteServerState(ServerReadinessPhase.Failed, generationId, "startup-protection-active", blockedMessage);
                 return;
             }
-
-            WriteServerState(
-                isAfterCompile ? ServerReadinessPhase.Recovering : ServerReadinessPhase.Starting,
-                generationId,
-                isAfterCompile ? "post-compile-recovery" : "server-recovery",
-                null);
 
             VibeLogger.LogInfo("startup_request", "transport=project_ipc");
 
@@ -578,7 +542,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (_bridgeServer != null && _bridgeServer.IsRunning)
                 {
                     VibeLogger.LogInfo("server_start_ignored", $"already_running endpoint={_bridgeServer.Endpoint}");
-                    await MarkServerReadyAsync(generationId, "already-running", cancellationToken);
+                    await MarkServerReadyAsync("already-running", cancellationToken);
                     return;
                 }
 
@@ -611,7 +575,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     _sessionStateService.ClearServerSession();
                     _sessionStateService.ClearReconnectingFlags();
                     string message = "Unity CLI Loop server recovery failed because the project IPC endpoint could not be bound within 5000ms.";
-                    WriteServerState(ServerReadinessPhase.Failed, generationId, "server-recovery", message);
                     Debug.LogError($"[{UnityCliLoopConstants.PROJECT_NAME}] {message}");
                     throw new InvalidOperationException(message);
                 }
@@ -623,7 +586,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 _sessionStateService.ClearReconnectingFlags();
                 _sessionStateService.ClearPostCompileReconnectingUI();
                 UnityCliLoopToolRegistrar.WarmupRegistry();
-                await MarkServerReadyAsync(generationId, "server-recovery", cancellationToken);
+                await MarkServerReadyAsync("server-recovery", cancellationToken);
 
                 ActivateStartupProtection(5000);
             }
@@ -707,12 +670,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         private async Task MarkServerReadyAsync(
-            string generationId,
             string reason,
             CancellationToken cancellationToken)
         {
-            Debug.Assert(!string.IsNullOrWhiteSpace(generationId), "generationId must not be null or empty");
-
             try
             {
                 await ProbeReadinessWithTimeoutAsync(cancellationToken, UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS);
@@ -720,11 +680,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             catch (Exception ex)
             {
                 string message = $"Unity CLI Loop server bound its project IPC endpoint, but readiness probe failed during {reason}. {ex.GetBaseException().Message}";
-                WriteServerState(ServerReadinessPhase.Failed, generationId, reason, message);
                 throw new InvalidOperationException(message, ex);
             }
 
-            WriteServerState(ServerReadinessPhase.Ready, generationId, reason, null);
             _serverLifecycleRegistry.PublishServerStarted();
         }
 
@@ -762,18 +720,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CancellationToken.None,
                 TaskContinuationOptions.OnlyOnFaulted,
                 TaskScheduler.Default);
-        }
-
-        private void WriteServerState(
-            ServerReadinessPhase phase,
-            string generationId,
-            string reason,
-            string lastError)
-        {
-            Debug.Assert(!string.IsNullOrWhiteSpace(generationId), "generationId must not be null or empty");
-
-            string endpoint = _bridgeServer?.Endpoint;
-            _stateStore.Write(phase, generationId, reason, endpoint, lastError);
         }
 
         public void AddServerStateChangedHandler(Action handler)
