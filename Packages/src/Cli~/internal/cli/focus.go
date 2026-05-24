@@ -385,7 +385,9 @@ func buildRestoreWindowsForegroundWindowScript(handle int64) string {
 	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(false)...)
 	scriptLines = append(scriptLines,
 		fmt.Sprintf("$handle = [IntPtr]::new(%d)", handle),
-		"if ($handle -ne [IntPtr]::Zero) { [Win32Interop]::SetForegroundWindow($handle) | Out-Null }",
+		"if ($handle -eq [IntPtr]::Zero) { throw 'Saved foreground window handle is invalid' }",
+		"$restored = [Win32Interop]::SetForegroundWindow($handle)",
+		"if (-not $restored) { throw 'Failed to restore previous foreground window' }",
 	)
 	return strings.Join(scriptLines, "\n")
 }

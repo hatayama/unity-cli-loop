@@ -89,6 +89,11 @@ func writeToolFailure(writer io.Writer, err error, outcome unityipc.UnitySendOut
 				return
 			}
 		}
+		var notRespondingErr unityServerNotRespondingError
+		if outcome.RequestDispatched && !outcome.RequestAccepted && errors.As(err, &notRespondingErr) {
+			writeErrorEnvelope(writer, unityServerNotRespondingAfterDispatchError(notRespondingErr, context))
+			return
+		}
 	}
 	writeClassifiedError(writer, err, context)
 }
@@ -380,6 +385,27 @@ func disconnectedAfterDispatchError(err error, context errorContext) cliError {
 		},
 		Details: map[string]any{
 			"cause": err.Error(),
+		},
+	}
+}
+
+func unityServerNotRespondingAfterDispatchError(err unityServerNotRespondingError, context errorContext) cliError {
+	return cliError{
+		ErrorCode:   errorCodeUnityNotReachable,
+		Phase:       errorPhaseResponseWaiting,
+		Message:     "Unity is running for this project, but the Unity CLI Loop server did not acknowledge the dispatched request.",
+		Retryable:   true,
+		SafeToRetry: false,
+		ProjectRoot: firstNonEmpty(context.projectRoot, err.projectRoot),
+		Command:     context.command,
+		NextActions: []string{
+			"Check Unity Console logs and project state because Unity may have received the request.",
+			"Retry only after confirming the previous command did not run or has finished.",
+			"Run `uloop focus-window` if Unity appears stalled in the background.",
+		},
+		Details: map[string]any{
+			"endpoint": err.endpoint,
+			"cause":    err.causeText(),
 		},
 	}
 }

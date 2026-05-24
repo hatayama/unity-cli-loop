@@ -93,13 +93,15 @@ func TestBuildFocusUnityProcessWindowsWithRestoreScriptCapturesForegroundWindow(
 	}
 }
 
-// Verifies the Windows restore script targets the saved foreground window handle.
-func TestBuildRestoreWindowsForegroundWindowScriptUsesSavedHandle(t *testing.T) {
+// Verifies the Windows restore script fails when the saved foreground window cannot be restored.
+func TestBuildRestoreWindowsForegroundWindowScriptThrowsOnRestoreFailure(t *testing.T) {
 	script := buildRestoreWindowsForegroundWindowScript(123)
 
 	for _, expected := range []string{
 		"$handle = [IntPtr]::new(123)",
-		"[Win32Interop]::SetForegroundWindow($handle)",
+		"if ($handle -eq [IntPtr]::Zero) { throw 'Saved foreground window handle is invalid' }",
+		"$restored = [Win32Interop]::SetForegroundWindow($handle)",
+		"if (-not $restored) { throw 'Failed to restore previous foreground window' }",
 	} {
 		if !strings.Contains(script, expected) {
 			t.Fatalf("script missing %q: %s", expected, script)

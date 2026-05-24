@@ -140,6 +140,37 @@ func TestClassifyUnityServerNotRespondingError(t *testing.T) {
 	}
 }
 
+func TestWriteToolFailureWhenServerStopsBeforeAcceptingDispatchedRequestIsNotSafeToRetry(t *testing.T) {
+	// Verifies pre-accept server silence does not advertise a dispatched state-changing command as safe to retry.
+	var stderr bytes.Buffer
+
+	writeToolFailure(
+		&stderr,
+		unityServerNotRespondingError{
+			projectRoot: "/tmp/MyProject",
+			endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+			cause:       errors.New("read timeout"),
+		},
+		unityipc.UnitySendOutcome{RequestDispatched: true},
+		errorContext{projectRoot: "/tmp/MyProject", command: "execute-dynamic-code"},
+	)
+
+	var envelope cliErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
+	}
+	if envelope.Error.ErrorCode != errorCodeUnityNotReachable {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if !envelope.Error.Retryable || envelope.Error.SafeToRetry {
+		t.Fatalf("retry flags mismatch: %#v", envelope.Error)
+	}
+	if len(envelope.Error.NextActions) == 0 ||
+		!strings.Contains(envelope.Error.NextActions[0], "may have received the request") {
+		t.Fatalf("next actions mismatch: %#v", envelope.Error.NextActions)
+	}
+}
+
 func TestClassifyRPCErrorKeepsData(t *testing.T) {
 	err := &unityipc.RPCError{
 		Code:    -32000,
