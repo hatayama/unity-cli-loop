@@ -9,19 +9,23 @@ import (
 	"github.com/hatayama/unity-cli-loop/Packages/src/Cli/internal/unityipc"
 )
 
-// Verifies transient IPC connection failures focus Unity once before reporting server-not-responding.
+// Verifies transient IPC connection failures focus Unity once and restore focus before reporting server-not-responding.
 func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *testing.T) {
 	originalFinder := findRunningUnityProcessForConnectionRetry
 	originalFocus := focusUnityProcessForConnectionRetry
 	originalTimeout := serverConnectionRetryTimeout
 	originalPoll := serverConnectionRetryPoll
 	focusCallCount := 0
+	restoreCallCount := 0
 	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
 		return &unityProcess{pid: 123}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) error {
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
 		focusCallCount++
-		return nil
+		return func(context.Context) error {
+			restoreCallCount++
+			return nil
+		}, nil
 	}
 	serverConnectionRetryTimeout = time.Nanosecond
 	serverConnectionRetryPoll = time.Nanosecond
@@ -53,5 +57,8 @@ func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *test
 	}
 	if focusCallCount != 1 {
 		t.Fatalf("expected one focus attempt, got %d", focusCallCount)
+	}
+	if restoreCallCount != 1 {
+		t.Fatalf("expected one focus restore, got %d", restoreCallCount)
 	}
 }

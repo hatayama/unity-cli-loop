@@ -12,10 +12,12 @@ import (
 
 var (
 	findRunningUnityProcessForConnectionRetry = findRunningUnityProcess
-	focusUnityProcessForConnectionRetry       = focusUnityProcess
+	focusUnityProcessForConnectionRetry       = focusUnityProcessWithRestore
 	serverConnectionRetryTimeout              = 10 * time.Second
 	serverConnectionRetryPoll                 = 1 * time.Second
 )
+
+const focusRestoreTimeout = 2 * time.Second
 
 type unityServerNotRespondingError struct {
 	projectRoot string
@@ -53,6 +55,16 @@ func sendWithTransientConnectionRetry(
 
 	var lastOutcome unityipc.UnitySendOutcome
 	var lastErr error
+	var restoreFocus restoreFocusFunc
+	defer func() {
+		if restoreFocus == nil {
+			return
+		}
+		restoreContext, cancel := context.WithTimeout(context.Background(), focusRestoreTimeout)
+		defer cancel()
+		_ = restoreFocus(restoreContext)
+	}()
+
 	focusAttempted := false
 	for {
 		outcome, err := unityipc.NewClient(connection, version).
@@ -69,7 +81,10 @@ func sendWithTransientConnectionRetry(
 			return outcome, err
 		}
 		if !focusAttempted {
-			_ = focusUnityProcessForConnectionRetry(retryContext, runningProcess.pid)
+			restorer, focusErr := focusUnityProcessForConnectionRetry(retryContext, runningProcess.pid)
+			if focusErr == nil {
+				restoreFocus = restorer
+			}
 			focusAttempted = true
 		}
 
