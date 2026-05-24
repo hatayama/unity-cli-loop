@@ -1,20 +1,21 @@
 #if ULOOP_HAS_TEST_FRAMEWORK
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
+
+[assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Editor")]
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Registers and executes Unity Test Runner work when the Test Framework package is installed.
     /// </summary>
-    [InitializeOnLoad]
     internal static class RunTestsTestFrameworkStartup
     {
-        static RunTestsTestFrameworkStartup()
+        internal static void Initialize()
         {
             UnityTestFrameworkExecutionServiceRegistry.Register(new UnityTestFrameworkExecutionService());
         }
