@@ -267,7 +267,18 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 		writeErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
 		return 1
 	}
-	if compileResultSucceeded(result) {
+	switch compileResultReadinessWaitMode(result) {
+	case compileReadinessWaitRequired:
+		spinner.Update("Waiting for Unity tools after compile...")
+		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
+			spinner.Stop()
+			writeClassifiedError(stderr, err, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     compileCommandName,
+			})
+			return 1
+		}
+	case compileReadinessWaitWarmup:
 		spinner.Update("Warming execute-dynamic-code after compile...")
 		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
 			spinner.Stop()
@@ -360,10 +371,24 @@ type compileResultStatus struct {
 	Success *bool `json:"Success"`
 }
 
-func compileResultSucceeded(result json.RawMessage) bool {
+type compileReadinessWaitMode int
+
+const (
+	compileReadinessWaitNone compileReadinessWaitMode = iota
+	compileReadinessWaitRequired
+	compileReadinessWaitWarmup
+)
+
+func compileResultReadinessWaitMode(result json.RawMessage) compileReadinessWaitMode {
 	var status compileResultStatus
 	if json.Unmarshal(result, &status) != nil {
-		return false
+		return compileReadinessWaitNone
 	}
-	return status.Success != nil && *status.Success
+	if status.Success == nil {
+		return compileReadinessWaitRequired
+	}
+	if *status.Success {
+		return compileReadinessWaitWarmup
+	}
+	return compileReadinessWaitNone
 }

@@ -68,7 +68,7 @@ func sendWithTransientConnectionRetry(
 	focusAttempted := false
 	for {
 		outcome, err := unityipc.NewClient(connection, version).
-			SendWithProgressOutcome(retryContext, method, params, progress)
+			SendWithProgressOutcome(ctx, method, params, progress)
 		if !shouldRetryUndispatchedConnection(err, outcome) {
 			return outcome, err
 		}

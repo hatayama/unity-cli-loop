@@ -198,18 +198,20 @@ func TestShouldWaitForCompileResultRequiresDispatchedTransportError(t *testing.T
 	}
 }
 
-// Verifies that post-compile readiness runs only after successful compile results.
-func TestCompileResultSucceededRequiresTrueSuccess(t *testing.T) {
-	if !compileResultSucceeded([]byte(`{"Success":true}`)) {
-		t.Fatal("successful compile result was not accepted")
+// Verifies compile readiness wait decisions include indeterminate forced-compile results.
+func TestCompileResultReadinessWaitMode(t *testing.T) {
+	cases := map[string]compileReadinessWaitMode{
+		`{"Success":true}`: compileReadinessWaitWarmup,
+		`{"Success":false,"Errors":[{"Message":"boom"}]}`: compileReadinessWaitNone,
+		`{"Success":null,"Message":"indeterminate"}`:      compileReadinessWaitRequired,
+		`{"Message":"indeterminate"}`:                     compileReadinessWaitRequired,
 	}
 
-	if compileResultSucceeded([]byte(`{"Success":false,"Errors":[{"Message":"boom"}]}`)) {
-		t.Fatal("failed compile result should not trigger readiness")
-	}
-
-	if compileResultSucceeded([]byte(`{"Message":"indeterminate"}`)) {
-		t.Fatal("indeterminate compile result should not trigger readiness")
+	for result, expected := range cases {
+		actual := compileResultReadinessWaitMode([]byte(result))
+		if actual != expected {
+			t.Fatalf("readiness wait mode mismatch for %s: %v", result, actual)
+		}
 	}
 }
 
