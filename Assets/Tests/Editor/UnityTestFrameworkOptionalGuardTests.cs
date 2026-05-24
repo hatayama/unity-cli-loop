@@ -15,13 +15,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string PackageManifestPath = "Packages/src/package.json";
         private const string PackageLockPath = "Packages/packages-lock.json";
         private const string UnityEditorTestRunnerGuidReference = "GUID:0acc523941302664db1f4e527237feb3";
+        private const string UnityEditorTestRunnerAssemblyName = "UnityEditor.TestRunner";
+        private const string UnityEngineTestRunnerAssemblyName = "UnityEngine.TestRunner";
+        private const string TestAssembliesOptionalReference = "TestAssemblies";
         private const string RunTestsAsmdefPath =
             "Packages/src/Editor/FirstPartyTools/RunTests/UnityCLILoop.FirstPartyTools.RunTests.Editor.asmdef";
+        private const string RunTestsTestFrameworkAsmdefPath =
+            "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/UnityCLILoop.FirstPartyTools.RunTests.TestFramework.Editor.asmdef";
         private static readonly string[] UnityTestRunnerApiFiles =
         {
-            "Packages/src/Editor/FirstPartyTools/RunTests/TestRunner/PlayModeTestExecuter.cs",
-            "Packages/src/Editor/FirstPartyTools/RunTests/TestRunner/NUnitXmlResultExporter.cs",
-            "Packages/src/Editor/FirstPartyTools/RunTests/TestRunner/SerializableTestResult.cs"
+            "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/PlayModeTestExecuter.cs",
+            "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/NUnitXmlResultExporter.cs",
+            "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/SerializableTestResultConverter.cs"
         };
 
         [Test]
@@ -47,11 +52,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void RunTestsAssemblyDefinition_WhenScanned_DefinesOptionalTestFrameworkSymbol()
         {
             // Verifies that RunTests can compile different code paths based on package availability.
-            JObject asmdef = ReadJson(RunTestsAsmdefPath);
+            JObject asmdef = ReadJson(RunTestsTestFrameworkAsmdefPath);
             bool hasVersionDefine = asmdef["versionDefines"]
                 ?.Any(DefinesUnityTestFrameworkSymbol) == true;
 
             Assert.That(hasVersionDefine, Is.True);
+        }
+
+        [Test]
+        public void RunTestsAssemblyDefinition_WhenScanned_DoesNotCompileAsUnityTestAssembly()
+        {
+            // Verifies that the registry-facing tool assembly is compiled for normal package consumers.
+            JObject asmdef = ReadJson(RunTestsAsmdefPath);
+            string[] optionalUnityReferences = ReadStringArray(asmdef, "optionalUnityReferences");
+
+            Assert.That(optionalUnityReferences, Does.Not.Contain(TestAssembliesOptionalReference));
+        }
+
+        [Test]
+        public void RunTestsTestFrameworkAssemblyDefinition_WhenScanned_GatesUnityTestRunnerReferencesByPackagePresence()
+        {
+            // Verifies that Unity Test Runner APIs stay in the optional adapter assembly.
+            JObject asmdef = ReadJson(RunTestsTestFrameworkAsmdefPath);
+            string[] references = ReadStringArray(asmdef, "references");
+            string[] defineConstraints = ReadStringArray(asmdef, "defineConstraints");
+
+            Assert.That(references, Does.Contain(UnityEditorTestRunnerAssemblyName));
+            Assert.That(references, Does.Contain(UnityEngineTestRunnerAssemblyName));
+            Assert.That(defineConstraints, Does.Contain(UnityCliLoopConstants.SCRIPTING_DEFINE_HAS_TEST_FRAMEWORK));
         }
 
         [Test]
@@ -61,6 +89,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string content = ReadText(RunTestsAsmdefPath);
 
             Assert.That(content, Does.Not.Contain(UnityEditorTestRunnerGuidReference));
+            Assert.That(content, Does.Not.Contain(UnityEditorTestRunnerAssemblyName));
+            Assert.That(content, Does.Not.Contain(UnityEngineTestRunnerAssemblyName));
         }
 
         [Test]
@@ -88,6 +118,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static JObject ReadJson(string relativePath)
         {
             return JObject.Parse(ReadText(relativePath));
+        }
+
+        private static string[] ReadStringArray(JObject json, string propertyName)
+        {
+            return json[propertyName]
+                ?.Values<string>()
+                .ToArray() ?? new string[0];
         }
 
         private static string ReadText(string relativePath)

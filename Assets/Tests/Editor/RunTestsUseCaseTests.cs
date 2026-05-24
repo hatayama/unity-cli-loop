@@ -96,14 +96,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public bool WasCalled { get; private set; }
 
-            public override Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter)
+            public override Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
+                ct.ThrowIfCancellationRequested();
                 WasCalled = true;
                 return Task.FromResult(new SerializableTestResult());
             }
 
-            public override Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter)
+            public override Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
+                ct.ThrowIfCancellationRequested();
                 WasCalled = true;
                 return Task.FromResult(new SerializableTestResult());
             }

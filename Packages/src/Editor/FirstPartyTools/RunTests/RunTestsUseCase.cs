@@ -47,10 +47,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <returns>Test execution result</returns>
         public async Task<UnityCliLoopTestExecutionResult> ExecuteAsync(UnityCliLoopTestExecutionRequest parameters, CancellationToken ct)
         {
-#if !ULOOP_HAS_TEST_FRAMEWORK
-            ct.ThrowIfCancellationRequested();
-            return await Task.FromResult(CreateTestFrameworkUnavailableResponse());
-#else
             if (!IsSupportedTestMode(parameters.TestMode))
             {
                 return CreateFailureResponse("Unsupported test mode: " + parameters.TestMode);
@@ -75,16 +71,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             
             try
             {
-                if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
-                {
-                    // TODO: Add cancellationToken parameter when TestExecutionService supports it
-                    result = await _executionService.ExecutePlayModeTestAsync(filter);
-                }
-                else
-                {
-                    // TODO: Add cancellationToken parameter when TestExecutionService supports it
-                    result = await _executionService.ExecuteEditModeTestAsync(filter);
-                }
+            if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
+            {
+                result = await _executionService.ExecutePlayModeTestAsync(filter, ct);
+            }
+            else
+            {
+                result = await _executionService.ExecuteEditModeTestAsync(filter, ct);
+            }
             }
             catch (System.OperationCanceledException)
             {
@@ -117,7 +111,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SkippedCount = result.skippedCount,
                 XmlPath = result.xmlPath
             };
-#endif
         }
 
         public Task<UnityCliLoopTestExecutionResult> RunTestsAsync(UnityCliLoopTestExecutionRequest request, CancellationToken ct)
@@ -128,21 +121,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool IsSupportedTestMode(UnityCliLoopTestMode testMode)
         {
             return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);
-        }
-
-        private static UnityCliLoopTestExecutionResult CreateTestFrameworkUnavailableResponse()
-        {
-            return new UnityCliLoopTestExecutionResult
-            {
-                Success = false,
-                Message = RunTestsResponse.TestFrameworkUnavailableMessage,
-                CompletedAt = DateTime.UtcNow.ToString("o"),
-                TestCount = 0,
-                PassedCount = 0,
-                FailedCount = 0,
-                SkippedCount = 0,
-                XmlPath = null
-            };
         }
 
         private static UnityCliLoopTestExecutionResult CreateFailureResponse(string message)

@@ -1,4 +1,6 @@
 using System.Threading.Tasks;
+using System.Threading;
+using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -14,13 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <param name="filter">Test execution filter</param>
         /// <returns>Test execution result</returns>
-        public virtual async Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter)
+        public virtual Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
         {
-#if !ULOOP_HAS_TEST_FRAMEWORK
-            return await Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());
-#else
-            return await PlayModeTestExecuter.ExecutePlayModeTest(filter);
-#endif
+            ct.ThrowIfCancellationRequested();
+            return UnityTestFrameworkExecutionServiceRegistry.Current.ExecutePlayModeTestAsync(filter, ct);
         }
 
         /// <summary>
@@ -28,13 +27,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <param name="filter">Test execution filter</param>
         /// <returns>Test execution result</returns>
-        public virtual async Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter)
+        public virtual Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
         {
-#if !ULOOP_HAS_TEST_FRAMEWORK
-            return await Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());
-#else
-            return await PlayModeTestExecuter.ExecuteEditModeTest(filter);
-#endif
+            ct.ThrowIfCancellationRequested();
+            return UnityTestFrameworkExecutionServiceRegistry.Current.ExecuteEditModeTestAsync(filter, ct);
+        }
+    }
+
+    internal interface IUnityTestFrameworkExecutionService
+    {
+        Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct);
+        Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct);
+    }
+
+    internal static class UnityTestFrameworkExecutionServiceRegistry
+    {
+        private static readonly IUnityTestFrameworkExecutionService UnavailableService =
+            new TestFrameworkUnavailableExecutionService();
+
+        private static IUnityTestFrameworkExecutionService _current = UnavailableService;
+
+        public static IUnityTestFrameworkExecutionService Current => _current;
+
+        public static void Register(IUnityTestFrameworkExecutionService executionService)
+        {
+            Debug.Assert(executionService != null, "executionService must not be null");
+            _current = executionService;
+        }
+
+    }
+
+    internal sealed class TestFrameworkUnavailableExecutionService : IUnityTestFrameworkExecutionService
+    {
+        public Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());
+        }
+
+        public Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());
         }
     }
 }

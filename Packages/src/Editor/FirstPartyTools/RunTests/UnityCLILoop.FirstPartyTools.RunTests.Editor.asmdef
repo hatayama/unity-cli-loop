@@ -9,20 +9,12 @@
         "Editor"
     ],
     "excludePlatforms": [],
-    "optionalUnityReferences": [
-        "TestAssemblies"
-    ],
+    "optionalUnityReferences": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [
-        {
-            "name": "com.unity.test-framework",
-            "expression": "",
-            "define": "ULOOP_HAS_TEST_FRAMEWORK"
-        }
-    ],
+    "versionDefines": [],
     "noEngineReferences": false
 }
