@@ -19,150 +19,44 @@ const (
 
 const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`
 
-type toolReadinessWaitMode int
-
-var (
-	findRunningUnityProcessForReadiness = findRunningUnityProcess
-	stoppedServerStateGrace             = 2 * time.Second
-	stoppedServerStatePoll              = 100 * time.Millisecond
-)
-
-const (
-	toolReadinessWaitThroughStopped toolReadinessWaitMode = iota
-	toolReadinessStopWhenServerStops
-)
+var findRunningUnityProcessForReadiness = findRunningUnityProcess
 
 func waitForToolReadiness(ctx context.Context, projectRoot string) error {
-	return waitForToolReadinessWithMode(ctx, projectRoot, toolReadinessWaitThroughStopped)
-}
-
-func waitForRecoveringToolReadiness(ctx context.Context, projectRoot string) error {
-	return waitForToolReadinessWithMode(ctx, projectRoot, toolReadinessStopWhenServerStops)
-}
-
-func waitForToolReadinessWithMode(ctx context.Context, projectRoot string, mode toolReadinessWaitMode) error {
 	// Why: launch and compile can both recreate Unity's project IPC server; a real
 	// tool request proves the user-visible command will not be the cold transport probe.
 	timeoutContext, cancel := context.WithTimeout(ctx, toolReadinessTimeout)
 	defer cancel()
 
+	var lastErr error
 	for {
-		state, ok, err := readServerState(projectRoot)
-		if err != nil {
-			return err
-		}
-		if ok {
-			if failure := serverStateFailureError(state); failure != nil {
-				return failure
-			}
-			if mode == toolReadinessStopWhenServerStops && isServerStateStopped(state) {
-				return serverStoppedError{state: state}
-			}
-			if mode == toolReadinessWaitThroughStopped && isServerStateStopped(state) {
-				changed, err := waitForStoppedServerStateChange(timeoutContext, ctx, projectRoot, state)
-				if err != nil {
-					return err
-				}
-				if !changed {
-					stale, err := isStoppedServerStateStale(timeoutContext, projectRoot)
-					if err != nil {
-						return err
-					}
-					if stale {
-						return serverStoppedError{state: state}
-					}
-					select {
-					case <-timeoutContext.Done():
-						return toolReadinessDoneError(ctx)
-					case <-time.After(toolReadinessPoll):
-					}
-				}
-				continue
-			}
-			if isServerStateBusy(state) {
-				stale, err := isBusyServerStateStale(timeoutContext, projectRoot)
-				if err != nil {
-					return err
-				}
-				if stale {
-					return staleServerStateError{state: state}
-				}
-				select {
-				case <-timeoutContext.Done():
-					return toolReadinessDoneError(ctx)
-				case <-time.After(toolReadinessPoll):
-				}
-				continue
-			}
-		}
-
 		if err := probeToolReadinessSequence(timeoutContext, projectRoot); err == nil {
 			return nil
+		} else {
+			lastErr = err
 		}
 
 		select {
 		case <-timeoutContext.Done():
-			return toolReadinessDoneError(ctx)
+			return toolReadinessDoneError(ctx, projectRoot, lastErr)
 		case <-time.After(toolReadinessPoll):
 		}
 	}
 }
 
-func waitForStoppedServerStateChange(timeoutCtx context.Context, parentCtx context.Context, projectRoot string, initialState serverState) (bool, error) {
-	if stoppedServerStateGrace <= 0 {
-		return false, nil
-	}
-
-	graceTimer := time.NewTimer(stoppedServerStateGrace)
-	defer graceTimer.Stop()
-
-	ticker := time.NewTicker(stoppedServerStatePoll)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return false, toolReadinessDoneError(parentCtx)
-		case <-graceTimer.C:
-			return false, nil
-		case <-ticker.C:
-			state, ok, err := readServerState(projectRoot)
-			if err != nil {
-				return false, err
-			}
-			if !ok || !isSameStoppedServerState(state, initialState) {
-				return true, nil
-			}
-		}
-	}
-}
-
-func isSameStoppedServerState(state serverState, expected serverState) bool {
-	return state.Phase == "stopped" &&
-		expected.Phase == "stopped" &&
-		state.GenerationID == expected.GenerationID &&
-		state.Reason == expected.Reason
-}
-
-func isStoppedServerStateStale(ctx context.Context, projectRoot string) (bool, error) {
-	runningProcess, err := findRunningUnityProcessForReadiness(ctx, projectRoot)
-	if err != nil {
-		return false, err
-	}
-	return runningProcess == nil, nil
-}
-
-func isBusyServerStateStale(ctx context.Context, projectRoot string) (bool, error) {
-	runningProcess, err := findRunningUnityProcessForReadiness(ctx, projectRoot)
-	if err != nil {
-		return false, err
-	}
-	return runningProcess == nil, nil
-}
-
-func toolReadinessDoneError(ctx context.Context) error {
+func toolReadinessDoneError(ctx context.Context, projectRoot string, cause error) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	runningProcess, err := findRunningUnityProcessForReadiness(context.Background(), projectRoot)
+	if err == nil && runningProcess != nil {
+		return unityServerNotRespondingError{
+			projectRoot: projectRoot,
+			endpoint:    resolveProjectEndpointAddress(projectRoot),
+			cause:       cause,
+		}
+	}
+	if cause != nil {
+		return fmt.Errorf("timed out waiting for Unity tool readiness: %w", cause)
 	}
 	return fmt.Errorf("timed out waiting for Unity tool readiness")
 }

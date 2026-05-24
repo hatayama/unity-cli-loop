@@ -79,13 +79,6 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		writeClassifiedError(stderr, err, errorContext{command: command})
 		return 1
 	}
-	if shouldWaitForServerReadinessBeforeCommand(command) {
-		if err := waitForRecoveringServerIfNeeded(ctx, connection.ProjectRoot, waitForRecoveringToolReadiness); err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: command})
-			return 1
-		}
-	}
-
 	switch command {
 	case "list":
 		return runList(ctx, connection, stdout, stderr)
@@ -93,8 +86,6 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return runSync(ctx, connection, stdout, stderr)
 	case "focus-window":
 		return runFocusWindow(ctx, connection.ProjectRoot, stdout, stderr)
-	case "fix":
-		return runFix(connection.ProjectRoot, stdout, stderr)
 	default:
 		tool, cache, ok, err := findToolForCommand(connection.ProjectRoot, command)
 		if err != nil {
@@ -131,15 +122,6 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	}
 }
 
-func shouldWaitForServerReadinessBeforeCommand(command string) bool {
-	switch command {
-	case "fix", "focus-window":
-		return false
-	default:
-		return true
-	}
-}
-
 func isUnknownLeadingOption(command string) bool {
 	return strings.HasPrefix(command, "-")
 }
@@ -155,9 +137,9 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 	applyDebugTimingParams(command, params)
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, command)
-	client := unityipc.NewClient(connection, version)
-	outcome, err := client.SendWithProgressOutcome(
+	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
+		connection,
 		command,
 		params,
 		func(string) {
@@ -182,9 +164,9 @@ func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection u
 	applyDebugTimingParams(executeDynamicCodeCommandName, params)
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, executeDynamicCodeCommandName)
-	client := unityipc.NewClient(connection, version)
-	outcome, err := client.SendWithProgressOutcome(
+	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
+		connection,
 		executeDynamicCodeCommandName,
 		params,
 		func(string) {
@@ -243,9 +225,9 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, compileCommandName)
-	client := unityipc.NewClient(connection, version)
-	outcome, err := client.SendWithProgressOutcome(
+	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
+		connection,
 		compileCommandName,
 		params,
 		func(string) {
@@ -285,7 +267,18 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 		writeErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
 		return 1
 	}
-	if compileResultSucceeded(result) {
+	switch compileResultReadinessWaitMode(result) {
+	case compileReadinessWaitRequired:
+		spinner.Update("Waiting for Unity tools after compile...")
+		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
+			spinner.Stop()
+			writeClassifiedError(stderr, err, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     compileCommandName,
+			})
+			return 1
+		}
+	case compileReadinessWaitWarmup:
 		spinner.Update("Warming execute-dynamic-code after compile...")
 		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
 			spinner.Stop()
@@ -309,9 +302,9 @@ func writePostCompileWarmupWarning(stderr io.Writer, err error) {
 
 func runList(ctx context.Context, connection unityipc.Connection, stdout io.Writer, stderr io.Writer) int {
 	spinner := newToolSpinner(stderr, "list")
-	client := unityipc.NewClient(connection, version)
-	outcome, err := client.SendWithProgressOutcome(
+	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
+		connection,
 		"get-tool-details",
 		map[string]any{},
 		func(string) {
@@ -332,9 +325,9 @@ func runList(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 
 func runSync(ctx context.Context, connection unityipc.Connection, stdout io.Writer, stderr io.Writer) int {
 	spinner := newToolSpinner(stderr, "sync")
-	client := unityipc.NewClient(connection, version)
-	outcome, err := client.SendWithProgressOutcome(
+	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
+		connection,
 		"get-tool-details",
 		map[string]any{},
 		func(string) {
@@ -378,10 +371,24 @@ type compileResultStatus struct {
 	Success *bool `json:"Success"`
 }
 
-func compileResultSucceeded(result json.RawMessage) bool {
+type compileReadinessWaitMode int
+
+const (
+	compileReadinessWaitNone compileReadinessWaitMode = iota
+	compileReadinessWaitRequired
+	compileReadinessWaitWarmup
+)
+
+func compileResultReadinessWaitMode(result json.RawMessage) compileReadinessWaitMode {
 	var status compileResultStatus
 	if json.Unmarshal(result, &status) != nil {
-		return false
+		return compileReadinessWaitNone
 	}
-	return status.Success != nil && *status.Success
+	if status.Success == nil {
+		return compileReadinessWaitRequired
+	}
+	if *status.Success {
+		return compileReadinessWaitWarmup
+	}
+	return compileReadinessWaitNone
 }

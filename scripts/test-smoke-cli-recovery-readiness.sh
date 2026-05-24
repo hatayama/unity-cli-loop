@@ -29,7 +29,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -48,8 +47,8 @@ func main() {
 	case "launch":
 		fmt.Printf("Unity is already running for %s (PID: 1234)\n", projectPath)
 	case "get-logs":
-		if fileExists(filepath.Join(projectPath, "Temp", "UnityCliLoop", "server-state.json")) {
-			fmt.Fprintln(os.Stderr, "{\n  \"success\": false,\n  \"error\": {\n    \"errorCode\": \"UNITY_NOT_REACHABLE\",\n    \"message\": \"Unity is not running, but a stale Unity CLI Loop recovery state file says it is still busy.\",\n    \"nextActions\": [\n      \"Run `uloop fix` to remove stale recovery state files.\"\n    ]\n  }\n}")
+		if os.Getenv("ULOOP_FAKE_CONNECTION_FAILURE") == "1" {
+			fmt.Fprintln(os.Stderr, "{\n  \"success\": false,\n  \"error\": {\n    \"errorCode\": \"UNITY_NOT_REACHABLE\",\n    \"message\": \"The Unity CLI Loop server is not reachable for this project.\",\n    \"nextActions\": [\n      \"If Unity is closed, run `uloop launch`.\"\n    ]\n  }\n}")
 			os.Exit(1)
 		}
 		fmt.Println(`{"DisplayedCount":0,"Logs":[],"MaxCount":1,"TotalCount":0}`)
@@ -61,9 +60,6 @@ func main() {
 		fmt.Println(`{"Success":true,"ErrorCount":0,"WarningCount":0}`)
 	case "execute-dynamic-code":
 		fmt.Println(`{"Success":true,"Result":"cli-recovery-readiness-e2e"}`)
-	case "fix":
-		removeRecoveryStateFiles(projectPath)
-		fmt.Println("Cleaned up 1 recovery state file(s).")
 	default:
 		fmt.Fprintf(os.Stderr, "unexpected command: %s\n", commandName)
 		os.Exit(98)
@@ -91,23 +87,6 @@ func appendCallLog(projectPath string, commandName string, commandArgs []string)
 	}
 }
 
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
-}
-
-func removeRecoveryStateFiles(projectPath string) {
-	stateDir := filepath.Join(projectPath, "Temp", "UnityCliLoop")
-	files := []string{
-		"server-state.json",
-		"server-state.json.tmp",
-		"server-state.json.tmp.write",
-		"server-state.json.bak",
-	}
-	for _, file := range files {
-		_ = os.Remove(filepath.Join(stateDir, file))
-	}
-}
 EOF
 
 go build -o "$FAKE_ULOOP" "$FAKE_ULOOP_SOURCE"
@@ -124,8 +103,11 @@ fi
 grep -F "launch" "$CALL_LOG" >/dev/null
 grep -E '\|compile\|$' "$CALL_LOG" >/dev/null
 grep -F "execute-dynamic-code" "$CALL_LOG" >/dev/null
-grep -F "fix" "$CALL_LOG" >/dev/null
-grep -F "stale recovery-state check passed" "$TMP_DIR/output.txt" >/dev/null
+if grep -F "fix" "$CALL_LOG" >/dev/null; then
+    echo "cleanup command should not be called" >&2
+    exit 1
+fi
+grep -F "stale recovery-state ignored" "$TMP_DIR/output.txt" >/dev/null
 
 if CALL_LOG="$CALL_LOG" ULOOP_FAKE_COMPILE_WITHOUT_SUCCESS=1 go run "$ROOT_DIR/scripts/smoke-cli-recovery-readiness.go" \
     --project-path "$PROJECT_PATH" \

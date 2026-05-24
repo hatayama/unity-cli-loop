@@ -33,6 +33,8 @@ type focusResponse struct {
 	Message string `json:"Message"`
 }
 
+type restoreFocusFunc func(context.Context) error
+
 func runFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, stderr io.Writer) int {
 	runningProcess, err := findRunningUnityProcess(ctx, projectRoot)
 	if err != nil {
@@ -239,7 +241,47 @@ func focusUnityProcess(ctx context.Context, pid int) error {
 	}
 }
 
+func focusUnityProcessWithRestore(ctx context.Context, pid int) (restoreFocusFunc, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		return focusUnityProcessMacWithRestore(ctx, pid)
+	case "windows":
+		return focusUnityProcessWindowsWithRestore(ctx, pid)
+	default:
+		return nil, fmt.Errorf("focus-window is not supported on %s", runtime.GOOS)
+	}
+}
+
 func focusUnityProcessMac(ctx context.Context, pid int) error {
+	return setFrontmostProcessMac(ctx, pid)
+}
+
+func focusUnityProcessMacWithRestore(ctx context.Context, pid int) (restoreFocusFunc, error) {
+	previousPID := readFrontmostProcessIDMac(ctx)
+	if err := setFrontmostProcessMac(ctx, pid); err != nil {
+		return nil, err
+	}
+	if previousPID <= 0 {
+		return nil, nil
+	}
+	return func(ctx context.Context) error {
+		return setFrontmostProcessMac(ctx, previousPID)
+	}, nil
+}
+
+func readFrontmostProcessIDMac(ctx context.Context) int {
+	output, err := exec.CommandContext(ctx, "osascript", "-e", `tell application "System Events" to get unix id of first process whose frontmost is true`).Output()
+	if err != nil {
+		return 0
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	if err != nil {
+		return 0
+	}
+	return pid
+}
+
+func setFrontmostProcessMac(ctx context.Context, pid int) error {
 	script := fmt.Sprintf(`tell application "System Events" to set frontmost of (first process whose unix id is %d) to true`, pid)
 	return exec.CommandContext(ctx, "osascript", "-e", script).Run()
 }
@@ -249,22 +291,66 @@ func focusUnityProcessWindows(ctx context.Context, pid int) error {
 	return exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script).Run()
 }
 
+func focusUnityProcessWindowsWithRestore(ctx context.Context, pid int) (restoreFocusFunc, error) {
+	script := buildFocusUnityProcessWindowsWithRestoreScript(pid)
+	output, err := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script).Output()
+	if err != nil {
+		return nil, err
+	}
+	previousHandle := parseWindowsForegroundHandle(string(output))
+	if previousHandle == 0 {
+		return nil, nil
+	}
+	return func(ctx context.Context) error {
+		return restoreWindowsForegroundWindow(ctx, previousHandle)
+	}, nil
+}
+
 func buildFocusUnityProcessWindowsScript(pid int) string {
+	scriptLines := []string{
+		"$ErrorActionPreference = 'Stop'",
+	}
+	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(false)...)
+	scriptLines = append(scriptLines, buildWindowsFocusTargetScriptLines(pid)...)
+	return strings.Join(scriptLines, "\n")
+}
+
+func buildFocusUnityProcessWindowsWithRestoreScript(pid int) string {
+	scriptLines := []string{
+		"$ErrorActionPreference = 'Stop'",
+	}
+	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(true)...)
+	scriptLines = append(scriptLines,
+		"$previous = [Win32Interop]::GetForegroundWindow()",
+	)
+	scriptLines = append(scriptLines, buildWindowsFocusTargetScriptLines(pid)...)
+	scriptLines = append(scriptLines, "Write-Output $previous.ToInt64()")
+	return strings.Join(scriptLines, "\n")
+}
+
+func buildWindowsFocusInteropTypeDefinition(includeGetForegroundWindow bool) []string {
 	addTypeLines := []string{
 		"Add-Type -TypeDefinition @\"",
 		"using System;",
 		"using System.Runtime.InteropServices;",
 		"public static class Win32Interop {",
+	}
+	if includeGetForegroundWindow {
+		addTypeLines = append(addTypeLines,
+			"  [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();",
+		)
+	}
+	addTypeLines = append(addTypeLines,
 		"  [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd);",
 		"  [DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);",
 		"}",
 		"\"@",
-	}
-	scriptLines := []string{
-		"$ErrorActionPreference = 'Stop'",
-	}
-	scriptLines = append(scriptLines, addTypeLines...)
-	scriptLines = append(scriptLines,
+	)
+	return addTypeLines
+}
+
+func buildWindowsFocusTargetScriptLines(pid int) []string {
+	return []string{
 		fmt.Sprintf("try { $process = Get-Process -Id %d -ErrorAction Stop } catch { throw 'Unity process was not found: %d' }", pid, pid),
 		"$handle = $process.MainWindowHandle",
 		fmt.Sprintf("if ($handle -eq 0) { throw 'Unity process has no main window handle: %d' }", pid),
@@ -276,6 +362,32 @@ func buildFocusUnityProcessWindowsScript(pid int) string {
 		fmt.Sprintf("  $focused = $shell.AppActivate(%d)", pid),
 		"}",
 		"if (-not $focused) { throw 'Failed to focus Unity window' }",
+	}
+}
+
+func parseWindowsForegroundHandle(output string) int64 {
+	handle, err := strconv.ParseInt(strings.TrimSpace(output), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return handle
+}
+
+func restoreWindowsForegroundWindow(ctx context.Context, handle int64) error {
+	script := buildRestoreWindowsForegroundWindowScript(handle)
+	return exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script).Run()
+}
+
+func buildRestoreWindowsForegroundWindowScript(handle int64) string {
+	scriptLines := []string{
+		"$ErrorActionPreference = 'Stop'",
+	}
+	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(false)...)
+	scriptLines = append(scriptLines,
+		fmt.Sprintf("$handle = [IntPtr]::new(%d)", handle),
+		"if ($handle -eq [IntPtr]::Zero) { throw 'Saved foreground window handle is invalid' }",
+		"$restored = [Win32Interop]::SetForegroundWindow($handle)",
+		"if (-not $restored) { throw 'Failed to restore previous foreground window' }",
 	)
 	return strings.Join(scriptLines, "\n")
 }

@@ -95,7 +95,17 @@ func (client *Client) SendWithProgress(ctx context.Context, method string, param
 }
 
 func (client *Client) SendWithProgressOutcome(ctx context.Context, method string, params map[string]any, progress ProgressFunc) (UnitySendOutcome, error) {
-	acceptCtx, cancelAccept := context.WithTimeout(ctx, client.getAcceptTimeout())
+	return client.SendWithProgressOutcomeAcceptContext(ctx, ctx, method, params, progress)
+}
+
+func (client *Client) SendWithProgressOutcomeAcceptContext(
+	ctx context.Context,
+	acceptParentContext context.Context,
+	method string,
+	params map[string]any,
+	progress ProgressFunc,
+) (UnitySendOutcome, error) {
+	acceptCtx, cancelAccept := context.WithTimeout(acceptParentContext, client.getAcceptTimeout())
 	defer cancelAccept()
 
 	startedAt := time.Now()

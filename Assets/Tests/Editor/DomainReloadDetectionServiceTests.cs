@@ -20,7 +20,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
         private IDomainReloadDetectionService _domainReloadDetectionService;
-        private ServerReadinessStateStore _stateStore;
         private bool _settingsFileExisted;
         private string _settingsFileContent;
 
@@ -38,8 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
             _sessionStateService.ClearAll();
-            _stateStore = CreateTestStateStore();
-            _domainReloadDetectionService = new DomainReloadDetectionFileService(_sessionStateService, _stateStore);
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(_sessionStateService);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
         }
 
@@ -48,14 +46,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             _originalSessionState.Restore(_sessionStateService);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
-            _stateStore.Delete();
             RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
         }
 
         [Test]
-        public void RollbackDomainReloadStart_ClearsTemporaryFlagsProviderStateAndPublishesFailureState()
+        public void RollbackDomainReloadStart_ClearsTemporaryFlagsAndProviderState()
         {
-            // Verifies rollback clears transient reload state and records a failed readiness phase.
+            // Verifies rollback clears transient reload state.
             const string correlationId = "test-correlation";
             UnityCliLoopEditorDomainReloadStateProvider provider = new();
 
@@ -78,9 +75,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.False);
             Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
             Assert.That(provider.IsDomainReloadInProgress(), Is.False);
-            ServerReadinessState state = _stateStore.Read();
-            Assert.That(state.Phase, Is.EqualTo("failed"));
-            Assert.That(state.LastError, Is.Not.Empty);
         }
 
         [Test]
@@ -96,7 +90,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 showPostCompileReconnectingUI: true);
             _domainReloadDetectionService = new DomainReloadDetectionFileService(
                 _sessionStateService,
-                _stateStore,
                 new TestLegacySessionStateReader(legacySessionState));
 
             _domainReloadDetectionService.CompleteDomainReload("test-correlation");
@@ -107,8 +100,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetIsReconnecting(), Is.True);
             Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.True);
             Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.True);
-            ServerReadinessState state = _stateStore.Read();
-            Assert.That(state.Phase, Is.EqualTo("recovering"));
         }
 
         [Test]
@@ -124,14 +115,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 showPostCompileReconnectingUI: false);
             _domainReloadDetectionService = new DomainReloadDetectionFileService(
                 _sessionStateService,
-                _stateStore,
                 new TestLegacySessionStateReader(legacySessionState));
 
             _domainReloadDetectionService.CompleteDomainReload("test-correlation");
 
             Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
-            ServerReadinessState state = _stateStore.Read();
-            Assert.That(state.Phase, Is.EqualTo("recovering"));
         }
 
         [Test]
@@ -150,7 +138,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "}");
             _domainReloadDetectionService = new DomainReloadDetectionFileService(
                 _sessionStateService,
-                _stateStore,
                 new UnityCliLoopEditorLegacySessionStateReader());
 
             _domainReloadDetectionService.CompleteDomainReload("first-correlation");
@@ -161,17 +148,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
             Assert.That(_sessionStateService.GetIsAfterCompile(), Is.False);
             Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
-            ServerReadinessState state = _stateStore.Read();
-            Assert.That(state.Phase, Is.EqualTo("recovering"));
-        }
-
-        private static ServerReadinessStateStore CreateTestStateStore()
-        {
-            string projectRoot = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "unity-cli-loop-tests",
-                System.Guid.NewGuid().ToString("N"));
-            return new ServerReadinessStateStore(projectRoot);
         }
 
         private static void RestoreFile(string path, bool existed, string content)

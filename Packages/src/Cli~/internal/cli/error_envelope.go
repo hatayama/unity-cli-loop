@@ -89,6 +89,11 @@ func writeToolFailure(writer io.Writer, err error, outcome unityipc.UnitySendOut
 				return
 			}
 		}
+		var notRespondingErr unityServerNotRespondingError
+		if outcome.RequestDispatched && !outcome.RequestAccepted && errors.As(err, &notRespondingErr) {
+			writeErrorEnvelope(writer, unityServerNotRespondingAfterDispatchError(notRespondingErr, context))
+			return
+		}
 	}
 	writeClassifiedError(writer, err, context)
 }
@@ -130,6 +135,28 @@ func classifyError(err error, context errorContext) cliError {
 		return argumentErr.toCLIError(context)
 	}
 
+	var notRespondingErr unityServerNotRespondingError
+	if errors.As(err, &notRespondingErr) {
+		return cliError{
+			ErrorCode:   errorCodeUnityNotReachable,
+			Phase:       errorPhaseConnection,
+			Message:     "Unity is running for this project, but the Unity CLI Loop server is not responding.",
+			Retryable:   true,
+			SafeToRetry: true,
+			ProjectRoot: firstNonEmpty(context.projectRoot, notRespondingErr.projectRoot),
+			Command:     context.command,
+			NextActions: []string{
+				"Wait and retry; Unity may be starting, importing assets, compiling, or reloading scripts.",
+				"Run `uloop focus-window` if Unity appears stalled in the background.",
+				"Confirm that the command targets the intended Unity project and the Editor package is installed.",
+			},
+			Details: map[string]any{
+				"endpoint": notRespondingErr.endpoint,
+				"cause":    notRespondingErr.causeText(),
+			},
+		}
+	}
+
 	var connectionErr *unityipc.ConnectionAttemptError
 	if errors.As(err, &connectionErr) {
 		return cliError{
@@ -148,50 +175,6 @@ func classifyError(err error, context errorContext) cliError {
 			Details: map[string]any{
 				"endpoint": connectionErr.Endpoint,
 				"cause":    connectionAttemptCause(connectionErr),
-			},
-		}
-	}
-
-	var stoppedErr serverStoppedError
-	if errors.As(err, &stoppedErr) {
-		return cliError{
-			ErrorCode:   errorCodeUnityNotReachable,
-			Phase:       errorPhaseConnection,
-			Message:     "The Unity CLI Loop server stopped before it became ready.",
-			Retryable:   true,
-			SafeToRetry: true,
-			ProjectRoot: context.projectRoot,
-			Command:     context.command,
-			NextActions: []string{
-				"If Unity is closed, run `uloop launch`.",
-				"If you intentionally stopped the bridge, start it from Unity settings or relaunch Unity.",
-				"Retry after Unity finishes starting, compiling, or reloading scripts.",
-			},
-			Details: map[string]any{
-				"phase":  stoppedErr.state.Phase,
-				"reason": stoppedErr.state.Reason,
-			},
-		}
-	}
-
-	var staleStateErr staleServerStateError
-	if errors.As(err, &staleStateErr) {
-		return cliError{
-			ErrorCode:   errorCodeUnityNotReachable,
-			Phase:       errorPhaseConnection,
-			Message:     "Unity is not running, but a stale Unity CLI Loop recovery state file says it is still busy.",
-			Retryable:   true,
-			SafeToRetry: true,
-			ProjectRoot: context.projectRoot,
-			Command:     context.command,
-			NextActions: []string{
-				"Run `uloop fix` to remove stale recovery state files.",
-				"Run `uloop launch` if Unity should be started for this project.",
-				"Retry the original command after the stale state is cleared.",
-			},
-			Details: map[string]any{
-				"phase":  staleStateErr.state.Phase,
-				"reason": staleStateErr.state.Reason,
 			},
 		}
 	}
@@ -406,6 +389,27 @@ func disconnectedAfterDispatchError(err error, context errorContext) cliError {
 	}
 }
 
+func unityServerNotRespondingAfterDispatchError(err unityServerNotRespondingError, context errorContext) cliError {
+	return cliError{
+		ErrorCode:   errorCodeUnityNotReachable,
+		Phase:       errorPhaseResponseWaiting,
+		Message:     "Unity is running for this project, but the Unity CLI Loop server did not acknowledge the dispatched request.",
+		Retryable:   true,
+		SafeToRetry: false,
+		ProjectRoot: firstNonEmpty(context.projectRoot, err.projectRoot),
+		Command:     context.command,
+		NextActions: []string{
+			"Check Unity Console logs and project state because Unity may have received the request.",
+			"Retry only after confirming the previous command did not run or has finished.",
+			"Run `uloop focus-window` if Unity appears stalled in the background.",
+		},
+		Details: map[string]any{
+			"endpoint": err.endpoint,
+			"cause":    err.causeText(),
+		},
+	}
+}
+
 func unknownCommandError(command string, cache toolsCache, context errorContext) cliError {
 	return cliError{
 		ErrorCode:   errorCodeUnknownCommand,
@@ -435,7 +439,6 @@ func compileWaitTimeoutError(projectRoot string) cliError {
 		ProjectRoot: projectRoot,
 		Command:     compileCommandName,
 		NextActions: []string{
-			"Run `uloop fix` to remove stale recovery state files.",
 			"Retry `uloop compile` after Unity becomes responsive.",
 		},
 	}
