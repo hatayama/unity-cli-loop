@@ -15,7 +15,7 @@
         "System.Runtime.CompilerServices.Unsafe.dll",
         "System.Reflection.Metadata.dll"
     ],
-    "autoReferenced": true,
+    "autoReferenced": false,
     "defineConstraints": [],
     "versionDefines": [],
     "noEngineReferences": false
