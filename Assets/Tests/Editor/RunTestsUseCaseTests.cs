@@ -66,6 +66,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(validationService.WasCalled, Is.False);
         }
 
+        [Test]
+        public async Task ExecuteAsync_WhenTestFrameworkUnavailable_ShouldFailFastWithoutValidation()
+        {
+            StubTestExecutionService executionService = new()
+            {
+                TestFrameworkAvailable = false
+            };
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService
+            );
+            UnityCliLoopTestExecutionRequest parameters = new()
+            {
+                TestMode = UnityCliLoopTestMode.PlayMode,
+                SaveBeforeRun = true
+            };
+
+            UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo(RunTestsResponse.TestFrameworkUnavailableMessage));
+            Assert.That(response.TestCount, Is.EqualTo(0));
+            Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.WasCalled, Is.False);
+        }
+
         /// <summary>
         /// Test support type used by editor and play mode fixtures.
         /// </summary>
@@ -94,7 +122,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class StubTestExecutionService : TestExecutionService
         {
+            public bool TestFrameworkAvailable { get; set; } = true;
             public bool WasCalled { get; private set; }
+
+            public override bool IsTestFrameworkAvailable => TestFrameworkAvailable;
 
             public override Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {

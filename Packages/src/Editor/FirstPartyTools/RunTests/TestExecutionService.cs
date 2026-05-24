@@ -11,6 +11,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class TestExecutionService
     {
+        public virtual bool IsTestFrameworkAvailable => UnityTestFrameworkExecutionServiceRegistry.IsAvailable;
+
         /// <summary>
         /// Execute tests in PlayMode
         /// </summary>
@@ -48,13 +50,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static IUnityTestFrameworkExecutionService _current = UnavailableService;
 
         public static IUnityTestFrameworkExecutionService Current => _current;
+        public static bool IsAvailable => !ReferenceEquals(_current, UnavailableService);
 
         public static void Register(IUnityTestFrameworkExecutionService executionService)
         {
             Debug.Assert(executionService != null, "executionService must not be null");
             _current = executionService;
         }
-
     }
 
     internal sealed class TestFrameworkUnavailableExecutionService : IUnityTestFrameworkExecutionService

@@ -52,6 +52,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateFailureResponse("Unsupported test mode: " + parameters.TestMode);
             }
 
+            ct.ThrowIfCancellationRequested();
+            if (!_executionService.IsTestFrameworkAvailable)
+            {
+                return CreateTestFrameworkUnavailableResponse();
+            }
+
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
             if (!validation.IsValid)
             {
@@ -71,14 +77,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             
             try
             {
-            if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
-            {
-                result = await _executionService.ExecutePlayModeTestAsync(filter, ct);
-            }
-            else
-            {
-                result = await _executionService.ExecuteEditModeTestAsync(filter, ct);
-            }
+                if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
+                {
+                    result = await _executionService.ExecutePlayModeTestAsync(filter, ct);
+                }
+                else
+                {
+                    result = await _executionService.ExecuteEditModeTestAsync(filter, ct);
+                }
             }
             catch (System.OperationCanceledException)
             {
@@ -121,6 +127,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool IsSupportedTestMode(UnityCliLoopTestMode testMode)
         {
             return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);
+        }
+
+        private static UnityCliLoopTestExecutionResult CreateTestFrameworkUnavailableResponse()
+        {
+            return CreateFailureResponse(RunTestsResponse.TestFrameworkUnavailableMessage);
         }
 
         private static UnityCliLoopTestExecutionResult CreateFailureResponse(string message)
