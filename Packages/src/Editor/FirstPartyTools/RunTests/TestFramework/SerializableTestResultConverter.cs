@@ -13,13 +13,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (result == null)
             {
+                System.Diagnostics.Debug.Assert(result != null, "ITestResultAdaptor must not be null");
                 return new SerializableTestResult
                 {
-                    success = true,
-                    message = "Test execution completed without detailed results",
+                    success = false,
+                    message = "Test execution failed: no test result was produced",
                     completedAt = DateTime.UtcNow.ToString("o"),
-                    testCount = 1,
-                    passedCount = 1,
+                    testCount = 0,
+                    passedCount = 0,
                     failedCount = 0,
                     skippedCount = 0,
                     xmlPath = null

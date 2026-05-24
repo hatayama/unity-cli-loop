@@ -1,12 +1,16 @@
 #if ULOOP_HAS_TEST_FRAMEWORK
 using System;
+using System.Globalization;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml;
 using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[assembly: InternalsVisibleTo("uLoopMCP.Tests.Editor")]
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -15,10 +19,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class NUnitXmlResultExporter
     {
+        private const string DurationFormat = "F3";
+        private const string FileTimestampFormat = "yyyyMMdd_HHmmss_fffffff";
+        private const string XmlFileExtension = ".xml";
+
         public static string SaveTestResultAsXml(ITestResultAdaptor testResult)
         {
-            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string fileName = $"{timestamp}.xml";
+            string fileName = CreateResultFileName();
             DirectoryInfo parentDirectory = Directory.GetParent(UnityEngine.Application.dataPath);
             if (parentDirectory == null)
             {
@@ -41,6 +48,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return filePath;
         }
 
+        private static string CreateResultFileName()
+        {
+            string timestamp = DateTime.UtcNow.ToString(FileTimestampFormat, CultureInfo.InvariantCulture);
+            return $"{timestamp}_{Guid.NewGuid():N}{XmlFileExtension}";
+        }
+
         private static string GenerateNUnitXml(ITestResultAdaptor testResult)
         {
             XmlDocument document = new XmlDocument();
@@ -55,9 +68,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             testRun.SetAttribute("passed", CountPassed(testResult).ToString());
             testRun.SetAttribute("failed", CountFailed(testResult).ToString());
             testRun.SetAttribute("skipped", CountSkipped(testResult).ToString());
-            testRun.SetAttribute("start-time", testResult.StartTime.ToString("yyyy-MM-dd HH:mm:ss"));
-            testRun.SetAttribute("end-time", testResult.EndTime.ToString("yyyy-MM-dd HH:mm:ss"));
-            testRun.SetAttribute("duration", testResult.Duration.ToString("F3"));
+            testRun.SetAttribute("inconclusive", CountInconclusive(testResult).ToString());
+            testRun.SetAttribute("start-time", FormatDateTime(testResult.StartTime));
+            testRun.SetAttribute("end-time", FormatDateTime(testResult.EndTime));
+            testRun.SetAttribute("duration", FormatDuration(testResult.Duration));
             document.AppendChild(testRun);
 
             XmlElement testSuite = CreateTestSuiteElement(document, testResult);
@@ -65,9 +79,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ToFormattedXml(document);
         }
 
+        private static string FormatDateTime(DateTime dateTime)
+        {
+            return dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatDuration(double duration)
+        {
+            return duration.ToString(DurationFormat, CultureInfo.InvariantCulture);
+        }
+
         private static string ToFormattedXml(XmlDocument document)
         {
-            using StringWriter stringWriter = new StringWriter();
+            using Utf8StringWriter stringWriter = new Utf8StringWriter();
             XmlWriterSettings settings = new XmlWriterSettings
             {
                 Indent = true,
@@ -84,6 +108,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return stringWriter.ToString();
         }
 
+        private sealed class Utf8StringWriter : StringWriter
+        {
+            public override Encoding Encoding => Encoding.UTF8;
+        }
+
         private static XmlElement CreateTestSuiteElement(XmlDocument document, ITestResultAdaptor result)
         {
             if (!result.Test.IsSuite)
@@ -96,13 +125,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             suite.SetAttribute("name", result.Test.Name);
             suite.SetAttribute("fullname", result.Test.FullName);
             suite.SetAttribute("result", result.TestStatus.ToString());
-            suite.SetAttribute("start-time", result.StartTime.ToString("yyyy-MM-dd HH:mm:ss"));
-            suite.SetAttribute("end-time", result.EndTime.ToString("yyyy-MM-dd HH:mm:ss"));
-            suite.SetAttribute("duration", result.Duration.ToString("F3"));
+            suite.SetAttribute("start-time", FormatDateTime(result.StartTime));
+            suite.SetAttribute("end-time", FormatDateTime(result.EndTime));
+            suite.SetAttribute("duration", FormatDuration(result.Duration));
             suite.SetAttribute("total", CountTestCases(result).ToString());
             suite.SetAttribute("passed", CountPassed(result).ToString());
             suite.SetAttribute("failed", CountFailed(result).ToString());
             suite.SetAttribute("skipped", CountSkipped(result).ToString());
+            suite.SetAttribute("inconclusive", CountInconclusive(result).ToString());
 
             if (result.Children == null)
             {
@@ -124,9 +154,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             testCase.SetAttribute("name", result.Test.Name);
             testCase.SetAttribute("fullname", result.Test.FullName);
             testCase.SetAttribute("result", result.TestStatus.ToString());
-            testCase.SetAttribute("start-time", result.StartTime.ToString("yyyy-MM-dd HH:mm:ss"));
-            testCase.SetAttribute("end-time", result.EndTime.ToString("yyyy-MM-dd HH:mm:ss"));
-            testCase.SetAttribute("duration", result.Duration.ToString("F3"));
+            testCase.SetAttribute("start-time", FormatDateTime(result.StartTime));
+            testCase.SetAttribute("end-time", FormatDateTime(result.EndTime));
+            testCase.SetAttribute("duration", FormatDuration(result.Duration));
 
             if (result.TestStatus != TestStatus.Failed)
             {
@@ -165,6 +195,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return "Failed";
             }
 
+            if (CountInconclusive(result) > 0)
+            {
+                return "Inconclusive";
+            }
+
             if (CountSkipped(result) > 0 && CountPassed(result) == 0)
             {
                 return "Skipped";
@@ -196,36 +231,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static int CountPassed(ITestResultAdaptor result)
         {
-            if (!result.Test.IsSuite)
-            {
-                return result.TestStatus == TestStatus.Passed ? 1 : 0;
-            }
-
-            return CountChildrenByStatus(result, TestStatus.Passed);
+            return CountByStatus(result, TestStatus.Passed);
         }
 
         private static int CountFailed(ITestResultAdaptor result)
         {
-            if (!result.Test.IsSuite)
-            {
-                return result.TestStatus == TestStatus.Failed ? 1 : 0;
-            }
-
-            return CountChildrenByStatus(result, TestStatus.Failed);
+            return CountByStatus(result, TestStatus.Failed);
         }
 
         private static int CountSkipped(ITestResultAdaptor result)
         {
-            if (!result.Test.IsSuite)
-            {
-                return result.TestStatus == TestStatus.Skipped ? 1 : 0;
-            }
-
-            return CountChildrenByStatus(result, TestStatus.Skipped);
+            return CountByStatus(result, TestStatus.Skipped);
         }
 
-        private static int CountChildrenByStatus(ITestResultAdaptor result, TestStatus status)
+        private static int CountInconclusive(ITestResultAdaptor result)
         {
+            return CountByStatus(result, TestStatus.Inconclusive);
+        }
+
+        private static int CountByStatus(ITestResultAdaptor result, TestStatus status)
+        {
+            if (!result.Test.IsSuite)
+            {
+                return result.TestStatus == status ? 1 : 0;
+            }
+
             if (result.Children == null)
             {
                 return 0;
@@ -234,18 +264,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int count = 0;
             foreach (ITestResultAdaptor child in result.Children)
             {
-                if (status == TestStatus.Passed)
-                {
-                    count += CountPassed(child);
-                }
-                else if (status == TestStatus.Failed)
-                {
-                    count += CountFailed(child);
-                }
-                else if (status == TestStatus.Skipped)
-                {
-                    count += CountSkipped(child);
-                }
+                count += CountByStatus(child, status);
             }
 
             return count;

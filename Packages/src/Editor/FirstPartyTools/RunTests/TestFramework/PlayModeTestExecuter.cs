@@ -59,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ct.ThrowIfCancellationRequested();
             TaskCompletionSource<SerializableTestResult> taskCompletionSource =
-                new TaskCompletionSource<SerializableTestResult>();
+                new TaskCompletionSource<SerializableTestResult>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             using UnifiedTestCallback callback = new UnifiedTestCallback();
             callback.OnTestCompleted += (result, rawResult) =>
@@ -71,15 +71,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (result.failedCount > 0 && rawResult != null)
                 {
-                    result.xmlPath = NUnitXmlResultExporter.SaveTestResultAsXml(rawResult);
+                    result.xmlPath = TrySaveFailureXml(rawResult);
                 }
-                taskCompletionSource.SetResult(result);
+                taskCompletionSource.TrySetResult(result);
             };
 
             StartTestExecution(testMode, filter, callback);
             SerializableTestResult result = await taskCompletionSource.Task;
             ct.ThrowIfCancellationRequested();
             return result;
+        }
+
+        internal static string TrySaveFailureXml(ITestResultAdaptor rawResult)
+        {
+            try
+            {
+                return NUnitXmlResultExporter.SaveTestResultAsXml(rawResult);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"Failed to save NUnit XML result file: {exception.Message}");
+                return null;
+            }
         }
 
         private static void StartTestExecution(TestMode testMode, TestExecutionFilter filter, UnifiedTestCallback callback)
