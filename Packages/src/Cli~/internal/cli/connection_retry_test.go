@@ -144,3 +144,75 @@ func TestSendWithTransientConnectionRetryDoesNotCancelAcceptedRequestAtRetryTime
 	default:
 	}
 }
+
+// Verifies the retry timeout still bounds pre-accepted server silence.
+func TestSendWithTransientConnectionRetryKeepsRetryTimeoutBeforeAcceptedAck(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	originalTimeout := serverConnectionRetryTimeout
+	serverConnectionRetryTimeout = 20 * time.Millisecond
+	t.Cleanup(func() {
+		serverConnectionRetryTimeout = originalTimeout
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		if _, err := unityipc.Read(bufio.NewReader(conn)); err != nil {
+			serverErr <- err
+			return
+		}
+
+		time.Sleep(60 * time.Millisecond)
+
+		final := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
+		if err := unityipc.Write(conn, final); err != nil {
+			return
+		}
+	}()
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	outcome, err := sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"compile",
+		map[string]any{},
+		nil)
+	if err == nil {
+		t.Fatalf("expected retry timeout before accepted ack, got result %s", outcome.Result)
+	}
+	if !outcome.RequestDispatched {
+		t.Fatalf("request dispatch flag mismatch: %#v", outcome)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
