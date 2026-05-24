@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
@@ -82,9 +83,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that optional Test Framework registration is owned by the composition-root startup path.
             string content = ReadText(FirstPartyToolsEditorStartupPath);
+            string guard = "#if " + UnityCliLoopConstants.SCRIPTING_DEFINE_HAS_TEST_FRAMEWORK;
+            string initCall = "RunTestsTestFrameworkStartup.Initialize();";
+            int guardIndex = content.IndexOf(guard, StringComparison.Ordinal);
+            int initCallIndex = content.IndexOf(initCall, StringComparison.Ordinal);
 
-            Assert.That(content, Does.Contain("#if " + UnityCliLoopConstants.SCRIPTING_DEFINE_HAS_TEST_FRAMEWORK));
-            Assert.That(content, Does.Contain("RunTestsTestFrameworkStartup.Initialize();"));
+            Assert.That(guardIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(initCallIndex, Is.GreaterThan(guardIndex));
+            int endIfIndex = content.IndexOf("#endif", initCallIndex, StringComparison.Ordinal);
+            Assert.That(endIfIndex, Is.GreaterThan(initCallIndex));
         }
 
         [Test]
