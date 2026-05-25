@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.19](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.18...v3.0.0-beta.19) (2026-05-25)
+
+
+### Bug Fixes
+
+* Input simulation commands no longer hang while showing overlays ([#1208](https://github.com/hatayama/unity-cli-loop/issues/1208)) ([b21a47c](https://github.com/hatayama/unity-cli-loop/commit/b21a47c021074e63f7db472e5666c23bc743ffe1))
+* Make skill instructions use CLI flag syntax ([#1210](https://github.com/hatayama/unity-cli-loop/issues/1210)) ([a11923d](https://github.com/hatayama/unity-cli-loop/commit/a11923dc61cdced2bbe57656058084c726920d8a))
+
 ## [3.0.0-beta.18](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.17...v3.0.0-beta.18) (2026-05-25)
 
 
