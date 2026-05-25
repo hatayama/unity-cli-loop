@@ -18,8 +18,8 @@ uloop compile [--force-recompile] [--no-wait-for-domain-reload]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--force-recompile` | boolean | `false` | Use for broader validation, including warnings hidden by other asmdefs; much slower than normal compile |
-| `--no-wait-for-domain-reload` | boolean | `false` | Return before Domain Reload completion |
+| `--force-recompile` | flag | - | Use for broader validation, including warnings hidden by other asmdefs; much slower than normal compile |
+| `--no-wait-for-domain-reload` | flag | - | Return before Domain Reload completion |
 
 ## Global Options
 
