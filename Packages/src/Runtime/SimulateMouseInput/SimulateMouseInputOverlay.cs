@@ -12,6 +12,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     public class SimulateMouseInputOverlay : MonoBehaviour
     {
         private const float DISPLAY_DURATION = 1.0f;
+        private const string LeftButtonName = "LeftButton";
+        private const string MoveDirectionGroupName = "MoveDirectionGroup";
+        private const string RightButtonName = "RightButton";
+        private const string ScrollArrowBottomName = "ScrollArrowBottom";
+        private const string ScrollArrowTopName = "ScrollArrowTop";
+        private const string ScrollWheelName = "ScrollWheel";
 
         private static readonly Color BUTTON_PRESSED_COLOR = new Color(1f, 1f, 1f, 0.95f);
 
@@ -31,6 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         private void Awake()
         {
+            RestoreMissingReferences();
+
             _canvasGroup = GetComponent<CanvasGroup>();
             if (_canvasGroup == null)
             {
@@ -42,6 +50,40 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             SetVisible(false);
             CaptureIdleColors();
+        }
+
+        private void RestoreMissingReferences()
+        {
+            RestoreMissingReference(ref _leftButton, LeftButtonName);
+            RestoreMissingReference(ref _rightButton, RightButtonName);
+            RestoreMissingReference(ref _scrollWheel, ScrollWheelName);
+            RestoreMissingReference(ref _scrollArrowTop, ScrollArrowTopName);
+            RestoreMissingReference(ref _scrollArrowBottom, ScrollArrowBottomName);
+            RestoreMissingReference(ref _moveDirectionGroup, MoveDirectionGroupName);
+        }
+
+        private void RestoreMissingReference<T>(ref T? reference, string childName) where T : Component
+        {
+            if (reference != null)
+            {
+                return;
+            }
+
+            reference = FindChildComponent<T>(childName);
+        }
+
+        private T? FindChildComponent<T>(string childName) where T : Component
+        {
+            T[] children = GetComponentsInChildren<T>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == childName)
+                {
+                    return children[i];
+                }
+            }
+
+            return null;
         }
 
         private void LateUpdate()

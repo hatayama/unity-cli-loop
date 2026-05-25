@@ -8,6 +8,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     /// </summary>
     public class RecordInputOverlayView : MonoBehaviour
     {
+        private const string CountdownGroupName = "CountdownGroup";
+        private const string CountdownTextName = "CountdownText";
+        private const string RecordingGroupName = "RecordingGroup";
+        private const string RecDotName = "RecDot";
+        private const string StatusTextName = "StatusText";
+
         [SerializeField] private CanvasGroup _canvasGroup;
         [SerializeField] private GameObject _countdownGroup;
         [SerializeField] private Text _countdownText;
@@ -17,6 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         private void Awake()
         {
+            RestoreMissingReferences();
+
             Debug.Assert(_canvasGroup != null, "_canvasGroup must be assigned in prefab");
             Debug.Assert(_countdownGroup != null, "_countdownGroup must be assigned in prefab");
             Debug.Assert(_countdownText != null, "_countdownText must be assigned in prefab");
@@ -27,6 +35,55 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             _canvasGroup.interactable = false;
             _canvasGroup.blocksRaycasts = false;
             Hide();
+        }
+
+        private void RestoreMissingReferences()
+        {
+            RestoreMissingReference(ref _canvasGroup, GetComponent<CanvasGroup>);
+            RestoreMissingReference(ref _countdownGroup, () => FindChildGameObject(CountdownGroupName));
+            RestoreMissingReference(ref _countdownText, () => FindChildComponent<Text>(CountdownTextName));
+            RestoreMissingReference(ref _recordingGroup, () => FindChildGameObject(RecordingGroupName));
+            RestoreMissingReference(ref _recDotText, () => FindChildComponent<Text>(RecDotName));
+            RestoreMissingReference(ref _statusText, () => FindChildComponent<Text>(StatusTextName));
+        }
+
+        private void RestoreMissingReference<T>(ref T reference, System.Func<T> resolveReference)
+            where T : UnityEngine.Object
+        {
+            if (reference != null)
+            {
+                return;
+            }
+
+            reference = resolveReference();
+        }
+
+        private GameObject FindChildGameObject(string childName)
+        {
+            Transform[] children = GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == childName)
+                {
+                    return children[i].gameObject;
+                }
+            }
+
+            return null;
+        }
+
+        private T FindChildComponent<T>(string childName) where T : Component
+        {
+            T[] children = GetComponentsInChildren<T>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == childName)
+                {
+                    return children[i];
+                }
+            }
+
+            return null;
         }
 
         public void ShowCountdown(int remainingSeconds)

@@ -12,6 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     {
         public const float CONTAINER_BACKGROUND_ALPHA = 0.8f;
 
+        private const string ContainerName = "Container";
         private const float PRESS_DISPLAY_DURATION = 0.5f;
         private const float FADE_DURATION = 0.2f;
         private const int FONT_SIZE = 48;
@@ -27,6 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         private void Awake()
         {
+            RestoreMissingReferences();
+
             Debug.Assert(_container != null, "_container must be assigned in prefab");
             Debug.Assert(_containerImage != null, "_containerImage must be assigned in prefab");
 
@@ -37,6 +40,33 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             _container.SetActive(false);
+        }
+
+        private void RestoreMissingReferences()
+        {
+            if (_container == null)
+            {
+                _container = FindChildGameObject(ContainerName);
+            }
+
+            if (_containerImage == null && _container != null)
+            {
+                _containerImage = _container.GetComponent<Image>();
+            }
+        }
+
+        private GameObject FindChildGameObject(string childName)
+        {
+            Transform[] children = GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == childName)
+                {
+                    return children[i].gameObject;
+                }
+            }
+
+            return null!;
         }
 
         private void LateUpdate()

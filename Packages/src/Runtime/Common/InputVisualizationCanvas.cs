@@ -24,11 +24,32 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         private void Awake()
         {
             EnsureUnitScaleCanvas();
+            RestoreMissingReferences();
+
             Debug.Assert(_keyboardOverlay != null, "_keyboardOverlay must be assigned in prefab");
             Debug.Assert(_mouseUiOverlay != null, "_mouseUiOverlay must be assigned in prefab");
             Debug.Assert(_mouseInputOverlay != null, "_mouseInputOverlay must be assigned in prefab");
             Debug.Assert(_recordInputOverlayPresenter != null, "_recordInputOverlayPresenter must be assigned in prefab");
             Debug.Assert(_replayInputOverlay != null, "_replayInputOverlay must be assigned in prefab");
+        }
+
+        private void RestoreMissingReferences()
+        {
+            RestoreMissingReference(ref _keyboardOverlay);
+            RestoreMissingReference(ref _mouseUiOverlay);
+            RestoreMissingReference(ref _mouseInputOverlay);
+            RestoreMissingReference(ref _recordInputOverlayPresenter);
+            RestoreMissingReference(ref _replayInputOverlay);
+        }
+
+        private void RestoreMissingReference<T>(ref T reference) where T : Component
+        {
+            if (reference != null)
+            {
+                return;
+            }
+
+            reference = GetComponentInChildren<T>(true);
         }
 
         private void EnsureUnitScaleCanvas()
