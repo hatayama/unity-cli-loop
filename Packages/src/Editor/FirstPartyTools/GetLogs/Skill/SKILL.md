@@ -21,9 +21,9 @@ uloop get-logs [options]
 | `--log-type` | string | `All` | Log type filter: `Error`, `Warning`, `Log`, `All` |
 | `--max-count` | integer | `100` | Maximum number of logs to retrieve |
 | `--search-text` | string | - | Text to search within logs |
-| `--include-stack-trace` | boolean | `false` | Include stack trace in output |
-| `--use-regex` | boolean | `false` | Use regex for search |
-| `--search-in-stack-trace` | boolean | `false` | Search within stack trace |
+| `--include-stack-trace` | flag | - | Include stack trace in output |
+| `--use-regex` | flag | - | Use regex for search |
+| `--search-in-stack-trace` | flag | - | Search within stack trace |
 
 ## Global Options
 

@@ -18,7 +18,7 @@ uloop clear-console [--add-confirmation-message]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--add-confirmation-message` | boolean | `false` | Add confirmation message after clearing |
+| `--add-confirmation-message` | flag | - | Add confirmation message after clearing |
 
 ## Global Options
 

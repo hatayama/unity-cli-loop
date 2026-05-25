@@ -19,7 +19,7 @@ uloop hello-world [options]
 |-----------|------|---------|-------------|
 | `--name` | string | `World` | Name to greet |
 | `--language` | string | `english` | Language for greeting: `english`, `japanese`, `spanish`, `french` |
-| `--include-timestamp` | boolean | `true` | Whether to include timestamp in response |
+| `--no-include-timestamp` | flag | - | Exclude timestamp from response |
 
 ## Examples
 
@@ -34,7 +34,7 @@ uloop hello-world --name "Alice"
 uloop hello-world --name "太郎" --language japanese
 
 # Spanish greeting without timestamp
-uloop hello-world --name "Carlos" --language spanish --include-timestamp false
+uloop hello-world --name "Carlos" --language spanish --no-include-timestamp
 ```
 
 ## Output
@@ -49,5 +49,5 @@ Returns JSON with:
 This is a sample custom tool demonstrating:
 - Type-safe parameter handling with Schema
 - Enum parameters for language selection
-- Boolean flag parameters
+- Value-less flag parameters
 - Multi-language support

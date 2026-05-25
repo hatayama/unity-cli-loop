@@ -33,8 +33,8 @@ uloop replay-input --action Stop
 |-----------|------|---------|-------------|
 | `--action` | enum | `Start` | `Start`, `Stop`, `Status` |
 | `--input-path` | string | auto | JSON path. Auto-detects latest in `.uloop/outputs/InputRecordings/` |
-| `--no-show-overlay` | flag | off | Hide replay progress overlay |
-| `--loop` | boolean | `false` | Loop continuously |
+| `--no-show-overlay` | flag | - | Hide replay progress overlay |
+| `--loop` | flag | - | Loop continuously |
 
 ## Deterministic Replay
 

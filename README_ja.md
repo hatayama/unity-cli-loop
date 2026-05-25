@@ -326,11 +326,11 @@ log検索時、ノイズのとなるlogをクリアする事ができます。
 ### 6. get-hierarchy - シーン構造の解析
 現在アクティブなHierarchyの情報をネストされたJSON形式で取得します。ランタイムでも動作します。
 **自動ファイル出力**: 取得したHierarchyは常に`{project_root}/.uloop/outputs/HierarchyResults/`ディレクトリにJSONとして保存されます。レスポンスにはファイルパスのみが返るため、大量データでもトークン消費を最小限に抑えられます。
-**選択モード**: `UseSelection: true` を指定すると、Unity Editorで選択中のGameObjectから階層を取得できます。複数選択にも対応 - 親子両方が選択されている場合、重複を避けるため親のみがルートとして使用されます。
+**選択モード**: `uloop get-hierarchy --use-selection` を指定すると、Unity Editorで選択中のGameObjectから階層を取得できます。複数選択にも対応 - 親子両方が選択されている場合、重複を避けるため親のみがルートとして使用されます。
 ```text
 → GameObject間の親子関係を理解。構造的な問題を発見・修正
 → シーンの規模にかかわらず、Hierarchyデータはファイルに保存され、生のJSONの代わりにパスが返されます
-→ get-hierarchy (UseSelection: true)
+→ uloop get-hierarchy --use-selection
 → パスを手動で指定せずに、選択中のGameObjectの階層を取得
 ```
 

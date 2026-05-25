@@ -25,7 +25,7 @@ uloop run-tests [options]
 | `--test-mode` | string | `EditMode` | Test mode: `EditMode`, `PlayMode` |
 | `--filter-type` | string | `all` | Filter type: `all`, `exact`, `regex`, `assembly` |
 | `--filter-value` | string | - | Filter value (test name, pattern, or assembly) |
-| `--save-before-run` | boolean | `false` | Save unsaved loaded Scene changes and current Prefab Stage changes before running tests |
+| `--save-before-run` | flag | - | Save unsaved loaded Scene changes and current Prefab Stage changes before running tests |
 
 ## Global Options
 

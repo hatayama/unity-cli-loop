@@ -26,8 +26,8 @@ uloop find-game-objects [options]
 | `--tag` | string | - | Tag filter |
 | `--layer` | integer | - | Layer filter (layer number) |
 | `--max-results` | integer | `20` | Maximum number of results |
-| `--include-inactive` | boolean | `false` | Include inactive GameObjects |
-| `--include-inherited-properties` | boolean | `false` | Include inherited properties in results |
+| `--include-inactive` | flag | - | Include inactive GameObjects |
+| `--include-inherited-properties` | flag | - | Include inherited properties in results |
 
 ## Search Modes
 
