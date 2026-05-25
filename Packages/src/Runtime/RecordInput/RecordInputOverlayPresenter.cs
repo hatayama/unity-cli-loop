@@ -21,6 +21,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         private void Awake()
         {
+            if (_view == null)
+            {
+                _view = GetComponent<RecordInputOverlayView>();
+            }
+
             Debug.Assert(_view != null, "_view must be assigned in prefab");
         }
 
