@@ -63,6 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 InputVisualizationCanvas canvas = instance.GetComponent<InputVisualizationCanvas>();
 
+                Assert.That(canvas, Is.Not.Null);
                 Assert.That(canvas.KeyboardOverlay, Is.Not.Null);
                 Assert.That(canvas.MouseUiOverlay, Is.Not.Null);
                 Assert.That(canvas.MouseInputOverlay, Is.Not.Null);
@@ -89,6 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 RecordInputOverlayView recordView =
                     canvas.RecordInputOverlayPresenter.GetComponent<RecordInputOverlayView>();
+                Assert.That(recordView, Is.Not.Null);
                 AssertSerializedReference(recordView, "_canvasGroup");
                 AssertSerializedReference(recordView, "_countdownGroup");
                 AssertSerializedReference(recordView, "_countdownText");

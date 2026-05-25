@@ -49,6 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             _canvasGroup.blocksRaycasts = false;
 
             SetVisible(false);
+            Debug.Assert(_scrollArrowTop != null, "_scrollArrowTop must be assigned before runtime updates");
+            Debug.Assert(_scrollArrowBottom != null, "_scrollArrowBottom must be assigned before runtime updates");
             CaptureIdleColors();
         }
 
