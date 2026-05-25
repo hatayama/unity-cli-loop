@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.18](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.17...v3.0.0-beta.18) (2026-05-25)
+
+
+### Bug Fixes
+
+* Simplify compile skill guidance ([#1206](https://github.com/hatayama/unity-cli-loop/issues/1206)) ([71b080e](https://github.com/hatayama/unity-cli-loop/commit/71b080ef58558ba190fd0ac249529f3f7e0f6dc1))
+
 ## [3.0.0-beta.17](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.16...v3.0.0-beta.17) (2026-05-25)
 
 
