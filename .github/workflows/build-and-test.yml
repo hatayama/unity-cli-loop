@@ -13,13 +13,20 @@ permissions:
 jobs:
   build-cli:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Test release automation shell helpers
         run: |
+          scripts/test-comment-cli-minimum-version-warning.sh
           scripts/test-resolve-native-cli-release-target.sh
           scripts/test-is-release-please-release-commit.sh
           scripts/test-release-please-config.sh
@@ -30,6 +37,15 @@ jobs:
           scripts/test-notify-release-workflow-failure.sh
           scripts/test-native-cli-publish-workflow.sh
           scripts/test-install-release-filter.sh
+
+      - name: Comment on CLI minimum version check
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CLI_MINIMUM_VERSION_BASE_REF: origin/${{ github.base_ref }}
+        run: scripts/comment-cli-minimum-version-warning.sh
 
       - name: Setup Go
         uses: actions/setup-go@v6
