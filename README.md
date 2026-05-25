@@ -325,11 +325,11 @@ Retrieve objects and examine component parameters. Also retrieve information abo
 ### 6. get-hierarchy - Analyze Scene Structure
 Retrieve information about the currently active Hierarchy in nested JSON format. Works at runtime as well.
 **Automatic File Export**: Retrieved hierarchy data is always saved as JSON in `{project_root}/.uloop/outputs/HierarchyResults/` directory. The response only returns the file path, minimizing token consumption even for large datasets.
-**Selection Mode**: Use `UseSelection: true` to get hierarchy starting from currently selected GameObject(s) in Unity Editor. Supports multiple selection - when parent and child are both selected, only the parent is used as root to avoid duplicate traversal.
+**Selection Mode**: Use `uloop get-hierarchy --use-selection` to get hierarchy starting from currently selected GameObject(s) in Unity Editor. Supports multiple selection - when parent and child are both selected, only the parent is used as root to avoid duplicate traversal.
 ```text
 → Understand parent-child relationships between GameObjects, discover and fix structural issues
 → Regardless of scene size, hierarchy data is saved to a file and the path is returned instead of raw JSON
-→ get-hierarchy (UseSelection: true)
+→ uloop get-hierarchy --use-selection
 → Get hierarchy of currently selected GameObjects without specifying paths manually
 ```
 

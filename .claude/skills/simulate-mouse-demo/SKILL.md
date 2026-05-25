@@ -33,7 +33,7 @@ If PlayMode is not active, start it with `uloop control-play-mode --action Play`
 Take an annotated screenshot to get exact coordinates for each interactive element:
 
 ```bash
-uloop screenshot --capture-mode rendering --annotate-elements true
+uloop screenshot --capture-mode rendering --annotate-elements
 ```
 
 From the `AnnotatedElements` array in the response, extract `SimX` and `SimY` for:
