@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.15](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.14...cli-v3.0.0-beta.15) (2026-05-25)
+
+
+### Bug Fixes
+
+* Unity commands recover without stale readiness cleanup ([#1199](https://github.com/hatayama/unity-cli-loop/issues/1199)) ([a4b3f06](https://github.com/hatayama/unity-cli-loop/commit/a4b3f06ad14dd88d465f5ab2fe3b2705a0b4ac4e))
+
 ## [3.0.0-beta.14](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.13...cli-v3.0.0-beta.14) (2026-05-23)
 
 

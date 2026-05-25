@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0-beta.17](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.16...v3.0.0-beta.17) (2026-05-25)
+
+
+### Bug Fixes
+
+* Input overlays load without auto-referencing runtime assemblies ([#1195](https://github.com/hatayama/unity-cli-loop/issues/1195)) ([45e5daf](https://github.com/hatayama/unity-cli-loop/commit/45e5daf547719ccec322b4b0efeb3f692b78602f))
+* Internal assemblies no longer leak into project scripts ([#1197](https://github.com/hatayama/unity-cli-loop/issues/1197)) ([546bf6d](https://github.com/hatayama/unity-cli-loop/commit/546bf6d54dd32ac513d4857a163971b8adc1ac39))
+* Keep Run Tests available without extra Editor startup hooks ([#1201](https://github.com/hatayama/unity-cli-loop/issues/1201)) ([b8d89c3](https://github.com/hatayama/unity-cli-loop/commit/b8d89c32605e9f125bc92d598eac9315707bd95e))
+* run-tests is available in package consumer projects ([#1192](https://github.com/hatayama/unity-cli-loop/issues/1192)) ([311e453](https://github.com/hatayama/unity-cli-loop/commit/311e4531cdd45babf7b374497717a54f30176f75))
+* Unity commands recover without stale readiness cleanup ([#1199](https://github.com/hatayama/unity-cli-loop/issues/1199)) ([a4b3f06](https://github.com/hatayama/unity-cli-loop/commit/a4b3f06ad14dd88d465f5ab2fe3b2705a0b4ac4e))
+
 ## [3.0.0-beta.16](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.15...v3.0.0-beta.16) (2026-05-23)
 
 
