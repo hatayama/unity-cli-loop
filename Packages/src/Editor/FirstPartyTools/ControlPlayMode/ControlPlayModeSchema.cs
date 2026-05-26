@@ -1,4 +1,6 @@
 
+using System.ComponentModel;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -16,6 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class ControlPlayModeSchema : UnityCliLoopToolSchema
     {
         public PlayModeAction Action { get; set; } = PlayModeAction.Play;
+        public int TimeoutSeconds { get; set; } = ControlPlayModeUseCase.DefaultTimeoutSeconds;
+        [Browsable(false)]
+        public bool StatusOnly { get; set; }
     }
 }
-
