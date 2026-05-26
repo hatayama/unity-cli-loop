@@ -165,6 +165,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                     Assert.That(
                         assetPath,
+                        Is.Not.Empty,
+                        $"{OverlayPrefabFilePaths[pathIndex]} contains unresolved script GUID {guid}");
+
+                    Assert.That(
+                        assetPath,
                         Does.Not.StartWith("Assets/"),
                         $"{OverlayPrefabFilePaths[pathIndex]} references project script GUID {guid} at {assetPath}");
                 }
