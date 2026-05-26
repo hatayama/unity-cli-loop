@@ -16,11 +16,13 @@ import (
 const windowsPowerShellCommand = "powershell"
 
 var (
-	macUnityExecutablePattern     = regexp.MustCompile(`(?i)Unity\.app/Contents/MacOS/Unity`)
-	windowsUnityExecutablePattern = regexp.MustCompile(`(?i)Unity\.exe`)
-	macProcessLinePattern         = regexp.MustCompile(`^\s*(\d+)\s+(.*)$`)
-	projectPathFlagPattern        = regexp.MustCompile(`(?i)-projectpath(?:=|\s+)(.+)$`)
-	nextUnityFlagPattern          = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
+	macUnityExecutablePattern             = regexp.MustCompile(`(?i)Unity\.app/Contents/MacOS/Unity`)
+	windowsUnityExecutablePattern         = regexp.MustCompile(`(?i)Unity\.exe`)
+	macProcessLinePattern                 = regexp.MustCompile(`^\s*(\d+)\s+(.*)$`)
+	projectPathFlagPattern                = regexp.MustCompile(`(?i)-projectpath(?:=|\s+)(.+)$`)
+	nextUnityFlagPattern                  = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
+	findRunningUnityProcessForFocusWindow = findRunningUnityProcess
+	focusUnityProcessForFocusWindow       = focusUnityProcess
 )
 
 type unityProcess struct {
@@ -36,7 +38,7 @@ type focusResponse struct {
 type restoreFocusFunc func(context.Context) error
 
 func runFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, stderr io.Writer) int {
-	runningProcess, err := findRunningUnityProcess(ctx, projectRoot)
+	runningProcess, err := findRunningUnityProcessForFocusWindow(ctx, projectRoot)
 	if err != nil {
 		writeFocusResponse(stderr, false, err.Error())
 		return 1
@@ -46,11 +48,15 @@ func runFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, s
 		return 1
 	}
 
-	if err := focusUnityProcess(ctx, runningProcess.pid); err != nil {
+	correlationID := newCliVibeCorrelationID()
+	logFocusWindowFocusAttempt(projectRoot, runningProcess.pid, correlationID)
+	if err := focusUnityProcessForFocusWindow(ctx, runningProcess.pid); err != nil {
+		logFocusWindowFocusFailure(projectRoot, runningProcess.pid, err, correlationID)
 		writeFocusResponse(stderr, false, fmt.Sprintf("Failed to focus Unity window: %s", err.Error()))
 		return 1
 	}
 
+	logFocusWindowFocusSuccess(projectRoot, runningProcess.pid, correlationID)
 	writeFocusResponse(stdout, true, fmt.Sprintf("Unity Editor window focused (PID: %d)", runningProcess.pid))
 	return 0
 }
@@ -63,6 +69,46 @@ func writeFocusResponse(writer io.Writer, success bool, message string) {
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(response)
+}
+
+func logFocusWindowFocusAttempt(projectRoot string, pid int, correlationID string) {
+	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
+		Level:     "INFO",
+		Operation: "cli_focus_window_focus_attempt",
+		Message:   "Attempting to focus Unity for the focus-window command.",
+		Context: map[string]any{
+			"command": "focus-window",
+			"pid":     pid,
+		},
+		CorrelationID: correlationID,
+	})
+}
+
+func logFocusWindowFocusSuccess(projectRoot string, pid int, correlationID string) {
+	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
+		Level:     "INFO",
+		Operation: "cli_focus_window_focus_success",
+		Message:   "Focused Unity for the focus-window command.",
+		Context: map[string]any{
+			"command": "focus-window",
+			"pid":     pid,
+		},
+		CorrelationID: correlationID,
+	})
+}
+
+func logFocusWindowFocusFailure(projectRoot string, pid int, focusErr error, correlationID string) {
+	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
+		Level:     "WARNING",
+		Operation: "cli_focus_window_focus_failed",
+		Message:   "Failed to focus Unity for the focus-window command.",
+		Context: map[string]any{
+			"command":    "focus-window",
+			"pid":        pid,
+			"focusError": errorMessage(focusErr),
+		},
+		CorrelationID: correlationID,
+	})
 }
 
 func findRunningUnityProcess(ctx context.Context, projectRoot string) (*unityProcess, error) {

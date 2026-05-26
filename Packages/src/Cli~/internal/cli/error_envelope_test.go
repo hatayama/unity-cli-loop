@@ -215,9 +215,9 @@ func TestClassifyCliUpdateRequiredRPCError(t *testing.T) {
 func TestClassifyServerBusyRPCError(t *testing.T) {
 	err := &unityipc.RPCError{
 		Code:    -32603,
-		Message: "Unity tool execution is busy",
+		Message: "Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes.",
 		Data: json.RawMessage(
-			`{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"Retry after the current command completes."}`),
+			`{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes."}`),
 	}
 
 	cliErr := classifyError(err, errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"})

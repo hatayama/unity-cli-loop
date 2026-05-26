@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -113,8 +114,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     _ => Task.CompletedTask);
 
                 string secondResponse = await AwaitWithTimeout(secondResponseTask, TimeSpan.FromMilliseconds(200));
+                JObject error = ParseError(secondResponse);
                 JObject data = ParseErrorData(secondResponse);
 
+                Assert.That(error["message"]?.ToString(), Does.Contain(SingleFlightTestTool.Name));
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
@@ -173,8 +176,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     _ => Task.CompletedTask);
 
                 string otherToolResponse = await AwaitWithTimeout(otherToolTask, TimeSpan.FromMilliseconds(200));
+                JObject error = ParseError(otherToolResponse);
                 JObject data = ParseErrorData(otherToolResponse);
 
+                Assert.That(error["message"]?.ToString(), Does.Contain(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
+                Assert.That(error["message"]?.ToString(), Does.Contain(SingleFlightTestTool.Name));
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
@@ -186,6 +192,69 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await DrainTaskIfNeeded(firstDynamicCodeTask);
                 await DrainTaskIfNeeded(secondDynamicCodeTask);
                 await DrainTaskIfNeeded(otherToolTask);
+                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
+        [Test]
+        public async Task ProcessRequest_AfterGetHierarchyReturns_AllowsImmediateGetLogs()
+        {
+            // Verifies a completed get-hierarchy response releases the single-flight gate before the next tool request.
+            CapturingMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            UnityCliLoopToolRegistrar.RegisterService(service);
+
+            string hierarchyResponse = null;
+            Task<string> hierarchyResponseTask = null;
+            Task<string> logsResponseTask = null;
+            try
+            {
+                hierarchyResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequestWithParams(
+                        UnityCliLoopConstants.TOOL_NAME_GET_HIERARCHY,
+                        "{\"MaxDepth\":0,\"IncludeComponents\":false}",
+                        1),
+                    CancellationToken.None,
+                    _ => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
+                dispatcher.RunContinuations();
+                hierarchyResponse = await AwaitWithTimeout(hierarchyResponseTask, TimeSpan.FromSeconds(1));
+                JObject parsedHierarchy = JObject.Parse(hierarchyResponse);
+
+                Assert.That(parsedHierarchy["error"], Is.Null);
+                Assert.That(parsedHierarchy["result"]?["hierarchyFilePath"]?.ToString(), Is.Not.Empty);
+
+                logsResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequestWithParams(
+                        UnityCliLoopConstants.TOOL_NAME_GET_LOGS,
+                        "{\"MaxCount\":0}",
+                        2),
+                    CancellationToken.None,
+                    _ => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
+                dispatcher.RunContinuations();
+                string logsResponse = await AwaitWithTimeout(logsResponseTask, TimeSpan.FromSeconds(1));
+                JObject parsedLogs = JObject.Parse(logsResponse);
+
+                Assert.That(parsedLogs["error"], Is.Null);
+                Assert.That(parsedLogs["result"]?["DisplayedCount"]?.ToObject<int>(), Is.EqualTo(0));
+            }
+            finally
+            {
+                dispatcher.RunContinuations();
+                await DrainTaskIfNeeded(hierarchyResponseTask);
+                await DrainTaskIfNeeded(logsResponseTask);
+                DeleteHierarchyFileFromResponse(hierarchyResponse);
                 UnityCliLoopToolRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
@@ -299,14 +368,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "\",\"acceptsDispatchAck\":true}}";
         }
 
+        private static string BuildToolRequestWithParams(string toolName, string paramsJson, int id)
+        {
+            return
+                "{\"jsonrpc\":\"2.0\",\"method\":\"" +
+                toolName +
+                "\",\"params\":" +
+                paramsJson +
+                ",\"id\":" +
+                id +
+                ",\"uloop\":{\"cliVersion\":\"" +
+                CliConstants.MINIMUM_REQUIRED_CLI_VERSION +
+                "\",\"acceptsDispatchAck\":true}}";
+        }
+
         private static JObject ParseErrorData(string response)
+        {
+            JObject error = ParseError(response);
+            JObject data = error["data"] as JObject;
+            Assert.That(data, Is.Not.Null);
+            return data;
+        }
+
+        private static JObject ParseError(string response)
         {
             JObject parsed = JObject.Parse(response);
             JObject error = parsed["error"] as JObject;
             Assert.That(error, Is.Not.Null);
-            JObject data = error["data"] as JObject;
-            Assert.That(data, Is.Not.Null);
-            return data;
+            return error;
         }
 
         private static async Task<string> AwaitWithTimeout(Task<string> task, TimeSpan timeout)
@@ -333,6 +422,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             await AwaitWithTimeout(task, TimeSpan.FromSeconds(1));
+        }
+
+        private static void DeleteHierarchyFileFromResponse(string response)
+        {
+            if (string.IsNullOrEmpty(response))
+            {
+                return;
+            }
+
+            JObject parsed = JObject.Parse(response);
+            string relativePath = parsed["result"]?["hierarchyFilePath"]?.ToString();
+            if (string.IsNullOrEmpty(relativePath))
+            {
+                return;
+            }
+
+            string projectRoot = Path.GetFullPath(UnityCliLoopPathResolver.GetProjectRoot());
+            string absolutePath = Path.GetFullPath(Path.Combine(projectRoot, relativePath));
+            string projectRootPrefix = projectRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? projectRoot
+                : projectRoot + Path.DirectorySeparatorChar;
+            if (!string.Equals(absolutePath, projectRoot, StringComparison.Ordinal)
+                && !absolutePath.StartsWith(projectRootPrefix, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (File.Exists(absolutePath))
+            {
+                File.Delete(absolutePath);
+            }
         }
 
         private static void RestoreEditorMainThreadDispatcher()

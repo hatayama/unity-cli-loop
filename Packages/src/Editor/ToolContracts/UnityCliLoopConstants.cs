@@ -62,6 +62,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // Command name constants
         public const string TOOL_NAME_CONTROL_PLAY_MODE = "control-play-mode";
         public const string TOOL_NAME_EXECUTE_DYNAMIC_CODE = "execute-dynamic-code";
+        public const string TOOL_NAME_GET_HIERARCHY = "get-hierarchy";
+        public const string TOOL_NAME_GET_LOGS = "get-logs";
         public const string TOOL_NAME_RUN_TESTS = "run-tests";
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";
         public const string COMMAND_NAME_GET_VERSION = "get-version";

@@ -4,8 +4,12 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +70,111 @@ func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *test
 	}
 }
 
+// Verifies successful retry focus attempts are persisted to CLI Vibe logs.
+func TestSendWithTransientConnectionRetryWritesFocusSuccessVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+
+	originalFinder := findRunningUnityProcessForConnectionRetry
+	originalFocus := focusUnityProcessForConnectionRetry
+	originalTimeout := serverConnectionRetryTimeout
+	originalPoll := serverConnectionRetryPoll
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 456}, nil
+	}
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+		return nil, nil
+	}
+	serverConnectionRetryTimeout = time.Nanosecond
+	serverConnectionRetryPoll = time.Nanosecond
+	t.Cleanup(func() {
+		findRunningUnityProcessForConnectionRetry = originalFinder
+		focusUnityProcessForConnectionRetry = originalFocus
+		serverConnectionRetryTimeout = originalTimeout
+		serverConnectionRetryPoll = originalPoll
+	})
+
+	projectRoot := t.TempDir()
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "unix",
+			Address: filepath.Join(t.TempDir(), "missing.sock"),
+		},
+		ProjectRoot: projectRoot,
+	}
+
+	_, _ = sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil)
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_connection_retry_focus_attempt"`,
+		`"operation":"cli_connection_retry_focus_success"`,
+		`"command":"get-logs"`,
+		`"pid":456`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+}
+
+// Verifies failed retry focus attempts are persisted to CLI Vibe logs.
+func TestSendWithTransientConnectionRetryWritesFocusFailureVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+
+	originalFinder := findRunningUnityProcessForConnectionRetry
+	originalFocus := focusUnityProcessForConnectionRetry
+	originalTimeout := serverConnectionRetryTimeout
+	originalPoll := serverConnectionRetryPoll
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 789}, nil
+	}
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+		return nil, fmt.Errorf("focus denied")
+	}
+	serverConnectionRetryTimeout = time.Nanosecond
+	serverConnectionRetryPoll = time.Nanosecond
+	t.Cleanup(func() {
+		findRunningUnityProcessForConnectionRetry = originalFinder
+		focusUnityProcessForConnectionRetry = originalFocus
+		serverConnectionRetryTimeout = originalTimeout
+		serverConnectionRetryPoll = originalPoll
+	})
+
+	projectRoot := t.TempDir()
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "unix",
+			Address: filepath.Join(t.TempDir(), "missing.sock"),
+		},
+		ProjectRoot: projectRoot,
+	}
+
+	_, _ = sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"compile",
+		map[string]any{},
+		nil)
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_connection_retry_focus_attempt"`,
+		`"operation":"cli_connection_retry_focus_failed"`,
+		`"command":"compile"`,
+		`"pid":789`,
+		`"focusError":"focus denied"`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+}
+
 // Verifies process probe timeouts keep the structured server-not-responding error.
 func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testing.T) {
 	originalFinder := findRunningUnityProcessForConnectionRetry
@@ -102,6 +211,22 @@ func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testin
 	if !errors.As(err, &notRespondingErr) {
 		t.Fatalf("expected unityServerNotRespondingError, got %v", err)
 	}
+}
+
+func readOnlyCliVibeLog(t *testing.T, projectRoot string) string {
+	t.Helper()
+	logFiles, err := filepath.Glob(filepath.Join(projectRoot, cliVibeLogDirectory, cliVibeLogPrefix+"_*.json"))
+	if err != nil {
+		t.Fatalf("failed to glob CLI Vibe logs: %v", err)
+	}
+	if len(logFiles) != 1 {
+		t.Fatalf("expected one CLI Vibe log, got %d: %#v", len(logFiles), logFiles)
+	}
+	content, err := os.ReadFile(logFiles[0])
+	if err != nil {
+		t.Fatalf("failed to read CLI Vibe log: %v", err)
+	}
+	return string(content)
 }
 
 // Verifies accepted RPCs can outlive the pre-dispatch connection retry timeout.
