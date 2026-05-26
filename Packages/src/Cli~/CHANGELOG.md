@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.17](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.16...cli-v3.0.0-beta.17) (2026-05-26)
+
+
+### Features
+
+* Tests now save editor changes before running ([#1212](https://github.com/hatayama/unity-cli-loop/issues/1212)) ([ded7d74](https://github.com/hatayama/unity-cli-loop/commit/ded7d7411905f3edeb0c286567c8d7d03ae57aa5))
+
 ## [3.0.0-beta.16](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.15...cli-v3.0.0-beta.16) (2026-05-25)
 
 
