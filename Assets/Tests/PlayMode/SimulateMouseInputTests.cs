@@ -131,6 +131,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsFalse(lastResponse.Success, "LongPress with zero duration should fail");
         }
 
+        [UnityTest]
+        public IEnumerator LongPress_Should_RestoreRunInBackground_WhenOriginallyDisabled()
+        {
+            // Verifies that mouse input simulation keeps PlayMode running in the background only during execution.
+            yield return null;
+
+            bool originalRunInBackground = UnityEngine.Application.runInBackground;
+
+            try
+            {
+                UnityEngine.Application.runInBackground = false;
+                Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+                {
+                    ["action"] = MouseInputAction.LongPress.ToString(),
+                    ["x"] = 400,
+                    ["y"] = 300,
+                    ["duration"] = 0.2f
+                }, System.Threading.CancellationToken.None);
+
+                float toggleTimeoutAt = Time.realtimeSinceStartup + 2f;
+                yield return new WaitUntil(() =>
+                    UnityEngine.Application.runInBackground
+                    || task.IsCompleted
+                    || Time.realtimeSinceStartup >= toggleTimeoutAt);
+                Assert.IsTrue(
+                    UnityEngine.Application.runInBackground,
+                    "Mouse input simulation should enable Run In Background while executing.");
+
+                float completionTimeoutAt = Time.realtimeSinceStartup + 5f;
+                yield return new WaitUntil(() =>
+                    task.IsCompleted || Time.realtimeSinceStartup >= completionTimeoutAt);
+                Assert.IsTrue(task.IsCompleted, "Tool execution timed out.");
+                Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+
+                lastResponse = (SimulateMouseInputResponse)task.Result;
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsFalse(
+                    UnityEngine.Application.runInBackground,
+                    "Mouse input simulation should restore the original Run In Background value.");
+            }
+            finally
+            {
+                UnityEngine.Application.runInBackground = originalRunInBackground;
+            }
+        }
+
         #endregion
 
         #region MoveDelta Tests

@@ -99,6 +99,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId: correlationId
             );
 
+            using InputSimulationRunInBackgroundScope runInBackgroundScope = InputSimulationRunInBackgroundScope.Enable();
+
             EnsureOverlayExists();
 
             UnityCliLoopMouseInputSimulationResult response;

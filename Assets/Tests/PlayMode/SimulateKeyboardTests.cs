@@ -199,6 +199,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Press_Should_RestoreRunInBackground_WhenOriginallyDisabled()
+        {
+            // Verifies that keyboard simulation keeps PlayMode running in the background only during execution.
+            yield return null;
+
+            bool originalRunInBackground = UnityEngine.Application.runInBackground;
+
+            try
+            {
+                UnityEngine.Application.runInBackground = false;
+                Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+                {
+                    ["action"] = KeyboardAction.Press.ToString(),
+                    ["key"] = "Space",
+                    ["duration"] = 0.2f
+                }, CancellationToken.None);
+
+                float toggleTimeoutAt = Time.realtimeSinceStartup + 2f;
+                yield return new WaitUntil(() =>
+                    UnityEngine.Application.runInBackground
+                    || task.IsCompleted
+                    || Time.realtimeSinceStartup >= toggleTimeoutAt);
+                Assert.IsTrue(
+                    UnityEngine.Application.runInBackground,
+                    "Keyboard simulation should enable Run In Background while executing.");
+
+                float completionTimeoutAt = Time.realtimeSinceStartup + 5f;
+                yield return new WaitUntil(() =>
+                    task.IsCompleted || Time.realtimeSinceStartup >= completionTimeoutAt);
+                Assert.IsTrue(task.IsCompleted, "Tool execution timed out.");
+                Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+
+                lastResponse = (SimulateKeyboardResponse)task.Result;
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsFalse(
+                    UnityEngine.Application.runInBackground,
+                    "Keyboard simulation should restore the original Run In Background value.");
+            }
+            finally
+            {
+                UnityEngine.Application.runInBackground = originalRunInBackground;
+            }
+        }
+
+        [UnityTest]
         public IEnumerator OverlayFade_Should_StartAfterPressRelease_And_NotDimHeldKeyBadge()
         {
             yield return null;
