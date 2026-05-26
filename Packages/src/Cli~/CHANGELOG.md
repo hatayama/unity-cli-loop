@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.16](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.15...cli-v3.0.0-beta.16) (2026-05-25)
+
+
+### Bug Fixes
+
+* Make skill instructions use CLI flag syntax ([#1210](https://github.com/hatayama/unity-cli-loop/issues/1210)) ([a11923d](https://github.com/hatayama/unity-cli-loop/commit/a11923dc61cdced2bbe57656058084c726920d8a))
+
 ## [3.0.0-beta.15](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.14...cli-v3.0.0-beta.15) (2026-05-25)
 
 
