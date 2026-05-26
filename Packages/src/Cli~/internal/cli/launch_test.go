@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,6 +109,93 @@ func TestRunLaunchQuitDoesNotLaunchWhenUnityIsNotRunning(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "No Unity process is running") {
 		t.Fatalf("stdout mismatch: %s", stdout.String())
+	}
+}
+
+// Verifies launch logs when it focuses an already-running Unity process.
+func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
+	originalFinder := findRunningUnityProcessForLaunch
+	originalFocus := focusUnityProcessForLaunch
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 111}, nil
+	}
+	focusUnityProcessForLaunch = func(context.Context, int) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		focusUnityProcessForLaunch = originalFocus
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(
+		context.Background(),
+		launchOptions{projectPath: projectRoot},
+		projectRoot,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_launch_existing_focus_attempt"`,
+		`"operation":"cli_launch_existing_focus_success"`,
+		`"command":"launch"`,
+		`"pid":111`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+}
+
+// Verifies launch logs focus failures without changing its existing success behavior.
+func TestRunLaunchWritesExistingFocusFailureVibeLog(t *testing.T) {
+	originalFinder := findRunningUnityProcessForLaunch
+	originalFocus := focusUnityProcessForLaunch
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 222}, nil
+	}
+	focusUnityProcessForLaunch = func(context.Context, int) error {
+		return fmt.Errorf("activation denied")
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		focusUnityProcessForLaunch = originalFocus
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(
+		context.Background(),
+		launchOptions{projectPath: projectRoot},
+		projectRoot,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 0 {
+		t.Fatalf("launch should preserve existing focus failure behavior: code=%d stderr=%s", code, stderr.String())
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_launch_existing_focus_attempt"`,
+		`"operation":"cli_launch_existing_focus_failed"`,
+		`"command":"launch"`,
+		`"pid":222`,
+		`"focusError":"activation denied"`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
 	}
 }
 
