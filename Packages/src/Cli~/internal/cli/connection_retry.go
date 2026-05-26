@@ -91,9 +91,14 @@ func sendWithTransientConnectionRetry(
 			return outcome, err
 		}
 		if !focusAttempted {
+			correlationID := newCliVibeCorrelationID()
+			logConnectionRetryFocusAttempt(connection, method, runningProcess.pid, err, correlationID)
 			restorer, focusErr := focusUnityProcessForConnectionRetry(retryContext, runningProcess.pid)
 			if focusErr == nil {
 				restoreFocus = restorer
+				logConnectionRetryFocusSuccess(connection, method, runningProcess.pid, err, correlationID)
+			} else {
+				logConnectionRetryFocusFailure(connection, method, runningProcess.pid, err, focusErr, correlationID)
 			}
 			focusAttempted = true
 		}
@@ -122,6 +127,78 @@ func shouldRetryUndispatchedConnection(err error, outcome unityipc.UnitySendOutc
 
 	var connectionErr *unityipc.ConnectionAttemptError
 	return errors.As(err, &connectionErr)
+}
+
+func logConnectionRetryFocusAttempt(
+	connection unityipc.Connection,
+	method string,
+	pid int,
+	retryCause error,
+	correlationID string,
+) {
+	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
+		Level:     "INFO",
+		Operation: "cli_connection_retry_focus_attempt",
+		Message:   "Attempting to focus Unity before retrying an undispatched request.",
+		Context: map[string]any{
+			"command":  method,
+			"pid":      pid,
+			"endpoint": connection.Endpoint.Address,
+			"cause":    errorMessage(retryCause),
+		},
+		CorrelationID: correlationID,
+	})
+}
+
+func logConnectionRetryFocusSuccess(
+	connection unityipc.Connection,
+	method string,
+	pid int,
+	retryCause error,
+	correlationID string,
+) {
+	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
+		Level:     "INFO",
+		Operation: "cli_connection_retry_focus_success",
+		Message:   "Focused Unity before retrying an undispatched request.",
+		Context: map[string]any{
+			"command":  method,
+			"pid":      pid,
+			"endpoint": connection.Endpoint.Address,
+			"cause":    errorMessage(retryCause),
+		},
+		CorrelationID: correlationID,
+	})
+}
+
+func logConnectionRetryFocusFailure(
+	connection unityipc.Connection,
+	method string,
+	pid int,
+	retryCause error,
+	focusErr error,
+	correlationID string,
+) {
+	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
+		Level:     "WARNING",
+		Operation: "cli_connection_retry_focus_failed",
+		Message:   "Failed to focus Unity before retrying an undispatched request.",
+		Context: map[string]any{
+			"command":    method,
+			"pid":        pid,
+			"endpoint":   connection.Endpoint.Address,
+			"cause":      errorMessage(retryCause),
+			"focusError": errorMessage(focusErr),
+		},
+		CorrelationID: correlationID,
+	})
+}
+
+func errorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func resolveProjectEndpointAddress(projectRoot string) string {
