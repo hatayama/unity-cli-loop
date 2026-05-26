@@ -16,6 +16,7 @@ const (
 	cacheDirectoryName  = tools.CacheDirectoryName
 	cacheFileName       = tools.CacheFileName
 	projectPathFlagName = "project-path"
+	runTestsCommandName = "run-tests"
 )
 
 type (
@@ -239,7 +240,7 @@ func isNextOptionToken(value string) bool {
 func findProperty(tool toolDefinition, kebabName string) (string, toolProperty, bool, bool) {
 	schema := tool.EffectiveInputSchema()
 	for propertyName, property := range schema.Properties {
-		if optionNameForProperty(propertyName, property) == kebabName {
+		if optionNameForProperty(tool.Name, propertyName, property) == kebabName {
 			return propertyName, property, isNegatedBooleanProperty(property), true
 		}
 	}
@@ -294,12 +295,21 @@ func convertValue(value string, property toolProperty, option string) (any, erro
 	}
 }
 
-func optionNameForProperty(propertyName string, property toolProperty) string {
+func optionNameForProperty(toolName string, propertyName string, property toolProperty) string {
 	kebabName := pascalToKebab(propertyName)
 	if isNegatedBooleanProperty(property) {
+		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
+			return "fail-on-unsaved-changes"
+		}
 		return "no-" + kebabName
 	}
 	return kebabName
+}
+
+func isRunTestsSaveBeforeRunOption(toolName string, propertyName string, property toolProperty) bool {
+	return toolName == runTestsCommandName &&
+		propertyName == "SaveBeforeRun" &&
+		isNegatedBooleanProperty(property)
 }
 
 func visibleOptionNamesForTool(tool toolDefinition) []string {
@@ -309,7 +319,7 @@ func visibleOptionNamesForTool(tool toolDefinition) []string {
 		if property.Hidden {
 			continue
 		}
-		options = append(options, "--"+optionNameForProperty(propertyName, property))
+		options = append(options, "--"+optionNameForProperty(tool.Name, propertyName, property))
 	}
 	sort.Strings(options)
 	return options

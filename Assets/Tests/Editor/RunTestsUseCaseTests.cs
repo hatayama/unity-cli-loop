@@ -67,6 +67,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteAsync_WithDefaultRequest_ShouldSaveBeforeRun()
+        {
+            // Verifies default use-case requests preserve the run-tests auto-save behavior.
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService
+            );
+            UnityCliLoopTestExecutionRequest parameters = new();
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(validationService.WasCalled, Is.True);
+            Assert.That(validationService.SaveBeforeRun, Is.True);
+            Assert.That(executionService.WasCalled, Is.True);
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenTestFrameworkUnavailable_ShouldFailFastWithoutValidation()
         {
             StubTestExecutionService executionService = new()

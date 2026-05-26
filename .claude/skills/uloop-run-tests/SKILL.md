@@ -10,7 +10,7 @@ Execute Unity Test Runner. When tests fail, NUnit XML results with error message
 
 Before running `uloop run-tests`, run `uloop compile` for the same Unity project when the current task created, deleted, renamed, moved, or edited C# source files, test files, `.asmdef`, `.asmref`, package manifest files, or scripting define settings. This refreshes the AssetDatabase, lets Unity discover new tests, and surfaces compile errors before test execution. You may skip this compile step when rerunning tests without code or assembly-definition changes since the last successful compile.
 
-Before executing tests, `uloop run-tests` checks for unsaved loaded Scene changes and unsaved current Prefab Stage changes. If any are found, it returns `Success: false`, keeps `TestCount` at `0`, lists the unsaved items in `Message`, and does not start the Unity Test Runner. Save or discard those editor changes, then rerun the command. Use `--save-before-run` only when the user explicitly asks to save editor changes before continuing.
+Before executing tests, `uloop run-tests` saves unsaved loaded Scene changes and unsaved current Prefab Stage changes by default. If saving fails, it returns `Success: false`, keeps `TestCount` at `0`, lists the unsaved items in `Message`, and does not start the Unity Test Runner.
 
 ## Usage
 
@@ -25,7 +25,7 @@ uloop run-tests [options]
 | `--test-mode` | string | `EditMode` | Test mode: `EditMode`, `PlayMode` |
 | `--filter-type` | string | `all` | Filter type: `all`, `exact`, `regex`, `assembly` |
 | `--filter-value` | string | - | Filter value (test name, pattern, or assembly) |
-| `--save-before-run` | flag | - | Save unsaved loaded Scene changes and current Prefab Stage changes before running tests |
+| `--fail-on-unsaved-changes` | flag | - | Fail before test execution if unsaved editor changes remain instead of auto-saving them |
 
 ## Global Options
 
@@ -42,8 +42,8 @@ uloop run-tests
 # Run PlayMode tests
 uloop run-tests --test-mode PlayMode
 
-# Save explicitly approved editor changes before running tests
-uloop run-tests --save-before-run
+# Fail instead of auto-saving when editor changes are unsaved
+uloop run-tests --fail-on-unsaved-changes
 
 # Run specific test
 uloop run-tests --filter-type exact --filter-value "MyTest.TestMethod"

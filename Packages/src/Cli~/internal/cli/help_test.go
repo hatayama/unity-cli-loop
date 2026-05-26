@@ -310,7 +310,9 @@ func TestRunProjectLocalRunTestsHelpDoesNotRequireUnityProject(t *testing.T) {
 		"--test-mode",
 		"--filter-type",
 		"--filter-value",
-		"--save-before-run",
+		"--fail-on-unsaved-changes",
+		"Fail before execution if unsaved editor changes remain instead of auto-saving them",
+		"default: auto-save enabled",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("run-tests help missing %q:\n%s", expected, output)
