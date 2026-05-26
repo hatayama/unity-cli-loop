@@ -70,11 +70,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             {
                 return new TranslationOutput
                 {
-                    FriendlyMessage = "Unity tool execution is busy",
+                    FriendlyMessage = busyException.Message,
                     Explanation = busyException.Message,
                     Solutions = new List<string>
                     {
-                        "Retry after the current command completes"
+                        "Retry after the running tool completes"
                     }
                 };
             }

@@ -114,8 +114,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     _ => Task.CompletedTask);
 
                 string secondResponse = await AwaitWithTimeout(secondResponseTask, TimeSpan.FromMilliseconds(200));
+                JObject error = ParseError(secondResponse);
                 JObject data = ParseErrorData(secondResponse);
 
+                Assert.That(error["message"]?.ToString(), Does.Contain(SingleFlightTestTool.Name));
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
@@ -174,8 +176,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     _ => Task.CompletedTask);
 
                 string otherToolResponse = await AwaitWithTimeout(otherToolTask, TimeSpan.FromMilliseconds(200));
+                JObject error = ParseError(otherToolResponse);
                 JObject data = ParseErrorData(otherToolResponse);
 
+                Assert.That(error["message"]?.ToString(), Does.Contain(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
+                Assert.That(error["message"]?.ToString(), Does.Contain(SingleFlightTestTool.Name));
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
@@ -379,12 +384,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static JObject ParseErrorData(string response)
         {
-            JObject parsed = JObject.Parse(response);
-            JObject error = parsed["error"] as JObject;
-            Assert.That(error, Is.Not.Null);
+            JObject error = ParseError(response);
             JObject data = error["data"] as JObject;
             Assert.That(data, Is.Not.Null);
             return data;
+        }
+
+        private static JObject ParseError(string response)
+        {
+            JObject parsed = JObject.Parse(response);
+            JObject error = parsed["error"] as JObject;
+            Assert.That(error, Is.Not.Null);
+            return error;
         }
 
         private static async Task<string> AwaitWithTimeout(Task<string> task, TimeSpan timeout)
