@@ -16,6 +16,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class ControlPlayModeSchema : UnityCliLoopToolSchema
     {
         public PlayModeAction Action { get; set; } = PlayModeAction.Play;
+        public int TimeoutSeconds { get; set; } = ControlPlayModeUseCase.DefaultTimeoutSeconds;
     }
 }
-
