@@ -124,6 +124,8 @@ func TestParseWindowsForegroundHandle(t *testing.T) {
 
 // Verifies focus-window persists successful focus attempts to CLI Vibe logs.
 func TestRunFocusWindowWritesFocusSuccessVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+
 	originalFinder := findRunningUnityProcessForFocusWindow
 	originalFocus := focusUnityProcessForFocusWindow
 	findRunningUnityProcessForFocusWindow = func(context.Context, string) (*unityProcess, error) {
@@ -161,6 +163,8 @@ func TestRunFocusWindowWritesFocusSuccessVibeLog(t *testing.T) {
 
 // Verifies focus-window persists failed focus attempts to CLI Vibe logs.
 func TestRunFocusWindowWritesFocusFailureVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+
 	originalFinder := findRunningUnityProcessForFocusWindow
 	originalFocus := focusUnityProcessForFocusWindow
 	findRunningUnityProcessForFocusWindow = func(context.Context, string) (*unityProcess, error) {

@@ -114,6 +114,8 @@ func TestRunLaunchQuitDoesNotLaunchWhenUnityIsNotRunning(t *testing.T) {
 
 // Verifies launch logs when it focuses an already-running Unity process.
 func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+
 	originalFinder := findRunningUnityProcessForLaunch
 	originalFocus := focusUnityProcessForLaunch
 	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
@@ -157,6 +159,8 @@ func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
 
 // Verifies launch logs focus failures without changing its existing success behavior.
 func TestRunLaunchWritesExistingFocusFailureVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+
 	originalFinder := findRunningUnityProcessForLaunch
 	originalFocus := focusUnityProcessForLaunch
 	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {

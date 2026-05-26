@@ -72,6 +72,8 @@ func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *test
 
 // Verifies successful retry focus attempts are persisted to CLI Vibe logs.
 func TestSendWithTransientConnectionRetryWritesFocusSuccessVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+
 	originalFinder := findRunningUnityProcessForConnectionRetry
 	originalFocus := focusUnityProcessForConnectionRetry
 	originalTimeout := serverConnectionRetryTimeout
@@ -122,6 +124,8 @@ func TestSendWithTransientConnectionRetryWritesFocusSuccessVibeLog(t *testing.T)
 
 // Verifies failed retry focus attempts are persisted to CLI Vibe logs.
 func TestSendWithTransientConnectionRetryWritesFocusFailureVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+
 	originalFinder := findRunningUnityProcessForConnectionRetry
 	originalFocus := focusUnityProcessForConnectionRetry
 	originalTimeout := serverConnectionRetryTimeout

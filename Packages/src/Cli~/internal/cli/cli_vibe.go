@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 const (
 	cliVibeLogDirectory = ".uloop/outputs/VibeLogs"
 	cliVibeLogPrefix    = "cli_vibe"
+	cliVibeLogEnvName   = "ULOOP_DEBUG"
 )
 
 type cliVibeLogEntry struct {
@@ -32,6 +34,10 @@ func newCliVibeCorrelationID() string {
 }
 
 func writeCliVibeLog(projectRoot string, entry cliVibeLogEntry) error {
+	if !isCliVibeLogEnabled() {
+		return nil
+	}
+
 	if projectRoot == "" {
 		return nil
 	}
@@ -66,4 +72,12 @@ func writeCliVibeLog(projectRoot string, entry cliVibeLogEntry) error {
 	}
 	_, err = file.Write(append(payload, '\n'))
 	return err
+}
+
+func isCliVibeLogEnabled() bool {
+	value := strings.TrimSpace(os.Getenv(cliVibeLogEnvName))
+	if value == "" || value == "0" {
+		return false
+	}
+	return !strings.EqualFold(value, "false")
 }
