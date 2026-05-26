@@ -438,7 +438,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return;
             }
 
-            string absolutePath = Path.GetFullPath(Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), relativePath));
+            string projectRoot = Path.GetFullPath(UnityCliLoopPathResolver.GetProjectRoot());
+            string absolutePath = Path.GetFullPath(Path.Combine(projectRoot, relativePath));
+            string projectRootPrefix = projectRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? projectRoot
+                : projectRoot + Path.DirectorySeparatorChar;
+            if (!string.Equals(absolutePath, projectRoot, StringComparison.Ordinal)
+                && !absolutePath.StartsWith(projectRootPrefix, StringComparison.Ordinal))
+            {
+                return;
+            }
+
             if (File.Exists(absolutePath))
             {
                 File.Delete(absolutePath);
