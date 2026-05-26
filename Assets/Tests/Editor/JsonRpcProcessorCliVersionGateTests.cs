@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -192,6 +193,69 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ProcessRequest_AfterGetHierarchyReturns_AllowsImmediateGetLogs()
+        {
+            // Verifies a completed get-hierarchy response releases the single-flight gate before the next tool request.
+            CapturingMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            UnityCliLoopToolRegistrar.RegisterService(service);
+
+            string hierarchyResponse = null;
+            Task<string> hierarchyResponseTask = null;
+            Task<string> logsResponseTask = null;
+            try
+            {
+                hierarchyResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequestWithParams(
+                        UnityCliLoopConstants.TOOL_NAME_GET_HIERARCHY,
+                        "{\"MaxDepth\":0,\"IncludeComponents\":false}",
+                        1),
+                    CancellationToken.None,
+                    _ => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
+                dispatcher.RunContinuations();
+                hierarchyResponse = await AwaitWithTimeout(hierarchyResponseTask, TimeSpan.FromSeconds(1));
+                JObject parsedHierarchy = JObject.Parse(hierarchyResponse);
+
+                Assert.That(parsedHierarchy["error"], Is.Null);
+                Assert.That(parsedHierarchy["result"]?["hierarchyFilePath"]?.ToString(), Is.Not.Empty);
+
+                logsResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequestWithParams(
+                        UnityCliLoopConstants.TOOL_NAME_GET_LOGS,
+                        "{\"MaxCount\":0}",
+                        2),
+                    CancellationToken.None,
+                    _ => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
+                dispatcher.RunContinuations();
+                string logsResponse = await AwaitWithTimeout(logsResponseTask, TimeSpan.FromSeconds(1));
+                JObject parsedLogs = JObject.Parse(logsResponse);
+
+                Assert.That(parsedLogs["error"], Is.Null);
+                Assert.That(parsedLogs["result"]?["DisplayedCount"]?.ToObject<int>(), Is.EqualTo(0));
+            }
+            finally
+            {
+                dispatcher.RunContinuations();
+                await DrainTaskIfNeeded(hierarchyResponseTask);
+                await DrainTaskIfNeeded(logsResponseTask);
+                DeleteHierarchyFileFromResponse(hierarchyResponse);
+                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
+        [Test]
         public async Task ProcessRequest_WhenInternalBridgeCommandRuns_SwitchesToMainThread()
         {
             // Verifies CLI-only bridge commands keep Unity API access on the editor thread.
@@ -299,6 +363,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "\",\"acceptsDispatchAck\":true}}";
         }
 
+        private static string BuildToolRequestWithParams(string toolName, string paramsJson, int id)
+        {
+            return
+                "{\"jsonrpc\":\"2.0\",\"method\":\"" +
+                toolName +
+                "\",\"params\":" +
+                paramsJson +
+                ",\"id\":" +
+                id +
+                ",\"uloop\":{\"cliVersion\":\"" +
+                CliConstants.MINIMUM_REQUIRED_CLI_VERSION +
+                "\",\"acceptsDispatchAck\":true}}";
+        }
+
         private static JObject ParseErrorData(string response)
         {
             JObject parsed = JObject.Parse(response);
@@ -333,6 +411,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             await AwaitWithTimeout(task, TimeSpan.FromSeconds(1));
+        }
+
+        private static void DeleteHierarchyFileFromResponse(string response)
+        {
+            if (string.IsNullOrEmpty(response))
+            {
+                return;
+            }
+
+            JObject parsed = JObject.Parse(response);
+            string relativePath = parsed["result"]?["hierarchyFilePath"]?.ToString();
+            if (string.IsNullOrEmpty(relativePath))
+            {
+                return;
+            }
+
+            string absolutePath = Path.GetFullPath(Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), relativePath));
+            if (File.Exists(absolutePath))
+            {
+                File.Delete(absolutePath);
+            }
         }
 
         private static void RestoreEditorMainThreadDispatcher()
