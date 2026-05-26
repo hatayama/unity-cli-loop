@@ -7,6 +7,7 @@ MARKER="<!-- uloop-cli-minimum-version-warning -->"
 PR_NUMBER=${PR_NUMBER:-}
 REPOSITORY=${GITHUB_REPOSITORY:-}
 BASE_REF=${CLI_MINIMUM_VERSION_BASE_REF:-}
+HEAD_REF=${CLI_MINIMUM_VERSION_HEAD_REF:-HEAD}
 
 if [ -z "$PR_NUMBER" ]; then
   echo "Skipping CLI minimum version comment because no PR number was provided."
@@ -26,7 +27,7 @@ if [ -z "$BASE_REF" ]; then
   exit 0
 fi
 
-CHANGED_FILES=$(git -C "$ROOT_DIR" diff --name-only "$BASE_REF...HEAD" --)
+CHANGED_FILES=$(git -C "$ROOT_DIR" diff --name-only "$BASE_REF...$HEAD_REF" --)
 
 has_changed_file() {
   expected=$1

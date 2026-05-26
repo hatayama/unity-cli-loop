@@ -153,10 +153,46 @@ run_case() {
   )
 }
 
+run_head_ref_case() {
+  name=$1
+
+  work_dir="$TMP_DIR/$name"
+  mkdir -p "$work_dir"
+  write_mock_gh "$work_dir"
+  touch "$work_dir/gh.log" "$work_dir/body.log"
+  create_repository "$work_dir"
+
+  (
+    cd "$work_dir/repo"
+    base_branch=$(git branch --show-current)
+    git switch -q -c pr-head
+    write_file Packages/src/Cli~/internal/cli/run.go "package cli // changed"
+    git add .
+    git commit -q -m go-cli
+    git switch -q "$base_branch"
+
+    PATH="$work_dir/bin:$ORIGINAL_PATH" \
+      GH_LOG="$work_dir/gh.log" \
+      GH_BODY_LOG="$work_dir/body.log" \
+      GH_EXISTING_COMMENT_ID="" \
+      ULOOP_REPOSITORY_ROOT="$work_dir/repo" \
+      PR_NUMBER=123 \
+      GITHUB_REPOSITORY=hatayama/unity-cli-loop \
+      CLI_MINIMUM_VERSION_BASE_REF=HEAD \
+      CLI_MINIMUM_VERSION_HEAD_REF=pr-head \
+      "$SCRIPT" > "$work_dir/output.txt"
+  )
+}
+
 # Verifies a Go CLI change without a minimum-version change creates a warning comment.
 run_case posts-warning "" go-cli
 assert_contains "$TMP_DIR/posts-warning/gh.log" "POST repos/hatayama/unity-cli-loop/issues/123/comments"
 assert_contains "$TMP_DIR/posts-warning/body.log" "Go CLI files changed"
+
+# Verifies pull_request_target can diff a fetched PR head without checking it out.
+run_head_ref_case posts-warning-from-head-ref
+assert_contains "$TMP_DIR/posts-warning-from-head-ref/gh.log" "POST repos/hatayama/unity-cli-loop/issues/123/comments"
+assert_contains "$TMP_DIR/posts-warning-from-head-ref/body.log" "Go CLI files changed"
 
 # Verifies a matching existing comment is updated instead of duplicated.
 run_case updates-warning 456 go-cli
