@@ -34,6 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             PrepareResultStorage(request);
+            string correlationId = ResolveCorrelationId(request);
+            LogCompileRequestReceived(request, correlationId);
 
             // 1. Play Mode preparation check
             PlayModeCompilationPreparationService preparationService = new();
@@ -41,6 +43,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!preparation.CanProceed)
             {
+                VibeLogger.LogWarning(
+                    "compile_preparation_failed",
+                    preparation.ErrorMessage,
+                    BuildCompileLogContext(request),
+                    correlationId);
                 UnityCliLoopCompileResult response = CreateCompileResult(
                     false,
                     1,
@@ -48,13 +55,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new[] { CreateIssue(preparation.ErrorMessage, "", 0) },
                     Array.Empty<UnityCliLoopCompileIssue>(),
                     null);
-                return PersistResponseIfNeeded(request, response);
+                return PersistResponseIfNeeded(request, response, correlationId);
             }
 
             if (preparation.NeedsPlayModeStop)
             {
+                VibeLogger.LogInfo(
+                    "compile_playmode_stop_requested",
+                    "Stopping Play Mode before compile.",
+                    BuildCompileLogContext(request),
+                    correlationId);
                 preparationService.StopPlayMode();
                 bool exited = await WaitForPlayModeExitAsync(ct);
+                VibeLogger.LogInfo(
+                    "compile_playmode_exit_observed",
+                    exited ? "Play Mode exited before compile." : "Play Mode did not exit before compile.",
+                    new
+                    {
+                        request_id = request.RequestId,
+                        exited
+                    },
+                    correlationId);
                 if (!exited)
                 {
                     UnityCliLoopCompileResult response = CreateCompileResult(
@@ -64,7 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         new[] { CreateIssue("Play Mode did not exit within 5 seconds; compilation aborted.", "", 0) },
                         Array.Empty<UnityCliLoopCompileIssue>(),
                         null);
-                    return PersistResponseIfNeeded(request, response);
+                    return PersistResponseIfNeeded(request, response, correlationId);
                 }
             }
 
@@ -74,6 +95,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             
             if (!validation.IsValid)
             {
+                VibeLogger.LogWarning(
+                    "compile_state_validation_failed",
+                    validation.ErrorMessage,
+                    BuildCompileLogContext(request),
+                    correlationId);
                 UnityCliLoopCompileResult response = CreateCompileResult(
                     false,
                     1,
@@ -81,13 +107,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new[] { CreateIssue(validation.ErrorMessage, "", 0) },
                     Array.Empty<UnityCliLoopCompileIssue>(),
                     null);
-                return PersistResponseIfNeeded(request, response);
+                return PersistResponseIfNeeded(request, response, correlationId);
             }
 
             // 3. Compilation execution
             ct.ThrowIfCancellationRequested();
+            VibeLogger.LogInfo(
+                "compile_execution_start",
+                "Starting Unity compilation execution.",
+                BuildCompileLogContext(request),
+                correlationId);
             CompilationExecutionService executionService = new();
             CompileResult result = await executionService.ExecuteCompilationAsync(request.ForceRecompile, ct);
+            VibeLogger.LogInfo(
+                "compile_execution_completed",
+                "Unity compilation execution completed.",
+                new
+                {
+                    request_id = request.RequestId,
+                    success = result.Success,
+                    error_count = result.ErrorCount,
+                    warning_count = result.WarningCount,
+                    is_indeterminate = result.IsIndeterminate
+                },
+                correlationId);
             
             // 4. Result formatting
             if (result.IsIndeterminate)
@@ -99,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     null,
                     null,
                     result.Message ?? "Compilation status is indeterminate. Use get-logs tool to check results.");
-                return PersistResponseIfNeeded(request, response);
+                return PersistResponseIfNeeded(request, response, correlationId);
             }
 
             UnityCliLoopCompileIssue[] errors = result.error?.Select(e => CreateIssue(e.message, e.file, e.line)).ToArray();
@@ -112,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 errors,
                 warnings,
                 null);
-            return PersistResponseIfNeeded(request, successResponse);
+            return PersistResponseIfNeeded(request, successResponse, correlationId);
         }
 
         private static UnityCliLoopCompileResult CreateCompileResult(
@@ -191,13 +234,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static UnityCliLoopCompileResult PersistResponseIfNeeded(UnityCliLoopCompileRequest request, UnityCliLoopCompileResult response)
+        private static UnityCliLoopCompileResult PersistResponseIfNeeded(
+            UnityCliLoopCompileRequest request,
+            UnityCliLoopCompileResult response,
+            string correlationId)
         {
             Debug.Assert(request != null, "request must not be null");
             Debug.Assert(response != null, "response must not be null");
 
             if (!request.WaitForDomainReload)
             {
+                VibeLogger.LogInfo(
+                    "compile_result_returned_without_domain_reload_wait",
+                    "Returning compile result without delayed domain reload wait.",
+                    new
+                    {
+                        success = response.Success,
+                        error_count = response.ErrorCount,
+                        warning_count = response.WarningCount
+                    },
+                    correlationId);
                 return response;
             }
 
@@ -205,11 +261,62 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (string.IsNullOrWhiteSpace(request.RequestId))
             {
+                VibeLogger.LogWarning(
+                    "compile_result_not_persisted",
+                    "Compile result was not persisted because the request ID is empty.",
+                    null,
+                    correlationId);
                 return response;
             }
 
             CompileResultPersistenceService.SaveResult(request.RequestId, response);
+            VibeLogger.LogInfo(
+                "compile_result_persisted",
+                "Compile result persisted for CLI domain reload wait.",
+                new
+                {
+                    request_id = request.RequestId,
+                    success = response.Success,
+                    error_count = response.ErrorCount,
+                    warning_count = response.WarningCount
+                },
+                correlationId);
             return response;
+        }
+
+        private static string ResolveCorrelationId(UnityCliLoopCompileRequest request)
+        {
+            Debug.Assert(request != null, "request must not be null");
+
+            if (!string.IsNullOrWhiteSpace(request.RequestId))
+            {
+                return request.RequestId;
+            }
+
+            return VibeLogger.GenerateCorrelationId();
+        }
+
+        private static object BuildCompileLogContext(UnityCliLoopCompileRequest request)
+        {
+            Debug.Assert(request != null, "request must not be null");
+
+            return new
+            {
+                request_id = request.RequestId,
+                force_recompile = request.ForceRecompile,
+                wait_for_domain_reload = request.WaitForDomainReload
+            };
+        }
+
+        private static void LogCompileRequestReceived(UnityCliLoopCompileRequest request, string correlationId)
+        {
+            VibeLogger.LogInfo(
+                "compile_request_received",
+                "Compile request received.",
+                BuildCompileLogContext(request),
+                correlationId,
+                humanNote: "Compile request entered the Unity-side use case.",
+                aiTodo: "Compare this point with compile_execution_start, compile_controller_waiting_for_finish, domain_reload_start, and domain_reload_complete.");
         }
 
         private static string CreateRequestId()
