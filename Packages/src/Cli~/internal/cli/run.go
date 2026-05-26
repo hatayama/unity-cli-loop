@@ -133,6 +133,9 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 	if shouldWaitForExecuteDynamicCodeDomainReload(command, params) {
 		return runExecuteDynamicCodeWithDomainReloadWait(ctx, connection, params, stdout, stderr)
 	}
+	if shouldWaitForControlPlayModeState(command, params) {
+		return runControlPlayModeWithStateWait(ctx, connection, params, stdout, stderr)
+	}
 
 	applyDebugTimingParams(command, params)
 	startedAt := time.Now()
