@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
@@ -18,6 +19,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/io.github.hatayama.uloopmcp/Runtime/Common/InputVisualizationCanvas.prefab";
         private const string RuntimeAssemblyDefinitionPath =
             "Packages/src/Runtime/uLoopMCP.Runtime.asmdef";
+        private static readonly string[] OverlayPrefabPaths =
+        {
+            "Packages/io.github.hatayama.uloopmcp/Runtime/Common/InputVisualizationCanvas.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/SimulateMouseInput/SimulateMouseInputOverlay.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/SimulateKeyboard/SimulateKeyboardOverlay.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/SimulateMouseUi/SimulateMouseUiOverlay.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/RecordInput/RecordInputOverlay.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/ReplayInput/ReplayInputOverlay.prefab"
+        };
+
+        private static readonly string[] OverlayPrefabFilePaths =
+        {
+            "Packages/src/Runtime/Common/InputVisualizationCanvas.prefab",
+            "Packages/src/Runtime/SimulateMouseInput/SimulateMouseInputOverlay.prefab",
+            "Packages/src/Runtime/SimulateKeyboard/SimulateKeyboardOverlay.prefab",
+            "Packages/src/Runtime/SimulateMouseUi/SimulateMouseUiOverlay.prefab",
+            "Packages/src/Runtime/RecordInput/RecordInputOverlay.prefab",
+            "Packages/src/Runtime/ReplayInput/ReplayInputOverlay.prefab"
+        };
 
         [Test]
         public void RuntimeAssemblyDefinition_WhenScanned_IsAttachableAndNotAutoReferenced()
@@ -106,6 +126,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        [Test]
+        public void InputVisualizationPrefabs_WhenLoaded_HaveNoMissingScripts()
+        {
+            // Verifies that package Overlay prefabs do not emit missing-script warnings when instantiated.
+            for (int pathIndex = 0; pathIndex < OverlayPrefabPaths.Length; pathIndex++)
+            {
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(OverlayPrefabPaths[pathIndex]);
+
+                Assert.That(prefab, Is.Not.Null, OverlayPrefabPaths[pathIndex]);
+                AssertNoMissingScripts(prefab, OverlayPrefabPaths[pathIndex]);
+
+                GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+                try
+                {
+                    AssertNoMissingScripts(instance, OverlayPrefabPaths[pathIndex]);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(instance);
+                }
+            }
+        }
+
+        [Test]
+        public void InputVisualizationPrefabs_WhenScanned_DoNotReferenceProjectScripts()
+        {
+            // Verifies that package Overlay prefabs do not depend on scripts outside the package.
+            for (int pathIndex = 0; pathIndex < OverlayPrefabFilePaths.Length; pathIndex++)
+            {
+                string contents = ReadText(OverlayPrefabFilePaths[pathIndex]);
+                MatchCollection matches = Regex.Matches(contents, @"m_Script:\s*\{fileID:\s*11500000,\s*guid:\s*([0-9a-f]{32}),");
+
+                foreach (Match match in matches)
+                {
+                    string guid = match.Groups[1].Value;
+                    string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+
+                    Assert.That(
+                        assetPath,
+                        Does.Not.StartWith("Assets/"),
+                        $"{OverlayPrefabFilePaths[pathIndex]} references project script GUID {guid} at {assetPath}");
+                }
+            }
+        }
+
         private static void AssertSerializedReference(UnityEngine.Object target, string propertyName)
         {
             SerializedObject serializedObject = new SerializedObject(target);
@@ -113,6 +178,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(property, Is.Not.Null, propertyName);
             Assert.That(property.objectReferenceValue, Is.Not.Null, propertyName);
+        }
+
+        private static void AssertNoMissingScripts(GameObject root, string prefabPath)
+        {
+            Transform[] transforms = root.GetComponentsInChildren<Transform>(true);
+            for (int transformIndex = 0; transformIndex < transforms.Length; transformIndex++)
+            {
+                GameObject gameObject = transforms[transformIndex].gameObject;
+                int missingScriptCount = GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(gameObject);
+
+                Assert.That(
+                    missingScriptCount,
+                    Is.EqualTo(0),
+                    $"{prefabPath} has {missingScriptCount} missing script component(s) on {gameObject.name}");
+            }
         }
 
         private static string ReadText(string relativePath)
