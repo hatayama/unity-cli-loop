@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.0-beta.20](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.19...v3.0.0-beta.20) (2026-05-26)
+
+
+### Features
+
+* Tests now save editor changes before running ([#1212](https://github.com/hatayama/unity-cli-loop/issues/1212)) ([ded7d74](https://github.com/hatayama/unity-cli-loop/commit/ded7d7411905f3edeb0c286567c8d7d03ae57aa5))
+
+
+### Bug Fixes
+
+* Input simulation no longer stalls when Run In Background is disabled ([#1214](https://github.com/hatayama/unity-cli-loop/issues/1214)) ([7023ac4](https://github.com/hatayama/unity-cli-loop/commit/7023ac4aa9309ac342d50c84e449b24e6e59b0d1))
+
 ## [3.0.0-beta.19](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.18...v3.0.0-beta.19) (2026-05-25)
 
 
