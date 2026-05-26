@@ -85,6 +85,72 @@ func TestBuildToolParamsConvertsExecuteDynamicCodeNoWaitFlag(t *testing.T) {
 	}
 }
 
+// Tests that run-tests accepts --fail-on-unsaved-changes from embedded tools.
+func TestBuildToolParamsConvertsRunTestsFailOnUnsavedChangesFlag(t *testing.T) {
+	tool, ok := findTool(loadDefaultTools(), runTestsCommandName)
+	if !ok {
+		t.Fatal("run-tests was not found in default tools")
+	}
+
+	params, _, err := buildToolParams([]string{"--fail-on-unsaved-changes"}, tool)
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+
+	if params["SaveBeforeRun"] != false {
+		t.Fatalf("SaveBeforeRun mismatch: %#v", params["SaveBeforeRun"])
+	}
+}
+
+// Tests that run-tests-specific aliases do not leak into unrelated tool schemas.
+func TestBuildToolParamsKeepsGenericSaveBeforeRunFlagForOtherTools(t *testing.T) {
+	tool := toolDefinition{
+		Name: "sample-tool",
+		InputSchema: inputSchema{
+			Properties: map[string]toolProperty{
+				"SaveBeforeRun": {Type: "boolean", Default: true},
+			},
+		},
+	}
+
+	params, _, err := buildToolParams([]string{"--no-save-before-run"}, tool)
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+	if params["SaveBeforeRun"] != false {
+		t.Fatalf("SaveBeforeRun mismatch: %#v", params["SaveBeforeRun"])
+	}
+
+	_, _, err = buildToolParams([]string{"--fail-on-unsaved-changes"}, tool)
+	if err == nil {
+		t.Fatal("expected run-tests-specific flag to be rejected")
+	}
+}
+
+// Tests that run-tests-specific help text does not leak into unrelated tool schemas.
+func TestVisibleOptionHelpEntriesKeepsGenericSaveBeforeRunHelpForOtherTools(t *testing.T) {
+	tool := toolDefinition{
+		Name: "sample-tool",
+		InputSchema: inputSchema{
+			Properties: map[string]toolProperty{
+				"SaveBeforeRun": {Type: "boolean", Default: true},
+			},
+		},
+	}
+
+	entries := visibleOptionHelpEntriesForTool(tool)
+
+	if len(entries) != 1 {
+		t.Fatalf("entry count mismatch: %#v", entries)
+	}
+	if entries[0].name != "--no-save-before-run" {
+		t.Fatalf("option name mismatch: %#v", entries[0].name)
+	}
+	if entries[0].description != "Disable save before run; default: enabled" {
+		t.Fatalf("description mismatch: %#v", entries[0].description)
+	}
+}
+
 func TestBuildToolParamsRejectsCompileWaitForDomainReloadFlag(t *testing.T) {
 	// Verifies the removed positive domain-reload wait flag is not accepted by the public CLI parser.
 	tool, ok := findTool(loadDefaultTools(), compileCommandName)
