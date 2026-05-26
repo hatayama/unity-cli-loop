@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         private static string CreateMessage(string runningToolName, string requestedToolName)
         {
-            return $"Unity tool execution is busy running '{runningToolName}'. Retry '{requestedToolName}' after the current command completes.";
+            return $"Unity is busy running '{runningToolName}'. Retry '{requestedToolName}' after the running tool completes.";
         }
     }
 }

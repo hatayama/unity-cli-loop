@@ -64,6 +64,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // If compilation is already in progress, wait for the current task.
                 if (_currentCompileTask != null)
                 {
+                    VibeLogger.LogInfo(
+                        "compile_controller_wait_existing_task",
+                        "Compilation is already in progress; waiting for the existing task.",
+                        new { force_recompile = forceRecompile });
                     return await _currentCompileTask.Task;
                 }
                 throw new InvalidOperationException("Compilation is in progress, but the task could not be found.");
@@ -73,6 +77,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ValidationResult validation = validationService.ValidateCompilationState();
             if (!validation.IsValid)
             {
+                VibeLogger.LogWarning(
+                    "compile_controller_validation_failed",
+                    validation.ErrorMessage,
+                    new { force_recompile = forceRecompile });
                 return new CompileResult(
                     success: false,
                     errorCount: 0,
@@ -92,15 +100,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _isForceCompile = forceRecompile;
 
             // Execute asset refresh.
+            VibeLogger.LogInfo(
+                "compile_asset_refresh_start",
+                "Calling AssetDatabase.Refresh before compile.",
+                new { force_recompile = forceRecompile });
             AssetDatabase.Refresh();
+            VibeLogger.LogInfo(
+                "compile_asset_refresh_complete",
+                "AssetDatabase.Refresh returned before compile.",
+                new { force_recompile = forceRecompile });
 
             // Register events.
             CompilationPipeline.compilationFinished += HandleCompileFinished;
             CompilationPipeline.assemblyCompilationFinished += HandleAssemblyFinished;
+            VibeLogger.LogInfo(
+                "compile_event_handlers_registered",
+                "Registered Unity compilation callbacks.",
+                new { force_recompile = forceRecompile });
 
             string startMessage = forceRecompile ? "Forced recompile started after asset refresh..." : "Compilation started after asset refresh...";
             OnCompileStarted?.Invoke(startMessage);
 
+            VibeLogger.LogInfo(
+                "compile_request_script_compilation",
+                "Requesting Unity script compilation.",
+                new { force_recompile = forceRecompile });
             if (forceRecompile)
             {
                 CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache);
@@ -109,8 +133,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 CompilationPipeline.RequestScriptCompilation();
             }
+            VibeLogger.LogInfo(
+                "compile_request_script_compilation_returned",
+                "Unity script compilation request returned.",
+                new { force_recompile = forceRecompile });
 
             _ = WatchCompileStartAsync(ct);
+            VibeLogger.LogInfo(
+                "compile_controller_waiting_for_finish",
+                "Waiting for Unity compilationFinished callback.",
+                new { force_recompile = forceRecompile });
             return await _currentCompileTask.Task;
         }
 
@@ -128,6 +160,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (EditorApplication.isCompiling)
                 {
+                    VibeLogger.LogInfo(
+                        "compile_editor_compiling_observed",
+                        "EditorApplication.isCompiling became true.",
+                        new { waited_ms = waitedMs });
                     return;
                 }
 
@@ -146,10 +182,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ValidationResult asmdefValidation = asmdefValidationService.ValidateNoDuplicateAsmdefNames();
             if (!asmdefValidation.IsValid)
             {
+                VibeLogger.LogWarning(
+                    "compile_start_timeout_duplicate_asmdef",
+                    asmdefValidation.ErrorMessage,
+                    new { waited_ms = waitedMs });
                 AbortCompile(asmdefValidation.ErrorMessage);
                 return;
             }
 
+            VibeLogger.LogWarning(
+                "compile_start_timeout",
+                "Compilation did not start before the start timeout.",
+                new { waited_ms = waitedMs });
             AbortCompile(
                 "Compilation did not start. Possible causes: editor update/reload locks, Auto Refresh disabled, or no script changes."
             );
@@ -161,6 +205,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return;
             }
+
+            VibeLogger.LogWarning(
+                "compile_aborted",
+                reason,
+                new { force_recompile = _isForceCompile });
 
             // Unregister events.
             CompilationPipeline.compilationFinished -= HandleCompileFinished;
@@ -208,6 +257,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _isCompiling = false;
 
             CompileResult result = CreateCompileResult();
+            VibeLogger.LogInfo(
+                "compile_finished_event",
+                "Unity compilationFinished callback received.",
+                new
+                {
+                    force_recompile = _isForceCompile,
+                    success = result.Success,
+                    error_count = result.ErrorCount,
+                    warning_count = result.WarningCount,
+                    message_count = _compileMessages.Count
+                });
             OnCompileCompleted?.Invoke(result);
 
             // Set the result on the TaskCompletionSource.
@@ -233,6 +293,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _compileMessages.Add(message);
             }
 
+            VibeLogger.LogInfo(
+                "compile_assembly_finished",
+                "Unity assemblyCompilationFinished callback received.",
+                new
+                {
+                    assembly_name = assemblyName,
+                    message_count = messages.Length,
+                    total_message_count = _compileMessages.Count
+                });
             OnAssemblyCompiled?.Invoke(assemblyName, messages);
         }
 
