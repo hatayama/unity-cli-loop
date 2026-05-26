@@ -314,6 +314,11 @@
               "Pause"
             ],
             "default": "Play"
+          },
+          "TimeoutSeconds": {
+            "type": "integer",
+            "description": "Maximum seconds to wait for the requested play mode state",
+            "default": 180
           }
         }
       }

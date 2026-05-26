@@ -9,6 +9,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ControlPlayModeUseCase
     {
+        public const int DefaultTimeoutSeconds = 180;
+
         public Task<ControlPlayModeResponse> ExecuteAsync(ControlPlayModeSchema parameters, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -16,6 +18,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (parameters == null)
             {
                 throw new System.ArgumentNullException(nameof(parameters));
+            }
+
+            if (parameters.StatusOnly)
+            {
+                return Task.FromResult(CreateResponse("Play mode status"));
             }
 
             string message;
@@ -57,13 +64,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     break;
             }
 
-            ControlPlayModeResponse response = new()            {
+            return Task.FromResult(CreateResponse(message));
+        }
+
+        private static ControlPlayModeResponse CreateResponse(string message)
+        {
+            ControlPlayModeResponse response = new()
+            {
                 IsPlaying = EditorApplication.isPlaying,
                 IsPaused = EditorApplication.isPaused,
                 Message = message
             };
 
-            return Task.FromResult(response);
+            return response;
         }
     }
 }
