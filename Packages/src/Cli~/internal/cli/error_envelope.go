@@ -22,6 +22,7 @@ const (
 	errorCodeUnityServerBusy                 = "UNITY_SERVER_BUSY"
 	errorCodeCLIUpdateRequired               = "CLI_UPDATE_REQUIRED"
 	errorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
+	errorCodeControlPlayModeWaitTimeout      = "CONTROL_PLAY_MODE_WAIT_TIMEOUT"
 	errorCodeInternalError                   = "INTERNAL_ERROR"
 
 	errorPhaseArgumentParsing = "argument_parsing"

@@ -98,12 +98,13 @@ func runControlPlayModeWithStateWait(
 		return 1
 	}
 
-	if completed {
-		response.Message = completedControlPlayModeMessage(action, initialResponse, hasInitialResponse)
-	} else {
-		response.Message = fmt.Sprintf("%s requested but did not complete within %ds", requestedControlPlayModeMessage(action), timeoutSeconds)
+	if !completed {
+		writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
+		writeErrorEnvelope(stderr, controlPlayModeWaitTimeoutError(connection.ProjectRoot, action, timeoutSeconds, response))
+		return 1
 	}
 
+	response.Message = completedControlPlayModeMessage(action, initialResponse, hasInitialResponse)
 	result, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
 		writeClassifiedError(stderr, marshalErr, errorContext{
@@ -271,6 +272,33 @@ func requestedControlPlayModeMessage(action string) string {
 		return "Play mode pause"
 	default:
 		return "Play mode start"
+	}
+}
+
+func controlPlayModeWaitTimeoutError(
+	projectRoot string,
+	action string,
+	timeoutSeconds int,
+	response controlPlayModeResponse,
+) cliError {
+	return cliError{
+		ErrorCode:   errorCodeControlPlayModeWaitTimeout,
+		Phase:       errorPhaseResponseWaiting,
+		Message:     fmt.Sprintf("%s requested but did not complete within %ds", requestedControlPlayModeMessage(action), timeoutSeconds),
+		Retryable:   true,
+		SafeToRetry: true,
+		ProjectRoot: projectRoot,
+		Command:     controlPlayModeCommandName,
+		NextActions: []string{
+			"Check Unity Console logs for PlayMode transition errors.",
+			"Retry `uloop control-play-mode` after Unity finishes compiling, reloading scripts, or entering PlayMode.",
+		},
+		Details: map[string]any{
+			"requestedAction": action,
+			"isPlaying":       response.IsPlaying,
+			"isPaused":        response.IsPaused,
+			"timeoutSeconds":  timeoutSeconds,
+		},
 	}
 }
 
