@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// • assembly: Assembly name (e.g.: UnityCliLoop.Tests.Editor)
         /// </summary>
         public string FilterValue { get; set; } = "";
-        public bool SaveBeforeRun { get; set; } = false;
+        public bool SaveBeforeRun { get; set; } = true;
 
     }
 } 

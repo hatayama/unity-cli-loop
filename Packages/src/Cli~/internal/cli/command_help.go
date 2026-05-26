@@ -110,11 +110,11 @@ func visibleOptionHelpEntriesForTool(tool toolDefinition) []optionHelpEntry {
 			continue
 		}
 
-		optionName := "--" + optionNameForProperty(propertyName, property)
+		optionName := "--" + optionNameForProperty(tool.Name, propertyName, property)
 		entries = append(entries, optionHelpEntry{
 			name:        optionName,
 			usage:       optionUsage(optionName, property),
-			description: optionDescription(propertyName, property),
+			description: optionDescription(tool.Name, propertyName, property),
 		})
 	}
 
@@ -146,9 +146,13 @@ func optionValueName(property toolProperty) string {
 	}
 }
 
-func optionDescription(propertyName string, property toolProperty) string {
+func optionDescription(toolName string, propertyName string, property toolProperty) string {
+	if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
+		return optionSummary(toolName, propertyName, property) + "; default: auto-save enabled"
+	}
+
 	parts := []string{}
-	if description := optionSummary(propertyName, property); description != "" {
+	if description := optionSummary(toolName, propertyName, property); description != "" {
 		parts = append(parts, description)
 	}
 	if propertyDefault := property.EffectiveDefault(); propertyDefault != nil {
@@ -160,8 +164,16 @@ func optionDescription(propertyName string, property toolProperty) string {
 	return strings.Join(parts, "; ")
 }
 
-func optionSummary(propertyName string, property toolProperty) string {
+func optionSummary(toolName string, propertyName string, property toolProperty) string {
 	if isNegatedBooleanProperty(property) {
+		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
+			return "Fail before execution if unsaved editor changes remain instead of auto-saving them"
+		}
+		summary := firstHelpLine(property.Description)
+		normalizedSummary := strings.ToLower(summary)
+		if strings.HasPrefix(normalizedSummary, "disable ") || strings.HasPrefix(normalizedSummary, "do not ") {
+			return summary
+		}
 		return "Disable " + pascalToWords(propertyName)
 	}
 	return firstHelpLine(property.Description)

@@ -33,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public UnityCliLoopTestMode TestMode { get; set; } = UnityCliLoopTestMode.EditMode;
         public TestFilterType FilterType { get; set; } = TestFilterType.all;
         public string FilterValue { get; set; } = "";
-        public bool SaveBeforeRun { get; set; }
+        public bool SaveBeforeRun { get; set; } = true;
     }
 
     /// <summary>
