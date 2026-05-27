@@ -161,6 +161,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void InputVisualizationPrefabs_WhenLoaded_AreEditorOnly()
+        {
+            // Verifies that package Overlay prefabs are excluded from Player builds by Unity's EditorOnly tag.
+            for (int pathIndex = 0; pathIndex < OverlayPrefabPaths.Length; pathIndex++)
+            {
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(OverlayPrefabPaths[pathIndex]);
+
+                Assert.That(prefab, Is.Not.Null, OverlayPrefabPaths[pathIndex]);
+                AssertEditorOnlyTags(prefab, OverlayPrefabPaths[pathIndex]);
+            }
+        }
+
+        [Test]
         public void InputVisualizationPrefabs_WhenScanned_DoNotReferenceProjectScripts()
         {
             // Verifies that package Overlay prefabs do not depend on scripts outside the package.
@@ -199,6 +212,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     contents.TrimStart(),
                     Does.StartWith("#if UNITY_EDITOR"),
                     EditorOnlyOverlayComponentSourcePaths[pathIndex]);
+            }
+        }
+
+        private static void AssertEditorOnlyTags(GameObject root, string prefabPath)
+        {
+            Transform[] transforms = root.GetComponentsInChildren<Transform>(true);
+            for (int transformIndex = 0; transformIndex < transforms.Length; transformIndex++)
+            {
+                GameObject gameObject = transforms[transformIndex].gameObject;
+
+                Assert.That(
+                    gameObject.CompareTag("EditorOnly"),
+                    Is.True,
+                    $"{prefabPath} has non-EditorOnly tag on {gameObject.name}");
             }
         }
 
