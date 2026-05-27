@@ -118,6 +118,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ProjectAsmdefNames_WhenLoaded_UseUnityCliLoopName()
+        {
+            // Tests that tracked asmdef assembly names no longer expose the legacy project name.
+            string[] legacyAssemblyNames = ReadProjectAsmdefPaths()
+                .Select(ReadAsmdefName)
+                .Where(assemblyName => assemblyName.IndexOf("uLoopMCP", StringComparison.Ordinal) >= 0)
+                .OrderBy(assemblyName => assemblyName)
+                .ToArray();
+
+            Assert.That(legacyAssemblyNames, Is.Empty);
+        }
+
+        [Test]
         public void ProjectAsmdefs_WhenLoaded_AutoReferenceOnlyPublicToolContracts()
         {
             // Tests that internal assemblies require explicit asmdef references.

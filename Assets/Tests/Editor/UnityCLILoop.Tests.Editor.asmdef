@@ -1,5 +1,5 @@
 {
-    "name": "uLoopMCP.Tests.Editor",
+    "name": "UnityCLILoop.Tests.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor",
     "references": [
         "GUID:214998e563c124e8a88199b2dd1f522d",
