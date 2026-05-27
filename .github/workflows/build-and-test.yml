@@ -28,7 +28,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: Packages/src/Cli~/.go-version
-          cache-dependency-path: Packages/src/Cli~/**/go.sum
+          cache: false
 
       - name: Test release automation shell helpers
         run: |
