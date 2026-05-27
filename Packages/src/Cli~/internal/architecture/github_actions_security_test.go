@@ -131,6 +131,11 @@ func TestWorkflowRunsOnPullRequestDetectsInlineOnSyntax(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "inline trigger map",
+			lines:    []string{"on: {pull_request: {}}"},
+			expected: true,
+		},
+		{
 			name:     "single inline pull_request_target",
 			lines:    []string{"on: pull_request_target"},
 			expected: true,
@@ -141,6 +146,11 @@ func TestWorkflowRunsOnPullRequestDetectsInlineOnSyntax(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "block trigger map",
+			lines:    []string{"on:", "  push:", "  pull_request:", "    branches: [main]"},
+			expected: true,
+		},
+		{
 			name:     "unrelated pull request trigger",
 			lines:    []string{"on: pull_request_review"},
 			expected: false,
@@ -148,6 +158,16 @@ func TestWorkflowRunsOnPullRequestDetectsInlineOnSyntax(t *testing.T) {
 		{
 			name:     "unrelated inline trigger list",
 			lines:    []string{"on: [push, pull_request_review]"},
+			expected: false,
+		},
+		{
+			name:     "unrelated inline trigger map nested value",
+			lines:    []string{"on: {workflow_run: {workflows: [pull_request]}}"},
+			expected: false,
+		},
+		{
+			name:     "unrelated block trigger nested value",
+			lines:    []string{"on:", "  workflow_run:", "    workflows: [pull_request]"},
 			expected: false,
 		},
 	}
@@ -203,6 +223,7 @@ func parseUsesAction(line string) (string, bool) {
 
 func workflowRunsOnPullRequest(lines []string) bool {
 	inOnBlock := false
+	onChildIndent := -1
 	for _, line := range lines {
 		lineWithoutComment := stripYamlComment(line)
 		trimmedLine := strings.TrimSpace(lineWithoutComment)
@@ -212,9 +233,10 @@ func workflowRunsOnPullRequest(lines []string) bool {
 		if strings.HasPrefix(trimmedLine, "on:") {
 			onValue := strings.TrimSpace(strings.TrimPrefix(trimmedLine, "on:"))
 			if onValue != "" {
-				return workflowTriggerListContainsPullRequest(onValue)
+				return workflowInlineTriggerContainsPullRequest(onValue)
 			}
 			inOnBlock = true
+			onChildIndent = -1
 			continue
 		}
 		if !inOnBlock {
@@ -223,7 +245,14 @@ func workflowRunsOnPullRequest(lines []string) bool {
 		if isTopLevelYamlKey(lineWithoutComment) {
 			return false
 		}
-		if workflowTriggerListContainsPullRequest(trimmedLine) {
+		lineIndent := leadingWhitespaceCount(lineWithoutComment)
+		if onChildIndent < 0 {
+			onChildIndent = lineIndent
+		}
+		if lineIndent != onChildIndent {
+			continue
+		}
+		if workflowBlockTriggerLineContainsPullRequest(trimmedLine) {
 			return true
 		}
 	}
@@ -294,13 +323,88 @@ func isStepStart(line string) bool {
 func workflowTriggerListContainsPullRequest(value string) bool {
 	value = strings.TrimSpace(value)
 	value = strings.TrimPrefix(value, "- ")
-	normalizedValue := strings.NewReplacer("[", " ", "]", " ", ",", " ", ":", " ", `"`, " ", `'`, " ").Replace(value)
+	normalizedValue := strings.NewReplacer("[", " ", "]", " ", "{", " ", "}", " ", ",", " ", ":", " ", `"`, " ", `'`, " ").Replace(value)
 	for _, token := range strings.Fields(normalizedValue) {
 		if token == "pull_request" || token == "pull_request_target" {
 			return true
 		}
 	}
 	return false
+}
+
+func workflowInlineTriggerContainsPullRequest(value string) bool {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "{") {
+		return workflowInlineMapContainsPullRequest(value)
+	}
+	return workflowTriggerListContainsPullRequest(value)
+}
+
+func workflowInlineMapContainsPullRequest(value string) bool {
+	content := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(value, "{"), "}"))
+	for _, entry := range splitTopLevelCommaEntries(content) {
+		key := topLevelMapKey(entry)
+		if key == "pull_request" || key == "pull_request_target" {
+			return true
+		}
+	}
+	return false
+}
+
+func splitTopLevelCommaEntries(value string) []string {
+	entries := []string{}
+	startIndex := 0
+	nestingDepth := 0
+	for index, char := range value {
+		switch char {
+		case '{', '[':
+			nestingDepth++
+		case '}', ']':
+			if nestingDepth > 0 {
+				nestingDepth--
+			}
+		case ',':
+			if nestingDepth == 0 {
+				entries = append(entries, value[startIndex:index])
+				startIndex = index + 1
+			}
+		}
+	}
+	entries = append(entries, value[startIndex:])
+	return entries
+}
+
+func topLevelMapKey(entry string) string {
+	nestingDepth := 0
+	for index, char := range entry {
+		switch char {
+		case '{', '[':
+			nestingDepth++
+		case '}', ']':
+			if nestingDepth > 0 {
+				nestingDepth--
+			}
+		case ':':
+			if nestingDepth == 0 {
+				return trimWorkflowToken(entry[:index])
+			}
+		}
+	}
+	return ""
+}
+
+func workflowBlockTriggerLineContainsPullRequest(value string) bool {
+	value = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(value), "- "))
+	key, _, hasKey := strings.Cut(value, ":")
+	if hasKey {
+		value = key
+	}
+	value = trimWorkflowToken(value)
+	return value == "pull_request" || value == "pull_request_target"
+}
+
+func trimWorkflowToken(value string) string {
+	return strings.Trim(strings.TrimSpace(value), `"'`)
 }
 
 func isTopLevelYamlKey(line string) bool {
@@ -310,6 +414,11 @@ func isTopLevelYamlKey(line string) bool {
 	}
 	key, _, hasKey := strings.Cut(trimmedLine, ":")
 	return hasKey && key != ""
+}
+
+func leadingWhitespaceCount(value string) int {
+	trimmedValue := strings.TrimLeft(value, " \t")
+	return len(value) - len(trimmedValue)
 }
 
 func workflowViolation(repositoryRoot string, workflowPath string, lineIndex int, actionRef string, message string) string {
