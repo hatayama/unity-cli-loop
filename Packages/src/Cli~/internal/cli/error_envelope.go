@@ -62,6 +62,10 @@ type errorContext struct {
 }
 
 func writeErrorEnvelope(writer io.Writer, err cliError) {
+	if err.ErrorCode == errorCodeUnityServerBusy {
+		writeBusyStatusEnvelope(writer, err.Message)
+		return
+	}
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(cliErrorEnvelope{
@@ -202,7 +206,7 @@ func classifyError(err error, context errorContext) cliError {
 			return cliUpdateRequiredError(rpcErr, details, decodedData, context)
 		}
 		if rpcDataType(decodedData) == "server_busy" {
-			return unityServerBusyError(rpcErr, details, context)
+			return unityServerBusyError(rpcErr, details, decodedData, context)
 		}
 		return cliError{
 			ErrorCode:   errorCodeUnityRPCError,
@@ -307,11 +311,16 @@ func rpcDataType(data map[string]any) string {
 	return value
 }
 
-func unityServerBusyError(rpcErr *unityipc.RPCError, details map[string]any, context errorContext) cliError {
+func unityServerBusyError(
+	rpcErr *unityipc.RPCError,
+	details map[string]any,
+	data map[string]any,
+	context errorContext,
+) cliError {
 	return cliError{
 		ErrorCode:   errorCodeUnityServerBusy,
 		Phase:       errorPhaseDispatch,
-		Message:     rpcErr.Message,
+		Message:     unityServerBusyMessage(rpcErr.Message, data, context.command),
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: context.projectRoot,
@@ -484,13 +493,4 @@ func isSafeRetryCommand(command string) bool {
 	default:
 		return false
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }
