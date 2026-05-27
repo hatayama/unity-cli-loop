@@ -17,12 +17,12 @@ jobs:
       HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           lfs: true
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
         with:
           dotnet-version: 10.0.x
 
@@ -31,7 +31,7 @@ jobs:
 
       - name: Cache Library folder
         if: env.HAS_UNITY_LICENSE == 'true'
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: Library
           key: Library-2022.3.62f1-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
@@ -41,7 +41,7 @@ jobs:
       - name: Compile Unity project
         if: env.HAS_UNITY_LICENSE == 'true'
         id: compile
-        uses: game-ci/unity-builder@v4
+        uses: game-ci/unity-builder@1d4ee0697f193f54668e98961d79907911f4b4f2
         timeout-minutes: 30
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -108,7 +108,7 @@ jobs:
 
       - name: Run EditMode tests
         if: env.HAS_UNITY_LICENSE == 'true'
-        uses: game-ci/unity-test-runner@v4
+        uses: game-ci/unity-test-runner@0ff419b913a3630032cbe0de48a0099b5a9f0ed9
         timeout-minutes: 30
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -121,7 +121,7 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload test results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always() && env.HAS_UNITY_LICENSE == 'true'
         with:
           name: Unity test results
