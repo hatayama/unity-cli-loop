@@ -213,6 +213,7 @@ func TestClassifyCliUpdateRequiredRPCError(t *testing.T) {
 }
 
 func TestClassifyServerBusyRPCError(t *testing.T) {
+	// Verifies server_busy RPC failures keep retryable classification while using the lightweight message.
 	err := &unityipc.RPCError{
 		Code:    -32603,
 		Message: "Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes.",
@@ -229,6 +230,38 @@ func TestClassifyServerBusyRPCError(t *testing.T) {
 	}
 	if !cliErr.Retryable || !cliErr.SafeToRetry {
 		t.Fatalf("retry flags mismatch: %#v", cliErr)
+	}
+	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. Retry after the running tool completes."
+	if cliErr.Message != expectedMessage {
+		t.Fatalf("message mismatch: %s", cliErr.Message)
+	}
+}
+
+func TestWriteClassifiedServerBusyRPCErrorWritesBusyStatus(t *testing.T) {
+	// Verifies server_busy output avoids the full error envelope because busy is a temporary state.
+	err := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes.",
+		Data: json.RawMessage(
+			`{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes."}`),
+	}
+	var stderr bytes.Buffer
+
+	writeClassifiedError(&stderr, err, errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"})
+
+	var envelope cliStatusEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
+	}
+	if envelope.Status != cliStatusBusy {
+		t.Fatalf("status mismatch: %#v", envelope)
+	}
+	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. Retry after the running tool completes."
+	if envelope.Message != expectedMessage {
+		t.Fatalf("message mismatch: %#v", envelope)
+	}
+	if bytes.Contains(stderr.Bytes(), []byte("Success")) || bytes.Contains(stderr.Bytes(), []byte("errorCode")) {
+		t.Fatalf("busy output should not include error envelope fields: %s", stderr.String())
 	}
 }
 
