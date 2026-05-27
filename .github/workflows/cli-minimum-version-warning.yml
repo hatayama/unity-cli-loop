@@ -1,0 +1,32 @@
+name: CLI Minimum Version Warning
+
+on:
+  pull_request_target:
+    branches: [main, v3-beta]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout base repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Fetch pull request head
+        run: git fetch --no-tags origin "pull/${{ github.event.pull_request.number }}/head:cli-minimum-version-pr-head"
+
+      - name: Comment on CLI minimum version check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CLI_MINIMUM_VERSION_BASE_REF: origin/${{ github.base_ref }}
+          CLI_MINIMUM_VERSION_HEAD_REF: cli-minimum-version-pr-head
+        run: scripts/comment-cli-minimum-version-warning.sh
