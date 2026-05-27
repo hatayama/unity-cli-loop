@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     public enum MouseInputAction
@@ -9,3 +10,4 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         SmoothDelta = 4
     }
 }
+#endif

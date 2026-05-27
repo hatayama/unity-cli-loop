@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     public enum KeyboardAction
@@ -7,3 +8,4 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         KeyUp = 2
     }
 }
+#endif

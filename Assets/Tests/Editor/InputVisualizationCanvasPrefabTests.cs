@@ -19,6 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/io.github.hatayama.uloopmcp/Runtime/Common/InputVisualizationCanvas.prefab";
         private const string RuntimeAssemblyDefinitionPath =
             "Packages/src/Runtime/uLoopMCP.Runtime.asmdef";
+        private const string RuntimeSourceDirectoryPath =
+            "Packages/src/Runtime";
         private static readonly string[] OverlayPrefabPaths =
         {
             "Packages/io.github.hatayama.uloopmcp/Runtime/Common/InputVisualizationCanvas.prefab",
@@ -37,17 +39,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Runtime/SimulateMouseUi/SimulateMouseUiOverlay.prefab",
             "Packages/src/Runtime/RecordInput/RecordInputOverlay.prefab",
             "Packages/src/Runtime/ReplayInput/ReplayInputOverlay.prefab"
-        };
-
-        private static readonly string[] EditorOnlyOverlayComponentSourcePaths =
-        {
-            "Packages/src/Runtime/Common/InputVisualizationCanvas.cs",
-            "Packages/src/Runtime/SimulateMouseInput/SimulateMouseInputOverlay.cs",
-            "Packages/src/Runtime/SimulateKeyboard/SimulateKeyboardOverlay.cs",
-            "Packages/src/Runtime/SimulateMouseUi/SimulateMouseUiOverlay.cs",
-            "Packages/src/Runtime/RecordInput/RecordInputOverlayPresenter.cs",
-            "Packages/src/Runtime/RecordInput/RecordInputOverlayView.cs",
-            "Packages/src/Runtime/ReplayInput/ReplayInputOverlay.cs"
         };
 
         [Test]
@@ -201,17 +192,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void InputVisualizationOverlayComponents_WhenScanned_AreEditorOnly()
+        public void RuntimeSources_WhenScanned_AreEditorOnly()
         {
-            // Verifies that prefab-attached overlay components cannot compile into Player assemblies.
-            for (int pathIndex = 0; pathIndex < EditorOnlyOverlayComponentSourcePaths.Length; pathIndex++)
+            // Verifies that Runtime assembly sources cannot compile into Player assemblies.
+            string runtimeSourceDirectory = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), RuntimeSourceDirectoryPath);
+            string[] runtimeSourcePaths = Directory.GetFiles(runtimeSourceDirectory, "*.cs", SearchOption.AllDirectories);
+            System.Array.Sort(runtimeSourcePaths);
+
+            for (int pathIndex = 0; pathIndex < runtimeSourcePaths.Length; pathIndex++)
             {
-                string contents = ReadText(EditorOnlyOverlayComponentSourcePaths[pathIndex]);
+                string contents = File.ReadAllText(runtimeSourcePaths[pathIndex]);
 
                 Assert.That(
                     contents.TrimStart(),
                     Does.StartWith("#if UNITY_EDITOR"),
-                    EditorOnlyOverlayComponentSourcePaths[pathIndex]);
+                    runtimeSourcePaths[pathIndex]);
             }
         }
 

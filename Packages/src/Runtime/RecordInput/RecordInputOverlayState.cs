@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.Runtime
@@ -94,3 +95,4 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
     }
 }
+#endif
