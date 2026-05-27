@@ -124,11 +124,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool enabled = IsInstallCliButtonEnabled(
                 data.IsInstallingCli,
                 data.IsChecking);
-            bool useDisabledStyle = !enabled || IsUninstallCliAction(
+            bool isUninstallStyle = !data.NeedsCliPathSetup && IsUninstallCliAction(
                 data.IsCliInstalled,
                 data.NeedsUpdate,
                 data.NeedsDowngrade,
                 data.CanUninstallCli);
+            bool useDisabledStyle = !enabled || isUninstallStyle;
             SetCliButton(label, enabled, useDisabledStyle);
         }
 
