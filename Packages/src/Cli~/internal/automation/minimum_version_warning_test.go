@@ -1,6 +1,7 @@
 package automation
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -38,6 +39,31 @@ func TestMinimumVersionWarningConfigUsesGitHubEnvironmentFallbacks(t *testing.T)
 	}
 }
 
+// Verifies that missing base refs skip before repository resolution needs gh.
+func TestMinimumVersionWarningSkipsMissingBaseRefBeforeRepositoryResolution(t *testing.T) {
+	t.Setenv("ULOOP_REPOSITORY_ROOT", t.TempDir())
+	t.Setenv("PR_NUMBER", "123")
+	t.Setenv("GITHUB_REPOSITORY", "")
+	t.Setenv("GITHUB_BASE_REF", "")
+	t.Setenv("CLI_MINIMUM_VERSION_BASE_REF", "")
+	t.Setenv("CLI_MINIMUM_VERSION_HEAD_REF", "")
+	t.Setenv("PATH", t.TempDir())
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := RunMinimumVersionWarning(context.Background(), &stdout, &stderr)
+
+	if exitCode != 0 {
+		t.Fatalf("expected missing base ref to skip with exit code 0, got %d", exitCode)
+	}
+	if stdout.String() != "Skipping CLI minimum version comment because no base ref was provided.\n" {
+		t.Fatalf("expected base-ref skip message, got %q", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected no stderr on base-ref skip, got %q", stderr.String())
+	}
+}
+
 // Verifies that Go CLI source changes require a minimum-version warning.
 func TestMinimumVersionWarningRequiresCommentForGoCliSourceChanges(t *testing.T) {
 	testCases := []struct {
@@ -54,6 +80,11 @@ func TestMinimumVersionWarningRequiresCommentForGoCliSourceChanges(t *testing.T)
 			name:        "internal source",
 			changedFile: goCliPackageRoot + "internal/cli/run.go",
 			shouldWarn:  true,
+		},
+		{
+			name:        "internal test source",
+			changedFile: goCliPackageRoot + "internal/architecture/comment_cli_minimum_version_warning_test.go",
+			shouldWarn:  false,
 		},
 		{
 			name:        "warning command source",

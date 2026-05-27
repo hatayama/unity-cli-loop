@@ -45,17 +45,17 @@ func RunMinimumVersionWarning(ctx context.Context, stdout io.Writer, stderr io.W
 		return 0
 	}
 
+	if config.baseRef == "" {
+		writeMinimumVersionWarningLine(stdout, "Skipping CLI minimum version comment because no base ref was provided.")
+		return 0
+	}
+
 	repository, err := resolveMinimumVersionWarningRepository(ctx, config)
 	if err != nil {
 		writeMinimumVersionWarningLine(stderr, err)
 		return 1
 	}
 	config.repository = repository
-
-	if config.baseRef == "" {
-		writeMinimumVersionWarningLine(stdout, "Skipping CLI minimum version comment because no base ref was provided.")
-		return 0
-	}
 
 	changedFiles, err := minimumVersionWarningChangedFiles(ctx, config)
 	if err != nil {
@@ -232,7 +232,8 @@ func minimumVersionWarningIsGoCliFile(changedFile string) bool {
 	if changedFile == goCliPackageRoot+"CHANGELOG.md" ||
 		strings.HasPrefix(changedFile, goCliPackageRoot+"dist/") ||
 		strings.HasPrefix(changedFile, goCliPackageRoot+"cmd/comment-cli-minimum-version-warning/") ||
-		strings.HasPrefix(changedFile, goCliPackageRoot+"internal/automation/") {
+		strings.HasPrefix(changedFile, goCliPackageRoot+"internal/automation/") ||
+		strings.HasSuffix(changedFile, "_test.go") {
 		return false
 	}
 	if strings.HasPrefix(changedFile, goCliPackageRoot+"cmd/") || strings.HasPrefix(changedFile, goCliPackageRoot+"internal/") {
