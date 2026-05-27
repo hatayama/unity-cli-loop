@@ -87,6 +87,79 @@ func TestPullRequestWorkflowCacheActionsRequireTrustedUnitySecrets(t *testing.T)
 	}
 }
 
+// Tests that unnamed action steps are still parsed as remote action uses.
+func TestParseUsesActionAcceptsUnnamedSteps(t *testing.T) {
+	actionRef, ok := parseUsesAction("      - uses: actions/checkout@v6")
+	if !ok {
+		t.Fatal("expected unnamed uses step to be parsed")
+	}
+	if actionRef != "actions/checkout@v6" {
+		t.Fatalf("unexpected action ref: %s", actionRef)
+	}
+}
+
+// Tests that step-local checks do not read settings from neighboring unnamed steps.
+func TestStepContainsStopsAtUnnamedStepBoundaries(t *testing.T) {
+	lines := []string{
+		"      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c",
+		"        with:",
+		"          go-version-file: Packages/src/Cli~/.go-version",
+		"      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae",
+		"        with:",
+		"          cache: false",
+	}
+	if stepContains(lines, 0, "cache: false") {
+		t.Fatal("expected cache setting in a neighboring unnamed step to be ignored")
+	}
+}
+
+// Tests that inline pull request triggers are recognized without matching unrelated triggers.
+func TestWorkflowRunsOnPullRequestDetectsInlineOnSyntax(t *testing.T) {
+	testCases := []struct {
+		name     string
+		lines    []string
+		expected bool
+	}{
+		{
+			name:     "single inline pull_request",
+			lines:    []string{"on: pull_request"},
+			expected: true,
+		},
+		{
+			name:     "inline trigger list",
+			lines:    []string{"on: [push, pull_request]"},
+			expected: true,
+		},
+		{
+			name:     "single inline pull_request_target",
+			lines:    []string{"on: pull_request_target"},
+			expected: true,
+		},
+		{
+			name:     "block trigger list",
+			lines:    []string{"on:", "  - push", "  - pull_request"},
+			expected: true,
+		},
+		{
+			name:     "unrelated pull request trigger",
+			lines:    []string{"on: pull_request_review"},
+			expected: false,
+		},
+		{
+			name:     "unrelated inline trigger list",
+			lines:    []string{"on: [push, pull_request_review]"},
+			expected: false,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if workflowRunsOnPullRequest(testCase.lines) != testCase.expected {
+				t.Fatalf("pull request trigger detection mismatch for %v", testCase.lines)
+			}
+		})
+	}
+}
+
 func workflowFilePaths(t *testing.T, repositoryRoot string) []string {
 	t.Helper()
 	workflowRoot := filepath.Join(repositoryRoot, ".github", "workflows")
@@ -119,6 +192,7 @@ func readWorkflowLines(t *testing.T, workflowPath string) []string {
 
 func parseUsesAction(line string) (string, bool) {
 	trimmedLine := strings.TrimSpace(stripYamlComment(line))
+	trimmedLine = strings.TrimPrefix(trimmedLine, "- ")
 	if !strings.HasPrefix(trimmedLine, "uses:") {
 		return "", false
 	}
@@ -128,9 +202,28 @@ func parseUsesAction(line string) (string, bool) {
 }
 
 func workflowRunsOnPullRequest(lines []string) bool {
+	inOnBlock := false
 	for _, line := range lines {
-		trimmedLine := strings.TrimSpace(stripYamlComment(line))
-		if strings.HasPrefix(trimmedLine, "pull_request:") || strings.HasPrefix(trimmedLine, "pull_request_target:") {
+		lineWithoutComment := stripYamlComment(line)
+		trimmedLine := strings.TrimSpace(lineWithoutComment)
+		if trimmedLine == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmedLine, "on:") {
+			onValue := strings.TrimSpace(strings.TrimPrefix(trimmedLine, "on:"))
+			if onValue != "" {
+				return workflowTriggerListContainsPullRequest(onValue)
+			}
+			inOnBlock = true
+			continue
+		}
+		if !inOnBlock {
+			continue
+		}
+		if isTopLevelYamlKey(lineWithoutComment) {
+			return false
+		}
+		if workflowTriggerListContainsPullRequest(trimmedLine) {
 			return true
 		}
 	}
@@ -189,7 +282,34 @@ func stepStartIndex(lines []string, lineIndex int) int {
 }
 
 func isStepStart(line string) bool {
-	return strings.HasPrefix(strings.TrimSpace(stripYamlComment(line)), "- name:")
+	trimmedLine := strings.TrimSpace(stripYamlComment(line))
+	if !strings.HasPrefix(trimmedLine, "- ") {
+		return false
+	}
+	stepContent := strings.TrimSpace(strings.TrimPrefix(trimmedLine, "- "))
+	stepKey, _, hasStepKey := strings.Cut(stepContent, ":")
+	return hasStepKey && stepKey != "" && !strings.ContainsAny(stepKey, " []{}")
+}
+
+func workflowTriggerListContainsPullRequest(value string) bool {
+	value = strings.TrimSpace(value)
+	value = strings.TrimPrefix(value, "- ")
+	normalizedValue := strings.NewReplacer("[", " ", "]", " ", ",", " ", ":", " ", `"`, " ", `'`, " ").Replace(value)
+	for _, token := range strings.Fields(normalizedValue) {
+		if token == "pull_request" || token == "pull_request_target" {
+			return true
+		}
+	}
+	return false
+}
+
+func isTopLevelYamlKey(line string) bool {
+	trimmedLine := strings.TrimSpace(line)
+	if trimmedLine == "" || strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+		return false
+	}
+	key, _, hasKey := strings.Cut(trimmedLine, ":")
+	return hasKey && key != ""
 }
 
 func workflowViolation(repositoryRoot string, workflowPath string, lineIndex int, actionRef string, message string) string {
