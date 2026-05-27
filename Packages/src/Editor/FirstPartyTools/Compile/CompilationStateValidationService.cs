@@ -30,13 +30,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 );
             }
 
-            AssemblyDefinitionDuplicationValidationService asmdefValidationService = new();
-            ValidationResult asmdefValidation = asmdefValidationService.ValidateNoDuplicateAsmdefNamesFromConsoleErrors();
-            if (!asmdefValidation.IsValid)
-            {
-                return asmdefValidation;
-            }
-            
             return ValidationResult.Success();
         }
     }

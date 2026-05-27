@@ -96,54 +96,97 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             _isCompiling = true;
             _compileMessages.Clear();
-            _currentCompileTask = new TaskCompletionSource<CompileResult>();
+            TaskCompletionSource<CompileResult> compileTask = new();
+            _currentCompileTask = compileTask;
             _isForceCompile = forceRecompile;
+            bool eventsRegistered = false;
+            bool compileTaskTransferred = false;
 
-            // Execute asset refresh.
-            VibeLogger.LogInfo(
-                "compile_asset_refresh_start",
-                "Calling AssetDatabase.Refresh before compile.",
-                new { force_recompile = forceRecompile });
-            AssetDatabase.Refresh();
-            VibeLogger.LogInfo(
-                "compile_asset_refresh_complete",
-                "AssetDatabase.Refresh returned before compile.",
-                new { force_recompile = forceRecompile });
-
-            // Register events.
-            CompilationPipeline.compilationFinished += HandleCompileFinished;
-            CompilationPipeline.assemblyCompilationFinished += HandleAssemblyFinished;
-            VibeLogger.LogInfo(
-                "compile_event_handlers_registered",
-                "Registered Unity compilation callbacks.",
-                new { force_recompile = forceRecompile });
-
-            string startMessage = forceRecompile ? "Forced recompile started after asset refresh..." : "Compilation started after asset refresh...";
-            OnCompileStarted?.Invoke(startMessage);
-
-            VibeLogger.LogInfo(
-                "compile_request_script_compilation",
-                "Requesting Unity script compilation.",
-                new { force_recompile = forceRecompile });
-            if (forceRecompile)
+            try
             {
-                CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache);
-            }
-            else
-            {
-                CompilationPipeline.RequestScriptCompilation();
-            }
-            VibeLogger.LogInfo(
-                "compile_request_script_compilation_returned",
-                "Unity script compilation request returned.",
-                new { force_recompile = forceRecompile });
+                // Execute asset refresh.
+                VibeLogger.LogInfo(
+                    "compile_asset_refresh_start",
+                    "Calling AssetDatabase.Refresh before compile.",
+                    new { force_recompile = forceRecompile });
+                AssetDatabase.Refresh();
+                VibeLogger.LogInfo(
+                    "compile_asset_refresh_complete",
+                    "AssetDatabase.Refresh returned before compile.",
+                    new { force_recompile = forceRecompile });
 
-            _ = WatchCompileStartAsync(ct);
-            VibeLogger.LogInfo(
-                "compile_controller_waiting_for_finish",
-                "Waiting for Unity compilationFinished callback.",
-                new { force_recompile = forceRecompile });
-            return await _currentCompileTask.Task;
+                AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
+                AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
+                    assemblyDefinitionValidationService.FindCurrentErrors();
+                if (assemblyDefinitionErrors.HasErrors)
+                {
+                    CompileResult result = CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors);
+                    VibeLogger.LogWarning(
+                        "compile_asset_refresh_assembly_definition_error",
+                        assemblyDefinitionErrors.Message,
+                        new
+                        {
+                            force_recompile = forceRecompile,
+                            error_count = assemblyDefinitionErrors.Errors.Length
+                        });
+                    CompleteCompileWithoutRequest(result);
+                    return result;
+                }
+
+                // Register events.
+                CompilationPipeline.compilationFinished += HandleCompileFinished;
+                CompilationPipeline.assemblyCompilationFinished += HandleAssemblyFinished;
+                eventsRegistered = true;
+                VibeLogger.LogInfo(
+                    "compile_event_handlers_registered",
+                    "Registered Unity compilation callbacks.",
+                    new { force_recompile = forceRecompile });
+
+                string startMessage = forceRecompile ? "Forced recompile started after asset refresh..." : "Compilation started after asset refresh...";
+                OnCompileStarted?.Invoke(startMessage);
+
+                VibeLogger.LogInfo(
+                    "compile_request_script_compilation",
+                    "Requesting Unity script compilation.",
+                    new { force_recompile = forceRecompile });
+                if (forceRecompile)
+                {
+                    CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache);
+                }
+                else
+                {
+                    CompilationPipeline.RequestScriptCompilation();
+                }
+                VibeLogger.LogInfo(
+                    "compile_request_script_compilation_returned",
+                    "Unity script compilation request returned.",
+                    new { force_recompile = forceRecompile });
+
+                _ = WatchCompileStartAsync(ct);
+                VibeLogger.LogInfo(
+                    "compile_controller_waiting_for_finish",
+                    "Waiting for Unity compilationFinished callback.",
+                    new { force_recompile = forceRecompile });
+                compileTaskTransferred = true;
+                return await compileTask.Task;
+            }
+            finally
+            {
+                if (!compileTaskTransferred &&
+                    ReferenceEquals(_currentCompileTask, compileTask) &&
+                    !compileTask.Task.IsCompleted)
+                {
+                    if (eventsRegistered)
+                    {
+                        UnregisterCompilationEvents();
+                    }
+
+                    _currentCompileTask = null;
+                    _isCompiling = false;
+                    _isForceCompile = false;
+                    compileTask.TrySetCanceled();
+                }
+            }
         }
 
         private async Task WatchCompileStartAsync(CancellationToken ct)
@@ -178,6 +221,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 waitedMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;
             }
 
+            AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
+                assemblyDefinitionValidationService.FindCurrentErrors();
+            if (assemblyDefinitionErrors.HasErrors)
+            {
+                VibeLogger.LogWarning(
+                    "compile_start_timeout_assembly_definition_error",
+                    assemblyDefinitionErrors.Message,
+                    new { waited_ms = waitedMs });
+                AbortCompileWithResult(CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors));
+                return;
+            }
+
             AssemblyDefinitionDuplicationValidationService asmdefValidationService = new();
             ValidationResult asmdefValidation = asmdefValidationService.ValidateNoDuplicateAsmdefNames();
             if (!asmdefValidation.IsValid)
@@ -199,6 +255,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
         }
 
+        /// <summary>
+        /// Completes an active compile request with a prepared failure result before Unity reports compilationFinished.
+        /// </summary>
+        private void AbortCompileWithResult(CompileResult result)
+        {
+            if (_currentCompileTask == null || _currentCompileTask.Task.IsCompleted)
+            {
+                return;
+            }
+
+            VibeLogger.LogWarning(
+                "compile_aborted",
+                result.Message,
+                new { force_recompile = _isForceCompile });
+
+            CompleteCompileRequest(result, unregisterEvents: true);
+        }
+
+        /// <summary>
+        /// Completes a compile request that stopped before RequestScriptCompilation was called.
+        /// </summary>
+        private void CompleteCompileWithoutRequest(CompileResult result)
+        {
+            CompleteCompileRequest(result, unregisterEvents: false);
+        }
+
         private void AbortCompile(string reason)
         {
             if (_currentCompileTask == null || _currentCompileTask.Task.IsCompleted)
@@ -210,12 +292,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "compile_aborted",
                 reason,
                 new { force_recompile = _isForceCompile });
-
-            // Unregister events.
-            CompilationPipeline.compilationFinished -= HandleCompileFinished;
-            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
-
-            _isCompiling = false;
 
             CompileResult result = new(
                 success: false,
@@ -229,11 +305,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message: reason
             );
 
-            OnCompileCompleted?.Invoke(result);
+            CompleteCompileRequest(result, unregisterEvents: true);
+        }
+
+        /// <summary>
+        /// Completes the active compile task while guaranteeing controller state cleanup.
+        /// </summary>
+        private void CompleteCompileRequest(CompileResult result, bool unregisterEvents)
+        {
+            UnityEngine.Debug.Assert(result != null, "result must not be null");
 
             TaskCompletionSource<CompileResult> task = _currentCompileTask;
-            _currentCompileTask = null;
-            task.SetResult(result);
+
+            // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
+            try
+            {
+                if (unregisterEvents)
+                {
+                    UnregisterCompilationEvents();
+                }
+
+                _isCompiling = false;
+                _isForceCompile = false;
+                OnCompileCompleted?.Invoke(result);
+            }
+            finally
+            {
+                if (ReferenceEquals(_currentCompileTask, task))
+                {
+                    _currentCompileTask = null;
+                    _isCompiling = false;
+                    _isForceCompile = false;
+                }
+
+                task?.TrySetResult(result);
+            }
+        }
+
+        /// <summary>
+        /// Removes Unity compilation callbacks for the current compile request.
+        /// </summary>
+        private void UnregisterCompilationEvents()
+        {
+            CompilationPipeline.compilationFinished -= HandleCompileFinished;
+            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
         }
 
         /// <summary>
@@ -250,12 +365,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <param name="context">The compilation context.</param>
         private void HandleCompileFinished(object context)
         {
-            // Unregister events.
-            CompilationPipeline.compilationFinished -= HandleCompileFinished;
-            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
-
-            _isCompiling = false;
-
             CompileResult result = CreateCompileResult();
             VibeLogger.LogInfo(
                 "compile_finished_event",
@@ -268,15 +377,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     warning_count = result.WarningCount,
                     message_count = _compileMessages.Count
                 });
-            OnCompileCompleted?.Invoke(result);
 
-            // Set the result on the TaskCompletionSource.
-            TaskCompletionSource<CompileResult> task = _currentCompileTask;
-            _currentCompileTask = null;
-            task?.SetResult(result);
-
-            // Reset force compile flag for future compilations
-            _isForceCompile = false;
+            CompleteCompileRequest(result, unregisterEvents: true);
         }
 
         /// <summary>
@@ -343,6 +445,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 errors: errors,
                 warnings: warnings
             );
+        }
+
+        /// <summary>
+        /// Creates a failed compile result from Assembly Definition and Assembly Reference Console errors.
+        /// </summary>
+        private static CompileResult CreateAssemblyDefinitionFailureResult(
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors)
+        {
+            CompilerMessage[] errors = CreateAssemblyDefinitionCompilerMessages(assemblyDefinitionErrors.Errors);
+            return new CompileResult(
+                success: false,
+                errorCount: errors.Length,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: errors,
+                errors: errors,
+                warnings: Array.Empty<CompilerMessage>(),
+                message: assemblyDefinitionErrors.Message
+            );
+        }
+
+        /// <summary>
+        /// Converts Assembly Definition and Assembly Reference Console errors into compiler messages.
+        /// </summary>
+        private static CompilerMessage[] CreateAssemblyDefinitionCompilerMessages(
+            AssemblyDefinitionConsoleError[] assemblyDefinitionErrors)
+        {
+            CompilerMessage[] messages = new CompilerMessage[assemblyDefinitionErrors.Length];
+            for (int i = 0; i < assemblyDefinitionErrors.Length; i++)
+            {
+                AssemblyDefinitionConsoleError error = assemblyDefinitionErrors[i];
+                messages[i] = new CompilerMessage
+                {
+                    type = CompilerMessageType.Error,
+                    message = error.Message,
+                    file = error.File,
+                    line = error.Line
+                };
+            }
+
+            return messages;
         }
 
         /// <summary>
