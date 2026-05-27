@@ -27,6 +27,9 @@ assert_not_contains() {
 
 assert_contains "$WARNING_WORKFLOW" "  pull_request_target:"
 assert_contains "$WARNING_WORKFLOW" "  issues: write"
+assert_contains "$WARNING_WORKFLOW" "      - name: Setup Go"
+assert_contains "$WARNING_WORKFLOW" "        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c"
+assert_contains "$WARNING_WORKFLOW" "          cache: false"
 assert_contains "$WARNING_WORKFLOW" "      - name: Fetch pull request head"
 assert_contains "$WARNING_WORKFLOW" "          CLI_MINIMUM_VERSION_HEAD_REF: cli-minimum-version-pr-head"
 assert_contains "$WARNING_WORKFLOW" "        run: scripts/comment-cli-minimum-version-warning.sh"

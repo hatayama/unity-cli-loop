@@ -39,6 +39,7 @@ func TestCommentCliMinimumVersionWarningWarnsForGoCliChange(t *testing.T) {
 
 	assertContains(t, result.GitHubLog, "POST repos/hatayama/unity-cli-loop/issues/123/comments")
 	assertContains(t, result.BodyLog, "Go CLI files changed")
+	assertContains(t, result.Output, "Posted CLI minimum version comment.")
 
 	result = runCommentScriptCase(t, commentScriptOptions{
 		ExistingCommentID: "456",
@@ -50,6 +51,7 @@ func TestCommentCliMinimumVersionWarningWarnsForGoCliChange(t *testing.T) {
 	assertContains(t, result.GitHubLog, "PATCH repos/hatayama/unity-cli-loop/issues/comments/456")
 	assertContains(t, result.BodyLog, "Go CLI files changed")
 	assertNotContains(t, result.GitHubLog, "POST")
+	assertContains(t, result.Output, "Updated CLI minimum version comment.")
 }
 
 // Verifies that pull_request_target can diff a fetched PR head without checking it out.
@@ -85,6 +87,7 @@ func TestCommentCliMinimumVersionWarningResolvesExistingReminder(t *testing.T) {
 
 	assertContains(t, result.GitHubLog, "PATCH repos/hatayama/unity-cli-loop/issues/comments/456")
 	assertContains(t, result.BodyLog, "Resolved:")
+	assertContains(t, result.Output, "Resolved CLI minimum version comment.")
 }
 
 // Verifies that unrelated changes do not create a reminder comment.
