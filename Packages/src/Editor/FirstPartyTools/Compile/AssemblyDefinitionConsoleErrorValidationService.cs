@@ -205,7 +205,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             int asmdefCount = Directory.GetFiles(directoryPath, "*.asmdef", SearchOption.TopDirectoryOnly).Length;
-            return asmdefCount > 1;
+            int asmrefCount = Directory.GetFiles(directoryPath, "*.asmref", SearchOption.TopDirectoryOnly).Length;
+            return asmdefCount + asmrefCount > 1;
         }
 
         /// <summary>
