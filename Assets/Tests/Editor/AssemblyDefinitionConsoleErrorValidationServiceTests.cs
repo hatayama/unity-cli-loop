@@ -69,5 +69,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.HasErrors, Is.False);
             Assert.That(result.Errors, Is.Empty);
         }
+
+        [Test]
+        public void FindErrors_WhenGenericErrorMentionsAsmdefPath_ReturnsNoIssues()
+        {
+            // Tests that stale generic Console errors mentioning .asmdef paths do not block compilation.
+            AssemblyDefinitionConsoleErrorValidationService service = new();
+            UnityCliLoopConsoleLogEntry[] entries =
+            {
+                new(
+                    UnityCliLoopLogType.Error,
+                    "Tool failed while reading Assets/Editor/Sample.asmdef",
+                    "")
+            };
+
+            AssemblyDefinitionConsoleErrorResult result = service.FindErrors(entries);
+
+            Assert.That(result.HasErrors, Is.False);
+            Assert.That(result.Errors, Is.Empty);
+        }
     }
 }

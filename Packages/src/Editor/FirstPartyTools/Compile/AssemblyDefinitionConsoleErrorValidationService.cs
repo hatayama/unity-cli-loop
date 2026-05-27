@@ -20,6 +20,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RegexOptions.Compiled | RegexOptions.IgnoreCase
         );
 
+        private static readonly string[] AssemblyDefinitionImporterErrorMarkers =
+        {
+            "Assembly has duplicate references:",
+            "Assembly Reference",
+            "Assembly Definition",
+            "Assembly with name '",
+            "assembly definition files"
+        };
+
         /// <summary>
         /// Finds Assembly Definition and Assembly Reference errors from the current Unity Console.
         /// </summary>
@@ -68,6 +77,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                if (!IsAssemblyDefinitionImporterError(searchableText))
+                {
+                    continue;
+                }
+
                 string file = pathMatch.Groups["path"].Value;
                 string issueMessage = string.IsNullOrWhiteSpace(message)
                     ? searchableText.Trim()
@@ -91,6 +105,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             return entry != null &&
                    string.Equals(entry.Type, UnityCliLoopLogType.Error, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks whether a Console error has Unity's Assembly Definition or Assembly Reference importer wording.
+        /// </summary>
+        private static bool IsAssemblyDefinitionImporterError(string message)
+        {
+            foreach (string marker in AssemblyDefinitionImporterErrorMarkers)
+            {
+                if (message.IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
