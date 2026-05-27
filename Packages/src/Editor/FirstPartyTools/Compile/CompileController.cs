@@ -110,6 +110,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "AssetDatabase.Refresh returned before compile.",
                 new { force_recompile = forceRecompile });
 
+            AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
+                assemblyDefinitionValidationService.FindCurrentErrors();
+            if (assemblyDefinitionErrors.HasErrors)
+            {
+                CompileResult result = CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors);
+                VibeLogger.LogWarning(
+                    "compile_asset_refresh_assembly_definition_error",
+                    assemblyDefinitionErrors.Message,
+                    new
+                    {
+                        force_recompile = forceRecompile,
+                        error_count = assemblyDefinitionErrors.Errors.Length
+                    });
+                CompleteCompileWithoutRequest(result);
+                return result;
+            }
+
             // Register events.
             CompilationPipeline.compilationFinished += HandleCompileFinished;
             CompilationPipeline.assemblyCompilationFinished += HandleAssemblyFinished;
@@ -178,6 +196,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 waitedMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;
             }
 
+            AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
+                assemblyDefinitionValidationService.FindCurrentErrors();
+            if (assemblyDefinitionErrors.HasErrors)
+            {
+                VibeLogger.LogWarning(
+                    "compile_start_timeout_assembly_definition_error",
+                    assemblyDefinitionErrors.Message,
+                    new { waited_ms = waitedMs });
+                AbortCompileWithResult(CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors));
+                return;
+            }
+
             AssemblyDefinitionDuplicationValidationService asmdefValidationService = new();
             ValidationResult asmdefValidation = asmdefValidationService.ValidateNoDuplicateAsmdefNames();
             if (!asmdefValidation.IsValid)
@@ -197,6 +228,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AbortCompile(
                 "Compilation did not start. Possible causes: editor update/reload locks, Auto Refresh disabled, or no script changes."
             );
+        }
+
+        /// <summary>
+        /// Completes an active compile request with a prepared failure result before Unity reports compilationFinished.
+        /// </summary>
+        private void AbortCompileWithResult(CompileResult result)
+        {
+            if (_currentCompileTask == null || _currentCompileTask.Task.IsCompleted)
+            {
+                return;
+            }
+
+            VibeLogger.LogWarning(
+                "compile_aborted",
+                result.Message,
+                new { force_recompile = _isForceCompile });
+
+            // Unregister events.
+            CompilationPipeline.compilationFinished -= HandleCompileFinished;
+            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
+
+            _isCompiling = false;
+
+            OnCompileCompleted?.Invoke(result);
+
+            TaskCompletionSource<CompileResult> task = _currentCompileTask;
+            _currentCompileTask = null;
+            task.SetResult(result);
+
+            _isForceCompile = false;
+        }
+
+        /// <summary>
+        /// Completes a compile request that stopped before RequestScriptCompilation was called.
+        /// </summary>
+        private void CompleteCompileWithoutRequest(CompileResult result)
+        {
+            _isCompiling = false;
+
+            OnCompileCompleted?.Invoke(result);
+
+            TaskCompletionSource<CompileResult> task = _currentCompileTask;
+            _currentCompileTask = null;
+            task?.SetResult(result);
+
+            _isForceCompile = false;
         }
 
         private void AbortCompile(string reason)
@@ -343,6 +420,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 errors: errors,
                 warnings: warnings
             );
+        }
+
+        /// <summary>
+        /// Creates a failed compile result from Assembly Definition and Assembly Reference Console errors.
+        /// </summary>
+        private static CompileResult CreateAssemblyDefinitionFailureResult(
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors)
+        {
+            CompilerMessage[] errors = CreateAssemblyDefinitionCompilerMessages(assemblyDefinitionErrors.Errors);
+            return new CompileResult(
+                success: false,
+                errorCount: errors.Length,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: errors,
+                errors: errors,
+                warnings: Array.Empty<CompilerMessage>(),
+                message: assemblyDefinitionErrors.Message
+            );
+        }
+
+        /// <summary>
+        /// Converts Assembly Definition and Assembly Reference Console errors into compiler messages.
+        /// </summary>
+        private static CompilerMessage[] CreateAssemblyDefinitionCompilerMessages(
+            AssemblyDefinitionConsoleError[] assemblyDefinitionErrors)
+        {
+            CompilerMessage[] messages = new CompilerMessage[assemblyDefinitionErrors.Length];
+            for (int i = 0; i < assemblyDefinitionErrors.Length; i++)
+            {
+                AssemblyDefinitionConsoleError error = assemblyDefinitionErrors[i];
+                messages[i] = new CompilerMessage
+                {
+                    type = CompilerMessageType.Error,
+                    message = error.Message,
+                    file = error.File,
+                    line = error.Line
+                };
+            }
+
+            return messages;
         }
 
         /// <summary>
