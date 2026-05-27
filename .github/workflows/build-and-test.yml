@@ -24,6 +24,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: Packages/src/Cli~/.go-version
+          cache-dependency-path: Packages/src/Cli~/**/go.sum
+
       - name: Test release automation shell helpers
         run: |
           scripts/test-comment-cli-minimum-version-warning.sh
@@ -38,12 +44,6 @@ jobs:
           scripts/test-notify-release-workflow-failure.sh
           scripts/test-native-cli-publish-workflow.sh
           scripts/test-install-release-filter.sh
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: Packages/src/Cli~/.go-version
-          cache-dependency-path: Packages/src/Cli~/**/go.sum
 
       - name: Install golangci-lint
         run: |
