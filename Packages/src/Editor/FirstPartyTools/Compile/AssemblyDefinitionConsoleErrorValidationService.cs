@@ -376,16 +376,64 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private static string ToAbsolutePath(string assetPath)
         {
+            Debug.Assert(!string.IsNullOrWhiteSpace(assetPath), "assetPath must not be null or empty");
+
+            if (assetPath.StartsWith("Packages/", StringComparison.Ordinal))
+            {
+                string packagePath = ToPackageAbsolutePath(assetPath);
+                if (!string.IsNullOrEmpty(packagePath))
+                {
+                    return packagePath;
+                }
+            }
+
             return Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), assetPath);
         }
 
         /// <summary>
-        /// Checks whether Unity still exposes an import log for the asset.
+        /// Converts a Package Manager virtual asset path to the package file path on disk.
+        /// </summary>
+        private static string ToPackageAbsolutePath(string assetPath)
+        {
+            UnityEditor.PackageManager.PackageInfo packageInfo =
+                UnityEditor.PackageManager.PackageInfo.FindForAssetPath(assetPath);
+            if (packageInfo == null ||
+                string.IsNullOrEmpty(packageInfo.assetPath) ||
+                string.IsNullOrEmpty(packageInfo.resolvedPath))
+            {
+                return string.Empty;
+            }
+
+            if (!assetPath.StartsWith(packageInfo.assetPath, StringComparison.Ordinal))
+            {
+                return string.Empty;
+            }
+
+            string relativePath = assetPath.Substring(packageInfo.assetPath.Length)
+                .TrimStart('/', '\\');
+            return Path.Combine(packageInfo.resolvedPath, relativePath);
+        }
+
+        /// <summary>
+        /// Checks whether Unity still exposes an error import log for the asset.
         /// </summary>
         private static bool HasAssetImportLog(string assetPath)
         {
             ImportLog importLog = AssetImporter.GetImportLog(assetPath);
-            return importLog != null;
+            if (importLog == null)
+            {
+                return false;
+            }
+
+            foreach (ImportLog.ImportLogEntry entry in importLog.logEntries)
+            {
+                if ((entry.flags & ImportLogFlags.Error) != 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>

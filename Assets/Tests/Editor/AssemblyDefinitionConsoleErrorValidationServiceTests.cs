@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -144,6 +145,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new(
                     UnityCliLoopLogType.Error,
                     "Tool failed while reading Assets/Editor/Sample.asmdef",
+                    "")
+            };
+
+            AssemblyDefinitionConsoleErrorResult result = service.FindErrors(entries);
+
+            Assert.That(result.HasErrors, Is.False);
+            Assert.That(result.Errors, Is.Empty);
+        }
+
+        [Test]
+        public void FindErrors_WhenValidRegistryPackageAsmdefPathIsMentioned_ReturnsNoIssues()
+        {
+            // Tests that Package Manager virtual asset paths resolve before checking current file contents.
+            const string packageAsmdefPath = "Packages/com.unity.cinemachine/Runtime/com.unity.cinemachine.asmdef";
+            Assert.That(AssetImporter.GetAtPath(packageAsmdefPath), Is.Not.Null);
+            AssemblyDefinitionConsoleErrorValidationService service = new();
+            UnityCliLoopConsoleLogEntry[] entries =
+            {
+                new(
+                    UnityCliLoopLogType.Error,
+                    $"JSON parse error in {packageAsmdefPath}",
                     "")
             };
 

@@ -96,72 +96,97 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             _isCompiling = true;
             _compileMessages.Clear();
-            _currentCompileTask = new TaskCompletionSource<CompileResult>();
+            TaskCompletionSource<CompileResult> compileTask = new();
+            _currentCompileTask = compileTask;
             _isForceCompile = forceRecompile;
+            bool eventsRegistered = false;
+            bool compileTaskTransferred = false;
 
-            // Execute asset refresh.
-            VibeLogger.LogInfo(
-                "compile_asset_refresh_start",
-                "Calling AssetDatabase.Refresh before compile.",
-                new { force_recompile = forceRecompile });
-            AssetDatabase.Refresh();
-            VibeLogger.LogInfo(
-                "compile_asset_refresh_complete",
-                "AssetDatabase.Refresh returned before compile.",
-                new { force_recompile = forceRecompile });
-
-            AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
-            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
-                assemblyDefinitionValidationService.FindCurrentErrors();
-            if (assemblyDefinitionErrors.HasErrors)
+            try
             {
-                CompileResult result = CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors);
-                VibeLogger.LogWarning(
-                    "compile_asset_refresh_assembly_definition_error",
-                    assemblyDefinitionErrors.Message,
-                    new
+                // Execute asset refresh.
+                VibeLogger.LogInfo(
+                    "compile_asset_refresh_start",
+                    "Calling AssetDatabase.Refresh before compile.",
+                    new { force_recompile = forceRecompile });
+                AssetDatabase.Refresh();
+                VibeLogger.LogInfo(
+                    "compile_asset_refresh_complete",
+                    "AssetDatabase.Refresh returned before compile.",
+                    new { force_recompile = forceRecompile });
+
+                AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
+                AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
+                    assemblyDefinitionValidationService.FindCurrentErrors();
+                if (assemblyDefinitionErrors.HasErrors)
+                {
+                    CompileResult result = CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors);
+                    VibeLogger.LogWarning(
+                        "compile_asset_refresh_assembly_definition_error",
+                        assemblyDefinitionErrors.Message,
+                        new
+                        {
+                            force_recompile = forceRecompile,
+                            error_count = assemblyDefinitionErrors.Errors.Length
+                        });
+                    CompleteCompileWithoutRequest(result);
+                    return result;
+                }
+
+                // Register events.
+                CompilationPipeline.compilationFinished += HandleCompileFinished;
+                CompilationPipeline.assemblyCompilationFinished += HandleAssemblyFinished;
+                eventsRegistered = true;
+                VibeLogger.LogInfo(
+                    "compile_event_handlers_registered",
+                    "Registered Unity compilation callbacks.",
+                    new { force_recompile = forceRecompile });
+
+                string startMessage = forceRecompile ? "Forced recompile started after asset refresh..." : "Compilation started after asset refresh...";
+                OnCompileStarted?.Invoke(startMessage);
+
+                VibeLogger.LogInfo(
+                    "compile_request_script_compilation",
+                    "Requesting Unity script compilation.",
+                    new { force_recompile = forceRecompile });
+                if (forceRecompile)
+                {
+                    CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache);
+                }
+                else
+                {
+                    CompilationPipeline.RequestScriptCompilation();
+                }
+                VibeLogger.LogInfo(
+                    "compile_request_script_compilation_returned",
+                    "Unity script compilation request returned.",
+                    new { force_recompile = forceRecompile });
+
+                _ = WatchCompileStartAsync(ct);
+                VibeLogger.LogInfo(
+                    "compile_controller_waiting_for_finish",
+                    "Waiting for Unity compilationFinished callback.",
+                    new { force_recompile = forceRecompile });
+                compileTaskTransferred = true;
+                return await compileTask.Task;
+            }
+            finally
+            {
+                if (!compileTaskTransferred &&
+                    ReferenceEquals(_currentCompileTask, compileTask) &&
+                    !compileTask.Task.IsCompleted)
+                {
+                    if (eventsRegistered)
                     {
-                        force_recompile = forceRecompile,
-                        error_count = assemblyDefinitionErrors.Errors.Length
-                    });
-                CompleteCompileWithoutRequest(result);
-                return result;
+                        UnregisterCompilationEvents();
+                    }
+
+                    _currentCompileTask = null;
+                    _isCompiling = false;
+                    _isForceCompile = false;
+                    compileTask.TrySetCanceled();
+                }
             }
-
-            // Register events.
-            CompilationPipeline.compilationFinished += HandleCompileFinished;
-            CompilationPipeline.assemblyCompilationFinished += HandleAssemblyFinished;
-            VibeLogger.LogInfo(
-                "compile_event_handlers_registered",
-                "Registered Unity compilation callbacks.",
-                new { force_recompile = forceRecompile });
-
-            string startMessage = forceRecompile ? "Forced recompile started after asset refresh..." : "Compilation started after asset refresh...";
-            OnCompileStarted?.Invoke(startMessage);
-
-            VibeLogger.LogInfo(
-                "compile_request_script_compilation",
-                "Requesting Unity script compilation.",
-                new { force_recompile = forceRecompile });
-            if (forceRecompile)
-            {
-                CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache);
-            }
-            else
-            {
-                CompilationPipeline.RequestScriptCompilation();
-            }
-            VibeLogger.LogInfo(
-                "compile_request_script_compilation_returned",
-                "Unity script compilation request returned.",
-                new { force_recompile = forceRecompile });
-
-            _ = WatchCompileStartAsync(ct);
-            VibeLogger.LogInfo(
-                "compile_controller_waiting_for_finish",
-                "Waiting for Unity compilationFinished callback.",
-                new { force_recompile = forceRecompile });
-            return await _currentCompileTask.Task;
         }
 
         private async Task WatchCompileStartAsync(CancellationToken ct)
