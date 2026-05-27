@@ -97,11 +97,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void RuntimeAsmdef_WhenLoaded_AllowsPrefabAttachmentWithoutAutoReference()
         {
             // Tests that runtime overlay code can attach to prefabs without implicit project references.
-            string[] includePlatforms = ReadIncludePlatforms("Packages/src/Runtime/uLoopMCP.Runtime.asmdef");
-            bool autoReferenced = ReadAutoReferenced("Packages/src/Runtime/uLoopMCP.Runtime.asmdef");
+            string[] includePlatforms = ReadIncludePlatforms("Packages/src/Runtime/UnityCLILoop.Runtime.asmdef");
+            bool autoReferenced = ReadAutoReferenced("Packages/src/Runtime/UnityCLILoop.Runtime.asmdef");
 
             Assert.That(includePlatforms, Is.Empty);
             Assert.That(autoReferenced, Is.False);
+        }
+
+        [Test]
+        public void ProjectAsmdefFileNames_WhenLoaded_UseUnityCliLoopName()
+        {
+            // Tests that tracked asmdef asset filenames no longer expose the legacy project name.
+            string[] legacyFileNames = ReadProjectAsmdefPaths()
+                .Select(Path.GetFileName)
+                .Where(fileName => fileName.IndexOf("uLoopMCP", StringComparison.Ordinal) >= 0)
+                .OrderBy(fileName => fileName)
+                .ToArray();
+
+            Assert.That(legacyFileNames, Is.Empty);
         }
 
         [Test]
@@ -145,7 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void DemoEditorAsmdef_WhenLoaded_RequiresUnityIncludeTestsAndManualReference()
         {
             // Tests that demo editor startup hooks stay out of normal Editor startup.
-            string relativeAsmdefPath = "Assets/Tests/Demo/Editor/uLoopMCP.Tests.Demo.Editor.asmdef";
+            string relativeAsmdefPath = "Assets/Tests/Demo/Editor/UnityCLILoop.Tests.Demo.Editor.asmdef";
             string[] defineConstraints = ReadDefineConstraints(relativeAsmdefPath);
             bool autoReferenced = ReadAutoReferenced(relativeAsmdefPath);
 
