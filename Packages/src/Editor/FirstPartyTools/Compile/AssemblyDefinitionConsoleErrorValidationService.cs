@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<string, string, bool> _isCurrentImportError;
 
         private static readonly Regex AssemblyDefinitionAssetPathRegex = new(
-            "(?<path>(?:Assets|Packages)/[^\\r\\n()]*?\\.(?:asmdef|asmref))",
+            "(?<path>(?:Assets|Packages)/[^\\r\\n]*?\\.(?:asmdef|asmref))",
             RegexOptions.Compiled | RegexOptions.IgnoreCase
         );
 
@@ -157,7 +157,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (assetPath.EndsWith(".asmdef", StringComparison.OrdinalIgnoreCase))
             {
-                return HasDuplicateReferences(assetPath) ||
+                return HasMalformedAssemblyDefinition(assetPath) ||
+                       HasDuplicateReferences(assetPath) ||
                        HasMultipleAssemblyDefinitionFilesInFolder(assetPath) ||
                        HasDuplicateAssemblyName(assetPath, message) ||
                        HasAssetImportLog(assetPath);
@@ -183,13 +184,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (Match referenceMatch in referenceMatches)
             {
                 string reference = referenceMatch.Groups["value"].Value;
-                if (!references.Add(reference))
+                string referenceIdentity = ResolveAssemblyReferenceIdentity(reference);
+                if (!references.Add(referenceIdentity))
                 {
                     return true;
                 }
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Checks whether an asmdef is missing the minimum JSON shape Unity's importer requires.
+        /// </summary>
+        private static bool HasMalformedAssemblyDefinition(string assetPath)
+        {
+            string source = ReadAssetText(assetPath).Trim();
+            if (string.IsNullOrEmpty(source))
+            {
+                return true;
+            }
+
+            if (!source.StartsWith("{", StringComparison.Ordinal) ||
+                !source.EndsWith("}", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            Match nameMatch = AssemblyNameRegex.Match(source);
+            return !nameMatch.Success;
         }
 
         /// <summary>
@@ -271,6 +294,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string reference = referenceMatch.Groups["reference"].Value;
             return !AssemblyReferenceTargetExists(reference);
+        }
+
+        /// <summary>
+        /// Resolves an asmdef reference string to the assembly identity Unity uses for duplicate checks.
+        /// </summary>
+        private static string ResolveAssemblyReferenceIdentity(string reference)
+        {
+            if (!reference.StartsWith(GuidReferencePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return reference;
+            }
+
+            string guid = reference.Substring(GuidReferencePrefix.Length);
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (!path.EndsWith(".asmdef", StringComparison.OrdinalIgnoreCase))
+            {
+                return reference;
+            }
+
+            return ReadAssemblyDefinitionName(path);
         }
 
         /// <summary>

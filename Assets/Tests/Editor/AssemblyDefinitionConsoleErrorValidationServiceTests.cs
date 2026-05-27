@@ -114,6 +114,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void FindErrors_WhenAssetPathContainsParentheses_ReturnsIssueWithFile()
+        {
+            // Tests that Unity asset paths with parentheses are still parsed from Console errors.
+            AssemblyDefinitionConsoleErrorValidationService service = new(
+                (assetPath, message) => true);
+            UnityCliLoopConsoleLogEntry[] entries =
+            {
+                new(
+                    UnityCliLoopLogType.Error,
+                    "JSON parse error: Missing a name for object member. (Assets/Foo (Editor)/Bad.asmref)",
+                    "")
+            };
+
+            AssemblyDefinitionConsoleErrorResult result = service.FindErrors(entries);
+
+            Assert.That(result.HasErrors, Is.True);
+            Assert.That(result.Errors, Has.Length.EqualTo(1));
+            Assert.That(result.Errors[0].File, Is.EqualTo("Assets/Foo (Editor)/Bad.asmref"));
+        }
+
+        [Test]
         public void FindErrors_WhenGenericErrorMentionsAsmdefPath_ReturnsNoIssues()
         {
             // Tests that stale generic Console errors mentioning .asmdef paths do not block compilation.
