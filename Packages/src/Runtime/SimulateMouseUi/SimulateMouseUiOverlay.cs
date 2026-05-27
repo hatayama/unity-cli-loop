@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 #nullable enable
 using System.Collections.Generic;
 using UnityEngine;
@@ -366,3 +367,4 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
     }
 }
+#endif

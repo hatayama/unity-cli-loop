@@ -39,6 +39,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Runtime/ReplayInput/ReplayInputOverlay.prefab"
         };
 
+        private static readonly string[] EditorOnlyOverlayComponentSourcePaths =
+        {
+            "Packages/src/Runtime/Common/InputVisualizationCanvas.cs",
+            "Packages/src/Runtime/SimulateMouseInput/SimulateMouseInputOverlay.cs",
+            "Packages/src/Runtime/SimulateKeyboard/SimulateKeyboardOverlay.cs",
+            "Packages/src/Runtime/SimulateMouseUi/SimulateMouseUiOverlay.cs",
+            "Packages/src/Runtime/RecordInput/RecordInputOverlayPresenter.cs",
+            "Packages/src/Runtime/RecordInput/RecordInputOverlayView.cs",
+            "Packages/src/Runtime/ReplayInput/ReplayInputOverlay.cs"
+        };
+
         [Test]
         public void RuntimeAssemblyDefinition_WhenScanned_IsAttachableAndNotAutoReferenced()
         {
@@ -173,6 +184,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         Does.Not.StartWith("Assets/"),
                         $"{OverlayPrefabFilePaths[pathIndex]} references project script GUID {guid} at {assetPath}");
                 }
+            }
+        }
+
+        [Test]
+        public void InputVisualizationOverlayComponents_WhenScanned_AreEditorOnly()
+        {
+            // Verifies that prefab-attached overlay components cannot compile into Player assemblies.
+            for (int pathIndex = 0; pathIndex < EditorOnlyOverlayComponentSourcePaths.Length; pathIndex++)
+            {
+                string contents = ReadText(EditorOnlyOverlayComponentSourcePaths[pathIndex]);
+
+                Assert.That(
+                    contents.TrimStart(),
+                    Does.StartWith("#if UNITY_EDITOR"),
+                    EditorOnlyOverlayComponentSourcePaths[pathIndex]);
             }
         }
 
