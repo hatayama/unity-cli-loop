@@ -245,19 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.Message,
                 new { force_recompile = _isForceCompile });
 
-            // Unregister events.
-            CompilationPipeline.compilationFinished -= HandleCompileFinished;
-            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
-
-            _isCompiling = false;
-
-            OnCompileCompleted?.Invoke(result);
-
-            TaskCompletionSource<CompileResult> task = _currentCompileTask;
-            _currentCompileTask = null;
-            task.SetResult(result);
-
-            _isForceCompile = false;
+            CompleteCompileRequest(result, unregisterEvents: true);
         }
 
         /// <summary>
@@ -265,15 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private void CompleteCompileWithoutRequest(CompileResult result)
         {
-            _isCompiling = false;
-
-            OnCompileCompleted?.Invoke(result);
-
-            TaskCompletionSource<CompileResult> task = _currentCompileTask;
-            _currentCompileTask = null;
-            task?.SetResult(result);
-
-            _isForceCompile = false;
+            CompleteCompileRequest(result, unregisterEvents: false);
         }
 
         private void AbortCompile(string reason)
@@ -288,12 +268,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 reason,
                 new { force_recompile = _isForceCompile });
 
-            // Unregister events.
-            CompilationPipeline.compilationFinished -= HandleCompileFinished;
-            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
-
-            _isCompiling = false;
-
             CompileResult result = new(
                 success: false,
                 errorCount: 0,
@@ -306,11 +280,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message: reason
             );
 
-            OnCompileCompleted?.Invoke(result);
+            CompleteCompileRequest(result, unregisterEvents: true);
+        }
+
+        /// <summary>
+        /// Completes the active compile task while guaranteeing controller state cleanup.
+        /// </summary>
+        private void CompleteCompileRequest(CompileResult result, bool unregisterEvents)
+        {
+            UnityEngine.Debug.Assert(result != null, "result must not be null");
 
             TaskCompletionSource<CompileResult> task = _currentCompileTask;
-            _currentCompileTask = null;
-            task.SetResult(result);
+
+            // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
+            try
+            {
+                if (unregisterEvents)
+                {
+                    UnregisterCompilationEvents();
+                }
+
+                _isCompiling = false;
+                _isForceCompile = false;
+                OnCompileCompleted?.Invoke(result);
+            }
+            finally
+            {
+                if (ReferenceEquals(_currentCompileTask, task))
+                {
+                    _currentCompileTask = null;
+                    _isCompiling = false;
+                    _isForceCompile = false;
+                }
+
+                task?.TrySetResult(result);
+            }
+        }
+
+        /// <summary>
+        /// Removes Unity compilation callbacks for the current compile request.
+        /// </summary>
+        private void UnregisterCompilationEvents()
+        {
+            CompilationPipeline.compilationFinished -= HandleCompileFinished;
+            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
         }
 
         /// <summary>
@@ -327,12 +340,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <param name="context">The compilation context.</param>
         private void HandleCompileFinished(object context)
         {
-            // Unregister events.
-            CompilationPipeline.compilationFinished -= HandleCompileFinished;
-            CompilationPipeline.assemblyCompilationFinished -= HandleAssemblyFinished;
-
-            _isCompiling = false;
-
             CompileResult result = CreateCompileResult();
             VibeLogger.LogInfo(
                 "compile_finished_event",
@@ -345,15 +352,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     warning_count = result.WarningCount,
                     message_count = _compileMessages.Count
                 });
-            OnCompileCompleted?.Invoke(result);
 
-            // Set the result on the TaskCompletionSource.
-            TaskCompletionSource<CompileResult> task = _currentCompileTask;
-            _currentCompileTask = null;
-            task?.SetResult(result);
-
-            // Reset force compile flag for future compilations
-            _isForceCompile = false;
+            CompleteCompileRequest(result, unregisterEvents: true);
         }
 
         /// <summary>
