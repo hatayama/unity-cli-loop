@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.0.0-beta.21](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.20...v3.0.0-beta.21) (2026-05-27)
+
+
+### Bug Fixes
+
+* Play mode control waits reliably and input overlays avoid missing script warnings ([#1219](https://github.com/hatayama/unity-cli-loop/issues/1219)) ([2ad9f59](https://github.com/hatayama/unity-cli-loop/commit/2ad9f596f7d18b19c0dd012a9442e1d88c100a56))
+* Setup now requires the Play Mode wait CLI release ([#1220](https://github.com/hatayama/unity-cli-loop/issues/1220)) ([73db4b4](https://github.com/hatayama/unity-cli-loop/commit/73db4b444f4df8f39757fa0532d303afb7d60da6))
+* Unity busy states are easier to diagnose ([#1215](https://github.com/hatayama/unity-cli-loop/issues/1215)) ([fb4713d](https://github.com/hatayama/unity-cli-loop/commit/fb4713d5567110536bb37b157b4abfb25a95994c))
+
 ## [3.0.0-beta.20](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.19...v3.0.0-beta.20) (2026-05-26)
 
 
