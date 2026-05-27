@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System.Globalization;
 using UnityEngine;
 
@@ -95,3 +96,4 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
     }
 }
+#endif

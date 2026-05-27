@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
@@ -10,3 +11,4 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public const float DISSIPATE_DURATION = 0.1f;
     }
 }
+#endif

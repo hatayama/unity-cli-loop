@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 #nullable enable
 
 namespace io.github.hatayama.UnityCliLoop.Runtime
@@ -66,3 +67,4 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
     }
 }
+#endif
