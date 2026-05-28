@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         private FramePressObserver framePressObserver = null!;
         private UpdateFramePressObserver updateFramePressObserver = null!;
         private FrameStateObserver frameStateObserver = null!;
+        private WasPressedGameplayJumpController gameplayJumpController = null!;
         private ManualModeFramePressObserver manualModeFramePressObserver = null!;
         private InputSettings.UpdateMode originalUpdateMode;
         private float originalTimeScale;
@@ -49,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             framePressObserver = framePressObserverGo.AddComponent<FramePressObserver>();
             updateFramePressObserver = framePressObserverGo.AddComponent<UpdateFramePressObserver>();
             frameStateObserver = framePressObserverGo.AddComponent<FrameStateObserver>();
+            gameplayJumpController = framePressObserverGo.AddComponent<WasPressedGameplayJumpController>();
             manualModeFramePressObserver = framePressObserverGo.AddComponent<ManualModeFramePressObserver>();
 
             tool = new TestableSimulateKeyboardTool();
@@ -176,6 +178,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             });
 
             Assert.GreaterOrEqual(updateFramePressObserver.SpaceHeldUpdateCount, 2, "Default Press should stay held across gameplay observation frames");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WithoutDuration_Should_TriggerGameplayJumpFromWasPressedThisFrame()
+        {
+            // Verifies that default Press drives gameplay state transitions that poll wasPressedThisFrame in Update.
+            yield return null;
+
+            gameplayJumpController.ResetState();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.AreEqual(1, gameplayJumpController.JumpCount, "Default Press should trigger a single gameplay jump.");
+            Assert.IsFalse(gameplayJumpController.Grounded, "Gameplay state should become airborne after the jump.");
+            Assert.Greater(gameplayJumpController.VerticalPosition, 0f, "Gameplay jump should move the controller upward.");
         }
 
         [UnityTest]
@@ -464,6 +485,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.Success);
             Assert.IsFalse(KeyboardKeyState.IsKeyHeld(Key.W), "Key should be released after KeyUp");
             Assert.Greater(frameStateObserver.WReleasedUpdateCount, 0, "KeyUp should wait until Update observed the released key");
+        }
+
+        [UnityTest]
+        public IEnumerator KeyDown_Should_TriggerGameplayJumpFromWasPressedThisFrame()
+        {
+            // Verifies that KeyDown exposes its initial edge to gameplay before returning as a held key.
+            yield return null;
+
+            gameplayJumpController.ResetState();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.AreEqual(1, gameplayJumpController.JumpCount, "KeyDown should trigger a single gameplay jump on the initial edge.");
+            Assert.IsFalse(gameplayJumpController.Grounded, "Gameplay state should become airborne after KeyDown.");
+            Assert.IsTrue(keyboard[Key.Space].isPressed, "KeyDown should remain held after gameplay observes the edge.");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyUp.ToString(),
+                ["key"] = "Space"
+            });
+            Assert.IsTrue(lastResponse.Success);
         }
 
         [UnityTest]
@@ -823,6 +870,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         {
             WPressedUpdateCount = 0;
             WReleasedUpdateCount = 0;
+        }
+    }
+
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
+    public class WasPressedGameplayJumpController : MonoBehaviour
+    {
+        private const float JumpVelocity = 8f;
+        private const float SimulatedFrameSeconds = 0.016f;
+
+        public bool Grounded { get; private set; } = true;
+        public int JumpCount { get; private set; }
+        public float VerticalPosition { get; private set; }
+        public float VerticalVelocity { get; private set; }
+
+        private void Update()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null)
+            {
+                return;
+            }
+
+            if (Grounded && keyboard.spaceKey.wasPressedThisFrame)
+            {
+                Grounded = false;
+                JumpCount++;
+                VerticalVelocity = JumpVelocity;
+            }
+
+            if (!Grounded)
+            {
+                VerticalPosition += VerticalVelocity * SimulatedFrameSeconds;
+            }
+        }
+
+        public void ResetState()
+        {
+            Grounded = true;
+            JumpCount = 0;
+            VerticalPosition = 0f;
+            VerticalVelocity = 0f;
         }
     }
 
