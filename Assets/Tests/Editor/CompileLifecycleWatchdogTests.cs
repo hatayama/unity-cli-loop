@@ -110,6 +110,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(actualException, Is.SameAs(expectedException));
         }
 
+        [Test]
+        public void IsCurrentCompileRequest_WhenTaskMatches_ReturnsTrue()
+        {
+            // Verifies watchdog fault recovery accepts the compile request it was created for.
+            TaskCompletionSource<CompileResult> compileTask = new();
+
+            bool isCurrentCompileRequest = CompileController.IsCurrentCompileRequest(compileTask, compileTask);
+
+            Assert.That(isCurrentCompileRequest, Is.True);
+        }
+
+        [Test]
+        public void IsCurrentCompileRequest_WhenTaskDiffers_ReturnsFalse()
+        {
+            // Verifies late watchdog faults from older requests cannot abort a newer compile request.
+            TaskCompletionSource<CompileResult> currentCompileTask = new();
+            TaskCompletionSource<CompileResult> staleCompileTask = new();
+
+            bool isCurrentCompileRequest = CompileController.IsCurrentCompileRequest(
+                currentCompileTask,
+                staleCompileTask);
+
+            Assert.That(isCurrentCompileRequest, Is.False);
+        }
+
         private sealed class SequenceCompilationState
         {
             private readonly bool[] _states;

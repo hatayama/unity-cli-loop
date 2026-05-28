@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Unity script compilation request returned.",
                     new { force_recompile = forceRecompile });
 
-                StartCompileLifecycleWatchdog(ct);
+                StartCompileLifecycleWatchdog(compileTask, ct);
                 VibeLogger.LogInfo(
                     "compile_controller_waiting_for_finish",
                     "Waiting for Unity compilationFinished callback.",
@@ -189,11 +189,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private void StartCompileLifecycleWatchdog(CancellationToken ct)
+        private void StartCompileLifecycleWatchdog(TaskCompletionSource<CompileResult> compileTask, CancellationToken ct)
         {
+            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
+
             Task watchdogTask = WatchCompileLifecycleAsync(ct);
             _ = watchdogTask.ContinueWith(
-                HandleCompileLifecycleWatchdogFault,
+                faultedTask => HandleCompileLifecycleWatchdogFault(compileTask, faultedTask),
                 CancellationToken.None,
                 TaskContinuationOptions.OnlyOnFaulted,
                 TaskScheduler.Default);
@@ -222,10 +224,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return TimerDelay.Wait(UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS);
         }
 
-        private void HandleCompileLifecycleWatchdogFault(Task faultedTask)
+        private void HandleCompileLifecycleWatchdogFault(
+            TaskCompletionSource<CompileResult> compileTask,
+            Task faultedTask)
         {
+            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
             UnityEngine.Debug.Assert(faultedTask != null, "faultedTask must not be null");
             UnityEngine.Debug.Assert(faultedTask.IsFaulted, "faultedTask must be faulted");
+
+            if (!IsCurrentCompileRequest(_currentCompileTask, compileTask))
+            {
+                return;
+            }
 
             Exception exception = faultedTask.Exception;
             UnityEngine.Debug.Assert(exception != null, "faultedTask exception must not be null");
@@ -234,12 +244,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityEngine.Debug.LogException(exception);
             }
 
-            EditorApplication.delayCall += AbortCompileAfterWatchdogFault;
+            EditorApplication.delayCall += () => AbortCompileAfterWatchdogFault(compileTask);
         }
 
-        private void AbortCompileAfterWatchdogFault()
+        private void AbortCompileAfterWatchdogFault(TaskCompletionSource<CompileResult> compileTask)
         {
+            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
+
+            if (!IsCurrentCompileRequest(_currentCompileTask, compileTask))
+            {
+                return;
+            }
+
             AbortCompile("Compilation watchdog failed unexpectedly.");
+        }
+
+        internal static bool IsCurrentCompileRequest(
+            TaskCompletionSource<CompileResult> currentCompileTask,
+            TaskCompletionSource<CompileResult> compileTask)
+        {
+            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
+            return currentCompileTask != null && ReferenceEquals(currentCompileTask, compileTask);
         }
 
         private void HandleCompileStartedObserved(int waitedMs)
