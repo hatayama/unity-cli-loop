@@ -359,6 +359,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
+        public async Task CompileAsync_ScriptMode_NakedObject_ShouldUseUnityObjectAlias()
+        {
+            // Verifies that wrapper-provided Object resolves to UnityEngine.Object while C# object remains available.
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
+                Code = @"
+                    Object[] unityObjects = new Object[0];
+                    object boxedObject = new object();
+                    System.Object systemObject = boxedObject;
+                    return unityObjects.Length == 0 && systemObject != null ? ""ok"" : ""unexpected"";
+                ",
+                ClassName = "NakedObjectAliasCommand",
+                Namespace = "TestNamespace"
+            };
+
+            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
+
+            Assert.IsTrue(result.Success,
+                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Object alias should compile");
+            StringAssert.Contains("using Object = UnityEngine.Object;", result.UpdatedCode);
+        }
+
+        [Test]
+        public async Task CompileAsync_ScriptMode_UserObjectAlias_ShouldKeepExplicitAlias()
+        {
+            // Verifies that an explicit user Object alias is not shadowed by the wrapper default.
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
+                Code = @"
+                    using Object = System.Object;
+                    Object boxedObject = new object();
+                    return boxedObject != null ? ""ok"" : ""unexpected"";
+                ",
+                ClassName = "UserObjectAliasCommand",
+                Namespace = "TestNamespace"
+            };
+
+            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
+
+            Assert.IsTrue(result.Success,
+                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "User Object alias should compile");
+            StringAssert.DoesNotContain("using Object = UnityEngine.Object;", result.UpdatedCode);
+        }
+
+        [Test]
+        public async Task CompileAsync_ScriptMode_UserObjectAliasWithCompactSpacing_ShouldKeepExplicitAlias()
+        {
+            // Verifies that compact alias spacing is still treated as an explicit Object alias.
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
+                Code = @"
+                    using Object=System.Object;
+                    Object boxedObject = new object();
+                    return boxedObject != null ? ""ok"" : ""unexpected"";
+                ",
+                ClassName = "CompactUserObjectAliasCommand",
+                Namespace = "TestNamespace"
+            };
+
+            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
+
+            Assert.IsTrue(result.Success,
+                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Compact user Object alias should compile");
+            StringAssert.DoesNotContain("using Object = UnityEngine.Object;", result.UpdatedCode);
+        }
+
+        [Test]
+        public async Task CompileAsync_ScriptMode_UserObjectAliasWithTokenComment_ShouldKeepExplicitAlias()
+        {
+            // Verifies that comments between alias tokens do not hide an explicit Object alias.
+            DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
+            CompilationRequest request = new()            {
+                Code = @"
+                    using Object /* explicit */ = System.Object;
+                    Object boxedObject = new object();
+                    return boxedObject != null ? ""ok"" : ""unexpected"";
+                ",
+                ClassName = "CommentedUserObjectAliasCommand",
+                Namespace = "TestNamespace"
+            };
+
+            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
+
+            Assert.IsTrue(result.Success,
+                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Commented user Object alias should compile");
+            StringAssert.DoesNotContain("using Object = UnityEngine.Object;", result.UpdatedCode);
+        }
+
+        [Test]
         public async Task CompileAsync_ScriptMode_MultipleMissingUsings_ShouldPreInjectAllAndSucceed()
         {
             DynamicCodeCompiler compiler = new(DynamicCodeSecurityLevel.Restricted);
