@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Unity script compilation request returned.",
                     new { force_recompile = forceRecompile });
 
-                _ = WatchCompileLifecycleAsync(ct);
+                StartCompileLifecycleWatchdog(ct);
                 VibeLogger.LogInfo(
                     "compile_controller_waiting_for_finish",
                     "Waiting for Unity compilationFinished callback.",
@@ -189,6 +189,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        private void StartCompileLifecycleWatchdog(CancellationToken ct)
+        {
+            Task watchdogTask = WatchCompileLifecycleAsync(ct);
+            _ = watchdogTask.ContinueWith(
+                HandleCompileLifecycleWatchdogFault,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+        }
+
         private Task WatchCompileLifecycleAsync(CancellationToken ct)
         {
             CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
@@ -210,6 +220,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static Task WaitForCompileWatchdogPollAsync()
         {
             return TimerDelay.Wait(UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS);
+        }
+
+        private void HandleCompileLifecycleWatchdogFault(Task faultedTask)
+        {
+            UnityEngine.Debug.Assert(faultedTask != null, "faultedTask must not be null");
+            UnityEngine.Debug.Assert(faultedTask.IsFaulted, "faultedTask must be faulted");
+
+            Exception exception = faultedTask.Exception;
+            UnityEngine.Debug.Assert(exception != null, "faultedTask exception must not be null");
+            if (exception != null)
+            {
+                UnityEngine.Debug.LogException(exception);
+            }
+
+            EditorApplication.delayCall += AbortCompileAfterWatchdogFault;
+        }
+
+        private void AbortCompileAfterWatchdogFault()
+        {
+            AbortCompile("Compilation watchdog failed unexpectedly.");
         }
 
         private void HandleCompileStartedObserved(int waitedMs)
@@ -469,14 +499,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             CompilerMessage[] errors = _compileMessages.Where(m => m.type == CompilerMessageType.Error).ToArray();
             CompilerMessage[] warnings = _compileMessages.Where(m => m.type == CompilerMessageType.Warning).ToArray();
+            CompilerMessage[] messages = _isForceCompile ? Array.Empty<CompilerMessage>() : _compileMessages.ToArray();
+            CompilerMessage[] resultErrors = _isForceCompile ? Array.Empty<CompilerMessage>() : errors;
+            CompilerMessage[] resultWarnings = _isForceCompile ? Array.Empty<CompilerMessage>() : warnings;
             return new CompileResult(
                 success: null,
                 errorCount: errors.Length,
                 warningCount: warnings.Length,
                 completedAt: DateTime.Now,
-                messages: _compileMessages.ToArray(),
-                errors: errors,
-                warnings: warnings,
+                messages: messages,
+                errors: resultErrors,
+                warnings: resultWarnings,
                 isIndeterminate: true,
                 message: message
             );

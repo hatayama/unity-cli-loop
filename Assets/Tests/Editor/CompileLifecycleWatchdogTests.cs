@@ -89,6 +89,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(missedCallbackCount, Is.EqualTo(0));
         }
 
+        [Test]
+        public void WatchAsync_WhenPollingFails_ExposesFaultForControllerRecovery()
+        {
+            // Verifies watchdog faults remain observable so the controller can abort the active compile request.
+            ConstantCompilationState compilationState = new ConstantCompilationState(false);
+            InvalidOperationException expectedException = new InvalidOperationException("poll failed");
+            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
+                compilationState.IsCompiling,
+                () => false,
+                () => Task.FromException(expectedException),
+                _ => { },
+                _ => { },
+                _ => { },
+                _ => { });
+
+            InvalidOperationException actualException = Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await watchdog.WatchAsync(CancellationToken.None));
+
+            Assert.That(actualException, Is.SameAs(expectedException));
+        }
+
         private sealed class SequenceCompilationState
         {
             private readonly bool[] _states;
