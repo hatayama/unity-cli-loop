@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Examples:
         /// • When FilterType is Exact: "io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs"
         /// • When FilterType is Regex: "io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests" or "io.github.hatayama.UnityCliLoop"
-        /// • When FilterType is AssemblyName: "uLoopMCP.Tests.Editor"
+        /// • When FilterType is AssemblyName: "UnityCLILoop.Tests.Editor"
         /// </summary>
         public string FilterValue { get; }
         

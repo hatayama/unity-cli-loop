@@ -5,7 +5,7 @@ using UnityEngine;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 
-[assembly: InternalsVisibleTo("uLoopMCP.Tests.Editor")]
+[assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor")]
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {

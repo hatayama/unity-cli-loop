@@ -1,3 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("uLoopMCP.Tests.Demo.Editor")]
+[assembly: InternalsVisibleTo("UnityCLILoop.Tests.Demo.Editor")]

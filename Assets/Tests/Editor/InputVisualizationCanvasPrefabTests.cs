@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string PrefabPath =
             "Packages/io.github.hatayama.uloopmcp/Runtime/Common/InputVisualizationCanvas.prefab";
         private const string RuntimeAssemblyDefinitionPath =
-            "Packages/src/Runtime/uLoopMCP.Runtime.asmdef";
+            "Packages/src/Runtime/UnityCLILoop.Runtime.asmdef";
         private const string RuntimeSourceDirectoryPath =
             "Packages/src/Runtime";
         private static readonly string[] OverlayPrefabPaths =

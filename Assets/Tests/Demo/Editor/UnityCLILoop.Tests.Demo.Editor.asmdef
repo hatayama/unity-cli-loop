@@ -1,38 +1,30 @@
 {
-    "name": "uLoopMCP.Tests.PlayMode",
-    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.PlayMode",
+    "name": "UnityCLILoop.Tests.Demo.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Demo.Editor",
     "references": [
-        "GUID:27619889b8ba8c24980f49ee34dbb44a",
-        "GUID:0acc523941302664db1f4e527237feb3",
+        "GUID:6399a27a6ac3945be87994ba344509be",
         "GUID:214998e563c124e8a88199b2dd1f522d",
-        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
         "GUID:01082d2dd8b5b41d487dcc154c017098",
         "GUID:e5952ef560e1641f68b2687e6045bf5b",
         "GUID:d427b32aad9cb44fc8e962437c9dbcd8",
         "GUID:b21158f16291043699bc11600a45a9ee",
-        "GUID:f1a38fcd7e85047c5a86331a3e37ddfc",
         "GUID:45d3617c96fa64d3e95383450e67f25a",
-        "GUID:a2d87883023de4cf59b7d1962d5dd8aa",
         "GUID:aa7cf56cc5f074e57ba35272b877e116",
         "GUID:dc412b2cd951d452b8dcec99c3adeb19",
         "GUID:3b7aa330d87dc452293296dd5830859b",
-        "GUID:679888bc3e9c44c19ab0d62ff8701dcf",
-        "GUID:9c34b9a25e1464dec91601291eade23f",
-        "GUID:32708dd5a1f18474e8a4deddc56e8806",
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
         "GUID:c956a21f824994ef087b6de566690b3d",
-        "GUID:2bafac87e7f4b9b418d9448d219b01ab",
         "GUID:75469ad4d38634e559750d17036d5f7c",
-        "GUID:dc04f38471c3a459fb4d31124ee9127d",
-        "GUID:6399a27a6ac3945be87994ba344509be"
+        "GUID:4307f53044263cf4b835bd812fc161a4",
+        "GUID:b29b10dec3e804e2188c90158d317fd7"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": true,
-    "precompiledReferences": [
-        "nunit.framework.dll",
-        "Newtonsoft.Json.dll"
-    ],
+    "overrideReferences": false,
+    "precompiledReferences": [],
     "autoReferenced": false,
     "defineConstraints": [
         "UNITY_INCLUDE_TESTS"
