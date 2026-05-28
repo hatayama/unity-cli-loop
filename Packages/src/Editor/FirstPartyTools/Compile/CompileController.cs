@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Unity script compilation request returned.",
                     new { force_recompile = forceRecompile });
 
-                _ = WatchCompileStartAsync(ct);
+                StartCompileLifecycleWatchdog(compileTask, ct);
                 VibeLogger.LogInfo(
                     "compile_controller_waiting_for_finish",
                     "Waiting for Unity compilationFinished callback.",
@@ -189,38 +189,94 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private async Task WatchCompileStartAsync(CancellationToken ct)
+        private void StartCompileLifecycleWatchdog(TaskCompletionSource<CompileResult> compileTask, CancellationToken ct)
         {
-            int waitedMs = 0;
+            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
 
-            while (waitedMs < UnityCliLoopConstants.COMPILE_START_TIMEOUT_MS)
+            Task watchdogTask = WatchCompileLifecycleAsync(ct);
+            _ = watchdogTask.ContinueWith(
+                faultedTask => HandleCompileLifecycleWatchdogFault(compileTask, faultedTask),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+        }
+
+        private Task WatchCompileLifecycleAsync(CancellationToken ct)
+        {
+            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
+                () => EditorApplication.isCompiling,
+                IsCompileRequestCompleted,
+                WaitForCompileWatchdogPollAsync,
+                HandleCompileStartedObserved,
+                HandleCompileStartTimeout,
+                HandleCompileStoppedWithoutFinishEvent,
+                AbortCompile);
+            return watchdog.WatchAsync(ct);
+        }
+
+        private bool IsCompileRequestCompleted()
+        {
+            return _currentCompileTask == null || _currentCompileTask.Task.IsCompleted;
+        }
+
+        private static Task WaitForCompileWatchdogPollAsync()
+        {
+            return TimerDelay.Wait(UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS);
+        }
+
+        private void HandleCompileLifecycleWatchdogFault(
+            TaskCompletionSource<CompileResult> compileTask,
+            Task faultedTask)
+        {
+            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
+            UnityEngine.Debug.Assert(faultedTask != null, "faultedTask must not be null");
+            UnityEngine.Debug.Assert(faultedTask.IsFaulted, "faultedTask must be faulted");
+
+            if (!IsCurrentCompileRequest(_currentCompileTask, compileTask))
             {
-                if (ct.IsCancellationRequested)
-                {
-                    AbortCompile("Compilation request was cancelled before it started.");
-                    return;
-                }
-
-                if (EditorApplication.isCompiling)
-                {
-                    VibeLogger.LogInfo(
-                        "compile_editor_compiling_observed",
-                        "EditorApplication.isCompiling became true.",
-                        new { waited_ms = waitedMs });
-                    return;
-                }
-
-                if (_currentCompileTask == null || _currentCompileTask.Task.IsCompleted)
-                {
-                    return;
-                }
-
-                // Do not pass CancellationToken here: this method is fire-and-forget and must not throw.
-                // Cancellation is handled by explicit checks above to avoid leaving _currentCompileTask pending.
-                await TimerDelay.Wait(UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS);
-                waitedMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;
+                return;
             }
 
+            Exception exception = faultedTask.Exception;
+            UnityEngine.Debug.Assert(exception != null, "faultedTask exception must not be null");
+            if (exception != null)
+            {
+                UnityEngine.Debug.LogException(exception);
+            }
+
+            EditorApplication.delayCall += () => AbortCompileAfterWatchdogFault(compileTask);
+        }
+
+        private void AbortCompileAfterWatchdogFault(TaskCompletionSource<CompileResult> compileTask)
+        {
+            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
+
+            if (!IsCurrentCompileRequest(_currentCompileTask, compileTask))
+            {
+                return;
+            }
+
+            AbortCompile("Compilation watchdog failed unexpectedly.");
+        }
+
+        internal static bool IsCurrentCompileRequest(
+            TaskCompletionSource<CompileResult> currentCompileTask,
+            TaskCompletionSource<CompileResult> compileTask)
+        {
+            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
+            return currentCompileTask != null && ReferenceEquals(currentCompileTask, compileTask);
+        }
+
+        private void HandleCompileStartedObserved(int waitedMs)
+        {
+            VibeLogger.LogInfo(
+                "compile_editor_compiling_observed",
+                "EditorApplication.isCompiling became true.",
+                new { waited_ms = waitedMs });
+        }
+
+        private void HandleCompileStartTimeout(int waitedMs)
+        {
             AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
             AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
                 assemblyDefinitionValidationService.FindCurrentErrors();
@@ -253,6 +309,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AbortCompile(
                 "Compilation did not start. Possible causes: editor update/reload locks, Auto Refresh disabled, or no script changes."
             );
+        }
+
+        private void HandleCompileStoppedWithoutFinishEvent(int stoppedMs)
+        {
+            string message =
+                "Unity stopped compiling before Unity CLI Loop received the compilationFinished callback. " +
+                "The compile result is indeterminate; use get-logs to inspect the compiler output.";
+            VibeLogger.LogWarning(
+                "compile_finish_callback_missing",
+                message,
+                new
+                {
+                    force_recompile = _isForceCompile,
+                    stopped_ms = stoppedMs,
+                    message_count = _compileMessages.Count
+                });
+            AbortCompileWithResult(CreateIndeterminateCompileResult(message));
         }
 
         /// <summary>
@@ -447,6 +520,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
         }
 
+        private CompileResult CreateIndeterminateCompileResult(string message)
+        {
+            CompilerMessage[] errors = _compileMessages.Where(m => m.type == CompilerMessageType.Error).ToArray();
+            CompilerMessage[] warnings = _compileMessages.Where(m => m.type == CompilerMessageType.Warning).ToArray();
+            CompilerMessage[] messages = _isForceCompile ? Array.Empty<CompilerMessage>() : _compileMessages.ToArray();
+            CompilerMessage[] resultErrors = _isForceCompile ? Array.Empty<CompilerMessage>() : errors;
+            CompilerMessage[] resultWarnings = _isForceCompile ? Array.Empty<CompilerMessage>() : warnings;
+            return new CompileResult(
+                success: null,
+                errorCount: errors.Length,
+                warningCount: warnings.Length,
+                completedAt: DateTime.Now,
+                messages: messages,
+                errors: resultErrors,
+                warnings: resultWarnings,
+                isIndeterminate: true,
+                message: message
+            );
+        }
+
         /// <summary>
         /// Creates a failed compile result from Assembly Definition and Assembly Reference Console errors.
         /// </summary>
@@ -503,6 +596,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _currentCompileTask.SetCanceled();
                 _currentCompileTask = null;
             }
+            _isCompiling = false;
+            _isForceCompile = false;
         }
 
         /// <summary>
