@@ -31,7 +31,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         {
             for (int i = 0; i < eventSystems.Length; i++)
             {
-                eventSystems[i].enabled = originalEnabledStates[i];
+                EventSystem eventSystem = eventSystems[i];
+                if (eventSystem == null)
+                {
+                    continue;
+                }
+                eventSystem.enabled = originalEnabledStates[i];
             }
         }
     }
