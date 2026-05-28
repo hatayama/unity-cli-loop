@@ -10,7 +10,7 @@ using UnityEditor.TestTools.TestRunner.Api;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
-[assembly: InternalsVisibleTo("uLoopMCP.Tests.Editor")]
+[assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor")]
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {

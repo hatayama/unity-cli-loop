@@ -333,6 +333,36 @@ public static class CurrentManualToolRegistration
         }
 
         [Test]
+        public void ApplyMigration_WhenLegacyRuntimeAsmdefNameExists_RewritesToRuntimeReference()
+        {
+            // Verifies that old name-based runtime references survive the runtime asmdef rename.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.asmdef");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools"",
+    ""references"": [
+        ""uLoopMCP.Runtime""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:c956a21f824994ef087b6de566690b3d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("uLoopMCP.Runtime"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenCurrentManualRegistrationExistsWithLegacyAsmdefGuid_AddsContractReferences()
         {
             // Verifies that partially migrated GUID refs are expanded to the assemblies current registrar APIs expose.

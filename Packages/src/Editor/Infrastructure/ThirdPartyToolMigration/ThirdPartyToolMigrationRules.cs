@@ -21,12 +21,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal const string CurrentApplicationNamespace = "io.github.hatayama.UnityCliLoop.Application";
         internal const string CurrentDomainNamespace = "io.github.hatayama.UnityCliLoop.Domain";
         internal const string LegacyEditorAssemblyName = "uLoopMCP.Editor";
+        internal const string LegacyRuntimeAssemblyName = "uLoopMCP.Runtime";
         private const string CurrentApplicationAssemblyName = "UnityCLILoop.Application";
         private const string CurrentDomainAssemblyName = "UnityCLILoop.Domain";
+        private const string CurrentRuntimeAssemblyName = "UnityCLILoop.Runtime";
         private const string CurrentToolContractsAssemblyName = "UnityCLILoop.ToolContracts";
         internal const string LegacyEditorAssemblyGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
         internal const string CurrentApplicationGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
         internal const string CurrentDomainGuidReference = "GUID:5c4588558a3624eacbce0f50007cf1eb";
+        internal const string CurrentRuntimeGuidReference = "GUID:c956a21f824994ef087b6de566690b3d";
         internal const string CurrentToolContractsGuidReference = "GUID:fc3fd32eddbee40e39c2d76dc184957b";
         private const string DescriptionAttributeArgumentName = "Description";
         private const string DisplayDevelopmentOnlyAttributeArgumentName = "DisplayDevelopmentOnly";
@@ -419,14 +422,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return ContainsTextFragment(source, LegacyNamespace) ||
-                ContainsTextFragment(source, LegacyEditorAssemblyName);
+                ContainsTextFragment(source, LegacyEditorAssemblyName) ||
+                ContainsTextFragment(source, LegacyRuntimeAssemblyName);
         }
 
         internal static bool ContainsLegacyAsmdefNameReference(string source)
         {
             Debug.Assert(source != null, "source must not be null");
 
-            if (!ContainsTextFragment(source, LegacyEditorAssemblyName))
+            if (!ContainsTextFragment(source, LegacyEditorAssemblyName) &&
+                !ContainsTextFragment(source, LegacyRuntimeAssemblyName))
             {
                 return false;
             }
@@ -440,7 +445,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             foreach (JToken reference in references)
             {
                 string referenceValue = reference.Value<string>() ?? string.Empty;
-                if (string.Equals(referenceValue, LegacyEditorAssemblyName, StringComparison.Ordinal))
+                if (string.Equals(referenceValue, LegacyEditorAssemblyName, StringComparison.Ordinal) ||
+                    string.Equals(referenceValue, LegacyRuntimeAssemblyName, StringComparison.Ordinal))
                 {
                     return true;
                 }
@@ -676,6 +682,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
             }
 
+            if (string.Equals(reference, LegacyRuntimeAssemblyName, StringComparison.Ordinal))
+            {
+                return new[] { CurrentRuntimeGuidReference };
+            }
+
             if (hasLegacyCSharpSource &&
                 string.Equals(reference, LegacyEditorAssemblyGuidReference, StringComparison.Ordinal))
             {
@@ -769,6 +780,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static string GetCurrentAsmdefReferenceKey(string reference)
         {
             Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
+
+            if (IsCurrentAsmdefReference(
+                    reference,
+                    CurrentRuntimeAssemblyName,
+                    CurrentRuntimeGuidReference))
+            {
+                return CurrentRuntimeAssemblyName;
+            }
 
             if (IsCurrentAsmdefReference(
                     reference,

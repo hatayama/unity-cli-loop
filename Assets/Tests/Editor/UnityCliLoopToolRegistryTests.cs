@@ -347,32 +347,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ExecuteCommandAsync_WhenSampleToolUsesTypedContract_ReturnsTypedResponse()
+        public async Task ExecuteToolAsync_WhenSampleToolUsesTypedContract_ReturnsTypedResponse()
         {
-            // Tests that third-party sample tools execute through the same typed contract path as bundled tools.
+            // Tests that third-party sample tools deserialize camelCase JSON into typed schema values.
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            UnityCliLoopToolExecutionService executionService = new();
             JObject parameters = JObject.FromObject(new
             {
-                name = "Masamichi",
+                name = "<USER_NAME>",
                 language = "french",
                 includeTimestamp = false
             });
 
-            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
+            UnityCliLoopToolResponse response = await executionService.ExecuteToolAsync(
+                registry,
                 "hello-world",
                 parameters,
                 CancellationToken.None);
             JObject serializedResponse = JObject.FromObject(response);
 
-            Assert.That(serializedResponse.Value<string>("Message"), Is.EqualTo("Bonjour, Masamichi!"));
+            Assert.That(serializedResponse.Value<string>("Message"), Is.EqualTo("Bonjour, <USER_NAME>!"));
             Assert.That(serializedResponse.Value<string>("Language"), Is.EqualTo("french"));
             Assert.That(serializedResponse["Timestamp"]?.Type, Is.EqualTo(JTokenType.Null));
         }
 
         [Test]
-        public async Task ExecuteCommandAsync_WhenParamsAreOmitted_UsesDefaultSchema()
+        public async Task ExecuteToolAsync_WhenParamsAreOmitted_UsesDefaultSchema()
         {
-            // Tests that JSON-RPC requests may omit params and still use schema defaults.
-            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
+            // Tests that tool execution may omit params and still use schema defaults.
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            UnityCliLoopToolExecutionService executionService = new();
+
+            UnityCliLoopToolResponse response = await executionService.ExecuteToolAsync(
+                registry,
                 "hello-world",
                 null,
                 CancellationToken.None);

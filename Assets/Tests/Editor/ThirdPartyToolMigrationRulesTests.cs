@@ -1186,6 +1186,31 @@ public sealed class OtherTool
         }
 
         [Test]
+        public void MigrateAsmdefSource_WhenLegacyRuntimeReferenceIsUsed_RewritesToRuntimeGuid()
+        {
+            // Verifies that old runtime assembly name references keep resolving after the asmdef rename.
+            string source = @"{
+    ""name"": ""MyCompany.Tools"",
+    ""references"": [
+        ""uLoopMCP.Runtime""
+    ]
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource: false,
+                    requiresToolContractsReference: false,
+                    requiresApplicationReference: false,
+                    requiresDomainReference: false);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("GUID:c956a21f824994ef087b6de566690b3d"));
+            Assert.That(result.Content, Does.Not.Contain("uLoopMCP.Runtime"));
+            Assert.That(result.ReplacementCount, Is.EqualTo(1));
+        }
+
+        [Test]
         public void MigrateAsmdefSource_WhenOnlyLegacyGuidIsUsedWithoutLegacySource_KeepsContent()
         {
             // Verifies that package-owned Application references are not rewritten by GUID alone.
