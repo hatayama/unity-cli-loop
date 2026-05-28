@@ -21,17 +21,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         private SimulateMouseInputTool tool = null!;
         private SimulateMouseInputResponse lastResponse = null!;
         private Mouse mouse = null!;
+        private GameObject mouseObserverGo = null!;
+        private MouseUpdateFramePressObserver mouseUpdateFramePressObserver = null!;
 
         public override void Setup()
         {
             base.Setup();
             tool = new SimulateMouseInputTool();
             mouse = InputSystem.AddDevice<Mouse>();
+            mouseObserverGo = new GameObject("MouseUpdateFramePressObserver");
+            mouseUpdateFramePressObserver = mouseObserverGo.AddComponent<MouseUpdateFramePressObserver>();
         }
 
         public override void TearDown()
         {
             MouseInputState.ReleaseAllButtons();
+            Object.DestroyImmediate(mouseObserverGo);
             base.TearDown();
         }
 
@@ -40,7 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         [UnityTest]
         public IEnumerator Click_Should_SetWasPressedThisFrame()
         {
+            // Verifies that Click is visible to gameplay Update polling through wasPressedThisFrame.
             yield return null;
+
+            mouseUpdateFramePressObserver.ResetCount();
 
             yield return RunTool(new JObject
             {
@@ -52,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.Success);
             Assert.AreEqual("Click", lastResponse.Action);
             Assert.AreEqual("Left", lastResponse.Button);
+            Assert.Greater(mouseUpdateFramePressObserver.LeftButtonPressedUpdateCount, 0, "Click should be visible to MonoBehaviour.Update via wasPressedThisFrame");
             // After click completes, button should be released
             Assert.IsFalse(mouse.leftButton.isPressed, "Left button should be released after click");
         }
@@ -246,6 +255,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Test support type used by play mode mouse input fixtures.
+    /// </summary>
+    public class MouseUpdateFramePressObserver : MonoBehaviour
+    {
+        public int LeftButtonPressedUpdateCount { get; private set; }
+
+        private void Update()
+        {
+            Mouse mouse = Mouse.current;
+            if (mouse == null)
+            {
+                return;
+            }
+
+            if (mouse.leftButton.wasPressedThisFrame)
+            {
+                LeftButtonPressedUpdateCount++;
+            }
+        }
+
+        public void ResetCount()
+        {
+            LeftButtonPressedUpdateCount = 0;
+        }
     }
 }
 #endif

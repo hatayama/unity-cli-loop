@@ -19,6 +19,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class InputSystemUpdateHelper
     {
+        private const int StandardPressObservationFrames = 2;
+        private const int ManualPressObservationFrames = 3;
+
         public static Task ApplyOnNextConfiguredUpdate(Action apply, CancellationToken ct)
         {
             InputUpdateType targetUpdateType = InputUpdateTypeResolver.Resolve();
@@ -64,18 +67,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (!InputUpdateTypeResolver.RequiresExplicitUpdate())
             {
-                return 1;
+                // Press must survive more than the input update that injected it.
+                // CLI follow-up commands can run immediately after completion, so
+                // gameplay Update polling needs a second runtime frame before release.
+                return StandardPressObservationFrames;
             }
 
             InputUpdateType targetUpdateType = InputUpdateTypeResolver.Resolve();
             if (targetUpdateType != InputUpdateType.Manual)
             {
-                return 2;
+                return StandardPressObservationFrames;
             }
 
             // Manual-mode projects often call InputSystem.Update from their own Update loop,
             // so zero-duration taps need one extra frame to remain visible to gameplay code.
-            return 3;
+            return ManualPressObservationFrames;
         }
 
         public static async Task WaitForObservationFrames(CancellationToken ct)
