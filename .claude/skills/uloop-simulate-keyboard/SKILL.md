@@ -38,6 +38,10 @@ uloop simulate-keyboard --action <action> --key <key> [options]
 | `KeyDown` | KeyDown only (held until KeyUp) | Start continuous movement, hold sprint |
 | `KeyUp` | KeyUp only (release held key) | Stop movement, release sprint |
 
+Use `Press` for edge-triggered gameplay code such as `Keyboard.current.spaceKey.wasPressedThisFrame`.
+If a successful `Press` does not change game state, verify PlayMode, Input System settings, and the follow-up observation timing before changing the user's gameplay code.
+Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
+
 ### KeyDown/KeyUp Rules
 
 - `KeyDown` fails if the key is already held

@@ -441,7 +441,7 @@ Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
 ### 13. simulate-keyboard - Simulate Keyboard Input in PlayMode
 Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations (e.g. Shift+W for sprinting). This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`.
 
-Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down), KeyUp (release held key).
+Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down), KeyUp (release held key). Use Press for edge-triggered gameplay such as `Keyboard.current.spaceKey.wasPressedThisFrame`; use KeyDown/KeyUp only when the test intentionally needs a held key.
 
 ```text
 → simulate-keyboard (Action: Press, Key: Space)

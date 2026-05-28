@@ -442,7 +442,7 @@ Input System経由でPlayMode中のマウス入力をシミュレーションし
 ### 13. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
 Input System経由でPlayMode中のキーボード入力をシミュレーションします。単発のキータップ、長押し、複数キーの同時押し（例：Shift+Wでスプリント）に対応しています。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要があります。ゲームコードがInput System API（例: `Keyboard.current[Key.W].isPressed`）で入力を読み取っている必要があり、レガシーの `Input.GetKey()` には対応していません。
 
-3つのアクションに対応: Press（ワンショットタップまたは時間指定ホールド）、KeyDown（キーを押し続ける）、KeyUp（押下中のキーを解放）
+3つのアクションに対応: Press（ワンショットタップまたは時間指定ホールド）、KeyDown（キーを押し続ける）、KeyUp（押下中のキーを解放）。`Keyboard.current.spaceKey.wasPressedThisFrame` のような立ち上がり検出には Press を使い、意図的にキーを保持したい場合だけ KeyDown/KeyUp を使います。
 
 ```text
 → simulate-keyboard (Action: Press, Key: Space)

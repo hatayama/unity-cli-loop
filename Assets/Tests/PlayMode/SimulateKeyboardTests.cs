@@ -29,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         private SimulateKeyboardResponse lastResponse = null!;
         private Keyboard keyboard = null!;
         private FramePressObserver framePressObserver = null!;
+        private UpdateFramePressObserver updateFramePressObserver = null!;
         private FrameStateObserver frameStateObserver = null!;
         private ManualModeFramePressObserver manualModeFramePressObserver = null!;
         private InputSettings.UpdateMode originalUpdateMode;
@@ -46,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             eventSystemGo.AddComponent<EventSystem>();
             framePressObserverGo = new GameObject("FramePressObserver");
             framePressObserver = framePressObserverGo.AddComponent<FramePressObserver>();
+            updateFramePressObserver = framePressObserverGo.AddComponent<UpdateFramePressObserver>();
             frameStateObserver = framePressObserverGo.AddComponent<FrameStateObserver>();
             manualModeFramePressObserver = framePressObserverGo.AddComponent<ManualModeFramePressObserver>();
 
@@ -140,6 +142,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
             Assert.Greater(framePressObserver.SpacePressedFrameCount, 0, "Zero-duration press should still be visible as a tap");
             Assert.IsFalse(keyboard[Key.Space].isPressed, "Zero-duration press should release the key after the tap");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WithoutDuration_Should_BeVisibleToGameplayUpdate()
+        {
+            // Verifies that default Press stays alive long enough for Update polling to observe wasPressedThisFrame.
+            yield return null;
+
+            updateFramePressObserver.ResetCount();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.Greater(updateFramePressObserver.SpacePressedUpdateCount, 0, "Default Press should be visible to MonoBehaviour.Update via wasPressedThisFrame");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WithoutDuration_Should_StayHeldForGameplayObservationFrames()
+        {
+            // Verifies that default Press is not released before gameplay Update can observe the held state.
+            yield return null;
+
+            updateFramePressObserver.ResetCount();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.GreaterOrEqual(updateFramePressObserver.SpaceHeldUpdateCount, 2, "Default Press should stay held across gameplay observation frames");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_InFixedMode_Should_BeVisibleToGameplayUpdate()
+        {
+            // Verifies that Press still reaches Update polling when the project processes input in FixedUpdate.
+            yield return null;
+
+            InputSettings settings = RequireInputSettings();
+            settings.updateMode = InputSettings.UpdateMode.ProcessEventsInFixedUpdate;
+            updateFramePressObserver.ResetCount();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space",
+                ["duration"] = 0.2f
+            });
+
+            Assert.Greater(updateFramePressObserver.SpacePressedUpdateCount, 0, "Fixed-update input processing should still be visible to MonoBehaviour.Update via wasPressedThisFrame");
         }
 
         [UnityTest]
@@ -701,6 +757,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         {
             SpacePressedFrameCount = 0;
             EnterPressedFrameCount = 0;
+        }
+    }
+
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
+    public class UpdateFramePressObserver : MonoBehaviour
+    {
+        public int SpacePressedUpdateCount { get; private set; }
+        public int SpaceHeldUpdateCount { get; private set; }
+
+        private void Update()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null)
+            {
+                return;
+            }
+
+            if (keyboard.spaceKey.wasPressedThisFrame)
+            {
+                SpacePressedUpdateCount++;
+            }
+
+            if (keyboard.spaceKey.isPressed)
+            {
+                SpaceHeldUpdateCount++;
+            }
+        }
+
+        public void ResetCount()
+        {
+            SpacePressedUpdateCount = 0;
+            SpaceHeldUpdateCount = 0;
         }
     }
 
