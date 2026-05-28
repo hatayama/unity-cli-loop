@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.0.0-beta.23](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.22...v3.0.0-beta.23) (2026-05-28)
+
+
+### Bug Fixes
+
+* Compile no longer leaves Unity busy after finishing ([#1237](https://github.com/hatayama/unity-cli-loop/issues/1237)) ([f705b4b](https://github.com/hatayama/unity-cli-loop/commit/f705b4b7a9cc48ded3625bae91da6a39d9095462))
+* Dynamic code snippets can use Unity Object without ambiguity ([#1234](https://github.com/hatayama/unity-cli-loop/issues/1234)) ([0428197](https://github.com/hatayama/unity-cli-loop/commit/0428197e7c957ab4915646471b3142b1394e2373))
+* Simulated key presses now reach gameplay polling ([#1236](https://github.com/hatayama/unity-cli-loop/issues/1236)) ([ba735f1](https://github.com/hatayama/unity-cli-loop/commit/ba735f158a2be60829ad9e349a536a954637439a))
+
 ## [3.0.0-beta.22](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.21...v3.0.0-beta.22) (2026-05-28)
 
 
