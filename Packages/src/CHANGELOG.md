@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.0-beta.22](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.21...v3.0.0-beta.22) (2026-05-28)
+
+
+### Bug Fixes
+
+* Compile fails fast on asmdef and asmref import errors ([#1225](https://github.com/hatayama/unity-cli-loop/issues/1225)) ([a90ca87](https://github.com/hatayama/unity-cli-loop/commit/a90ca875382228914468919d717454eeea25b9e7))
+* Player builds stay free of editor-only uLoop tooling ([#1229](https://github.com/hatayama/unity-cli-loop/issues/1229)) ([ff6fb8d](https://github.com/hatayama/unity-cli-loop/commit/ff6fb8ddc979a77f5a9afbd759dbe13203a42ccd))
+* Settings makes installed CLI uninstall action appear inactive ([#1228](https://github.com/hatayama/unity-cli-loop/issues/1228)) ([99af542](https://github.com/hatayama/unity-cli-loop/commit/99af5428048e83d7722e28acd7c226352742be1c))
+* Unity CLI Loop assemblies no longer expose legacy uLoopMCP names ([#1230](https://github.com/hatayama/unity-cli-loop/issues/1230)) ([cb75c0c](https://github.com/hatayama/unity-cli-loop/commit/cb75c0c48c71adfe8372ad064486bd2d5a2ea7a0))
+
 ## [3.0.0-beta.21](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.20...v3.0.0-beta.21) (2026-05-27)
 
 

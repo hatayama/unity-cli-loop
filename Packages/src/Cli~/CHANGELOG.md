@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.19](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.18...cli-v3.0.0-beta.19) (2026-05-28)
+
+
+### Bug Fixes
+
+* Busy responses now show as temporary status messages ([#1227](https://github.com/hatayama/unity-cli-loop/issues/1227)) ([fdd6b98](https://github.com/hatayama/unity-cli-loop/commit/fdd6b98e7f738018754b4a4a32416b2afa451d3b))
+
 ## [3.0.0-beta.18](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.17...cli-v3.0.0-beta.18) (2026-05-27)
 
 
