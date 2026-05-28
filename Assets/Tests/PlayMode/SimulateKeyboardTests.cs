@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
     {
         private GameObject eventSystemGo = null!;
         private GameObject framePressObserverGo = null!;
+        private ExistingEventSystemDisableScope eventSystemDisableScope = null!;
         private TestableSimulateKeyboardTool tool = null!;
         private SimulateKeyboardResponse lastResponse = null!;
         private Keyboard keyboard = null!;
@@ -40,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             originalUpdateMode = settings.updateMode;
             originalTimeScale = Time.timeScale;
 
+            eventSystemDisableScope = new ExistingEventSystemDisableScope();
             eventSystemGo = new GameObject("TestEventSystem");
             eventSystemGo.AddComponent<EventSystem>();
             framePressObserverGo = new GameObject("FramePressObserver");
@@ -66,6 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             }
             Object.DestroyImmediate(framePressObserverGo);
             Object.DestroyImmediate(eventSystemGo);
+            eventSystemDisableScope.Restore();
             base.TearDown();
         }
 

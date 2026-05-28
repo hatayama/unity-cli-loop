@@ -20,12 +20,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
     {
         private GameObject canvasGo = null!;
         private GameObject eventSystemGo = null!;
+        private ExistingEventSystemDisableScope eventSystemDisableScope = null!;
         private SimulateMouseUiTool tool = null!;
         private SimulateMouseUiResponse lastResponse = null!;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
+            eventSystemDisableScope = new ExistingEventSystemDisableScope();
+
             canvasGo = new GameObject("TestCanvas");
             Canvas canvas = canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -48,6 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Object.Destroy(canvasGo);
             Object.Destroy(eventSystemGo);
             yield return null;
+
+            eventSystemDisableScope.Restore();
         }
 
         #region Click Tests
