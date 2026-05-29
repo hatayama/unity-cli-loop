@@ -1,14 +1,11 @@
 package cli
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -201,88 +198,16 @@ func TestShouldWaitForCompileResultRequiresDispatchedTransportError(t *testing.T
 	}
 }
 
-// Verifies accepted compile requests leave RPC waiting and poll the result file after the compile response timeout.
-func TestRunCompileWithDomainReloadWaitPollsResultAfterAcceptedResponseTimeout(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+// Verifies accepted final-response timeouts can fall back to result-file polling.
+func TestShouldWaitForCompileResultAllowsAcceptedFinalResponseTimeout(t *testing.T) {
+	outcome := unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}
+	if !shouldWaitForCompileResult(fmt.Errorf("read tcp 127.0.0.1:1: i/o timeout"), outcome) {
+		t.Fatal("accepted final-response timeout should wait")
 	}
 
-	originalResponseTimeout := compileFinalResponseTimeout
-	compileFinalResponseTimeout = 20 * time.Millisecond
-	t.Cleanup(func() {
-		compileFinalResponseTimeout = originalResponseTimeout
-	})
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer func() {
-		_ = listener.Close()
-	}()
-
-	serverErr := make(chan error, 1)
-	go func() {
-		conn, acceptErr := listener.Accept()
-		if acceptErr != nil {
-			serverErr <- acceptErr
-			return
-		}
-		defer func() {
-			_ = conn.Close()
-		}()
-
-		if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
-			serverErr <- readErr
-			return
-		}
-
-		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
-		if writeErr := unityipc.Write(conn, accepted); writeErr != nil {
-			serverErr <- writeErr
-			return
-		}
-
-		time.Sleep(100 * time.Millisecond)
-	}()
-
-	projectRoot := t.TempDir()
-	requestID := "compile_test_timeout"
-	resultDir := filepath.Join(projectRoot, compileResultRelativeDir)
-	if err := os.MkdirAll(resultDir, 0o755); err != nil {
-		t.Fatalf("failed to create result dir: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(resultDir, requestID+".json"),
-		[]byte(`{"Success":false}`),
-		0o644,
-	); err != nil {
-		t.Fatalf("failed to write result: %v", err)
-	}
-
-	connection := unityipc.Connection{
-		Endpoint: unityipc.Endpoint{
-			Network: "tcp",
-			Address: listener.Addr().String(),
-		},
-		ProjectRoot: projectRoot,
-	}
-	params := map[string]any{compileRequestIDParam: requestID}
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	code := runCompileWithDomainReloadWait(context.Background(), connection, params, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("compile wait failed with code %d\nstdout:\n%s\nstderr:\n%s", code, stdout.String(), stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"Success": false`) {
-		t.Fatalf("stdout does not contain result: %s", stdout.String())
-	}
-	select {
-	case err := <-serverErr:
-		t.Fatalf("server failed: %v", err)
-	default:
+	unacceptedOutcome := unityipc.UnitySendOutcome{RequestDispatched: true}
+	if shouldWaitForCompileResult(fmt.Errorf("read tcp 127.0.0.1:1: i/o timeout"), unacceptedOutcome) {
+		t.Fatal("unaccepted timeout should not wait")
 	}
 }
 

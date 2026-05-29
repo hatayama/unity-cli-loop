@@ -85,12 +85,6 @@ func NewClient(connection Connection, clientVersion string) *Client {
 	return &Client{connection: connection, clientVersion: clientVersion}
 }
 
-// WithResponseTimeout sets the deadline for the final response after Unity accepts a request.
-func (client *Client) WithResponseTimeout(timeout time.Duration) *Client {
-	client.responseTimeout = timeout
-	return client
-}
-
 func (client *Client) Send(ctx context.Context, method string, params map[string]any) (json.RawMessage, error) {
 	return client.SendWithProgress(ctx, method, params, nil)
 }

@@ -25,8 +25,6 @@ const (
 	compileLockGracePeriod   = 500 * time.Millisecond
 )
 
-var compileFinalResponseTimeout = compileWaitTimeout
-
 type compileCompletionOptions struct {
 	projectRoot  string
 	requestID    string
