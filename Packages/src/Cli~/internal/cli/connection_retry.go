@@ -25,6 +25,10 @@ type unityServerNotRespondingError struct {
 	cause       error
 }
 
+type transientConnectionRetryOptions struct {
+	responseTimeout time.Duration
+}
+
 func (err unityServerNotRespondingError) Error() string {
 	if err.cause != nil {
 		return fmt.Sprintf("Unity is running but the Unity CLI Loop server is not responding: %s", err.cause)
@@ -50,6 +54,23 @@ func sendWithTransientConnectionRetry(
 	params map[string]any,
 	progress unityipc.ProgressFunc,
 ) (unityipc.UnitySendOutcome, error) {
+	return sendWithTransientConnectionRetryOptions(
+		ctx,
+		connection,
+		method,
+		params,
+		progress,
+		transientConnectionRetryOptions{})
+}
+
+func sendWithTransientConnectionRetryOptions(
+	ctx context.Context,
+	connection unityipc.Connection,
+	method string,
+	params map[string]any,
+	progress unityipc.ProgressFunc,
+	options transientConnectionRetryOptions,
+) (unityipc.UnitySendOutcome, error) {
 	retryContext, cancel := context.WithTimeout(ctx, serverConnectionRetryTimeout)
 	defer cancel()
 
@@ -67,8 +88,11 @@ func sendWithTransientConnectionRetry(
 
 	focusAttempted := false
 	for {
-		outcome, err := unityipc.NewClient(connection, version).
-			SendWithProgressOutcomeAcceptContext(ctx, retryContext, method, params, progress)
+		client := unityipc.NewClient(connection, version)
+		if options.responseTimeout > 0 {
+			client = client.WithResponseTimeout(options.responseTimeout)
+		}
+		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, retryContext, method, params, progress)
 		if !shouldRetryUndispatchedConnection(err, outcome) {
 			return outcome, err
 		}

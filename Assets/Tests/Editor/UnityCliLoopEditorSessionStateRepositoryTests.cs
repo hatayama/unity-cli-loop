@@ -39,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.False);
             Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
             Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
         }
 
         [Test]
@@ -72,6 +73,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetPendingCompileRequest_WhenServiceIsRecreated_ReadsExistingSessionValue()
+        {
+            // Verifies pending compile recovery data survives Domain Reload service recreation.
+            _sessionStateService.MarkPendingCompileRequest("compile_test_request", forceRecompile: true);
+
+            UnityCliLoopEditorSessionStateService recreatedService =
+                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                recreatedService.GetPendingCompileRequest();
+            Assert.That(pendingCompileRequest.HasRequest, Is.True);
+            Assert.That(pendingCompileRequest.RequestId, Is.EqualTo("compile_test_request"));
+            Assert.That(pendingCompileRequest.ForceRecompile, Is.True);
+        }
+
+        [Test]
         public void ConsumeShouldAutoScanThirdPartyToolMigration_WhenFlagIsSet_ReturnsTrueOnce()
         {
             // Verifies that the startup migration scan request is consumed exactly once.
@@ -92,6 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionStateService.MarkDomainReloadStarted(serverIsRunning: true);
             _sessionStateService.SetShouldAutoScanThirdPartyToolMigration(true);
             _sessionStateService.SetIsServerManuallyStopped(true);
+            _sessionStateService.MarkPendingCompileRequest("compile_test_request", forceRecompile: false);
 
             _sessionStateService.ClearAll();
 
@@ -103,6 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
             Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
             Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
         }
 
         [Test]

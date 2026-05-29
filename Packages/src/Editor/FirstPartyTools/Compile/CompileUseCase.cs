@@ -6,6 +6,8 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -19,6 +21,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const int MAX_WAIT_MS = 5000;
         private const int POLL_INTERVAL_MS = 50;
+        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+
+        public CompileUseCase()
+        {
+            _sessionStateService =
+                new UnityCliLoopEditorSessionStateService(new UnityCliLoopEditorSessionStateRepository());
+        }
 
         /// <summary>
         /// Executes compilation processing
@@ -35,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             PrepareResultStorage(request);
             string correlationId = ResolveCorrelationId(request);
+            MarkPendingCompileRequestIfNeeded(request);
             LogCompileRequestReceived(request, correlationId);
 
             // 1. Play Mode preparation check
@@ -234,7 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static UnityCliLoopCompileResult PersistResponseIfNeeded(
+        private UnityCliLoopCompileResult PersistResponseIfNeeded(
             UnityCliLoopCompileRequest request,
             UnityCliLoopCompileResult response,
             string correlationId)
@@ -270,6 +280,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             CompileResultPersistenceService.SaveResult(request.RequestId, response);
+            _sessionStateService.ClearPendingCompileRequestIfMatches(request.RequestId);
             VibeLogger.LogInfo(
                 "compile_result_persisted",
                 "Compile result persisted for CLI domain reload wait.",
@@ -282,6 +293,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 },
                 correlationId);
             return response;
+        }
+
+        private void MarkPendingCompileRequestIfNeeded(UnityCliLoopCompileRequest request)
+        {
+            Debug.Assert(request != null, "request must not be null");
+
+            if (!request.WaitForDomainReload)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(request.RequestId))
+            {
+                return;
+            }
+
+            _sessionStateService.MarkPendingCompileRequest(request.RequestId, request.ForceRecompile);
         }
 
         private static string ResolveCorrelationId(UnityCliLoopCompileRequest request)

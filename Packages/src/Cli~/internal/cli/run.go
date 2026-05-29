@@ -228,13 +228,16 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, compileCommandName)
-	outcome, err := sendWithTransientConnectionRetry(
+	outcome, err := sendWithTransientConnectionRetryOptions(
 		ctx,
 		connection,
 		compileCommandName,
 		params,
 		func(string) {
 			spinner.Update("Executing compile...")
+		},
+		transientConnectionRetryOptions{
+			responseTimeout: compileFinalResponseTimeout,
 		},
 	)
 	if err != nil && shouldWaitForCompileResult(err, outcome) {

@@ -21,6 +21,44 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI);
         bool GetShouldAutoScanThirdPartyToolMigration();
         void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration);
+        string GetPendingCompileRequestId();
+        void SetPendingCompileRequestId(string pendingCompileRequestId);
+        bool GetPendingCompileForceRecompile();
+        void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile);
+    }
+
+    /// <summary>
+    /// Records the compile request that must still produce a CLI result file after Domain Reload.
+    /// </summary>
+    public sealed class UnityCliLoopPendingCompileRequest
+    {
+        private UnityCliLoopPendingCompileRequest(bool hasRequest, string requestId, bool forceRecompile)
+        {
+            HasRequest = hasRequest;
+            RequestId = requestId;
+            ForceRecompile = forceRecompile;
+        }
+
+        public bool HasRequest { get; }
+        public string RequestId { get; }
+        public bool ForceRecompile { get; }
+
+        public static UnityCliLoopPendingCompileRequest None()
+        {
+            return new UnityCliLoopPendingCompileRequest(false, "", false);
+        }
+
+        public static UnityCliLoopPendingCompileRequest Create(string requestId, bool forceRecompile)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                throw new ArgumentException("requestId must not be null or whitespace.", nameof(requestId));
+            }
+
+            return new UnityCliLoopPendingCompileRequest(true, requestId, forceRecompile);
+        }
     }
 
     /// <summary>
@@ -117,6 +155,51 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             _sessionStatePort.SetShouldAutoScanThirdPartyToolMigration(shouldAutoScanThirdPartyToolMigration);
         }
 
+        public UnityCliLoopPendingCompileRequest GetPendingCompileRequest()
+        {
+            string requestId = _sessionStatePort.GetPendingCompileRequestId();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            return UnityCliLoopPendingCompileRequest.Create(
+                requestId,
+                _sessionStatePort.GetPendingCompileForceRecompile());
+        }
+
+        public void MarkPendingCompileRequest(string requestId, bool forceRecompile)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            _sessionStatePort.SetPendingCompileRequestId(requestId);
+            _sessionStatePort.SetPendingCompileForceRecompile(forceRecompile);
+        }
+
+        public void ClearPendingCompileRequest()
+        {
+            _sessionStatePort.SetPendingCompileRequestId("");
+            _sessionStatePort.SetPendingCompileForceRecompile(false);
+        }
+
+        public void ClearPendingCompileRequestIfMatches(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            UnityCliLoopPendingCompileRequest pendingCompileRequest = GetPendingCompileRequest();
+            if (!pendingCompileRequest.HasRequest)
+            {
+                return;
+            }
+
+            if (pendingCompileRequest.RequestId != requestId)
+            {
+                return;
+            }
+
+            ClearPendingCompileRequest();
+        }
+
         public bool ConsumeShouldAutoScanThirdPartyToolMigration()
         {
             if (!GetShouldAutoScanThirdPartyToolMigration())
@@ -195,6 +278,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         {
             ClearServerSession();
             ClearDomainReloadRecoveryFlags();
+            ClearPendingCompileRequest();
             SetShouldAutoScanThirdPartyToolMigration(false);
             SetIsServerManuallyStopped(false);
         }

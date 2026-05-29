@@ -57,14 +57,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Directory.CreateDirectory(CompileResultDirectoryPath);
             }
 
+            string resultJson = JsonConvert.SerializeObject(response, Formatting.None);
+            string filePath = CreateResultFilePath(requestId);
+            File.WriteAllText(filePath, resultJson, Encoding.UTF8);
+        }
+
+        public static bool ResultExists(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or empty");
+
+            string filePath = CreateResultFilePath(requestId);
+            return File.Exists(filePath);
+        }
+
+        private static string CreateResultFilePath(string requestId)
+        {
             string sanitizedFileName = Path.GetFileName(requestId);
             Debug.Assert(sanitizedFileName == requestId,
                 $"requestId must not contain path separators: '{requestId}'");
 
-            string resultJson = JsonConvert.SerializeObject(response, Formatting.None);
             string fileName = $"{sanitizedFileName}{UnityCliLoopConstants.JSON_FILE_EXTENSION}";
-            string filePath = Path.Combine(CompileResultDirectoryPath, fileName);
-            File.WriteAllText(filePath, resultJson, Encoding.UTF8);
+            return Path.Combine(CompileResultDirectoryPath, fileName);
         }
     }
 }
