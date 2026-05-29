@@ -276,6 +276,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ProcessRequest_WhenCompileUsesCamelCaseNoReloadWait_CancelsOnClientDisconnect()
+        {
+            // Verifies JSON-RPC compile dispatch policy matches the camelCase tool deserializer contract.
+            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            UnityCliLoopToolRegistrar.RegisterService(service);
+            service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
+
+            bool cancelOnClientDisconnect = false;
+            try
+            {
+                string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequestWithParams(
+                        UnityCliLoopConstants.TOOL_NAME_COMPILE,
+                        "{\"waitForDomainReload\":false}",
+                        1),
+                    CancellationToken.None,
+                    (_, shouldCancelOnClientDisconnect) =>
+                    {
+                        cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
+                        return Task.CompletedTask;
+                    });
+                JObject parsed = JObject.Parse(response);
+
+                Assert.That(parsed["error"], Is.Null);
+                Assert.That(parsed["result"], Is.Not.Null);
+                Assert.That(cancelOnClientDisconnect, Is.True);
+            }
+            finally
+            {
+                UnityCliLoopToolRegistrar.RegisterService(previousService);
+            }
+        }
+
+        [Test]
         public async Task ProcessRequest_AfterGetHierarchyReturns_AllowsImmediateGetLogs()
         {
             // Verifies a completed get-hierarchy response releases the single-flight gate before the next tool request.

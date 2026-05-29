@@ -233,7 +233,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return true;
             }
 
-            JToken waitForDomainReloadToken = paramsObject[WaitForDomainReloadParamName];
+            JToken waitForDomainReloadToken =
+                paramsObject.GetValue(WaitForDomainReloadParamName, StringComparison.OrdinalIgnoreCase);
             if (waitForDomainReloadToken == null)
             {
                 return true;
