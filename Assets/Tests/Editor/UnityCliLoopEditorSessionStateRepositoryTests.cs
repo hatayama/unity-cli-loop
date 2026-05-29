@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using System;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -86,6 +87,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(pendingCompileRequest.HasRequest, Is.True);
             Assert.That(pendingCompileRequest.RequestId, Is.EqualTo("compile_test_request"));
             Assert.That(pendingCompileRequest.ForceRecompile, Is.True);
+            Assert.That(pendingCompileRequest.ExpiresAtUtcTicks, Is.GreaterThan(DateTime.UtcNow.Ticks));
+        }
+
+        [Test]
+        public void ClearExpiredPendingCompileRequest_WhenRequestIsExpired_ClearsSessionValue()
+        {
+            // Verifies stale compile recovery data cannot survive indefinitely across commands.
+            DateTime now = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+            _sessionStateService.MarkPendingCompileRequestWithExpiration(
+                "compile_test_request",
+                forceRecompile: false,
+                expiresAtUtcTicks: now.AddSeconds(-1).Ticks);
+
+            bool cleared = _sessionStateService.ClearExpiredPendingCompileRequest(now);
+
+            Assert.That(cleared, Is.True);
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
+        }
+
+        [Test]
+        public void ClearExpiredPendingCompileRequest_WhenRequestIsFresh_KeepsSessionValue()
+        {
+            // Verifies active compile recovery data is not cleared before its deadline.
+            DateTime now = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+            _sessionStateService.MarkPendingCompileRequestWithExpiration(
+                "compile_test_request",
+                forceRecompile: false,
+                expiresAtUtcTicks: now.AddSeconds(1).Ticks);
+
+            bool cleared = _sessionStateService.ClearExpiredPendingCompileRequest(now);
+
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            Assert.That(cleared, Is.False);
+            Assert.That(pendingCompileRequest.HasRequest, Is.True);
+            Assert.That(pendingCompileRequest.RequestId, Is.EqualTo("compile_test_request"));
         }
 
         [Test]

@@ -22,25 +22,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<string, bool> _resultExists;
         private readonly Action<string, UnityCliLoopCompileResult> _saveResult;
         private readonly Func<string> _getProjectRoot;
+        private readonly Func<DateTime> _getUtcNow;
 
         internal PendingCompileResultRecoveryService(
             UnityCliLoopEditorSessionStateService sessionStateService,
             Func<bool> isEditorCompiling,
             Func<string, bool> resultExists,
             Action<string, UnityCliLoopCompileResult> saveResult,
-            Func<string> getProjectRoot)
+            Func<string> getProjectRoot,
+            Func<DateTime> getUtcNow)
         {
             Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
             Debug.Assert(isEditorCompiling != null, "isEditorCompiling must not be null");
             Debug.Assert(resultExists != null, "resultExists must not be null");
             Debug.Assert(saveResult != null, "saveResult must not be null");
             Debug.Assert(getProjectRoot != null, "getProjectRoot must not be null");
+            Debug.Assert(getUtcNow != null, "getUtcNow must not be null");
 
             _sessionStateService = sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
             _isEditorCompiling = isEditorCompiling ?? throw new ArgumentNullException(nameof(isEditorCompiling));
             _resultExists = resultExists ?? throw new ArgumentNullException(nameof(resultExists));
             _saveResult = saveResult ?? throw new ArgumentNullException(nameof(saveResult));
             _getProjectRoot = getProjectRoot ?? throw new ArgumentNullException(nameof(getProjectRoot));
+            _getUtcNow = getUtcNow ?? throw new ArgumentNullException(nameof(getUtcNow));
         }
 
         internal PendingCompileRecoveryStatus Recover(bool recoverWhileEditorCompiling)
@@ -49,6 +53,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _sessionStateService.GetPendingCompileRequest();
             if (!pendingCompileRequest.HasRequest)
             {
+                return PendingCompileRecoveryStatus.Completed;
+            }
+
+            DateTime utcNow = _getUtcNow();
+            if (pendingCompileRequest.IsExpiredAt(utcNow))
+            {
+                VibeLogger.LogInfo(
+                    "compile_pending_result_expired",
+                    "Pending compile recovery expired before Domain Reload recovery could use it.",
+                    new
+                    {
+                        request_id = pendingCompileRequest.RequestId,
+                        force_recompile = pendingCompileRequest.ForceRecompile
+                    },
+                    pendingCompileRequest.RequestId);
+                _sessionStateService.ClearPendingCompileRequestIfMatches(pendingCompileRequest.RequestId);
                 return PendingCompileRecoveryStatus.Completed;
             }
 

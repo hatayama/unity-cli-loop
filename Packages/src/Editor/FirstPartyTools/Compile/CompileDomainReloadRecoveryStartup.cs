@@ -1,4 +1,5 @@
 using UnityEditor;
+using System;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -42,7 +43,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => EditorApplication.isCompiling,
                 CompileResultPersistenceService.ResultExists,
                 CompileResultPersistenceService.SaveResult,
-                UnityCliLoopPathResolver.GetProjectRoot);
+                UnityCliLoopPathResolver.GetProjectRoot,
+                () => DateTime.UtcNow);
         }
     }
 }

@@ -66,9 +66,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             service.SetShouldAutoScanThirdPartyToolMigration(_shouldAutoScanThirdPartyToolMigration);
             if (_pendingCompileRequest.HasRequest)
             {
-                service.MarkPendingCompileRequest(
+                service.MarkPendingCompileRequestWithExpiration(
                     _pendingCompileRequest.RequestId,
-                    _pendingCompileRequest.ForceRecompile);
+                    _pendingCompileRequest.ForceRecompile,
+                    _pendingCompileRequest.ExpiresAtUtcTicks);
                 return;
             }
 

@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using System;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -13,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
+        private DateTime _testUtcNow;
 
         [SetUp]
         public void SetUp()
@@ -20,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
             _sessionStateService.ClearAll();
+            _testUtcNow = DateTime.UtcNow;
         }
 
         [TearDown]
@@ -44,7 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     savedRequestId = requestId;
                     savedResult = result;
                 },
-                () => "<PROJECT_ROOT>");
+                () => "<PROJECT_ROOT>",
+                () => _testUtcNow);
 
             PendingCompileRecoveryStatus status = recoveryService.Recover(recoverWhileEditorCompiling: false);
 
@@ -67,7 +71,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => false,
                 _ => true,
                 (_, _) => saveCallCount++,
-                () => "<PROJECT_ROOT>");
+                () => "<PROJECT_ROOT>",
+                () => _testUtcNow);
+
+            PendingCompileRecoveryStatus status = recoveryService.Recover(recoverWhileEditorCompiling: false);
+
+            Assert.That(status, Is.EqualTo(PendingCompileRecoveryStatus.Completed));
+            Assert.That(saveCallCount, Is.EqualTo(0));
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
+        }
+
+        [Test]
+        public void Recover_WhenPendingRequestIsExpired_ClearsSessionWithoutSaving()
+        {
+            // Verifies stale compile recovery data does not create a result for a canceled command later.
+            _sessionStateService.MarkPendingCompileRequestWithExpiration(
+                "compile_test_request",
+                forceRecompile: false,
+                expiresAtUtcTicks: _testUtcNow.AddSeconds(-1).Ticks);
+            int saveCallCount = 0;
+            PendingCompileResultRecoveryService recoveryService = new PendingCompileResultRecoveryService(
+                _sessionStateService,
+                () => false,
+                _ => false,
+                (_, _) => saveCallCount++,
+                () => "<PROJECT_ROOT>",
+                () => _testUtcNow);
 
             PendingCompileRecoveryStatus status = recoveryService.Recover(recoverWhileEditorCompiling: false);
 
@@ -87,7 +116,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => true,
                 _ => false,
                 (_, _) => saveCallCount++,
-                () => "<PROJECT_ROOT>");
+                () => "<PROJECT_ROOT>",
+                () => _testUtcNow);
 
             PendingCompileRecoveryStatus status = recoveryService.Recover(recoverWhileEditorCompiling: false);
 
@@ -110,7 +140,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => true,
                 _ => false,
                 (_, result) => savedResult = result,
-                () => "<PROJECT_ROOT>");
+                () => "<PROJECT_ROOT>",
+                () => _testUtcNow);
 
             PendingCompileRecoveryStatus status = recoveryService.Recover(recoverWhileEditorCompiling: true);
 
@@ -118,6 +149,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(savedResult, Is.Not.Null);
             Assert.That(savedResult.Message, Does.Contain("Force compilation"));
             Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
+        }
+
+        [Test]
+        public void ShouldClearPendingCompileRequestAfterCancellation_WhenCallerCancelsBeforeReload_ReturnsTrue()
+        {
+            // Verifies caller cancellation clears pending recovery before it can become stale.
+            UnityCliLoopCompileRequest request = CreateCompileRequest(waitForDomainReload: true);
+
+            bool shouldClear = CompileUseCase.ShouldClearPendingCompileRequestAfterCancellation(
+                request,
+                isCancellationRequested: true,
+                isDomainReloadInProgress: false);
+
+            Assert.That(shouldClear, Is.True);
+        }
+
+        [Test]
+        public void ShouldClearPendingCompileRequestAfterCancellation_WhenDomainReloadCancels_ReturnsFalse()
+        {
+            // Verifies Domain Reload cancellation keeps pending recovery available after reload.
+            UnityCliLoopCompileRequest request = CreateCompileRequest(waitForDomainReload: true);
+
+            bool shouldClear = CompileUseCase.ShouldClearPendingCompileRequestAfterCancellation(
+                request,
+                isCancellationRequested: true,
+                isDomainReloadInProgress: true);
+
+            Assert.That(shouldClear, Is.False);
+        }
+
+        [Test]
+        public void ShouldClearPendingCompileRequestAfterCancellation_WhenNoReloadWait_ReturnsFalse()
+        {
+            // Verifies fire-and-forget compile requests do not touch pending reload recovery state.
+            UnityCliLoopCompileRequest request = CreateCompileRequest(waitForDomainReload: false);
+
+            bool shouldClear = CompileUseCase.ShouldClearPendingCompileRequestAfterCancellation(
+                request,
+                isCancellationRequested: true,
+                isDomainReloadInProgress: false);
+
+            Assert.That(shouldClear, Is.False);
+        }
+
+        private static UnityCliLoopCompileRequest CreateCompileRequest(bool waitForDomainReload)
+        {
+            return new UnityCliLoopCompileRequest
+            {
+                ForceRecompile = false,
+                WaitForDomainReload = waitForDomainReload,
+                RequestId = "compile_test_request"
+            };
         }
     }
 }

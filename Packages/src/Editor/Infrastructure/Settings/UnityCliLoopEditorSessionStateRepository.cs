@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             KeyPrefix + "shouldAutoScanThirdPartyToolMigration";
         private const string PendingCompileRequestIdKey = KeyPrefix + "pendingCompileRequestId";
         private const string PendingCompileForceRecompileKey = KeyPrefix + "pendingCompileForceRecompile";
+        private const string PendingCompileExpiresAtUtcTicksKey = KeyPrefix + "pendingCompileExpiresAtUtcTicks";
 
         public bool GetIsServerRunning()
         {
@@ -120,6 +121,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile)
         {
             SetBool(PendingCompileForceRecompileKey, pendingCompileForceRecompile);
+        }
+
+        public string GetPendingCompileExpiresAtUtcTicks()
+        {
+            return GetString(PendingCompileExpiresAtUtcTicksKey);
+        }
+
+        public void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks)
+        {
+            SetString(PendingCompileExpiresAtUtcTicksKey, pendingCompileExpiresAtUtcTicks);
         }
 
         private static bool GetBool(string key)
