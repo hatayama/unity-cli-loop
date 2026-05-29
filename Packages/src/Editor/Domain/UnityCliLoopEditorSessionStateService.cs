@@ -83,9 +83,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     /// </summary>
     public sealed class UnityCliLoopEditorSessionStateService
     {
-        // Why: after the CLI final-response wait and result-file polling windows close,
-        // recovering an old pending request would only create a stale result for a gone caller.
-        private const int PendingCompileRequestLifetimeSeconds = 190;
+        // Why: accepted compile requests can still be running while the CLI waits for its
+        // long final-response budget, so recovery must outlive that active wait window.
+        private const int PendingCompileRequestLifetimeSeconds = 32 * 60;
         private readonly IUnityCliLoopEditorSessionStatePort _sessionStatePort;
 
         public UnityCliLoopEditorSessionStateService(IUnityCliLoopEditorSessionStatePort sessionStatePort)

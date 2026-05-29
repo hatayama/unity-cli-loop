@@ -10,12 +10,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Starts pending compile result recovery after Unity recreates editor assemblies.
     /// </summary>
-    [InitializeOnLoad]
-    internal sealed class CompileDomainReloadRecoveryStartup
+    internal static class CompileDomainReloadRecoveryStartup
     {
         private const int RecoveryMaxWaitMs = 5000;
 
-        static CompileDomainReloadRecoveryStartup()
+        internal static void Initialize()
         {
             EditorApplication.delayCall += () => RecoverAfterDomainReload(DateTime.UtcNow);
         }

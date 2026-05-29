@@ -106,6 +106,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void MarkPendingCompileRequest_WhenCreated_OutlivesAcceptedCompileWaitBudget()
+        {
+            // Verifies long accepted compiles keep recovery state until the CLI wait budget has elapsed.
+            DateTime markedAtUtc = DateTime.UtcNow;
+
+            _sessionStateService.MarkPendingCompileRequest("compile_test_request", forceRecompile: true);
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            DateTime expiresAtUtc = new DateTime(
+                pendingCompileRequest.ExpiresAtUtcTicks,
+                DateTimeKind.Utc);
+            TimeSpan lifetime = expiresAtUtc - markedAtUtc;
+
+            Assert.That(pendingCompileRequest.HasRequest, Is.True);
+            Assert.That(lifetime, Is.GreaterThanOrEqualTo(TimeSpan.FromMinutes(31)));
+        }
+
+        [Test]
         public void Recover_WhenEditorIsStillCompiling_KeepsPendingRequestForRetry()
         {
             // Verifies recovery waits briefly while Unity still reports an active compile.
