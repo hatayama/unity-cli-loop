@@ -13,25 +13,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [InitializeOnLoad]
     internal sealed class CompileDomainReloadRecoveryStartup
     {
-        private const int RecoveryPollIntervalMs = 100;
         private const int RecoveryMaxWaitMs = 5000;
 
         static CompileDomainReloadRecoveryStartup()
         {
-            EditorApplication.delayCall += () => RecoverAfterDomainReload(0);
+            EditorApplication.delayCall += () => RecoverAfterDomainReload(DateTime.UtcNow);
         }
 
-        private static void RecoverAfterDomainReload(int waitedMs)
+        private static void RecoverAfterDomainReload(DateTime startedAtUtc)
         {
             PendingCompileResultRecoveryService recoveryService = CreateRecoveryService();
-            bool recoverWhileEditorCompiling = waitedMs >= RecoveryMaxWaitMs;
+            bool recoverWhileEditorCompiling =
+                ShouldRecoverWhileEditorCompiling(startedAtUtc, DateTime.UtcNow);
             PendingCompileRecoveryStatus status = recoveryService.Recover(recoverWhileEditorCompiling);
             if (status == PendingCompileRecoveryStatus.Completed)
             {
                 return;
             }
 
-            EditorApplication.delayCall += () => RecoverAfterDomainReload(waitedMs + RecoveryPollIntervalMs);
+            EditorApplication.delayCall += () => RecoverAfterDomainReload(startedAtUtc);
+        }
+
+        internal static bool ShouldRecoverWhileEditorCompiling(DateTime startedAtUtc, DateTime utcNow)
+        {
+            System.Diagnostics.Debug.Assert(startedAtUtc.Kind == DateTimeKind.Utc, "startedAtUtc must be UTC");
+            System.Diagnostics.Debug.Assert(utcNow.Kind == DateTimeKind.Utc, "utcNow must be UTC");
+
+            TimeSpan elapsed = utcNow - startedAtUtc;
+            return elapsed.TotalMilliseconds >= RecoveryMaxWaitMs;
         }
 
         private static PendingCompileResultRecoveryService CreateRecoveryService()

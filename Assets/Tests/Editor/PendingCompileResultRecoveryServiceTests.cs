@@ -193,6 +193,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldClear, Is.False);
         }
 
+        [Test]
+        public void ShouldRecoverWhileEditorCompiling_WhenElapsedTimeIsBelowLimit_ReturnsFalse()
+        {
+            // Verifies recovery polling uses real elapsed time instead of editor frame count.
+            DateTime startedAtUtc = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+            DateTime utcNow = startedAtUtc.AddMilliseconds(4999);
+
+            bool shouldRecover =
+                CompileDomainReloadRecoveryStartup.ShouldRecoverWhileEditorCompiling(startedAtUtc, utcNow);
+
+            Assert.That(shouldRecover, Is.False);
+        }
+
+        [Test]
+        public void ShouldRecoverWhileEditorCompiling_WhenElapsedTimeReachesLimit_ReturnsTrue()
+        {
+            // Verifies recovery can synthesize an indeterminate result after the real timeout elapses.
+            DateTime startedAtUtc = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+            DateTime utcNow = startedAtUtc.AddMilliseconds(5000);
+
+            bool shouldRecover =
+                CompileDomainReloadRecoveryStartup.ShouldRecoverWhileEditorCompiling(startedAtUtc, utcNow);
+
+            Assert.That(shouldRecover, Is.True);
+        }
+
         private static UnityCliLoopCompileRequest CreateCompileRequest(bool waitForDomainReload)
         {
             return new UnityCliLoopCompileRequest

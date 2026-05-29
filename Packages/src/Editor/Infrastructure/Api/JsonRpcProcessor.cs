@@ -31,6 +31,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public static class JsonRpcProcessor
     {
+        private const string WaitForDomainReloadParamName = "WaitForDomainReload";
+
+        internal delegate Task JsonRpcEarlyResponseWriter(
+            string responseJson,
+            bool cancelOnClientDisconnect);
+
         /// <summary>
         /// Process JSON-RPC request and generate response
         /// </summary>
@@ -42,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static async Task<string> ProcessRequestWithEarlyResponseAsync(
             string jsonRequest,
             CancellationToken ct,
-            Func<string, Task> earlyResponseWriter)
+            JsonRpcEarlyResponseWriter earlyResponseWriter)
         {
             try
             {
@@ -148,7 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             JsonRpcRequest request,
             string originalJson,
             CancellationToken ct,
-            Func<string, Task> earlyResponseWriter)
+            JsonRpcEarlyResponseWriter earlyResponseWriter)
         {
             try
             {
@@ -160,7 +166,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (request.AcceptsDispatchAck && earlyResponseWriter != null)
                 {
-                    await earlyResponseWriter(CreateDispatchAcceptedResponse(request.Id));
+                    await earlyResponseWriter(
+                        CreateDispatchAcceptedResponse(request.Id),
+                        ShouldCancelAcceptedRequestOnClientDisconnect(request));
                 }
 
                 Stopwatch requestStopwatch = Stopwatch.StartNew();
@@ -204,6 +212,39 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
+        }
+
+        private static bool ShouldCancelAcceptedRequestOnClientDisconnect(JsonRpcRequest request)
+        {
+            System.Diagnostics.Debug.Assert(request != null, "request must not be null");
+
+            if (request.Method != UnityCliLoopConstants.TOOL_NAME_COMPILE)
+            {
+                return true;
+            }
+
+            return !CompileRequestWaitsForDomainReload(request.Params);
+        }
+
+        private static bool CompileRequestWaitsForDomainReload(JToken paramsToken)
+        {
+            if (paramsToken is not JObject paramsObject)
+            {
+                return true;
+            }
+
+            JToken waitForDomainReloadToken = paramsObject[WaitForDomainReloadParamName];
+            if (waitForDomainReloadToken == null)
+            {
+                return true;
+            }
+
+            if (waitForDomainReloadToken.Type != JTokenType.Boolean)
+            {
+                return true;
+            }
+
+            return waitForDomainReloadToken.Value<bool>();
         }
 
         private static bool IsCliUpdateRequired(string currentCliVersion)
