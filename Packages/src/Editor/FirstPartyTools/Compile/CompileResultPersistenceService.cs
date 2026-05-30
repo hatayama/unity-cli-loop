@@ -62,7 +62,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string resultJson = JsonConvert.SerializeObject(response, Formatting.None);
+            int resultBytes = Encoding.UTF8.GetByteCount(resultJson);
+            VibeLogger.LogInfo(
+                "compile_result_file_publish_start",
+                "Publishing compile result file for CLI polling.",
+                new
+                {
+                    request_id = requestId,
+                    result_file_name = Path.GetFileName(filePath),
+                    result_directory = CompileResultDirectoryPath,
+                    result_directory_exists = Directory.Exists(CompileResultDirectoryPath),
+                    result_bytes = resultBytes,
+                    success = response.Success,
+                    error_count = response.ErrorCount,
+                    warning_count = response.WarningCount
+                },
+                requestId);
             PublishResultFile(filePath, resultJson);
+            VibeLogger.LogInfo(
+                "compile_result_file_publish_complete",
+                "Published compile result file for CLI polling.",
+                new
+                {
+                    request_id = requestId,
+                    result_file_name = Path.GetFileName(filePath),
+                    result_path = filePath,
+                    result_exists = File.Exists(filePath),
+                    result_bytes = resultBytes
+                },
+                requestId);
         }
 
         public static bool ResultExists(string requestId)

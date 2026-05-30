@@ -67,7 +67,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     VibeLogger.LogInfo(
                         "compile_controller_wait_existing_task",
                         "Compilation is already in progress; waiting for the existing task.",
-                        new { force_recompile = forceRecompile });
+                        BuildCompileControllerStateContext(new Dictionary<string, object>
+                        {
+                            ["requested_force_recompile"] = forceRecompile
+                        }));
                     return await _currentCompileTask.Task;
                 }
                 throw new InvalidOperationException("Compilation is in progress, but the task could not be found.");
@@ -166,7 +169,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 VibeLogger.LogInfo(
                     "compile_controller_waiting_for_finish",
                     "Waiting for Unity compilationFinished callback.",
-                    new { force_recompile = forceRecompile });
+                    BuildCompileControllerStateContext(new Dictionary<string, object>
+                    {
+                        ["requested_force_recompile"] = forceRecompile
+                    }));
                 compileTaskTransferred = true;
                 return await compileTask.Task;
             }
@@ -210,6 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HandleCompileStartedObserved,
                 HandleCompileStartTimeout,
                 HandleCompileStoppedWithoutFinishEvent,
+                HandleCompileStillWaiting,
                 AbortCompile);
             return watchdog.WatchAsync(ct);
         }
@@ -267,12 +274,58 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return currentCompileTask != null && ReferenceEquals(currentCompileTask, compileTask);
         }
 
+        private Dictionary<string, object> BuildCompileControllerStateContext(
+            Dictionary<string, object> extraContext)
+        {
+            Dictionary<string, object> context = new()
+            {
+                ["force_recompile"] = _isForceCompile,
+                ["controller_compiling"] = _isCompiling,
+                ["current_task_present"] = _currentCompileTask != null,
+                ["current_task_completed"] = _currentCompileTask != null && _currentCompileTask.Task.IsCompleted,
+                ["message_count"] = _compileMessages != null ? _compileMessages.Count : 0,
+                ["editor_compiling"] = EditorApplication.isCompiling,
+                ["editor_updating"] = EditorApplication.isUpdating,
+                ["editor_playing"] = EditorApplication.isPlaying,
+                ["editor_paused"] = EditorApplication.isPaused
+            };
+            if (extraContext == null)
+            {
+                return context;
+            }
+
+            foreach (KeyValuePair<string, object> entry in extraContext)
+            {
+                context[entry.Key] = entry.Value;
+            }
+
+            return context;
+        }
+
         private void HandleCompileStartedObserved(int waitedMs)
         {
             VibeLogger.LogInfo(
                 "compile_editor_compiling_observed",
                 "EditorApplication.isCompiling became true.",
-                new { waited_ms = waitedMs });
+                BuildCompileControllerStateContext(new Dictionary<string, object>
+                {
+                    ["waited_ms"] = waitedMs
+                }));
+        }
+
+        private void HandleCompileStillWaiting(CompileLifecycleWatchdogSnapshot snapshot)
+        {
+            VibeLogger.LogInfo(
+                "compile_controller_still_waiting",
+                "CompileController is still waiting for Unity compile lifecycle progress.",
+                BuildCompileControllerStateContext(new Dictionary<string, object>
+                {
+                    ["observed_start"] = snapshot.ObservedStart,
+                    ["snapshot_editor_compiling"] = snapshot.EditorCompiling,
+                    ["waited_for_start_ms"] = snapshot.WaitedForStartMs,
+                    ["waited_after_start_ms"] = snapshot.WaitedAfterStartMs,
+                    ["stopped_after_start_ms"] = snapshot.StoppedAfterStartMs
+                }));
         }
 
         private void HandleCompileStartTimeout(int waitedMs)
@@ -285,7 +338,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 VibeLogger.LogWarning(
                     "compile_start_timeout_assembly_definition_error",
                     assemblyDefinitionErrors.Message,
-                    new { waited_ms = waitedMs });
+                    BuildCompileControllerStateContext(new Dictionary<string, object>
+                    {
+                        ["waited_ms"] = waitedMs
+                    }));
                 AbortCompileWithResult(CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors));
                 return;
             }
@@ -297,7 +353,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 VibeLogger.LogWarning(
                     "compile_start_timeout_duplicate_asmdef",
                     asmdefValidation.ErrorMessage,
-                    new { waited_ms = waitedMs });
+                    BuildCompileControllerStateContext(new Dictionary<string, object>
+                    {
+                        ["waited_ms"] = waitedMs
+                    }));
                 AbortCompile(asmdefValidation.ErrorMessage);
                 return;
             }
@@ -305,7 +364,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             VibeLogger.LogWarning(
                 "compile_start_timeout",
                 "Compilation did not start before the start timeout.",
-                new { waited_ms = waitedMs });
+                BuildCompileControllerStateContext(new Dictionary<string, object>
+                {
+                    ["waited_ms"] = waitedMs
+                }));
             AbortCompile(
                 "Compilation did not start. Possible causes: editor update/reload locks, Auto Refresh disabled, or no script changes."
             );
@@ -323,7 +385,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     force_recompile = _isForceCompile,
                     stopped_ms = stoppedMs,
-                    message_count = _compileMessages.Count
+                    message_count = _compileMessages.Count,
+                    editor_compiling = EditorApplication.isCompiling,
+                    editor_updating = EditorApplication.isUpdating,
+                    editor_playing = EditorApplication.isPlaying,
+                    editor_paused = EditorApplication.isPaused
                 });
             AbortCompileWithResult(CreateIndeterminateCompileResult(message));
         }
@@ -341,7 +407,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             VibeLogger.LogWarning(
                 "compile_aborted",
                 result.Message,
-                new { force_recompile = _isForceCompile });
+                BuildCompileControllerStateContext(new Dictionary<string, object>
+                {
+                    ["success"] = result.Success,
+                    ["error_count"] = result.ErrorCount,
+                    ["warning_count"] = result.WarningCount,
+                    ["is_indeterminate"] = result.IsIndeterminate
+                }));
 
             CompleteCompileRequest(result, unregisterEvents: true);
         }
@@ -364,7 +436,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             VibeLogger.LogWarning(
                 "compile_aborted",
                 reason,
-                new { force_recompile = _isForceCompile });
+                BuildCompileControllerStateContext(new Dictionary<string, object>
+                {
+                    ["reason"] = reason
+                }));
 
             CompileResult result = new(
                 success: false,
@@ -389,6 +464,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityEngine.Debug.Assert(result != null, "result must not be null");
 
             TaskCompletionSource<CompileResult> task = _currentCompileTask;
+            Dictionary<string, object> completionContext = BuildCompileControllerStateContext(
+                new Dictionary<string, object>
+                {
+                    ["unregister_events"] = unregisterEvents,
+                    ["success"] = result.Success,
+                    ["error_count"] = result.ErrorCount,
+                    ["warning_count"] = result.WarningCount,
+                    ["is_indeterminate"] = result.IsIndeterminate
+                });
+            VibeLogger.LogInfo(
+                "compile_controller_completion_start",
+                "Completing the active compile request in CompileController.",
+                completionContext);
 
             // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
             try
@@ -400,7 +488,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 _isCompiling = false;
                 _isForceCompile = false;
+                VibeLogger.LogInfo(
+                    "compile_controller_completion_before_event",
+                    "Notifying CompileController completion subscribers.",
+                    completionContext);
                 OnCompileCompleted?.Invoke(result);
+                VibeLogger.LogInfo(
+                    "compile_controller_completion_after_event",
+                    "CompileController completion subscribers returned.",
+                    completionContext);
             }
             finally
             {
@@ -412,6 +508,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 task?.TrySetResult(result);
+                VibeLogger.LogInfo(
+                    "compile_controller_task_completed",
+                    "CompileController task completed with a compile result.",
+                    BuildCompileControllerStateContext(new Dictionary<string, object>
+                    {
+                        ["success"] = result.Success,
+                        ["error_count"] = result.ErrorCount,
+                        ["warning_count"] = result.WarningCount,
+                        ["is_indeterminate"] = result.IsIndeterminate
+                    }));
             }
         }
 

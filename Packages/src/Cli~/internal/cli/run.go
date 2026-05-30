@@ -225,6 +225,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 		})
 		return 1
 	}
+	logCompileWaitRequestPrepared(connection.ProjectRoot, requestID)
 
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, compileCommandName)
@@ -237,6 +238,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 			spinner.Update("Executing compile...")
 		},
 	)
+	logCompileSendCompleted(connection, requestID, outcome, err, time.Since(startedAt))
 	if err != nil && shouldWaitForCompileResult(err, outcome) {
 		spinner.Update("Connection lost during compile. Waiting for result file...")
 	}

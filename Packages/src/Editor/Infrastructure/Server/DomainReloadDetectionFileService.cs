@@ -66,10 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             VibeLogger.LogInfo(
                 "domain_reload_start",
                 "Domain reload starting",
-                new
-                {
-                    server_running = serverIsRunning
-                },
+                BuildDomainReloadStartContext(serverIsRunning),
                 correlationId
             );
         }
@@ -99,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 serverWillRecover
                     ? "Domain reload completed - starting server recovery process"
                     : "Domain reload completed - server was manually stopped before recovery",
-                new { transport = "project_ipc" },
+                BuildDomainReloadCompleteContext(serverWillRecover),
                 correlationId
             );
         }
@@ -170,6 +167,41 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             _legacySessionStateReader.Clear();
+        }
+
+        private object BuildDomainReloadStartContext(bool serverIsRunning)
+        {
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            return new
+            {
+                transport = "project_ipc",
+                server_running = serverIsRunning,
+                session_server_running = _sessionStateService.GetIsServerRunning(),
+                session_domain_reload_in_progress = _sessionStateService.GetIsDomainReloadInProgress(),
+                pending_compile_request = pendingCompileRequest.HasRequest,
+                pending_compile_request_id = pendingCompileRequest.RequestId,
+                pending_compile_force_recompile = pendingCompileRequest.ForceRecompile,
+                pending_compile_expires_at_utc_ticks = pendingCompileRequest.ExpiresAtUtcTicks
+            };
+        }
+
+        private object BuildDomainReloadCompleteContext(bool serverWillRecover)
+        {
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            return new
+            {
+                transport = "project_ipc",
+                server_will_recover = serverWillRecover,
+                session_server_running = _sessionStateService.GetIsServerRunning(),
+                session_domain_reload_in_progress = _sessionStateService.GetIsDomainReloadInProgress(),
+                session_reconnecting = _sessionStateService.GetIsReconnecting(),
+                pending_compile_request = pendingCompileRequest.HasRequest,
+                pending_compile_request_id = pendingCompileRequest.RequestId,
+                pending_compile_force_recompile = pendingCompileRequest.ForceRecompile,
+                pending_compile_expires_at_utc_ticks = pendingCompileRequest.ExpiresAtUtcTicks
+            };
         }
     }
 }

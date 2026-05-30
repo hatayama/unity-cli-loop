@@ -16,20 +16,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static void Initialize()
         {
+            VibeLogger.LogInfo(
+                "compile_domain_reload_recovery_scheduled",
+                "Scheduled pending compile recovery for the next editor delay call.",
+                new { editor_compiling = EditorApplication.isCompiling });
             EditorApplication.delayCall += () => RecoverAfterDomainReload(DateTime.UtcNow);
         }
 
         private static void RecoverAfterDomainReload(DateTime startedAtUtc)
         {
             PendingCompileResultRecoveryService recoveryService = CreateRecoveryService();
+            DateTime utcNow = DateTime.UtcNow;
+            TimeSpan elapsed = utcNow - startedAtUtc;
             bool recoverWhileEditorCompiling =
-                ShouldRecoverWhileEditorCompiling(startedAtUtc, DateTime.UtcNow);
+                ShouldRecoverWhileEditorCompiling(startedAtUtc, utcNow);
+            VibeLogger.LogInfo(
+                "compile_domain_reload_recovery_attempt",
+                "Attempting pending compile recovery after Domain Reload.",
+                new
+                {
+                    elapsed_ms = elapsed.TotalMilliseconds,
+                    editor_compiling = EditorApplication.isCompiling,
+                    recover_while_editor_compiling = recoverWhileEditorCompiling
+                });
             PendingCompileRecoveryStatus status = recoveryService.Recover(recoverWhileEditorCompiling);
             if (status == PendingCompileRecoveryStatus.Completed)
             {
+                VibeLogger.LogInfo(
+                    "compile_domain_reload_recovery_completed",
+                    "Pending compile recovery finished for this delay-call pass.",
+                    new
+                    {
+                        elapsed_ms = elapsed.TotalMilliseconds,
+                        editor_compiling = EditorApplication.isCompiling
+                    });
                 return;
             }
 
+            VibeLogger.LogInfo(
+                "compile_domain_reload_recovery_retry_scheduled",
+                "Pending compile recovery will retry on the next editor delay call.",
+                new
+                {
+                    elapsed_ms = elapsed.TotalMilliseconds,
+                    editor_compiling = EditorApplication.isCompiling
+                });
             EditorApplication.delayCall += () => RecoverAfterDomainReload(startedAtUtc);
         }
 

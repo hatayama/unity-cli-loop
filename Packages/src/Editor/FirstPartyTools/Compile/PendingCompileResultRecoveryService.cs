@@ -51,8 +51,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             UnityCliLoopPendingCompileRequest pendingCompileRequest =
                 _sessionStateService.GetPendingCompileRequest();
+            bool isEditorCompiling = _isEditorCompiling();
             if (!pendingCompileRequest.HasRequest)
             {
+                VibeLogger.LogInfo(
+                    "compile_pending_recovery_no_request",
+                    "Domain Reload compile recovery found no pending compile request.",
+                    new
+                    {
+                        editor_compiling = isEditorCompiling,
+                        recover_while_editor_compiling = recoverWhileEditorCompiling
+                    });
                 return PendingCompileRecoveryStatus.Completed;
             }
 
@@ -72,8 +81,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return PendingCompileRecoveryStatus.Completed;
             }
 
-            if (_isEditorCompiling() && !recoverWhileEditorCompiling)
+            if (isEditorCompiling && !recoverWhileEditorCompiling)
             {
+                VibeLogger.LogInfo(
+                    "compile_pending_recovery_retry_editor_compiling",
+                    "Pending compile recovery is waiting because Unity still reports compilation in progress.",
+                    new
+                    {
+                        request_id = pendingCompileRequest.RequestId,
+                        force_recompile = pendingCompileRequest.ForceRecompile,
+                        expires_at_utc_ticks = pendingCompileRequest.ExpiresAtUtcTicks,
+                        editor_compiling = isEditorCompiling,
+                        recover_while_editor_compiling = recoverWhileEditorCompiling
+                    },
+                    pendingCompileRequest.RequestId);
                 return PendingCompileRecoveryStatus.Retry;
             }
 
@@ -93,6 +114,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             UnityCliLoopCompileResult result = CreateIndeterminateResult(pendingCompileRequest);
+            VibeLogger.LogWarning(
+                "compile_pending_recovery_persist_start",
+                "Pending compile recovery is writing an indeterminate result file.",
+                new
+                {
+                    request_id = pendingCompileRequest.RequestId,
+                    force_recompile = pendingCompileRequest.ForceRecompile,
+                    expires_at_utc_ticks = pendingCompileRequest.ExpiresAtUtcTicks,
+                    editor_compiling = isEditorCompiling,
+                    recover_while_editor_compiling = recoverWhileEditorCompiling
+                },
+                pendingCompileRequest.RequestId);
             _saveResult(pendingCompileRequest.RequestId, result);
             VibeLogger.LogWarning(
                 "compile_pending_result_recovered_after_domain_reload",
@@ -100,7 +133,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new
                 {
                     request_id = pendingCompileRequest.RequestId,
-                    force_recompile = pendingCompileRequest.ForceRecompile
+                    force_recompile = pendingCompileRequest.ForceRecompile,
+                    editor_compiling = isEditorCompiling,
+                    recover_while_editor_compiling = recoverWhileEditorCompiling
                 },
                 pendingCompileRequest.RequestId);
             _sessionStateService.ClearPendingCompileRequestIfMatches(pendingCompileRequest.RequestId);

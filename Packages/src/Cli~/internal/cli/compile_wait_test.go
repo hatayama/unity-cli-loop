@@ -187,6 +187,77 @@ func TestWaitForCompileCompletionIgnoresStaleServerState(t *testing.T) {
 	}
 }
 
+// Verifies that compile wait timeouts are visible in CLI Vibe logs.
+func TestWaitForCompileCompletionWritesTimeoutVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	requestID := "compile_timeout_log_test"
+
+	_, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+		projectRoot:  projectRoot,
+		requestID:    requestID,
+		timeout:      20 * time.Millisecond,
+		pollInterval: 5 * time.Millisecond,
+		lockGrace:    time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if completed {
+		t.Fatal("compile wait should time out without a result file")
+	}
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_compile_result_wait_started"`,
+		`"operation":"cli_compile_result_wait_timed_out"`,
+		`"request_id":"compile_timeout_log_test"`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+}
+
+// Verifies that valid compile result files are logged when polling completes.
+func TestWaitForCompileCompletionWritesResultFileVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	requestID := "compile_result_log_test"
+	resultPath := compileResultPath(projectRoot, requestID)
+	if err := os.MkdirAll(filepath.Dir(resultPath), 0o755); err != nil {
+		t.Fatalf("failed to create result dir: %v", err)
+	}
+	if err := os.WriteFile(resultPath, []byte(`{"Success":true}`), 0o644); err != nil {
+		t.Fatalf("failed to write result: %v", err)
+	}
+
+	_, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+		projectRoot:  projectRoot,
+		requestID:    requestID,
+		timeout:      time.Second,
+		pollInterval: 5 * time.Millisecond,
+		lockGrace:    10 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if !completed {
+		t.Fatal("compile wait did not complete")
+	}
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_compile_result_file_detected"`,
+		`"operation":"cli_compile_result_file_stable"`,
+		`"request_id":"compile_result_log_test"`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+}
+
 func TestShouldWaitForCompileResultRequiresDispatchedTransportError(t *testing.T) {
 	if shouldWaitForCompileResult(os.ErrNotExist, unityipc.UnitySendOutcome{}) {
 		t.Fatal("undispatched error should not wait")

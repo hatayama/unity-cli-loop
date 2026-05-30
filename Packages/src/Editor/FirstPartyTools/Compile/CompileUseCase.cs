@@ -42,14 +42,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(request));
             }
 
+            string originalRequestId = request.RequestId;
             PrepareResultStorage(request);
             string correlationId = ResolveCorrelationId(request);
+            LogCompileResultStoragePrepared(request, originalRequestId, correlationId);
             bool resultPersistenceCompleted = false;
 
             try
             {
-                _sessionStateService.ClearExpiredPendingCompileRequest(DateTime.UtcNow);
-                MarkPendingCompileRequestIfNeeded(request);
+                bool clearedExpiredPendingRequest =
+                    _sessionStateService.ClearExpiredPendingCompileRequest(DateTime.UtcNow);
+                if (clearedExpiredPendingRequest)
+                {
+                    VibeLogger.LogWarning(
+                        "compile_expired_pending_request_cleared",
+                        "Cleared an expired pending compile request before accepting a new compile request.",
+                        BuildCompileLogContext(request),
+                        correlationId);
+                }
+
+                MarkPendingCompileRequestIfNeeded(request, correlationId);
                 LogCompileRequestReceived(request, correlationId);
 
                 // 1. Play Mode preparation check
@@ -295,7 +307,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return response;
             }
 
+            VibeLogger.LogInfo(
+                "compile_result_persist_start",
+                "Persisting compile result for CLI domain reload wait.",
+                new
+                {
+                    request_id = request.RequestId,
+                    success = response.Success,
+                    error_count = response.ErrorCount,
+                    warning_count = response.WarningCount
+                },
+                correlationId);
             CompileResultPersistenceService.SaveResult(request.RequestId, response);
+            bool resultExistsAfterPersist = CompileResultPersistenceService.ResultExists(request.RequestId);
             _sessionStateService.ClearPendingCompileRequestIfMatches(request.RequestId);
             VibeLogger.LogInfo(
                 "compile_result_persisted",
@@ -305,13 +329,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     request_id = request.RequestId,
                     success = response.Success,
                     error_count = response.ErrorCount,
-                    warning_count = response.WarningCount
+                    warning_count = response.WarningCount,
+                    result_exists_after_persist = resultExistsAfterPersist
                 },
                 correlationId);
             return response;
         }
 
-        private void MarkPendingCompileRequestIfNeeded(UnityCliLoopCompileRequest request)
+        private void MarkPendingCompileRequestIfNeeded(
+            UnityCliLoopCompileRequest request,
+            string correlationId)
         {
             Debug.Assert(request != null, "request must not be null");
 
@@ -326,6 +353,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _sessionStateService.MarkPendingCompileRequest(request.RequestId, request.ForceRecompile);
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            VibeLogger.LogInfo(
+                "compile_pending_request_marked",
+                "Marked compile request for Domain Reload recovery.",
+                new
+                {
+                    request_id = pendingCompileRequest.RequestId,
+                    force_recompile = pendingCompileRequest.ForceRecompile,
+                    expires_at_utc_ticks = pendingCompileRequest.ExpiresAtUtcTicks
+                },
+                correlationId);
         }
 
         private void ClearPendingCompileRequestAfterCancellation(
@@ -465,6 +504,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId,
                 humanNote: "Compile request entered the Unity-side use case.",
                 aiTodo: "Compare this point with compile_execution_start, compile_controller_waiting_for_finish, domain_reload_start, and domain_reload_complete.");
+        }
+
+        private static void LogCompileResultStoragePrepared(
+            UnityCliLoopCompileRequest request,
+            string originalRequestId,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                "compile_result_storage_prepared",
+                "Prepared compile result storage before execution.",
+                new
+                {
+                    request_id = request.RequestId,
+                    original_request_id = originalRequestId,
+                    request_id_changed = request.RequestId != originalRequestId,
+                    force_recompile = request.ForceRecompile,
+                    wait_for_domain_reload = request.WaitForDomainReload
+                },
+                correlationId);
         }
 
         private static string CreateRequestId()
