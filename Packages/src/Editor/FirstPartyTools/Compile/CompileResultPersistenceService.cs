@@ -90,30 +90,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentException("requestId must not be null or whitespace.", nameof(requestId));
             }
 
-            if (!IsRequestIdSafe(requestId))
+            if (!CompileRequestIdRules.IsSafe(requestId))
             {
                 throw new ArgumentException(
                     "requestId may contain only ASCII letters, digits, underscore, or hyphen.",
                     nameof(requestId));
             }
-        }
-
-        private static bool IsRequestIdSafe(string requestId)
-        {
-            foreach (char character in requestId)
-            {
-                bool isSafe = (character >= 'a' && character <= 'z') ||
-                              (character >= 'A' && character <= 'Z') ||
-                              (character >= '0' && character <= '9') ||
-                              character == '_' ||
-                              character == '-';
-                if (!isSafe)
-                {
-                    return false;
-                }
-            }
-
-            return true;
         }
 
         private static void PublishResultFile(string filePath, string content)

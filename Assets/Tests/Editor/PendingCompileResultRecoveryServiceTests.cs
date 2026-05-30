@@ -223,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             bool shouldClear = CompileUseCase.ShouldClearPendingCompileRequestAfterInterruptedCompile(
                 request,
-                completed: false,
+                resultPersistenceCompleted: false,
                 isCancellationRequested: false,
                 isDomainReloadInProgress: false);
 
@@ -231,14 +231,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ShouldClearPendingCompileRequestAfterInterruptedCompile_WhenCompileCompleted_ReturnsFalse()
+        public void ShouldClearPendingCompileRequestAfterInterruptedCompile_WhenResultPersistenceCompleted_ReturnsFalse()
         {
             // Verifies successful result persistence owns pending recovery cleanup.
             UnityCliLoopCompileRequest request = CreateCompileRequest(waitForDomainReload: true);
 
             bool shouldClear = CompileUseCase.ShouldClearPendingCompileRequestAfterInterruptedCompile(
                 request,
-                completed: true,
+                resultPersistenceCompleted: true,
                 isCancellationRequested: false,
                 isDomainReloadInProgress: false);
 
@@ -253,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             bool shouldClear = CompileUseCase.ShouldClearPendingCompileRequestAfterInterruptedCompile(
                 request,
-                completed: false,
+                resultPersistenceCompleted: false,
                 isCancellationRequested: false,
                 isDomainReloadInProgress: true);
 

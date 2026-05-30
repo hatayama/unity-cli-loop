@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             PrepareResultStorage(request);
             string correlationId = ResolveCorrelationId(request);
-            bool completed = false;
+            bool resultPersistenceCompleted = false;
 
             try
             {
@@ -72,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         null);
                     UnityCliLoopCompileResult persistedResponse =
                         PersistResponseIfNeeded(request, response, correlationId);
-                    completed = true;
+                    resultPersistenceCompleted = true;
                     return persistedResponse;
                 }
 
@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             null);
                         UnityCliLoopCompileResult persistedResponse =
                             PersistResponseIfNeeded(request, response, correlationId);
-                        completed = true;
+                        resultPersistenceCompleted = true;
                         return persistedResponse;
                     }
                 }
@@ -130,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         null);
                     UnityCliLoopCompileResult persistedResponse =
                         PersistResponseIfNeeded(request, response, correlationId);
-                    completed = true;
+                    resultPersistenceCompleted = true;
                     return persistedResponse;
                 }
 
@@ -168,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         result.Message ?? "Compilation status is indeterminate. Use get-logs tool to check results.");
                     UnityCliLoopCompileResult persistedResponse =
                         PersistResponseIfNeeded(request, response, correlationId);
-                    completed = true;
+                    resultPersistenceCompleted = true;
                     return persistedResponse;
                 }
 
@@ -184,13 +184,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     null);
                 UnityCliLoopCompileResult persistedSuccessResponse =
                     PersistResponseIfNeeded(request, successResponse, correlationId);
-                completed = true;
+                resultPersistenceCompleted = true;
                 return persistedSuccessResponse;
             }
             finally
             {
                 ClearPendingCompileRequestAfterCancellation(request, ct, correlationId);
-                ClearPendingCompileRequestAfterInterruptedCompile(request, completed, ct, correlationId);
+                ClearPendingCompileRequestAfterInterruptedCompile(
+                    request,
+                    resultPersistenceCompleted,
+                    ct,
+                    correlationId);
             }
         }
 
@@ -248,26 +252,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(request.RequestId) && IsRequestIdSafe(request.RequestId))
+            if (!string.IsNullOrWhiteSpace(request.RequestId) && CompileRequestIdRules.IsSafe(request.RequestId))
             {
                 return;
             }
 
             request.RequestId = CreateRequestId();
-        }
-
-        private static bool IsRequestIdSafe(string requestId)
-        {
-            foreach (char c in requestId)
-            {
-                bool isSafe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-                              || (c >= '0' && c <= '9') || c == '_' || c == '-';
-                if (!isSafe)
-                {
-                    return false;
-                }
-            }
-            return true;
         }
 
         private UnityCliLoopCompileResult PersistResponseIfNeeded(
@@ -363,7 +353,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void ClearPendingCompileRequestAfterInterruptedCompile(
             UnityCliLoopCompileRequest request,
-            bool completed,
+            bool resultPersistenceCompleted,
             CancellationToken ct,
             string correlationId)
         {
@@ -371,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!ShouldClearPendingCompileRequestAfterInterruptedCompile(
                     request,
-                    completed,
+                    resultPersistenceCompleted,
                     ct.IsCancellationRequested,
                     _sessionStateService.GetIsDomainReloadInProgress()))
             {
@@ -413,13 +403,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static bool ShouldClearPendingCompileRequestAfterInterruptedCompile(
             UnityCliLoopCompileRequest request,
-            bool completed,
+            bool resultPersistenceCompleted,
             bool isCancellationRequested,
             bool isDomainReloadInProgress)
         {
             Debug.Assert(request != null, "request must not be null");
 
-            if (completed)
+            if (resultPersistenceCompleted)
             {
                 return false;
             }

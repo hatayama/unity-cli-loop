@@ -25,6 +25,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void IsSafe_WhenRequestIdUsesAllowedCharacters_ReturnsTrue()
+        {
+            // Verifies compile request ID validation accepts the CLI-generated character set.
+            bool isSafe = CompileRequestIdRules.IsSafe("compile_safe-123");
+
+            Assert.That(isSafe, Is.True);
+        }
+
+        [Test]
+        public void IsSafe_WhenRequestIdContainsPathSeparator_ReturnsFalse()
+        {
+            // Verifies shared request ID validation rejects path separators.
+            bool isSafe = CompileRequestIdRules.IsSafe("../unsafe");
+
+            Assert.That(isSafe, Is.False);
+        }
+
+        [Test]
         public void SaveResult_WhenTargetIsMissing_PublishesCompleteJsonWithoutSidecars()
         {
             // Verifies CLI pollers read a complete JSON file after result persistence publishes it.
