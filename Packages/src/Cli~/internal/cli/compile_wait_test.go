@@ -272,42 +272,8 @@ func TestWaitForCompileCompletionWritesTimeoutVibeLog(t *testing.T) {
 
 	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
 	for _, expected := range []string{
-		`"operation":"cli_compile_status_wait_started"`,
 		`"operation":"cli_compile_status_wait_timed_out"`,
 		`"request_id":"compile_timeout_log_test"`,
-	} {
-		if !strings.Contains(logContent, expected) {
-			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
-		}
-	}
-}
-
-// Verifies that ready compile status results are logged when polling completes.
-func TestWaitForCompileCompletionWritesStatusResultVibeLog(t *testing.T) {
-	enableCliVibeLog(t)
-	connection := compileWaitTestConnection(t)
-	requestID := "compile_result_log_test"
-	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
-		return compileStatusResponse{Ready: true, HasResult: true, Result: json.RawMessage(`{"Success":true}`)}, nil
-	})
-
-	_, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
-		connection:   connection,
-		requestID:    requestID,
-		timeout:      time.Second,
-		pollInterval: 5 * time.Millisecond,
-	})
-	if err != nil {
-		t.Fatalf("waitForCompileCompletion failed: %v", err)
-	}
-	if !completed {
-		t.Fatal("compile wait did not complete")
-	}
-
-	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
-	for _, expected := range []string{
-		`"operation":"cli_compile_status_result_available"`,
-		`"request_id":"compile_result_log_test"`,
 	} {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)

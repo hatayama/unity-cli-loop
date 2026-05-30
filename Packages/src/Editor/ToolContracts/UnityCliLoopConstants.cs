@@ -96,7 +96,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const int COMPILE_START_TIMEOUT_MS = 5000;
         public const int COMPILE_START_POLL_INTERVAL_MS = 100;
         public const int COMPILE_FINISH_MISSED_CALLBACK_GRACE_MS = 500;
-        public const int COMPILE_WAIT_DIAGNOSTIC_LOG_INTERVAL_MS = 1000;
         
         public const int MAX_SETTINGS_SIZE_BYTES = 1024 * 16;
         public const string SECURITY_LOG_PREFIX = "[UnityCliLoop Security]";

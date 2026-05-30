@@ -21,7 +21,6 @@ const (
 	compileWaitTimeout        = toolReadinessTimeout
 	compileWaitPollInterval   = toolReadinessPoll
 	compileStatusProbeTimeout = toolReadinessProbeTimeout
-	compileWaitLogInterval    = 5 * time.Second
 	compileResponseTimeout    = 2 * time.Second
 )
 
@@ -106,9 +105,6 @@ func isSafeCompileRequestID(requestID string) bool {
 func waitForCompileCompletion(ctx context.Context, options compileCompletionOptions) (json.RawMessage, bool, error) {
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.timeout)
-	nextProgressLogAt := startedAt.Add(compileWaitLogInterval)
-
-	logCompileWaitStarted(options, startedAt)
 
 	for {
 		now := time.Now()
@@ -118,13 +114,7 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 
 		status, err := queryCompileStatus(ctx, options.connection, options.requestID)
 		if err == nil && status.Ready && status.HasResult && len(status.Result) > 0 {
-			logCompileStatusResultAvailable(options, startedAt, status)
 			return status.Result, true, nil
-		}
-
-		if !now.Before(nextProgressLogAt) {
-			logCompileWaitPolling(options, startedAt, deadline, status, err)
-			nextProgressLogAt = now.Add(compileWaitLogInterval)
 		}
 
 		select {
@@ -190,96 +180,6 @@ func isFinalResponseTimeoutError(err error) bool {
 	return strings.Contains(err.Error(), "i/o timeout")
 }
 
-func logCompileWaitRequestPrepared(projectRoot string, requestID string) {
-	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
-		Level:     "INFO",
-		Operation: "cli_compile_wait_request_prepared",
-		Message:   "Prepared compile request ID for status polling.",
-		Context: map[string]any{
-			"command":    compileCommandName,
-			"request_id": requestID,
-		},
-		CorrelationID: requestID,
-	})
-}
-
-func logCompileSendCompleted(
-	connection unityipc.Connection,
-	requestID string,
-	outcome unityipc.UnitySendOutcome,
-	sendErr error,
-	elapsed time.Duration,
-) {
-	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
-		Level:     "INFO",
-		Operation: "cli_compile_send_completed",
-		Message:   "Compile RPC returned to the CLI before status polling.",
-		Context: map[string]any{
-			"command":            compileCommandName,
-			"request_id":         requestID,
-			"endpoint":           connection.Endpoint.Address,
-			"elapsed_ms":         elapsed.Milliseconds(),
-			"request_dispatched": outcome.RequestDispatched,
-			"request_accepted":   outcome.RequestAccepted,
-			"error":              errorMessage(sendErr),
-			"will_poll_status":   shouldWaitForCompileStatus(sendErr, outcome),
-		},
-		CorrelationID: requestID,
-	})
-}
-
-func logCompileWaitStarted(options compileCompletionOptions, startedAt time.Time) {
-	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
-		Level:         "INFO",
-		Operation:     "cli_compile_status_wait_started",
-		Message:       "Started polling Unity compile status.",
-		Context:       compileWaitLogContext(options, startedAt, nil),
-		CorrelationID: options.requestID,
-	})
-}
-
-func logCompileWaitPolling(
-	options compileCompletionOptions,
-	startedAt time.Time,
-	deadline time.Time,
-	status compileStatusResponse,
-	statusErr error,
-) {
-	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
-		Level:     "INFO",
-		Operation: "cli_compile_status_wait_polling",
-		Message:   "Still polling Unity compile status.",
-		Context: compileWaitLogContext(options, startedAt, map[string]any{
-			"ready":                        status.Ready,
-			"has_result":                   status.HasResult,
-			"is_compiling":                 status.IsCompiling,
-			"is_updating":                  status.IsUpdating,
-			"is_domain_reload_in_progress": status.IsDomainReloadInProgress,
-			"status_error":                 errorMessage(statusErr),
-			"remaining_timeout_ms":         remainingMilliseconds(deadline),
-		}),
-		CorrelationID: options.requestID,
-	})
-}
-
-func logCompileStatusResultAvailable(
-	options compileCompletionOptions,
-	startedAt time.Time,
-	status compileStatusResponse,
-) {
-	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
-		Level:     "INFO",
-		Operation: "cli_compile_status_result_available",
-		Message:   "Unity compile status returned a ready result.",
-		Context: compileWaitLogContext(options, startedAt, map[string]any{
-			"ready":        status.Ready,
-			"has_result":   status.HasResult,
-			"result_bytes": len(status.Result),
-		}),
-		CorrelationID: options.requestID,
-	})
-}
-
 func logCompileWaitTimedOut(options compileCompletionOptions, startedAt time.Time) {
 	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
 		Level:         "WARNING",
@@ -320,12 +220,4 @@ func compileWaitLogContext(
 		context[key] = value
 	}
 	return context
-}
-
-func remainingMilliseconds(deadline time.Time) int64 {
-	remaining := time.Until(deadline).Milliseconds()
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
 }

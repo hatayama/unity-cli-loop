@@ -119,15 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             try
             {
                 // Execute asset refresh.
-                VibeLogger.LogInfo(
-                    "compile_asset_refresh_start",
-                    "Calling AssetDatabase.Refresh before compile.",
-                    new { force_recompile = forceRecompile });
                 AssetDatabase.Refresh();
-                VibeLogger.LogInfo(
-                    "compile_asset_refresh_complete",
-                    "AssetDatabase.Refresh returned before compile.",
-                    new { force_recompile = forceRecompile });
 
                 AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
                 AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
@@ -151,18 +143,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CompilationPipeline.compilationFinished += HandleCompileFinished;
                 CompilationPipeline.assemblyCompilationFinished += HandleAssemblyFinished;
                 eventsRegistered = true;
-                VibeLogger.LogInfo(
-                    "compile_event_handlers_registered",
-                    "Registered Unity compilation callbacks.",
-                    new { force_recompile = forceRecompile });
 
                 string startMessage = forceRecompile ? "Forced recompile started after asset refresh..." : "Compilation started after asset refresh...";
                 OnCompileStarted?.Invoke(startMessage);
 
-                VibeLogger.LogInfo(
-                    "compile_request_script_compilation",
-                    "Requesting Unity script compilation.",
-                    new { force_recompile = forceRecompile });
                 if (forceRecompile)
                 {
                     CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache);
@@ -171,19 +155,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     CompilationPipeline.RequestScriptCompilation();
                 }
-                VibeLogger.LogInfo(
-                    "compile_request_script_compilation_returned",
-                    "Unity script compilation request returned.",
-                    new { force_recompile = forceRecompile });
 
                 StartCompileLifecycleWatchdog(compileTask, ct);
-                VibeLogger.LogInfo(
-                    "compile_controller_waiting_for_finish",
-                    "Waiting for Unity compilationFinished callback.",
-                    BuildCompileControllerStateContext(new Dictionary<string, object>
-                    {
-                        ["requested_force_recompile"] = forceRecompile
-                    }));
                 compileTaskTransferred = true;
                 return await compileTask.Task;
             }
@@ -224,10 +197,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => EditorApplication.isCompiling,
                 IsCompileRequestCompleted,
                 WaitForCompileWatchdogPollAsync,
-                HandleCompileStartedObserved,
+                _ => { },
                 HandleCompileStartTimeout,
                 HandleCompileStoppedWithoutFinishEvent,
-                HandleCompileStillWaiting,
                 AbortCompile);
             return watchdog.WatchAsync(ct);
         }
@@ -311,32 +283,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return context;
-        }
-
-        private void HandleCompileStartedObserved(int waitedMs)
-        {
-            VibeLogger.LogInfo(
-                "compile_editor_compiling_observed",
-                "EditorApplication.isCompiling became true.",
-                BuildCompileControllerStateContext(new Dictionary<string, object>
-                {
-                    ["waited_ms"] = waitedMs
-                }));
-        }
-
-        private void HandleCompileStillWaiting(CompileLifecycleWatchdogSnapshot snapshot)
-        {
-            VibeLogger.LogInfo(
-                "compile_controller_still_waiting",
-                "CompileController is still waiting for Unity compile lifecycle progress.",
-                BuildCompileControllerStateContext(new Dictionary<string, object>
-                {
-                    ["observed_start"] = snapshot.ObservedStart,
-                    ["snapshot_editor_compiling"] = snapshot.EditorCompiling,
-                    ["waited_for_start_ms"] = snapshot.WaitedForStartMs,
-                    ["waited_after_start_ms"] = snapshot.WaitedAfterStartMs,
-                    ["stopped_after_start_ms"] = snapshot.StoppedAfterStartMs
-                }));
         }
 
         private void HandleCompileStartTimeout(int waitedMs)
@@ -485,10 +431,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ["is_indeterminate"] = result.IsIndeterminate
                 });
             RecordCompileResultIfNeeded(result, completionContext);
-            VibeLogger.LogInfo(
-                "compile_controller_completion_start",
-                "Completing the active compile request in CompileController.",
-                completionContext);
 
             // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
             try
@@ -500,15 +442,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 _isCompiling = false;
                 _isForceCompile = false;
-                VibeLogger.LogInfo(
-                    "compile_controller_completion_before_event",
-                    "Notifying CompileController completion subscribers.",
-                    completionContext);
                 OnCompileCompleted?.Invoke(result);
-                VibeLogger.LogInfo(
-                    "compile_controller_completion_after_event",
-                    "CompileController completion subscribers returned.",
-                    completionContext);
             }
             finally
             {
@@ -521,16 +455,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 task?.TrySetResult(result);
-                VibeLogger.LogInfo(
-                    "compile_controller_task_completed",
-                    "CompileController task completed with a compile result.",
-                    BuildCompileControllerStateContext(new Dictionary<string, object>
-                    {
-                        ["success"] = result.Success,
-                        ["error_count"] = result.ErrorCount,
-                        ["warning_count"] = result.WarningCount,
-                        ["is_indeterminate"] = result.IsIndeterminate
-                    }));
             }
         }
 
@@ -584,18 +508,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private void HandleCompileFinished(object context)
         {
             CompileResult result = CreateCompileResult();
-            VibeLogger.LogInfo(
-                "compile_finished_event",
-                "Unity compilationFinished callback received.",
-                new
-                {
-                    force_recompile = _isForceCompile,
-                    success = result.Success,
-                    error_count = result.ErrorCount,
-                    warning_count = result.WarningCount,
-                    message_count = _compileMessages.Count
-                });
-
             CompleteCompileRequest(result, unregisterEvents: true);
         }
 
@@ -613,15 +525,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _compileMessages.Add(message);
             }
 
-            VibeLogger.LogInfo(
-                "compile_assembly_finished",
-                "Unity assemblyCompilationFinished callback received.",
-                new
-                {
-                    assembly_name = assemblyName,
-                    message_count = messages.Length,
-                    total_message_count = _compileMessages.Count
-                });
             OnAssemblyCompiled?.Invoke(assemblyName, messages);
         }
 

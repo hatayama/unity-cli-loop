@@ -40,16 +40,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(request));
             }
 
-            string originalRequestId = request.RequestId;
             PrepareResultStorage(request);
             string correlationId = ResolveCorrelationId(request);
-            LogCompileResultStoragePrepared(request, originalRequestId, correlationId);
 
             DateTime utcNow = DateTime.UtcNow;
             _sessionStateService.ClearExpiredCompileResult(utcNow);
             _sessionStateService.ClearExpiredPendingCompileRequest(utcNow);
-            MarkPendingCompileRequestIfNeeded(request, utcNow, correlationId);
-            LogCompileRequestReceived(request, correlationId);
+            MarkPendingCompileRequestIfNeeded(request, utcNow);
 
             // 1. Play Mode preparation check
             PlayModeCompilationPreparationService preparationService = new();
@@ -132,25 +129,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // 3. Compilation execution
             ct.ThrowIfCancellationRequested();
-            VibeLogger.LogInfo(
-                "compile_execution_start",
-                "Starting Unity compilation execution.",
-                BuildCompileLogContext(request),
-                correlationId);
             CompilationExecutionService executionService = new();
             CompileResult result = await executionService.ExecuteCompilationAsync(request, ct);
-            VibeLogger.LogInfo(
-                "compile_execution_completed",
-                "Unity compilation execution completed.",
-                new
-                {
-                    request_id = request.RequestId,
-                    success = result.Success,
-                    error_count = result.ErrorCount,
-                    warning_count = result.WarningCount,
-                    is_indeterminate = result.IsIndeterminate
-                },
-                correlationId);
 
             // 4. Result formatting
             UnityCliLoopCompileResult successResponse =
@@ -243,46 +223,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return response;
             }
 
-            VibeLogger.LogInfo(
-                "compile_result_session_state_store_start",
-                "Storing compile result for CLI status polling.",
-                new
-                {
-                    request_id = request.RequestId,
-                    force_recompile = request.ForceRecompile,
-                    success = response.Success,
-                    error_count = response.ErrorCount,
-                    warning_count = response.WarningCount
-                },
-                correlationId);
             CompileSessionResultService.StoreCompileResult(
                 _sessionStateService,
                 request.RequestId,
                 request.ForceRecompile,
                 response,
                 correlationId);
-            UnityCliLoopStoredCompileResult storedResult =
-                _sessionStateService.GetCompileResult(request.RequestId);
-            VibeLogger.LogInfo(
-                "compile_result_session_state_stored",
-                "Compile result was stored for CLI status polling.",
-                new
-                {
-                    request_id = request.RequestId,
-                    force_recompile = request.ForceRecompile,
-                    success = response.Success,
-                    error_count = response.ErrorCount,
-                    warning_count = response.WarningCount,
-                    result_exists_after_store = storedResult.HasResult
-                },
-                correlationId);
             return response;
         }
 
         private void MarkPendingCompileRequestIfNeeded(
             UnityCliLoopCompileRequest request,
-            DateTime markedAtUtc,
-            string correlationId)
+            DateTime markedAtUtc)
         {
             Debug.Assert(request != null, "request must not be null");
             Debug.Assert(markedAtUtc.Kind == DateTimeKind.Utc, "markedAtUtc must be UTC");
@@ -297,16 +249,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 request.RequestId,
                 request.ForceRecompile,
                 markedAtUtc);
-            VibeLogger.LogInfo(
-                "compile_pending_request_marked",
-                "Stored pending compile request before Unity can start Domain Reload.",
-                new
-                {
-                    request_id = request.RequestId,
-                    force_recompile = request.ForceRecompile,
-                    wait_for_domain_reload = request.WaitForDomainReload
-                },
-                correlationId);
         }
 
         private static string ResolveCorrelationId(UnityCliLoopCompileRequest request)
@@ -331,36 +273,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 force_recompile = request.ForceRecompile,
                 wait_for_domain_reload = request.WaitForDomainReload
             };
-        }
-
-        private static void LogCompileRequestReceived(UnityCliLoopCompileRequest request, string correlationId)
-        {
-            VibeLogger.LogInfo(
-                "compile_request_received",
-                "Compile request received.",
-                BuildCompileLogContext(request),
-                correlationId,
-                humanNote: "Compile request entered the Unity-side use case.",
-                aiTodo: "Compare this point with compile_execution_start, compile_controller_waiting_for_finish, domain_reload_start, and domain_reload_complete.");
-        }
-
-        private static void LogCompileResultStoragePrepared(
-            UnityCliLoopCompileRequest request,
-            string originalRequestId,
-            string correlationId)
-        {
-            VibeLogger.LogInfo(
-                "compile_result_storage_prepared",
-                "Prepared compile result storage before execution.",
-                new
-                {
-                    request_id = request.RequestId,
-                    original_request_id = originalRequestId,
-                    request_id_changed = request.RequestId != originalRequestId,
-                    force_recompile = request.ForceRecompile,
-                    wait_for_domain_reload = request.WaitForDomainReload
-                },
-                correlationId);
         }
 
         private static string CreateRequestId()

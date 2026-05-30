@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -31,7 +30,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _ => { },
                 _ => startTimeoutCount++,
                 stoppedMs => missedCallbackStoppedMs = stoppedMs,
-                _ => { },
                 _ => cancellationCount++);
 
             await watchdog.WatchAsync(CancellationToken.None);
@@ -61,7 +59,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _ => { },
                 _ => startTimeoutCount++,
                 _ => missedCallbackCount++,
-                _ => { },
                 _ => { });
 
             await watchdog.WatchAsync(CancellationToken.None);
@@ -84,39 +81,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _ => { },
                 waitedMs => startTimeoutMs = waitedMs,
                 _ => missedCallbackCount++,
-                _ => { },
                 _ => { });
 
             await watchdog.WatchAsync(CancellationToken.None);
 
             Assert.That(startTimeoutMs, Is.EqualTo(UnityCliLoopConstants.COMPILE_START_TIMEOUT_MS));
             Assert.That(missedCallbackCount, Is.EqualTo(0));
-        }
-
-        [Test]
-        public async Task WatchAsync_WhenCompileKeepsWaiting_ReportsDiagnosticSnapshots()
-        {
-            // Verifies long compile waits emit snapshots before timeout recovery.
-            ConstantCompilationState compilationState = new ConstantCompilationState(false);
-            List<CompileLifecycleWatchdogSnapshot> snapshots = new();
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => false,
-                () => Task.CompletedTask,
-                _ => { },
-                _ => { },
-                _ => { },
-                snapshot => snapshots.Add(snapshot),
-                _ => { });
-
-            await watchdog.WatchAsync(CancellationToken.None);
-
-            Assert.That(snapshots, Is.Not.Empty);
-            Assert.That(
-                snapshots[0].WaitedForStartMs,
-                Is.EqualTo(UnityCliLoopConstants.COMPILE_WAIT_DIAGNOSTIC_LOG_INTERVAL_MS));
-            Assert.That(snapshots[0].ObservedStart, Is.False);
-            Assert.That(snapshots[0].EditorCompiling, Is.False);
         }
 
         [Test]
@@ -129,7 +99,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compilationState.IsCompiling,
                 () => false,
                 () => Task.FromException(expectedException),
-                _ => { },
                 _ => { },
                 _ => { },
                 _ => { },

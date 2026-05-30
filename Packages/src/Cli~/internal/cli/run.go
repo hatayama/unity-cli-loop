@@ -225,7 +225,6 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 		})
 		return 1
 	}
-	logCompileWaitRequestPrepared(connection.ProjectRoot, requestID)
 
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, compileCommandName)
@@ -239,7 +238,6 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 		},
 		compileResponseTimeout,
 	)
-	logCompileSendCompleted(connection, requestID, outcome, err, time.Since(startedAt))
 	if err != nil && shouldWaitForCompileStatus(err, outcome) {
 		spinner.Update("Connection changed during compile. Waiting for Unity status...")
 	}

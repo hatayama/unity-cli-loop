@@ -66,7 +66,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             VibeLogger.LogInfo(
                 "domain_reload_start",
                 "Domain reload starting",
-                BuildDomainReloadStartContext(serverIsRunning),
+                new
+                {
+                    server_running = serverIsRunning
+                },
                 correlationId
             );
         }
@@ -96,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 serverWillRecover
                     ? "Domain reload completed - starting server recovery process"
                     : "Domain reload completed - server was manually stopped before recovery",
-                BuildDomainReloadCompleteContext(serverWillRecover),
+                new { transport = "project_ipc" },
                 correlationId
             );
         }
@@ -167,41 +170,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             _legacySessionStateReader.Clear();
-        }
-
-        private object BuildDomainReloadStartContext(bool serverIsRunning)
-        {
-            UnityCliLoopStoredCompileResult compileResult =
-                _sessionStateService.GetStoredCompileResult();
-            return new
-            {
-                transport = "project_ipc",
-                server_running = serverIsRunning,
-                session_server_running = _sessionStateService.GetIsServerRunning(),
-                session_domain_reload_in_progress = _sessionStateService.GetIsDomainReloadInProgress(),
-                stored_compile_result = compileResult.HasResult,
-                stored_compile_request_id = compileResult.RequestId,
-                stored_compile_force_recompile = compileResult.ForceRecompile,
-                stored_compile_completed_at_utc_ticks = compileResult.CompletedAtUtcTicks
-            };
-        }
-
-        private object BuildDomainReloadCompleteContext(bool serverWillRecover)
-        {
-            UnityCliLoopStoredCompileResult compileResult =
-                _sessionStateService.GetStoredCompileResult();
-            return new
-            {
-                transport = "project_ipc",
-                server_will_recover = serverWillRecover,
-                session_server_running = _sessionStateService.GetIsServerRunning(),
-                session_domain_reload_in_progress = _sessionStateService.GetIsDomainReloadInProgress(),
-                session_reconnecting = _sessionStateService.GetIsReconnecting(),
-                stored_compile_result = compileResult.HasResult,
-                stored_compile_request_id = compileResult.RequestId,
-                stored_compile_force_recompile = compileResult.ForceRecompile,
-                stored_compile_completed_at_utc_ticks = compileResult.CompletedAtUtcTicks
-            };
         }
     }
 }
