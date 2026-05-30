@@ -21,6 +21,11 @@ If the minimum CLI version stays unchanged, make sure that decision is intention
 Do not directly edit skill files under the project-root `.agents/` or `.claude/` directories.
 These files are generated copies. Update the source skill definitions instead, then regenerate the copies through the normal workflow.
 
+## CI Automation Language
+
+Write GitHub Actions and release automation logic in Go when it needs JSON parsing, workflow polling, state transitions, or non-trivial branching.
+Shell scripts are acceptable only as thin wrappers or simple command sequences.
+
 ## Dead Code Scanner
 
 Use the C# dead-code scanner before deleting apparently unreferenced C# code or before adding comments to explain why an apparently unreferenced type must stay.

@@ -232,6 +232,7 @@ func minimumVersionWarningIsGoCliFile(changedFile string) bool {
 	if changedFile == goCliPackageRoot+"CHANGELOG.md" ||
 		strings.HasPrefix(changedFile, goCliPackageRoot+"dist/") ||
 		strings.HasPrefix(changedFile, goCliPackageRoot+"cmd/comment-cli-minimum-version-warning/") ||
+		strings.HasPrefix(changedFile, goCliPackageRoot+"cmd/dispatch-release-please-pr-checks/") ||
 		strings.HasPrefix(changedFile, goCliPackageRoot+"internal/automation/") ||
 		strings.HasSuffix(changedFile, "_test.go") {
 		return false
