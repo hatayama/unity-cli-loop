@@ -237,6 +237,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ProcessRequest_WhenCompileOmitsReloadWait_KeepsAcceptedRequestAliveAfterDisconnect()
+        {
+            // Verifies missing compile reload-wait params preserve the default wait contract.
+            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            UnityCliLoopToolRegistrar.RegisterService(service);
+            service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
+
+            bool cancelOnClientDisconnect = true;
+            try
+            {
+                string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_COMPILE, 1),
+                    CancellationToken.None,
+                    (_, shouldCancelOnClientDisconnect) =>
+                    {
+                        cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
+                        return Task.CompletedTask;
+                    });
+                JObject parsed = JObject.Parse(response);
+
+                Assert.That(parsed["error"], Is.Null);
+                Assert.That(parsed["result"], Is.Not.Null);
+                Assert.That(cancelOnClientDisconnect, Is.False);
+            }
+            finally
+            {
+                UnityCliLoopToolRegistrar.RegisterService(previousService);
+            }
+        }
+
+        [Test]
         public async Task ProcessRequest_WhenCompileDoesNotWaitForDomainReload_CancelsOnClientDisconnect()
         {
             // Verifies fire-and-forget compile requests still cancel when the CLI connection goes away.

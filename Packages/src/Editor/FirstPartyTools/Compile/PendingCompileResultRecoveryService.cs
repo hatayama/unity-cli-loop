@@ -117,8 +117,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new UnityCliLoopCompileResult
             {
                 Success = null,
-                ErrorCount = 0,
-                WarningCount = 0,
+                ErrorCount = null,
+                WarningCount = null,
                 Errors = null,
                 Warnings = null,
                 Message = message,

@@ -91,6 +91,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetPendingCompileRequest_WhenExpirationTicksAreMalformed_ClearsSessionValue()
+        {
+            // Verifies malformed compile recovery data self-heals instead of breaking startup recovery.
+            UnityCliLoopEditorSessionStateRepository repository = new UnityCliLoopEditorSessionStateRepository();
+            repository.SetPendingCompileRequestId("compile_test_request");
+            repository.SetPendingCompileForceRecompile(true);
+            repository.SetPendingCompileExpiresAtUtcTicks("not_ticks");
+            UnityCliLoopEditorSessionStateService recreatedService =
+                new UnityCliLoopEditorSessionStateService(repository);
+
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                recreatedService.GetPendingCompileRequest();
+
+            Assert.That(pendingCompileRequest.HasRequest, Is.False);
+            Assert.That(recreatedService.GetPendingCompileRequest().HasRequest, Is.False);
+        }
+
+        [Test]
         public void ClearExpiredPendingCompileRequest_WhenRequestIsExpired_ClearsSessionValue()
         {
             // Verifies stale compile recovery data cannot survive indefinitely across commands.

@@ -184,13 +184,46 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             string expiresAtUtcTicksText = _sessionStatePort.GetPendingCompileExpiresAtUtcTicks();
-            long expiresAtUtcTicks = string.IsNullOrWhiteSpace(expiresAtUtcTicksText)
-                ? 0
-                : Convert.ToInt64(expiresAtUtcTicksText);
+            (bool isValid, long expiresAtUtcTicks) =
+                ParsePendingCompileExpiresAtUtcTicks(expiresAtUtcTicksText);
+            if (!isValid)
+            {
+                ClearPendingCompileRequest();
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
             return UnityCliLoopPendingCompileRequest.Create(
                 requestId,
                 _sessionStatePort.GetPendingCompileForceRecompile(),
                 expiresAtUtcTicks);
+        }
+
+        private static (bool IsValid, long Value) ParsePendingCompileExpiresAtUtcTicks(string expiresAtUtcTicksText)
+        {
+            if (string.IsNullOrWhiteSpace(expiresAtUtcTicksText))
+            {
+                return (true, 0);
+            }
+
+            string trimmedText = expiresAtUtcTicksText.Trim();
+            long value = 0;
+            foreach (char character in trimmedText)
+            {
+                if (character < '0' || character > '9')
+                {
+                    return (false, 0);
+                }
+
+                int digit = character - '0';
+                if (value > (long.MaxValue - digit) / 10)
+                {
+                    return (false, 0);
+                }
+
+                value = value * 10 + digit;
+            }
+
+            return (true, value);
         }
 
         public void MarkPendingCompileRequest(string requestId, bool forceRecompile)

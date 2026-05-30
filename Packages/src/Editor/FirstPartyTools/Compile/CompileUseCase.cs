@@ -44,12 +44,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             PrepareResultStorage(request);
             string correlationId = ResolveCorrelationId(request);
-            _sessionStateService.ClearExpiredPendingCompileRequest(DateTime.UtcNow);
-            MarkPendingCompileRequestIfNeeded(request);
-            LogCompileRequestReceived(request, correlationId);
+            bool completed = false;
 
             try
             {
+                _sessionStateService.ClearExpiredPendingCompileRequest(DateTime.UtcNow);
+                MarkPendingCompileRequestIfNeeded(request);
+                LogCompileRequestReceived(request, correlationId);
+
                 // 1. Play Mode preparation check
                 PlayModeCompilationPreparationService preparationService = new();
                 PreparationResult preparation = preparationService.DeterminePreparationAction();
@@ -68,7 +70,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         new[] { CreateIssue(preparation.ErrorMessage, "", 0) },
                         Array.Empty<UnityCliLoopCompileIssue>(),
                         null);
-                    return PersistResponseIfNeeded(request, response, correlationId);
+                    UnityCliLoopCompileResult persistedResponse =
+                        PersistResponseIfNeeded(request, response, correlationId);
+                    completed = true;
+                    return persistedResponse;
                 }
 
                 if (preparation.NeedsPlayModeStop)
@@ -98,7 +103,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             new[] { CreateIssue("Play Mode did not exit within 5 seconds; compilation aborted.", "", 0) },
                             Array.Empty<UnityCliLoopCompileIssue>(),
                             null);
-                        return PersistResponseIfNeeded(request, response, correlationId);
+                        UnityCliLoopCompileResult persistedResponse =
+                            PersistResponseIfNeeded(request, response, correlationId);
+                        completed = true;
+                        return persistedResponse;
                     }
                 }
 
@@ -120,7 +128,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         new[] { CreateIssue(validation.ErrorMessage, "", 0) },
                         Array.Empty<UnityCliLoopCompileIssue>(),
                         null);
-                    return PersistResponseIfNeeded(request, response, correlationId);
+                    UnityCliLoopCompileResult persistedResponse =
+                        PersistResponseIfNeeded(request, response, correlationId);
+                    completed = true;
+                    return persistedResponse;
                 }
 
                 // 3. Compilation execution
@@ -155,7 +166,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         null,
                         null,
                         result.Message ?? "Compilation status is indeterminate. Use get-logs tool to check results.");
-                    return PersistResponseIfNeeded(request, response, correlationId);
+                    UnityCliLoopCompileResult persistedResponse =
+                        PersistResponseIfNeeded(request, response, correlationId);
+                    completed = true;
+                    return persistedResponse;
                 }
 
                 UnityCliLoopCompileIssue[] errors = result.error?.Select(e => CreateIssue(e.message, e.file, e.line)).ToArray();
@@ -168,11 +182,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errors,
                     warnings,
                     null);
-                return PersistResponseIfNeeded(request, successResponse, correlationId);
+                UnityCliLoopCompileResult persistedSuccessResponse =
+                    PersistResponseIfNeeded(request, successResponse, correlationId);
+                completed = true;
+                return persistedSuccessResponse;
             }
             finally
             {
                 ClearPendingCompileRequestAfterCancellation(request, ct, correlationId);
+                ClearPendingCompileRequestAfterInterruptedCompile(request, completed, ct, correlationId);
             }
         }
 
@@ -343,6 +361,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _sessionStateService.ClearPendingCompileRequestIfMatches(request.RequestId);
         }
 
+        private void ClearPendingCompileRequestAfterInterruptedCompile(
+            UnityCliLoopCompileRequest request,
+            bool completed,
+            CancellationToken ct,
+            string correlationId)
+        {
+            Debug.Assert(request != null, "request must not be null");
+
+            if (!ShouldClearPendingCompileRequestAfterInterruptedCompile(
+                    request,
+                    completed,
+                    ct.IsCancellationRequested,
+                    _sessionStateService.GetIsDomainReloadInProgress()))
+            {
+                return;
+            }
+
+            VibeLogger.LogWarning(
+                "compile_pending_request_cleared_after_interruption",
+                "Cleared pending compile recovery because compilation stopped before Domain Reload started.",
+                BuildCompileLogContext(request),
+                correlationId);
+            _sessionStateService.ClearPendingCompileRequestIfMatches(request.RequestId);
+        }
+
         internal static bool ShouldClearPendingCompileRequestAfterCancellation(
             UnityCliLoopCompileRequest request,
             bool isCancellationRequested,
@@ -351,6 +394,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(request != null, "request must not be null");
 
             if (!isCancellationRequested)
+            {
+                return false;
+            }
+
+            if (isDomainReloadInProgress)
+            {
+                return false;
+            }
+
+            if (!request.WaitForDomainReload)
+            {
+                return false;
+            }
+
+            return !string.IsNullOrWhiteSpace(request.RequestId);
+        }
+
+        internal static bool ShouldClearPendingCompileRequestAfterInterruptedCompile(
+            UnityCliLoopCompileRequest request,
+            bool completed,
+            bool isCancellationRequested,
+            bool isDomainReloadInProgress)
+        {
+            Debug.Assert(request != null, "request must not be null");
+
+            if (completed)
+            {
+                return false;
+            }
+
+            if (isCancellationRequested)
             {
                 return false;
             }

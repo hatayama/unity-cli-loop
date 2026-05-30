@@ -56,6 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(savedRequestId, Is.EqualTo("compile_test_request"));
             Assert.That(savedResult, Is.Not.Null);
             Assert.That(savedResult.Success, Is.Null);
+            Assert.That(savedResult.ErrorCount, Is.Null);
+            Assert.That(savedResult.WarningCount, Is.Null);
             Assert.That(savedResult.ProjectRoot, Is.EqualTo("<PROJECT_ROOT>"));
             Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
         }
@@ -166,6 +168,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(status, Is.EqualTo(PendingCompileRecoveryStatus.Completed));
             Assert.That(savedResult, Is.Not.Null);
             Assert.That(savedResult.Message, Does.Contain("Force compilation"));
+            Assert.That(savedResult.ErrorCount, Is.Null);
+            Assert.That(savedResult.WarningCount, Is.Null);
             Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
         }
 
@@ -207,6 +211,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 request,
                 isCancellationRequested: true,
                 isDomainReloadInProgress: false);
+
+            Assert.That(shouldClear, Is.False);
+        }
+
+        [Test]
+        public void ShouldClearPendingCompileRequestAfterInterruptedCompile_WhenCompileFailsBeforeReload_ReturnsTrue()
+        {
+            // Verifies non-cancellation failures clear pending recovery before it can become stale.
+            UnityCliLoopCompileRequest request = CreateCompileRequest(waitForDomainReload: true);
+
+            bool shouldClear = CompileUseCase.ShouldClearPendingCompileRequestAfterInterruptedCompile(
+                request,
+                completed: false,
+                isCancellationRequested: false,
+                isDomainReloadInProgress: false);
+
+            Assert.That(shouldClear, Is.True);
+        }
+
+        [Test]
+        public void ShouldClearPendingCompileRequestAfterInterruptedCompile_WhenCompileCompleted_ReturnsFalse()
+        {
+            // Verifies successful result persistence owns pending recovery cleanup.
+            UnityCliLoopCompileRequest request = CreateCompileRequest(waitForDomainReload: true);
+
+            bool shouldClear = CompileUseCase.ShouldClearPendingCompileRequestAfterInterruptedCompile(
+                request,
+                completed: true,
+                isCancellationRequested: false,
+                isDomainReloadInProgress: false);
+
+            Assert.That(shouldClear, Is.False);
+        }
+
+        [Test]
+        public void ShouldClearPendingCompileRequestAfterInterruptedCompile_WhenDomainReloadStarted_ReturnsFalse()
+        {
+            // Verifies Domain Reload recovery keeps ownership once Unity has begun reloading scripts.
+            UnityCliLoopCompileRequest request = CreateCompileRequest(waitForDomainReload: true);
+
+            bool shouldClear = CompileUseCase.ShouldClearPendingCompileRequestAfterInterruptedCompile(
+                request,
+                completed: false,
+                isCancellationRequested: false,
+                isDomainReloadInProgress: true);
 
             Assert.That(shouldClear, Is.False);
         }
