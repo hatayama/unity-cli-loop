@@ -130,6 +130,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(pendingRequest.RequestId, Is.EqualTo("compile_test_request"));
             Assert.That(pendingRequest.ForceRecompile, Is.True);
             Assert.That(pendingRequest.ExpiresAtUtcTicks, Is.GreaterThan(markedAtUtc.Ticks));
+            Assert.That(pendingRequest.ReloadObserved, Is.False);
+        }
+
+        [Test]
+        public void MarkDomainReloadStarted_WhenPendingCompileRequestExists_MarksReloadObserved()
+        {
+            // Verifies pending compile recovery only becomes eligible after Unity starts Domain Reload.
+            _sessionStateService.MarkPendingCompileRequest(
+                "compile_test_request",
+                forceRecompile: false,
+                markedAtUtc: DateTime.UtcNow);
+
+            _sessionStateService.MarkDomainReloadStarted(serverIsRunning: true);
+
+            UnityCliLoopPendingCompileRequest pendingRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            Assert.That(pendingRequest.HasRequest, Is.True);
+            Assert.That(pendingRequest.ReloadObserved, Is.True);
         }
 
         [Test]

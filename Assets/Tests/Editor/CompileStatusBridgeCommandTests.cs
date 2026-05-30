@@ -97,13 +97,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildResponse_WhenUnityIsIdleAndPendingRequestHasNoResult_ReturnsRecoveredResult()
+        public void BuildResponse_WhenUnityIsIdleAndPendingRequestHasNoReloadSignal_WaitsForResult()
         {
-            // Verifies reload recovery returns an indeterminate result instead of leaving the CLI polling forever.
+            // Verifies idle polling cannot complete while the original compile operation is still running.
             _sessionStateService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: false,
                 markedAtUtc: System.DateTime.UtcNow);
+
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: false,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+
+            Assert.That(response.Ready, Is.True);
+            Assert.That(response.HasResult, Is.False);
+            Assert.That(response.Result, Is.Null);
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.True);
+        }
+
+        [Test]
+        public void BuildResponse_WhenUnityIsIdleAndPendingRequestObservedReload_ReturnsRecoveredResult()
+        {
+            // Verifies reload recovery returns an indeterminate result after Unity actually started Domain Reload.
+            _sessionStateService.MarkPendingCompileRequest(
+                "compile_test_request",
+                forceRecompile: false,
+                markedAtUtc: System.DateTime.UtcNow);
+            _sessionStateService.MarkPendingCompileRequestReloadObserved();
 
             GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
                 "compile_test_request",
@@ -151,6 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "compile_test_request",
                 forceRecompile: true,
                 markedAtUtc: System.DateTime.UtcNow);
+            _sessionStateService.MarkPendingCompileRequestReloadObserved();
 
             GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
                 "compile_test_request",

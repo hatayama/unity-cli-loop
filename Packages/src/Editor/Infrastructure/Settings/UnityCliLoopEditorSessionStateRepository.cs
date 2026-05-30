@@ -27,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string PendingCompileForceRecompileKey = KeyPrefix + "pendingCompileForceRecompile";
         private const string PendingCompileExpiresAtUtcTicksKey =
             KeyPrefix + "pendingCompileExpiresAtUtcTicks";
+        private const string PendingCompileReloadObservedKey = KeyPrefix + "pendingCompileReloadObserved";
 
         public bool GetIsServerRunning()
         {
@@ -176,6 +177,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks)
         {
             SetString(PendingCompileExpiresAtUtcTicksKey, pendingCompileExpiresAtUtcTicks);
+        }
+
+        public bool GetPendingCompileReloadObserved()
+        {
+            return GetBool(PendingCompileReloadObservedKey);
+        }
+
+        public void SetPendingCompileReloadObserved(bool pendingCompileReloadObserved)
+        {
+            SetBool(PendingCompileReloadObservedKey, pendingCompileReloadObserved);
         }
 
         private static bool GetBool(string key)

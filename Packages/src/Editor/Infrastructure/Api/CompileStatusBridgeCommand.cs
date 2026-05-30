@@ -101,6 +101,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return UnityCliLoopStoredCompileResult.None();
             }
 
+            if (!pendingRequest.ReloadObserved)
+            {
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
             JObject recoveredResult = CreateRecoveredCompileResult(pendingRequest);
             sessionStateService.StoreCompileResult(
                 requestId,

@@ -84,7 +84,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 service.StorePendingCompileRequest(
                     _pendingCompileRequest.RequestId,
                     _pendingCompileRequest.ForceRecompile,
-                    _pendingCompileRequest.ExpiresAtUtcTicks);
+                    _pendingCompileRequest.ExpiresAtUtcTicks,
+                    _pendingCompileRequest.ReloadObserved);
             }
             else
             {

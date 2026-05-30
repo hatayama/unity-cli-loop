@@ -35,6 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile);
         string GetPendingCompileExpiresAtUtcTicks();
         void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks);
+        bool GetPendingCompileReloadObserved();
+        void SetPendingCompileReloadObserved(bool pendingCompileReloadObserved);
     }
 
     /// <summary>
@@ -112,28 +114,32 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             bool hasRequest,
             string requestId,
             bool forceRecompile,
-            long expiresAtUtcTicks)
+            long expiresAtUtcTicks,
+            bool reloadObserved)
         {
             HasRequest = hasRequest;
             RequestId = requestId;
             ForceRecompile = forceRecompile;
             ExpiresAtUtcTicks = expiresAtUtcTicks;
+            ReloadObserved = reloadObserved;
         }
 
         public bool HasRequest { get; }
         public string RequestId { get; }
         public bool ForceRecompile { get; }
         public long ExpiresAtUtcTicks { get; }
+        public bool ReloadObserved { get; }
 
         public static UnityCliLoopPendingCompileRequest None()
         {
-            return new UnityCliLoopPendingCompileRequest(false, "", false, 0);
+            return new UnityCliLoopPendingCompileRequest(false, "", false, 0, false);
         }
 
         public static UnityCliLoopPendingCompileRequest Create(
             string requestId,
             bool forceRecompile,
-            long expiresAtUtcTicks)
+            long expiresAtUtcTicks,
+            bool reloadObserved)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
             Debug.Assert(expiresAtUtcTicks > 0, "expiresAtUtcTicks must be positive");
@@ -147,7 +153,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 true,
                 requestId,
                 forceRecompile,
-                expiresAtUtcTicks);
+                expiresAtUtcTicks,
+                reloadObserved);
         }
 
         public bool IsExpiredAt(DateTime utcNow)
@@ -378,13 +385,15 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             StorePendingCompileRequest(
                 requestId,
                 forceRecompile,
-                markedAtUtc.Add(CompileResultLifetime).Ticks);
+                markedAtUtc.Add(CompileResultLifetime).Ticks,
+                reloadObserved: false);
         }
 
         public void StorePendingCompileRequest(
             string requestId,
             bool forceRecompile,
-            long expiresAtUtcTicks)
+            long expiresAtUtcTicks,
+            bool reloadObserved)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
             Debug.Assert(expiresAtUtcTicks > 0, "expiresAtUtcTicks must be positive");
@@ -392,6 +401,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             _sessionStatePort.SetPendingCompileRequestId(requestId);
             _sessionStatePort.SetPendingCompileForceRecompile(forceRecompile);
             _sessionStatePort.SetPendingCompileExpiresAtUtcTicks(expiresAtUtcTicks.ToString());
+            _sessionStatePort.SetPendingCompileReloadObserved(reloadObserved);
         }
 
         public UnityCliLoopPendingCompileRequest GetPendingCompileRequest()
@@ -414,7 +424,24 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return UnityCliLoopPendingCompileRequest.Create(
                 requestId,
                 _sessionStatePort.GetPendingCompileForceRecompile(),
-                expiresAtUtcTicks);
+                expiresAtUtcTicks,
+                _sessionStatePort.GetPendingCompileReloadObserved());
+        }
+
+        public bool MarkPendingCompileRequestReloadObserved()
+        {
+            UnityCliLoopPendingCompileRequest pendingRequest = GetPendingCompileRequest();
+            if (!pendingRequest.HasRequest)
+            {
+                return false;
+            }
+
+            StorePendingCompileRequest(
+                pendingRequest.RequestId,
+                pendingRequest.ForceRecompile,
+                pendingRequest.ExpiresAtUtcTicks,
+                reloadObserved: true);
+            return true;
         }
 
         public UnityCliLoopPendingCompileRequest GetPendingCompileRequestForRequestId(string requestId)
@@ -440,6 +467,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             _sessionStatePort.SetPendingCompileRequestId("");
             _sessionStatePort.SetPendingCompileForceRecompile(false);
             _sessionStatePort.SetPendingCompileExpiresAtUtcTicks("");
+            _sessionStatePort.SetPendingCompileReloadObserved(false);
         }
 
         public bool ClearPendingCompileRequestIfMatches(string requestId)
@@ -484,6 +512,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public void MarkDomainReloadStarted(bool serverIsRunning)
         {
             SetIsDomainReloadInProgress(true);
+            MarkPendingCompileRequestReloadObserved();
             if (!serverIsRunning)
             {
                 return;
