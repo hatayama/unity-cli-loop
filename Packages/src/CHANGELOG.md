@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.24](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.23...v3.0.0-beta.24) (2026-05-30)
+
+
+### Bug Fixes
+
+* Compile commands no longer hang across Unity reloads ([#1240](https://github.com/hatayama/unity-cli-loop/issues/1240)) ([12238ce](https://github.com/hatayama/unity-cli-loop/commit/12238ce492e364e3a1999364027cded03ab96262))
+
 ## [3.0.0-beta.23](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.22...v3.0.0-beta.23) (2026-05-28)
 
 
