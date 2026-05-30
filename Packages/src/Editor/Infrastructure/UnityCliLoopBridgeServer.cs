@@ -587,9 +587,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     string responseJson = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                         requestJson,
                         requestCancellationTokenSource.Token,
-                        async responseJsonValue =>
+                        async (responseJsonValue, cancelOnClientDisconnect) =>
                         {
                             await WriteJsonResponseAsync(stream, responseJsonValue, serverCancellationToken);
+                            if (!cancelOnClientDisconnect)
+                            {
+                                return;
+                            }
+
                             clientDisconnectMonitorTask =
                                 MonitorClientDisconnectAsync(client, requestCancellationTokenSource);
                         });

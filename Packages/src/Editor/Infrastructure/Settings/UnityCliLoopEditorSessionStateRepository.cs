@@ -19,6 +19,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string ShowPostCompileReconnectingUIKey = KeyPrefix + "showPostCompileReconnectingUI";
         private const string ShouldAutoScanThirdPartyToolMigrationKey =
             KeyPrefix + "shouldAutoScanThirdPartyToolMigration";
+        private const string PendingCompileRequestIdKey = KeyPrefix + "pendingCompileRequestId";
+        private const string PendingCompileForceRecompileKey = KeyPrefix + "pendingCompileForceRecompile";
+        private const string PendingCompileExpiresAtUtcTicksKey = KeyPrefix + "pendingCompileExpiresAtUtcTicks";
 
         public bool GetIsServerRunning()
         {
@@ -100,6 +103,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SetBool(ShouldAutoScanThirdPartyToolMigrationKey, shouldAutoScanThirdPartyToolMigration);
         }
 
+        public string GetPendingCompileRequestId()
+        {
+            return GetString(PendingCompileRequestIdKey);
+        }
+
+        public void SetPendingCompileRequestId(string pendingCompileRequestId)
+        {
+            SetString(PendingCompileRequestIdKey, pendingCompileRequestId);
+        }
+
+        public bool GetPendingCompileForceRecompile()
+        {
+            return GetBool(PendingCompileForceRecompileKey);
+        }
+
+        public void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile)
+        {
+            SetBool(PendingCompileForceRecompileKey, pendingCompileForceRecompile);
+        }
+
+        public string GetPendingCompileExpiresAtUtcTicks()
+        {
+            return GetString(PendingCompileExpiresAtUtcTicksKey);
+        }
+
+        public void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks)
+        {
+            SetString(PendingCompileExpiresAtUtcTicksKey, pendingCompileExpiresAtUtcTicks);
+        }
+
         private static bool GetBool(string key)
         {
             return SessionState.GetBool(key, false);
@@ -108,6 +141,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static void SetBool(string key, bool value)
         {
             SessionState.SetBool(key, value);
+        }
+
+        private static string GetString(string key)
+        {
+            return SessionState.GetString(key, "");
+        }
+
+        private static void SetString(string key, string value)
+        {
+            SessionState.SetString(key, value ?? "");
         }
     }
 }

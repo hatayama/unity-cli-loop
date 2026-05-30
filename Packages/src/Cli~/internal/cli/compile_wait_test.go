@@ -198,6 +198,19 @@ func TestShouldWaitForCompileResultRequiresDispatchedTransportError(t *testing.T
 	}
 }
 
+// Verifies accepted final-response timeouts can fall back to result-file polling.
+func TestShouldWaitForCompileResultAllowsAcceptedFinalResponseTimeout(t *testing.T) {
+	outcome := unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}
+	if !shouldWaitForCompileResult(fmt.Errorf("read tcp 127.0.0.1:1: i/o timeout"), outcome) {
+		t.Fatal("accepted final-response timeout should wait")
+	}
+
+	unacceptedOutcome := unityipc.UnitySendOutcome{RequestDispatched: true}
+	if shouldWaitForCompileResult(fmt.Errorf("read tcp 127.0.0.1:1: i/o timeout"), unacceptedOutcome) {
+		t.Fatal("unaccepted timeout should not wait")
+	}
+}
+
 // Verifies compile readiness wait decisions include indeterminate forced-compile results.
 func TestCompileResultReadinessWaitMode(t *testing.T) {
 	cases := map[string]compileReadinessWaitMode{

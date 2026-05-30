@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [UnityCliLoopTool]
     public class CompileTool : UnityCliLoopTool<CompileSchema, CompileResponse>
     {
-        public override string ToolName => "compile";
+        public override string ToolName => UnityCliLoopConstants.TOOL_NAME_COMPILE;
 
         protected override async Task<CompileResponse> ExecuteAsync(CompileSchema parameters, CancellationToken ct)
         {

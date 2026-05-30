@@ -150,7 +150,10 @@ func shouldWaitForCompileResult(err error, outcome unityipc.UnitySendOutcome) bo
 	if !outcome.RequestDispatched {
 		return false
 	}
-	return isTransportDisconnectError(err)
+	if isTransportDisconnectError(err) {
+		return true
+	}
+	return outcome.RequestAccepted && isFinalResponseTimeoutError(err)
 }
 
 func isTransportDisconnectError(err error) bool {
@@ -160,4 +163,8 @@ func isTransportDisconnectError(err error) bool {
 		strings.Contains(message, "connection reset") ||
 		strings.Contains(message, "broken pipe") ||
 		strings.Contains(message, "use of closed network connection")
+}
+
+func isFinalResponseTimeoutError(err error) bool {
+	return strings.Contains(err.Error(), "i/o timeout")
 }
