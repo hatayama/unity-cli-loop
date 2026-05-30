@@ -26,6 +26,11 @@ if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
   exit 0
 fi
 
+if [ "$1" = "pr" ] && [ "$2" = "ready" ]; then
+  printf '%s\n' "$*" >> "$GH_LOG"
+  exit 0
+fi
+
 echo "unexpected gh command: $*" >&2
 exit 1
 MOCK_GH
@@ -105,12 +110,13 @@ run_case() {
   work_dir="$TMP_DIR/$name"
   mkdir -p "$work_dir"
   write_mock_commands "$work_dir"
-  touch "$work_dir/git.log" "$work_dir/script.log"
+  touch "$work_dir/gh.log" "$work_dir/git.log" "$work_dir/script.log"
 
   (
     cd "$work_dir"
     PATH="$work_dir/bin:$ORIGINAL_PATH" \
       GH_PR_LIST_JSON="$pr_json" \
+      GH_LOG="$work_dir/gh.log" \
       GIT_LOG="$work_dir/git.log" \
       SCRIPT_LOG="$work_dir/script.log" \
       DIST_DIRTY="$dist_dirty" \
@@ -154,6 +160,7 @@ test_current_dist_checks_without_commit() {
 
   assert_contains "$TMP_DIR/current-dist/script.log" "build"
   assert_contains "$TMP_DIR/current-dist/script.log" "check"
+  assert_contains "$TMP_DIR/current-dist/gh.log" "pr ready 1043 --repo hatayama/unity-cli-loop --undo"
   assert_contains "$TMP_DIR/current-dist/git.log" "fetch origin release-please--branches--v3-beta"
   assert_contains "$TMP_DIR/current-dist/git.log" "checkout -B release-please--branches--v3-beta FETCH_HEAD"
   assert_not_contains "$TMP_DIR/current-dist/git.log" "commit -m"
@@ -182,6 +189,7 @@ test_stale_dist_commits_and_pushes() {
 
   assert_contains "$TMP_DIR/stale-dist/script.log" "build"
   assert_contains "$TMP_DIR/stale-dist/script.log" "check"
+  assert_contains "$TMP_DIR/stale-dist/gh.log" "pr ready 1043 --repo hatayama/unity-cli-loop --undo"
   assert_contains "$TMP_DIR/stale-dist/git.log" "add Packages/src/Cli~/dist"
   assert_contains "$TMP_DIR/stale-dist/git.log" "commit -m chore(v3-beta): update native CLI binaries"
   assert_contains "$TMP_DIR/stale-dist/git.log" "push origin HEAD:release-please--branches--v3-beta"

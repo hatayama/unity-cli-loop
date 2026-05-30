@@ -92,6 +92,11 @@ func TestMinimumVersionWarningRequiresCommentForGoCliSourceChanges(t *testing.T)
 			shouldWarn:  false,
 		},
 		{
+			name:        "release check command source",
+			changedFile: goCliPackageRoot + "cmd/dispatch-release-please-pr-checks/main.go",
+			shouldWarn:  false,
+		},
+		{
 			name:        "warning automation source",
 			changedFile: goCliPackageRoot + "internal/automation/minimum_version_warning.go",
 			shouldWarn:  false,
