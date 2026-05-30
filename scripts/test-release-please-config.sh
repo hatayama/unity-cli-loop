@@ -77,7 +77,12 @@ assert_step_contains() {
   expected=$3
 
   step_line=$(line_number "$path" "$step")
-  if [ -z "$step_line" ] || ! tail -n +"$step_line" "$path" | sed -n '1,8p' | grep -F -- "$expected" >/dev/null; then
+  if [ -z "$step_line" ] || ! awk -v start="$step_line" '
+    NR < start { next }
+    NR == start { in_step = 1 }
+    in_step && NR > start && /^      - name: / { exit }
+    in_step { print }
+  ' "$path" | grep -F -- "$expected" >/dev/null; then
     echo "Expected step '$step' to contain: $expected" >&2
     exit 1
   fi
