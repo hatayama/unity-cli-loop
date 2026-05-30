@@ -49,6 +49,8 @@ RELEASE_PR_HEAD_REF=$(printf '%s' "$MATCHING_RELEASE_PRS" | jq -r '.[0].headRefN
 RELEASE_PR_URL=$(printf '%s' "$MATCHING_RELEASE_PRS" | jq -r '.[0].url')
 
 echo "Syncing native CLI dist files for release PR #$RELEASE_PR_NUMBER: $RELEASE_PR_URL"
+echo "Marking release PR #$RELEASE_PR_NUMBER as draft while generated files are synced."
+gh pr ready "$RELEASE_PR_NUMBER" --repo "$REPO_FULL_NAME" --undo
 
 git fetch origin "$RELEASE_PR_HEAD_REF"
 git checkout -B "$RELEASE_PR_HEAD_REF" FETCH_HEAD

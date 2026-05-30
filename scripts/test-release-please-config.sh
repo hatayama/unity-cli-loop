@@ -51,6 +51,26 @@ assert_file_contains() {
   fi
 }
 
+line_number() {
+  path=$1
+  text=$2
+
+  grep -nF -- "$text" "$path" | head -n 1 | cut -d: -f 1
+}
+
+assert_file_order() {
+  path=$1
+  earlier=$2
+  later=$3
+
+  earlier_line=$(line_number "$path" "$earlier")
+  later_line=$(line_number "$path" "$later")
+  if [ -z "$earlier_line" ] || [ -z "$later_line" ] || [ "$earlier_line" -ge "$later_line" ]; then
+    echo "Expected '$earlier' to appear before '$later' in $path." >&2
+    exit 1
+  fi
+}
+
 assert_package_path_exists() {
   package_path=$1
   path=$2
@@ -89,6 +109,14 @@ assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][1].path' 'cont
 
 assert_file_contains "$RELEASE_WORKFLOW" 'id: package_release_sync'
 assert_file_contains "$RELEASE_WORKFLOW" "steps.package_release_sync.outputs.ready != 'false'"
+assert_file_contains "$RELEASE_WORKFLOW" '  actions: write'
+assert_file_contains "$RELEASE_WORKFLOW" '  checks: read'
+assert_file_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation'
+assert_file_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks'
+assert_file_contains "$RELEASE_WORKFLOW" '        working-directory: Packages/src/Cli~'
+assert_file_contains "$RELEASE_WORKFLOW" '        run: go run ./cmd/dispatch-release-please-pr-checks'
+assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' '      - name: Dispatch release PR checks'
+assert_file_order "$RELEASE_WORKFLOW" '      - name: Sync native CLI binaries into release PR' '      - name: Dispatch release PR checks'
 
 assert_manifest_semver '.["."]'
 assert_manifest_semver '.["Packages/src/Cli~"]'
