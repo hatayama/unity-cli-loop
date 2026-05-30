@@ -80,20 +80,20 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 		return 1
 	}
 
-	runID, err := findDispatchedReleasePRCheckRun(ctx, config, releasePR, dispatchedAt)
+	run, err := findDispatchedReleasePRCheckRun(ctx, config, releasePR, dispatchedAt)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
 	}
 
-	writeReleasePRCheckLine(stdout, fmt.Sprintf("Watching %s run %d for release PR #%d.", config.workflow, runID, releasePR.Number))
-	err = watchReleasePRCheckRun(ctx, config, runID)
+	writeReleasePRCheckLine(stdout, fmt.Sprintf("Watching %s run %d for release PR #%d.", config.workflow, run.DatabaseID, releasePR.Number))
+	err = watchReleasePRCheckRun(ctx, config, run.DatabaseID)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
 	}
 
-	err = verifyReleasePRCheckHeadUnchanged(ctx, config, releasePR)
+	err = verifyReleasePRCheckHeadMatchesRun(ctx, config, releasePR, run.HeadSHA)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
@@ -242,23 +242,33 @@ func dispatchReleasePRCheckWorkflow(ctx context.Context, config releasePRCheckCo
 	return err
 }
 
-func findDispatchedReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest, dispatchedAt time.Time) (int64, error) {
+func findDispatchedReleasePRCheckRun(
+	ctx context.Context,
+	config releasePRCheckConfig,
+	releasePR releasePullRequest,
+	dispatchedAt time.Time,
+) (releaseWorkflowRun, error) {
 	for attempt := 0; attempt < config.lookupAttempts; attempt++ {
-		runID, found, err := latestReleasePRCheckRun(ctx, config, releasePR, dispatchedAt)
+		run, found, err := latestReleasePRCheckRun(ctx, config, releasePR, dispatchedAt)
 		if err != nil {
-			return 0, err
+			return releaseWorkflowRun{}, err
 		}
 		if found {
-			return runID, nil
+			return run, nil
 		}
 		if attempt+1 < config.lookupAttempts {
 			releasePRCheckSleep(time.Duration(config.lookupIntervalSeconds) * time.Second)
 		}
 	}
-	return 0, fmt.Errorf("could not find dispatched %s workflow run for %s", config.workflow, releasePR.HeadRefOID)
+	return releaseWorkflowRun{}, fmt.Errorf("could not find dispatched %s workflow run for %s", config.workflow, releasePR.HeadRefOID)
 }
 
-func latestReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest, dispatchedAt time.Time) (int64, bool, error) {
+func latestReleasePRCheckRun(
+	ctx context.Context,
+	config releasePRCheckConfig,
+	releasePR releasePullRequest,
+	dispatchedAt time.Time,
+) (releaseWorkflowRun, bool, error) {
 	output, err := runReleasePRCheckOutput(
 		ctx,
 		"gh",
@@ -278,25 +288,22 @@ func latestReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, r
 		"20",
 	)
 	if err != nil {
-		return 0, false, err
+		return releaseWorkflowRun{}, false, err
 	}
 
 	runs := []releaseWorkflowRun{}
 	err = json.Unmarshal([]byte(output), &runs)
 	if err != nil {
-		return 0, false, fmt.Errorf("failed to parse workflow runs: %w", err)
+		return releaseWorkflowRun{}, false, fmt.Errorf("failed to parse workflow runs: %w", err)
 	}
 
 	var latestRun releaseWorkflowRun
 	var latestCreatedAt time.Time
 	found := false
 	for _, run := range runs {
-		if run.HeadSHA != releasePR.HeadRefOID {
-			continue
-		}
 		createdAt, err := time.Parse(time.RFC3339, run.CreatedAt)
 		if err != nil {
-			return 0, false, fmt.Errorf("failed to parse workflow run createdAt %q: %w", run.CreatedAt, err)
+			return releaseWorkflowRun{}, false, fmt.Errorf("failed to parse workflow run createdAt %q: %w", run.CreatedAt, err)
 		}
 		if createdAt.Before(dispatchedAt) {
 			continue
@@ -308,9 +315,9 @@ func latestReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, r
 		}
 	}
 	if !found {
-		return 0, false, nil
+		return releaseWorkflowRun{}, false, nil
 	}
-	return latestRun.DatabaseID, true, nil
+	return latestRun, true, nil
 }
 
 func watchReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, runID int64) error {
@@ -330,7 +337,12 @@ func watchReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, ru
 	return err
 }
 
-func verifyReleasePRCheckHeadUnchanged(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest) error {
+func verifyReleasePRCheckHeadMatchesRun(
+	ctx context.Context,
+	config releasePRCheckConfig,
+	releasePR releasePullRequest,
+	checkedHeadSHA string,
+) error {
 	currentReleasePR, found, err := findReleasePRCheckPullRequest(ctx, config)
 	if err != nil {
 		return err
@@ -341,8 +353,8 @@ func verifyReleasePRCheckHeadUnchanged(ctx context.Context, config releasePRChec
 	if currentReleasePR.Number != releasePR.Number {
 		return fmt.Errorf("pending release PR changed from #%d to #%d before marking ready", releasePR.Number, currentReleasePR.Number)
 	}
-	if currentReleasePR.HeadRefOID != releasePR.HeadRefOID {
-		return fmt.Errorf("release PR #%d head changed from %s to %s before marking ready", releasePR.Number, releasePR.HeadRefOID, currentReleasePR.HeadRefOID)
+	if currentReleasePR.HeadRefOID != checkedHeadSHA {
+		return fmt.Errorf("release PR #%d head changed from %s to %s before marking ready", releasePR.Number, checkedHeadSHA, currentReleasePR.HeadRefOID)
 	}
 	return nil
 }
