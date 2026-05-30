@@ -171,25 +171,25 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private object BuildDomainReloadStartContext(bool serverIsRunning)
         {
-            UnityCliLoopPendingCompileRequest pendingCompileRequest =
-                _sessionStateService.GetPendingCompileRequest();
+            UnityCliLoopStoredCompileResult compileResult =
+                _sessionStateService.GetStoredCompileResult();
             return new
             {
                 transport = "project_ipc",
                 server_running = serverIsRunning,
                 session_server_running = _sessionStateService.GetIsServerRunning(),
                 session_domain_reload_in_progress = _sessionStateService.GetIsDomainReloadInProgress(),
-                pending_compile_request = pendingCompileRequest.HasRequest,
-                pending_compile_request_id = pendingCompileRequest.RequestId,
-                pending_compile_force_recompile = pendingCompileRequest.ForceRecompile,
-                pending_compile_expires_at_utc_ticks = pendingCompileRequest.ExpiresAtUtcTicks
+                stored_compile_result = compileResult.HasResult,
+                stored_compile_request_id = compileResult.RequestId,
+                stored_compile_force_recompile = compileResult.ForceRecompile,
+                stored_compile_completed_at_utc_ticks = compileResult.CompletedAtUtcTicks
             };
         }
 
         private object BuildDomainReloadCompleteContext(bool serverWillRecover)
         {
-            UnityCliLoopPendingCompileRequest pendingCompileRequest =
-                _sessionStateService.GetPendingCompileRequest();
+            UnityCliLoopStoredCompileResult compileResult =
+                _sessionStateService.GetStoredCompileResult();
             return new
             {
                 transport = "project_ipc",
@@ -197,10 +197,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 session_server_running = _sessionStateService.GetIsServerRunning(),
                 session_domain_reload_in_progress = _sessionStateService.GetIsDomainReloadInProgress(),
                 session_reconnecting = _sessionStateService.GetIsReconnecting(),
-                pending_compile_request = pendingCompileRequest.HasRequest,
-                pending_compile_request_id = pendingCompileRequest.RequestId,
-                pending_compile_force_recompile = pendingCompileRequest.ForceRecompile,
-                pending_compile_expires_at_utc_ticks = pendingCompileRequest.ExpiresAtUtcTicks
+                stored_compile_result = compileResult.HasResult,
+                stored_compile_request_id = compileResult.RequestId,
+                stored_compile_force_recompile = compileResult.ForceRecompile,
+                stored_compile_completed_at_utc_ticks = compileResult.CompletedAtUtcTicks
             };
         }
     }

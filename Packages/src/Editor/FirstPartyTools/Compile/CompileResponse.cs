@@ -69,8 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Unity project root path (from UnityEngine.Application.dataPath).
-        /// Set only when WaitForDomainReload=true so that the CLI can locate the compile result
-        /// in the correct project even when connected to a remote Unity instance.
+        /// Set only when WaitForDomainReload=true so the CLI can report which project produced the result.
         /// </summary>
         public string ProjectRoot { get; set; }
 

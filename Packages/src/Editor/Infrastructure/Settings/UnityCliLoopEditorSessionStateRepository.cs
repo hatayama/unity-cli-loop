@@ -19,9 +19,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string ShowPostCompileReconnectingUIKey = KeyPrefix + "showPostCompileReconnectingUI";
         private const string ShouldAutoScanThirdPartyToolMigrationKey =
             KeyPrefix + "shouldAutoScanThirdPartyToolMigration";
-        private const string PendingCompileRequestIdKey = KeyPrefix + "pendingCompileRequestId";
-        private const string PendingCompileForceRecompileKey = KeyPrefix + "pendingCompileForceRecompile";
-        private const string PendingCompileExpiresAtUtcTicksKey = KeyPrefix + "pendingCompileExpiresAtUtcTicks";
+        private const string CompileResultRequestIdKey = KeyPrefix + "compileResultRequestId";
+        private const string CompileResultForceRecompileKey = KeyPrefix + "compileResultForceRecompile";
+        private const string CompileResultJsonKey = KeyPrefix + "compileResultJson";
+        private const string CompileResultCompletedAtUtcTicksKey = KeyPrefix + "compileResultCompletedAtUtcTicks";
 
         public bool GetIsServerRunning()
         {
@@ -103,34 +104,44 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SetBool(ShouldAutoScanThirdPartyToolMigrationKey, shouldAutoScanThirdPartyToolMigration);
         }
 
-        public string GetPendingCompileRequestId()
+        public string GetCompileResultRequestId()
         {
-            return GetString(PendingCompileRequestIdKey);
+            return GetString(CompileResultRequestIdKey);
         }
 
-        public void SetPendingCompileRequestId(string pendingCompileRequestId)
+        public void SetCompileResultRequestId(string compileResultRequestId)
         {
-            SetString(PendingCompileRequestIdKey, pendingCompileRequestId);
+            SetString(CompileResultRequestIdKey, compileResultRequestId);
         }
 
-        public bool GetPendingCompileForceRecompile()
+        public bool GetCompileResultForceRecompile()
         {
-            return GetBool(PendingCompileForceRecompileKey);
+            return GetBool(CompileResultForceRecompileKey);
         }
 
-        public void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile)
+        public void SetCompileResultForceRecompile(bool compileResultForceRecompile)
         {
-            SetBool(PendingCompileForceRecompileKey, pendingCompileForceRecompile);
+            SetBool(CompileResultForceRecompileKey, compileResultForceRecompile);
         }
 
-        public string GetPendingCompileExpiresAtUtcTicks()
+        public string GetCompileResultJson()
         {
-            return GetString(PendingCompileExpiresAtUtcTicksKey);
+            return GetString(CompileResultJsonKey);
         }
 
-        public void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks)
+        public void SetCompileResultJson(string compileResultJson)
         {
-            SetString(PendingCompileExpiresAtUtcTicksKey, pendingCompileExpiresAtUtcTicks);
+            SetString(CompileResultJsonKey, compileResultJson);
+        }
+
+        public string GetCompileResultCompletedAtUtcTicks()
+        {
+            return GetString(CompileResultCompletedAtUtcTicksKey);
+        }
+
+        public void SetCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks)
+        {
+            SetString(CompileResultCompletedAtUtcTicksKey, compileResultCompletedAtUtcTicks);
         }
 
         private static bool GetBool(string key)

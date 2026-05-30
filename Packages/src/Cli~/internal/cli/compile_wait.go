@@ -1,14 +1,11 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,23 +13,48 @@ import (
 )
 
 const (
-	compileCommandName       = "compile"
-	compileRequestIDParam    = "RequestId"
-	compileWaitParam         = domainReloadWaitParam
-	compileResultRelativeDir = "Temp/UnityCliLoop/compile-results"
-	compileWaitTimeout       = 90 * time.Second
-	compileWaitPollInterval  = 50 * time.Millisecond
-	compileLockGracePeriod   = 500 * time.Millisecond
-	compileWaitLogInterval   = 5 * time.Second
+	compileCommandName               = "compile"
+	compileStatusCommandName         = "get-compile-status"
+	compileRequestIDParam            = "RequestId"
+	compileWaitParam                 = domainReloadWaitParam
+	compileForceParam                = "ForceRecompile"
+	compileWaitTimeout               = toolReadinessTimeout
+	compileWaitPollInterval          = toolReadinessPoll
+	compileStatusProbeTimeout        = toolReadinessProbeTimeout
+	compileWaitLogInterval           = 5 * time.Second
+	compileResponseTimeout           = 2 * time.Second
+	forceCompileUnknownResultMessage = "Force compilation completed, but Unity does not provide detailed errors or warnings for this command. Use get-logs to inspect the compiler output."
 )
 
 type compileCompletionOptions struct {
-	projectRoot  string
-	requestID    string
-	timeout      time.Duration
-	pollInterval time.Duration
-	lockGrace    time.Duration
+	connection     unityipc.Connection
+	requestID      string
+	forceRecompile bool
+	timeout        time.Duration
+	pollInterval   time.Duration
 }
+
+type compileStatusResponse struct {
+	Ready                    bool            `json:"Ready"`
+	HasResult                bool            `json:"HasResult"`
+	IsCompiling              bool            `json:"IsCompiling"`
+	IsUpdating               bool            `json:"IsUpdating"`
+	IsDomainReloadInProgress bool            `json:"IsDomainReloadInProgress"`
+	Result                   json.RawMessage `json:"Result"`
+	Message                  string          `json:"Message"`
+}
+
+type compileUnknownResultPayload struct {
+	Success      *bool  `json:"Success"`
+	ErrorCount   *int   `json:"ErrorCount"`
+	WarningCount *int   `json:"WarningCount"`
+	Errors       []any  `json:"Errors"`
+	Warnings     []any  `json:"Warnings"`
+	Message      string `json:"Message"`
+	ProjectRoot  string `json:"ProjectRoot"`
+}
+
+var queryCompileStatus = queryCompileStatusFromUnity
 
 func shouldWaitForCompileDomainReload(command string, params map[string]any) bool {
 	if command != compileCommandName {
@@ -96,7 +118,6 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.timeout)
 	nextProgressLogAt := startedAt.Add(compileWaitLogInterval)
-	var idleSince time.Time
 
 	logCompileWaitStarted(options, startedAt)
 
@@ -106,27 +127,19 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 			break
 		}
 
-		result, err := tryReadCompileResult(options.projectRoot, options.requestID)
-		if err != nil {
-			logCompileWaitReadFailed(options, startedAt, err)
-			return nil, false, err
+		status, err := queryCompileStatus(ctx, options.connection, options.requestID)
+		if err == nil && status.Ready && status.HasResult && len(status.Result) > 0 {
+			logCompileStatusResultAvailable(options, startedAt, status)
+			return status.Result, true, nil
 		}
-
-		if len(result) > 0 {
-			if idleSince.IsZero() {
-				idleSince = now
-				logCompileResultFileDetected(options, startedAt, len(result))
-			}
-			if time.Since(idleSince) >= options.lockGrace {
-				logCompileResultFileStable(options, startedAt, len(result))
-				return result, true, nil
-			}
-		} else {
-			idleSince = time.Time{}
+		if err == nil && status.Ready && options.forceRecompile {
+			result := createForceCompileUnknownResult(options.connection.ProjectRoot)
+			logCompileForceStatusReadyWithoutResult(options, startedAt, status)
+			return result, true, nil
 		}
 
 		if !now.Before(nextProgressLogAt) {
-			logCompileWaitPolling(options, startedAt, deadline, !idleSince.IsZero())
+			logCompileWaitPolling(options, startedAt, deadline, status, err)
 			nextProgressLogAt = now.Add(compileWaitLogInterval)
 		}
 
@@ -142,32 +155,49 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 	return nil, false, nil
 }
 
-func tryReadCompileResult(projectRoot string, requestID string) (json.RawMessage, error) {
-	if !isSafeCompileRequestID(requestID) {
-		return nil, fmt.Errorf("requestId contains unsafe characters: %s", requestID)
-	}
+func compileForceRecompileEnabled(params map[string]any) bool {
+	value, ok := params[compileForceParam].(bool)
+	return ok && value
+}
 
-	resultPath := compileResultPath(projectRoot, requestID)
-	content, err := os.ReadFile(resultPath)
+func createForceCompileUnknownResult(projectRoot string) json.RawMessage {
+	payload := compileUnknownResultPayload{
+		Success:      nil,
+		ErrorCount:   nil,
+		WarningCount: nil,
+		Errors:       nil,
+		Warnings:     nil,
+		Message:      forceCompileUnknownResultMessage,
+		ProjectRoot:  projectRoot,
+	}
+	result, err := json.Marshal(payload)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
+		return json.RawMessage(`{"Success":null,"ErrorCount":null,"WarningCount":null,"Errors":null,"Warnings":null,"Message":"Force compilation completed, but Unity does not provide detailed errors or warnings for this command. Use get-logs to inspect the compiler output.","ProjectRoot":""}`)
 	}
-
-	content = bytes.TrimPrefix(content, []byte{0xef, 0xbb, 0xbf})
-	if !json.Valid(content) {
-		return nil, nil
-	}
-	return json.RawMessage(content), nil
+	return result
 }
 
-func compileResultPath(projectRoot string, requestID string) string {
-	return filepath.Join(projectRoot, compileResultRelativeDir, requestID+".json")
+func queryCompileStatusFromUnity(ctx context.Context, connection unityipc.Connection, requestID string) (compileStatusResponse, error) {
+	probeContext, cancel := context.WithTimeout(ctx, compileStatusProbeTimeout)
+	defer cancel()
+
+	response, err := unityipc.NewClient(connection, version).Send(
+		probeContext,
+		compileStatusCommandName,
+		map[string]any{compileRequestIDParam: requestID},
+	)
+	if err != nil {
+		return compileStatusResponse{}, err
+	}
+
+	var status compileStatusResponse
+	if err := json.Unmarshal(response, &status); err != nil {
+		return compileStatusResponse{}, err
+	}
+	return status, nil
 }
 
-func shouldWaitForCompileResult(err error, outcome unityipc.UnitySendOutcome) bool {
+func shouldWaitForCompileStatus(err error, outcome unityipc.UnitySendOutcome) bool {
 	if err == nil {
 		return true
 	}
@@ -197,7 +227,7 @@ func logCompileWaitRequestPrepared(projectRoot string, requestID string) {
 	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_compile_wait_request_prepared",
-		Message:   "Prepared compile request ID for domain reload result polling.",
+		Message:   "Prepared compile request ID for status polling.",
 		Context: map[string]any{
 			"command":    compileCommandName,
 			"request_id": requestID,
@@ -216,7 +246,7 @@ func logCompileSendCompleted(
 	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_compile_send_completed",
-		Message:   "Compile RPC returned to the CLI before result-file polling.",
+		Message:   "Compile RPC returned to the CLI before status polling.",
 		Context: map[string]any{
 			"command":            compileCommandName,
 			"request_id":         requestID,
@@ -225,17 +255,17 @@ func logCompileSendCompleted(
 			"request_dispatched": outcome.RequestDispatched,
 			"request_accepted":   outcome.RequestAccepted,
 			"error":              errorMessage(sendErr),
-			"will_poll_result":   shouldWaitForCompileResult(sendErr, outcome),
+			"will_poll_status":   shouldWaitForCompileStatus(sendErr, outcome),
 		},
 		CorrelationID: requestID,
 	})
 }
 
 func logCompileWaitStarted(options compileCompletionOptions, startedAt time.Time) {
-	_ = writeCliVibeLog(options.projectRoot, cliVibeLogEntry{
+	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
 		Level:         "INFO",
-		Operation:     "cli_compile_result_wait_started",
-		Message:       "Started polling for the Unity compile result file.",
+		Operation:     "cli_compile_status_wait_started",
+		Message:       "Started polling Unity compile status.",
 		Context:       compileWaitLogContext(options, startedAt, nil),
 		CorrelationID: options.requestID,
 	})
@@ -245,71 +275,76 @@ func logCompileWaitPolling(
 	options compileCompletionOptions,
 	startedAt time.Time,
 	deadline time.Time,
-	resultVisible bool,
+	status compileStatusResponse,
+	statusErr error,
 ) {
-	_ = writeCliVibeLog(options.projectRoot, cliVibeLogEntry{
+	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
 		Level:     "INFO",
-		Operation: "cli_compile_result_wait_polling",
-		Message:   "Still polling for the Unity compile result file.",
+		Operation: "cli_compile_status_wait_polling",
+		Message:   "Still polling Unity compile status.",
 		Context: compileWaitLogContext(options, startedAt, map[string]any{
-			"result_visible":       resultVisible,
-			"remaining_timeout_ms": remainingMilliseconds(deadline),
+			"ready":                        status.Ready,
+			"has_result":                   status.HasResult,
+			"is_compiling":                 status.IsCompiling,
+			"is_updating":                  status.IsUpdating,
+			"is_domain_reload_in_progress": status.IsDomainReloadInProgress,
+			"status_error":                 errorMessage(statusErr),
+			"remaining_timeout_ms":         remainingMilliseconds(deadline),
 		}),
 		CorrelationID: options.requestID,
 	})
 }
 
-func logCompileResultFileDetected(options compileCompletionOptions, startedAt time.Time, resultBytes int) {
-	_ = writeCliVibeLog(options.projectRoot, cliVibeLogEntry{
+func logCompileStatusResultAvailable(
+	options compileCompletionOptions,
+	startedAt time.Time,
+	status compileStatusResponse,
+) {
+	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
 		Level:     "INFO",
-		Operation: "cli_compile_result_file_detected",
-		Message:   "Detected a valid Unity compile result file and started lock-grace verification.",
+		Operation: "cli_compile_status_result_available",
+		Message:   "Unity compile status returned a ready result.",
 		Context: compileWaitLogContext(options, startedAt, map[string]any{
-			"result_bytes": resultBytes,
+			"ready":        status.Ready,
+			"has_result":   status.HasResult,
+			"result_bytes": len(status.Result),
 		}),
 		CorrelationID: options.requestID,
 	})
 }
 
-func logCompileResultFileStable(options compileCompletionOptions, startedAt time.Time, resultBytes int) {
-	_ = writeCliVibeLog(options.projectRoot, cliVibeLogEntry{
+func logCompileForceStatusReadyWithoutResult(
+	options compileCompletionOptions,
+	startedAt time.Time,
+	status compileStatusResponse,
+) {
+	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
 		Level:     "INFO",
-		Operation: "cli_compile_result_file_stable",
-		Message:   "Compile result file stayed readable through the lock-grace window.",
+		Operation: "cli_compile_force_status_ready_without_result",
+		Message:   "Unity is ready after force compile without a stored detailed result.",
 		Context: compileWaitLogContext(options, startedAt, map[string]any{
-			"result_bytes": resultBytes,
+			"ready":      status.Ready,
+			"has_result": status.HasResult,
 		}),
 		CorrelationID: options.requestID,
 	})
 }
 
 func logCompileWaitTimedOut(options compileCompletionOptions, startedAt time.Time) {
-	_ = writeCliVibeLog(options.projectRoot, cliVibeLogEntry{
+	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
 		Level:         "WARNING",
-		Operation:     "cli_compile_result_wait_timed_out",
-		Message:       "Timed out while polling for the Unity compile result file.",
+		Operation:     "cli_compile_status_wait_timed_out",
+		Message:       "Timed out while polling Unity compile status.",
 		Context:       compileWaitLogContext(options, startedAt, nil),
 		CorrelationID: options.requestID,
 	})
 }
 
 func logCompileWaitCancelled(options compileCompletionOptions, startedAt time.Time, err error) {
-	_ = writeCliVibeLog(options.projectRoot, cliVibeLogEntry{
+	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
 		Level:     "WARNING",
-		Operation: "cli_compile_result_wait_cancelled",
-		Message:   "Compile result-file polling was cancelled.",
-		Context: compileWaitLogContext(options, startedAt, map[string]any{
-			"error": errorMessage(err),
-		}),
-		CorrelationID: options.requestID,
-	})
-}
-
-func logCompileWaitReadFailed(options compileCompletionOptions, startedAt time.Time, err error) {
-	_ = writeCliVibeLog(options.projectRoot, cliVibeLogEntry{
-		Level:     "WARNING",
-		Operation: "cli_compile_result_wait_read_failed",
-		Message:   "Failed while reading the Unity compile result file.",
+		Operation: "cli_compile_status_wait_cancelled",
+		Message:   "Compile status polling was cancelled.",
 		Context: compileWaitLogContext(options, startedAt, map[string]any{
 			"error": errorMessage(err),
 		}),
@@ -325,10 +360,10 @@ func compileWaitLogContext(
 	context := map[string]any{
 		"command":          compileCommandName,
 		"request_id":       options.requestID,
-		"result_path":      compileResultPath(options.projectRoot, options.requestID),
+		"force_recompile":  options.forceRecompile,
+		"endpoint":         options.connection.Endpoint.Address,
 		"timeout_ms":       options.timeout.Milliseconds(),
 		"poll_interval_ms": options.pollInterval.Milliseconds(),
-		"lock_grace_ms":    options.lockGrace.Milliseconds(),
 		"elapsed_ms":       time.Since(startedAt).Milliseconds(),
 	}
 	for key, value := range extra {

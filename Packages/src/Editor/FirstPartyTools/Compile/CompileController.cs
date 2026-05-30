@@ -6,6 +6,8 @@ using System;
 using System.Threading.Tasks;
 using System.Threading;
 
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -20,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private List<CompilerMessage> _compileMessages = new();
         private TaskCompletionSource<CompileResult> _currentCompileTask;
         private bool _isForceCompile = false;
+        private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
 
         /// <summary>
         /// Event that occurs when compilation is complete.
@@ -45,6 +48,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Gets the current list of compiler messages.
         /// </summary>
         public IReadOnlyList<CompilerMessage> CompileMessages => _compileMessages.AsReadOnly();
+
+        /// <summary>
+        /// Sets delayed compile result storage for the active CLI request.
+        /// </summary>
+        internal void SetResultRecordingContext(CompileResultRecordingContext resultRecordingContext)
+        {
+            _resultRecordingContext = resultRecordingContext;
+        }
 
         /// <summary>
         /// Executes compilation asynchronously.
@@ -473,6 +484,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ["warning_count"] = result.WarningCount,
                     ["is_indeterminate"] = result.IsIndeterminate
                 });
+            RecordCompileResultIfNeeded(result, completionContext);
             VibeLogger.LogInfo(
                 "compile_controller_completion_start",
                 "Completing the active compile request in CompileController.",
@@ -505,6 +517,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _currentCompileTask = null;
                     _isCompiling = false;
                     _isForceCompile = false;
+                    _resultRecordingContext = CompileResultRecordingContext.Disabled();
                 }
 
                 task?.TrySetResult(result);
@@ -519,6 +532,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ["is_indeterminate"] = result.IsIndeterminate
                     }));
             }
+        }
+
+        private void RecordCompileResultIfNeeded(
+            CompileResult result,
+            Dictionary<string, object> completionContext)
+        {
+            UnityEngine.Debug.Assert(result != null, "result must not be null");
+            UnityEngine.Debug.Assert(completionContext != null, "completionContext must not be null");
+
+            if (!_resultRecordingContext.Enabled)
+            {
+                return;
+            }
+
+            UnityCliLoopEditorSessionStateService sessionStateService =
+                new UnityCliLoopEditorSessionStateService(new UnityCliLoopEditorSessionStateRepository());
+            UnityCliLoopCompileResult response =
+                CompileSessionResultService.CreateCompileResult(result, _resultRecordingContext.ForceRecompile);
+            CompileSessionResultService.StoreCompileResult(
+                sessionStateService,
+                _resultRecordingContext.RequestId,
+                _resultRecordingContext.ForceRecompile,
+                response,
+                _resultRecordingContext.RequestId);
+            completionContext["result_recorded_in_session_state"] = true;
+            completionContext["request_id"] = _resultRecordingContext.RequestId;
         }
 
         /// <summary>
@@ -595,12 +634,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int errorCount = _compileMessages.Count(m => m.type == CompilerMessageType.Error);
             int warningCount = _compileMessages.Count(m => m.type == CompilerMessageType.Warning);
 
-            // For force compile, don't include messages in response
-            // User should use get-logs tool after domain reload completes
+            // Why: Unity does not expose reliable detailed issue data for this clean compile path.
             if (_isForceCompile)
             {
                 return new CompileResult(
-                    success: null, // Success status is indeterminate during force compile
+                    success: null,
                     errorCount: errorCount,
                     warningCount: warningCount,
                     completedAt: DateTime.Now,
@@ -608,7 +646,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errors: new CompilerMessage[0],
                     warnings: new CompilerMessage[0],
                     isIndeterminate: true,
-                    message: "Force compilation executed. Use get-logs tool to retrieve compilation messages."
+                    message: null
                 );
             }
 
@@ -704,6 +742,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             _isCompiling = false;
             _isForceCompile = false;
+            _resultRecordingContext = CompileResultRecordingContext.Disabled();
         }
 
         /// <summary>

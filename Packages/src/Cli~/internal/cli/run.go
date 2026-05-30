@@ -229,7 +229,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 
 	startedAt := time.Now()
 	spinner := newToolSpinner(stderr, compileCommandName)
-	outcome, err := sendWithTransientConnectionRetry(
+	outcome, err := sendWithTransientConnectionRetryAndResponseTimeout(
 		ctx,
 		connection,
 		compileCommandName,
@@ -237,12 +237,13 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 		func(string) {
 			spinner.Update("Executing compile...")
 		},
+		compileResponseTimeout,
 	)
 	logCompileSendCompleted(connection, requestID, outcome, err, time.Since(startedAt))
-	if err != nil && shouldWaitForCompileResult(err, outcome) {
-		spinner.Update("Connection lost during compile. Waiting for result file...")
+	if err != nil && shouldWaitForCompileStatus(err, outcome) {
+		spinner.Update("Connection changed during compile. Waiting for Unity status...")
 	}
-	if !shouldWaitForCompileResult(err, outcome) {
+	if !shouldWaitForCompileStatus(err, outcome) {
 		spinner.Stop()
 		writeToolFailure(stderr, err, outcome, errorContext{
 			projectRoot: connection.ProjectRoot,
@@ -253,11 +254,11 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 
 	spinner.Update("Waiting for domain reload to complete...")
 	result, completed, waitErr := waitForCompileCompletion(ctx, compileCompletionOptions{
-		projectRoot:  connection.ProjectRoot,
-		requestID:    requestID,
-		timeout:      compileWaitTimeout,
-		pollInterval: compileWaitPollInterval,
-		lockGrace:    compileLockGracePeriod,
+		connection:     connection,
+		requestID:      requestID,
+		forceRecompile: compileForceRecompileEnabled(params),
+		timeout:        compileWaitTimeout,
+		pollInterval:   compileWaitPollInterval,
 	})
 	if waitErr != nil {
 		spinner.Stop()
@@ -273,16 +274,6 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 		return 1
 	}
 	switch compileResultReadinessWaitMode(result) {
-	case compileReadinessWaitRequired:
-		spinner.Update("Waiting for Unity tools after compile...")
-		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
-			spinner.Stop()
-			writeClassifiedError(stderr, err, errorContext{
-				projectRoot: connection.ProjectRoot,
-				command:     compileCommandName,
-			})
-			return 1
-		}
 	case compileReadinessWaitWarmup:
 		spinner.Update("Warming execute-dynamic-code after compile...")
 		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
@@ -380,7 +371,6 @@ type compileReadinessWaitMode int
 
 const (
 	compileReadinessWaitNone compileReadinessWaitMode = iota
-	compileReadinessWaitRequired
 	compileReadinessWaitWarmup
 )
 
@@ -390,7 +380,7 @@ func compileResultReadinessWaitMode(result json.RawMessage) compileReadinessWait
 		return compileReadinessWaitNone
 	}
 	if status.Success == nil {
-		return compileReadinessWaitRequired
+		return compileReadinessWaitNone
 	}
 	if *status.Success {
 		return compileReadinessWaitWarmup

@@ -21,60 +21,79 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI);
         bool GetShouldAutoScanThirdPartyToolMigration();
         void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration);
-        string GetPendingCompileRequestId();
-        void SetPendingCompileRequestId(string pendingCompileRequestId);
-        bool GetPendingCompileForceRecompile();
-        void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile);
-        string GetPendingCompileExpiresAtUtcTicks();
-        void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks);
+        string GetCompileResultRequestId();
+        void SetCompileResultRequestId(string compileResultRequestId);
+        bool GetCompileResultForceRecompile();
+        void SetCompileResultForceRecompile(bool compileResultForceRecompile);
+        string GetCompileResultJson();
+        void SetCompileResultJson(string compileResultJson);
+        string GetCompileResultCompletedAtUtcTicks();
+        void SetCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks);
     }
 
     /// <summary>
-    /// Records the compile request that must still produce a CLI result file after Domain Reload.
+    /// Records the compile result that the CLI reads after Unity finishes Domain Reload.
     /// </summary>
-    public sealed class UnityCliLoopPendingCompileRequest
+    public sealed class UnityCliLoopStoredCompileResult
     {
-        private UnityCliLoopPendingCompileRequest(
-            bool hasRequest,
+        private UnityCliLoopStoredCompileResult(
+            bool hasResult,
             string requestId,
             bool forceRecompile,
-            long expiresAtUtcTicks)
+            string resultJson,
+            long completedAtUtcTicks)
         {
-            HasRequest = hasRequest;
+            HasResult = hasResult;
             RequestId = requestId;
             ForceRecompile = forceRecompile;
-            ExpiresAtUtcTicks = expiresAtUtcTicks;
+            ResultJson = resultJson;
+            CompletedAtUtcTicks = completedAtUtcTicks;
         }
 
-        public bool HasRequest { get; }
+        public bool HasResult { get; }
         public string RequestId { get; }
         public bool ForceRecompile { get; }
-        public long ExpiresAtUtcTicks { get; }
+        public string ResultJson { get; }
+        public long CompletedAtUtcTicks { get; }
 
-        public static UnityCliLoopPendingCompileRequest None()
+        public static UnityCliLoopStoredCompileResult None()
         {
-            return new UnityCliLoopPendingCompileRequest(false, "", false, 0);
+            return new UnityCliLoopStoredCompileResult(false, "", false, "", 0);
         }
 
-        public static UnityCliLoopPendingCompileRequest Create(
+        public static UnityCliLoopStoredCompileResult Create(
             string requestId,
             bool forceRecompile,
-            long expiresAtUtcTicks)
+            string resultJson,
+            long completedAtUtcTicks)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+            Debug.Assert(!string.IsNullOrWhiteSpace(resultJson), "resultJson must not be null or whitespace");
+            Debug.Assert(completedAtUtcTicks > 0, "completedAtUtcTicks must be positive");
 
             if (string.IsNullOrWhiteSpace(requestId))
             {
                 throw new ArgumentException("requestId must not be null or whitespace.", nameof(requestId));
             }
 
-            return new UnityCliLoopPendingCompileRequest(true, requestId, forceRecompile, expiresAtUtcTicks);
+            if (string.IsNullOrWhiteSpace(resultJson))
+            {
+                throw new ArgumentException("resultJson must not be null or whitespace.", nameof(resultJson));
+            }
+
+            return new UnityCliLoopStoredCompileResult(
+                true,
+                requestId,
+                forceRecompile,
+                resultJson,
+                completedAtUtcTicks);
         }
 
-        public bool IsExpiredAt(DateTime utcNow)
+        public bool IsExpiredAt(DateTime utcNow, TimeSpan lifetime)
         {
             Debug.Assert(utcNow.Kind == DateTimeKind.Utc, "utcNow must be UTC");
-            return HasRequest && ExpiresAtUtcTicks <= utcNow.Ticks;
+            Debug.Assert(lifetime > TimeSpan.Zero, "lifetime must be positive");
+            return HasResult && CompletedAtUtcTicks <= (utcNow - lifetime).Ticks;
         }
     }
 
@@ -83,9 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     /// </summary>
     public sealed class UnityCliLoopEditorSessionStateService
     {
-        // Why: accepted compile requests can still be running while the CLI waits for its
-        // long final-response budget, so recovery must outlive that active wait window.
-        private const int PendingCompileRequestLifetimeSeconds = 32 * 60;
+        private static readonly TimeSpan CompileResultLifetime = TimeSpan.FromMinutes(32);
         private readonly IUnityCliLoopEditorSessionStatePort _sessionStatePort;
 
         public UnityCliLoopEditorSessionStateService(IUnityCliLoopEditorSessionStatePort sessionStatePort)
@@ -175,37 +192,14 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             _sessionStatePort.SetShouldAutoScanThirdPartyToolMigration(shouldAutoScanThirdPartyToolMigration);
         }
 
-        public UnityCliLoopPendingCompileRequest GetPendingCompileRequest()
+        private static (bool IsValid, long Value) ParseUtcTicks(string utcTicksText)
         {
-            string requestId = _sessionStatePort.GetPendingCompileRequestId();
-            if (string.IsNullOrWhiteSpace(requestId))
-            {
-                return UnityCliLoopPendingCompileRequest.None();
-            }
-
-            string expiresAtUtcTicksText = _sessionStatePort.GetPendingCompileExpiresAtUtcTicks();
-            (bool isValid, long expiresAtUtcTicks) =
-                ParsePendingCompileExpiresAtUtcTicks(expiresAtUtcTicksText);
-            if (!isValid)
-            {
-                ClearPendingCompileRequest();
-                return UnityCliLoopPendingCompileRequest.None();
-            }
-
-            return UnityCliLoopPendingCompileRequest.Create(
-                requestId,
-                _sessionStatePort.GetPendingCompileForceRecompile(),
-                expiresAtUtcTicks);
-        }
-
-        private static (bool IsValid, long Value) ParsePendingCompileExpiresAtUtcTicks(string expiresAtUtcTicksText)
-        {
-            if (string.IsNullOrWhiteSpace(expiresAtUtcTicksText))
+            if (string.IsNullOrWhiteSpace(utcTicksText))
             {
                 return (true, 0);
             }
 
-            string trimmedText = expiresAtUtcTicksText.Trim();
+            string trimmedText = utcTicksText.Trim();
             long value = 0;
             foreach (char character in trimmedText)
             {
@@ -226,63 +220,90 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return (true, value);
         }
 
-        public void MarkPendingCompileRequest(string requestId, bool forceRecompile)
-        {
-            long expiresAtUtcTicks = DateTime.UtcNow
-                .AddSeconds(PendingCompileRequestLifetimeSeconds)
-                .Ticks;
-            MarkPendingCompileRequestWithExpiration(requestId, forceRecompile, expiresAtUtcTicks);
-        }
-
-        public void MarkPendingCompileRequestWithExpiration(
+        public void StoreCompileResult(
             string requestId,
             bool forceRecompile,
-            long expiresAtUtcTicks)
+            string resultJson,
+            DateTime completedAtUtc)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
-            Debug.Assert(expiresAtUtcTicks > 0, "expiresAtUtcTicks must be positive");
+            Debug.Assert(!string.IsNullOrWhiteSpace(resultJson), "resultJson must not be null or whitespace");
+            Debug.Assert(completedAtUtc.Kind == DateTimeKind.Utc, "completedAtUtc must be UTC");
 
-            _sessionStatePort.SetPendingCompileRequestId(requestId);
-            _sessionStatePort.SetPendingCompileForceRecompile(forceRecompile);
-            _sessionStatePort.SetPendingCompileExpiresAtUtcTicks(expiresAtUtcTicks.ToString());
+            _sessionStatePort.SetCompileResultRequestId(requestId);
+            _sessionStatePort.SetCompileResultForceRecompile(forceRecompile);
+            _sessionStatePort.SetCompileResultJson(resultJson);
+            _sessionStatePort.SetCompileResultCompletedAtUtcTicks(completedAtUtc.Ticks.ToString());
         }
 
-        public void ClearPendingCompileRequest()
-        {
-            _sessionStatePort.SetPendingCompileRequestId("");
-            _sessionStatePort.SetPendingCompileForceRecompile(false);
-            _sessionStatePort.SetPendingCompileExpiresAtUtcTicks("");
-        }
-
-        public void ClearPendingCompileRequestIfMatches(string requestId)
+        public UnityCliLoopStoredCompileResult GetCompileResult(string requestId)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
 
-            UnityCliLoopPendingCompileRequest pendingCompileRequest = GetPendingCompileRequest();
-            if (!pendingCompileRequest.HasRequest)
+            UnityCliLoopStoredCompileResult storedResult = GetStoredCompileResult();
+            if (!storedResult.HasResult)
             {
-                return;
+                return UnityCliLoopStoredCompileResult.None();
             }
 
-            if (pendingCompileRequest.RequestId != requestId)
+            if (storedResult.RequestId != requestId)
             {
-                return;
+                return UnityCliLoopStoredCompileResult.None();
             }
 
-            ClearPendingCompileRequest();
+            return storedResult;
         }
 
-        public bool ClearExpiredPendingCompileRequest(DateTime utcNow)
+        public UnityCliLoopStoredCompileResult GetStoredCompileResult()
+        {
+            string requestId = _sessionStatePort.GetCompileResultRequestId();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            string resultJson = _sessionStatePort.GetCompileResultJson();
+            if (string.IsNullOrWhiteSpace(resultJson))
+            {
+                ClearCompileResult();
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            string completedAtUtcTicksText = _sessionStatePort.GetCompileResultCompletedAtUtcTicks();
+            (bool isValid, long completedAtUtcTicks) =
+                ParseUtcTicks(completedAtUtcTicksText);
+            if (!isValid || completedAtUtcTicks <= 0)
+            {
+                ClearCompileResult();
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            return UnityCliLoopStoredCompileResult.Create(
+                requestId,
+                _sessionStatePort.GetCompileResultForceRecompile(),
+                resultJson,
+                completedAtUtcTicks);
+        }
+
+        public void ClearCompileResult()
+        {
+            _sessionStatePort.SetCompileResultRequestId("");
+            _sessionStatePort.SetCompileResultForceRecompile(false);
+            _sessionStatePort.SetCompileResultJson("");
+            _sessionStatePort.SetCompileResultCompletedAtUtcTicks("");
+        }
+
+        public bool ClearExpiredCompileResult(DateTime utcNow)
         {
             Debug.Assert(utcNow.Kind == DateTimeKind.Utc, "utcNow must be UTC");
 
-            UnityCliLoopPendingCompileRequest pendingCompileRequest = GetPendingCompileRequest();
-            if (!pendingCompileRequest.IsExpiredAt(utcNow))
+            UnityCliLoopStoredCompileResult storedResult = GetStoredCompileResult();
+            if (!storedResult.IsExpiredAt(utcNow, CompileResultLifetime))
             {
                 return false;
             }
 
-            ClearPendingCompileRequest();
+            ClearCompileResult();
             return true;
         }
 
@@ -364,7 +385,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         {
             ClearServerSession();
             ClearDomainReloadRecoveryFlags();
-            ClearPendingCompileRequest();
+            ClearCompileResult();
             SetShouldAutoScanThirdPartyToolMigration(false);
             SetIsServerManuallyStopped(false);
         }
