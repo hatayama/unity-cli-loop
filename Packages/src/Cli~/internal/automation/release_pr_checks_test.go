@@ -74,6 +74,22 @@ func TestReleasePRChecksAcceptSameSecondRunAfterDispatch(t *testing.T) {
 	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
 }
 
+// Verifies that a stale PR head SHA before dispatch does not hide successful checks for the updated branch head.
+func TestReleasePRChecksUseDispatchedRunHeadWhenPRListReturnsStaleHead(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:           `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"release123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSONAfterWatch: `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"dist456","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		runListJSON:          `[{"databaseId":4242,"headSha":"dist456","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		runWatchStatus:       "0",
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertReleasePRCheckLogContains(t, result.stdout, "Watching build-and-test.yml run 4242 for release PR #1043.")
+	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
+}
+
 // Verifies that release-looking PRs are ignored without a release-please branch.
 func TestReleasePRChecksIgnoreManualReleasePR(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
