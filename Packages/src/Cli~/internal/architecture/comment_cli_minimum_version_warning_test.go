@@ -71,6 +71,21 @@ func TestCommentCliMinimumVersionWarningFailsCheckModeForGoCliChange(t *testing.
 	assertNotContains(t, result.GitHubLog, "PATCH")
 }
 
+// Verifies that touching the constants file without changing the required CLI still fails check mode.
+func TestCommentCliMinimumVersionWarningFailsCheckModeForUnchangedMinimumVersion(t *testing.T) {
+	result := runCommentScriptCase(t, commentScriptOptions{
+		Mutation:        "go-cli-and-unchanged-minimum",
+		BaseRef:         "HEAD^",
+		IncludePRNumber: true,
+		FailOnWarning:   true,
+		ExpectFailure:   true,
+	})
+
+	assertContains(t, result.Output, "MINIMUM_REQUIRED_CLI_VERSION")
+	assertNotContains(t, result.GitHubLog, "POST")
+	assertNotContains(t, result.GitHubLog, "PATCH")
+}
+
 // Verifies that pull_request_target can diff a fetched PR head without checking it out.
 func TestCommentCliMinimumVersionWarningUsesExplicitHeadRef(t *testing.T) {
 	workDir := t.TempDir()
@@ -141,6 +156,9 @@ func runCommentScriptCase(t *testing.T, options commentScriptOptions) commentScr
 	case "go-cli-and-minimum":
 		writeFile(t, filepath.Join(repositoryPath, goCliPath), "package cli // changed")
 		writeFile(t, filepath.Join(repositoryPath, minimumVersionPath), `public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.15";`)
+	case "go-cli-and-unchanged-minimum":
+		writeFile(t, filepath.Join(repositoryPath, goCliPath), "package cli // changed")
+		writeFile(t, filepath.Join(repositoryPath, minimumVersionPath), `public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.14"; // touched`)
 	case "docs":
 		writeFile(t, filepath.Join(repositoryPath, "README.md"), "documentation")
 	case "":
