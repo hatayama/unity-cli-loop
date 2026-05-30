@@ -70,6 +70,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 forceRecompile,
                 resultJson,
                 DateTime.UtcNow);
+            bool pendingRequestCleared =
+                sessionStateService.ClearPendingCompileRequestIfMatches(requestId);
             VibeLogger.LogInfo(
                 "compile_result_session_state_store_complete",
                 "Stored compile result in SessionState for CLI status polling.",
@@ -80,7 +82,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     success = result.Success,
                     error_count = result.ErrorCount,
                     warning_count = result.WarningCount,
-                    result_bytes = System.Text.Encoding.UTF8.GetByteCount(resultJson)
+                    result_bytes = System.Text.Encoding.UTF8.GetByteCount(resultJson),
+                    pending_request_cleared = pendingRequestCleared
                 },
                 correlationId);
         }

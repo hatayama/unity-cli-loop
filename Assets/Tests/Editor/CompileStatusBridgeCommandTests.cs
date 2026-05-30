@@ -95,5 +95,75 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.HasResult, Is.False);
             Assert.That(response.Result, Is.Null);
         }
+
+        [Test]
+        public void BuildResponse_WhenUnityIsIdleAndPendingRequestHasNoResult_ReturnsRecoveredResult()
+        {
+            // Verifies reload recovery returns an indeterminate result instead of leaving the CLI polling forever.
+            _sessionStateService.MarkPendingCompileRequest(
+                "compile_test_request",
+                forceRecompile: false,
+                markedAtUtc: System.DateTime.UtcNow);
+
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: false,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+
+            Assert.That(response.Ready, Is.True);
+            Assert.That(response.HasResult, Is.True);
+            Assert.That(response.Result["Success"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["Warnings"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["Message"]?.ToString(), Does.Contain("reloaded scripts"));
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
+        }
+
+        [Test]
+        public void BuildResponse_WhenUnityIsBusyAndPendingRequestHasNoResult_WaitsForReadiness()
+        {
+            // Verifies pending recovery does not publish an indeterminate result before Unity is idle.
+            _sessionStateService.MarkPendingCompileRequest(
+                "compile_test_request",
+                forceRecompile: false,
+                markedAtUtc: System.DateTime.UtcNow);
+
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: true,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+
+            Assert.That(response.Ready, Is.False);
+            Assert.That(response.HasResult, Is.False);
+            Assert.That(response.Result, Is.Null);
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.True);
+        }
+
+        [Test]
+        public void BuildResponse_WhenForceCompilePendingRequestHasNoResult_ReturnsForceCompileMessage()
+        {
+            // Verifies forced compile recovery preserves the documented no-details response shape.
+            _sessionStateService.MarkPendingCompileRequest(
+                "compile_test_request",
+                forceRecompile: true,
+                markedAtUtc: System.DateTime.UtcNow);
+
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: false,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+
+            Assert.That(response.Ready, Is.True);
+            Assert.That(response.HasResult, Is.True);
+            Assert.That(response.Result["Success"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["Message"]?.ToString(), Does.Contain("Force compilation"));
+        }
     }
 }

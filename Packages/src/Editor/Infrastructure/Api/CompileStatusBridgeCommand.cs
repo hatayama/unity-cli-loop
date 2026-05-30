@@ -1,10 +1,12 @@
 using System;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -14,6 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal static class CompileStatusBridgeCommand
     {
         private const string RequestIdParamName = "RequestId";
+        private const string RecoveredCompileResultMessage =
+            "Compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. Use get-logs to inspect the compiler output.";
+        private const string ForceCompileUnknownResultMessage =
+            "Force compilation completed, but Unity does not provide detailed errors or warnings for this command. Use get-logs to inspect the compiler output.";
 
         public static GetCompileStatusResponse Execute(JToken paramsToken)
         {
@@ -44,9 +50,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
             bool ready = !isCompiling && !isUpdating && !isDomainReloadInProgress;
+            sessionStateService.ClearExpiredPendingCompileRequest(DateTime.UtcNow);
             UnityCliLoopStoredCompileResult storedResult = string.IsNullOrWhiteSpace(requestId)
                 ? UnityCliLoopStoredCompileResult.None()
                 : sessionStateService.GetCompileResult(requestId);
+            if (ready && !storedResult.HasResult)
+            {
+                storedResult = RecoverPendingCompileResult(requestId, sessionStateService);
+            }
+
             JToken result = storedResult.HasResult ? JToken.Parse(storedResult.ResultJson) : null;
             return new GetCompileStatusResponse
             {
@@ -69,6 +81,54 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             JToken requestIdToken = paramsObject.GetValue(RequestIdParamName, StringComparison.OrdinalIgnoreCase);
             return requestIdToken?.ToString() ?? "";
+        }
+
+        private static UnityCliLoopStoredCompileResult RecoverPendingCompileResult(
+            string requestId,
+            UnityCliLoopEditorSessionStateService sessionStateService)
+        {
+            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            UnityCliLoopPendingCompileRequest pendingRequest =
+                sessionStateService.GetPendingCompileRequestForRequestId(requestId);
+            if (!pendingRequest.HasRequest)
+            {
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            JObject recoveredResult = CreateRecoveredCompileResult(pendingRequest);
+            sessionStateService.StoreCompileResult(
+                requestId,
+                pendingRequest.ForceRecompile,
+                recoveredResult.ToString(Formatting.None),
+                DateTime.UtcNow);
+            sessionStateService.ClearPendingCompileRequestIfMatches(requestId);
+            return sessionStateService.GetCompileResult(requestId);
+        }
+
+        private static JObject CreateRecoveredCompileResult(
+            UnityCliLoopPendingCompileRequest pendingRequest)
+        {
+            Debug.Assert(pendingRequest != null, "pendingRequest must not be null");
+
+            string message = pendingRequest.ForceRecompile
+                ? ForceCompileUnknownResultMessage
+                : RecoveredCompileResultMessage;
+            return new JObject
+            {
+                ["Success"] = JValue.CreateNull(),
+                ["ErrorCount"] = JValue.CreateNull(),
+                ["WarningCount"] = JValue.CreateNull(),
+                ["Errors"] = JValue.CreateNull(),
+                ["Warnings"] = JValue.CreateNull(),
+                ["Message"] = message,
+                ["ProjectRoot"] = UnityCliLoopPathResolver.GetProjectRoot()
+            };
         }
 
         private static string CreateMessage(bool ready, bool hasResult)

@@ -45,7 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string correlationId = ResolveCorrelationId(request);
             LogCompileResultStoragePrepared(request, originalRequestId, correlationId);
 
-            _sessionStateService.ClearExpiredCompileResult(DateTime.UtcNow);
+            DateTime utcNow = DateTime.UtcNow;
+            _sessionStateService.ClearExpiredCompileResult(utcNow);
+            _sessionStateService.ClearExpiredPendingCompileRequest(utcNow);
+            MarkPendingCompileRequestIfNeeded(request, utcNow, correlationId);
             LogCompileRequestReceived(request, correlationId);
 
             // 1. Play Mode preparation check
@@ -274,6 +277,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 },
                 correlationId);
             return response;
+        }
+
+        private void MarkPendingCompileRequestIfNeeded(
+            UnityCliLoopCompileRequest request,
+            DateTime markedAtUtc,
+            string correlationId)
+        {
+            Debug.Assert(request != null, "request must not be null");
+            Debug.Assert(markedAtUtc.Kind == DateTimeKind.Utc, "markedAtUtc must be UTC");
+
+            if (!request.WaitForDomainReload)
+            {
+                return;
+            }
+
+            Debug.Assert(!string.IsNullOrWhiteSpace(request.RequestId), "request.RequestId must not be null or whitespace");
+            _sessionStateService.MarkPendingCompileRequest(
+                request.RequestId,
+                request.ForceRecompile,
+                markedAtUtc);
+            VibeLogger.LogInfo(
+                "compile_pending_request_marked",
+                "Stored pending compile request before Unity can start Domain Reload.",
+                new
+                {
+                    request_id = request.RequestId,
+                    force_recompile = request.ForceRecompile,
+                    wait_for_domain_reload = request.WaitForDomainReload
+                },
+                correlationId);
         }
 
         private static string ResolveCorrelationId(UnityCliLoopCompileRequest request)

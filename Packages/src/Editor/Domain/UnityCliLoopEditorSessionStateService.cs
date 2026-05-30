@@ -29,6 +29,12 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void SetCompileResultJson(string compileResultJson);
         string GetCompileResultCompletedAtUtcTicks();
         void SetCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks);
+        string GetPendingCompileRequestId();
+        void SetPendingCompileRequestId(string pendingCompileRequestId);
+        bool GetPendingCompileForceRecompile();
+        void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile);
+        string GetPendingCompileExpiresAtUtcTicks();
+        void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks);
     }
 
     /// <summary>
@@ -94,6 +100,60 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Debug.Assert(utcNow.Kind == DateTimeKind.Utc, "utcNow must be UTC");
             Debug.Assert(lifetime > TimeSpan.Zero, "lifetime must be positive");
             return HasResult && CompletedAtUtcTicks <= (utcNow - lifetime).Ticks;
+        }
+    }
+
+    /// <summary>
+    /// Records a compile request that may need an indeterminate result after Domain Reload.
+    /// </summary>
+    public sealed class UnityCliLoopPendingCompileRequest
+    {
+        private UnityCliLoopPendingCompileRequest(
+            bool hasRequest,
+            string requestId,
+            bool forceRecompile,
+            long expiresAtUtcTicks)
+        {
+            HasRequest = hasRequest;
+            RequestId = requestId;
+            ForceRecompile = forceRecompile;
+            ExpiresAtUtcTicks = expiresAtUtcTicks;
+        }
+
+        public bool HasRequest { get; }
+        public string RequestId { get; }
+        public bool ForceRecompile { get; }
+        public long ExpiresAtUtcTicks { get; }
+
+        public static UnityCliLoopPendingCompileRequest None()
+        {
+            return new UnityCliLoopPendingCompileRequest(false, "", false, 0);
+        }
+
+        public static UnityCliLoopPendingCompileRequest Create(
+            string requestId,
+            bool forceRecompile,
+            long expiresAtUtcTicks)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+            Debug.Assert(expiresAtUtcTicks > 0, "expiresAtUtcTicks must be positive");
+
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                throw new ArgumentException("requestId must not be null or whitespace.", nameof(requestId));
+            }
+
+            return new UnityCliLoopPendingCompileRequest(
+                true,
+                requestId,
+                forceRecompile,
+                expiresAtUtcTicks);
+        }
+
+        public bool IsExpiredAt(DateTime utcNow)
+        {
+            Debug.Assert(utcNow.Kind == DateTimeKind.Utc, "utcNow must be UTC");
+            return HasRequest && ExpiresAtUtcTicks <= utcNow.Ticks;
         }
     }
 
@@ -307,6 +367,109 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return true;
         }
 
+        public void MarkPendingCompileRequest(
+            string requestId,
+            bool forceRecompile,
+            DateTime markedAtUtc)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+            Debug.Assert(markedAtUtc.Kind == DateTimeKind.Utc, "markedAtUtc must be UTC");
+
+            StorePendingCompileRequest(
+                requestId,
+                forceRecompile,
+                markedAtUtc.Add(CompileResultLifetime).Ticks);
+        }
+
+        public void StorePendingCompileRequest(
+            string requestId,
+            bool forceRecompile,
+            long expiresAtUtcTicks)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+            Debug.Assert(expiresAtUtcTicks > 0, "expiresAtUtcTicks must be positive");
+
+            _sessionStatePort.SetPendingCompileRequestId(requestId);
+            _sessionStatePort.SetPendingCompileForceRecompile(forceRecompile);
+            _sessionStatePort.SetPendingCompileExpiresAtUtcTicks(expiresAtUtcTicks.ToString());
+        }
+
+        public UnityCliLoopPendingCompileRequest GetPendingCompileRequest()
+        {
+            string requestId = _sessionStatePort.GetPendingCompileRequestId();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            string expiresAtUtcTicksText = _sessionStatePort.GetPendingCompileExpiresAtUtcTicks();
+            (bool isValid, long expiresAtUtcTicks) =
+                ParseUtcTicks(expiresAtUtcTicksText);
+            if (!isValid || expiresAtUtcTicks <= 0)
+            {
+                ClearPendingCompileRequest();
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            return UnityCliLoopPendingCompileRequest.Create(
+                requestId,
+                _sessionStatePort.GetPendingCompileForceRecompile(),
+                expiresAtUtcTicks);
+        }
+
+        public UnityCliLoopPendingCompileRequest GetPendingCompileRequestForRequestId(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            UnityCliLoopPendingCompileRequest pendingRequest = GetPendingCompileRequest();
+            if (!pendingRequest.HasRequest)
+            {
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            if (pendingRequest.RequestId != requestId)
+            {
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            return pendingRequest;
+        }
+
+        public void ClearPendingCompileRequest()
+        {
+            _sessionStatePort.SetPendingCompileRequestId("");
+            _sessionStatePort.SetPendingCompileForceRecompile(false);
+            _sessionStatePort.SetPendingCompileExpiresAtUtcTicks("");
+        }
+
+        public bool ClearPendingCompileRequestIfMatches(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            UnityCliLoopPendingCompileRequest pendingRequest = GetPendingCompileRequest();
+            if (!pendingRequest.HasRequest || pendingRequest.RequestId != requestId)
+            {
+                return false;
+            }
+
+            ClearPendingCompileRequest();
+            return true;
+        }
+
+        public bool ClearExpiredPendingCompileRequest(DateTime utcNow)
+        {
+            Debug.Assert(utcNow.Kind == DateTimeKind.Utc, "utcNow must be UTC");
+
+            UnityCliLoopPendingCompileRequest pendingRequest = GetPendingCompileRequest();
+            if (!pendingRequest.IsExpiredAt(utcNow))
+            {
+                return false;
+            }
+
+            ClearPendingCompileRequest();
+            return true;
+        }
+
         public bool ConsumeShouldAutoScanThirdPartyToolMigration()
         {
             if (!GetShouldAutoScanThirdPartyToolMigration())
@@ -386,6 +549,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             ClearServerSession();
             ClearDomainReloadRecoveryFlags();
             ClearCompileResult();
+            ClearPendingCompileRequest();
             SetShouldAutoScanThirdPartyToolMigration(false);
             SetIsServerManuallyStopped(false);
         }

@@ -23,6 +23,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string CompileResultForceRecompileKey = KeyPrefix + "compileResultForceRecompile";
         private const string CompileResultJsonKey = KeyPrefix + "compileResultJson";
         private const string CompileResultCompletedAtUtcTicksKey = KeyPrefix + "compileResultCompletedAtUtcTicks";
+        private const string PendingCompileRequestIdKey = KeyPrefix + "pendingCompileRequestId";
+        private const string PendingCompileForceRecompileKey = KeyPrefix + "pendingCompileForceRecompile";
+        private const string PendingCompileExpiresAtUtcTicksKey =
+            KeyPrefix + "pendingCompileExpiresAtUtcTicks";
 
         public bool GetIsServerRunning()
         {
@@ -142,6 +146,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void SetCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks)
         {
             SetString(CompileResultCompletedAtUtcTicksKey, compileResultCompletedAtUtcTicks);
+        }
+
+        public string GetPendingCompileRequestId()
+        {
+            return GetString(PendingCompileRequestIdKey);
+        }
+
+        public void SetPendingCompileRequestId(string pendingCompileRequestId)
+        {
+            SetString(PendingCompileRequestIdKey, pendingCompileRequestId);
+        }
+
+        public bool GetPendingCompileForceRecompile()
+        {
+            return GetBool(PendingCompileForceRecompileKey);
+        }
+
+        public void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile)
+        {
+            SetBool(PendingCompileForceRecompileKey, pendingCompileForceRecompile);
+        }
+
+        public string GetPendingCompileExpiresAtUtcTicks()
+        {
+            return GetString(PendingCompileExpiresAtUtcTicksKey);
+        }
+
+        public void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks)
+        {
+            SetString(PendingCompileExpiresAtUtcTicksKey, pendingCompileExpiresAtUtcTicks);
         }
 
         private static bool GetBool(string key)
