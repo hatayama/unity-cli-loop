@@ -33,8 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private readonly bool _showReconnectingUI;
         private readonly bool _showPostCompileReconnectingUI;
         private readonly bool _shouldAutoScanThirdPartyToolMigration;
-        private readonly UnityCliLoopStoredCompileResult _compileResult;
-        private readonly UnityCliLoopPendingCompileRequest _pendingCompileRequest;
+        private readonly UnityCliLoopStoredCompileResult[] _compileResults;
+        private readonly UnityCliLoopPendingCompileRequest[] _pendingCompileRequests;
 
         private UnityCliLoopEditorSessionStateSnapshot(UnityCliLoopEditorSessionStateService service)
         {
@@ -46,8 +46,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _showReconnectingUI = service.GetShowReconnectingUI();
             _showPostCompileReconnectingUI = service.GetShowPostCompileReconnectingUI();
             _shouldAutoScanThirdPartyToolMigration = service.GetShouldAutoScanThirdPartyToolMigration();
-            _compileResult = service.GetStoredCompileResult();
-            _pendingCompileRequest = service.GetPendingCompileRequest();
+            _compileResults = service.GetStoredCompileResults();
+            _pendingCompileRequests = service.GetPendingCompileRequests();
         }
 
         internal static UnityCliLoopEditorSessionStateSnapshot Capture(
@@ -66,30 +66,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             service.SetShowReconnectingUI(_showReconnectingUI);
             service.SetShowPostCompileReconnectingUI(_showPostCompileReconnectingUI);
             service.SetShouldAutoScanThirdPartyToolMigration(_shouldAutoScanThirdPartyToolMigration);
-            if (_compileResult.HasResult)
+            service.ClearCompileResult();
+            foreach (UnityCliLoopStoredCompileResult compileResult in _compileResults)
             {
                 service.StoreCompileResult(
-                    _compileResult.RequestId,
-                    _compileResult.ForceRecompile,
-                    _compileResult.ResultJson,
-                    new System.DateTime(_compileResult.CompletedAtUtcTicks, System.DateTimeKind.Utc));
-            }
-            else
-            {
-                service.ClearCompileResult();
+                    compileResult.RequestId,
+                    compileResult.ForceRecompile,
+                    compileResult.ResultJson,
+                    new System.DateTime(compileResult.CompletedAtUtcTicks, System.DateTimeKind.Utc));
             }
 
-            if (_pendingCompileRequest.HasRequest)
+            service.ClearPendingCompileRequest();
+            foreach (UnityCliLoopPendingCompileRequest pendingCompileRequest in _pendingCompileRequests)
             {
                 service.StorePendingCompileRequest(
-                    _pendingCompileRequest.RequestId,
-                    _pendingCompileRequest.ForceRecompile,
-                    _pendingCompileRequest.ExpiresAtUtcTicks,
-                    _pendingCompileRequest.ReloadObserved);
-            }
-            else
-            {
-                service.ClearPendingCompileRequest();
+                    pendingCompileRequest.RequestId,
+                    pendingCompileRequest.ForceRecompile,
+                    pendingCompileRequest.ExpiresAtUtcTicks,
+                    pendingCompileRequest.ReloadObserved);
             }
         }
     }

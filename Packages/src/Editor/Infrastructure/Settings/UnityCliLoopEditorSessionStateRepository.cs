@@ -19,15 +19,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string ShowPostCompileReconnectingUIKey = KeyPrefix + "showPostCompileReconnectingUI";
         private const string ShouldAutoScanThirdPartyToolMigrationKey =
             KeyPrefix + "shouldAutoScanThirdPartyToolMigration";
-        private const string CompileResultRequestIdKey = KeyPrefix + "compileResultRequestId";
-        private const string CompileResultForceRecompileKey = KeyPrefix + "compileResultForceRecompile";
-        private const string CompileResultJsonKey = KeyPrefix + "compileResultJson";
-        private const string CompileResultCompletedAtUtcTicksKey = KeyPrefix + "compileResultCompletedAtUtcTicks";
-        private const string PendingCompileRequestIdKey = KeyPrefix + "pendingCompileRequestId";
-        private const string PendingCompileForceRecompileKey = KeyPrefix + "pendingCompileForceRecompile";
-        private const string PendingCompileExpiresAtUtcTicksKey =
+        private const string CompileResultRequestIdsKey = KeyPrefix + "compileResultRequestIds";
+        private const string LegacyCompileResultRequestIdKey = KeyPrefix + "compileResultRequestId";
+        private const string LegacyCompileResultForceRecompileKey = KeyPrefix + "compileResultForceRecompile";
+        private const string LegacyCompileResultJsonKey = KeyPrefix + "compileResultJson";
+        private const string LegacyCompileResultCompletedAtUtcTicksKey =
+            KeyPrefix + "compileResultCompletedAtUtcTicks";
+        private const string CompileResultKeyPrefix = KeyPrefix + "compileResult.";
+        private const string CompileResultForceRecompileKeySuffix = ".forceRecompile";
+        private const string CompileResultJsonKeySuffix = ".json";
+        private const string CompileResultCompletedAtUtcTicksKeySuffix = ".completedAtUtcTicks";
+        private const string PendingCompileRequestIdsKey = KeyPrefix + "pendingCompileRequestIds";
+        private const string LegacyPendingCompileRequestIdKey = KeyPrefix + "pendingCompileRequestId";
+        private const string LegacyPendingCompileForceRecompileKey = KeyPrefix + "pendingCompileForceRecompile";
+        private const string LegacyPendingCompileExpiresAtUtcTicksKey =
             KeyPrefix + "pendingCompileExpiresAtUtcTicks";
-        private const string PendingCompileReloadObservedKey = KeyPrefix + "pendingCompileReloadObserved";
+        private const string LegacyPendingCompileReloadObservedKey = KeyPrefix + "pendingCompileReloadObserved";
+        private const string PendingCompileKeyPrefix = KeyPrefix + "pendingCompile.";
+        private const string PendingCompileForceRecompileKeySuffix = ".forceRecompile";
+        private const string PendingCompileExpiresAtUtcTicksKeySuffix = ".expiresAtUtcTicks";
+        private const string PendingCompileReloadObservedKeySuffix = ".reloadObserved";
 
         public bool GetIsServerRunning()
         {
@@ -109,84 +120,174 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SetBool(ShouldAutoScanThirdPartyToolMigrationKey, shouldAutoScanThirdPartyToolMigration);
         }
 
-        public string GetCompileResultRequestId()
+        public string GetCompileResultRequestIds()
         {
-            return GetString(CompileResultRequestIdKey);
+            return GetString(CompileResultRequestIdsKey);
         }
 
-        public void SetCompileResultRequestId(string compileResultRequestId)
+        public void SetCompileResultRequestIds(string compileResultRequestIds)
         {
-            SetString(CompileResultRequestIdKey, compileResultRequestId);
+            SetString(CompileResultRequestIdsKey, compileResultRequestIds);
         }
 
-        public bool GetCompileResultForceRecompile()
+        public string GetLegacyCompileResultRequestId()
         {
-            return GetBool(CompileResultForceRecompileKey);
+            return GetString(LegacyCompileResultRequestIdKey);
         }
 
-        public void SetCompileResultForceRecompile(bool compileResultForceRecompile)
+        public void SetLegacyCompileResultRequestId(string compileResultRequestId)
         {
-            SetBool(CompileResultForceRecompileKey, compileResultForceRecompile);
+            SetString(LegacyCompileResultRequestIdKey, compileResultRequestId);
         }
 
-        public string GetCompileResultJson()
+        public bool GetLegacyCompileResultForceRecompile()
         {
-            return GetString(CompileResultJsonKey);
+            return GetBool(LegacyCompileResultForceRecompileKey);
         }
 
-        public void SetCompileResultJson(string compileResultJson)
+        public void SetLegacyCompileResultForceRecompile(bool compileResultForceRecompile)
         {
-            SetString(CompileResultJsonKey, compileResultJson);
+            SetBool(LegacyCompileResultForceRecompileKey, compileResultForceRecompile);
         }
 
-        public string GetCompileResultCompletedAtUtcTicks()
+        public string GetLegacyCompileResultJson()
         {
-            return GetString(CompileResultCompletedAtUtcTicksKey);
+            return GetString(LegacyCompileResultJsonKey);
         }
 
-        public void SetCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks)
+        public void SetLegacyCompileResultJson(string compileResultJson)
         {
-            SetString(CompileResultCompletedAtUtcTicksKey, compileResultCompletedAtUtcTicks);
+            SetString(LegacyCompileResultJsonKey, compileResultJson);
         }
 
-        public string GetPendingCompileRequestId()
+        public string GetLegacyCompileResultCompletedAtUtcTicks()
         {
-            return GetString(PendingCompileRequestIdKey);
+            return GetString(LegacyCompileResultCompletedAtUtcTicksKey);
         }
 
-        public void SetPendingCompileRequestId(string pendingCompileRequestId)
+        public void SetLegacyCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks)
         {
-            SetString(PendingCompileRequestIdKey, pendingCompileRequestId);
+            SetString(LegacyCompileResultCompletedAtUtcTicksKey, compileResultCompletedAtUtcTicks);
         }
 
-        public bool GetPendingCompileForceRecompile()
+        public bool GetCompileResultForceRecompile(string requestId)
         {
-            return GetBool(PendingCompileForceRecompileKey);
+            return GetBool(CreateCompileResultKey(requestId, CompileResultForceRecompileKeySuffix));
         }
 
-        public void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile)
+        public void SetCompileResultForceRecompile(string requestId, bool compileResultForceRecompile)
         {
-            SetBool(PendingCompileForceRecompileKey, pendingCompileForceRecompile);
+            SetBool(CreateCompileResultKey(requestId, CompileResultForceRecompileKeySuffix), compileResultForceRecompile);
         }
 
-        public string GetPendingCompileExpiresAtUtcTicks()
+        public string GetCompileResultJson(string requestId)
         {
-            return GetString(PendingCompileExpiresAtUtcTicksKey);
+            return GetString(CreateCompileResultKey(requestId, CompileResultJsonKeySuffix));
         }
 
-        public void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks)
+        public void SetCompileResultJson(string requestId, string compileResultJson)
         {
-            SetString(PendingCompileExpiresAtUtcTicksKey, pendingCompileExpiresAtUtcTicks);
+            SetString(CreateCompileResultKey(requestId, CompileResultJsonKeySuffix), compileResultJson);
         }
 
-        public bool GetPendingCompileReloadObserved()
+        public string GetCompileResultCompletedAtUtcTicks(string requestId)
         {
-            return GetBool(PendingCompileReloadObservedKey);
+            return GetString(CreateCompileResultKey(requestId, CompileResultCompletedAtUtcTicksKeySuffix));
         }
 
-        public void SetPendingCompileReloadObserved(bool pendingCompileReloadObserved)
+        public void SetCompileResultCompletedAtUtcTicks(string requestId, string compileResultCompletedAtUtcTicks)
         {
-            SetBool(PendingCompileReloadObservedKey, pendingCompileReloadObserved);
+            SetString(CreateCompileResultKey(requestId, CompileResultCompletedAtUtcTicksKeySuffix), compileResultCompletedAtUtcTicks);
+        }
+
+        public string GetPendingCompileRequestIds()
+        {
+            return GetString(PendingCompileRequestIdsKey);
+        }
+
+        public void SetPendingCompileRequestIds(string pendingCompileRequestIds)
+        {
+            SetString(PendingCompileRequestIdsKey, pendingCompileRequestIds);
+        }
+
+        public string GetLegacyPendingCompileRequestId()
+        {
+            return GetString(LegacyPendingCompileRequestIdKey);
+        }
+
+        public void SetLegacyPendingCompileRequestId(string pendingCompileRequestId)
+        {
+            SetString(LegacyPendingCompileRequestIdKey, pendingCompileRequestId);
+        }
+
+        public bool GetLegacyPendingCompileForceRecompile()
+        {
+            return GetBool(LegacyPendingCompileForceRecompileKey);
+        }
+
+        public void SetLegacyPendingCompileForceRecompile(bool pendingCompileForceRecompile)
+        {
+            SetBool(LegacyPendingCompileForceRecompileKey, pendingCompileForceRecompile);
+        }
+
+        public string GetLegacyPendingCompileExpiresAtUtcTicks()
+        {
+            return GetString(LegacyPendingCompileExpiresAtUtcTicksKey);
+        }
+
+        public void SetLegacyPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks)
+        {
+            SetString(LegacyPendingCompileExpiresAtUtcTicksKey, pendingCompileExpiresAtUtcTicks);
+        }
+
+        public bool GetLegacyPendingCompileReloadObserved()
+        {
+            return GetBool(LegacyPendingCompileReloadObservedKey);
+        }
+
+        public void SetLegacyPendingCompileReloadObserved(bool pendingCompileReloadObserved)
+        {
+            SetBool(LegacyPendingCompileReloadObservedKey, pendingCompileReloadObserved);
+        }
+
+        public bool GetPendingCompileForceRecompile(string requestId)
+        {
+            return GetBool(CreatePendingCompileKey(requestId, PendingCompileForceRecompileKeySuffix));
+        }
+
+        public void SetPendingCompileForceRecompile(string requestId, bool pendingCompileForceRecompile)
+        {
+            SetBool(CreatePendingCompileKey(requestId, PendingCompileForceRecompileKeySuffix), pendingCompileForceRecompile);
+        }
+
+        public string GetPendingCompileExpiresAtUtcTicks(string requestId)
+        {
+            return GetString(CreatePendingCompileKey(requestId, PendingCompileExpiresAtUtcTicksKeySuffix));
+        }
+
+        public void SetPendingCompileExpiresAtUtcTicks(string requestId, string pendingCompileExpiresAtUtcTicks)
+        {
+            SetString(CreatePendingCompileKey(requestId, PendingCompileExpiresAtUtcTicksKeySuffix), pendingCompileExpiresAtUtcTicks);
+        }
+
+        public bool GetPendingCompileReloadObserved(string requestId)
+        {
+            return GetBool(CreatePendingCompileKey(requestId, PendingCompileReloadObservedKeySuffix));
+        }
+
+        public void SetPendingCompileReloadObserved(string requestId, bool pendingCompileReloadObserved)
+        {
+            SetBool(CreatePendingCompileKey(requestId, PendingCompileReloadObservedKeySuffix), pendingCompileReloadObserved);
+        }
+
+        private static string CreateCompileResultKey(string requestId, string suffix)
+        {
+            return CompileResultKeyPrefix + requestId + suffix;
+        }
+
+        private static string CreatePendingCompileKey(string requestId, string suffix)
+        {
+            return PendingCompileKeyPrefix + requestId + suffix;
         }
 
         private static bool GetBool(string key)

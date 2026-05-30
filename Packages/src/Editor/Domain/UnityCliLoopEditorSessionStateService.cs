@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace io.github.hatayama.UnityCliLoop.Domain
@@ -21,22 +22,38 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI);
         bool GetShouldAutoScanThirdPartyToolMigration();
         void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration);
-        string GetCompileResultRequestId();
-        void SetCompileResultRequestId(string compileResultRequestId);
-        bool GetCompileResultForceRecompile();
-        void SetCompileResultForceRecompile(bool compileResultForceRecompile);
-        string GetCompileResultJson();
-        void SetCompileResultJson(string compileResultJson);
-        string GetCompileResultCompletedAtUtcTicks();
-        void SetCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks);
-        string GetPendingCompileRequestId();
-        void SetPendingCompileRequestId(string pendingCompileRequestId);
-        bool GetPendingCompileForceRecompile();
-        void SetPendingCompileForceRecompile(bool pendingCompileForceRecompile);
-        string GetPendingCompileExpiresAtUtcTicks();
-        void SetPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks);
-        bool GetPendingCompileReloadObserved();
-        void SetPendingCompileReloadObserved(bool pendingCompileReloadObserved);
+        string GetCompileResultRequestIds();
+        void SetCompileResultRequestIds(string compileResultRequestIds);
+        string GetLegacyCompileResultRequestId();
+        void SetLegacyCompileResultRequestId(string compileResultRequestId);
+        bool GetLegacyCompileResultForceRecompile();
+        void SetLegacyCompileResultForceRecompile(bool compileResultForceRecompile);
+        string GetLegacyCompileResultJson();
+        void SetLegacyCompileResultJson(string compileResultJson);
+        string GetLegacyCompileResultCompletedAtUtcTicks();
+        void SetLegacyCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks);
+        bool GetCompileResultForceRecompile(string requestId);
+        void SetCompileResultForceRecompile(string requestId, bool compileResultForceRecompile);
+        string GetCompileResultJson(string requestId);
+        void SetCompileResultJson(string requestId, string compileResultJson);
+        string GetCompileResultCompletedAtUtcTicks(string requestId);
+        void SetCompileResultCompletedAtUtcTicks(string requestId, string compileResultCompletedAtUtcTicks);
+        string GetPendingCompileRequestIds();
+        void SetPendingCompileRequestIds(string pendingCompileRequestIds);
+        string GetLegacyPendingCompileRequestId();
+        void SetLegacyPendingCompileRequestId(string pendingCompileRequestId);
+        bool GetLegacyPendingCompileForceRecompile();
+        void SetLegacyPendingCompileForceRecompile(bool pendingCompileForceRecompile);
+        string GetLegacyPendingCompileExpiresAtUtcTicks();
+        void SetLegacyPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks);
+        bool GetLegacyPendingCompileReloadObserved();
+        void SetLegacyPendingCompileReloadObserved(bool pendingCompileReloadObserved);
+        bool GetPendingCompileForceRecompile(string requestId);
+        void SetPendingCompileForceRecompile(string requestId, bool pendingCompileForceRecompile);
+        string GetPendingCompileExpiresAtUtcTicks(string requestId);
+        void SetPendingCompileExpiresAtUtcTicks(string requestId, string pendingCompileExpiresAtUtcTicks);
+        bool GetPendingCompileReloadObserved(string requestId);
+        void SetPendingCompileReloadObserved(string requestId, bool pendingCompileReloadObserved);
     }
 
     /// <summary>
@@ -287,6 +304,68 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return (true, value);
         }
 
+        private static string[] ParseRequestIdIndex(string requestIdIndex)
+        {
+            if (string.IsNullOrWhiteSpace(requestIdIndex))
+            {
+                return Array.Empty<string>();
+            }
+
+            string[] rawRequestIds = requestIdIndex.Split(
+                new[] { '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+            List<string> requestIds = new List<string>();
+            foreach (string rawRequestId in rawRequestIds)
+            {
+                string requestId = rawRequestId.Trim();
+                if (string.IsNullOrWhiteSpace(requestId) || requestIds.Contains(requestId))
+                {
+                    continue;
+                }
+
+                requestIds.Add(requestId);
+            }
+
+            return requestIds.ToArray();
+        }
+
+        private static string FormatRequestIdIndex(List<string> requestIds)
+        {
+            Debug.Assert(requestIds != null, "requestIds must not be null");
+            return string.Join("\n", requestIds.ToArray());
+        }
+
+        private static string AddRequestIdToIndex(string requestIdIndex, string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            List<string> requestIds = new List<string>(ParseRequestIdIndex(requestIdIndex));
+            if (!requestIds.Contains(requestId))
+            {
+                requestIds.Add(requestId);
+            }
+
+            return FormatRequestIdIndex(requestIds);
+        }
+
+        private static string RemoveRequestIdFromIndex(string requestIdIndex, string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            List<string> requestIds = new List<string>();
+            foreach (string indexedRequestId in ParseRequestIdIndex(requestIdIndex))
+            {
+                if (indexedRequestId == requestId)
+                {
+                    continue;
+                }
+
+                requestIds.Add(indexedRequestId);
+            }
+
+            return FormatRequestIdIndex(requestIds);
+        }
+
         public void StoreCompileResult(
             string requestId,
             bool forceRecompile,
@@ -297,81 +376,205 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Debug.Assert(!string.IsNullOrWhiteSpace(resultJson), "resultJson must not be null or whitespace");
             Debug.Assert(completedAtUtc.Kind == DateTimeKind.Utc, "completedAtUtc must be UTC");
 
-            _sessionStatePort.SetCompileResultRequestId(requestId);
-            _sessionStatePort.SetCompileResultForceRecompile(forceRecompile);
-            _sessionStatePort.SetCompileResultJson(resultJson);
-            _sessionStatePort.SetCompileResultCompletedAtUtcTicks(completedAtUtc.Ticks.ToString());
+            _sessionStatePort.SetCompileResultRequestIds(
+                AddRequestIdToIndex(_sessionStatePort.GetCompileResultRequestIds(), requestId));
+            _sessionStatePort.SetCompileResultForceRecompile(requestId, forceRecompile);
+            _sessionStatePort.SetCompileResultJson(requestId, resultJson);
+            _sessionStatePort.SetCompileResultCompletedAtUtcTicks(requestId, completedAtUtc.Ticks.ToString());
         }
 
         public UnityCliLoopStoredCompileResult GetCompileResult(string requestId)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
 
-            UnityCliLoopStoredCompileResult storedResult = GetStoredCompileResult();
-            if (!storedResult.HasResult)
-            {
-                return UnityCliLoopStoredCompileResult.None();
-            }
-
-            if (storedResult.RequestId != requestId)
-            {
-                return UnityCliLoopStoredCompileResult.None();
-            }
-
-            return storedResult;
-        }
-
-        public UnityCliLoopStoredCompileResult GetStoredCompileResult()
-        {
-            string requestId = _sessionStatePort.GetCompileResultRequestId();
-            if (string.IsNullOrWhiteSpace(requestId))
-            {
-                return UnityCliLoopStoredCompileResult.None();
-            }
-
-            string resultJson = _sessionStatePort.GetCompileResultJson();
+            string resultJson = _sessionStatePort.GetCompileResultJson(requestId);
             if (string.IsNullOrWhiteSpace(resultJson))
             {
-                ClearCompileResult();
+                UnityCliLoopStoredCompileResult legacyResult =
+                    GetLegacyCompileResultForRequestId(requestId);
+                if (legacyResult.HasResult)
+                {
+                    return legacyResult;
+                }
+
+                ClearCompileResultForRequestId(requestId);
                 return UnityCliLoopStoredCompileResult.None();
             }
 
-            string completedAtUtcTicksText = _sessionStatePort.GetCompileResultCompletedAtUtcTicks();
+            string completedAtUtcTicksText = _sessionStatePort.GetCompileResultCompletedAtUtcTicks(requestId);
             (bool isValid, long completedAtUtcTicks) =
                 ParseUtcTicks(completedAtUtcTicksText);
             if (!isValid || completedAtUtcTicks <= 0)
             {
-                ClearCompileResult();
+                ClearCompileResultForRequestId(requestId);
                 return UnityCliLoopStoredCompileResult.None();
             }
 
             return UnityCliLoopStoredCompileResult.Create(
                 requestId,
-                _sessionStatePort.GetCompileResultForceRecompile(),
+                _sessionStatePort.GetCompileResultForceRecompile(requestId),
                 resultJson,
                 completedAtUtcTicks);
         }
 
+        public UnityCliLoopStoredCompileResult GetStoredCompileResult()
+        {
+            UnityCliLoopStoredCompileResult[] storedResults = GetStoredCompileResults();
+            if (storedResults.Length == 0)
+            {
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            return storedResults[0];
+        }
+
+        public UnityCliLoopStoredCompileResult[] GetStoredCompileResults()
+        {
+            string[] requestIds = ParseRequestIdIndex(_sessionStatePort.GetCompileResultRequestIds());
+            List<UnityCliLoopStoredCompileResult> storedResults =
+                new List<UnityCliLoopStoredCompileResult>();
+            foreach (string requestId in requestIds)
+            {
+                UnityCliLoopStoredCompileResult storedResult = GetCompileResult(requestId);
+                if (storedResult.HasResult)
+                {
+                    storedResults.Add(storedResult);
+                }
+            }
+
+            UnityCliLoopStoredCompileResult legacyResult = GetLegacyCompileResult();
+            if (legacyResult.HasResult && !ContainsCompileResult(storedResults, legacyResult.RequestId))
+            {
+                storedResults.Add(legacyResult);
+            }
+
+            return storedResults.ToArray();
+        }
+
         public void ClearCompileResult()
         {
-            _sessionStatePort.SetCompileResultRequestId("");
-            _sessionStatePort.SetCompileResultForceRecompile(false);
-            _sessionStatePort.SetCompileResultJson("");
-            _sessionStatePort.SetCompileResultCompletedAtUtcTicks("");
+            foreach (string requestId in ParseRequestIdIndex(_sessionStatePort.GetCompileResultRequestIds()))
+            {
+                ClearCompileResultValues(requestId);
+            }
+
+            _sessionStatePort.SetCompileResultRequestIds("");
+            ClearLegacyCompileResult();
+        }
+
+        private void ClearCompileResultForRequestId(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            ClearCompileResultValues(requestId);
+            _sessionStatePort.SetCompileResultRequestIds(
+                RemoveRequestIdFromIndex(_sessionStatePort.GetCompileResultRequestIds(), requestId));
+        }
+
+        private void ClearCompileResultValues(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            _sessionStatePort.SetCompileResultForceRecompile(requestId, false);
+            _sessionStatePort.SetCompileResultJson(requestId, "");
+            _sessionStatePort.SetCompileResultCompletedAtUtcTicks(requestId, "");
+        }
+
+        private static bool ContainsCompileResult(
+            List<UnityCliLoopStoredCompileResult> storedResults,
+            string requestId)
+        {
+            Debug.Assert(storedResults != null, "storedResults must not be null");
+
+            foreach (UnityCliLoopStoredCompileResult storedResult in storedResults)
+            {
+                if (storedResult.RequestId == requestId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private UnityCliLoopStoredCompileResult GetLegacyCompileResult()
+        {
+            string requestId = _sessionStatePort.GetLegacyCompileResultRequestId();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            return GetLegacyCompileResultForRequestId(requestId);
+        }
+
+        private UnityCliLoopStoredCompileResult GetLegacyCompileResultForRequestId(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            string legacyRequestId = _sessionStatePort.GetLegacyCompileResultRequestId();
+            if (legacyRequestId != requestId)
+            {
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            string resultJson = _sessionStatePort.GetLegacyCompileResultJson();
+            if (string.IsNullOrWhiteSpace(resultJson))
+            {
+                ClearLegacyCompileResult();
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            string completedAtUtcTicksText =
+                _sessionStatePort.GetLegacyCompileResultCompletedAtUtcTicks();
+            (bool isValid, long completedAtUtcTicks) =
+                ParseUtcTicks(completedAtUtcTicksText);
+            if (!isValid || completedAtUtcTicks <= 0)
+            {
+                ClearLegacyCompileResult();
+                return UnityCliLoopStoredCompileResult.None();
+            }
+
+            bool forceRecompile = _sessionStatePort.GetLegacyCompileResultForceRecompile();
+            StoreCompileResult(
+                requestId,
+                forceRecompile,
+                resultJson,
+                new DateTime(completedAtUtcTicks, DateTimeKind.Utc));
+            ClearLegacyCompileResult();
+            return UnityCliLoopStoredCompileResult.Create(
+                requestId,
+                forceRecompile,
+                resultJson,
+                completedAtUtcTicks);
+        }
+
+        private void ClearLegacyCompileResult()
+        {
+            _sessionStatePort.SetLegacyCompileResultRequestId("");
+            _sessionStatePort.SetLegacyCompileResultForceRecompile(false);
+            _sessionStatePort.SetLegacyCompileResultJson("");
+            _sessionStatePort.SetLegacyCompileResultCompletedAtUtcTicks("");
         }
 
         public bool ClearExpiredCompileResult(DateTime utcNow)
         {
             Debug.Assert(utcNow.Kind == DateTimeKind.Utc, "utcNow must be UTC");
 
-            UnityCliLoopStoredCompileResult storedResult = GetStoredCompileResult();
-            if (!storedResult.IsExpiredAt(utcNow, CompileResultLifetime))
+            bool cleared = false;
+            UnityCliLoopStoredCompileResult[] storedResults = GetStoredCompileResults();
+            foreach (UnityCliLoopStoredCompileResult storedResult in storedResults)
             {
-                return false;
+                if (!storedResult.IsExpiredAt(utcNow, CompileResultLifetime))
+                {
+                    continue;
+                }
+
+                ClearCompileResultForRequestId(storedResult.RequestId);
+                cleared = true;
             }
 
-            ClearCompileResult();
-            return true;
+            return cleared;
         }
 
         public void MarkPendingCompileRequest(
@@ -398,49 +601,65 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
             Debug.Assert(expiresAtUtcTicks > 0, "expiresAtUtcTicks must be positive");
 
-            _sessionStatePort.SetPendingCompileRequestId(requestId);
-            _sessionStatePort.SetPendingCompileForceRecompile(forceRecompile);
-            _sessionStatePort.SetPendingCompileExpiresAtUtcTicks(expiresAtUtcTicks.ToString());
-            _sessionStatePort.SetPendingCompileReloadObserved(reloadObserved);
+            _sessionStatePort.SetPendingCompileRequestIds(
+                AddRequestIdToIndex(_sessionStatePort.GetPendingCompileRequestIds(), requestId));
+            _sessionStatePort.SetPendingCompileForceRecompile(requestId, forceRecompile);
+            _sessionStatePort.SetPendingCompileExpiresAtUtcTicks(requestId, expiresAtUtcTicks.ToString());
+            _sessionStatePort.SetPendingCompileReloadObserved(requestId, reloadObserved);
         }
 
         public UnityCliLoopPendingCompileRequest GetPendingCompileRequest()
         {
-            string requestId = _sessionStatePort.GetPendingCompileRequestId();
-            if (string.IsNullOrWhiteSpace(requestId))
+            UnityCliLoopPendingCompileRequest[] pendingRequests = GetPendingCompileRequests();
+            if (pendingRequests.Length == 0)
             {
                 return UnityCliLoopPendingCompileRequest.None();
             }
 
-            string expiresAtUtcTicksText = _sessionStatePort.GetPendingCompileExpiresAtUtcTicks();
-            (bool isValid, long expiresAtUtcTicks) =
-                ParseUtcTicks(expiresAtUtcTicksText);
-            if (!isValid || expiresAtUtcTicks <= 0)
+            return pendingRequests[0];
+        }
+
+        public UnityCliLoopPendingCompileRequest[] GetPendingCompileRequests()
+        {
+            string[] requestIds = ParseRequestIdIndex(_sessionStatePort.GetPendingCompileRequestIds());
+            List<UnityCliLoopPendingCompileRequest> pendingRequests =
+                new List<UnityCliLoopPendingCompileRequest>();
+            foreach (string requestId in requestIds)
             {
-                ClearPendingCompileRequest();
-                return UnityCliLoopPendingCompileRequest.None();
+                UnityCliLoopPendingCompileRequest pendingRequest =
+                    GetPendingCompileRequestForRequestId(requestId);
+                if (pendingRequest.HasRequest)
+                {
+                    pendingRequests.Add(pendingRequest);
+                }
             }
 
-            return UnityCliLoopPendingCompileRequest.Create(
-                requestId,
-                _sessionStatePort.GetPendingCompileForceRecompile(),
-                expiresAtUtcTicks,
-                _sessionStatePort.GetPendingCompileReloadObserved());
+            UnityCliLoopPendingCompileRequest legacyRequest = GetLegacyPendingCompileRequest();
+            if (legacyRequest.HasRequest && !ContainsPendingCompileRequest(pendingRequests, legacyRequest.RequestId))
+            {
+                pendingRequests.Add(legacyRequest);
+            }
+
+            return pendingRequests.ToArray();
         }
 
         public bool MarkPendingCompileRequestReloadObserved()
         {
-            UnityCliLoopPendingCompileRequest pendingRequest = GetPendingCompileRequest();
-            if (!pendingRequest.HasRequest)
+            UnityCliLoopPendingCompileRequest[] pendingRequests = GetPendingCompileRequests();
+            if (pendingRequests.Length == 0)
             {
                 return false;
             }
 
-            StorePendingCompileRequest(
-                pendingRequest.RequestId,
-                pendingRequest.ForceRecompile,
-                pendingRequest.ExpiresAtUtcTicks,
-                reloadObserved: true);
+            foreach (UnityCliLoopPendingCompileRequest pendingRequest in pendingRequests)
+            {
+                StorePendingCompileRequest(
+                    pendingRequest.RequestId,
+                    pendingRequest.ForceRecompile,
+                    pendingRequest.ExpiresAtUtcTicks,
+                    reloadObserved: true);
+            }
+
             return true;
         }
 
@@ -448,39 +667,141 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
 
-            UnityCliLoopPendingCompileRequest pendingRequest = GetPendingCompileRequest();
-            if (!pendingRequest.HasRequest)
+            string expiresAtUtcTicksText = _sessionStatePort.GetPendingCompileExpiresAtUtcTicks(requestId);
+            (bool isValid, long expiresAtUtcTicks) =
+                ParseUtcTicks(expiresAtUtcTicksText);
+            if (!isValid || expiresAtUtcTicks <= 0)
             {
+                UnityCliLoopPendingCompileRequest legacyRequest =
+                    GetLegacyPendingCompileRequestForRequestId(requestId);
+                if (legacyRequest.HasRequest)
+                {
+                    return legacyRequest;
+                }
+
+                ClearPendingCompileRequestForRequestId(requestId);
                 return UnityCliLoopPendingCompileRequest.None();
             }
 
-            if (pendingRequest.RequestId != requestId)
-            {
-                return UnityCliLoopPendingCompileRequest.None();
-            }
-
-            return pendingRequest;
+            return UnityCliLoopPendingCompileRequest.Create(
+                requestId,
+                _sessionStatePort.GetPendingCompileForceRecompile(requestId),
+                expiresAtUtcTicks,
+                _sessionStatePort.GetPendingCompileReloadObserved(requestId));
         }
 
         public void ClearPendingCompileRequest()
         {
-            _sessionStatePort.SetPendingCompileRequestId("");
-            _sessionStatePort.SetPendingCompileForceRecompile(false);
-            _sessionStatePort.SetPendingCompileExpiresAtUtcTicks("");
-            _sessionStatePort.SetPendingCompileReloadObserved(false);
+            foreach (string requestId in ParseRequestIdIndex(_sessionStatePort.GetPendingCompileRequestIds()))
+            {
+                ClearPendingCompileRequestValues(requestId);
+            }
+
+            _sessionStatePort.SetPendingCompileRequestIds("");
+            ClearLegacyPendingCompileRequest();
+        }
+
+        private void ClearPendingCompileRequestForRequestId(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            ClearPendingCompileRequestValues(requestId);
+            _sessionStatePort.SetPendingCompileRequestIds(
+                RemoveRequestIdFromIndex(_sessionStatePort.GetPendingCompileRequestIds(), requestId));
+        }
+
+        private void ClearPendingCompileRequestValues(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            _sessionStatePort.SetPendingCompileForceRecompile(requestId, false);
+            _sessionStatePort.SetPendingCompileExpiresAtUtcTicks(requestId, "");
+            _sessionStatePort.SetPendingCompileReloadObserved(requestId, false);
+        }
+
+        private static bool ContainsPendingCompileRequest(
+            List<UnityCliLoopPendingCompileRequest> pendingRequests,
+            string requestId)
+        {
+            Debug.Assert(pendingRequests != null, "pendingRequests must not be null");
+
+            foreach (UnityCliLoopPendingCompileRequest pendingRequest in pendingRequests)
+            {
+                if (pendingRequest.RequestId == requestId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private UnityCliLoopPendingCompileRequest GetLegacyPendingCompileRequest()
+        {
+            string requestId = _sessionStatePort.GetLegacyPendingCompileRequestId();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            return GetLegacyPendingCompileRequestForRequestId(requestId);
+        }
+
+        private UnityCliLoopPendingCompileRequest GetLegacyPendingCompileRequestForRequestId(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+
+            string legacyRequestId = _sessionStatePort.GetLegacyPendingCompileRequestId();
+            if (legacyRequestId != requestId)
+            {
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            string expiresAtUtcTicksText =
+                _sessionStatePort.GetLegacyPendingCompileExpiresAtUtcTicks();
+            (bool isValid, long expiresAtUtcTicks) =
+                ParseUtcTicks(expiresAtUtcTicksText);
+            if (!isValid || expiresAtUtcTicks <= 0)
+            {
+                ClearLegacyPendingCompileRequest();
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            bool forceRecompile = _sessionStatePort.GetLegacyPendingCompileForceRecompile();
+            bool reloadObserved = _sessionStatePort.GetLegacyPendingCompileReloadObserved();
+            StorePendingCompileRequest(
+                requestId,
+                forceRecompile,
+                expiresAtUtcTicks,
+                reloadObserved);
+            ClearLegacyPendingCompileRequest();
+            return UnityCliLoopPendingCompileRequest.Create(
+                requestId,
+                forceRecompile,
+                expiresAtUtcTicks,
+                reloadObserved);
+        }
+
+        private void ClearLegacyPendingCompileRequest()
+        {
+            _sessionStatePort.SetLegacyPendingCompileRequestId("");
+            _sessionStatePort.SetLegacyPendingCompileForceRecompile(false);
+            _sessionStatePort.SetLegacyPendingCompileExpiresAtUtcTicks("");
+            _sessionStatePort.SetLegacyPendingCompileReloadObserved(false);
         }
 
         public bool ClearPendingCompileRequestIfMatches(string requestId)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
 
-            UnityCliLoopPendingCompileRequest pendingRequest = GetPendingCompileRequest();
-            if (!pendingRequest.HasRequest || pendingRequest.RequestId != requestId)
+            UnityCliLoopPendingCompileRequest pendingRequest =
+                GetPendingCompileRequestForRequestId(requestId);
+            if (!pendingRequest.HasRequest)
             {
                 return false;
             }
 
-            ClearPendingCompileRequest();
+            ClearPendingCompileRequestForRequestId(requestId);
             return true;
         }
 
@@ -488,14 +809,20 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         {
             Debug.Assert(utcNow.Kind == DateTimeKind.Utc, "utcNow must be UTC");
 
-            UnityCliLoopPendingCompileRequest pendingRequest = GetPendingCompileRequest();
-            if (!pendingRequest.IsExpiredAt(utcNow))
+            bool cleared = false;
+            UnityCliLoopPendingCompileRequest[] pendingRequests = GetPendingCompileRequests();
+            foreach (UnityCliLoopPendingCompileRequest pendingRequest in pendingRequests)
             {
-                return false;
+                if (!pendingRequest.IsExpiredAt(utcNow))
+                {
+                    continue;
+                }
+
+                ClearPendingCompileRequestForRequestId(pendingRequest.RequestId);
+                cleared = true;
             }
 
-            ClearPendingCompileRequest();
-            return true;
+            return cleared;
         }
 
         public bool ConsumeShouldAutoScanThirdPartyToolMigration()
