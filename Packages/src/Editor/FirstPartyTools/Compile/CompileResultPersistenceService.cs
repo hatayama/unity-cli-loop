@@ -13,6 +13,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public static class CompileResultPersistenceService
     {
+        private const string CompletedResultTempFileSuffix = ".tmp";
+        private const string InProgressResultTempFileSuffix = ".tmp.write";
+
         // Concurrent clients may still be waiting on recent result files.
         // Only delete files older than this threshold (longer than the 90-second wait timeout)
         // to avoid destroying results that active waiters need.
@@ -52,19 +55,79 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or empty");
             Debug.Assert(response != null, "response must not be null");
 
+            string filePath = CreateResultFilePath(requestId);
             if (!Directory.Exists(CompileResultDirectoryPath))
             {
                 Directory.CreateDirectory(CompileResultDirectoryPath);
             }
 
-            string sanitizedFileName = Path.GetFileName(requestId);
-            Debug.Assert(sanitizedFileName == requestId,
-                $"requestId must not contain path separators: '{requestId}'");
-
             string resultJson = JsonConvert.SerializeObject(response, Formatting.None);
-            string fileName = $"{sanitizedFileName}{UnityCliLoopConstants.JSON_FILE_EXTENSION}";
-            string filePath = Path.Combine(CompileResultDirectoryPath, fileName);
-            File.WriteAllText(filePath, resultJson, Encoding.UTF8);
+            PublishResultFile(filePath, resultJson);
+        }
+
+        public static bool ResultExists(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or empty");
+
+            string filePath = CreateResultFilePath(requestId);
+            return File.Exists(filePath);
+        }
+
+        private static string CreateResultFilePath(string requestId)
+        {
+            ValidateRequestId(requestId);
+
+            string fileName = $"{requestId}{UnityCliLoopConstants.JSON_FILE_EXTENSION}";
+            return Path.Combine(CompileResultDirectoryPath, fileName);
+        }
+
+        private static void ValidateRequestId(string requestId)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or empty");
+
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                throw new ArgumentException("requestId must not be null or whitespace.", nameof(requestId));
+            }
+
+            if (!CompileRequestIdRules.IsSafe(requestId))
+            {
+                throw new ArgumentException(
+                    "requestId may contain only ASCII letters, digits, underscore, or hyphen.",
+                    nameof(requestId));
+            }
+        }
+
+        private static void PublishResultFile(string filePath, string content)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(filePath), "filePath must not be null or empty");
+            Debug.Assert(content != null, "content must not be null");
+
+            string inProgressTempFilePath = filePath + InProgressResultTempFileSuffix;
+            string completedTempFilePath = filePath + CompletedResultTempFileSuffix;
+            DeleteFileIfExists(inProgressTempFilePath);
+            DeleteFileIfExists(completedTempFilePath);
+
+            File.WriteAllText(inProgressTempFilePath, content, Encoding.UTF8);
+            File.Move(inProgressTempFilePath, completedTempFilePath);
+
+            if (File.Exists(filePath))
+            {
+                File.Replace(completedTempFilePath, filePath, null);
+                return;
+            }
+
+            File.Move(completedTempFilePath, filePath);
+        }
+
+        private static void DeleteFileIfExists(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(filePath), "filePath must not be null or empty");
+
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
         }
     }
 }

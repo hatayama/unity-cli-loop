@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using System;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -39,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.False);
             Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
             Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
         }
 
         [Test]
@@ -72,6 +74,76 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetPendingCompileRequest_WhenServiceIsRecreated_ReadsExistingSessionValue()
+        {
+            // Verifies pending compile recovery data survives Domain Reload service recreation.
+            _sessionStateService.MarkPendingCompileRequest("compile_test_request", forceRecompile: true);
+
+            UnityCliLoopEditorSessionStateService recreatedService =
+                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                recreatedService.GetPendingCompileRequest();
+            Assert.That(pendingCompileRequest.HasRequest, Is.True);
+            Assert.That(pendingCompileRequest.RequestId, Is.EqualTo("compile_test_request"));
+            Assert.That(pendingCompileRequest.ForceRecompile, Is.True);
+            Assert.That(pendingCompileRequest.ExpiresAtUtcTicks, Is.GreaterThan(DateTime.UtcNow.Ticks));
+        }
+
+        [Test]
+        public void GetPendingCompileRequest_WhenExpirationTicksAreMalformed_ClearsSessionValue()
+        {
+            // Verifies malformed compile recovery data self-heals instead of breaking startup recovery.
+            UnityCliLoopEditorSessionStateRepository repository = new UnityCliLoopEditorSessionStateRepository();
+            repository.SetPendingCompileRequestId("compile_test_request");
+            repository.SetPendingCompileForceRecompile(true);
+            repository.SetPendingCompileExpiresAtUtcTicks("not_ticks");
+            UnityCliLoopEditorSessionStateService recreatedService =
+                new UnityCliLoopEditorSessionStateService(repository);
+
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                recreatedService.GetPendingCompileRequest();
+
+            Assert.That(pendingCompileRequest.HasRequest, Is.False);
+            Assert.That(recreatedService.GetPendingCompileRequest().HasRequest, Is.False);
+        }
+
+        [Test]
+        public void ClearExpiredPendingCompileRequest_WhenRequestIsExpired_ClearsSessionValue()
+        {
+            // Verifies stale compile recovery data cannot survive indefinitely across commands.
+            DateTime now = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+            _sessionStateService.MarkPendingCompileRequestWithExpiration(
+                "compile_test_request",
+                forceRecompile: false,
+                expiresAtUtcTicks: now.AddSeconds(-1).Ticks);
+
+            bool cleared = _sessionStateService.ClearExpiredPendingCompileRequest(now);
+
+            Assert.That(cleared, Is.True);
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
+        }
+
+        [Test]
+        public void ClearExpiredPendingCompileRequest_WhenRequestIsFresh_KeepsSessionValue()
+        {
+            // Verifies active compile recovery data is not cleared before its deadline.
+            DateTime now = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+            _sessionStateService.MarkPendingCompileRequestWithExpiration(
+                "compile_test_request",
+                forceRecompile: false,
+                expiresAtUtcTicks: now.AddSeconds(1).Ticks);
+
+            bool cleared = _sessionStateService.ClearExpiredPendingCompileRequest(now);
+
+            UnityCliLoopPendingCompileRequest pendingCompileRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            Assert.That(cleared, Is.False);
+            Assert.That(pendingCompileRequest.HasRequest, Is.True);
+            Assert.That(pendingCompileRequest.RequestId, Is.EqualTo("compile_test_request"));
+        }
+
+        [Test]
         public void ConsumeShouldAutoScanThirdPartyToolMigration_WhenFlagIsSet_ReturnsTrueOnce()
         {
             // Verifies that the startup migration scan request is consumed exactly once.
@@ -92,6 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionStateService.MarkDomainReloadStarted(serverIsRunning: true);
             _sessionStateService.SetShouldAutoScanThirdPartyToolMigration(true);
             _sessionStateService.SetIsServerManuallyStopped(true);
+            _sessionStateService.MarkPendingCompileRequest("compile_test_request", forceRecompile: false);
 
             _sessionStateService.ClearAll();
 
@@ -103,6 +176,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
             Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
             Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
+            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
         }
 
         [Test]

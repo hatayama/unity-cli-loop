@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private readonly bool _showReconnectingUI;
         private readonly bool _showPostCompileReconnectingUI;
         private readonly bool _shouldAutoScanThirdPartyToolMigration;
+        private readonly UnityCliLoopPendingCompileRequest _pendingCompileRequest;
 
         private UnityCliLoopEditorSessionStateSnapshot(UnityCliLoopEditorSessionStateService service)
         {
@@ -44,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _showReconnectingUI = service.GetShowReconnectingUI();
             _showPostCompileReconnectingUI = service.GetShowPostCompileReconnectingUI();
             _shouldAutoScanThirdPartyToolMigration = service.GetShouldAutoScanThirdPartyToolMigration();
+            _pendingCompileRequest = service.GetPendingCompileRequest();
         }
 
         internal static UnityCliLoopEditorSessionStateSnapshot Capture(
@@ -62,6 +64,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             service.SetShowReconnectingUI(_showReconnectingUI);
             service.SetShowPostCompileReconnectingUI(_showPostCompileReconnectingUI);
             service.SetShouldAutoScanThirdPartyToolMigration(_shouldAutoScanThirdPartyToolMigration);
+            if (_pendingCompileRequest.HasRequest)
+            {
+                service.MarkPendingCompileRequestWithExpiration(
+                    _pendingCompileRequest.RequestId,
+                    _pendingCompileRequest.ForceRecompile,
+                    _pendingCompileRequest.ExpiresAtUtcTicks);
+                return;
+            }
+
+            service.ClearPendingCompileRequest();
         }
     }
 }
