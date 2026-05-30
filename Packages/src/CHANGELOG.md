@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.25](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.24...v3.0.0-beta.25) (2026-05-30)
+
+
+### Bug Fixes
+
+* Setup now requires the CLI needed for reliable compile waits ([#1246](https://github.com/hatayama/unity-cli-loop/issues/1246)) ([07c8247](https://github.com/hatayama/unity-cli-loop/commit/07c8247b0801e453eac23c8611d3f572bd675f80))
+
 ## [3.0.0-beta.24](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.23...v3.0.0-beta.24) (2026-05-30)
 
 
