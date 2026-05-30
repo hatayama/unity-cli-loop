@@ -58,6 +58,22 @@ func TestReleasePRChecksDispatchAndMarkReady(t *testing.T) {
 	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
 }
 
+// Verifies that same-second workflow runs are accepted when GitHub rounds createdAt timestamps.
+func TestReleasePRChecksAcceptSameSecondRunAfterDispatch(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]`,
+		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:00Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		runWatchStatus: "0",
+		now:            time.Date(2026, 5, 30, 1, 0, 0, 500000000, time.UTC),
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertReleasePRCheckLogContains(t, result.stdout, "Watching build-and-test.yml run 4242 for release PR #1043.")
+	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
+}
+
 // Verifies that release-looking PRs are ignored without a release-please branch.
 func TestReleasePRChecksIgnoreManualReleasePR(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
@@ -108,10 +124,29 @@ func TestReleasePRChecksFailWhenWatchedRunFails(t *testing.T) {
 	assertReleasePRCheckLogDoesNotContainLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
 }
 
+// Verifies that a changed release PR head is not marked ready after stale checks pass.
+func TestReleasePRChecksFailWhenHeadChangesBeforeReady(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:           `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSONAfterWatch: `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"def456","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		runListJSON:          `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"completed","conclusion":"success","url":"https://example.test/run/4242"}]`,
+		runWatchStatus:       "0",
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", result.exitCode)
+	}
+	assertReleasePRCheckLogContains(t, result.stderr, "release PR #1043 head changed from abc123 to def456 before marking ready")
+	assertReleasePRCheckLogContains(t, result.ghLog, "pr ready 1043 --repo owner/repository --undo")
+	assertReleasePRCheckLogDoesNotContainLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
+}
+
 type releasePRCheckCase struct {
-	prListJSON     string
-	runListJSON    string
-	runWatchStatus string
+	prListJSON           string
+	prListJSONAfterWatch string
+	runListJSON          string
+	runWatchStatus       string
+	now                  time.Time
 }
 
 func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRCheckRunResult {
@@ -125,6 +160,7 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	}
 
 	ghLogPath := filepath.Join(workDir, "gh.log")
+	prListCountPath := filepath.Join(workDir, "pr-list-count")
 	writeReleasePRCheckMockGH(t, filepath.Join(mockBin, "gh"))
 
 	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -134,6 +170,8 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	t.Setenv("RELEASE_PR_CHECK_LOOKUP_INTERVAL_SECONDS", "1")
 	t.Setenv("RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS", "1")
 	t.Setenv("GH_PR_LIST_JSON", testCase.prListJSON)
+	t.Setenv("GH_PR_LIST_JSON_AFTER_WATCH", testCase.prListJSONAfterWatch)
+	t.Setenv("GH_PR_LIST_COUNT_PATH", prListCountPath)
 	t.Setenv("GH_RUN_LIST_JSON", testCase.runListJSON)
 	t.Setenv("GH_RUN_WATCH_STATUS", testCase.runWatchStatus)
 	t.Setenv("GH_LOG", ghLogPath)
@@ -141,8 +179,12 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	originalNow := releasePRCheckNow
 	originalSleep := releasePRCheckSleep
 	sleeps := []time.Duration{}
+	now := testCase.now
+	if now.IsZero() {
+		now = time.Date(2026, 5, 30, 1, 0, 0, 0, time.UTC)
+	}
 	releasePRCheckNow = func() time.Time {
-		return time.Date(2026, 5, 30, 1, 0, 0, 0, time.UTC)
+		return now
 	}
 	releasePRCheckSleep = func(duration time.Duration) {
 		sleeps = append(sleeps, duration)
@@ -178,6 +220,18 @@ set -eu
 printf '%s\n' "$*" >> "$GH_LOG"
 
 if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
+  count=0
+  if [ -f "$GH_PR_LIST_COUNT_PATH" ]; then
+    count=$(cat "$GH_PR_LIST_COUNT_PATH")
+  fi
+  count=$((count + 1))
+  printf '%s\n' "$count" > "$GH_PR_LIST_COUNT_PATH"
+
+  if [ "$count" -gt 1 ] && [ -n "$GH_PR_LIST_JSON_AFTER_WATCH" ]; then
+    printf '%s\n' "$GH_PR_LIST_JSON_AFTER_WATCH"
+    exit 0
+  fi
+
   printf '%s\n' "$GH_PR_LIST_JSON"
   exit 0
 fi

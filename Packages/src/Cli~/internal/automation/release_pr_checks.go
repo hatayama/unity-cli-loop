@@ -72,7 +72,7 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 	}
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Marked release PR #%d as draft while checks run.", releasePR.Number))
 
-	dispatchedAt := releasePRCheckNow().UTC()
+	dispatchedAt := releasePRCheckNow().UTC().Truncate(time.Second)
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Dispatching %s for release PR #%d: %s", config.workflow, releasePR.Number, releasePR.URL))
 	err = dispatchReleasePRCheckWorkflow(ctx, config, releasePR)
 	if err != nil {
@@ -88,6 +88,12 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Watching %s run %d for release PR #%d.", config.workflow, runID, releasePR.Number))
 	err = watchReleasePRCheckRun(ctx, config, runID)
+	if err != nil {
+		writeReleasePRCheckLine(stderr, err)
+		return 1
+	}
+
+	err = verifyReleasePRCheckHeadUnchanged(ctx, config, releasePR)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
@@ -322,6 +328,23 @@ func watchReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, ru
 		strconv.Itoa(config.watchIntervalSeconds),
 	)
 	return err
+}
+
+func verifyReleasePRCheckHeadUnchanged(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest) error {
+	currentReleasePR, found, err := findReleasePRCheckPullRequest(ctx, config)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("release PR #%d is no longer pending before marking ready", releasePR.Number)
+	}
+	if currentReleasePR.Number != releasePR.Number {
+		return fmt.Errorf("pending release PR changed from #%d to #%d before marking ready", releasePR.Number, currentReleasePR.Number)
+	}
+	if currentReleasePR.HeadRefOID != releasePR.HeadRefOID {
+		return fmt.Errorf("release PR #%d head changed from %s to %s before marking ready", releasePR.Number, releasePR.HeadRefOID, currentReleasePR.HeadRefOID)
+	}
+	return nil
 }
 
 func runReleasePRCheckOutput(ctx context.Context, name string, args ...string) (string, error) {

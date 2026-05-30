@@ -71,6 +71,18 @@ assert_file_order() {
   fi
 }
 
+assert_step_contains() {
+  path=$1
+  step=$2
+  expected=$3
+
+  step_line=$(line_number "$path" "$step")
+  if [ -z "$step_line" ] || ! tail -n +"$step_line" "$path" | sed -n '1,8p' | grep -F -- "$expected" >/dev/null; then
+    echo "Expected step '$step' to contain: $expected" >&2
+    exit 1
+  fi
+}
+
 assert_package_path_exists() {
   package_path=$1
   path=$2
@@ -115,6 +127,8 @@ assert_file_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR 
 assert_file_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks'
 assert_file_contains "$RELEASE_WORKFLOW" '        working-directory: Packages/src/Cli~'
 assert_file_contains "$RELEASE_WORKFLOW" '        run: go run ./cmd/dispatch-release-please-pr-checks'
+assert_step_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'"
+assert_step_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'"
 assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' '      - name: Dispatch release PR checks'
 assert_file_order "$RELEASE_WORKFLOW" '      - name: Sync native CLI binaries into release PR' '      - name: Dispatch release PR checks'
 
