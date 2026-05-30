@@ -27,6 +27,8 @@ type commentScriptOptions struct {
 	BaseRef           string
 	HeadRef           string
 	IncludePRNumber   bool
+	FailOnWarning     bool
+	ExpectFailure     bool
 }
 
 // Verifies that Go CLI changes without a minimum-version bump create or update the reminder comment.
@@ -52,6 +54,36 @@ func TestCommentCliMinimumVersionWarningWarnsForGoCliChange(t *testing.T) {
 	assertContains(t, result.BodyLog, "Go CLI files changed")
 	assertNotContains(t, result.GitHubLog, "POST")
 	assertContains(t, result.Output, "Updated CLI minimum version comment.")
+}
+
+// Verifies that CI check mode fails instead of only writing a reminder comment.
+func TestCommentCliMinimumVersionWarningFailsCheckModeForGoCliChange(t *testing.T) {
+	result := runCommentScriptCase(t, commentScriptOptions{
+		Mutation:        "go-cli",
+		BaseRef:         "HEAD^",
+		IncludePRNumber: true,
+		FailOnWarning:   true,
+		ExpectFailure:   true,
+	})
+
+	assertContains(t, result.Output, "MINIMUM_REQUIRED_CLI_VERSION")
+	assertNotContains(t, result.GitHubLog, "POST")
+	assertNotContains(t, result.GitHubLog, "PATCH")
+}
+
+// Verifies that touching the constants file without changing the required CLI still fails check mode.
+func TestCommentCliMinimumVersionWarningFailsCheckModeForUnchangedMinimumVersion(t *testing.T) {
+	result := runCommentScriptCase(t, commentScriptOptions{
+		Mutation:        "go-cli-and-unchanged-minimum",
+		BaseRef:         "HEAD^",
+		IncludePRNumber: true,
+		FailOnWarning:   true,
+		ExpectFailure:   true,
+	})
+
+	assertContains(t, result.Output, "MINIMUM_REQUIRED_CLI_VERSION")
+	assertNotContains(t, result.GitHubLog, "POST")
+	assertNotContains(t, result.GitHubLog, "PATCH")
 }
 
 // Verifies that pull_request_target can diff a fetched PR head without checking it out.
@@ -124,6 +156,9 @@ func runCommentScriptCase(t *testing.T, options commentScriptOptions) commentScr
 	case "go-cli-and-minimum":
 		writeFile(t, filepath.Join(repositoryPath, goCliPath), "package cli // changed")
 		writeFile(t, filepath.Join(repositoryPath, minimumVersionPath), `public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.15";`)
+	case "go-cli-and-unchanged-minimum":
+		writeFile(t, filepath.Join(repositoryPath, goCliPath), "package cli // changed")
+		writeFile(t, filepath.Join(repositoryPath, minimumVersionPath), `public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.14"; // touched`)
 	case "docs":
 		writeFile(t, filepath.Join(repositoryPath, "README.md"), "documentation")
 	case "":
@@ -172,9 +207,16 @@ func runCommentScript(
 	if options.HeadRef != "" {
 		command.Env = append(command.Env, "CLI_MINIMUM_VERSION_HEAD_REF="+options.HeadRef)
 	}
+	if options.FailOnWarning {
+		command.Env = append(command.Env, "CLI_MINIMUM_VERSION_FAIL_ON_WARNING=true")
+	}
 
 	output, err := command.CombinedOutput()
-	if err != nil {
+	if options.ExpectFailure {
+		if err == nil {
+			t.Fatalf("expected comment script to fail, got success\n%s", string(output))
+		}
+	} else if err != nil {
 		t.Fatalf("comment script failed: %v\n%s", err, string(output))
 	}
 

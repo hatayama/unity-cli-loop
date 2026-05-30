@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -26,12 +27,15 @@ Resolved: this PR no longer has Go CLI changes without a ` + "`MINIMUM_REQUIRED_
 	goCliPackageRoot = "Packages/src/Cli~/"
 )
 
+var minimumVersionWarningValuePattern = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
+
 type minimumVersionWarningConfig struct {
 	repositoryRoot string
 	pullRequest    string
 	repository     string
 	baseRef        string
 	headRef        string
+	failOnWarning  bool
 }
 
 func RunMinimumVersionWarning(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
@@ -40,13 +44,32 @@ func RunMinimumVersionWarning(ctx context.Context, stdout io.Writer, stderr io.W
 		writeMinimumVersionWarningLine(stderr, err)
 		return 1
 	}
-	if config.pullRequest == "" {
+	if config.pullRequest == "" && !config.failOnWarning {
 		writeMinimumVersionWarningLine(stdout, "Skipping CLI minimum version comment because no PR number was provided.")
 		return 0
 	}
 
 	if config.baseRef == "" {
 		writeMinimumVersionWarningLine(stdout, "Skipping CLI minimum version comment because no base ref was provided.")
+		return 0
+	}
+
+	changedFiles, err := minimumVersionWarningChangedFiles(ctx, config)
+	if err != nil {
+		writeMinimumVersionWarningLine(stderr, err)
+		return 1
+	}
+
+	requiresComment, err := minimumVersionWarningRequiresCommentForDiff(ctx, config, changedFiles)
+	if err != nil {
+		writeMinimumVersionWarningLine(stderr, err)
+		return 1
+	}
+	if config.failOnWarning {
+		if requiresComment {
+			writeMinimumVersionWarningLine(stderr, strings.TrimSpace(minimumVersionWarningBody))
+			return 1
+		}
 		return 0
 	}
 
@@ -57,13 +80,7 @@ func RunMinimumVersionWarning(ctx context.Context, stdout io.Writer, stderr io.W
 	}
 	config.repository = repository
 
-	changedFiles, err := minimumVersionWarningChangedFiles(ctx, config)
-	if err != nil {
-		writeMinimumVersionWarningLine(stderr, err)
-		return 1
-	}
-
-	if minimumVersionWarningRequiresComment(changedFiles) {
+	if requiresComment {
 		message, err := upsertMinimumVersionWarningComment(ctx, config, minimumVersionWarningBody)
 		if err != nil {
 			writeMinimumVersionWarningLine(stderr, err)
@@ -110,6 +127,7 @@ func minimumVersionWarningConfigFromEnvironment() (minimumVersionWarningConfig, 
 		repository:     os.Getenv("GITHUB_REPOSITORY"),
 		baseRef:        baseRef,
 		headRef:        headRef,
+		failOnWarning:  os.Getenv("CLI_MINIMUM_VERSION_FAIL_ON_WARNING") == "true",
 	}, nil
 }
 
@@ -141,14 +159,86 @@ func minimumVersionWarningChangedFiles(ctx context.Context, config minimumVersio
 }
 
 func minimumVersionWarningRequiresComment(changedFiles []string) bool {
-	hasGoCliChange := false
+	return minimumVersionWarningHasGoCliChange(changedFiles) &&
+		!minimumVersionWarningChangesMinimumVersionFile(changedFiles)
+}
+
+func minimumVersionWarningRequiresCommentForDiff(
+	ctx context.Context,
+	config minimumVersionWarningConfig,
+	changedFiles []string,
+) (bool, error) {
+	if !minimumVersionWarningHasGoCliChange(changedFiles) {
+		return false, nil
+	}
+
+	if !minimumVersionWarningChangesMinimumVersionFile(changedFiles) {
+		return true, nil
+	}
+
+	changed, err := minimumVersionWarningMinimumVersionChanged(ctx, config)
+	if err != nil {
+		return false, err
+	}
+	return !changed, nil
+}
+
+func minimumVersionWarningHasGoCliChange(changedFiles []string) bool {
+	for _, changedFile := range changedFiles {
+		if minimumVersionWarningIsGoCliFile(changedFile) {
+			return true
+		}
+	}
+	return false
+}
+
+func minimumVersionWarningChangesMinimumVersionFile(changedFiles []string) bool {
 	for _, changedFile := range changedFiles {
 		if changedFile == minimumVersionWarningFile {
-			return false
+			return true
 		}
-		hasGoCliChange = hasGoCliChange || minimumVersionWarningIsGoCliFile(changedFile)
 	}
-	return hasGoCliChange
+	return false
+}
+
+func minimumVersionWarningMinimumVersionChanged(
+	ctx context.Context,
+	config minimumVersionWarningConfig,
+) (bool, error) {
+	baseVersion, err := minimumVersionWarningVersionAtRef(ctx, config, config.baseRef)
+	if err != nil {
+		return false, err
+	}
+	headVersion, err := minimumVersionWarningVersionAtRef(ctx, config, config.headRef)
+	if err != nil {
+		return false, err
+	}
+	return baseVersion != headVersion, nil
+}
+
+func minimumVersionWarningVersionAtRef(
+	ctx context.Context,
+	config minimumVersionWarningConfig,
+	ref string,
+) (string, error) {
+	output, err := runMinimumVersionWarningOutput(
+		ctx,
+		config.repositoryRoot,
+		"git",
+		"-C",
+		config.repositoryRoot,
+		"show",
+		ref+":"+minimumVersionWarningFile,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	matches := minimumVersionWarningValuePattern.FindStringSubmatch(output)
+	if len(matches) != 2 {
+		return "", fmt.Errorf("%s does not define MINIMUM_REQUIRED_CLI_VERSION at %s", minimumVersionWarningFile, ref)
+	}
+	return matches[1], nil
 }
 
 func upsertMinimumVersionWarningComment(ctx context.Context, config minimumVersionWarningConfig, body string) (string, error) {
