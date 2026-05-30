@@ -32,6 +32,7 @@ type minimumVersionWarningConfig struct {
 	repository     string
 	baseRef        string
 	headRef        string
+	failOnWarning  bool
 }
 
 func RunMinimumVersionWarning(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
@@ -40,13 +41,28 @@ func RunMinimumVersionWarning(ctx context.Context, stdout io.Writer, stderr io.W
 		writeMinimumVersionWarningLine(stderr, err)
 		return 1
 	}
-	if config.pullRequest == "" {
+	if config.pullRequest == "" && !config.failOnWarning {
 		writeMinimumVersionWarningLine(stdout, "Skipping CLI minimum version comment because no PR number was provided.")
 		return 0
 	}
 
 	if config.baseRef == "" {
 		writeMinimumVersionWarningLine(stdout, "Skipping CLI minimum version comment because no base ref was provided.")
+		return 0
+	}
+
+	changedFiles, err := minimumVersionWarningChangedFiles(ctx, config)
+	if err != nil {
+		writeMinimumVersionWarningLine(stderr, err)
+		return 1
+	}
+
+	requiresComment := minimumVersionWarningRequiresComment(changedFiles)
+	if config.failOnWarning {
+		if requiresComment {
+			writeMinimumVersionWarningLine(stderr, strings.TrimSpace(minimumVersionWarningBody))
+			return 1
+		}
 		return 0
 	}
 
@@ -57,13 +73,7 @@ func RunMinimumVersionWarning(ctx context.Context, stdout io.Writer, stderr io.W
 	}
 	config.repository = repository
 
-	changedFiles, err := minimumVersionWarningChangedFiles(ctx, config)
-	if err != nil {
-		writeMinimumVersionWarningLine(stderr, err)
-		return 1
-	}
-
-	if minimumVersionWarningRequiresComment(changedFiles) {
+	if requiresComment {
 		message, err := upsertMinimumVersionWarningComment(ctx, config, minimumVersionWarningBody)
 		if err != nil {
 			writeMinimumVersionWarningLine(stderr, err)
@@ -110,6 +120,7 @@ func minimumVersionWarningConfigFromEnvironment() (minimumVersionWarningConfig, 
 		repository:     os.Getenv("GITHUB_REPOSITORY"),
 		baseRef:        baseRef,
 		headRef:        headRef,
+		failOnWarning:  os.Getenv("CLI_MINIMUM_VERSION_FAIL_ON_WARNING") == "true",
 	}, nil
 }
 
