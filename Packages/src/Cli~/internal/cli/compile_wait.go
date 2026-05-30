@@ -13,17 +13,16 @@ import (
 )
 
 const (
-	compileCommandName               = "compile"
-	compileStatusCommandName         = "get-compile-status"
-	compileRequestIDParam            = "RequestId"
-	compileWaitParam                 = domainReloadWaitParam
-	compileForceParam                = "ForceRecompile"
-	compileWaitTimeout               = toolReadinessTimeout
-	compileWaitPollInterval          = toolReadinessPoll
-	compileStatusProbeTimeout        = toolReadinessProbeTimeout
-	compileWaitLogInterval           = 5 * time.Second
-	compileResponseTimeout           = 2 * time.Second
-	forceCompileUnknownResultMessage = "Force compilation completed, but Unity does not provide detailed errors or warnings for this command. Use get-logs to inspect the compiler output."
+	compileCommandName        = "compile"
+	compileStatusCommandName  = "get-compile-status"
+	compileRequestIDParam     = "RequestId"
+	compileWaitParam          = domainReloadWaitParam
+	compileForceParam         = "ForceRecompile"
+	compileWaitTimeout        = toolReadinessTimeout
+	compileWaitPollInterval   = toolReadinessPoll
+	compileStatusProbeTimeout = toolReadinessProbeTimeout
+	compileWaitLogInterval    = 5 * time.Second
+	compileResponseTimeout    = 2 * time.Second
 )
 
 type compileCompletionOptions struct {
@@ -42,16 +41,6 @@ type compileStatusResponse struct {
 	IsDomainReloadInProgress bool            `json:"IsDomainReloadInProgress"`
 	Result                   json.RawMessage `json:"Result"`
 	Message                  string          `json:"Message"`
-}
-
-type compileUnknownResultPayload struct {
-	Success      *bool  `json:"Success"`
-	ErrorCount   *int   `json:"ErrorCount"`
-	WarningCount *int   `json:"WarningCount"`
-	Errors       []any  `json:"Errors"`
-	Warnings     []any  `json:"Warnings"`
-	Message      string `json:"Message"`
-	ProjectRoot  string `json:"ProjectRoot"`
 }
 
 var queryCompileStatus = queryCompileStatusFromUnity
@@ -132,11 +121,6 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 			logCompileStatusResultAvailable(options, startedAt, status)
 			return status.Result, true, nil
 		}
-		if err == nil && status.Ready && options.forceRecompile {
-			result := createForceCompileUnknownResult(options.connection.ProjectRoot)
-			logCompileForceStatusReadyWithoutResult(options, startedAt, status)
-			return result, true, nil
-		}
 
 		if !now.Before(nextProgressLogAt) {
 			logCompileWaitPolling(options, startedAt, deadline, status, err)
@@ -158,23 +142,6 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 func compileForceRecompileEnabled(params map[string]any) bool {
 	value, ok := params[compileForceParam].(bool)
 	return ok && value
-}
-
-func createForceCompileUnknownResult(projectRoot string) json.RawMessage {
-	payload := compileUnknownResultPayload{
-		Success:      nil,
-		ErrorCount:   nil,
-		WarningCount: nil,
-		Errors:       nil,
-		Warnings:     nil,
-		Message:      forceCompileUnknownResultMessage,
-		ProjectRoot:  projectRoot,
-	}
-	result, err := json.Marshal(payload)
-	if err != nil {
-		return json.RawMessage(`{"Success":null,"ErrorCount":null,"WarningCount":null,"Errors":null,"Warnings":null,"Message":"Force compilation completed, but Unity does not provide detailed errors or warnings for this command. Use get-logs to inspect the compiler output.","ProjectRoot":""}`)
-	}
-	return result
 }
 
 func queryCompileStatusFromUnity(ctx context.Context, connection unityipc.Connection, requestID string) (compileStatusResponse, error) {
@@ -308,23 +275,6 @@ func logCompileStatusResultAvailable(
 			"ready":        status.Ready,
 			"has_result":   status.HasResult,
 			"result_bytes": len(status.Result),
-		}),
-		CorrelationID: options.requestID,
-	})
-}
-
-func logCompileForceStatusReadyWithoutResult(
-	options compileCompletionOptions,
-	startedAt time.Time,
-	status compileStatusResponse,
-) {
-	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
-		Level:     "INFO",
-		Operation: "cli_compile_force_status_ready_without_result",
-		Message:   "Unity is ready after force compile without a stored detailed result.",
-		Context: compileWaitLogContext(options, startedAt, map[string]any{
-			"ready":      status.Ready,
-			"has_result": status.HasResult,
 		}),
 		CorrelationID: options.requestID,
 	})

@@ -175,12 +175,21 @@ func TestWaitForCompileCompletionReturnsReadyStatusResult(t *testing.T) {
 	}
 }
 
-// Verifies force compile returns an explicit unknown result once Unity is ready without stored details.
-func TestWaitForCompileCompletionReturnsForceUnknownResultWhenReadyWithoutStoredResult(t *testing.T) {
+// Verifies force compile waits for Unity's stored result instead of fabricating one from idle status.
+func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) {
 	connection := compileWaitTestConnection(t)
 	requestID := "compile_force_unknown"
+	callCount := 0
 	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
-		return compileStatusResponse{Ready: true, HasResult: false}, nil
+		callCount++
+		if callCount == 1 {
+			return compileStatusResponse{Ready: true, HasResult: false}, nil
+		}
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":null,"ErrorCount":null,"Message":"Force compilation completed"}`),
+		}, nil
 	})
 
 	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
@@ -196,6 +205,9 @@ func TestWaitForCompileCompletionReturnsForceUnknownResultWhenReadyWithoutStored
 	if !completed {
 		t.Fatal("force compile wait did not complete")
 	}
+	if callCount != 2 {
+		t.Fatalf("force compile should wait for stored result, got %d status calls", callCount)
+	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(result, &payload); err != nil {
@@ -210,6 +222,29 @@ func TestWaitForCompileCompletionReturnsForceUnknownResultWhenReadyWithoutStored
 	message, ok := payload["Message"].(string)
 	if !ok || !strings.Contains(message, "Force compilation completed") {
 		t.Fatalf("force compile message mismatch: %#v", payload["Message"])
+	}
+}
+
+// Verifies force compile does not finish only because Unity reports an idle status without a result.
+func TestWaitForCompileCompletionForceCompileTimesOutWithoutStoredResult(t *testing.T) {
+	connection := compileWaitTestConnection(t)
+	requestID := "compile_force_no_result"
+	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{Ready: true, HasResult: false}, nil
+	})
+
+	_, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+		connection:     connection,
+		requestID:      requestID,
+		forceRecompile: true,
+		timeout:        20 * time.Millisecond,
+		pollInterval:   5 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if completed {
+		t.Fatal("force compile wait should not complete without a stored result")
 	}
 }
 
