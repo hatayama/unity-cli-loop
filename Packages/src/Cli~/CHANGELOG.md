@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.21](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.20...cli-v3.0.0-beta.21) (2026-05-30)
+
+
+### Bug Fixes
+
+* Native CLI releases no longer fail on stale binaries ([#1242](https://github.com/hatayama/unity-cli-loop/issues/1242)) ([80c1ed0](https://github.com/hatayama/unity-cli-loop/commit/80c1ed07e0a3e5b06d0eb2f21906b2451e6c584a))
+* Setup now requires the CLI needed for reliable compile waits ([#1246](https://github.com/hatayama/unity-cli-loop/issues/1246)) ([07c8247](https://github.com/hatayama/unity-cli-loop/commit/07c8247b0801e453eac23c8611d3f572bd675f80))
+
 ## [3.0.0-beta.20](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.19...cli-v3.0.0-beta.20) (2026-05-30)
 
 
