@@ -443,7 +443,7 @@ func compileWaitTimeoutError(projectRoot string) cliError {
 	return cliError{
 		ErrorCode:   errorCodeCompileWaitTimeout,
 		Phase:       errorPhaseCompileWaiting,
-		Message:     "Compile wait timed out after 90000ms.",
+		Message:     "Compile status wait timed out after 180000ms.",
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: projectRoot,

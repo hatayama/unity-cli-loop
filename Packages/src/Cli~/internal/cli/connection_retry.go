@@ -50,6 +50,24 @@ func sendWithTransientConnectionRetry(
 	params map[string]any,
 	progress unityipc.ProgressFunc,
 ) (unityipc.UnitySendOutcome, error) {
+	return sendWithTransientConnectionRetryAndResponseTimeout(
+		ctx,
+		connection,
+		method,
+		params,
+		progress,
+		0,
+	)
+}
+
+func sendWithTransientConnectionRetryAndResponseTimeout(
+	ctx context.Context,
+	connection unityipc.Connection,
+	method string,
+	params map[string]any,
+	progress unityipc.ProgressFunc,
+	responseTimeout time.Duration,
+) (unityipc.UnitySendOutcome, error) {
 	retryContext, cancel := context.WithTimeout(ctx, serverConnectionRetryTimeout)
 	defer cancel()
 
@@ -67,8 +85,11 @@ func sendWithTransientConnectionRetry(
 
 	focusAttempted := false
 	for {
-		outcome, err := unityipc.NewClient(connection, version).
-			SendWithProgressOutcomeAcceptContext(ctx, retryContext, method, params, progress)
+		client := unityipc.NewClient(connection, version)
+		if responseTimeout > 0 {
+			client = client.WithResponseTimeout(responseTimeout)
+		}
+		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, retryContext, method, params, progress)
 		if !shouldRetryUndispatchedConnection(err, outcome) {
 			return outcome, err
 		}

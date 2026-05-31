@@ -13,12 +13,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Execute compilation asynchronously
         /// </summary>
-        /// <param name="forceRecompile">Force recompile flag</param>
+        /// <param name="request">Compile request with force and delayed-result settings.</param>
         /// <returns>Compilation result</returns>
-        public async Task<CompileResult> ExecuteCompilationAsync(bool forceRecompile, CancellationToken ct)
+        public async Task<CompileResult> ExecuteCompilationAsync(UnityCliLoopCompileRequest request, CancellationToken ct)
         {
+            if (request == null)
+            {
+                throw new System.ArgumentNullException(nameof(request));
+            }
+
             using CompileController compileController = new();
-            return await compileController.TryCompileAsync(forceRecompile, ct);
+            compileController.SetResultRecordingContext(CompileResultRecordingContext.Create(request));
+            return await compileController.TryCompileAsync(request.ForceRecompile, ct);
         }
     }
 }

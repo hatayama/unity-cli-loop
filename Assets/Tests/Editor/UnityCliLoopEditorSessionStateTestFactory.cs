@@ -33,7 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private readonly bool _showReconnectingUI;
         private readonly bool _showPostCompileReconnectingUI;
         private readonly bool _shouldAutoScanThirdPartyToolMigration;
-        private readonly UnityCliLoopPendingCompileRequest _pendingCompileRequest;
+        private readonly UnityCliLoopStoredCompileResult[] _compileResults;
+        private readonly UnityCliLoopPendingCompileRequest[] _pendingCompileRequests;
 
         private UnityCliLoopEditorSessionStateSnapshot(UnityCliLoopEditorSessionStateService service)
         {
@@ -45,7 +46,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _showReconnectingUI = service.GetShowReconnectingUI();
             _showPostCompileReconnectingUI = service.GetShowPostCompileReconnectingUI();
             _shouldAutoScanThirdPartyToolMigration = service.GetShouldAutoScanThirdPartyToolMigration();
-            _pendingCompileRequest = service.GetPendingCompileRequest();
+            _compileResults = service.GetStoredCompileResults();
+            _pendingCompileRequests = service.GetPendingCompileRequests();
         }
 
         internal static UnityCliLoopEditorSessionStateSnapshot Capture(
@@ -64,16 +66,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             service.SetShowReconnectingUI(_showReconnectingUI);
             service.SetShowPostCompileReconnectingUI(_showPostCompileReconnectingUI);
             service.SetShouldAutoScanThirdPartyToolMigration(_shouldAutoScanThirdPartyToolMigration);
-            if (_pendingCompileRequest.HasRequest)
+            service.ClearCompileResult();
+            foreach (UnityCliLoopStoredCompileResult compileResult in _compileResults)
             {
-                service.MarkPendingCompileRequestWithExpiration(
-                    _pendingCompileRequest.RequestId,
-                    _pendingCompileRequest.ForceRecompile,
-                    _pendingCompileRequest.ExpiresAtUtcTicks);
-                return;
+                service.StoreCompileResult(
+                    compileResult.RequestId,
+                    compileResult.ForceRecompile,
+                    compileResult.ResultJson,
+                    new System.DateTime(compileResult.CompletedAtUtcTicks, System.DateTimeKind.Utc));
             }
 
             service.ClearPendingCompileRequest();
+            foreach (UnityCliLoopPendingCompileRequest pendingCompileRequest in _pendingCompileRequests)
+            {
+                service.StorePendingCompileRequest(
+                    pendingCompileRequest.RequestId,
+                    pendingCompileRequest.ForceRecompile,
+                    pendingCompileRequest.ExpiresAtUtcTicks,
+                    pendingCompileRequest.ReloadObserved);
+            }
         }
     }
 }

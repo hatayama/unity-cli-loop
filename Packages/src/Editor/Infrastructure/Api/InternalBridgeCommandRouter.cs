@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public static bool IsInternalCommand(string commandName)
         {
             return commandName == UnityCliLoopConstants.COMMAND_NAME_GET_VERSION ||
+                   commandName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS ||
                    commandName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS;
         }
 
@@ -29,6 +30,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS)
             {
                 return GetToolDetailsBridgeCommand.Execute(paramsToken);
+            }
+
+            if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS)
+            {
+                return CompileStatusBridgeCommand.Execute(paramsToken);
             }
 
             throw new ArgumentException($"Unknown internal bridge command: {commandName}", nameof(commandName));

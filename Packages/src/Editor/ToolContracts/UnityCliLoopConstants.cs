@@ -51,7 +51,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // Package path constants
         public const string TEMP_DIR = "Temp";
         public const string UNITYCLILOOP_DIR = "UnityCliLoop";
-        public const string COMPILE_RESULTS_DIR = "compile-results";
         public const string JSON_FILE_EXTENSION = ".json";
         
         // .uloop directory
@@ -68,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string TOOL_NAME_RUN_TESTS = "run-tests";
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";
         public const string COMMAND_NAME_GET_VERSION = "get-version";
+        public const string COMMAND_NAME_GET_COMPILE_STATUS = "get-compile-status";
 
         // Optional package names
         public const string PACKAGE_NAME_TEST_FRAMEWORK = "com.unity.test-framework";
