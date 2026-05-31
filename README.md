@@ -480,7 +480,7 @@ sh scripts/run-posix-e2e.sh --project-path /path/to/unity-project
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps1
 ```
 
-`run-posix-e2e.sh` uses the checked-in native CLI binary by default, passes an explicit `--project-path` to every `uloop` invocation, and runs CLI recovery/readiness, input record/replay, and simulate-mouse UI coverage in one sequence.
+`run-posix-e2e.sh` uses the built native CLI binary by default, passes an explicit `--project-path` to every `uloop` invocation, and runs CLI recovery/readiness, input record/replay, and simulate-mouse UI coverage in one sequence.
 
 ## Unity CLI Loop Extension Development
 Unity CLI Loop enables efficient development of project-specific tools without requiring changes to the core package.
@@ -634,7 +634,7 @@ See [HelloWorld sample](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKI
 
 ### Native Go CLI Development
 
-Run the native Go CLI checks before changing files under `Packages/src/Cli~`:
+Run the native Go CLI checks before changing files under `cli`:
 
 ```bash
 scripts/check-go-cli.sh
@@ -642,7 +642,7 @@ scripts/check-go-cli.sh
 
 The check script verifies formatting with `goimports` and `gofumpt`, runs `go vet ./...`, runs `golangci-lint`, and then runs `go test ./...` for the Go CLI module. Install `golangci-lint` first if it is not available on your `PATH`.
 
-Use the existing build script when you need to refresh the checked-in native binaries:
+Use the existing build script when you need to refresh local development binaries under `cli/dist`:
 
 ```bash
 scripts/build-go-cli.sh

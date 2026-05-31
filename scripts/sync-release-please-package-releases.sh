@@ -4,7 +4,7 @@ set -eu
 ROOT_DIR=${ULOOP_REPO_ROOT:-$(CDPATH= cd "$(dirname "$0")/.." && pwd)}
 CONFIG="$ROOT_DIR/release-please-config.json"
 MANIFEST="$ROOT_DIR/.release-please-manifest.json"
-CLI_PACKAGE_PATH="Packages/src/Cli~"
+CLI_PACKAGE_PATH="cli"
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 TMP_DIR=$(mktemp -d)
 

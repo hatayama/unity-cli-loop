@@ -8,7 +8,7 @@
       "include-v-in-tag": true,
       "include-component-in-tag": false,
       "exclude-paths": [
-        "Packages/src/Cli~"
+        "cli"
       ],
       "changelog-path": "Packages/src/CHANGELOG.md",
       "extra-files": [
@@ -19,7 +19,7 @@
         }
       ]
     },
-    "Packages/src/Cli~": {
+    "cli": {
       "component": "cli",
       "release-type": "go",
       "versioning": "prerelease",

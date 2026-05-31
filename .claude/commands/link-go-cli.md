@@ -9,13 +9,13 @@ Link this repository's in-development Go CLI as the global `uloop` command.
 
 ## Goal
 
-Build and verify the native Go CLI under `Packages/src/GoCli~`, then point the `uloop` command on PATH at this checkout's `uloop-dispatcher`.
+Build and verify the native Go CLI under `cli`, then point the `uloop` command on PATH at this checkout's local development binary.
 
 ## Important Assumptions
 
-- The target is `Packages/src/GoCli~`. Do not use the old `Packages/src/Cli~` path or `npm link`.
-- The global entrypoint is `uloop-dispatcher`. Do not link `uloop-core` directly because it is the project-local implementation.
-- If an unrelated existing `uloop` executable exists as a regular file, do not overwrite it. Ask the user first.
+- The target is `cli`. Do not use older package-local CLI paths or `npm link` workflows.
+- The development binary is generated under `cli/dist/.../uloop`. It is ignored by git and must not be committed.
+- Use `scripts/use-local-uloop.sh link|status|restore` instead of hand-writing the symlink.
 - Do not treat the link as complete without verification.
 
 ## Steps
@@ -27,7 +27,7 @@ git rev-parse --show-toplevel
 git status --short --branch
 ```
 
-Confirm that `Packages/src/GoCli~/go.mod` and `scripts/check-go-cli.sh` exist.
+Confirm that `cli/go.mod`, `scripts/check-go-cli.sh`, and `scripts/use-local-uloop.sh` exist.
 
 ### Step 2: Build and Verify the Go CLI
 
@@ -35,50 +35,19 @@ Confirm that `Packages/src/GoCli~/go.mod` and `scripts/check-go-cli.sh` exist.
 scripts/check-go-cli.sh
 ```
 
-This script checks Go CLI formatting, vet, lint, tests, and checked-in dist validation. If it fails, do not continue to linking. Report the cause instead.
+This script checks Go CLI formatting, vet, lint, tests, and local dist validation. If it fails because local development binaries are missing, run `scripts/build-go-cli.sh`, then rerun the check.
 
-### Step 3: Choose the Dispatcher for the Current Platform
-
-```bash
-uname -s
-uname -m
-```
-
-macOS mapping:
-
-- `Darwin` + `arm64` or `aarch64` -> `Packages/src/GoCli~/dist/darwin-arm64/uloop-dispatcher`
-- `Darwin` + `x86_64` or `amd64` -> `Packages/src/GoCli~/dist/darwin-amd64/uloop-dispatcher`
-
-Confirm that the target dispatcher exists and is executable.
-
-### Step 4: Choose the Global Bin Directory
-
-Priority order:
-
-1. Use `ULOOP_GLOBAL_BIN_DIR` when it is set.
-2. If `command -v uloop` succeeds, use the directory that contains that `uloop`.
-3. Use `$HOME/.npm-global/bin` when it is on PATH or already contains `uloop`.
-4. Use `$HOME/.local/bin` when it is on PATH.
-
-If none of these can be used, do not create a link. Report that the user should choose a bin directory that is on PATH.
-
-### Step 5: Create the Symlink
-
-Create the `uloop` symlink in the selected directory.
-
-Safety rules:
-
-- If the existing `uloop` is a symlink, show its current target before updating it with `ln -sfn`.
-- If the existing `uloop` is a regular file or directory, do not overwrite it. Ask the user first.
-- Only use `mkdir -p` for the selected global bin directory.
-
-Example:
+### Step 3: Link the Local CLI
 
 ```bash
-ln -sfn "$DISPATCHER_PATH" "$GLOBAL_BIN_DIR/uloop"
+scripts/use-local-uloop.sh link
 ```
 
-### Step 6: Verify the Link Result
+The script selects `cli/dist/darwin-arm64/uloop` or `cli/dist/darwin-amd64/uloop` on macOS, backs up an existing global `uloop` as `uloop.before-local-link`, and creates the symlink.
+
+Use `scripts/use-local-uloop.sh status` to inspect the current state and `scripts/use-local-uloop.sh restore` to put the previous global command back.
+
+### Step 4: Verify the Link Result
 
 ```bash
 which uloop
@@ -87,7 +56,7 @@ uloop --version
 uloop --help
 ```
 
-Confirm that the `readlink` result points at this checkout's `Packages/src/GoCli~/dist/.../uloop-dispatcher`.
+Confirm that the `readlink` result points at this checkout's `cli/dist/.../uloop`.
 
 ## Completion Report
 
@@ -97,4 +66,4 @@ Briefly report the following:
 - Symlink target
 - `uloop --version`
 - `scripts/check-go-cli.sh` result
-- Whether there are git changes
+- Whether a backup exists

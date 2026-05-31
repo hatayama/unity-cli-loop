@@ -110,19 +110,13 @@ yarn-error.log*
 **/[Bb]in/
 **/[Oo]bj/
 
-# Native Core CLI release artifacts are included in the Unity package
-Packages/src/Cli~/Core~/dist/*
-!Packages/src/Cli~/Core~/dist/darwin-arm64/
-!Packages/src/Cli~/Core~/dist/darwin-amd64/
-!Packages/src/Cli~/Core~/dist/windows-amd64/
-Packages/src/Cli~/Core~/dist/darwin-arm64/*
-Packages/src/Cli~/Core~/dist/darwin-amd64/*
-Packages/src/Cli~/Core~/dist/windows-amd64/*
-!Packages/src/Cli~/Core~/dist/darwin-arm64/uloop-core
-!Packages/src/Cli~/Core~/dist/darwin-amd64/uloop-core
-!Packages/src/Cli~/Core~/dist/windows-amd64/uloop-core.exe
-Packages/src/Cli~/Dispatcher~/dist/
-Packages/src/Cli~/Dispatcher~/release/
+# Native Go CLI build and release outputs
+/cli/dist/
+!cli/Core~/dist/darwin-arm64/uloop-core
+!cli/Core~/dist/darwin-amd64/uloop-core
+!cli/Core~/dist/windows-amd64/uloop-core.exe
+cli/Dispatcher~/dist/
+cli/Dispatcher~/release/
 
 # Environment configuration files
 .env

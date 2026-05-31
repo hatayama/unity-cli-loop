@@ -87,7 +87,7 @@ MOCK_GH
 write_release_files() {
   version=$1
 
-  mkdir -p Packages/src Packages/src/Cli~ scripts
+  mkdir -p Packages/src cli scripts
   cat > release-please-config.json <<'EOF_CONFIG'
 {
   "packages": {
@@ -97,7 +97,7 @@ write_release_files() {
       "include-component-in-tag": false,
       "changelog-path": "Packages/src/CHANGELOG.md"
     },
-    "Packages/src/Cli~": {
+    "cli": {
       "component": "cli",
       "release-type": "go",
       "include-v-in-tag": true,
@@ -111,7 +111,7 @@ EOF_CONFIG
   cat > .release-please-manifest.json <<EOF_MANIFEST
 {
   ".": "$version",
-  "Packages/src/Cli~": "$version"
+  "cli": "$version"
 }
 EOF_MANIFEST
 
@@ -125,7 +125,7 @@ EOF_MANIFEST
 * keep the root package release baseline available
 EOF_CHANGELOG
 
-  cat > Packages/src/Cli~/CHANGELOG.md <<EOF_CLI_CHANGELOG
+  cat > cli/CHANGELOG.md <<EOF_CLI_CHANGELOG
 # Changelog
 
 ## [$version](https://example.test/compare/cli-old...cli-new)
