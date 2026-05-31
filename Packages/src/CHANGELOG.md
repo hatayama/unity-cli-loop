@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.27](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.26...v3.0.0-beta.27) (2026-05-31)
+
+
+### Bug Fixes
+
+* Unity package no longer includes development CLI binaries ([#1250](https://github.com/hatayama/unity-cli-loop/issues/1250)) ([93b0176](https://github.com/hatayama/unity-cli-loop/commit/93b0176ac2dfd16d697ca426a9f56f7e97031e6d))
+
 ## [3.0.0-beta.26](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.25...v3.0.0-beta.26) (2026-05-31)
 
 
