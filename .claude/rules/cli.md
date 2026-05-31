@@ -1,5 +1,5 @@
 ---
-paths: Packages/src/Cli~/**
+paths: cli/**
 ---
 
 # uloop CLI
@@ -8,25 +8,31 @@ The uloop CLI is the native Go command surface for communicating with Unity Edit
 
 ## Architecture
 
-- `Dispatcher~` contains the global/user-facing `uloop-dispatcher` entrypoint.
-- `Core~` contains the project-local `uloop-core` implementation that resolves Unity connections and dispatches tool calls.
-- `Shared~` contains common domain, project, framing, and version helpers used by both binaries.
-- `layout-contract.json`, `Core~/contract.json`, and `Dispatcher~/contract.json` define the versioned CLI layout contract.
+- `cmd/uloop` contains the global/user-facing `uloop` entrypoint.
+- `internal/cli` contains command parsing, command execution, skills, readiness handling, and output formatting.
+- `internal/unityipc` contains Unity Editor IPC transport and framing.
+- `internal/install`, `internal/uninstall`, and `internal/update` contain native installer behavior.
+- `internal/project`, `internal/tools`, `internal/skills`, and `internal/version` contain shared helpers.
+- `layout-contract.json` and `contract.json` define the versioned CLI layout contract.
+- `cli/dist` contains generated local development binaries and release assets. It is ignored by git.
 
 ## Directory Structure
 
 ```text
-Cli~/
-├── Core~/
-│   ├── cmd/uloop-core/        # Core binary entrypoint
-│   ├── internal/application/  # Use cases
-│   ├── internal/ports/        # Boundary interfaces
-│   ├── internal/adapters/     # Unity transport and platform adapters
-│   └── internal/presentation/ # CLI commands, tools, skills, and output
-├── Dispatcher~/
-│   ├── cmd/uloop-dispatcher/  # Dispatcher binary entrypoint
-│   └── internal/dispatcher/   # Project-local core resolution and dispatch
-├── Shared~/                  # Shared domain and adapter packages
+cli/
+├── cmd/uloop/                # Native CLI entrypoint
+├── internal/cli/             # Command surface and output
+├── internal/unityipc/        # Unity IPC client and framing
+├── internal/install/         # Native install command helpers
+├── internal/uninstall/       # Native uninstall command helpers
+├── internal/update/          # Native update command helpers
+├── internal/automation/      # Release and workflow automation helpers
+├── internal/project/         # Unity project path helpers
+├── internal/skills/          # Bundled skill source helpers
+├── internal/tools/           # Tool catalog contracts
+├── internal/version/         # Version comparison helpers
+├── dist/                     # Ignored generated binaries and release assets
+├── contract.json
 └── layout-contract.json
 ```
 
@@ -38,7 +44,7 @@ Use the repository scripts:
 scripts/check-go-cli.sh
 ```
 
-This runs the Go CLI source checks and validates checked-in dist artifacts.
+This runs the Go CLI source checks and validates generated local dist artifacts.
 
 Release asset packaging is handled by:
 
@@ -66,7 +72,7 @@ Expected release assets:
 
 Skills are collected from two sources:
 
-1. CLI-only bundled skills under `Core~/internal/presentation/cli/skill-definitions/cli-only/`
+1. CLI-only bundled skills under `Packages/src/Editor/CliOnlyTools~/`
 2. Project skills scanned from Unity project's `Editor/` folders:
    - `Assets/**/Editor/`
    - `Packages/**/Editor/`
