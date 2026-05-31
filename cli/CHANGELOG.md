@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.23](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.22...cli-v3.0.0-beta.23) (2026-05-31)
+
+
+### Bug Fixes
+
+* Unity packages no longer include development CLI binaries.
+
 ## [3.0.0-beta.22](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.21...cli-v3.0.0-beta.22) (2026-05-31)
 
 
