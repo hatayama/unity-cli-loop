@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.26](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.25...v3.0.0-beta.26) (2026-05-31)
+
+
+### Bug Fixes
+
+* Compile commands now finish reliably after Unity reloads scripts ([#1248](https://github.com/hatayama/unity-cli-loop/issues/1248)) ([f593f46](https://github.com/hatayama/unity-cli-loop/commit/f593f463a7519eba992e525290ec3de5cc4fd276))
+
 ## [3.0.0-beta.25](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.24...v3.0.0-beta.25) (2026-05-30)
 
 
