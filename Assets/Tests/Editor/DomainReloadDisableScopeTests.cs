@@ -19,6 +19,7 @@ namespace io.github.hatayama.uLoopMCP
             _originalOptions = EditorSettings.enterPlayModeOptions;
             _originalSettings = McpEditorSettings.GetSettings();
 
+            DomainReloadDisableScope.ResetActiveScopeCountForTests();
             DomainReloadDisableScopeRecovery.ClearPendingRestore();
         }
 
@@ -27,6 +28,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             EditorSettings.enterPlayModeOptionsEnabled = _originalEnabled;
             EditorSettings.enterPlayModeOptions = _originalOptions;
+            DomainReloadDisableScope.ResetActiveScopeCountForTests();
             McpEditorSettings.SaveSettings(_originalSettings);
         }
 
@@ -41,6 +43,27 @@ namespace io.github.hatayama.uLoopMCP
                 Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
                 Assert.That(McpEditorSettings.GetSettings().domainReloadDisableScopeRestorePending, Is.True);
             }
+
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
+            Assert.That(McpEditorSettings.GetSettings().domainReloadDisableScopeRestorePending, Is.False);
+        }
+
+        [Test]
+        public void Dispose_KeepsDomainReloadDisabled_UntilLastNestedScopeDisposes()
+        {
+            SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+
+            DomainReloadDisableScope outerScope = new DomainReloadDisableScope();
+            DomainReloadDisableScope innerScope = new DomainReloadDisableScope();
+
+            innerScope.Dispose();
+
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
+            Assert.That(McpEditorSettings.GetSettings().domainReloadDisableScopeRestorePending, Is.True);
+
+            outerScope.Dispose();
 
             Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
             Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
@@ -71,6 +94,7 @@ namespace io.github.hatayama.uLoopMCP
 
             DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
             Assert.That(McpEditorSettings.GetSettings().domainReloadDisableScopeRestorePending, Is.True);
+            DomainReloadDisableScope.ResetActiveScopeCountForTests();
 
             DomainReloadDisableScope nextScope = new DomainReloadDisableScope();
             McpEditorSettingsData settings = McpEditorSettings.GetSettings();

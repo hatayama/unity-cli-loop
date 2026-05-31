@@ -8,10 +8,18 @@ namespace io.github.hatayama.uLoopMCP
     /// </summary>
     public class DomainReloadDisableScope : IDisposable
     {
+        private static int _activeScopeCount;
+        private bool _disposed;
+
         public DomainReloadDisableScope()
         {
-            DomainReloadDisableScopeRecovery.RestoreIfPending();
-            DomainReloadDisableScopeRecovery.SaveCurrentSettingsIfNeeded();
+            if (_activeScopeCount == 0)
+            {
+                DomainReloadDisableScopeRecovery.RestoreIfPending();
+                DomainReloadDisableScopeRecovery.SaveCurrentSettingsIfNeeded();
+            }
+
+            _activeScopeCount++;
 
             EditorSettings.enterPlayModeOptionsEnabled = true;
             EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload;
@@ -19,7 +27,24 @@ namespace io.github.hatayama.uLoopMCP
         
         public void Dispose()
         {
-            DomainReloadDisableScopeRecovery.RestoreIfPending();
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            System.Diagnostics.Debug.Assert(_activeScopeCount > 0, "active scope count must be positive before dispose");
+            _activeScopeCount--;
+
+            if (_activeScopeCount == 0)
+            {
+                DomainReloadDisableScopeRecovery.RestoreIfPending();
+            }
+        }
+
+        internal static void ResetActiveScopeCountForTests()
+        {
+            _activeScopeCount = 0;
         }
     }
 }
