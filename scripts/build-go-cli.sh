@@ -2,7 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-CLI_DIR="$ROOT_DIR/Packages/src/Cli~"
+CLI_DIR="$ROOT_DIR/cli"
 
 . "$ROOT_DIR/scripts/go-cli-toolchain.sh"
 require_go_cli_toolchain "$ROOT_DIR"

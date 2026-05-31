@@ -116,13 +116,13 @@ assert_changelog_exists() {
 
 assert_json_value '.packages["."].["changelog-path"]' 'Packages/src/CHANGELOG.md'
 assert_json_value '.packages["."].["include-component-in-tag"]' 'false'
-assert_json_value '.packages["."].["exclude-paths"][0]' 'Packages/src/Cli~'
+assert_json_value '.packages["."].["exclude-paths"][0]' 'cli'
 
-assert_json_value '.packages["Packages/src/Cli~"].component' 'cli'
-assert_json_value '.packages["Packages/src/Cli~"].["include-component-in-tag"]' 'true'
-assert_json_value '.packages["Packages/src/Cli~"].["changelog-path"]' 'CHANGELOG.md'
-assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][0].path' 'internal/tools/default-tools.json'
-assert_json_value '.packages["Packages/src/Cli~"].["extra-files"][1].path' 'contract.json'
+assert_json_value '.packages["cli"].component' 'cli'
+assert_json_value '.packages["cli"].["include-component-in-tag"]' 'true'
+assert_json_value '.packages["cli"].["changelog-path"]' 'CHANGELOG.md'
+assert_json_value '.packages["cli"].["extra-files"][0].path' 'internal/tools/default-tools.json'
+assert_json_value '.packages["cli"].["extra-files"][1].path' 'contract.json'
 
 assert_file_contains "$RELEASE_WORKFLOW" 'id: package_release_sync'
 assert_file_contains "$RELEASE_WORKFLOW" "steps.package_release_sync.outputs.ready != 'false'"
@@ -130,15 +130,14 @@ assert_file_contains "$RELEASE_WORKFLOW" '  actions: write'
 assert_file_contains "$RELEASE_WORKFLOW" '  checks: read'
 assert_file_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation'
 assert_file_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks'
-assert_file_contains "$RELEASE_WORKFLOW" '        working-directory: Packages/src/Cli~'
+assert_file_contains "$RELEASE_WORKFLOW" '        working-directory: cli'
 assert_file_contains "$RELEASE_WORKFLOW" '        run: go run ./cmd/dispatch-release-please-pr-checks'
 assert_step_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'"
 assert_step_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'"
 assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' '      - name: Dispatch release PR checks'
-assert_file_order "$RELEASE_WORKFLOW" '      - name: Sync native CLI binaries into release PR' '      - name: Dispatch release PR checks'
 
 assert_manifest_semver '.["."]'
-assert_manifest_semver '.["Packages/src/Cli~"]'
+assert_manifest_semver '.["cli"]'
 
 jq -r '.packages | to_entries[] | [.key, .value["changelog-path"]] | @tsv' "$CONFIG" |
 while IFS='	' read -r package_path changelog_path; do

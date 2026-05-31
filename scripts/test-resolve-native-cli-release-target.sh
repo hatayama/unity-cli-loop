@@ -23,8 +23,8 @@ set -eu
 emit_cli_release_diff() {
   version=$1
   printf '%s\n' 'diff --git a/.release-please-manifest.json b/.release-please-manifest.json'
-  printf '+  "Packages/src/Cli~": "%s"\n' "$version"
-  printf '%s\n' 'diff --git a/Packages/src/Cli~/CHANGELOG.md b/Packages/src/Cli~/CHANGELOG.md'
+  printf '+  "cli": "%s"\n' "$version"
+  printf '%s\n' 'diff --git a/cli/CHANGELOG.md b/cli/CHANGELOG.md'
   printf '+## [%s]\n' "$version"
 }
 
@@ -137,7 +137,7 @@ write_manifest() {
   version=$1
   cat > .release-please-manifest.json <<EOF_MANIFEST
 {
-  "Packages/src/Cli~": "$version"
+  "cli": "$version"
 }
 EOF_MANIFEST
 }
@@ -369,7 +369,7 @@ test_release_lookup_error_fails() {
   run_failure_case release-lookup-error 3.0.0-beta.3 push v3-beta "gh auth failed" error
 }
 
-assert_script_contains "Packages/src/Cli~/contract.json"
+assert_script_contains "cli/contract.json"
 test_complete_current_release_skips
 test_package_version_change_without_cli_change_skips
 test_cli_change_publishes

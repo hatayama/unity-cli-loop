@@ -102,26 +102,12 @@ jobs:
         if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version-file: Packages/src/Cli~/.go-version
-          cache-dependency-path: Packages/src/Cli~/**/go.sum
-
-      - name: Install golangci-lint for release PR binary sync
-        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'
-        run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
-      - name: Sync native CLI binaries into release PR
-        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_BRANCH: ${{ steps.target.outputs.branch }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: scripts/sync-release-please-go-cli-dist.sh
+          go-version-file: cli/.go-version
+          cache-dependency-path: cli/**/go.sum
 
       - name: Dispatch release PR checks
         if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'
-        working-directory: Packages/src/Cli~
+        working-directory: cli
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_BRANCH: ${{ steps.target.outputs.branch }}

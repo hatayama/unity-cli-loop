@@ -77,20 +77,20 @@ arch=$(uname -m)
 
 case "$os:$arch" in
   Darwin:arm64 | Darwin:aarch64)
-    cli_path="$ROOT_DIR/Packages/src/Cli~/dist/darwin-arm64/uloop"
+    cli_path="$ROOT_DIR/cli/dist/darwin-arm64/uloop"
     ;;
   Darwin:x86_64 | Darwin:amd64)
-    cli_path="$ROOT_DIR/Packages/src/Cli~/dist/darwin-amd64/uloop"
+    cli_path="$ROOT_DIR/cli/dist/darwin-amd64/uloop"
     ;;
   MINGW*:x86_64 | MINGW*:amd64 | MSYS*:x86_64 | MSYS*:amd64 | CYGWIN*:x86_64 | CYGWIN*:amd64 | Windows_NT:x86_64 | Windows_NT:amd64)
-    cli_path="$ROOT_DIR/Packages/src/Cli~/dist/windows-amd64/uloop.exe"
+    cli_path="$ROOT_DIR/cli/dist/windows-amd64/uloop.exe"
     global_command_name="uloop.exe"
     ;;
 esac
 
 if [ -z "$cli_path" ]; then
   echo "Go CLI source checks passed and dist binaries were rebuilt."
-  echo "No checked-in native CLI is mapped for this platform: $os/$arch"
+  echo "No built native CLI is mapped for this platform: $os/$arch"
   exit 0
 fi
 

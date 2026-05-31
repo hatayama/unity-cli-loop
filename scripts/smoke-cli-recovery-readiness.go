@@ -128,9 +128,9 @@ func defaultUloopPath() (string, error) {
 		if runtime.GOARCH == "arm64" {
 			arch = "darwin-arm64"
 		}
-		return filepath.Join(repoRoot, "Packages", "src", "Cli~", "dist", arch, "uloop"), nil
+		return filepath.Join(repoRoot, "cli", "dist", arch, "uloop"), nil
 	case "windows":
-		return filepath.Join(repoRoot, "Packages", "src", "Cli~", "dist", "windows-amd64", "uloop.exe"), nil
+		return filepath.Join(repoRoot, "cli", "dist", "windows-amd64", "uloop.exe"), nil
 	default:
 		return "", nil
 	}
@@ -152,7 +152,7 @@ func validatePaths(projectPath string, uloopPath string) error {
 		return fmt.Errorf("--project-path does not contain ProjectSettings: %s", projectPath)
 	}
 	if strings.TrimSpace(uloopPath) == "" {
-		return errors.New("no checked-in uloop binary is available for this platform. Pass --uloop-path")
+		return errors.New("no built uloop binary is available for this platform. Pass --uloop-path")
 	}
 	if !isFile(uloopPath) {
 		return fmt.Errorf("uloop binary not found: %s", uloopPath)

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "layout": {
+    "cliDir": "cli",
+    "distDir": "dist"
+  },
+  "binaries": {
+    "cli": {
+      "unix": "uloop",
+      "windows": "uloop.exe"
+    }
+  }
+}

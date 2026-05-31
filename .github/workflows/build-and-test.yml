@@ -27,7 +27,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version-file: Packages/src/Cli~/.go-version
+          go-version-file: cli/.go-version
           cache: false
 
       - name: Check CLI minimum version bump
@@ -43,13 +43,13 @@ jobs:
         run: |
           scripts/test-comment-cli-minimum-version-warning.sh
           scripts/test-cli-minimum-version-warning-workflow.sh
+          scripts/test-go-cli-toolchain.sh
           scripts/test-resolve-native-cli-release-target.sh
           scripts/test-is-release-please-release-commit.sh
           scripts/test-release-please-config.sh
           scripts/test-mark-release-pr-tagged.sh
           scripts/test-sync-published-release-pr-labels.sh
           scripts/test-sync-release-please-package-releases.sh
-          scripts/test-sync-release-please-go-cli-dist.sh
           scripts/test-notify-release-workflow-failure.sh
           scripts/test-native-cli-publish-workflow.sh
           scripts/test-install-release-filter.sh
@@ -101,12 +101,12 @@ jobs:
 
           test -f "Packages/src/package.json" || exit 1
           test -d "Packages/src/Editor" || exit 1
-          test -d "Packages/src/Cli~" || exit 1
-          test -f "Packages/src/Cli~/go.mod" || exit 1
-          test -d "Packages/src/Cli~/cmd" || exit 1
-          test -d "Packages/src/Cli~/internal" || exit 1
-          test -f "Packages/src/Cli~/dist/darwin-arm64/uloop" || exit 1
-          test -f "Packages/src/Cli~/dist/windows-amd64/uloop.exe" || exit 1
+          test ! -d "Packages/src/Cli~" || exit 1
+          test -d "Packages/src/Editor/CliOnlyTools~" || exit 1
+          test -d "cli" || exit 1
+          test -f "cli/go.mod" || exit 1
+          test -d "cli/cmd" || exit 1
+          test -d "cli/internal" || exit 1
 
           echo "✅ Unity Package structure is valid"
 

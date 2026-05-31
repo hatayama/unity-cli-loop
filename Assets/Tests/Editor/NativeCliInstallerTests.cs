@@ -459,62 +459,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildCurrentPackageUninstallCommand_OnWindowsUsesPackageLauncher()
-        {
-            // Verifies that Windows editor uninstall uses the package CLI so stale installed launchers cannot own cleanup.
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-native-local-cli-tests",
-                System.Guid.NewGuid().ToString("N"));
-            string packageResolvedPath = Path.Combine(
-                tempRoot,
-                CliConstants.UNITY_PACKAGES_DIR_NAME,
-                CliConstants.PACKAGE_SOURCE_DIR_NAME);
-            string cliDirectory = Path.Combine(
-                packageResolvedPath,
-                CliConstants.CLI_PACKAGE_DIR_NAME,
-                CliConstants.DIST_DIR_NAME,
-                CliConstants.WINDOWS_AMD64_DIST_DIR_NAME);
-            string cliPath = Path.Combine(cliDirectory, CliConstants.GLOBAL_WINDOWS_COMMAND_NAME);
-
-            Directory.CreateDirectory(cliDirectory);
-            File.WriteAllText(cliPath, string.Empty);
-
-            try
-            {
-                NativeCliInstallCommand command = NativeCliInstaller.BuildCurrentPackageUninstallCommand(
-                    "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin",
-                    RuntimePlatform.WindowsEditor,
-                    packageResolvedPath);
-
-                Assert.That(command.FileName, Is.EqualTo(cliPath));
-                Assert.That(command.Arguments, Is.EqualTo("uninstall"));
-                Assert.That(command.ManualCommand, Is.EqualTo($"\"{cliPath}\" uninstall"));
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, true);
-                }
-            }
-        }
-
-        [Test]
-        public void BuildCurrentPackageUninstallCommand_OnWindowsFallsBackToInstalledLauncher()
-        {
-            // Verifies that package-manager layouts without bundled CLI can still use the installed launcher.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildCurrentPackageUninstallCommand(
-                "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin",
-                RuntimePlatform.WindowsEditor,
-                "C:\\missing-package");
-
-            Assert.That(command.FileName, Does.EndWith("uloop.exe"));
-            Assert.That(command.FileName, Does.Contain("C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin"));
-            Assert.That(command.Arguments, Is.EqualTo("uninstall"));
-        }
-
-        [Test]
         public void BuildPathWithInstallDirectory_OnWindowsPrependsMissingNativeInstallDir()
         {
             // Verifies that Unity's current Windows PATH prefers the freshly installed native CLI.

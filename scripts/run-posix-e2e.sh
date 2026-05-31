@@ -23,7 +23,7 @@ Usage: sh scripts/run-posix-e2e.sh [options]
 
 Options:
   --project-path <path>              Unity project to test. Defaults to this repository.
-  --uloop-path <path>                uloop binary to execute. Defaults to the checked-in native binary.
+  --uloop-path <path>                uloop binary to execute. Defaults to the built native binary.
   --timeout <seconds>                Per-command smoke timeout. Default: 120.
   --launch-timeout <seconds>         Launch/reuse smoke timeout. Default: 240.
   --skip-recovery-readiness          Skip recovery/readiness smoke.
@@ -93,13 +93,13 @@ default_uloop_path() {
         Darwin)
             machine=$(uname -m)
             if [ "$machine" = "arm64" ] || [ "$machine" = "aarch64" ]; then
-                printf '%s\n' "$ROOT_DIR/Packages/src/Cli~/dist/darwin-arm64/uloop"
+                printf '%s\n' "$ROOT_DIR/cli/dist/darwin-arm64/uloop"
             else
-                printf '%s\n' "$ROOT_DIR/Packages/src/Cli~/dist/darwin-amd64/uloop"
+                printf '%s\n' "$ROOT_DIR/cli/dist/darwin-amd64/uloop"
             fi
             ;;
         MINGW*|MSYS*|CYGWIN*)
-            printf '%s\n' "$ROOT_DIR/Packages/src/Cli~/dist/windows-amd64/uloop.exe"
+            printf '%s\n' "$ROOT_DIR/cli/dist/windows-amd64/uloop.exe"
             ;;
         *)
             printf '%s\n' ""

@@ -74,8 +74,8 @@ jobs:
         if: steps.release.outputs.publish == 'true'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version-file: Packages/src/Cli~/.go-version
-          cache-dependency-path: Packages/src/Cli~/**/go.sum
+          go-version-file: cli/.go-version
+          cache-dependency-path: cli/**/go.sum
 
       - name: Install golangci-lint
         if: steps.release.outputs.publish == 'true'
@@ -99,7 +99,7 @@ jobs:
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
         with:
-          subject-path: Packages/src/Cli~/release/*
+          subject-path: cli/dist/release/*
 
       - name: Verify native CLI asset attestations
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
@@ -110,7 +110,7 @@ jobs:
         run: |
           set -eu
 
-          for asset_path in Packages/src/Cli~/release/*; do
+          for asset_path in cli/dist/release/*; do
             gh attestation verify "${asset_path}" \
               --repo "${GITHUB_REPOSITORY}" \
               --signer-workflow "${SIGNER_WORKFLOW}"
@@ -121,7 +121,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-cli-release-assets-${{ steps.release.outputs.tag }}
-          path: Packages/src/Cli~/release/*
+          path: cli/dist/release/*
           if-no-files-found: error
 
       - name: Write release notes
@@ -150,7 +150,7 @@ jobs:
                 exit 1
               }
             }
-          ' Packages/src/Cli~/CHANGELOG.md > "${NOTES_FILE}"
+          ' cli/CHANGELOG.md > "${NOTES_FILE}"
 
           echo "RELEASE_NOTES_FILE=${NOTES_FILE}" >> "$GITHUB_ENV"
 
@@ -219,7 +219,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          gh release upload "${RELEASE_TAG}" Packages/src/Cli~/release/* --clobber
+          gh release upload "${RELEASE_TAG}" cli/dist/release/* --clobber
 
       - name: Verify remote release assets
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
@@ -280,4 +280,4 @@ jobs:
       - name: Dry run summary
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run == 'true'
         run: |
-          ls -lh Packages/src/Cli~/release
+          ls -lh cli/dist/release
