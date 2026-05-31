@@ -327,6 +327,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteCommandAsync_WhenCommandIsGetCompileStatus_ReturnsBridgeStatusPayload()
+        {
+            // Tests that compile status polling routes as a CLI-only bridge command, not a public tool.
+            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
+                UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS,
+                new JObject(),
+                CancellationToken.None);
+
+            GetCompileStatusResponse getCompileStatusResponse = response as GetCompileStatusResponse;
+            Assert.That(getCompileStatusResponse, Is.Not.Null);
+        }
+
+        [Test]
         public void Constructor_WhenLegacyDevelopmentToolsAreRemoved_DoesNotRegisterThem()
         {
             // Tests that legacy MCP-era development tools are not exposed through the runtime registry.

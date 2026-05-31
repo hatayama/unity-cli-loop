@@ -1,14 +1,11 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,22 +13,36 @@ import (
 )
 
 const (
-	compileCommandName       = "compile"
-	compileRequestIDParam    = "RequestId"
-	compileWaitParam         = domainReloadWaitParam
-	compileResultRelativeDir = "Temp/UnityCliLoop/compile-results"
-	compileWaitTimeout       = 90 * time.Second
-	compileWaitPollInterval  = 50 * time.Millisecond
-	compileLockGracePeriod   = 500 * time.Millisecond
+	compileCommandName        = "compile"
+	compileStatusCommandName  = "get-compile-status"
+	compileRequestIDParam     = "RequestId"
+	compileWaitParam          = domainReloadWaitParam
+	compileForceParam         = "ForceRecompile"
+	compileWaitTimeout        = toolReadinessTimeout
+	compileWaitPollInterval   = toolReadinessPoll
+	compileStatusProbeTimeout = toolReadinessProbeTimeout
+	compileResponseTimeout    = 2 * time.Second
 )
 
 type compileCompletionOptions struct {
-	projectRoot  string
-	requestID    string
-	timeout      time.Duration
-	pollInterval time.Duration
-	lockGrace    time.Duration
+	connection     unityipc.Connection
+	requestID      string
+	forceRecompile bool
+	timeout        time.Duration
+	pollInterval   time.Duration
 }
+
+type compileStatusResponse struct {
+	Ready                    bool            `json:"Ready"`
+	HasResult                bool            `json:"HasResult"`
+	IsCompiling              bool            `json:"IsCompiling"`
+	IsUpdating               bool            `json:"IsUpdating"`
+	IsDomainReloadInProgress bool            `json:"IsDomainReloadInProgress"`
+	Result                   json.RawMessage `json:"Result"`
+	Message                  string          `json:"Message"`
+}
+
+var queryCompileStatus = queryCompileStatusFromUnity
 
 func shouldWaitForCompileDomainReload(command string, params map[string]any) bool {
 	if command != compileCommandName {
@@ -92,58 +103,58 @@ func isSafeCompileRequestID(requestID string) bool {
 }
 
 func waitForCompileCompletion(ctx context.Context, options compileCompletionOptions) (json.RawMessage, bool, error) {
-	deadline := time.Now().Add(options.timeout)
-	var idleSince time.Time
+	startedAt := time.Now()
+	deadline := startedAt.Add(options.timeout)
 
-	for time.Now().Before(deadline) {
-		result, err := tryReadCompileResult(options.projectRoot, options.requestID)
-		if err != nil {
-			return nil, false, err
+	for {
+		now := time.Now()
+		if !now.Before(deadline) {
+			break
 		}
 
-		if len(result) > 0 {
-			if idleSince.IsZero() {
-				idleSince = time.Now()
-			}
-			if time.Since(idleSince) >= options.lockGrace {
-				return result, true, nil
-			}
-		} else {
-			idleSince = time.Time{}
+		status, err := queryCompileStatus(ctx, options.connection, options.requestID)
+		if err == nil && status.Ready && status.HasResult && len(status.Result) > 0 {
+			return status.Result, true, nil
 		}
 
 		select {
 		case <-ctx.Done():
+			logCompileWaitCancelled(options, startedAt, ctx.Err())
 			return nil, false, ctx.Err()
 		case <-time.After(options.pollInterval):
 		}
 	}
 
+	logCompileWaitTimedOut(options, startedAt)
 	return nil, false, nil
 }
 
-func tryReadCompileResult(projectRoot string, requestID string) (json.RawMessage, error) {
-	if !isSafeCompileRequestID(requestID) {
-		return nil, fmt.Errorf("requestId contains unsafe characters: %s", requestID)
-	}
-
-	resultPath := filepath.Join(projectRoot, compileResultRelativeDir, requestID+".json")
-	content, err := os.ReadFile(resultPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	content = bytes.TrimPrefix(content, []byte{0xef, 0xbb, 0xbf})
-	if !json.Valid(content) {
-		return nil, nil
-	}
-	return json.RawMessage(content), nil
+func compileForceRecompileEnabled(params map[string]any) bool {
+	value, ok := params[compileForceParam].(bool)
+	return ok && value
 }
 
-func shouldWaitForCompileResult(err error, outcome unityipc.UnitySendOutcome) bool {
+func queryCompileStatusFromUnity(ctx context.Context, connection unityipc.Connection, requestID string) (compileStatusResponse, error) {
+	probeContext, cancel := context.WithTimeout(ctx, compileStatusProbeTimeout)
+	defer cancel()
+
+	response, err := unityipc.NewClient(connection, version).Send(
+		probeContext,
+		compileStatusCommandName,
+		map[string]any{compileRequestIDParam: requestID},
+	)
+	if err != nil {
+		return compileStatusResponse{}, err
+	}
+
+	var status compileStatusResponse
+	if err := json.Unmarshal(response, &status); err != nil {
+		return compileStatusResponse{}, err
+	}
+	return status, nil
+}
+
+func shouldWaitForCompileStatus(err error, outcome unityipc.UnitySendOutcome) bool {
 	if err == nil {
 		return true
 	}
@@ -167,4 +178,46 @@ func isTransportDisconnectError(err error) bool {
 
 func isFinalResponseTimeoutError(err error) bool {
 	return strings.Contains(err.Error(), "i/o timeout")
+}
+
+func logCompileWaitTimedOut(options compileCompletionOptions, startedAt time.Time) {
+	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
+		Level:         "WARNING",
+		Operation:     "cli_compile_status_wait_timed_out",
+		Message:       "Timed out while polling Unity compile status.",
+		Context:       compileWaitLogContext(options, startedAt, nil),
+		CorrelationID: options.requestID,
+	})
+}
+
+func logCompileWaitCancelled(options compileCompletionOptions, startedAt time.Time, err error) {
+	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
+		Level:     "WARNING",
+		Operation: "cli_compile_status_wait_cancelled",
+		Message:   "Compile status polling was cancelled.",
+		Context: compileWaitLogContext(options, startedAt, map[string]any{
+			"error": errorMessage(err),
+		}),
+		CorrelationID: options.requestID,
+	})
+}
+
+func compileWaitLogContext(
+	options compileCompletionOptions,
+	startedAt time.Time,
+	extra map[string]any,
+) map[string]any {
+	context := map[string]any{
+		"command":          compileCommandName,
+		"request_id":       options.requestID,
+		"force_recompile":  options.forceRecompile,
+		"endpoint":         options.connection.Endpoint.Address,
+		"timeout_ms":       options.timeout.Milliseconds(),
+		"poll_interval_ms": options.pollInterval.Milliseconds(),
+		"elapsed_ms":       time.Since(startedAt).Milliseconds(),
+	}
+	for key, value := range extra {
+		context[key] = value
+	}
+	return context
 }
