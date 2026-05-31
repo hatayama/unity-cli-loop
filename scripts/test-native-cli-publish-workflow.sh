@@ -32,6 +32,7 @@ assert_before() {
 }
 
 test_attestation_permissions() {
+  assert_contains "$WORKFLOW" "  actions: write"
   assert_contains "$WORKFLOW" "  id-token: write"
   assert_contains "$WORKFLOW" "  attestations: write"
   assert_contains "$WORKFLOW" "  artifact-metadata: write"
@@ -65,7 +66,17 @@ test_release_tagged_installer_scripts_are_verified() {
   assert_before "$WORKFLOW" "      - name: Verify release-tagged installer scripts" "      - name: Upload native CLI assets"
 }
 
+test_release_please_is_dispatched_after_publish() {
+  assert_contains "$WORKFLOW" "      - name: Dispatch release-please after native CLI publish"
+  assert_contains "$WORKFLOW" "        if: github.event_name == 'push' && steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'"
+  assert_contains "$WORKFLOW" '          TARGET_BRANCH: ${{ github.ref_name }}'
+  assert_contains "$WORKFLOW" '          gh workflow run release-please.yml --ref "${TARGET_BRANCH}" -f branch="${TARGET_BRANCH}"'
+  assert_before "$WORKFLOW" "      - name: Publish draft release" "      - name: Dispatch release-please after native CLI publish"
+  assert_before "$WORKFLOW" "      - name: Dispatch release-please after native CLI publish" "      - name: Sync release-please package releases"
+}
+
 test_attestation_permissions
 test_release_assets_are_attested
 test_release_asset_attestations_are_verified
 test_release_tagged_installer_scripts_are_verified
+test_release_please_is_dispatched_after_publish

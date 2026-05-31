@@ -40,6 +40,19 @@ asset_json() {
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
   if [ "$tag" = "cli-v3.0.0-beta.6" ]; then
+    if [ -n "${CLI_RELEASE_READY_AFTER_ATTEMPTS:-}" ]; then
+      attempt_file="$GH_LOG.cli-release-attempts"
+      attempt=1
+      if [ -f "$attempt_file" ]; then
+        attempt=$(($(cat "$attempt_file") + 1))
+      fi
+      printf '%s\n' "$attempt" > "$attempt_file"
+      if [ "$attempt" -lt "$CLI_RELEASE_READY_AFTER_ATTEMPTS" ]; then
+        echo "release not found" >&2
+        exit 1
+      fi
+    fi
+
     case "${CLI_RELEASE_STATE:-published}" in
       published)
         printf '{"isDraft":false,"targetCommitish":"%s","assets":' "${CLI_RELEASE_TARGET:-cli-release-sha}"
@@ -226,6 +239,9 @@ run_sync() {
   existing_target=$4
   cli_release_state=${5:-published}
   cli_release_assets=${6:-complete}
+  cli_release_wait_timeout=${7:-0}
+  cli_release_wait_interval=${8:-0}
+  cli_release_ready_after_attempts=${9:-}
 
   touch "$work_dir/gh.log"
   touch "$work_dir/github-output.txt"
@@ -238,6 +254,9 @@ run_sync() {
     EXISTING_RELEASE_TARGET="$existing_target" \
     CLI_RELEASE_STATE="$cli_release_state" \
     CLI_RELEASE_ASSETS="$cli_release_assets" \
+    CLI_RELEASE_WAIT_TIMEOUT_SECONDS="$cli_release_wait_timeout" \
+    CLI_RELEASE_WAIT_INTERVAL_SECONDS="$cli_release_wait_interval" \
+    CLI_RELEASE_READY_AFTER_ATTEMPTS="$cli_release_ready_after_attempts" \
     GITHUB_OUTPUT="$work_dir/github-output.txt" \
     GITHUB_REPOSITORY=hatayama/unity-cli-loop \
     ULOOP_REPO_ROOT="$work_dir" \
@@ -313,9 +332,24 @@ test_waits_for_cli_assets_before_creating_root_release() {
   assert_contains "$work_dir/github-output.txt" "ready=false"
 }
 
+# Verifies the release sync waits for a concurrently publishing CLI release before creating package releases.
+test_retries_until_cli_assets_are_ready() {
+  work_dir=$(create_release_repo retries-until-cli-ready)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  run_sync "$work_dir" "" false "" published complete 3 0 3
+
+  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published with complete assets yet; waiting 1s before retry."
+  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is now published with complete assets."
+  assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
+  assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
+  assert_contains "$work_dir/github-output.txt" "ready=true"
+}
+
 test_creates_missing_root_release_from_release_commit
 test_existing_root_release_is_reused
 test_existing_root_release_target_branch_resolves_via_origin
 test_existing_draft_root_release_is_published
 test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release
+test_retries_until_cli_assets_are_ready
