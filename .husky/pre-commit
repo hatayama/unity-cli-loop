@@ -1,10 +1,7 @@
 #!/usr/bin/env sh
 
-changed_cli_ts="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^cli/src/.*\.(ts|tsx)$' || true)"
+changed_cli_go="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^cli/.*\.go$' || true)"
 
-if [ -n "$changed_cli_ts" ]; then
-  cd cli
-  npm run lint
-  npx tsc --noEmit
-  npx knip
+if [ -n "$changed_cli_go" ]; then
+  scripts/check-go-cli.sh
 fi
