@@ -430,11 +430,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ["warning_count"] = result.WarningCount,
                     ["is_indeterminate"] = result.IsIndeterminate
                 });
-            RecordCompileResultIfNeeded(result, completionContext);
-
             // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
             try
             {
+                RecordCompileResultIfNeeded(result, completionContext);
+
                 if (unregisterEvents)
                 {
                     UnregisterCompilationEvents();

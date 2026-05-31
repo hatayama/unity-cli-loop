@@ -296,6 +296,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetCompileResult_WhenLegacyCompletedTicksAreOutOfRange_ClearsLegacySessionValue()
+        {
+            // Verifies legacy compile result migration rejects ticks that cannot become a UTC DateTime.
+            UnityCliLoopEditorSessionStateRepository repository = new UnityCliLoopEditorSessionStateRepository();
+            repository.SetLegacyCompileResultRequestId("compile_legacy_request");
+            repository.SetLegacyCompileResultForceRecompile(false);
+            repository.SetLegacyCompileResultJson("{\"Success\":true}");
+            repository.SetLegacyCompileResultCompletedAtUtcTicks(long.MaxValue.ToString());
+            UnityCliLoopEditorSessionStateService recreatedService =
+                new UnityCliLoopEditorSessionStateService(repository);
+
+            UnityCliLoopStoredCompileResult storedResult =
+                recreatedService.GetCompileResult("compile_legacy_request");
+
+            Assert.That(storedResult.HasResult, Is.False);
+            Assert.That(repository.GetLegacyCompileResultRequestId(), Is.Empty);
+        }
+
+        [Test]
         public void ClearExpiredCompileResult_WhenResultIsStale_ClearsSessionValue()
         {
             // Verifies stale compile results do not survive indefinitely across commands.

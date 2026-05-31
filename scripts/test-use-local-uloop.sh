@@ -65,4 +65,15 @@ if [ -e "$BIN_DIR/uloop.before-local-link" ]; then
   exit 1
 fi
 
+TRAILING_HOME="$WORK_DIR/trailing-home"
+TRAILING_BIN="$TRAILING_HOME/.local/bin"
+mkdir -p "$TRAILING_BIN"
+
+HOME="$TRAILING_HOME" PATH="$TRAILING_BIN/:/usr/bin:/bin:/usr/sbin:/sbin" "$ROOT_DIR/scripts/use-local-uloop.sh" link >/dev/null
+
+if [ ! -L "$TRAILING_BIN/uloop" ]; then
+  echo "Expected PATH entry with trailing slash to be selected for global uloop." >&2
+  exit 1
+fi
+
 echo "use-local-uloop link/restore test passed"

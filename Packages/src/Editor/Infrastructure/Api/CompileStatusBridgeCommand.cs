@@ -18,8 +18,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string RequestIdParamName = "RequestId";
         private const string RecoveredCompileResultMessage =
             "Compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. Use get-logs to inspect the compiler output.";
-        private const string ForceCompileUnknownResultMessage =
-            "Force compilation completed, but Unity does not provide detailed errors or warnings for this command. Use get-logs to inspect the compiler output.";
 
         public static GetCompileStatusResponse Execute(JToken paramsToken)
         {
@@ -121,9 +119,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(pendingRequest != null, "pendingRequest must not be null");
 
-            string message = pendingRequest.ForceRecompile
-                ? ForceCompileUnknownResultMessage
-                : RecoveredCompileResultMessage;
             return new JObject
             {
                 ["Success"] = JValue.CreateNull(),
@@ -131,9 +126,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ["WarningCount"] = JValue.CreateNull(),
                 ["Errors"] = JValue.CreateNull(),
                 ["Warnings"] = JValue.CreateNull(),
-                ["Message"] = message,
+                ["Message"] = CreateRecoveredCompileMessage(pendingRequest.ForceRecompile),
                 ["ProjectRoot"] = UnityCliLoopPathResolver.GetProjectRoot()
             };
+        }
+
+        private static JToken CreateRecoveredCompileMessage(bool forceRecompile)
+        {
+            if (forceRecompile)
+            {
+                return JValue.CreateNull();
+            }
+
+            return new JValue(RecoveredCompileResultMessage);
         }
 
         private static string CreateMessage(bool ready, bool hasResult)

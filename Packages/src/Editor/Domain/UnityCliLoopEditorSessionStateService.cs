@@ -301,6 +301,11 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 value = value * 10 + digit;
             }
 
+            if (value > DateTime.MaxValue.Ticks)
+            {
+                return (false, 0);
+            }
+
             return (true, value);
         }
 

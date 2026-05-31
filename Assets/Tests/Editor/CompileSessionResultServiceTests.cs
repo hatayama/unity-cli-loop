@@ -80,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
-            Assert.That(response.Message, Does.Contain("Force compilation"));
+            Assert.That(response.Message, Is.Null);
         }
 
         [Test]
@@ -104,6 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
+            Assert.That(response.Message, Is.Null);
         }
     }
 }

@@ -6,6 +6,14 @@ ACTION="${1:-status}"
 
 command_name="uloop"
 
+normalize_path_dir() {
+  path_dir="$1"
+  while [ "$path_dir" != "/" ] && [ "${path_dir%/}" != "$path_dir" ]; do
+    path_dir=${path_dir%/}
+  done
+  printf '%s\n' "$path_dir"
+}
+
 select_local_uloop() {
   os_name=$(uname -s)
   arch_name=$(uname -m)
@@ -30,11 +38,12 @@ select_local_uloop() {
 }
 
 path_contains_dir() {
-  candidate_dir="$1"
+  candidate_dir=$(normalize_path_dir "$1")
   old_ifs=$IFS
   IFS=:
   for path_dir in $PATH; do
-    if [ "$path_dir" = "$candidate_dir" ]; then
+    normalized_path_dir=$(normalize_path_dir "$path_dir")
+    if [ "$normalized_path_dir" = "$candidate_dir" ]; then
       IFS=$old_ifs
       return 0
     fi
