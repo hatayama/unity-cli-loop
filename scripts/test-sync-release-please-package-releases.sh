@@ -78,11 +78,26 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
     exit 0
   fi
 
+  if [ -n "${CREATE_RELEASE_RACE_TAG:-}" ] && [ "$tag" = "$CREATE_RELEASE_RACE_TAG" ]; then
+    race_file="$GH_LOG.release-created-by-other-workflow"
+    if [ -f "$race_file" ]; then
+      printf '{"isDraft":false,"targetCommitish":"%s","assets":[]}\n' "$CREATE_RELEASE_RACE_TARGET"
+      exit 0
+    fi
+  fi
+
   echo "release not found" >&2
   exit 1
 fi
 
 if [ "$1" = "release" ] && [ "$2" = "create" ]; then
+  tag=$3
+  if [ -n "${CREATE_RELEASE_RACE_TAG:-}" ] && [ "$tag" = "$CREATE_RELEASE_RACE_TAG" ]; then
+    touch "$GH_LOG.release-created-by-other-workflow"
+    echo "release already exists" >&2
+    exit 1
+  fi
+
   exit 0
 fi
 
@@ -257,6 +272,8 @@ run_sync() {
     CLI_RELEASE_WAIT_TIMEOUT_SECONDS="$cli_release_wait_timeout" \
     CLI_RELEASE_WAIT_INTERVAL_SECONDS="$cli_release_wait_interval" \
     CLI_RELEASE_READY_AFTER_ATTEMPTS="$cli_release_ready_after_attempts" \
+    CREATE_RELEASE_RACE_TAG="${CREATE_RELEASE_RACE_TAG:-}" \
+    CREATE_RELEASE_RACE_TARGET="${CREATE_RELEASE_RACE_TARGET:-}" \
     GITHUB_OUTPUT="$work_dir/github-output.txt" \
     GITHUB_REPOSITORY=hatayama/unity-cli-loop \
     ULOOP_REPO_ROOT="$work_dir" \
@@ -346,6 +363,19 @@ test_retries_until_cli_assets_are_ready() {
   assert_contains "$work_dir/github-output.txt" "ready=true"
 }
 
+# Verifies a root package release created by another workflow during creation is reused.
+test_concurrent_root_release_creation_is_reused() {
+  work_dir=$(create_release_repo concurrent-root-create)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  CREATE_RELEASE_RACE_TAG=v3.0.0-beta.6 CREATE_RELEASE_RACE_TARGET="$release_sha" run_sync "$work_dir" "" false ""
+
+  assert_contains "$work_dir/output.txt" "Release v3.0.0-beta.6 was created by another workflow."
+  assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
+  assert_not_contains "$work_dir/stderr.txt" "release already exists"
+  assert_contains "$work_dir/github-output.txt" "ready=true"
+}
+
 test_creates_missing_root_release_from_release_commit
 test_existing_root_release_is_reused
 test_existing_root_release_target_branch_resolves_via_origin
@@ -353,3 +383,4 @@ test_existing_draft_root_release_is_published
 test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release
 test_retries_until_cli_assets_are_ready
+test_concurrent_root_release_creation_is_reused

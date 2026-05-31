@@ -229,14 +229,49 @@ create_package_release() {
     exit 1
   fi
 
+  create_error_file="$TMP_DIR/create-release-error.txt"
+  set +e
   gh release create "$release_tag" \
     --repo "$REPO_FULL_NAME" \
     --title "$release_tag" \
     --notes-file "$notes_file" \
     --target "$target_sha" \
-    $prerelease_flag
+    $prerelease_flag 2>"$create_error_file"
 
-  echo "Created release-please package release $release_tag at $target_sha."
+  release_created=$?
+  set -e
+  if [ "$release_created" -eq 0 ]; then
+    rm -f "$create_error_file"
+    echo "Created release-please package release $release_tag at $target_sha."
+    return
+  fi
+
+  create_error=$(cat "$create_error_file")
+  rm -f "$create_error_file"
+
+  set +e
+  release_data=$(release_json "$release_tag")
+  release_status=$?
+  set -e
+
+  case "$release_status" in
+    0)
+      ensure_release_points_to_commit "$release_tag" "$target_sha" "$release_data"
+      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
+      if [ "$is_draft" != "false" ]; then
+        publish_existing_draft_release "$release_tag" "$version"
+      else
+        echo "Release $release_tag was created by another workflow."
+      fi
+      ;;
+    1)
+      printf '%s\n' "$create_error" >&2
+      exit 1
+      ;;
+    *)
+      exit "$release_status"
+      ;;
+  esac
 }
 
 release_has_all_cli_assets() {
