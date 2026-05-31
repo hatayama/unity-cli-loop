@@ -51,6 +51,9 @@ namespace io.github.hatayama.uLoopMCP
         public bool isReconnecting = false;
         public bool showReconnectingUI = false;
         public bool showPostCompileReconnectingUI = false;
+        public bool domainReloadDisableScopeRestorePending = false;
+        public bool domainReloadDisableScopeOriginalOptionsEnabled = false;
+        public int domainReloadDisableScopeOriginalOptions = (int)EnterPlayModeOptions.None;
         public int selectedEditorType = (int)McpEditorType.Cursor;
         public int connectionMode = (int)ConnectionMode.CLI;
         public float communicationLogHeight = McpUIConstants.DEFAULT_COMMUNICATION_LOG_HEIGHT;

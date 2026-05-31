@@ -3,24 +3,23 @@ using UnityEditor;
 
 namespace io.github.hatayama.uLoopMCP
 {
+    /// <summary>
+    /// Temporarily disables domain reload while preserving the user's Enter Play Mode settings.
+    /// </summary>
     public class DomainReloadDisableScope : IDisposable
     {
-        private readonly bool _originalEnabled;
-        private readonly EnterPlayModeOptions _originalOptions;
-        
         public DomainReloadDisableScope()
         {
-            _originalEnabled = EditorSettings.enterPlayModeOptionsEnabled;
-            _originalOptions = EditorSettings.enterPlayModeOptions;
-            
+            DomainReloadDisableScopeRecovery.RestoreIfPending();
+            DomainReloadDisableScopeRecovery.SaveCurrentSettingsIfNeeded();
+
             EditorSettings.enterPlayModeOptionsEnabled = true;
             EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload;
         }
         
         public void Dispose()
         {
-            EditorSettings.enterPlayModeOptionsEnabled = _originalEnabled;
-            EditorSettings.enterPlayModeOptions = _originalOptions;
+            DomainReloadDisableScopeRecovery.RestoreIfPending();
         }
     }
 }
