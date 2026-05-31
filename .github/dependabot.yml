@@ -16,7 +16,7 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "gomod"
-    directory: "/Packages/src/Cli~"
+    directory: "/cli"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3

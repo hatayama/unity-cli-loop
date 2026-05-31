@@ -138,11 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Could not resolve the global CLI install directory. Set {CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE} and try again.");
             }
 
-            string packageCliPath = ResolvePackageLocalCliPath(platform, UnityCliLoopConstants.PackageResolvedPath);
-            bool requireUserPathRemoval = !string.IsNullOrEmpty(packageCliPath);
-            NativeCliInstallCommand command = string.IsNullOrEmpty(packageCliPath)
-                ? BuildUninstallCommand(installDirectory, platform)
-                : BuildLauncherUninstallCommand(packageCliPath);
+            NativeCliInstallCommand command = BuildUninstallCommand(installDirectory, platform);
             CliInstallResult result = await Task.Run(
                 () => RunUninstallCommand(command, installDirectory, ct, INSTALL_PROCESS_TIMEOUT_MS),
                 ct);
@@ -160,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 UNINSTALL_COMPLETION_TIMEOUT_MS,
                 INSTALL_PROCESS_WAIT_SLICE_MS,
                 File.Exists,
-                requireUserPathRemoval,
+                false,
                 Environment.GetEnvironmentVariable,
                 Task.Delay);
             if (!removalResult.Success)
@@ -183,32 +179,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 installPath,
                 "uninstall",
                 $"{QuoteProcessArgument(installPath)} uninstall");
-        }
-
-        internal static NativeCliInstallCommand BuildCurrentPackageUninstallCommand(
-            string installDirectory,
-            RuntimePlatform platform,
-            string packageResolvedPath)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
-
-            string packageCliPath = ResolvePackageLocalCliPath(platform, packageResolvedPath);
-            if (string.IsNullOrEmpty(packageCliPath))
-            {
-                return BuildUninstallCommand(installDirectory, platform);
-            }
-
-            return BuildLauncherUninstallCommand(packageCliPath);
-        }
-
-        private static NativeCliInstallCommand BuildLauncherUninstallCommand(string launcherPath)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(launcherPath), "launcherPath must not be null or empty");
-
-            return new NativeCliInstallCommand(
-                launcherPath,
-                "uninstall",
-                $"{QuoteProcessArgument(launcherPath)} uninstall");
         }
 
         internal static CliInstallResult RunInstallCommand(
@@ -962,22 +932,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return scriptPath;
-        }
-
-        internal static string ResolvePackageLocalCliPath(RuntimePlatform platform, string packageResolvedPath)
-        {
-            if (platform != RuntimePlatform.WindowsEditor || string.IsNullOrWhiteSpace(packageResolvedPath))
-            {
-                return null;
-            }
-
-            string cliPath = Path.Combine(
-                packageResolvedPath,
-                CliConstants.CLI_PACKAGE_DIR_NAME,
-                CliConstants.DIST_DIR_NAME,
-                CliConstants.WINDOWS_AMD64_DIST_DIR_NAME,
-                CliConstants.GLOBAL_WINDOWS_COMMAND_NAME);
-            return File.Exists(cliPath) ? cliPath : null;
         }
 
         private static string QuotePosixShellValue(string value)

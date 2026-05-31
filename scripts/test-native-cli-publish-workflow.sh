@@ -41,7 +41,7 @@ test_release_assets_are_attested() {
   assert_contains "$WORKFLOW" "      - name: Attest native CLI release assets"
   assert_contains "$WORKFLOW" "        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'"
   assert_contains "$WORKFLOW" "        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26"
-  assert_contains "$WORKFLOW" "          subject-path: Packages/src/Cli~/release/*"
+  assert_contains "$WORKFLOW" "          subject-path: cli/dist/release/*"
   assert_before "$WORKFLOW" "      - name: Verify packaged release assets" "      - name: Attest native CLI release assets"
   assert_before "$WORKFLOW" "      - name: Attest native CLI release assets" "      - name: Upload native CLI assets"
 }
@@ -49,7 +49,7 @@ test_release_assets_are_attested() {
 test_release_asset_attestations_are_verified() {
   assert_contains "$WORKFLOW" "      - name: Verify native CLI asset attestations"
   assert_contains "$WORKFLOW" '          SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml'
-  assert_contains "$WORKFLOW" '          for asset_path in Packages/src/Cli~/release/*; do'
+  assert_contains "$WORKFLOW" '          for asset_path in cli/dist/release/*; do'
   assert_contains "$WORKFLOW" '            gh attestation verify "${asset_path}" \'
   assert_contains "$WORKFLOW" '              --repo "${GITHUB_REPOSITORY}" \'
   assert_contains "$WORKFLOW" '              --signer-workflow "${SIGNER_WORKFLOW}"'

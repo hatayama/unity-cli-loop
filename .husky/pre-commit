@@ -1,9 +1,9 @@
 #!/usr/bin/env sh
 
-changed_cli_ts="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^Packages/src/Cli~/src/.*\.(ts|tsx)$' || true)"
+changed_cli_ts="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^cli/src/.*\.(ts|tsx)$' || true)"
 
 if [ -n "$changed_cli_ts" ]; then
-  cd Packages/src/Cli~
+  cd cli
   npm run lint
   npx tsc --noEmit
   npx knip

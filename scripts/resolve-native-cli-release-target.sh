@@ -10,15 +10,15 @@ INPUT_RELEASE_TAG=${INPUT_RELEASE_TAG:-}
 INPUT_DRY_RUN=${INPUT_DRY_RUN:-false}
 RELEASE_DATA=""
 CLI_RELEASE_INPUT_PATHS="
-Packages/src/Cli~/.go-version
-Packages/src/Cli~/layout-contract.json
-Packages/src/Cli~/contract.go
-Packages/src/Cli~/contract.json
-Packages/src/Cli~/contract_test.go
-Packages/src/Cli~/cmd
-Packages/src/Cli~/go.mod
-Packages/src/Cli~/go.sum
-Packages/src/Cli~/internal
+cli/.go-version
+cli/layout-contract.json
+cli/contract.go
+cli/contract.json
+cli/contract_test.go
+cli/cmd
+cli/go.mod
+cli/go.sum
+cli/internal
 scripts/build-go-cli.sh
 scripts/go-cli-toolchain.sh
 scripts/install.sh
@@ -145,10 +145,10 @@ cli_release_inputs_changed() {
 release_commit_updates_cli_version() {
   commit_sha=$1
   version=$2
-  expected_manifest_entry="\"Packages/src/Cli~\": \"$version\""
+  expected_manifest_entry="\"cli\": \"$version\""
   expected_changelog_heading="## [$version]"
 
-  commit_diff=$(git show --format= "$commit_sha" -- .release-please-manifest.json Packages/src/Cli~/CHANGELOG.md 2>/dev/null || true)
+  commit_diff=$(git show --format= "$commit_sha" -- .release-please-manifest.json cli/CHANGELOG.md 2>/dev/null || true)
   printf '%s\n' "$commit_diff" \
     | awk -v manifest_entry="$expected_manifest_entry" -v changelog_heading="$expected_changelog_heading" '
       substr($0, 1, 1) == "+" && (index($0, manifest_entry) > 0 || index($0, changelog_heading) > 0) {
@@ -247,7 +247,7 @@ release_commit_sha_for_version() {
     done
 }
 
-VERSION=$(jq -r '.["Packages/src/Cli~"]' .release-please-manifest.json)
+VERSION=$(jq -r '.["cli"]' .release-please-manifest.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
   echo "Could not resolve CLI release version from .release-please-manifest.json." >&2
   exit 1

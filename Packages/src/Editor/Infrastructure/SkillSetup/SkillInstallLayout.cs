@@ -26,11 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const int Utf16CodeUnitByteCount = 2;
         private const ushort CarriageReturnCodeUnit = 0x000D;
         private const ushort LineFeedCodeUnit = 0x000A;
-        private const string CliPackageDirName = "Cli~";
-        private const string CliInternalDirName = "internal";
-        private const string CliSkillsDirName = "skills";
-        private const string CliSkillDefinitionsDirName = "skill-definitions";
-        private const string CliOnlySkillDefinitionsDirName = "cli-only";
+        private const string EditorDirName = "Editor";
+        private const string CliOnlyToolsDirName = "CliOnlyTools~";
         private static readonly HashSet<string> ExcludedFileNames = new()
         {
             ".meta",
@@ -670,11 +667,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return Path.Combine(
                 UnityCliLoopConstants.PackageResolvedPath,
-                CliPackageDirName,
-                CliInternalDirName,
-                CliSkillsDirName,
-                CliSkillDefinitionsDirName,
-                CliOnlySkillDefinitionsDirName);
+                EditorDirName,
+                CliOnlyToolsDirName);
         }
 
         private static bool IsCliOnlySkillSourceRoot(string searchRoot)

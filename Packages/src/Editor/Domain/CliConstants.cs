@@ -33,10 +33,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string SKILL_DIR_PREFIX = "uloop-";
         public const string UNITY_PACKAGES_DIR_NAME = "Packages";
         public const string PACKAGE_SOURCE_DIR_NAME = "src";
-        public const string CLI_PACKAGE_DIR_NAME = "Cli~";
-        public const string LEGACY_GO_CLI_PACKAGE_DIR_NAME = "GoCli~";
-        public const string DIST_DIR_NAME = "dist";
-        public const string WINDOWS_AMD64_DIST_DIR_NAME = "windows-amd64";
         public const string CLI_LAYOUT_CONTRACT_FILE_NAME = "layout-contract.json";
         public const string CLI_CONTRACT_FILE_NAME = "contract.json";
         public const string GLOBAL_UNIX_COMMAND_NAME = EXECUTABLE_NAME;

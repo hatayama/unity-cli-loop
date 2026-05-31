@@ -2,7 +2,7 @@
 
 ## 背景
 
-`Packages/src/Cli~` は小さな Go CLI アプリケーションです。以前の構成は Clean Architecture の語彙に寄せて `presentation`、`application`、`ports`、`adapters` に分かれていましたが、CLI の規模に対して抽象化が強くなっていました。
+`cli` は小さな Go CLI アプリケーションです。以前の構成は Clean Architecture の語彙に寄せて `presentation`、`application`、`ports`、`adapters` に分かれていましたが、CLI の規模に対して抽象化が強くなっていました。
 
 この整理では、Clean Architecture の層名を守ることよりも、CLI として実際に何をしているかが読み取りやすい構成を優先します。ただし SOLID、デメテルの法則、凝集度は維持し、特に機能的凝集を優先します。
 
@@ -19,7 +19,7 @@
 ゼロから設計するなら、抽象レイヤー名ではなく機能名で分けます。
 
 ```text
-Packages/src/Cli~
+cli
 ├── cmd/uloop/
 ├── internal/
 │   ├── cli/          # args, help, completion, stdout/stderr, command routing
@@ -30,7 +30,7 @@ Packages/src/Cli~
 │   ├── tools/        # default-tools.json, tool list/cache DTO and loading
 │   └── version/      # semver compare
 ├── contract.json     # CLI version contract exposed by root package
-└── dist/
+└── dist/           # ignored local build and release output
 ```
 
 この構成では、読み手は「CLI の入力処理」「Unity との IPC」「tool catalog」「update 処理」のように、実際の機能単位でコードを探せます。
@@ -39,7 +39,7 @@ Packages/src/Cli~
 
 一気に全部を動かすのではなく、小さい commit に分けて進めます。
 
-1. `Core~`、`Dispatcher~`、`Shared~` に分かれていた Go modules を `Packages/src/Cli~` に統合する。
+1. `Core~`、`Dispatcher~`、`Shared~` に分かれていた Go modules を `cli` に統合する。
 2. `internal/presentation` を `internal/cli` に rename する。
 3. `internal/application` と `internal/ports` を削除し、`cli` から `unityipc.Client` を直接呼ぶ。
 4. `adapters/unity` と `adapters/framing` を `internal/unityipc` に寄せる。
@@ -64,11 +64,11 @@ Packages/src/Cli~
 
 ```bash
 scripts/check-go-cli.sh
-Packages/src/Cli~/dist/darwin-arm64/uloop compile --wait-for-domain-reload
+cli/dist/darwin-arm64/uloop compile --wait-for-domain-reload
 ```
 
 skill discovery や CLI-only skill source path を動かした場合は、`ToolSkillSynchronizerTests` の targeted EditMode test も実行します。
 
 ```bash
-Packages/src/Cli~/dist/darwin-arm64/uloop run-tests --test-mode EditMode --filter-type regex --filter-value ToolSkillSynchronizerTests
+cli/dist/darwin-arm64/uloop run-tests --test-mode EditMode --filter-type regex --filter-value ToolSkillSynchronizerTests
 ```
