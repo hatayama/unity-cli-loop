@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -133,6 +134,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 staleCompileTask);
 
             Assert.That(isCurrentCompileRequest, Is.False);
+        }
+
+        [Test]
+        public void CreateStoppedWithoutFinishResult_WhenAsmdefErrorsExist_ReturnsFailureWithAsmdefErrors()
+        {
+            // Verifies missed callback recovery reports actionable asmdef import errors instead of unknown status.
+            const string asmdefPath = "Assets/Tests/EditMode/BlockKuzushi.EditMode.Tests.asmdef";
+            AssemblyDefinitionConsoleError[] assemblyDefinitionErrors =
+            {
+                new(
+                    $"Assembly has duplicate references: UnityEngine.TestRunner,UnityEditor.TestRunner ({asmdefPath})",
+                    asmdefPath,
+                    0)
+            };
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionResult = new(assemblyDefinitionErrors);
+            CompilerMessage[] compilerMessages = new CompilerMessage[0];
+
+            CompileResult result = CompileController.CreateStoppedWithoutFinishResult(
+                assemblyDefinitionResult,
+                compilerMessages,
+                false,
+                "Compilation stopped before the finish callback.");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.IsIndeterminate, Is.False);
+            Assert.That(result.ErrorCount, Is.EqualTo(1));
+            Assert.That(result.Errors[0].file, Is.EqualTo(asmdefPath));
+            Assert.That(result.Errors[0].message, Does.Contain("duplicate references"));
+        }
+
+        [Test]
+        public void CreateStoppedWithoutFinishResult_WhenNoAsmdefErrorsExist_ReturnsIndeterminateMessages()
+        {
+            // Verifies missed callback recovery keeps unknown status when no known importer error explains the gap.
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionResult =
+                new(new AssemblyDefinitionConsoleError[0]);
+            CompilerMessage[] compilerMessages =
+            {
+                new()
+                {
+                    type = CompilerMessageType.Error,
+                    message = "CS0000: sample compile error",
+                    file = "Assets/Scripts/Sample.cs",
+                    line = 7
+                }
+            };
+
+            CompileResult result = CompileController.CreateStoppedWithoutFinishResult(
+                assemblyDefinitionResult,
+                compilerMessages,
+                false,
+                "Compilation stopped before the finish callback.");
+
+            Assert.That(result.Success, Is.Null);
+            Assert.That(result.IsIndeterminate, Is.True);
+            Assert.That(result.ErrorCount, Is.EqualTo(1));
+            Assert.That(result.Errors[0].message, Is.EqualTo("CS0000: sample compile error"));
         }
 
         private sealed class SequenceCompilationState
