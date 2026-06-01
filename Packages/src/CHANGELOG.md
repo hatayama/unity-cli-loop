@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.5](https://github.com/hatayama/unity-cli-loop/compare/v2.1.4...v2.1.5) (2026-06-01)
+
+
+### Bug Fixes
+
+* Interrupted PlayMode tests no longer leave domain reload disabled ([#1255](https://github.com/hatayama/unity-cli-loop/issues/1255)) ([551bb38](https://github.com/hatayama/unity-cli-loop/commit/551bb382c21abc4785b1b23fbb52e0e48e134906))
+
 ## [2.1.4](https://github.com/hatayama/unity-cli-loop/compare/v2.1.3...v2.1.4) (2026-05-21)
 
 
