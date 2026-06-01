@@ -30,19 +30,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(false, false)]
-        [TestCase(true, true)]
+        [TestCase(false, false, false)]
+        [TestCase(true, false, true)]
+        [TestCase(true, true, false)]
         public void ShouldRepairCliPathFromPrimaryButton_ReturnsExpectedAction(
             bool needsCliPathSetup,
+            bool needsUpdate,
             bool expected)
         {
-            // Verifies that stale terminal PATH state routes the primary button to repair before uninstall.
-            bool result = UnityCliLoopSettingsWindow.ShouldRepairCliPathFromPrimaryButton(needsCliPathSetup);
+            // Verifies that stale terminal PATH state routes to repair only when install/update is not needed.
+            bool result = UnityCliLoopSettingsWindow.ShouldRepairCliPathFromPrimaryButton(
+                needsCliPathSetup,
+                needsUpdate);
 
             Assert.That(result, Is.EqualTo(expected));
         }
 
         [TestCase(true, "3.0.0", "3.0.0", true, "RepairPath")]
+        [TestCase(true, "2.9.0", "3.0.0", true, "InstallOrUpdate")]
         [TestCase(false, "3.0.0", "3.0.0", true, "Uninstall")]
         [TestCase(false, "2.9.0", "3.0.0", true, "InstallOrUpdate")]
         [TestCase(false, null, "3.0.0", true, "InstallOrUpdate")]

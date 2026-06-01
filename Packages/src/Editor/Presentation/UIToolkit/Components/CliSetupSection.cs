@@ -219,20 +219,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
-            if (needsCliPathSetup)
-            {
-                return isInstallingCli ? "Fixing PATH..." : "Fix PATH";
-            }
-
             bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade, canUninstallCli);
             if (isInstallingCli)
             {
-                return isUninstallAction ? "Uninstalling..." : "Installing...";
-            }
+                if (needsCliPathSetup && !needsUpdate && !needsDowngrade)
+                {
+                    return "Fixing PATH...";
+                }
 
-            if (!isCliInstalled)
-            {
-                return "Install CLI";
+                return isUninstallAction ? "Uninstalling..." : "Installing...";
             }
 
             if (needsUpdate)
@@ -243,6 +238,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (needsDowngrade)
             {
                 return $"Downgrade CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+            }
+
+            if (needsCliPathSetup)
+            {
+                return "Fix PATH";
+            }
+
+            if (!isCliInstalled)
+            {
+                return "Install CLI";
             }
 
             return canUninstallCli ? "Uninstall CLI" : "Install CLI";
