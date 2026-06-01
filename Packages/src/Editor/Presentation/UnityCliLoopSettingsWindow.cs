@@ -872,7 +872,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string requiredCliVersion,
             bool canUninstallCli)
         {
-            if (ShouldRepairCliPathFromPrimaryButton(needsCliPathSetup))
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredCliVersion);
+            if (ShouldRepairCliPathFromPrimaryButton(
+                    needsCliPathSetup,
+                    needsUpdate))
             {
                 return CliPrimaryButtonAction.RepairPath;
             }
@@ -903,9 +906,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return CliPrimaryButtonAction.None;
         }
 
-        internal static bool ShouldRepairCliPathFromPrimaryButton(bool needsCliPathSetup)
+        internal static bool ShouldRepairCliPathFromPrimaryButton(
+            bool needsCliPathSetup,
+            bool needsUpdate)
         {
-            return needsCliPathSetup;
+            return needsCliPathSetup && !needsUpdate;
         }
 
         private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)

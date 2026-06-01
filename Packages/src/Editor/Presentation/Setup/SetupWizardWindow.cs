@@ -781,24 +781,29 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
-            if (needsCliPathSetup)
-            {
-                return isInstallingCli ? "Fixing PATH..." : "Fix PATH";
-            }
-
             if (isInstallingCli)
             {
-                return "Installing...";
-            }
+                if (needsCliPathSetup && !needsUpdate)
+                {
+                    return "Fixing PATH...";
+                }
 
-            if (!cliInstalled)
-            {
-                return "Install CLI";
+                return "Installing...";
             }
 
             if (needsUpdate)
             {
                 return $"Update CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+            }
+
+            if (needsCliPathSetup)
+            {
+                return "Fix PATH";
+            }
+
+            if (!cliInstalled)
+            {
+                return "Install CLI";
             }
 
             return "Installed";
@@ -1053,7 +1058,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
 
-            if (ShouldRepairCliPathFromPrimaryButton(_needsCliPathSetup))
+            string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            string requiredCliVersion = GetMinimumRequiredCliVersion();
+            bool cliInstalled = IsCliInstalled(cliVersion);
+            bool cliVersionMatched = IsCliVersionSatisfied(cliVersion, requiredCliVersion) && cliInstalled;
+            bool needsUpdate = cliInstalled && !cliVersionMatched;
+            if (ShouldRepairCliPathFromPrimaryButton(_needsCliPathSetup, needsUpdate))
             {
                 await HandleRepairCliPathSetup();
                 return;
@@ -1121,9 +1131,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             UpdateCliStep(cliInstalled, cliVersion, requiredCliVersion, cliVersionMatched);
         }
 
-        internal static bool ShouldRepairCliPathFromPrimaryButton(bool needsCliPathSetup)
+        internal static bool ShouldRepairCliPathFromPrimaryButton(
+            bool needsCliPathSetup,
+            bool needsUpdate)
         {
-            return needsCliPathSetup;
+            return needsCliPathSetup && !needsUpdate;
         }
 
         private async Task HandleRepairCliPathSetup()
