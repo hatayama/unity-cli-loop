@@ -229,14 +229,49 @@ create_package_release() {
     exit 1
   fi
 
+  create_error_file="$TMP_DIR/create-release-error.txt"
+  set +e
   gh release create "$release_tag" \
     --repo "$REPO_FULL_NAME" \
     --title "$release_tag" \
     --notes-file "$notes_file" \
     --target "$target_sha" \
-    $prerelease_flag
+    $prerelease_flag 2>"$create_error_file"
 
-  echo "Created release-please package release $release_tag at $target_sha."
+  release_created=$?
+  set -e
+  if [ "$release_created" -eq 0 ]; then
+    rm -f "$create_error_file"
+    echo "Created release-please package release $release_tag at $target_sha."
+    return
+  fi
+
+  create_error=$(cat "$create_error_file")
+  rm -f "$create_error_file"
+
+  set +e
+  release_data=$(release_json "$release_tag")
+  release_status=$?
+  set -e
+
+  case "$release_status" in
+    0)
+      ensure_release_points_to_commit "$release_tag" "$target_sha" "$release_data"
+      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
+      if [ "$is_draft" != "false" ]; then
+        publish_existing_draft_release "$release_tag" "$version"
+      else
+        echo "Release $release_tag was created by another workflow."
+      fi
+      ;;
+    1)
+      printf '%s\n' "$create_error" >&2
+      exit 1
+      ;;
+    *)
+      exit "$release_status"
+      ;;
+  esac
 }
 
 release_has_all_cli_assets() {
@@ -276,6 +311,44 @@ cli_release_is_ready() {
   esac
 }
 
+wait_for_cli_release_ready() {
+  release_tag=$1
+  timeout_seconds=${CLI_RELEASE_WAIT_TIMEOUT_SECONDS:-600}
+  interval_seconds=${CLI_RELEASE_WAIT_INTERVAL_SECONDS:-30}
+  elapsed_seconds=0
+
+  while :; do
+    if cli_release_is_ready "$release_tag"; then
+      if [ "$elapsed_seconds" -gt 0 ]; then
+        echo "CLI release $release_tag is now published with complete assets."
+      fi
+      return 0
+    fi
+
+    if [ "$elapsed_seconds" -ge "$timeout_seconds" ]; then
+      return 1
+    fi
+
+    remaining_seconds=$((timeout_seconds - elapsed_seconds))
+    delay_seconds=$interval_seconds
+    sleep_seconds=$delay_seconds
+    if [ "$delay_seconds" -le 0 ]; then
+      delay_seconds=1
+      sleep_seconds=1
+    fi
+    if [ "$delay_seconds" -gt "$remaining_seconds" ]; then
+      delay_seconds=$remaining_seconds
+      sleep_seconds=$delay_seconds
+    fi
+
+    echo "CLI release $release_tag is not published with complete assets yet; waiting ${delay_seconds}s before retry."
+    if [ "$sleep_seconds" -gt 0 ]; then
+      sleep "$sleep_seconds"
+    fi
+    elapsed_seconds=$((elapsed_seconds + delay_seconds))
+  done
+}
+
 release_tag_from_config() {
   package_path=$1
   version=$2
@@ -306,7 +379,7 @@ fetch_release_refs
 cli_version=$(jq -r --arg package_path "$CLI_PACKAGE_PATH" '.[$package_path] // empty' "$MANIFEST")
 if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packages[$package_path] != null' "$CONFIG" >/dev/null; then
   cli_release_tag=$(release_tag_from_config "$CLI_PACKAGE_PATH" "$cli_version")
-  if ! cli_release_is_ready "$cli_release_tag"; then
+  if ! wait_for_cli_release_ready "$cli_release_tag"; then
     mark_package_release_sync_ready false
     echo "CLI release $cli_release_tag is not published with complete assets; package release sync will wait."
     exit 0

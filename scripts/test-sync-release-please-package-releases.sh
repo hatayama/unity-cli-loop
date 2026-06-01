@@ -40,6 +40,19 @@ asset_json() {
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
   if [ "$tag" = "cli-v3.0.0-beta.6" ]; then
+    if [ -n "${CLI_RELEASE_READY_AFTER_ATTEMPTS:-}" ]; then
+      attempt_file="$GH_LOG.cli-release-attempts"
+      attempt=1
+      if [ -f "$attempt_file" ]; then
+        attempt=$(($(cat "$attempt_file") + 1))
+      fi
+      printf '%s\n' "$attempt" > "$attempt_file"
+      if [ "$attempt" -lt "$CLI_RELEASE_READY_AFTER_ATTEMPTS" ]; then
+        echo "release not found" >&2
+        exit 1
+      fi
+    fi
+
     case "${CLI_RELEASE_STATE:-published}" in
       published)
         printf '{"isDraft":false,"targetCommitish":"%s","assets":' "${CLI_RELEASE_TARGET:-cli-release-sha}"
@@ -65,11 +78,26 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
     exit 0
   fi
 
+  if [ -n "${CREATE_RELEASE_RACE_TAG:-}" ] && [ "$tag" = "$CREATE_RELEASE_RACE_TAG" ]; then
+    race_file="$GH_LOG.release-created-by-other-workflow"
+    if [ -f "$race_file" ]; then
+      printf '{"isDraft":false,"targetCommitish":"%s","assets":[]}\n' "$CREATE_RELEASE_RACE_TARGET"
+      exit 0
+    fi
+  fi
+
   echo "release not found" >&2
   exit 1
 fi
 
 if [ "$1" = "release" ] && [ "$2" = "create" ]; then
+  tag=$3
+  if [ -n "${CREATE_RELEASE_RACE_TAG:-}" ] && [ "$tag" = "$CREATE_RELEASE_RACE_TAG" ]; then
+    touch "$GH_LOG.release-created-by-other-workflow"
+    echo "release already exists" >&2
+    exit 1
+  fi
+
   exit 0
 fi
 
@@ -82,6 +110,15 @@ exit 1
 MOCK_GH
 
   chmod +x "$mock_bin/gh"
+
+  cat > "$mock_bin/sleep" <<'MOCK_SLEEP'
+#!/bin/sh
+set -eu
+
+printf '%s\n' "$*" >> "$SLEEP_LOG"
+MOCK_SLEEP
+
+  chmod +x "$mock_bin/sleep"
 }
 
 write_release_files() {
@@ -226,18 +263,28 @@ run_sync() {
   existing_target=$4
   cli_release_state=${5:-published}
   cli_release_assets=${6:-complete}
+  cli_release_wait_timeout=${7:-0}
+  cli_release_wait_interval=${8:-0}
+  cli_release_ready_after_attempts=${9:-}
 
   touch "$work_dir/gh.log"
   touch "$work_dir/github-output.txt"
+  touch "$work_dir/sleep.log"
   write_mock_commands "$work_dir"
 
   PATH="$work_dir/bin:$ORIGINAL_PATH" \
     GH_LOG="$work_dir/gh.log" \
+    SLEEP_LOG="$work_dir/sleep.log" \
     EXISTING_RELEASE_TAG="$existing_tag" \
     EXISTING_RELEASE_DRAFT="$existing_draft" \
     EXISTING_RELEASE_TARGET="$existing_target" \
     CLI_RELEASE_STATE="$cli_release_state" \
     CLI_RELEASE_ASSETS="$cli_release_assets" \
+    CLI_RELEASE_WAIT_TIMEOUT_SECONDS="$cli_release_wait_timeout" \
+    CLI_RELEASE_WAIT_INTERVAL_SECONDS="$cli_release_wait_interval" \
+    CLI_RELEASE_READY_AFTER_ATTEMPTS="$cli_release_ready_after_attempts" \
+    CREATE_RELEASE_RACE_TAG="${CREATE_RELEASE_RACE_TAG:-}" \
+    CREATE_RELEASE_RACE_TARGET="${CREATE_RELEASE_RACE_TARGET:-}" \
     GITHUB_OUTPUT="$work_dir/github-output.txt" \
     GITHUB_REPOSITORY=hatayama/unity-cli-loop \
     ULOOP_REPO_ROOT="$work_dir" \
@@ -313,9 +360,39 @@ test_waits_for_cli_assets_before_creating_root_release() {
   assert_contains "$work_dir/github-output.txt" "ready=false"
 }
 
+# Verifies the release sync waits for a concurrently publishing CLI release before creating package releases.
+test_retries_until_cli_assets_are_ready() {
+  work_dir=$(create_release_repo retries-until-cli-ready)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  run_sync "$work_dir" "" false "" published complete 3 0 3
+
+  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published with complete assets yet; waiting 1s before retry."
+  assert_contains "$work_dir/sleep.log" "1"
+  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is now published with complete assets."
+  assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
+  assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
+  assert_contains "$work_dir/github-output.txt" "ready=true"
+}
+
+# Verifies a root package release created by another workflow during creation is reused.
+test_concurrent_root_release_creation_is_reused() {
+  work_dir=$(create_release_repo concurrent-root-create)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  CREATE_RELEASE_RACE_TAG=v3.0.0-beta.6 CREATE_RELEASE_RACE_TARGET="$release_sha" run_sync "$work_dir" "" false ""
+
+  assert_contains "$work_dir/output.txt" "Release v3.0.0-beta.6 was created by another workflow."
+  assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
+  assert_not_contains "$work_dir/stderr.txt" "release already exists"
+  assert_contains "$work_dir/github-output.txt" "ready=true"
+}
+
 test_creates_missing_root_release_from_release_commit
 test_existing_root_release_is_reused
 test_existing_root_release_target_branch_resolves_via_origin
 test_existing_draft_root_release_is_published
 test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release
+test_retries_until_cli_assets_are_ready
+test_concurrent_root_release_creation_is_reused

@@ -21,6 +21,7 @@ on:
         default: false
 
 permissions:
+  actions: write
   contents: write
   id-token: write
   attestations: write
@@ -258,6 +259,14 @@ jobs:
               gh release edit "${RELEASE_TAG}" --draft=false
               ;;
           esac
+
+      - name: Dispatch release-please after native CLI publish
+        if: github.event_name == 'push' && steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          gh workflow run release-please.yml --ref "${TARGET_BRANCH}" -f branch="${TARGET_BRANCH}"
 
       - name: Sync release-please package releases
         id: package_release_sync
