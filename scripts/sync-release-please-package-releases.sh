@@ -334,7 +334,7 @@ wait_for_cli_release_ready() {
     sleep_seconds=$delay_seconds
     if [ "$delay_seconds" -le 0 ]; then
       delay_seconds=1
-      sleep_seconds=0
+      sleep_seconds=1
     fi
     if [ "$delay_seconds" -gt "$remaining_seconds" ]; then
       delay_seconds=$remaining_seconds

@@ -110,6 +110,15 @@ exit 1
 MOCK_GH
 
   chmod +x "$mock_bin/gh"
+
+  cat > "$mock_bin/sleep" <<'MOCK_SLEEP'
+#!/bin/sh
+set -eu
+
+printf '%s\n' "$*" >> "$SLEEP_LOG"
+MOCK_SLEEP
+
+  chmod +x "$mock_bin/sleep"
 }
 
 write_release_files() {
@@ -260,10 +269,12 @@ run_sync() {
 
   touch "$work_dir/gh.log"
   touch "$work_dir/github-output.txt"
+  touch "$work_dir/sleep.log"
   write_mock_commands "$work_dir"
 
   PATH="$work_dir/bin:$ORIGINAL_PATH" \
     GH_LOG="$work_dir/gh.log" \
+    SLEEP_LOG="$work_dir/sleep.log" \
     EXISTING_RELEASE_TAG="$existing_tag" \
     EXISTING_RELEASE_DRAFT="$existing_draft" \
     EXISTING_RELEASE_TARGET="$existing_target" \
@@ -357,6 +368,7 @@ test_retries_until_cli_assets_are_ready() {
   run_sync "$work_dir" "" false "" published complete 3 0 3
 
   assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published with complete assets yet; waiting 1s before retry."
+  assert_contains "$work_dir/sleep.log" "1"
   assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is now published with complete assets."
   assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
   assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
