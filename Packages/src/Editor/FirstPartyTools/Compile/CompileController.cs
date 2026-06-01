@@ -335,20 +335,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string message =
                 "Unity stopped compiling before Unity CLI Loop received the compilationFinished callback. " +
                 "The compile result is indeterminate; use get-logs to inspect the compiler output.";
+            AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
+                assemblyDefinitionValidationService.FindCurrentErrors();
+            CompileResult result = CreateStoppedWithoutFinishResult(
+                assemblyDefinitionErrors,
+                _compileMessages.ToArray(),
+                _isForceCompile,
+                message);
             VibeLogger.LogWarning(
                 "compile_finish_callback_missing",
-                message,
+                result.Message ?? message,
                 new
                 {
                     force_recompile = _isForceCompile,
                     stopped_ms = stoppedMs,
                     message_count = _compileMessages.Count,
+                    assembly_definition_error_count = assemblyDefinitionErrors.Errors.Length,
                     editor_compiling = EditorApplication.isCompiling,
                     editor_updating = EditorApplication.isUpdating,
                     editor_playing = EditorApplication.isPlaying,
                     editor_paused = EditorApplication.isPaused
                 });
-            AbortCompileWithResult(CreateIndeterminateCompileResult(message));
+            AbortCompileWithResult(result);
         }
 
         /// <summary>
@@ -567,13 +576,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
         }
 
-        private CompileResult CreateIndeterminateCompileResult(string message)
+        /// <summary>
+        /// Creates the result used when Unity stops compiling before the finish callback is received.
+        /// </summary>
+        internal static CompileResult CreateStoppedWithoutFinishResult(
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors,
+            CompilerMessage[] compileMessages,
+            bool isForceCompile,
+            string message)
         {
-            CompilerMessage[] errors = _compileMessages.Where(m => m.type == CompilerMessageType.Error).ToArray();
-            CompilerMessage[] warnings = _compileMessages.Where(m => m.type == CompilerMessageType.Warning).ToArray();
-            CompilerMessage[] messages = _isForceCompile ? Array.Empty<CompilerMessage>() : _compileMessages.ToArray();
-            CompilerMessage[] resultErrors = _isForceCompile ? Array.Empty<CompilerMessage>() : errors;
-            CompilerMessage[] resultWarnings = _isForceCompile ? Array.Empty<CompilerMessage>() : warnings;
+            UnityEngine.Debug.Assert(assemblyDefinitionErrors != null, "assemblyDefinitionErrors must not be null");
+            UnityEngine.Debug.Assert(compileMessages != null, "compileMessages must not be null");
+
+            if (assemblyDefinitionErrors.HasErrors)
+            {
+                return CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors);
+            }
+
+            return CreateIndeterminateCompileResultFromMessages(compileMessages, isForceCompile, message);
+        }
+
+        /// <summary>
+        /// Creates an unknown compile result from the compiler messages already observed by this request.
+        /// </summary>
+        private static CompileResult CreateIndeterminateCompileResultFromMessages(
+            CompilerMessage[] compileMessages,
+            bool isForceCompile,
+            string message)
+        {
+            UnityEngine.Debug.Assert(compileMessages != null, "compileMessages must not be null");
+
+            CompilerMessage[] errors = compileMessages.Where(m => m.type == CompilerMessageType.Error).ToArray();
+            CompilerMessage[] warnings = compileMessages.Where(m => m.type == CompilerMessageType.Warning).ToArray();
+            CompilerMessage[] messages = isForceCompile ? Array.Empty<CompilerMessage>() : compileMessages;
+            CompilerMessage[] resultErrors = isForceCompile ? Array.Empty<CompilerMessage>() : errors;
+            CompilerMessage[] resultWarnings = isForceCompile ? Array.Empty<CompilerMessage>() : warnings;
             return new CompileResult(
                 success: null,
                 errorCount: errors.Length,
