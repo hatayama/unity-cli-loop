@@ -23,7 +23,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Whether to reload or save externally changed open Scene files before compilation refresh.
         /// </summary>
-        [Description("Automatically reload or save open Scene files changed outside Unity before compiling")]
         public bool ReloadExternalSceneChanges { get; set; } = true;
 
         /// <summary>

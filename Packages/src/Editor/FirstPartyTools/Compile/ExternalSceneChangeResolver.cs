@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Snapshots,
                 GetOpenSceneStates,
                 ReadSceneFileFingerprint,
-                SaveSceneByPath,
+                SaveDirtyOpenScenesBeforeReload,
                 ReloadOpenSceneSetup);
             return resolver.ResolveExternalSceneChanges(reloadExternalSceneChanges);
         }
@@ -130,17 +130,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (true, fileInfo.LastWriteTimeUtc, fileInfo.Length);
         }
 
-        private static bool SaveSceneByPath(string assetPath)
+        private static string[] SaveDirtyOpenScenesBeforeReload()
         {
-            Debug.Assert(!string.IsNullOrEmpty(assetPath), "assetPath must not be empty");
-
-            Scene scene = SceneManager.GetSceneByPath(assetPath);
-            if (!scene.IsValid() || !scene.isLoaded)
+            List<string> failedScenePaths = new List<string>();
+            for (int i = 0; i < SceneManager.sceneCount; i++)
             {
-                return false;
+                Scene scene = SceneManager.GetSceneAt(i);
+                if (!scene.IsValid() || !scene.isLoaded || !scene.isDirty)
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(scene.path) || !EditorSceneManager.SaveScene(scene))
+                {
+                    failedScenePaths.Add(GetSceneDisplayPath(scene));
+                    continue;
+                }
+
+                RecordSceneSnapshot(scene);
             }
 
-            return EditorSceneManager.SaveScene(scene);
+            return failedScenePaths.ToArray();
         }
 
         private static bool ReloadOpenSceneSetup()
@@ -161,6 +171,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(assetPath), "assetPath must not be empty");
             return assetPath.Replace('\\', '/');
         }
+
+        private static string GetSceneDisplayPath(Scene scene)
+        {
+            if (!string.IsNullOrEmpty(scene.path))
+            {
+                return NormalizeAssetPath(scene.path);
+            }
+
+            if (!string.IsNullOrEmpty(scene.name))
+            {
+                return scene.name;
+            }
+
+            return "Untitled scene";
+        }
     }
 
     /// <summary>
@@ -172,26 +197,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> _snapshots;
         private readonly Func<(string AssetPath, bool IsDirty)[]> _getOpenScenes;
         private readonly Func<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> _readFileFingerprint;
-        private readonly Func<string, bool> _saveScene;
+        private readonly Func<string[]> _saveDirtyOpenScenesBeforeReload;
         private readonly Func<bool> _reloadOpenSceneSetup;
 
         public ExternalSceneChangeResolver(
             Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots,
             Func<(string AssetPath, bool IsDirty)[]> getOpenScenes,
             Func<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> readFileFingerprint,
-            Func<string, bool> saveScene,
+            Func<string[]> saveDirtyOpenScenesBeforeReload,
             Func<bool> reloadOpenSceneSetup)
         {
             Debug.Assert(snapshots != null, "snapshots must not be null");
             Debug.Assert(getOpenScenes != null, "getOpenScenes must not be null");
             Debug.Assert(readFileFingerprint != null, "readFileFingerprint must not be null");
-            Debug.Assert(saveScene != null, "saveScene must not be null");
+            Debug.Assert(saveDirtyOpenScenesBeforeReload != null, "saveDirtyOpenScenesBeforeReload must not be null");
             Debug.Assert(reloadOpenSceneSetup != null, "reloadOpenSceneSetup must not be null");
 
             _snapshots = snapshots ?? throw new ArgumentNullException(nameof(snapshots));
             _getOpenScenes = getOpenScenes ?? throw new ArgumentNullException(nameof(getOpenScenes));
             _readFileFingerprint = readFileFingerprint ?? throw new ArgumentNullException(nameof(readFileFingerprint));
-            _saveScene = saveScene ?? throw new ArgumentNullException(nameof(saveScene));
+            _saveDirtyOpenScenesBeforeReload = saveDirtyOpenScenesBeforeReload ??
+                                               throw new ArgumentNullException(nameof(saveDirtyOpenScenesBeforeReload));
             _reloadOpenSceneSetup = reloadOpenSceneSetup ?? throw new ArgumentNullException(nameof(reloadOpenSceneSetup));
         }
 
@@ -233,13 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (scene.IsDirty)
                 {
-                    if (!_saveScene(scene.AssetPath))
-                    {
-                        unresolvedScenePaths.Add(scene.AssetPath);
-                        continue;
-                    }
-
-                    _snapshots[scene.AssetPath] = _readFileFingerprint(scene.AssetPath);
+                    unresolvedScenePaths.Add(scene.AssetPath);
                     continue;
                 }
 
@@ -254,6 +274,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (unresolvedScenePaths.Count > 0)
             {
                 return (false, CreateUnresolvedMessage(unresolvedScenePaths.ToArray()), unresolvedScenePaths.ToArray());
+            }
+
+            if (shouldReloadSceneSetup)
+            {
+                string[] dirtySceneSaveFailures = _saveDirtyOpenScenesBeforeReload();
+                Debug.Assert(dirtySceneSaveFailures != null, "dirty Scene save failures must not be null");
+                if (dirtySceneSaveFailures.Length > 0)
+                {
+                    return (false, CreateDirtySaveBeforeReloadFailureMessage(dirtySceneSaveFailures), dirtySceneSaveFailures);
+                }
             }
 
             if (shouldReloadSceneSetup && !_reloadOpenSceneSetup())
@@ -284,15 +314,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string CreateUnresolvedMessage(string[] scenePaths)
         {
             return "Compilation cannot resolve externally changed Scene files before compile. " +
-                   "Scenes that could not be saved or reloaded: " +
+                   "Scenes that could not be safely saved or reloaded: " +
                    FormatScenePaths(scenePaths) +
-                   ".";
+                   ". Dirty Scenes changed externally are not overwritten automatically.";
         }
 
         private static string CreateReloadFailureMessage(string[] scenePaths)
         {
             return "Compilation cannot reload externally changed Scene files before compile. " +
                    "Scenes that could not be reloaded: " +
+                   FormatScenePaths(scenePaths) +
+                   ".";
+        }
+
+        private static string CreateDirtySaveBeforeReloadFailureMessage(string[] scenePaths)
+        {
+            return "Compilation cannot save dirty Scene files before reloading externally changed Scene files. " +
+                   "Dirty Scenes that could not be saved: " +
                    FormatScenePaths(scenePaths) +
                    ".";
         }

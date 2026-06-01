@@ -685,7 +685,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 messages: errors,
                 errors: errors,
                 warnings: Array.Empty<CompilerMessage>(),
-                message: sceneChangeResult.Message
+                message: sceneChangeResult.Message,
+                preserveDetailsWhenForceRecompile: true
             );
         }
 
@@ -824,6 +825,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Message { get; }
 
         /// <summary>
+        /// Whether force-compile response shaping must keep detailed non-compiler preflight errors.
+        /// </summary>
+        internal bool PreserveDetailsWhenForceRecompile { get; }
+
+        /// <summary>
         /// Alias for error messages (for backward compatibility).
         /// </summary>
         public CompilerMessage[] error => Errors;
@@ -853,7 +859,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CompilerMessage[] errors,
             CompilerMessage[] warnings,
             bool isIndeterminate = false,
-            string message = null
+            string message = null,
+            bool preserveDetailsWhenForceRecompile = false
         )
         {
             Success = success;
@@ -865,6 +872,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Warnings = warnings;
             IsIndeterminate = isIndeterminate;
             Message = message;
+            PreserveDetailsWhenForceRecompile = preserveDetailsWhenForceRecompile;
         }
     }
 }

@@ -20,17 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies default compile behavior reloads clean externally changed Scenes.
             Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
-            bool saveWasCalled = false;
             bool reloadWasCalled = false;
             ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
                 snapshots,
                 () => new[] { (AssetPath: ScenePath, IsDirty: false) },
                 _ => (true, ChangedTime, 20),
-                _ =>
-                {
-                    saveWasCalled = true;
-                    return true;
-                },
+                () => Array.Empty<string>(),
                 () =>
                 {
                     reloadWasCalled = true;
@@ -41,25 +36,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 reloadExternalSceneChanges: true);
 
             Assert.That(result.CanProceed, Is.True);
-            Assert.That(saveWasCalled, Is.False);
             Assert.That(reloadWasCalled, Is.True);
         }
 
         [Test]
-        public void ResolveExternalSceneChanges_WhenDirtySceneChangedAndReloadEnabled_SavesScene()
+        public void ResolveExternalSceneChanges_WhenDirtySceneChangedAndReloadEnabled_ReturnsFailureWithoutMutation()
         {
-            // Verifies default compile behavior saves dirty externally changed Scenes before continuing.
+            // Verifies dirty externally changed Scenes are not overwritten by automatic compile preflight.
             Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
-            bool saveWasCalled = false;
+            bool saveDirtyOpenScenesWasCalled = false;
             bool reloadWasCalled = false;
             ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
                 snapshots,
                 () => new[] { (AssetPath: ScenePath, IsDirty: true) },
                 _ => (true, ChangedTime, 20),
-                _ =>
+                () =>
                 {
-                    saveWasCalled = true;
-                    return true;
+                    saveDirtyOpenScenesWasCalled = true;
+                    return Array.Empty<string>();
                 },
                 () =>
                 {
@@ -70,8 +64,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             (bool CanProceed, string Message, string[] ScenePaths) result = resolver.ResolveExternalSceneChanges(
                 reloadExternalSceneChanges: true);
 
-            Assert.That(result.CanProceed, Is.True);
-            Assert.That(saveWasCalled, Is.True);
+            Assert.That(result.CanProceed, Is.False);
+            Assert.That(result.Message, Does.Contain("not overwritten automatically"));
+            Assert.That(result.ScenePaths, Is.EqualTo(new[] { ScenePath }));
+            Assert.That(saveDirtyOpenScenesWasCalled, Is.False);
             Assert.That(reloadWasCalled, Is.False);
         }
 
@@ -80,16 +76,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies stop-on-external-scene-changes prevents automatic save or reload.
             Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
-            bool saveWasCalled = false;
+            bool saveDirtyOpenScenesWasCalled = false;
             bool reloadWasCalled = false;
             ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
                 snapshots,
                 () => new[] { (AssetPath: ScenePath, IsDirty: true) },
                 _ => (true, ChangedTime, 20),
-                _ =>
+                () =>
                 {
-                    saveWasCalled = true;
-                    return true;
+                    saveDirtyOpenScenesWasCalled = true;
+                    return Array.Empty<string>();
                 },
                 () =>
                 {
@@ -103,45 +99,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.CanProceed, Is.False);
             Assert.That(result.Message, Does.Contain("--stop-on-external-scene-changes"));
             Assert.That(result.ScenePaths, Is.EqualTo(new[] { ScenePath }));
-            Assert.That(saveWasCalled, Is.False);
+            Assert.That(saveDirtyOpenScenesWasCalled, Is.False);
             Assert.That(reloadWasCalled, Is.False);
         }
 
         [Test]
-        public void ResolveExternalSceneChanges_WhenDirtySaveFails_ReturnsFailure()
+        public void ResolveExternalSceneChanges_WhenCleanSceneChangedAndReloadEnabled_SavesDirtyScenesBeforeReload()
         {
-            // Verifies compile stops when a dirty externally changed Scene cannot be saved.
+            // Verifies reload preflight saves other dirty open Scenes before restoring Scene setup.
             Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
-            ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
-                snapshots,
-                () => new[] { (AssetPath: ScenePath, IsDirty: true) },
-                _ => (true, ChangedTime, 20),
-                _ => false,
-                () => true);
-
-            (bool CanProceed, string Message, string[] ScenePaths) result = resolver.ResolveExternalSceneChanges(
-                reloadExternalSceneChanges: true);
-
-            Assert.That(result.CanProceed, Is.False);
-            Assert.That(result.Message, Does.Contain("could not be saved or reloaded"));
-            Assert.That(result.ScenePaths, Is.EqualTo(new[] { ScenePath }));
-        }
-
-        [Test]
-        public void ResolveExternalSceneChanges_WhenSceneUnchanged_DoesNotSaveOrReload()
-        {
-            // Verifies unchanged Scene fingerprints do not trigger compile preflight work.
-            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
-            bool saveWasCalled = false;
+            bool saveDirtyOpenScenesWasCalled = false;
             bool reloadWasCalled = false;
             ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
                 snapshots,
-                () => new[] { (AssetPath: ScenePath, IsDirty: true) },
-                _ => (true, SavedTime, 10),
-                _ =>
+                () => new[] { (AssetPath: ScenePath, IsDirty: false) },
+                _ => (true, ChangedTime, 20),
+                () =>
                 {
-                    saveWasCalled = true;
-                    return true;
+                    saveDirtyOpenScenesWasCalled = true;
+                    return Array.Empty<string>();
                 },
                 () =>
                 {
@@ -153,7 +129,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 reloadExternalSceneChanges: true);
 
             Assert.That(result.CanProceed, Is.True);
-            Assert.That(saveWasCalled, Is.False);
+            Assert.That(saveDirtyOpenScenesWasCalled, Is.True);
+            Assert.That(reloadWasCalled, Is.True);
+        }
+
+        [Test]
+        public void ResolveExternalSceneChanges_WhenDirtyScenesBeforeReloadCannotBeSaved_ReturnsFailure()
+        {
+            // Verifies reload does not proceed when any dirty open Scene cannot be saved first.
+            const string DirtyScenePath = "Assets/Scenes/DirtyScene.unity";
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
+            bool reloadWasCalled = false;
+            ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
+                snapshots,
+                () => new[] { (AssetPath: ScenePath, IsDirty: false) },
+                _ => (true, ChangedTime, 20),
+                () => new[] { DirtyScenePath },
+                () =>
+                {
+                    reloadWasCalled = true;
+                    return true;
+                });
+
+            (bool CanProceed, string Message, string[] ScenePaths) result = resolver.ResolveExternalSceneChanges(
+                reloadExternalSceneChanges: true);
+
+            Assert.That(result.CanProceed, Is.False);
+            Assert.That(result.Message, Does.Contain("cannot save dirty Scene files"));
+            Assert.That(result.ScenePaths, Is.EqualTo(new[] { DirtyScenePath }));
+            Assert.That(reloadWasCalled, Is.False);
+        }
+
+        [Test]
+        public void ResolveExternalSceneChanges_WhenSceneUnchanged_DoesNotSaveOrReload()
+        {
+            // Verifies unchanged Scene fingerprints do not trigger compile preflight work.
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
+            bool saveDirtyOpenScenesWasCalled = false;
+            bool reloadWasCalled = false;
+            ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
+                snapshots,
+                () => new[] { (AssetPath: ScenePath, IsDirty: true) },
+                _ => (true, SavedTime, 10),
+                () =>
+                {
+                    saveDirtyOpenScenesWasCalled = true;
+                    return Array.Empty<string>();
+                },
+                () =>
+                {
+                    reloadWasCalled = true;
+                    return true;
+                });
+
+            (bool CanProceed, string Message, string[] ScenePaths) result = resolver.ResolveExternalSceneChanges(
+                reloadExternalSceneChanges: true);
+
+            Assert.That(result.CanProceed, Is.True);
+            Assert.That(saveDirtyOpenScenesWasCalled, Is.False);
             Assert.That(reloadWasCalled, Is.False);
         }
 
