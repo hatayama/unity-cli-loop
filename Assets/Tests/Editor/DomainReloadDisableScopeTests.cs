@@ -3,6 +3,8 @@ using System.IO;
 
 using NUnit.Framework;
 using UnityEditor;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -159,6 +161,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.True);
             Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
             Assert.That(File.Exists(MarkerFilePath), Is.False);
+        }
+
+        [Test]
+        public void SaveCurrentSettings_ThrowsAndKeepsExistingMarker_WhenMarkerAlreadyExists()
+        {
+            // Verifies that saving refuses to replace an unrecovered marker.
+            string directoryPath = Path.GetDirectoryName(MarkerFilePath);
+            if (!string.IsNullOrEmpty(directoryPath))
+            {
+                Directory.CreateDirectory(directoryPath);
+            }
+
+            string existingJson = "{ \"originalOptionsEnabled\": true, \"originalOptions\": 1 }";
+            File.WriteAllText(MarkerFilePath, existingJson);
+
+            LogAssert.Expect(LogType.Assert, "recovery marker must be restored before saving a new marker");
+            InvalidOperationException exception =
+                Assert.Throws<InvalidOperationException>(() => DomainReloadDisableScopeRecovery.SaveCurrentSettings());
+
+            Assert.That(exception.Message, Does.Contain("must be restored before saving"));
+            Assert.That(File.ReadAllText(MarkerFilePath), Is.EqualTo(existingJson));
+            Assert.That(File.Exists(TempFilePath), Is.False);
         }
 
         private static void SetEnterPlayModeSettings(bool enabled, EnterPlayModeOptions options)

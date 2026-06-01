@@ -37,9 +37,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static void SaveCurrentSettings()
         {
+            bool markerExists = File.Exists(DomainReloadDisableScopeRecoveryConstants.MarkerFilePath);
             Debug.Assert(
-                !File.Exists(DomainReloadDisableScopeRecoveryConstants.MarkerFilePath),
+                !markerExists,
                 "recovery marker must be restored before saving a new marker");
+            if (markerExists)
+            {
+                throw new InvalidOperationException(
+                    "Domain reload recovery marker must be restored before saving a new marker.");
+            }
 
             DomainReloadDisableScopeRecoveryData markerData = new DomainReloadDisableScopeRecoveryData
             {
@@ -104,7 +110,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             DeleteTempFileIfExists();
             string json = JsonUtility.ToJson(markerData, true);
             File.WriteAllText(DomainReloadDisableScopeRecoveryConstants.TempFilePath, json);
-            DeleteMarkerFileIfExists();
             File.Move(
                 DomainReloadDisableScopeRecoveryConstants.TempFilePath,
                 DomainReloadDisableScopeRecoveryConstants.MarkerFilePath);
