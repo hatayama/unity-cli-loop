@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 
 using NUnit.Framework;
@@ -113,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
             Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
-            DomainReloadDisableScope.ResetActiveScopeCountForTests();
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
 
             DomainReloadDisableScope nextScope = new DomainReloadDisableScope();
             DomainReloadDisableScopeRecoveryData markerData = DomainReloadDisableScopeRecovery.ReadMarkerDataForTests();
@@ -141,6 +142,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(File.Exists(MarkerFilePath), Is.False);
             Assert.That(File.Exists(TempFilePath), Is.False);
             System.GC.KeepAlive(scope);
+        }
+
+        [Test]
+        public void RestoreIfPending_RejectsUnsupportedEnterPlayModeOptionBits()
+        {
+            // Verifies that corrupted markers cannot write unsupported option bits into EditorSettings.
+            SetEnterPlayModeSettings(true, EnterPlayModeOptions.DisableDomainReload);
+            string json = "{ \"originalOptionsEnabled\": false, \"originalOptions\": 1024 }";
+            File.WriteAllText(MarkerFilePath, json);
+
+            InvalidOperationException exception =
+                Assert.Throws<InvalidOperationException>(() => DomainReloadDisableScopeRecovery.RestoreIfPending());
+
+            Assert.That(exception.Message, Does.Contain("supported Enter Play Mode option bits"));
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
         }
 
         private static void SetEnterPlayModeSettings(bool enabled, EnterPlayModeOptions options)

@@ -41,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
             using DomainReloadDisableScope scope = new DomainReloadDisableScope();
             return await ExecuteTestWithEventNotification(TestMode.PlayMode, filter, ct);
         }

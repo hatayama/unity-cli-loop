@@ -42,6 +42,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// Resets stale scope state before a new PlayMode test run starts.
+        /// </summary>
+        internal static void RecoverAbandonedScopeBeforeNewRun()
+        {
+            if (_activeScopeCount == 0)
+            {
+                return;
+            }
+
+            if (!DomainReloadDisableScopeRecovery.HasPendingRestore())
+            {
+                return;
+            }
+
+            _activeScopeCount = 0;
+        }
+
         internal static void ResetActiveScopeCountForTests()
         {
             _activeScopeCount = 0;

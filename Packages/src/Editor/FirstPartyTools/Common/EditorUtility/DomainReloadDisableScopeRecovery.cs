@@ -11,6 +11,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class DomainReloadDisableScopeRecovery
     {
+        // Unity can persist this deprecated bit, but referencing the enum member raises CS0618.
+        private const int DisableSceneBackupUnlessDirtyOptionBit = 4;
+        private const int ValidEnterPlayModeOptionsMask =
+            (int)(EnterPlayModeOptions.DisableDomainReload
+                  | EnterPlayModeOptions.DisableSceneReload)
+            | DisableSceneBackupUnlessDirtyOptionBit;
+
         internal static string MarkerFilePathForTests => DomainReloadDisableScopeRecoveryConstants.MarkerFilePath;
         internal static string TempFilePathForTests => DomainReloadDisableScopeRecoveryConstants.TempFilePath;
 
@@ -71,6 +78,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static bool HasPendingRestoreForTests()
         {
+            return HasPendingRestore();
+        }
+
+        internal static bool HasPendingRestore()
+        {
             return File.Exists(DomainReloadDisableScopeRecoveryConstants.MarkerFilePath);
         }
 
@@ -112,7 +124,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new InvalidOperationException("Domain reload recovery marker must contain valid JSON.");
             }
 
+            ValidateOriginalOptions(markerData.originalOptions);
             return markerData;
+        }
+
+        private static void ValidateOriginalOptions(int originalOptions)
+        {
+            if ((originalOptions & ~ValidEnterPlayModeOptionsMask) == 0)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Domain reload recovery marker must contain supported Enter Play Mode option bits.");
         }
 
         private static void DeleteMarkerFileIfExists()
