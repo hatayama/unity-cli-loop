@@ -19,6 +19,7 @@ uloop control-play-mode [options]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--action` | string | `Play` | Action to perform: `Play`, `Stop`, `Pause` |
+| `--timeout-seconds` | integer | `180` | Maximum seconds to wait for the requested play mode state |
 
 ## Global Options
 
@@ -31,6 +32,9 @@ uloop control-play-mode [options]
 ```bash
 # Start play mode
 uloop control-play-mode --action Play
+
+# Start play mode with a longer wait budget
+uloop control-play-mode --action Play --timeout-seconds 600
 
 # Stop play mode
 uloop control-play-mode --action Stop
@@ -52,5 +56,4 @@ Returns JSON with the current play mode state:
 - Stop action exits play mode and returns to edit mode
 - Pause action pauses the game while remaining in play mode
 - Useful for automated testing workflows
-
-- PlayMode entry may complete on the next editor frame. If a PlayMode-dependent command reports "PlayMode is not active" immediately after `--action Play`, wait briefly and retry.
+- The command waits for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.
