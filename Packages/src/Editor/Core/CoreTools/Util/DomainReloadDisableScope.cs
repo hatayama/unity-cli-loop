@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -9,18 +10,19 @@ namespace io.github.hatayama.uLoopMCP
     /// </summary>
     public class DomainReloadDisableScope : IDisposable
     {
-        private static int _activeScopeCount;
+        private static readonly List<WeakReference> ActiveScopeReferences = new List<WeakReference>();
         private bool _disposed;
 
         public DomainReloadDisableScope()
         {
-            if (_activeScopeCount == 0)
+            PruneInactiveScopeReferences();
+            if (ActiveScopeReferences.Count == 0)
             {
                 DomainReloadDisableScopeRecovery.RestoreIfPending();
                 DomainReloadDisableScopeRecovery.SaveCurrentSettings();
             }
 
-            _activeScopeCount++;
+            ActiveScopeReferences.Add(new WeakReference(this));
 
             EditorSettings.enterPlayModeOptionsEnabled = true;
             EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload;
@@ -34,10 +36,10 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             _disposed = true;
-            Debug.Assert(_activeScopeCount > 0, "active scope count must be positive before dispose");
-            _activeScopeCount--;
+            bool removed = RemoveScopeReference(this);
+            Debug.Assert(removed, "active scope reference must exist before dispose");
 
-            if (_activeScopeCount == 0)
+            if (ActiveScopeReferences.Count == 0)
             {
                 DomainReloadDisableScopeRecovery.RestoreIfPending();
             }
@@ -45,7 +47,41 @@ namespace io.github.hatayama.uLoopMCP
 
         internal static void ResetActiveScopeCountForTests()
         {
-            _activeScopeCount = 0;
+            ActiveScopeReferences.Clear();
+        }
+
+        private static void PruneInactiveScopeReferences()
+        {
+            for (int index = ActiveScopeReferences.Count - 1; index >= 0; index--)
+            {
+                DomainReloadDisableScope activeScope =
+                    ActiveScopeReferences[index].Target as DomainReloadDisableScope;
+                if (activeScope == null || activeScope._disposed)
+                {
+                    ActiveScopeReferences.RemoveAt(index);
+                }
+            }
+        }
+
+        private static bool RemoveScopeReference(DomainReloadDisableScope scope)
+        {
+            bool removed = false;
+            for (int index = ActiveScopeReferences.Count - 1; index >= 0; index--)
+            {
+                DomainReloadDisableScope activeScope =
+                    ActiveScopeReferences[index].Target as DomainReloadDisableScope;
+                if (activeScope == null || activeScope._disposed || ReferenceEquals(activeScope, scope))
+                {
+                    ActiveScopeReferences.RemoveAt(index);
+                }
+
+                if (ReferenceEquals(activeScope, scope))
+                {
+                    removed = true;
+                }
+            }
+
+            return removed;
         }
     }
 }

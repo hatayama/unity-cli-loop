@@ -128,6 +128,29 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public void Constructor_RestoresStaleMarker_WhenPreviousScopeWasAbandonedInSameEditorSession()
+        {
+            // Verifies same-session recovery after the abandoned scope is no longer alive.
+            SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+
+            System.WeakReference abandonedScopeReference = CreateAbandonedScopeReference();
+            CollectGarbage();
+            Assert.That(abandonedScopeReference.IsAlive, Is.False);
+
+            DomainReloadDisableScope nextScope = new DomainReloadDisableScope();
+            DomainReloadDisableScopeRecoveryData markerData = DomainReloadDisableScopeRecovery.ReadMarkerDataForTests();
+
+            Assert.That(markerData.originalOptionsEnabled, Is.False);
+            Assert.That(markerData.originalOptions, Is.EqualTo((int)EnterPlayModeOptions.None));
+
+            nextScope.Dispose();
+
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
+        }
+
+        [Test]
         public void RestoreIfPending_LeavesNoMarkerFile_AfterSuccessfulRestore()
         {
             // Verifies that successful recovery deletes the marker instead of saving a cleared state.
@@ -145,6 +168,22 @@ namespace io.github.hatayama.uLoopMCP
         {
             EditorSettings.enterPlayModeOptionsEnabled = enabled;
             EditorSettings.enterPlayModeOptions = options;
+        }
+
+        private static System.WeakReference CreateAbandonedScopeReference()
+        {
+            DomainReloadDisableScope scope = new DomainReloadDisableScope();
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
+            return new System.WeakReference(scope);
+        }
+
+        private static void CollectGarbage()
+        {
+            System.GC.Collect();
+            System.GC.WaitForPendingFinalizers();
+            System.GC.Collect();
         }
 
         private static void RestoreFile(string filePath, bool fileExisted, string fileContent)
