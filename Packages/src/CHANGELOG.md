@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.29](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.28...v3.0.0-beta.29) (2026-06-01)
+
+
+### Bug Fixes
+
+* Compile reports assembly definition errors instead of unknown status ([#1260](https://github.com/hatayama/unity-cli-loop/issues/1260)) ([e093b0b](https://github.com/hatayama/unity-cli-loop/commit/e093b0bb070fe66c413e880b278ba9b00c31daa2))
+* Setup updates outdated CLI before offering PATH repair ([#1258](https://github.com/hatayama/unity-cli-loop/issues/1258)) ([2254286](https://github.com/hatayama/unity-cli-loop/commit/2254286ead5bb90a77893ff1b071d9b536534dac))
+
 ## [3.0.0-beta.28](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.27...v3.0.0-beta.28) (2026-06-01)
 
 
