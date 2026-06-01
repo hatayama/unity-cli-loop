@@ -158,6 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(exception.Message, Does.Contain("supported Enter Play Mode option bits"));
             Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.True);
             Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
+            Assert.That(File.Exists(MarkerFilePath), Is.False);
         }
 
         private static void SetEnterPlayModeSettings(bool enabled, EnterPlayModeOptions options)

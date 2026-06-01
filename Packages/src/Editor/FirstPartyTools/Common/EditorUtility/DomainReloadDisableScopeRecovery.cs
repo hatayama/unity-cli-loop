@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 JsonUtility.FromJson<DomainReloadDisableScopeRecoveryData>(json);
             if (markerData == null)
             {
-                throw new InvalidOperationException("Domain reload recovery marker must contain valid JSON.");
+                ThrowInvalidMarker("Domain reload recovery marker must contain valid JSON.");
             }
 
             ValidateOriginalOptions(markerData.originalOptions);
@@ -135,8 +135,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            throw new InvalidOperationException(
+            ThrowInvalidMarker(
                 "Domain reload recovery marker must contain supported Enter Play Mode option bits.");
+        }
+
+        private static void ThrowInvalidMarker(string message)
+        {
+            DeleteMarkerFileIfExists();
+            throw new InvalidOperationException(message);
         }
 
         private static void DeleteMarkerFileIfExists()
