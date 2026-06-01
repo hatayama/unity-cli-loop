@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private List<CompilerMessage> _compileMessages = new();
         private TaskCompletionSource<CompileResult> _currentCompileTask;
         private bool _isForceCompile = false;
+        private bool _reloadExternalSceneChanges = true;
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
 
         /// <summary>
@@ -55,6 +56,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void SetResultRecordingContext(CompileResultRecordingContext resultRecordingContext)
         {
             _resultRecordingContext = resultRecordingContext;
+        }
+
+        /// <summary>
+        /// Sets how compile handles open Scene files changed outside Unity before asset refresh.
+        /// </summary>
+        internal void SetExternalSceneChangePolicy(bool reloadExternalSceneChanges)
+        {
+            _reloadExternalSceneChanges = reloadExternalSceneChanges;
         }
 
         /// <summary>
@@ -106,6 +115,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     isIndeterminate: true,
                     message: validation.ErrorMessage
                 );
+            }
+
+            (bool CanProceed, string Message, string[] ScenePaths) sceneChangeResult =
+                ExternalSceneChangeTracker.ResolveForCompile(_reloadExternalSceneChanges);
+            if (!sceneChangeResult.CanProceed)
+            {
+                VibeLogger.LogWarning(
+                    "compile_external_scene_change_resolution_failed",
+                    sceneChangeResult.Message,
+                    new
+                    {
+                        reload_external_scene_changes = _reloadExternalSceneChanges,
+                        scene_paths = sceneChangeResult.ScenePaths
+                    });
+                return CreateExternalSceneChangeFailureResult(sceneChangeResult);
             }
 
             _isCompiling = true;
@@ -270,7 +294,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ["editor_compiling"] = EditorApplication.isCompiling,
                 ["editor_updating"] = EditorApplication.isUpdating,
                 ["editor_playing"] = EditorApplication.isPlaying,
-                ["editor_paused"] = EditorApplication.isPaused
+                ["editor_paused"] = EditorApplication.isPaused,
+                ["reload_external_scene_changes"] = _reloadExternalSceneChanges
             };
             if (extraContext == null)
             {
@@ -644,6 +669,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Creates a failed compile result for external Scene changes that cannot be auto-resolved.
+        /// </summary>
+        private static CompileResult CreateExternalSceneChangeFailureResult(
+            (bool CanProceed, string Message, string[] ScenePaths) sceneChangeResult)
+        {
+            UnityEngine.Debug.Assert(!sceneChangeResult.CanProceed, "sceneChangeResult must be a failure");
+
+            CompilerMessage[] errors = CreateExternalSceneChangeCompilerMessages(sceneChangeResult);
+            return new CompileResult(
+                success: false,
+                errorCount: errors.Length,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: errors,
+                errors: errors,
+                warnings: Array.Empty<CompilerMessage>(),
+                message: sceneChangeResult.Message
+            );
+        }
+
+        /// <summary>
+        /// Converts unresolved external Scene changes into compiler-shaped errors for compile responses.
+        /// </summary>
+        private static CompilerMessage[] CreateExternalSceneChangeCompilerMessages(
+            (bool CanProceed, string Message, string[] ScenePaths) sceneChangeResult)
+        {
+            UnityEngine.Debug.Assert(sceneChangeResult.ScenePaths != null, "scene paths must not be null");
+            UnityEngine.Debug.Assert(sceneChangeResult.ScenePaths.Length > 0, "scene paths must not be empty");
+
+            CompilerMessage[] errors = new CompilerMessage[sceneChangeResult.ScenePaths.Length];
+            for (int i = 0; i < sceneChangeResult.ScenePaths.Length; i++)
+            {
+                errors[i] = new CompilerMessage
+                {
+                    type = CompilerMessageType.Error,
+                    message = sceneChangeResult.Message,
+                    file = sceneChangeResult.ScenePaths[i],
+                    line = 0
+                };
+            }
+
+            return errors;
+        }
+
+        /// <summary>
         /// Converts Assembly Definition and Assembly Reference Console errors into compiler messages.
         /// </summary>
         private static CompilerMessage[] CreateAssemblyDefinitionCompilerMessages(
@@ -682,6 +752,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             _isCompiling = false;
             _isForceCompile = false;
+            _reloadExternalSceneChanges = true;
             _resultRecordingContext = CompileResultRecordingContext.Disabled();
         }
 

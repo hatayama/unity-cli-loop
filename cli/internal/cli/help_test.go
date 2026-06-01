@@ -243,6 +243,9 @@ func TestRunProjectLocalCompileHelpDoesNotRequireUnityProject(t *testing.T) {
 		"uloop compile",
 		"--force-recompile",
 		"--no-wait-for-domain-reload",
+		"--stop-on-external-scene-changes",
+		"Stop before execution if open Scene files changed externally instead of auto-reloading them",
+		"default: auto-reload enabled",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("compile help missing %q:\n%s", expected, output)

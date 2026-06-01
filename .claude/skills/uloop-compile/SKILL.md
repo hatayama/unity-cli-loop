@@ -11,7 +11,7 @@ Execute Unity project compilation.
 ## Usage
 
 ```bash
-uloop compile [--force-recompile] [--no-wait-for-domain-reload]
+uloop compile [--force-recompile] [--no-wait-for-domain-reload] [--stop-on-external-scene-changes]
 ```
 
 ## Parameters
@@ -20,6 +20,7 @@ uloop compile [--force-recompile] [--no-wait-for-domain-reload]
 |-----------|------|---------|-------------|
 | `--force-recompile` | flag | - | Use for broader validation, including warnings hidden by other asmdefs; much slower than normal compile |
 | `--no-wait-for-domain-reload` | flag | - | Return before Domain Reload completion |
+| `--stop-on-external-scene-changes` | flag | - | Stop before compilation if open Scene files changed externally instead of auto-reloading them |
 
 ## Global Options
 
@@ -35,6 +36,9 @@ uloop compile
 
 # Start compilation without waiting for Domain Reload completion
 uloop compile --no-wait-for-domain-reload
+
+# Stop instead of auto-reloading externally changed open Scene files
+uloop compile --stop-on-external-scene-changes
 ```
 
 ## Output

@@ -102,6 +102,23 @@ func TestBuildToolParamsConvertsRunTestsFailOnUnsavedChangesFlag(t *testing.T) {
 	}
 }
 
+// Tests that compile accepts --stop-on-external-scene-changes from embedded tools.
+func TestBuildToolParamsConvertsCompileStopOnExternalSceneChangesFlag(t *testing.T) {
+	tool, ok := findTool(loadDefaultTools(), compileCommandName)
+	if !ok {
+		t.Fatal("compile was not found in default tools")
+	}
+
+	params, _, err := buildToolParams([]string{"--stop-on-external-scene-changes"}, tool)
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+
+	if params[reloadExternalSceneChangesPropertyName] != false {
+		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[reloadExternalSceneChangesPropertyName])
+	}
+}
+
 // Tests that run-tests-specific aliases do not leak into unrelated tool schemas.
 func TestBuildToolParamsKeepsGenericSaveBeforeRunFlagForOtherTools(t *testing.T) {
 	tool := toolDefinition{
@@ -124,6 +141,31 @@ func TestBuildToolParamsKeepsGenericSaveBeforeRunFlagForOtherTools(t *testing.T)
 	_, _, err = buildToolParams([]string{"--fail-on-unsaved-changes"}, tool)
 	if err == nil {
 		t.Fatal("expected run-tests-specific flag to be rejected")
+	}
+}
+
+// Tests that compile-specific aliases do not leak into unrelated tool schemas.
+func TestBuildToolParamsKeepsGenericReloadExternalSceneChangesFlagForOtherTools(t *testing.T) {
+	tool := toolDefinition{
+		Name: "sample-tool",
+		InputSchema: inputSchema{
+			Properties: map[string]toolProperty{
+				reloadExternalSceneChangesPropertyName: {Type: "boolean", Default: true},
+			},
+		},
+	}
+
+	params, _, err := buildToolParams([]string{"--no-reload-external-scene-changes"}, tool)
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+	if params[reloadExternalSceneChangesPropertyName] != false {
+		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[reloadExternalSceneChangesPropertyName])
+	}
+
+	_, _, err = buildToolParams([]string{"--stop-on-external-scene-changes"}, tool)
+	if err == nil {
+		t.Fatal("expected compile-specific flag to be rejected")
 	}
 }
 

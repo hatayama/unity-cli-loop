@@ -15,6 +15,11 @@
             "type": "boolean",
             "description": "Wait for domain reload completion before returning",
             "default": true
+          },
+          "ReloadExternalSceneChanges": {
+            "type": "boolean",
+            "description": "Automatically reload or save open Scene files changed outside Unity before compiling",
+            "default": true
           }
         }
       }

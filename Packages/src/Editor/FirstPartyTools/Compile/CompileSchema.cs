@@ -21,6 +21,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool WaitForDomainReload { get; set; } = true;
 
         /// <summary>
+        /// Whether to reload or save externally changed open Scene files before compilation refresh.
+        /// </summary>
+        [Description("Automatically reload or save open Scene files changed outside Unity before compiling")]
+        public bool ReloadExternalSceneChanges { get; set; } = true;
+
+        /// <summary>
         /// Internal request identifier used for delayed result recovery across domain reload.
         /// </summary>
         [Browsable(false)]
