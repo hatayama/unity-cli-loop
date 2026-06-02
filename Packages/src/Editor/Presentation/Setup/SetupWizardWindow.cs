@@ -65,12 +65,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool ShouldAutoShowForVersion(
             string currentVersion,
             string lastSeenVersion,
-            bool suppressAutoShow)
+            bool suppressAutoShow,
+            bool needsCliUpdate,
+            bool hasSkillUpdate)
         {
             bool versionChanged = !string.Equals(currentVersion, lastSeenVersion, System.StringComparison.Ordinal);
             if (!versionChanged) return false;
+            if (suppressAutoShow) return false;
 
-            return !suppressAutoShow;
+            return string.IsNullOrEmpty(lastSeenVersion)
+                || needsCliUpdate
+                || hasSkillUpdate;
         }
 
         internal static bool ShouldAutoScanThirdPartyToolMigration(string currentVersion, string lastSeenVersion)
@@ -124,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             EvaluateVersionChange(CancellationToken.None);
         }
 
-        private static void EvaluateVersionChange(CancellationToken ct)
+        private static async void EvaluateVersionChange(CancellationToken ct)
         {
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
             UnityCliLoopEditorSettingsService editorSettingsService = GetEditorSettingsService();
@@ -140,18 +145,80 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 lastSeenVersion);
             MaybeScheduleThirdPartyToolMigrationAutoScan(shouldAutoScanThirdPartyToolMigration);
 
-            bool shouldAutoShow = ShouldAutoShowForVersion(
+            bool versionChanged = !string.Equals(
                 currentVersion,
                 lastSeenVersion,
-                suppressAutoShow);
-
-            if (!shouldAutoShow)
+                System.StringComparison.Ordinal);
+            if (!versionChanged || suppressAutoShow)
             {
                 MaybeRecordSuppressedVersion(suppressAutoShow, currentVersion);
                 return;
             }
 
+            bool needsCliUpdate = false;
+            bool hasSkillUpdate = false;
+            if (!string.IsNullOrEmpty(lastSeenVersion))
+            {
+                needsCliUpdate = await NeedsCliUpdateForSetupWizardAsync(ct);
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                if (!needsCliUpdate)
+                {
+                    hasSkillUpdate = await HasSkillUpdateForSetupWizardAsync(ct);
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                }
+            }
+
+            bool shouldAutoShow = ShouldAutoShowForVersion(
+                currentVersion,
+                lastSeenVersion,
+                suppressAutoShow,
+                needsCliUpdate,
+                hasSkillUpdate);
+
+            if (!shouldAutoShow)
+            {
+                MaybeRecordLastSeenVersion(true, currentVersion);
+                return;
+            }
+
             EditorApplication.delayCall += ShowWindowOnVersionChange;
+        }
+
+        private static async Task<bool> NeedsCliUpdateForSetupWizardAsync(CancellationToken ct)
+        {
+            await CliSetupApplicationFacade.ForceRefreshCliVersionAsync(ct);
+            string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            if (string.IsNullOrEmpty(cliVersion))
+            {
+                return false;
+            }
+
+            string requiredCliVersion = GetMinimumRequiredCliVersion();
+            return !IsCliVersionSatisfied(cliVersion, requiredCliVersion);
+        }
+
+        private static async Task<bool> HasSkillUpdateForSetupWizardAsync(CancellationToken ct)
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            SkillSetupUseCase skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            List<SkillSetupTargetInfo> targets = await Task.Run(
+                () => skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(
+                    projectRoot,
+                    !ForceFlatSkillInstall),
+                ct);
+            if (ct.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            return HasSkillUpdateForSetupWizard(targets);
         }
 
         private static void ShowWindowOnVersionChange()
@@ -647,6 +714,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return targets
                 .Where(target => target.HasSkillsDirectory)
                 .ToList();
+        }
+
+        internal static bool HasSkillUpdateForSetupWizard(
+            IEnumerable<SkillSetupTargetInfo> targets)
+        {
+            Debug.Assert(targets != null, "targets must not be null");
+            return targets.Any(
+                target => target.HasSkillsDirectory
+                    && target.InstallState == SkillInstallState.Outdated);
         }
 
         internal static bool ShouldUseFirstInstallSkillsUi(string lastSeenSetupWizardVersion)
