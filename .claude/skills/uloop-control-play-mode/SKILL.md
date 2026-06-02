@@ -1,12 +1,12 @@
 ---
 name: uloop-control-play-mode
 toolName: control-play-mode
-description: "Control Unity Editor Play Mode. Use to start, stop, or pause Play Mode for runtime behavior checks and frame inspection."
+description: "Control Unity Editor Play Mode. Use to start, stop, pause, or advance one paused PlayMode frame for runtime behavior checks and frame inspection."
 ---
 
 # uloop control-play-mode
 
-Control Unity Editor play mode (play/stop/pause).
+Control Unity Editor play mode (play/stop/pause/next frame).
 
 ## Usage
 
@@ -18,7 +18,7 @@ uloop control-play-mode [options]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--action` | string | `Play` | Action to perform: `Play`, `Stop`, `Pause` |
+| `--action` | string | `Play` | Action to perform: `Play`, `Stop`, `Pause`, `NextFrame` |
 | `--timeout-seconds` | integer | `180` | Maximum seconds to wait for the requested play mode state |
 
 ## Global Options
@@ -41,6 +41,9 @@ uloop control-play-mode --action Stop
 
 # Pause play mode
 uloop control-play-mode --action Pause
+
+# Advance one frame while paused in play mode
+uloop control-play-mode --action NextFrame
 ```
 
 ## Output
@@ -55,5 +58,6 @@ Returns JSON with the current play mode state:
 - Play action starts the game in the Unity Editor (also resumes from pause)
 - Stop action exits play mode and returns to edit mode
 - Pause action pauses the game while remaining in play mode
+- NextFrame action advances one frame only when Unity is already paused in PlayMode; otherwise it is ignored
 - Useful for automated testing workflows
-- The command waits for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.
+- Play, Stop, and Pause wait for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.
