@@ -24,6 +24,7 @@ const (
 	errorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
 	errorCodeControlPlayModeWaitTimeout      = "CONTROL_PLAY_MODE_WAIT_TIMEOUT"
 	errorCodeDebugBreakAlreadyPaused         = "DEBUG_BREAK_ALREADY_PAUSED"
+	errorCodeDebugBreakNotPlaying            = "DEBUG_BREAK_NOT_PLAYING"
 	errorCodeInternalError                   = "INTERNAL_ERROR"
 
 	errorPhaseArgumentParsing = "argument_parsing"

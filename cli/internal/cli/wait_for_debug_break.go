@@ -67,6 +67,11 @@ func runWaitForDebugBreak(
 		writeErrorEnvelope(stderr, debugBreakAlreadyPausedError(connection.ProjectRoot, initialState))
 		return 1
 	}
+	if !initialState.IsPlaying {
+		spinner.Stop()
+		writeErrorEnvelope(stderr, debugBreakNotPlayingError(connection.ProjectRoot, initialState))
+		return 1
+	}
 
 	spinner.Update("Waiting for Debug.Break...")
 	finalState, waitErr := waitForDebugBreak(ctx, connection, initialState)
@@ -117,6 +122,7 @@ func waitForDebugBreak(
 	initialState playModeStateResponse,
 ) (playModeStateResponse, error) {
 	lastState := initialState
+	var lastErr error
 	for {
 		state, err := queryPlayModeState(ctx, connection)
 		if err == nil {
@@ -124,10 +130,15 @@ func waitForDebugBreak(
 			if state.IsPaused {
 				return state, nil
 			}
+		} else {
+			lastErr = err
 		}
 
 		select {
 		case <-ctx.Done():
+			if lastErr != nil {
+				return lastState, lastErr
+			}
 			return lastState, ctx.Err()
 		case <-time.After(waitForDebugBreakPollInterval):
 		}
@@ -165,6 +176,25 @@ func debugBreakAlreadyPausedError(projectRoot string, state playModeStateRespons
 		Command:     waitForDebugBreakCommandName,
 		NextActions: []string{
 			"Run `uloop control-play-mode --action Play` to resume Unity from the existing pause, then run `uloop wait-for-debug-break` before triggering the target action.",
+		},
+		Details: map[string]any{
+			"isPlaying": state.IsPlaying,
+			"isPaused":  state.IsPaused,
+		},
+	}
+}
+
+func debugBreakNotPlayingError(projectRoot string, state playModeStateResponse) cliError {
+	return cliError{
+		ErrorCode:   errorCodeDebugBreakNotPlaying,
+		Phase:       errorPhaseResponseWaiting,
+		Message:     "Unity Editor is not in PlayMode before waiting for Debug.Break.",
+		Retryable:   true,
+		SafeToRetry: true,
+		ProjectRoot: projectRoot,
+		Command:     waitForDebugBreakCommandName,
+		NextActions: []string{
+			"Run `uloop control-play-mode --action Play`, then run `uloop wait-for-debug-break` before triggering the target action.",
 		},
 		Details: map[string]any{
 			"isPlaying": state.IsPlaying,

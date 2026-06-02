@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -76,6 +77,29 @@ func TestRunWaitForDebugBreakFailsWhenUnityAlreadyPaused(t *testing.T) {
 	}
 }
 
+// Verifies wait-for-debug-break rejects EditMode before entering the wait loop.
+func TestRunWaitForDebugBreakFailsWhenUnityIsNotPlaying(t *testing.T) {
+	replaceQueryPlayModeState(t, func(context.Context, unityipc.Connection) (playModeStateResponse, error) {
+		return playModeStateResponse{IsPlaying: false, IsPaused: false}, nil
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForDebugBreak(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		[]string{},
+		&stdout,
+		&stderr)
+
+	if code != 1 {
+		t.Fatalf("expected not-playing failure, got %d with stdout %s", code, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), errorCodeDebugBreakNotPlaying) {
+		t.Fatalf("not-playing error missing from stderr: %s", stderr.String())
+	}
+}
+
 // Verifies Debug.Break polling keeps the last state when the caller cancels the wait.
 func TestWaitForDebugBreakReturnsLastStateWhenCanceled(t *testing.T) {
 	originalPollInterval := waitForDebugBreakPollInterval
@@ -98,6 +122,29 @@ func TestWaitForDebugBreakReturnsLastStateWhenCanceled(t *testing.T) {
 	}
 	if state.IsPaused {
 		t.Fatalf("last state should remain unpaused: %#v", state)
+	}
+}
+
+// Verifies Debug.Break polling reports the last probe error instead of hiding it behind timeout.
+func TestWaitForDebugBreakReturnsLastProbeErrorWhenCanceled(t *testing.T) {
+	originalPollInterval := waitForDebugBreakPollInterval
+	waitForDebugBreakPollInterval = time.Millisecond
+	t.Cleanup(func() {
+		waitForDebugBreakPollInterval = originalPollInterval
+	})
+	expectedErr := errors.New("play mode state probe failed")
+	replaceQueryPlayModeState(t, func(context.Context, unityipc.Connection) (playModeStateResponse, error) {
+		return playModeStateResponse{}, expectedErr
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	state, err := waitForDebugBreak(
+		ctx,
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		playModeStateResponse{IsPlaying: true, IsPaused: false})
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected last probe error, got %v with state %#v", err, state)
 	}
 }
 
