@@ -25,31 +25,16 @@ normalize_path_dir() {
   printf '%s\n' "$path_dir"
 }
 
-ensure_symlink_target() {
-  link_path="$1"
+copy_uloop_binary() {
+  destination_path="$1"
 
-  if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
-    echo "Go CLI source checks passed and dist binaries were rebuilt."
-    echo "Refusing to overwrite non-symlink global uloop: $link_path" >&2
-    exit 1
-  fi
+  rm -f "$destination_path"
+  cp "$cli_path" "$destination_path"
+  chmod +x "$destination_path"
+  echo "Copied rebuilt native CLI to global uloop: $destination_path"
 }
 
-update_uloop_link() {
-  link_path="$1"
-
-  if [ -L "$link_path" ]; then
-    current_target=$(readlink "$link_path")
-    echo "Updating global uloop symlink: $link_path -> $current_target"
-  else
-    echo "Creating global uloop symlink: $link_path"
-  fi
-
-  ln -sfn "$cli_path" "$link_path"
-  echo "Global uloop now points at the rebuilt native CLI: $link_path -> $(readlink "$link_path")"
-}
-
-ensure_global_uloop_resolves_to_link() {
+ensure_global_uloop_resolves_to_updated_binary() {
   resolved_uloop_path=$(command -v "$global_command_name" || true)
 
   if [ "$resolved_uloop_path" = "$global_uloop_path" ]; then
@@ -59,7 +44,7 @@ ensure_global_uloop_resolves_to_link() {
     return 0
   fi
 
-  echo "Global $global_command_name symlink was updated, but shell resolution does not point at it." >&2
+  echo "Global $global_command_name was updated, but shell resolution does not point at it." >&2
   echo "Resolved $global_command_name: ${resolved_uloop_path:-not found}" >&2
   echo "Expected $global_command_name: $global_uloop_path" >&2
   echo "Add $global_bin_dir to PATH or set ULOOP_GLOBAL_BIN_DIR to a directory earlier in PATH." >&2
@@ -136,16 +121,11 @@ fi
 
 echo "Go CLI source checks passed and dist binaries were rebuilt."
 
-ensure_symlink_target "$global_uloop_path"
+copy_uloop_binary "$global_uloop_path"
 if [ -n "$extra_global_uloop_path" ]; then
-  ensure_symlink_target "$extra_global_uloop_path"
+  copy_uloop_binary "$extra_global_uloop_path"
 fi
 
-update_uloop_link "$global_uloop_path"
-if [ -n "$extra_global_uloop_path" ]; then
-  update_uloop_link "$extra_global_uloop_path"
-fi
-
-ensure_global_uloop_resolves_to_link
+ensure_global_uloop_resolves_to_updated_binary
 
 "$global_command_name" --version

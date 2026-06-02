@@ -26,8 +26,8 @@ chmod +x "$BIN_DIR/uloop"
 
 ULOOP_GLOBAL_BIN_DIR="$BIN_DIR" "$ROOT_DIR/scripts/use-local-uloop.sh" link >/dev/null
 
-if [ ! -L "$BIN_DIR/uloop" ]; then
-  echo "Expected global uloop to be a symlink after link." >&2
+if [ -L "$BIN_DIR/uloop" ]; then
+  echo "Expected global uloop to be a copied executable, not a symlink." >&2
   exit 1
 fi
 
@@ -36,32 +36,28 @@ if [ "$(uname -m)" = "x86_64" ] || [ "$(uname -m)" = "amd64" ]; then
   expected_target="$ROOT_DIR/cli/dist/darwin-amd64/uloop"
 fi
 
-actual_target=$(readlink "$BIN_DIR/uloop")
-if [ "$actual_target" != "$expected_target" ]; then
-  echo "Unexpected symlink target: $actual_target" >&2
-  echo "Expected: $expected_target" >&2
-  exit 1
-fi
-
-if [ ! -x "$BIN_DIR/uloop.before-local-link" ]; then
-  echo "Expected original global uloop backup to exist." >&2
-  exit 1
-fi
-
-ULOOP_GLOBAL_BIN_DIR="$BIN_DIR" "$ROOT_DIR/scripts/use-local-uloop.sh" restore >/dev/null
-
-if [ -L "$BIN_DIR/uloop" ]; then
-  echo "Expected restored global uloop to no longer be a symlink." >&2
-  exit 1
-fi
-
-if [ "$("$BIN_DIR/uloop")" != "old-global-uloop" ]; then
-  echo "Restored global uloop did not execute the original script." >&2
+if ! cmp -s "$BIN_DIR/uloop" "$expected_target"; then
+  echo "Expected global uloop to match the local development binary." >&2
   exit 1
 fi
 
 if [ -e "$BIN_DIR/uloop.before-local-link" ]; then
-  echo "Expected backup to be consumed after restore." >&2
+  echo "Expected link to avoid creating a backup." >&2
+  exit 1
+fi
+
+printf '%s\n' '#!/bin/sh' 'echo stale-backup' > "$BIN_DIR/uloop.before-local-link"
+chmod +x "$BIN_DIR/uloop.before-local-link"
+
+ULOOP_GLOBAL_BIN_DIR="$BIN_DIR" "$ROOT_DIR/scripts/use-local-uloop.sh" link >/dev/null
+
+if ! cmp -s "$BIN_DIR/uloop" "$expected_target"; then
+  echo "Expected link to overwrite the global uloop even when a stale backup exists." >&2
+  exit 1
+fi
+
+if [ "$("$BIN_DIR/uloop.before-local-link")" != "stale-backup" ]; then
+  echo "Expected stale backup to be left untouched." >&2
   exit 1
 fi
 
@@ -71,9 +67,14 @@ mkdir -p "$TRAILING_BIN"
 
 HOME="$TRAILING_HOME" PATH="$TRAILING_BIN/:/usr/bin:/bin:/usr/sbin:/sbin" "$ROOT_DIR/scripts/use-local-uloop.sh" link >/dev/null
 
-if [ ! -L "$TRAILING_BIN/uloop" ]; then
+if [ -L "$TRAILING_BIN/uloop" ] || [ ! -x "$TRAILING_BIN/uloop" ]; then
   echo "Expected PATH entry with trailing slash to be selected for global uloop." >&2
   exit 1
 fi
 
-echo "use-local-uloop link/restore test passed"
+if ! cmp -s "$TRAILING_BIN/uloop" "$expected_target"; then
+  echo "Expected trailing PATH global uloop to match the local development binary." >&2
+  exit 1
+fi
+
+echo "use-local-uloop copy-link test passed"
