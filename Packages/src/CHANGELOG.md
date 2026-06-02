@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.31](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.30...v3.0.0-beta.31) (2026-06-02)
+
+
+### Bug Fixes
+
+* Compile waits longer before reporting indeterminate results ([#1276](https://github.com/hatayama/unity-cli-loop/issues/1276)) ([100e9aa](https://github.com/hatayama/unity-cli-loop/commit/100e9aa5aa06b049536545bcd5dd0a6839b27d95))
+* No-test runs now explain likely test assembly setup issues ([#1274](https://github.com/hatayama/unity-cli-loop/issues/1274)) ([d64d9bb](https://github.com/hatayama/unity-cli-loop/commit/d64d9bb3aa135be5f6785099d4cefb46bc1f4a44))
+
 ## [3.0.0-beta.30](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.29...v3.0.0-beta.30) (2026-06-02)
 
 
