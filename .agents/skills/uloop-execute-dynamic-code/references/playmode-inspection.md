@@ -117,6 +117,39 @@ Transform t = target.transform;
 return $"{target.name}: pos={t.position}, rot={t.rotation.eulerAngles}, scale={t.localScale}";
 ```
 
+## Schedule Debug.Break for Later Inspection
+
+Use this pattern when direct inspection is not enough and you want Unity to pause after a short delay or after the next runtime updates. Start `uloop wait-for-debug-break` in another session before triggering this snippet, or give the delay enough time to start the wait immediately after scheduling it. If Unity pauses before the wait command starts, the wait command will reject the stale pause.
+
+```csharp
+using UnityEditor;
+using UnityEngine;
+
+double startedAt = EditorApplication.timeSinceStartup;
+double delaySeconds = 3d;
+
+EditorApplication.CallbackFunction tick = null;
+tick = () =>
+{
+    if (EditorApplication.timeSinceStartup - startedAt < delaySeconds)
+    {
+        return;
+    }
+
+    EditorApplication.update -= tick;
+
+    GameObject player = GameObject.Find("Player");
+    Vector3 position = player != null ? player.transform.position : Vector3.zero;
+    Debug.Log($"[DebugBreak] delayed break after {delaySeconds}s, playerExists={player != null}, playerPosition={position}");
+    Debug.Break();
+};
+
+EditorApplication.update += tick;
+return $"Scheduled Debug.Break in {delaySeconds} seconds.";
+```
+
+After the wait command observes the pause, inspect the frozen state with `uloop get-logs`, `uloop get-hierarchy`, or another `uloop execute-dynamic-code` call. Resume PlayMode with `uloop control-play-mode --action Play` when inspection is complete.
+
 ## Check Rigidbody State
 
 ```csharp

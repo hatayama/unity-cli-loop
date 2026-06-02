@@ -83,4 +83,4 @@ For detailed code examples, refer to these files:
 - **PlayMode UI controls**: See [references/playmode-ui-controls.md](references/playmode-ui-controls.md)
   - InputField, Slider, Toggle, Dropdown, drag & drop simulation, list all UI controls
 - **PlayMode inspection**: See [references/playmode-inspection.md](references/playmode-inspection.md)
-  - Scene info, game state via reflection, physics state, raycast checks, GameObject search, position/rotation
+  - Scene info, game state via reflection, physics state, raycast checks, GameObject search, position/rotation, scheduled Debug.Break inspection
