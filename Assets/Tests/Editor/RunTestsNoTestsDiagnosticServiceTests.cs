@@ -61,6 +61,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void AppendDiagnosticsOrOriginalMessage_WhenDiagnosticsThrow_ReturnsOriginalMessage()
+        {
+            // Verifies optional no-test diagnostics cannot replace the original run-tests result with an exception.
+            string message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
+                RunTestsResponse.NoTestsFoundMessage,
+                () => throw new InvalidOperationException("diagnostic failure"));
+
+            Assert.That(message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
+        }
+
+        [Test]
         public void ShouldAppendDiagnostics_WhenFilterIsAllAndNoTestsWereFound_ReturnsTrue()
         {
             // Verifies that unfiltered no-discovery results can receive asmdef diagnostics.

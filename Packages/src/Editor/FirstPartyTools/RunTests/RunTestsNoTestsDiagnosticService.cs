@@ -39,6 +39,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return AppendFindingsIfEligible(message, success, testCount, findings);
         }
 
+        internal static string AppendDiagnosticsOrOriginalMessage(string message, Func<string> appendDiagnostics)
+        {
+            Debug.Assert(appendDiagnostics != null, "appendDiagnostics must not be null");
+
+            try
+            {
+                return appendDiagnostics();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"Failed to build no-tests diagnostics: {exception}");
+                return message;
+            }
+        }
+
         internal static string AppendFindingsIfEligible(
             string message,
             bool success,

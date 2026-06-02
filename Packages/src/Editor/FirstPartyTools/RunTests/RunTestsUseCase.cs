@@ -119,12 +119,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SkippedCount = result.skippedCount,
                 XmlPath = result.xmlPath
             };
-            response.Message = _noTestsDiagnosticService.AppendDiagnosticsIfNeeded(
+            response.Message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
                 response.Message,
-                response.Success,
-                response.TestCount,
-                parameters.TestMode,
-                parameters.FilterType);
+                () => _noTestsDiagnosticService.AppendDiagnosticsIfNeeded(
+                    response.Message,
+                    response.Success,
+                    response.TestCount,
+                    parameters.TestMode,
+                    parameters.FilterType));
             return response;
         }
 
