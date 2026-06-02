@@ -58,25 +58,100 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _originalSessionState.Restore(_sessionStateService);
         }
 
-        [TestCase("", "1.7.3", false, true)]
-        [TestCase("1.7.2", "1.7.3", false, true)]
-        [TestCase("1.7.4", "1.7.3", false, true)]
-        [TestCase("1.7.3", "1.7.3", false, false)]
-        [TestCase("", "1.7.3", true, false)]
-        [TestCase("1.7.2", "1.7.3", true, false)]
+        [TestCase("", "1.7.3", false, false, false, true)]
+        [TestCase("1.7.2", "1.7.3", false, false, false, false)]
+        [TestCase("1.7.2", "1.7.3", false, true, false, true)]
+        [TestCase("1.7.2", "1.7.3", false, false, true, true)]
+        [TestCase("1.7.4", "1.7.3", false, false, true, true)]
+        [TestCase("1.7.3", "1.7.3", false, true, true, false)]
+        [TestCase("", "1.7.3", true, true, true, false)]
+        [TestCase("1.7.2", "1.7.3", true, true, true, false)]
         public void ShouldAutoShowForVersion_ReturnsExpectedValue(
             string lastSeenVersion,
             string currentVersion,
             bool suppressAutoShow,
+            bool needsCliUpdate,
+            bool hasSkillUpdate,
             bool expected)
         {
+            // Verifies that package upgrades auto-show only for first install or actionable updates.
             bool shouldAutoShow =
                 SetupWizardWindow.ShouldAutoShowForVersion(
                     currentVersion,
                     lastSeenVersion,
-                    suppressAutoShow);
+                    suppressAutoShow,
+                    needsCliUpdate,
+                    hasSkillUpdate);
 
             Assert.That(shouldAutoShow, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void HasSkillUpdateForSetupWizard_WhenOutdatedTargetHasSkillsDirectory_ReturnsTrue()
+        {
+            // Verifies that outdated installed skills request the upgrade-time wizard.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    installState: SkillInstallState.Outdated)
+            };
+
+            bool hasSkillUpdate = SetupWizardWindow.HasSkillUpdateForSetupWizard(targets);
+
+            Assert.That(hasSkillUpdate, Is.True);
+        }
+
+        [TestCase(SkillInstallState.Installed)]
+        [TestCase(SkillInstallState.Missing)]
+        [TestCase(SkillInstallState.Checking)]
+        public void HasSkillUpdateForSetupWizard_WhenTargetIsNotOutdated_ReturnsFalse(
+            SkillInstallState installState)
+        {
+            // Verifies that non-outdated skill states do not request the upgrade-time wizard.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    installState)
+            };
+
+            bool hasSkillUpdate = SetupWizardWindow.HasSkillUpdateForSetupWizard(targets);
+
+            Assert.That(hasSkillUpdate, Is.False);
+        }
+
+        [Test]
+        public void HasSkillUpdateForSetupWizard_WhenOutdatedTargetHasNoSkillsDirectory_ReturnsFalse()
+        {
+            // Verifies that missing opt-in skills directories are not treated as skill updates.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: false,
+                    installState: SkillInstallState.Outdated)
+            };
+
+            bool hasSkillUpdate = SetupWizardWindow.HasSkillUpdateForSetupWizard(targets);
+
+            Assert.That(hasSkillUpdate, Is.False);
+        }
+
+        [Test]
+        public void HasSkillUpdateForSetupWizard_WhenTargetHasDifferentLayoutSkills_ReturnsTrue()
+        {
+            // Verifies that existing skills in the old layout request the upgrade-time wizard.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    installState: SkillInstallState.Missing,
+                    hasDifferentLayoutSkills: true)
+            };
+
+            bool hasSkillUpdate = SetupWizardWindow.HasSkillUpdateForSetupWizard(targets);
+
+            Assert.That(hasSkillUpdate, Is.True);
         }
 
         [TestCase("2.1.1", "3.0.0-beta.7", true)]
@@ -716,6 +791,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool hasFiniteSize = SetupWizardWindow.HasFiniteSize(new Vector2(240f, 120f));
 
             Assert.That(hasFiniteSize, Is.True);
+        }
+
+        private static SkillSetupTargetInfo CreateSkillTarget(
+            bool hasSkillsDirectory,
+            SkillInstallState installState,
+            bool hasDifferentLayoutSkills = false)
+        {
+            return new SkillSetupTargetInfo(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory,
+                hasExistingSkills: hasSkillsDirectory,
+                hasDifferentLayoutSkills,
+                installState);
         }
 
         private static void RestoreFile(string path, bool existed, string content)
