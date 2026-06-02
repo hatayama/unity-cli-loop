@@ -42,7 +42,7 @@
     "provenance": true
   },
   "dependencies": {
-    "commander": "14.0.3",
+    "commander": "15.0.0",
     "launch-unity": "^0.17.1",
     "semver": "7.8.1"
   },
