@@ -41,7 +41,7 @@ jobs:
       - name: Compile Unity project
         if: env.HAS_UNITY_LICENSE == 'true'
         id: compile
-        uses: game-ci/unity-builder@v4
+        uses: game-ci/unity-builder@v5
         timeout-minutes: 30
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
