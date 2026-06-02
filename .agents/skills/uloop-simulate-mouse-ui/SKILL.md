@@ -16,7 +16,18 @@ Simulate mouse interaction on Unity PlayMode UI: $ARGUMENTS
 3. Use the `AnnotatedElements` array to find the target element by `Label`, `Name`, or `Path` (A=frontmost, B=next, ...). Use `Interaction` to distinguish click targets from drag/drop/text targets, then use `SimX`/`SimY` directly as `--x`/`--y` coordinates.
 4. Execute the appropriate `uloop simulate-mouse-ui` command
 5. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering --annotate-elements`
-6. Report what happened
+6. If a screenshot cannot prove the UI state changed, use the Debug.Break verification workflow below
+7. Report what happened
+
+## Debug.Break Verification Workflow
+
+Use this when UI pointer events appear to fire but the resulting state is hard to confirm visually, such as a button callback that should update game state, a long-press that should open a menu, or a drag/drop action that should mutate inventory data.
+
+1. Start `uloop wait-for-debug-break` in another terminal/session.
+2. Schedule a delayed `Debug.Break()` with `uloop execute-dynamic-code` before triggering the UI input. Use the scheduled Debug.Break example in `uloop-execute-dynamic-code` PlayMode inspection references, and log the state you need to inspect, such as selected item, active panel, inventory contents, button callback side effects, or component fields.
+3. Trigger the UI mouse action before the delay expires, for example `uloop simulate-mouse-ui --action Click --x 400 --y 300`.
+4. When `wait-for-debug-break` returns, inspect the frozen state with `uloop get-logs`, `uloop get-hierarchy`, or another `uloop execute-dynamic-code` call.
+5. Resume PlayMode with `uloop control-play-mode --action Play` after inspection.
 
 ## Tool Reference
 

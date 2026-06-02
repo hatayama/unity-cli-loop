@@ -15,7 +15,18 @@ Simulate mouse input via Input System in Unity PlayMode: $ARGUMENTS
 2. For Click/LongPress: determine the target screen position (use `uloop screenshot` to find coordinates)
 3. Execute the appropriate `uloop simulate-mouse-input` command
 4. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
-5. Report what happened
+5. If a screenshot cannot prove the gameplay state changed, use the Debug.Break verification workflow below
+6. Report what happened
+
+## Debug.Break Verification Workflow
+
+Use this when mouse input appears to fire but the resulting gameplay state is hard to confirm visually, such as a click that should place or destroy an object, a mouse delta that should rotate a camera, or a scroll action that should change a selected slot.
+
+1. Start `uloop wait-for-debug-break` in another terminal/session.
+2. Schedule a delayed `Debug.Break()` with `uloop execute-dynamic-code` before triggering the mouse input. Use the scheduled Debug.Break example in `uloop-execute-dynamic-code` PlayMode inspection references, and log the state you need to inspect, such as target object existence, camera rotation, selected slot, hit result, or component fields.
+3. Trigger the mouse input before the delay expires, for example `uloop simulate-mouse-input --action Click --x 400 --y 300 --button Right`.
+4. When `wait-for-debug-break` returns, inspect the frozen state with `uloop get-logs`, `uloop get-hierarchy`, or another `uloop execute-dynamic-code` call.
+5. Resume PlayMode with `uloop control-play-mode --action Play` after inspection.
 
 ## Tool Reference
 

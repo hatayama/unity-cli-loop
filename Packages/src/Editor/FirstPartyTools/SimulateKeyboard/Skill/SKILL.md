@@ -14,7 +14,18 @@ Simulate keyboard input on Unity PlayMode: $ARGUMENTS
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. Execute the appropriate `uloop simulate-keyboard` command
 3. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
-4. Report what happened
+4. If a screenshot cannot prove the gameplay state changed, use the Debug.Break verification workflow below
+5. Report what happened
+
+## Debug.Break Verification Workflow
+
+Use this when input appears to fire but the result is hard to verify visually, such as pressing Space to jump and needing to confirm the player actually entered the jump state.
+
+1. Start `uloop wait-for-debug-break` in another terminal/session.
+2. Schedule a delayed `Debug.Break()` with `uloop execute-dynamic-code` before triggering the input. Use the scheduled Debug.Break example in `uloop-execute-dynamic-code` PlayMode inspection references, and log the state you need to inspect, such as position, velocity, grounded flags, or animation state.
+3. Trigger the keyboard input before the delay expires, for example `uloop simulate-keyboard --action Press --key Space`.
+4. When `wait-for-debug-break` returns, inspect the frozen state with `uloop get-logs`, `uloop get-hierarchy`, or another `uloop execute-dynamic-code` call.
+5. Resume PlayMode with `uloop control-play-mode --action Play` after inspection.
 
 ## Tool Reference
 
