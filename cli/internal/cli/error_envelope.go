@@ -23,6 +23,7 @@ const (
 	errorCodeCLIUpdateRequired               = "CLI_UPDATE_REQUIRED"
 	errorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
 	errorCodeControlPlayModeWaitTimeout      = "CONTROL_PLAY_MODE_WAIT_TIMEOUT"
+	errorCodeDebugBreakAlreadyPaused         = "DEBUG_BREAK_ALREADY_PAUSED"
 	errorCodeInternalError                   = "INTERNAL_ERROR"
 
 	errorPhaseArgumentParsing = "argument_parsing"
@@ -488,7 +489,7 @@ func availableCommandNames(cache toolsCache) []string {
 
 func isSafeRetryCommand(command string) bool {
 	switch command {
-	case "list", "sync", "get-version", "get-logs", "get-tool-details":
+	case "list", "sync", "get-version", "get-logs", "get-tool-details", "get-play-mode-state", waitForDebugBreakCommandName:
 		return true
 	default:
 		return false

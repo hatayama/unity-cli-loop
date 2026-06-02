@@ -26,7 +26,7 @@ func TestCompletionListCommandsIncludesNativeCommandsAndDefaultTools(t *testing.
 	}
 
 	output := stdout.String()
-	for _, command := range []string{"completion", "focus-window", "sync", "uninstall"} {
+	for _, command := range []string{"completion", "focus-window", "sync", "uninstall", waitForDebugBreakCommandName} {
 		if !strings.Contains(output, command) {
 			t.Fatalf("command %s was not listed: %s", command, output)
 		}

@@ -1,5 +1,5 @@
 {
-  "version": "3.0.0-beta.24",
+  "version": "3.0.0-beta.25",
   "tools": [
     {
       "name": "compile",
@@ -306,17 +306,18 @@
     },
     {
       "name": "control-play-mode",
-      "description": "Control Unity Editor play mode (play/stop/pause)",
+      "description": "Control Unity Editor play mode (play/stop/pause/next frame)",
       "inputSchema": {
         "type": "object",
         "properties": {
           "Action": {
             "type": "string",
-            "description": "Action to perform: Play - Start play mode, Stop - Stop play mode, Pause - Pause play mode",
+            "description": "Action to perform: Play - Start play mode, Stop - Stop play mode, Pause - Pause play mode, NextFrame - Advance one frame only when paused in play mode",
             "enum": [
               "Play",
               "Stop",
-              "Pause"
+              "Pause",
+              "NextFrame"
             ],
             "default": "Play"
           },

@@ -447,6 +447,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ProcessRequest_WhenToolExecutionSlotIsBusy_AllowsPlayModeStateBridgeCommand()
+        {
+            // Verifies Debug.Break state polling bypasses the normal single-flight tool execution slot.
+            CapturingMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            UnityCliLoopToolRegistrar.RegisterService(service);
+            service.RegisterCustomTool(new SingleFlightTestTool());
+
+            Task<string> toolResponseTask = null;
+            Task<string> bridgeResponseTask = null;
+            try
+            {
+                toolResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequest(SingleFlightTestTool.Name, 1),
+                    CancellationToken.None,
+                    (_, _) => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
+
+                bridgeResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequest(UnityCliLoopConstants.COMMAND_NAME_GET_PLAY_MODE_STATE, 2),
+                    CancellationToken.None,
+                    (_, _) => Task.CompletedTask);
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(2));
+                Assert.That(bridgeResponseTask.IsCompleted, Is.False);
+
+                dispatcher.RunContinuations();
+                string bridgeResponse = await AwaitWithTimeout(bridgeResponseTask, TimeSpan.FromMilliseconds(200));
+                JObject parsed = JObject.Parse(bridgeResponse);
+
+                Assert.That(parsed["error"], Is.Null);
+                Assert.That(parsed["result"]?["IsPaused"], Is.Not.Null);
+                LogAssert.NoUnexpectedReceived();
+            }
+            finally
+            {
+                dispatcher.RunContinuations();
+                await DrainTaskIfNeeded(toolResponseTask);
+                await DrainTaskIfNeeded(bridgeResponseTask);
+                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
+        [Test]
         public async Task ProcessRequest_WhenMainThreadSwitchIsCanceled_ReleasesExecutionGateWithoutError()
         {
             // Verifies client disconnects stop waiting requests before Unity pumps delayed editor continuations.

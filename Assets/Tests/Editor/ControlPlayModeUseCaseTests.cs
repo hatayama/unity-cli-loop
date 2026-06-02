@@ -34,5 +34,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Message, Is.EqualTo("Play mode status"));
         }
+
+        [Test]
+        public async Task ExecuteAsync_WhenNextFrameOutsidePlayMode_IgnoresRequest()
+        {
+            // Verifies that frame stepping never starts PlayMode as a side effect.
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase();
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.NextFrame,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.IsPlaying, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Next frame ignored"));
+        }
     }
 }

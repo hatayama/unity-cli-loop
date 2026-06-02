@@ -59,6 +59,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     message = "Play mode paused";
                     break;
 
+                case PlayModeAction.NextFrame:
+                    if (EditorApplication.isPlaying && EditorApplication.isPaused)
+                    {
+                        EditorApplication.Step();
+                        message = "Play mode advanced one frame";
+                        break;
+                    }
+                    message = "Next frame ignored";
+                    break;
+
                 default:
                     message = $"Unknown action: {parameters.Action}";
                     break;

@@ -31,14 +31,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetMinimumRequiredCliVersion_RequiresExternalSceneChangeFlagCliRelease()
+        public void GetMinimumRequiredCliVersion_RequiresDebugBreakWaitCliRelease()
         {
-            // Verifies this package release requires the CLI with external Scene change options.
+            // Verifies this package release requires the CLI with wait-for-debug-break support.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.24"));
+            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.25"));
         }
 
         [Test]
@@ -49,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo("cli-v3.0.0-beta.24"));
+            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo("cli-v3.0.0-beta.25"));
         }
 
         [Test]

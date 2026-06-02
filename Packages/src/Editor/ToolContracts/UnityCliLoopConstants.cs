@@ -68,6 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";
         public const string COMMAND_NAME_GET_VERSION = "get-version";
         public const string COMMAND_NAME_GET_COMPILE_STATUS = "get-compile-status";
+        public const string COMMAND_NAME_GET_PLAY_MODE_STATE = "get-play-mode-state";
 
         // Optional package names
         public const string PACKAGE_NAME_TEST_FRAMEWORK = "com.unity.test-framework";

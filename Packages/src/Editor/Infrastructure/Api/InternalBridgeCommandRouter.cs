@@ -15,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             return commandName == UnityCliLoopConstants.COMMAND_NAME_GET_VERSION ||
                    commandName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS ||
+                   commandName == UnityCliLoopConstants.COMMAND_NAME_GET_PLAY_MODE_STATE ||
                    commandName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS;
         }
 
@@ -35,6 +36,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS)
             {
                 return CompileStatusBridgeCommand.Execute(paramsToken);
+            }
+
+            if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_PLAY_MODE_STATE)
+            {
+                return PlayModeStateBridgeCommand.Execute();
             }
 
             throw new ArgumentException($"Unknown internal bridge command: {commandName}", nameof(commandName));

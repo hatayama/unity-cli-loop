@@ -86,6 +86,8 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return runSync(ctx, connection, stdout, stderr)
 	case "focus-window":
 		return runFocusWindow(ctx, connection.ProjectRoot, stdout, stderr)
+	case waitForDebugBreakCommandName:
+		return runWaitForDebugBreak(ctx, connection, commandArgs, stdout, stderr)
 	default:
 		tool, cache, ok, err := findToolForCommand(connection.ProjectRoot, command)
 		if err != nil {

@@ -168,6 +168,13 @@ func TestControlPlayModeTimeoutSecondsAcceptsFloatSchemaValue(t *testing.T) {
 	}
 }
 
+// Verifies that one-frame stepping returns the direct tool response instead of polling PlayMode state.
+func TestControlPlayModeActionCanWaitSkipsNextFrame(t *testing.T) {
+	if controlPlayModeActionCanWait("NextFrame") {
+		t.Fatal("NextFrame should not wait for a PlayMode state transition")
+	}
+}
+
 func serveRepeatedControlPlayModeResponse(
 	listener net.Listener,
 	serverErr chan<- error,

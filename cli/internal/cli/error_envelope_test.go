@@ -437,7 +437,7 @@ func TestClassifyConnectionAttemptUsesContextProjectRootFallback(t *testing.T) {
 
 func TestAvailableCommandNamesIncludesBuiltIns(t *testing.T) {
 	names := availableCommandNames(toolsCache{})
-	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "skills", "completion", "install", "update"}
+	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", waitForDebugBreakCommandName, "skills", "completion", "install", "update"}
 	for index, expected := range expectedBuiltIns {
 		if names[index] != expected {
 			t.Fatalf("built-in command mismatch: %#v", names)
