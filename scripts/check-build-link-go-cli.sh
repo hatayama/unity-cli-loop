@@ -27,10 +27,12 @@ normalize_path_dir() {
 
 copy_uloop_binary() {
   destination_path="$1"
+  tmp_destination_path="$destination_path.tmp.$$"
 
-  rm -f "$destination_path"
-  cp "$cli_path" "$destination_path"
-  chmod +x "$destination_path"
+  rm -f "$tmp_destination_path"
+  cp "$cli_path" "$tmp_destination_path"
+  chmod +x "$tmp_destination_path"
+  mv -f "$tmp_destination_path" "$destination_path"
   echo "Copied rebuilt native CLI to global uloop: $destination_path"
 }
 

@@ -104,9 +104,11 @@ print_status() {
 link_local_uloop() {
   mkdir -p "$global_bin_dir"
 
-  rm -f "$global_uloop"
-  cp "$local_uloop" "$global_uloop"
-  chmod +x "$global_uloop"
+  tmp_global_uloop="$global_uloop.tmp.$$"
+  rm -f "$tmp_global_uloop"
+  cp "$local_uloop" "$tmp_global_uloop"
+  chmod +x "$tmp_global_uloop"
+  mv -f "$tmp_global_uloop" "$global_uloop"
   echo "Copied local uloop to $global_uloop"
   print_status
 }
