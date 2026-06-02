@@ -69,6 +69,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task WatchAsync_WhenRequestCompletesAfterOldFinishGrace_StopsWithoutRecovery()
+        {
+            // Verifies delayed finish callbacks are still accepted after the old 500ms grace window.
+            SequenceCompilationState compilationState = new SequenceCompilationState(
+                new bool[] { false, true, false, false, false, false, false, false, false });
+            int waitCount = 0;
+            int missedCallbackCount = 0;
+            int startTimeoutCount = 0;
+            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
+                compilationState.IsCompiling,
+                () => waitCount >= 7,
+                () =>
+                {
+                    waitCount++;
+                    return Task.CompletedTask;
+                },
+                _ => { },
+                _ => startTimeoutCount++,
+                _ => missedCallbackCount++,
+                _ => { });
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(waitCount * UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS, Is.GreaterThan(500));
+            Assert.That(missedCallbackCount, Is.EqualTo(0));
+            Assert.That(startTimeoutCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public async Task WatchAsync_WhenCompileNeverStarts_RequestsStartTimeout()
         {
             // Verifies the watchdog keeps the existing start-timeout recovery path.
