@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.24](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.23...cli-v3.0.0-beta.24) (2026-06-02)
+
+
+### Bug Fixes
+
+* Compile handles externally changed open Scenes without blocking ([#1261](https://github.com/hatayama/unity-cli-loop/issues/1261)) ([8d6ed1b](https://github.com/hatayama/unity-cli-loop/commit/8d6ed1b7107d9cada658e2f7bb7bbd71122840b7))
+
 ## [3.0.0-beta.23](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.22...cli-v3.0.0-beta.23) (2026-05-31)
 
 
