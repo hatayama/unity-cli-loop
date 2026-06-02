@@ -47,11 +47,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return appendDiagnostics();
             }
-            catch (Exception exception)
+            catch (Exception exception) when (IsRecoverableAsmdefInspectionException(exception))
             {
                 Debug.LogWarning($"Failed to build no-tests diagnostics: {exception}");
                 return message;
             }
+        }
+
+        private static bool IsRecoverableAsmdefInspectionException(Exception exception)
+        {
+            Debug.Assert(exception != null, "exception must not be null");
+
+            return exception is IOException ||
+                   exception is UnauthorizedAccessException;
         }
 
         internal static string AppendFindingsIfEligible(

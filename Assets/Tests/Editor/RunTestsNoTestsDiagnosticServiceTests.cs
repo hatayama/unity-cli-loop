@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using NUnit.Framework;
 
@@ -61,14 +62,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void AppendDiagnosticsOrOriginalMessage_WhenDiagnosticsThrow_ReturnsOriginalMessage()
+        public void AppendDiagnosticsOrOriginalMessage_WhenInspectionReadFails_ReturnsOriginalMessage()
         {
-            // Verifies optional no-test diagnostics cannot replace the original run-tests result with an exception.
+            // Verifies optional no-test diagnostics cannot replace the original run-tests result with an I/O failure.
             string message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
                 RunTestsResponse.NoTestsFoundMessage,
-                () => throw new InvalidOperationException("diagnostic failure"));
+                () => throw new IOException("diagnostic failure"));
 
             Assert.That(message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
+        }
+
+        [Test]
+        public void AppendDiagnosticsOrOriginalMessage_WhenDiagnosticsHaveLogicFailure_Throws()
+        {
+            // Verifies no-test diagnostics do not hide programmer errors behind the original run-tests message.
+            Assert.Throws<InvalidOperationException>(() =>
+                RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
+                    RunTestsResponse.NoTestsFoundMessage,
+                    () => throw new InvalidOperationException("diagnostic failure")));
         }
 
         [Test]
