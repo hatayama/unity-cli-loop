@@ -137,6 +137,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(hasSkillUpdate, Is.False);
         }
 
+        [Test]
+        public void HasSkillUpdateForSetupWizard_WhenTargetHasDifferentLayoutSkills_ReturnsTrue()
+        {
+            // Verifies that existing skills in the old layout request the upgrade-time wizard.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    installState: SkillInstallState.Missing,
+                    hasDifferentLayoutSkills: true)
+            };
+
+            bool hasSkillUpdate = SetupWizardWindow.HasSkillUpdateForSetupWizard(targets);
+
+            Assert.That(hasSkillUpdate, Is.True);
+        }
+
         [TestCase("2.1.1", "3.0.0-beta.7", true)]
         [TestCase("1.9.0", "3.0.0", true)]
         [TestCase("", "3.0.0-beta.7", false)]
@@ -778,7 +795,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static SkillSetupTargetInfo CreateSkillTarget(
             bool hasSkillsDirectory,
-            SkillInstallState installState)
+            SkillInstallState installState,
+            bool hasDifferentLayoutSkills = false)
         {
             return new SkillSetupTargetInfo(
                 "Claude Code",
@@ -786,7 +804,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "--claude",
                 hasSkillsDirectory,
                 hasExistingSkills: hasSkillsDirectory,
-                hasDifferentLayoutSkills: false,
+                hasDifferentLayoutSkills,
                 installState);
         }
 

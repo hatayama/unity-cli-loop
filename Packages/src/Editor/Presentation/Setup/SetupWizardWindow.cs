@@ -722,7 +722,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(targets != null, "targets must not be null");
             return targets.Any(
                 target => target.HasSkillsDirectory
-                    && target.InstallState == SkillInstallState.Outdated);
+                    && (target.InstallState == SkillInstallState.Outdated
+                        || target.HasDifferentLayoutSkills));
         }
 
         internal static bool ShouldUseFirstInstallSkillsUi(string lastSeenSetupWizardVersion)
