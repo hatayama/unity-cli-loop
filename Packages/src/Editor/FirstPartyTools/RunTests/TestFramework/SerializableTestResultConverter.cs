@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (totalTests == 0)
             {
-                return "No tests found matching the specified filter criteria";
+                return RunTestsResponse.NoTestsFoundMessage;
             }
 
             return $"Test execution completed with status: {result.TestStatus}";
