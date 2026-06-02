@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public bool ForceRecompile { get; set; }
         public bool WaitForDomainReload { get; set; }
+        public bool ReloadExternalSceneChanges { get; set; } = true;
         public string RequestId { get; set; } = "";
     }
 

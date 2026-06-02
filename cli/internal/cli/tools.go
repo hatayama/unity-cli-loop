@@ -13,10 +13,11 @@ import (
 var version = clicontract.Current.CliVersion
 
 const (
-	cacheDirectoryName  = tools.CacheDirectoryName
-	cacheFileName       = tools.CacheFileName
-	projectPathFlagName = "project-path"
-	runTestsCommandName = "run-tests"
+	cacheDirectoryName                     = tools.CacheDirectoryName
+	cacheFileName                          = tools.CacheFileName
+	projectPathFlagName                    = "project-path"
+	runTestsCommandName                    = "run-tests"
+	reloadExternalSceneChangesPropertyName = "ReloadExternalSceneChanges"
 )
 
 type (
@@ -301,6 +302,9 @@ func optionNameForProperty(toolName string, propertyName string, property toolPr
 		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
 			return "fail-on-unsaved-changes"
 		}
+		if isCompileReloadExternalSceneChangesOption(toolName, propertyName, property) {
+			return "stop-on-external-scene-changes"
+		}
 		return "no-" + kebabName
 	}
 	return kebabName
@@ -309,6 +313,12 @@ func optionNameForProperty(toolName string, propertyName string, property toolPr
 func isRunTestsSaveBeforeRunOption(toolName string, propertyName string, property toolProperty) bool {
 	return toolName == runTestsCommandName &&
 		propertyName == "SaveBeforeRun" &&
+		isNegatedBooleanProperty(property)
+}
+
+func isCompileReloadExternalSceneChangesOption(toolName string, propertyName string, property toolProperty) bool {
+	return toolName == compileCommandName &&
+		propertyName == reloadExternalSceneChangesPropertyName &&
 		isNegatedBooleanProperty(property)
 }
 

@@ -106,5 +106,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Warnings, Is.Null);
             Assert.That(response.Message, Is.Null);
         }
+
+        [Test]
+        public void CreateCompileResult_WhenForceCompileHasPreservedFailure_MapsDetailedIssues()
+        {
+            // Verifies preflight failures keep actionable details even during force compile.
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = "external Scene changed",
+                file = "Assets/Scenes/SampleScene.unity",
+                line = 0
+            };
+            CompileResult result = new CompileResult(
+                success: false,
+                errorCount: 1,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: new[] { error },
+                errors: new[] { error },
+                warnings: Array.Empty<CompilerMessage>(),
+                message: "Compilation stopped because open Scene files changed externally.",
+                preserveDetailsWhenForceRecompile: true);
+
+            UnityCliLoopCompileResult response =
+                CompileSessionResultService.CreateCompileResult(result, forceRecompile: true);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorCount, Is.EqualTo(1));
+            Assert.That(response.Errors, Has.Length.EqualTo(1));
+            Assert.That(response.Errors[0].File, Is.EqualTo("Assets/Scenes/SampleScene.unity"));
+            Assert.That(response.Message, Does.Contain("externally"));
+        }
     }
 }

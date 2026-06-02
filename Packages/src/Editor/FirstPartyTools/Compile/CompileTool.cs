@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 ForceRecompile = parameters.ForceRecompile,
                 WaitForDomainReload = parameters.WaitForDomainReload,
+                ReloadExternalSceneChanges = parameters.ReloadExternalSceneChanges,
                 RequestId = parameters.RequestId,
             };
         }

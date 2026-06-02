@@ -271,7 +271,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 request_id = request.RequestId,
                 force_recompile = request.ForceRecompile,
-                wait_for_domain_reload = request.WaitForDomainReload
+                wait_for_domain_reload = request.WaitForDomainReload,
+                reload_external_scene_changes = request.ReloadExternalSceneChanges
             };
         }
 
