@@ -50,7 +50,7 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 	}
 
 	output := stdout.String()
-	for _, option := range []string{"--force-recompile", "--no-wait-for-domain-reload"} {
+	for _, option := range []string{"--force-recompile", "--no-wait-for-domain-reload", "--stop-on-external-scene-changes"} {
 		if !strings.Contains(output, option) {
 			t.Fatalf("option %s was not listed: %s", option, output)
 		}
@@ -92,6 +92,9 @@ func TestCompletionListOptionsUsesEmbeddedFirstPartyToolSchema(t *testing.T) {
 	output := stdout.String()
 	if !strings.Contains(output, "--no-wait-for-domain-reload") {
 		t.Fatalf("embedded compile options were not used: %s", output)
+	}
+	if !strings.Contains(output, "--stop-on-external-scene-changes") {
+		t.Fatalf("embedded compile external Scene option was not used: %s", output)
 	}
 	if strings.Contains(output, "--wait-for-domain-reload") {
 		t.Fatalf("stale wait option should not be listed: %s", output)

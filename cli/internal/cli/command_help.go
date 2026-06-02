@@ -150,6 +150,9 @@ func optionDescription(toolName string, propertyName string, property toolProper
 	if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
 		return optionSummary(toolName, propertyName, property) + "; default: auto-save enabled"
 	}
+	if isCompileReloadExternalSceneChangesOption(toolName, propertyName, property) {
+		return optionSummary(toolName, propertyName, property) + "; default: auto-reload enabled"
+	}
 
 	parts := []string{}
 	if description := optionSummary(toolName, propertyName, property); description != "" {
@@ -168,6 +171,9 @@ func optionSummary(toolName string, propertyName string, property toolProperty) 
 	if isNegatedBooleanProperty(property) {
 		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
 			return "Fail before execution if unsaved editor changes remain instead of auto-saving them"
+		}
+		if isCompileReloadExternalSceneChangesOption(toolName, propertyName, property) {
+			return "Stop before execution if open Scene files changed externally instead of auto-reloading them"
 		}
 		summary := firstHelpLine(property.Description)
 		normalizedSummary := strings.ToLower(summary)
