@@ -10,6 +10,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class RunTestsResponse : UnityCliLoopToolResponse
     {
+        internal const string NoTestsFoundMessage = "No tests found matching the specified filter criteria";
+
         public static readonly string TestFrameworkUnavailableMessage =
             $"run-tests requires the Unity Test Framework package ({UnityCliLoopConstants.PACKAGE_NAME_TEST_FRAMEWORK}). Install it via Package Manager to use test execution.";
 
