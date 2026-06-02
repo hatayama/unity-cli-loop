@@ -12,6 +12,8 @@ Before running `uloop run-tests`, run `uloop compile` for the same Unity project
 
 Before executing tests, `uloop run-tests` saves unsaved loaded Scene changes and unsaved current Prefab Stage changes by default. If saving fails, it returns `Success: false`, keeps `TestCount` at `0`, lists the unsaved items in `Message`, and does not start the Unity Test Runner.
 
+When an unfiltered `--filter-type all` run returns `TestCount: 0` and `Message` says no tests were found, read the `Message` for asmdef hints. `run-tests` only appends those hints when it detects likely test assembly configuration issues; exact, regex, and assembly filter misses keep the plain no-tests message.
+
 ## Usage
 
 ```bash

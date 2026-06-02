@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly TestFilterCreationService _filterService;
         private readonly TestExecutionService _executionService;
         private readonly TestExecutionStateValidationService _validationService;
+        private readonly RunTestsNoTestsDiagnosticService _noTestsDiagnosticService;
 
         public RunTestsUseCase()
             : this(
@@ -37,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _filterService = filterService;
             _executionService = executionService;
             _validationService = validationService;
+            _noTestsDiagnosticService = new RunTestsNoTestsDiagnosticService();
         }
 
         /// <summary>
@@ -106,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             
             // 3. Response creation
-            return new UnityCliLoopTestExecutionResult
+            UnityCliLoopTestExecutionResult response = new UnityCliLoopTestExecutionResult
             {
                 Success = result.success,
                 Message = result.message,
@@ -117,6 +119,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SkippedCount = result.skippedCount,
                 XmlPath = result.xmlPath
             };
+            response.Message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
+                response.Message,
+                () => _noTestsDiagnosticService.AppendDiagnosticsIfNeeded(
+                    response.Message,
+                    response.Success,
+                    response.TestCount,
+                    parameters.TestMode,
+                    parameters.FilterType));
+            return response;
         }
 
         public Task<UnityCliLoopTestExecutionResult> RunTestsAsync(UnityCliLoopTestExecutionRequest request, CancellationToken ct)
