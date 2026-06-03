@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         private static readonly Dictionary<string, UloopPausePointEntry> Entries = new();
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
+        private static UloopPausePointSnapshot _latestHitSnapshot;
 
         public static UloopPausePointSnapshot Enable(string id, int timeoutSeconds)
         {
@@ -25,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             DateTime now = NowUtc();
             UloopPausePointEntry entry = new(id, timeoutSeconds, now);
             Entries[id] = entry;
+            ClearLatestHitSnapshotIfMatches(id);
             return entry.ToSnapshot(now, _pauseController);
         }
 
@@ -40,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             UloopPausePointEntry entry = Entries[id];
             entry.MarkCleared();
+            ClearLatestHitSnapshotIfMatches(id);
             return entry.ToSnapshot(now, _pauseController);
         }
 
@@ -57,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 entry.MarkCleared();
                 clearedCount++;
             }
+            ClearLatestHitSnapshot();
 
             return new UloopPausePointClearAllResult(clearedCount, now);
         }
@@ -99,7 +103,34 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             _pauseController.Pause();
             entry.RecordHit(now, _pauseController.IsPlaying, _pauseController.IsPaused);
-            return entry.ToSnapshot(now, _pauseController);
+            UloopPausePointSnapshot snapshot = entry.ToSnapshot(now, _pauseController);
+            _latestHitSnapshot = snapshot;
+            return snapshot;
+        }
+
+        public static UloopPausePointSnapshot GetLatestHitSnapshot()
+        {
+            return _latestHitSnapshot;
+        }
+
+        public static void ClearLatestHitSnapshot()
+        {
+            _latestHitSnapshot = null;
+        }
+
+        private static void ClearLatestHitSnapshotIfMatches(string id)
+        {
+            if (_latestHitSnapshot == null)
+            {
+                return;
+            }
+
+            if (_latestHitSnapshot.Id != id)
+            {
+                return;
+            }
+
+            _latestHitSnapshot = null;
         }
 
         public static void ConfigureForTests(IUloopPausePointPauseController pauseController, Func<DateTime> nowProvider)
@@ -114,6 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static void ResetForTests()
         {
             Entries.Clear();
+            _latestHitSnapshot = null;
             _pauseController = new UnityEditorPausePointPauseController();
             _nowProvider = () => DateTime.UtcNow;
         }
@@ -172,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsHit = isHit;
             HitCount = hitCount;
             TimeoutSeconds = timeoutSeconds;
-            ElapsedMilliseconds = elapsedMilliseconds;
+            ElapsedSinceEnabledMilliseconds = elapsedMilliseconds;
             IsPlaying = isPlaying;
             IsPaused = isPaused;
             Message = message ?? string.Empty;
@@ -184,7 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool IsHit { get; }
         public int HitCount { get; }
         public int TimeoutSeconds { get; }
-        public long ElapsedMilliseconds { get; }
+        public long ElapsedSinceEnabledMilliseconds { get; }
         public bool IsPlaying { get; }
         public bool IsPaused { get; }
         public string Message { get; }

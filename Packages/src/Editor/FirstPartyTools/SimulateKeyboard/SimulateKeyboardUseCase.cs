@@ -92,6 +92,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
+            UloopPausePointRegistry.ClearLatestHitSnapshot();
+
             VibeLogger.LogInfo(
                 "simulate_keyboard_start",
                 "Keyboard simulation started",
@@ -315,7 +317,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCliLoopKeyboardAction action,
             string keyName)
         {
-            return new UnityCliLoopKeyboardSimulationResult
+            UnityCliLoopKeyboardSimulationResult result = new()
             {
                 Success = true,
                 Message = $"Keyboard input stopped because Unity paused during Debug Break inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
@@ -323,6 +325,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 KeyName = keyName,
                 InterruptedByDebugBreak = true
             };
+            AttachDebugBreakHit(result);
+            return result;
+        }
+
+        private static void AttachDebugBreakHit(UnityCliLoopKeyboardSimulationResult result)
+        {
+            if (result == null)
+            {
+                Debug.Assert(false, "result must not be null");
+                return;
+            }
+
+            UloopPausePointSnapshot? snapshot = UloopPausePointRegistry.GetLatestHitSnapshot();
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            if (!snapshot.IsHit)
+            {
+                return;
+            }
+
+            string? snapshotId = snapshot.Id;
+            if (string.IsNullOrEmpty(snapshotId))
+            {
+                return;
+            }
+
+            result.DebugBreakId = snapshotId;
+            result.DebugBreakHitCount = snapshot.HitCount;
         }
 
         private static async Task FinalizePressOverlay(CancellationToken ct)

@@ -71,6 +71,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Break_WhenPausePointIsEnabled_StoresLatestHitSnapshot()
+        {
+            // Verifies input interruption responses can read the latest marker hit.
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UnityCliLoopDebug.Break("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetLatestHitSnapshot();
+            Assert.That(snapshot, Is.Not.Null);
+            Assert.That(snapshot.Id, Is.EqualTo("jump"));
+            Assert.That(snapshot.HitCount, Is.EqualTo(1));
+        }
+
+        [Test]
         public void GetStatus_WhenTimeoutPasses_ExpiresAndDisarms()
         {
             // Verifies timeout disables the marker before a late hit can pause Unity.
@@ -83,6 +97,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
             Assert.That(snapshot.IsEnabled, Is.False);
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void GetStatus_WhenEnabled_ReportsElapsedSinceEnabledMilliseconds()
+        {
+            // Verifies elapsed time is named as time since the marker was enabled.
+            UloopPausePointRegistry.Enable("jump", 30);
+            _nowUtc = _nowUtc.AddMilliseconds(250);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.ElapsedSinceEnabledMilliseconds, Is.EqualTo(250));
         }
 
         [Test]
@@ -100,6 +126,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Enable_WhenSamePausePointWasHit_ClearsLatestHitSnapshot()
+        {
+            // Verifies re-enabling a marker does not leave stale hit details for input tools.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UnityCliLoopDebug.Break("jump");
+
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            Assert.That(UloopPausePointRegistry.GetLatestHitSnapshot(), Is.Null);
+        }
+
+        [Test]
         public void ClearAll_WhenPausePointWasHit_ClearsTerminalStatus()
         {
             // Verifies bulk clear hides stale terminal hit status from future waits.
@@ -112,6 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.ClearedCount, Is.EqualTo(1));
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
             Assert.That(snapshot.IsHit, Is.False);
+            Assert.That(UloopPausePointRegistry.GetLatestHitSnapshot(), Is.Null);
         }
 
         [Test]

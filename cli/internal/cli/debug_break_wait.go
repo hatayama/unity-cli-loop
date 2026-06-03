@@ -44,16 +44,16 @@ type debugBreakStatusOptions struct {
 }
 
 type debugBreakStatusResponse struct {
-	Id                  string `json:"Id"`
-	Status              string `json:"Status"`
-	IsEnabled           bool   `json:"IsEnabled"`
-	IsHit               bool   `json:"IsHit"`
-	HitCount            int    `json:"HitCount"`
-	TimeoutSeconds      int    `json:"TimeoutSeconds"`
-	ElapsedMilliseconds int64  `json:"ElapsedMilliseconds"`
-	IsPlaying           bool   `json:"IsPlaying"`
-	IsPaused            bool   `json:"IsPaused"`
-	Message             string `json:"Message"`
+	Id                              string `json:"Id"`
+	Status                          string `json:"Status"`
+	IsEnabled                       bool   `json:"IsEnabled"`
+	IsHit                           bool   `json:"IsHit"`
+	HitCount                        int    `json:"HitCount"`
+	TimeoutSeconds                  int    `json:"TimeoutSeconds"`
+	ElapsedSinceEnabledMilliseconds int64  `json:"ElapsedSinceEnabledMilliseconds"`
+	IsPlaying                       bool   `json:"IsPlaying"`
+	IsPaused                        bool   `json:"IsPaused"`
+	Message                         string `json:"Message"`
 }
 
 type debugBreakWaitState string
@@ -435,19 +435,19 @@ func debugBreakStateError(
 		NextActions: []string{
 			"Run `uloop enable-debug-break --id <marker-id>` before waiting.",
 			"Confirm the code path calls `UnityCliLoopDebug.Break(\"<marker-id>\")` with the same id.",
-			"Check `details.status`, `details.isPlaying`, `details.isPaused`, and `details.remainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+			"Check `details.status`, `details.isPlaying`, `details.isPaused`, `details.elapsedSinceEnabledMilliseconds`, and `details.remainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
 			"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
 		},
 		Details: map[string]any{
-			"id":                    options.id,
-			"status":                response.Status,
-			"hitCount":              response.HitCount,
-			"timeoutSeconds":        options.timeoutSeconds,
-			"elapsedMilliseconds":   response.ElapsedMilliseconds,
-			"isPlaying":             response.IsPlaying,
-			"isPaused":              response.IsPaused,
-			"remainingMilliseconds": debugBreakRemainingMilliseconds(options, response),
-			"markerMessage":         response.Message,
+			"id":                              options.id,
+			"status":                          response.Status,
+			"hitCount":                        response.HitCount,
+			"timeoutSeconds":                  options.timeoutSeconds,
+			"elapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
+			"isPlaying":                       response.IsPlaying,
+			"isPaused":                        response.IsPaused,
+			"remainingMilliseconds":           debugBreakRemainingMilliseconds(options, response),
+			"markerMessage":                   response.Message,
 		},
 	}
 }
@@ -459,7 +459,7 @@ func debugBreakRemainingMilliseconds(options waitForDebugBreakOptions, response 
 	}
 
 	totalMilliseconds := int64(timeoutSeconds) * int64(time.Second/time.Millisecond)
-	remainingMilliseconds := totalMilliseconds - response.ElapsedMilliseconds
+	remainingMilliseconds := totalMilliseconds - response.ElapsedSinceEnabledMilliseconds
 	if remainingMilliseconds <= 0 {
 		return 0
 	}

@@ -76,14 +76,14 @@ func TestRunWaitForDebugBreakClearsEnabledMarkerAfterTimeout(t *testing.T) {
 		id string,
 	) (debugBreakStatusResponse, error) {
 		return debugBreakStatusResponse{
-			Id:                  id,
-			Status:              debugBreakStatusEnabled,
-			IsEnabled:           true,
-			TimeoutSeconds:      1,
-			ElapsedMilliseconds: 100,
-			IsPlaying:           true,
-			IsPaused:            false,
-			Message:             "Debug break enabled.",
+			Id:                              id,
+			Status:                          debugBreakStatusEnabled,
+			IsEnabled:                       true,
+			TimeoutSeconds:                  1,
+			ElapsedSinceEnabledMilliseconds: 100,
+			IsPlaying:                       true,
+			IsPaused:                        false,
+			Message:                         "Debug break enabled.",
 		}, nil
 	}
 
@@ -123,6 +123,9 @@ func TestRunWaitForDebugBreakClearsEnabledMarkerAfterTimeout(t *testing.T) {
 	}
 	if envelope.Error.Details["markerMessage"] != "Debug break enabled." {
 		t.Fatalf("markerMessage detail mismatch: %#v", envelope.Error.Details)
+	}
+	if envelope.Error.Details["elapsedSinceEnabledMilliseconds"] != float64(100) {
+		t.Fatalf("elapsedSinceEnabledMilliseconds detail mismatch: %#v", envelope.Error.Details)
 	}
 	if envelope.Error.Details["remainingMilliseconds"] != float64(900) {
 		t.Fatalf("remainingMilliseconds detail mismatch: %#v", envelope.Error.Details)
@@ -207,12 +210,12 @@ func TestRunWaitForDebugBreakReportsNotEnabledError(t *testing.T) {
 // Verifies expired markers report no remaining enabled lifetime.
 func TestDebugBreakExpiredErrorReportsNoRemainingTime(t *testing.T) {
 	response := debugBreakStatusResponse{
-		Id:                  "jump",
-		Status:              debugBreakStatusExpired,
-		TimeoutSeconds:      1,
-		ElapsedMilliseconds: 1200,
-		IsPlaying:           true,
-		Message:             "Debug break expired before it was hit.",
+		Id:                              "jump",
+		Status:                          debugBreakStatusExpired,
+		TimeoutSeconds:                  1,
+		ElapsedSinceEnabledMilliseconds: 1200,
+		IsPlaying:                       true,
+		Message:                         "Debug break expired before it was hit.",
 	}
 
 	cliErr := debugBreakWaitError("/tmp/MyProject", waitForDebugBreakOptions{

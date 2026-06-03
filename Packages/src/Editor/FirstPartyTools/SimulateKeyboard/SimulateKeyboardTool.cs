@@ -49,6 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Action = result.Action,
                 KeyName = result.KeyName,
                 InterruptedByDebugBreak = result.InterruptedByDebugBreak,
+                DebugBreakId = result.DebugBreakId,
+                DebugBreakHitCount = result.DebugBreakHitCount,
             };
         }
     }

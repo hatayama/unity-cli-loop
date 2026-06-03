@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public bool IsHit { get; set; }
         public int HitCount { get; set; }
         public int TimeoutSeconds { get; set; }
-        public long ElapsedMilliseconds { get; set; }
+        public long ElapsedSinceEnabledMilliseconds { get; set; }
         public bool IsPlaying { get; set; }
         public bool IsPaused { get; set; }
         public string Message { get; set; } = string.Empty;
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 IsHit = snapshot.IsHit,
                 HitCount = snapshot.HitCount,
                 TimeoutSeconds = snapshot.TimeoutSeconds,
-                ElapsedMilliseconds = snapshot.ElapsedMilliseconds,
+                ElapsedSinceEnabledMilliseconds = snapshot.ElapsedSinceEnabledMilliseconds,
                 IsPlaying = snapshot.IsPlaying,
                 IsPaused = snapshot.IsPaused,
                 Message = snapshot.Message

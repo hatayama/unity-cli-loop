@@ -48,7 +48,7 @@ Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
 
 - Use `UnityCliLoopDebug.Break("<id>")` when a screenshot cannot prove that the keyboard input changed gameplay state, such as jump, sprint, or interaction.
 - Put the marker at a natural state transition after the game consumed the key, such as after jump velocity is applied, not immediately after sending `simulate-keyboard`.
-- If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. If a `UnityCliLoopDebug.Break` marker caused the pause, `DebugBreakId` and `DebugBreakHitCount` identify it. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
 - Use distinct marker ids for strict phases, for example `jump-key-read` and `jump-velocity-applied`.
 
 ### KeyDown/KeyUp Rules
@@ -93,6 +93,8 @@ Returns JSON with:
 - `Action` (string): The `--action` value that was applied (`Press`, `KeyDown`, or `KeyUp`)
 - `KeyName` (string, nullable): The key that was acted on; may be `null` when the action could not resolve a key
 - `InterruptedByDebugBreak` (boolean): True when Unity paused during Debug Break inspection and the input bookkeeping was safely released
+- `DebugBreakId` (string, nullable): The marker id when a `UnityCliLoopDebug.Break` marker caused the interruption
+- `DebugBreakHitCount` (integer, nullable): The marker hit count when a `UnityCliLoopDebug.Break` marker caused the interruption
 
 ## Prerequisites
 

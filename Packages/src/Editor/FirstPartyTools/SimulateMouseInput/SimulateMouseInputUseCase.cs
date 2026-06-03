@@ -92,6 +92,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
+            UloopPausePointRegistry.ClearLatestHitSnapshot();
+
             VibeLogger.LogInfo(
                 "simulate_mouse_input_start",
                 "Mouse input simulation started",
@@ -441,13 +443,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static UnityCliLoopMouseInputSimulationResult InterruptedActionResult(
             UnityCliLoopMouseInputAction action)
         {
-            return new UnityCliLoopMouseInputSimulationResult
+            UnityCliLoopMouseInputSimulationResult result = new()
             {
                 Success = true,
                 Message = "Mouse input stopped because Unity paused during Debug Break inspection. Unity CLI Loop released its held input bookkeeping.",
                 Action = action.ToString(),
                 InterruptedByDebugBreak = true
             };
+            AttachDebugBreakHit(result);
+            return result;
+        }
+
+        private static void AttachDebugBreakHit(UnityCliLoopMouseInputSimulationResult result)
+        {
+            if (result == null)
+            {
+                Debug.Assert(false, "result must not be null");
+                return;
+            }
+
+            UloopPausePointSnapshot? snapshot = UloopPausePointRegistry.GetLatestHitSnapshot();
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            if (!snapshot.IsHit)
+            {
+                return;
+            }
+
+            string? snapshotId = snapshot.Id;
+            if (string.IsNullOrEmpty(snapshotId))
+            {
+                return;
+            }
+
+            result.DebugBreakId = snapshotId;
+            result.DebugBreakHitCount = snapshot.HitCount;
         }
 
         private static async Task ReleaseButtonIfPossible(Mouse mouse, RuntimeMouseButton button)
