@@ -3,6 +3,7 @@ using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -26,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TearDown]
         public void TearDown()
         {
+            VibeLogger.ClearMemoryLogs();
             _originalSnapshot.Restore(_sessionStateService);
         }
 
@@ -188,6 +190,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Result["Success"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["Message"]?.Type, Is.EqualTo(JTokenType.Null));
+        }
+
+        [Test]
+        public void BuildResponse_WhenStatusIsQueried_WritesVibeLogContext()
+        {
+            // Verifies status polling leaves enough Unity-side context to correlate CLI wait diagnostics.
+            VibeLogger.ClearMemoryLogs();
+            string requestId = "compile_status_log_request_" + System.Guid.NewGuid().ToString("N");
+
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                requestId,
+                isCompiling: true,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+
+            Assert.That(response.Ready, Is.False);
+            JArray logs = JArray.Parse(VibeLogger.GetLogsForAi("compile_status_query_received"));
+            Assert.That(logs, Has.Count.EqualTo(1));
+            JObject context = (JObject)logs[0]["context"];
+            Assert.That(context["request_id"]?.ToString(), Is.EqualTo(requestId));
+            Assert.That(context["ready"]?.Value<bool>(), Is.False);
+            Assert.That(context["has_result"]?.Value<bool>(), Is.False);
+            Assert.That(context["is_compiling"]?.Value<bool>(), Is.True);
+            Assert.That(context["message"]?.ToString(), Does.Contain("still compiling"));
         }
     }
 }

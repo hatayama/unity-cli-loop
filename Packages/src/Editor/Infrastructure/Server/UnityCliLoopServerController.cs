@@ -36,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
         private long _startupProtectionUntilTicks = 0;
         private Task _currentRecoveryTask;
+        private int _serverGeneration = 0;
 
         internal UnityCliLoopServerControllerService(
             IUnityCliLoopServerInstanceFactory serverInstanceFactory,
@@ -85,6 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(server != null, "server must not be null");
 
             _bridgeServer = server;
+            _serverGeneration++;
             SaveRunningServerState();
         }
 
@@ -629,7 +631,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     server = _serverInstanceFactory.Create();
                     server.StartServer();
                     _bridgeServer = server;
-                    VibeLogger.LogInfo("binding_success", $"endpoint={server.Endpoint}");
+                    _serverGeneration++;
+                    VibeLogger.LogInfo(
+                        "binding_success",
+                        $"endpoint={server.Endpoint}",
+                        BuildBindingLogContext(server.Endpoint, _serverGeneration));
                     return true;
                 }
                 catch (Exception ex)
@@ -662,6 +668,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     remainingMs -= delay;
                 }
             }
+        }
+
+        private object BuildBindingLogContext(string endpoint, int serverGeneration)
+        {
+            UnityCliLoopPendingCompileRequest pendingRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            return new
+            {
+                endpoint,
+                server_generation = serverGeneration,
+                request_id = pendingRequest.HasRequest ? pendingRequest.RequestId : ""
+            };
         }
 
         private void SaveRunningServerState()

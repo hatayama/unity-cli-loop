@@ -66,10 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             VibeLogger.LogInfo(
                 "domain_reload_start",
                 "Domain reload starting",
-                new
-                {
-                    server_running = serverIsRunning
-                },
+                BuildDomainReloadStartLogContext(serverIsRunning),
                 correlationId
             );
         }
@@ -99,9 +96,33 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 serverWillRecover
                     ? "Domain reload completed - starting server recovery process"
                     : "Domain reload completed - server was manually stopped before recovery",
-                new { transport = "project_ipc" },
+                BuildDomainReloadCompleteLogContext(serverWillRecover),
                 correlationId
             );
+        }
+
+        private object BuildDomainReloadStartLogContext(bool serverRunning)
+        {
+            UnityCliLoopPendingCompileRequest pendingRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            return new
+            {
+                transport = "project_ipc",
+                server_running = serverRunning,
+                request_id = pendingRequest.HasRequest ? pendingRequest.RequestId : ""
+            };
+        }
+
+        private object BuildDomainReloadCompleteLogContext(bool serverWillRecover)
+        {
+            UnityCliLoopPendingCompileRequest pendingRequest =
+                _sessionStateService.GetPendingCompileRequest();
+            return new
+            {
+                transport = "project_ipc",
+                server_recovery_expected = serverWillRecover,
+                request_id = pendingRequest.HasRequest ? pendingRequest.RequestId : ""
+            };
         }
 
         public void RollbackDomainReloadStart(string correlationId)

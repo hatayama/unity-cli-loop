@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
@@ -18,6 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string RequestIdParamName = "RequestId";
         private const string RecoveredCompileResultMessage =
             "Compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. Use get-logs to inspect the compiler output.";
+        private static readonly Dictionary<string, string> LastLoggedStatusByRequestId =
+            new Dictionary<string, string>();
 
         public static GetCompileStatusResponse Execute(JToken paramsToken)
         {
@@ -58,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             JToken result = storedResult.HasResult ? JToken.Parse(storedResult.ResultJson) : null;
-            return new GetCompileStatusResponse
+            GetCompileStatusResponse response = new GetCompileStatusResponse
             {
                 Ready = ready,
                 HasResult = storedResult.HasResult,
@@ -68,6 +71,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Result = result,
                 Message = CreateMessage(ready, storedResult.HasResult)
             };
+            LogCompileStatusQueryReceived(requestId, response);
+            return response;
         }
 
         private static string ReadRequestId(JToken paramsToken)
@@ -154,6 +159,55 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return "Compile result is available.";
+        }
+
+        private static void LogCompileStatusQueryReceived(
+            string requestId,
+            GetCompileStatusResponse response)
+        {
+            Debug.Assert(response != null, "response must not be null");
+
+            string signature = CreateStatusSignature(response);
+            if (!string.IsNullOrWhiteSpace(requestId) &&
+                LastLoggedStatusByRequestId.TryGetValue(requestId, out string previousSignature) &&
+                previousSignature == signature)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(requestId))
+            {
+                LastLoggedStatusByRequestId[requestId] = signature;
+            }
+
+            VibeLogger.LogInfo(
+                "compile_status_query_received",
+                "CLI queried Unity compile status.",
+                new
+                {
+                    request_id = requestId,
+                    ready = response.Ready,
+                    has_result = response.HasResult,
+                    is_compiling = response.IsCompiling,
+                    is_updating = response.IsUpdating,
+                    is_domain_reload_in_progress = response.IsDomainReloadInProgress,
+                    message = response.Message
+                },
+                requestId);
+        }
+
+        private static string CreateStatusSignature(GetCompileStatusResponse response)
+        {
+            Debug.Assert(response != null, "response must not be null");
+
+            return string.Join(
+                "|",
+                response.Ready,
+                response.HasResult,
+                response.IsCompiling,
+                response.IsUpdating,
+                response.IsDomainReloadInProgress,
+                response.Message ?? "");
         }
     }
 }

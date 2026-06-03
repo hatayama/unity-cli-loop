@@ -60,6 +60,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
             Debug.Assert(result != null, "result must not be null");
 
+            UnityCliLoopStoredCompileResult existingResult =
+                sessionStateService.GetCompileResult(requestId);
+            UnityCliLoopPendingCompileRequest pendingRequest =
+                sessionStateService.GetPendingCompileRequestForRequestId(requestId);
             result.ProjectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             string resultJson = JsonConvert.SerializeObject(result, Formatting.None);
             sessionStateService.StoreCompileResult(
@@ -80,7 +84,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     error_count = result.ErrorCount,
                     warning_count = result.WarningCount,
                     result_bytes = System.Text.Encoding.UTF8.GetByteCount(resultJson),
-                    pending_request_cleared = pendingRequestCleared
+                    store_sequence = existingResult.HasResult ? 2 : 1,
+                    pending_request_before = pendingRequest.HasRequest,
+                    pending_request_cleared = pendingRequestCleared,
+                    duplicate_result_for_request = existingResult.HasResult
                 },
                 correlationId);
         }

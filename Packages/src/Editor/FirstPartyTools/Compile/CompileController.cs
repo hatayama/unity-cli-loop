@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private bool _isForceCompile = false;
         private bool _reloadExternalSceneChanges = true;
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
+        private DateTime _compileStartedAtUtc = DateTime.MinValue;
 
         /// <summary>
         /// Event that occurs when compilation is complete.
@@ -137,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TaskCompletionSource<CompileResult> compileTask = new();
             _currentCompileTask = compileTask;
             _isForceCompile = forceRecompile;
+            _compileStartedAtUtc = DateTime.UtcNow;
             bool eventsRegistered = false;
             bool compileTaskTransferred = false;
 
@@ -542,7 +544,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private void HandleCompileFinished(object context)
         {
             CompileResult result = CreateCompileResult();
+            VibeLogger.LogInfo(
+                "compile_finish_callback_received",
+                "Unity compilationFinished callback fired.",
+                BuildCompileFinishCallbackContext(result),
+                _resultRecordingContext.Enabled ? _resultRecordingContext.RequestId : null);
             CompleteCompileRequest(result, unregisterEvents: true);
+        }
+
+        private object BuildCompileFinishCallbackContext(CompileResult result)
+        {
+            UnityEngine.Debug.Assert(result != null, "result must not be null");
+
+            DateTime utcNow = DateTime.UtcNow;
+            double elapsedMs = _compileStartedAtUtc == DateTime.MinValue
+                ? 0
+                : (utcNow - _compileStartedAtUtc).TotalMilliseconds;
+            return new
+            {
+                request_id = _resultRecordingContext.Enabled ? _resultRecordingContext.RequestId : "",
+                success = result.Success,
+                error_count = result.ErrorCount,
+                warning_count = result.WarningCount,
+                is_indeterminate = result.IsIndeterminate,
+                elapsed_ms = Math.Max(0, (int)elapsedMs)
+            };
         }
 
         /// <summary>
@@ -755,6 +781,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _isForceCompile = false;
             _reloadExternalSceneChanges = true;
             _resultRecordingContext = CompileResultRecordingContext.Disabled();
+            _compileStartedAtUtc = DateTime.MinValue;
         }
 
         /// <summary>

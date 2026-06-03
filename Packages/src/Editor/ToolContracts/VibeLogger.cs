@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -25,10 +28,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         private const int MAX_FILE_SIZE_MB = 10;
         private const int MAX_MEMORY_LOGS = 1000;
         private const int MAX_LOG_FILES = 3;
+        private const int MAX_WRITE_RETRIES = 20;
+        private const int WRITE_RETRY_DELAY_MS = 25;
         
         private readonly List<VibeLogEntry> _memoryLogs = new List<VibeLogEntry>();
         private readonly object _lockObject = new object();
         private bool _hasCleanedUpOnStartup = false;
+        private bool _hasReportedInterleaving = false;
         
         /// <summary>
         /// Represents one Vibe Log entry in the owning workflow.
@@ -215,6 +221,18 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             }
             catch (Exception ex)
             {
+                TrySaveFileDiagnosticLog(
+                    "vibe_log_write_failed",
+                    "VibeLogger failed to append a JSONL entry.",
+                    new
+                    {
+                        log_path_identity = LOG_FILE_PREFIX,
+                        source = "Unity",
+                        operation = "append",
+                        failed_operation = operation,
+                        error = ex.Message,
+                        retry_count = MAX_WRITE_RETRIES
+                    });
                 // Fallback to Unity console if file logging fails
                 UnityEngine.Debug.LogError($"[VibeLogger] Failed to save log to file: {ex.Message}");
                 UnityEngine.Debug.Log($"[VibeLogger] {level} | {operation} | {message}");
@@ -226,12 +244,16 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         private void SaveLogToFile(VibeLogEntry logEntry)
         {
+            SaveLogToFile(logEntry, validateIntegrity: true);
+        }
+
+        private void SaveLogToFile(VibeLogEntry logEntry, bool validateIntegrity)
+        {
             if (!Directory.Exists(_logDirectory))
             {
                 Directory.CreateDirectory(_logDirectory);
             }
             
-            // Clean up old log files on first access only
             lock (_lockObject)
             {
                 if (!_hasCleanedUpOnStartup)
@@ -239,58 +261,155 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                     CleanupOldLogFiles();
                     _hasCleanedUpOnStartup = true;
                 }
-            }
-            
-            string fileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd}.json";
-            string filePath = Path.Combine(_logDirectory, fileName);
-            
-            // Check file size and rotate if necessary
-            if (File.Exists(filePath))
-            {
-                FileInfo fileInfo = new(filePath);
-                if (fileInfo.Length > MAX_FILE_SIZE_MB * 1024 * 1024)
+
+                string fileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd}.json";
+                string filePath = Path.Combine(_logDirectory, fileName);
+                RotateLogFileIfNeeded(filePath);
+                AppendJsonLineWithRetry(filePath, JsonConvert.SerializeObject(logEntry) + "\n");
+                if (validateIntegrity)
                 {
-                    string rotatedFileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
-                    string rotatedFilePath = Path.Combine(_logDirectory, rotatedFileName);
-                    File.Move(filePath, rotatedFilePath);
-                    
-                    // Clean up old files after rotation
-                    CleanupOldLogFiles();
+                    DetectInterleavingIfNeeded(filePath);
                 }
             }
-            
-            string jsonLog = JsonConvert.SerializeObject(logEntry) + "\n";
-            
-            // Use file locking with retry mechanism to handle concurrent access
-            int maxRetries = 3;
-            int retryDelayMs = 50;
-            
-            for (int retry = 0; retry < maxRetries; retry++)
+        }
+
+        private void RotateLogFileIfNeeded(string filePath)
+        {
+            if (!File.Exists(filePath))
+            {
+                return;
+            }
+
+            FileInfo fileInfo = new(filePath);
+            if (fileInfo.Length <= MAX_FILE_SIZE_MB * 1024 * 1024)
+            {
+                return;
+            }
+
+            string rotatedFileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
+            string rotatedFilePath = Path.Combine(_logDirectory, rotatedFileName);
+            File.Move(filePath, rotatedFilePath);
+            CleanupOldLogFiles();
+        }
+
+        private static void AppendJsonLineWithRetry(string filePath, string jsonLine)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(jsonLine);
+            for (int retry = 0; retry < MAX_WRITE_RETRIES; retry++)
             {
                 try
                 {
                     using (FileStream fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.Read))
-                    using (StreamWriter writer = new StreamWriter(fileStream))
                     {
-                        writer.Write(jsonLog);
-                        writer.Flush();
-                        return; // Success - exit retry loop
+                        fileStream.Write(payload, 0, payload.Length);
+                        fileStream.Flush();
+                        return;
                     }
                 }
-                catch (IOException ex) when (IsFileSharingViolation(ex) && retry < maxRetries - 1)
+                catch (IOException ex) when (IsFileSharingViolation(ex) && retry < MAX_WRITE_RETRIES - 1)
                 {
-                    // Wait and retry for sharing violations
-                    System.Threading.Thread.Sleep(retryDelayMs * (retry + 1));
+                    Thread.Sleep(WRITE_RETRY_DELAY_MS * (retry + 1));
                 }
                 catch (Exception ex)
                 {
-                    // For other exceptions, throw immediately
                     throw new InvalidOperationException($"Failed to write VibeLogger entry to file: {ex.Message}", ex);
                 }
             }
-            
-            // If all retries failed, throw with sharing violation context
-            throw new InvalidOperationException($"Failed to write VibeLogger entry after {maxRetries} retries due to file sharing violations");
+
+            throw new InvalidOperationException($"Failed to write VibeLogger entry after {MAX_WRITE_RETRIES} retries due to file sharing violations");
+        }
+
+        private void DetectInterleavingIfNeeded(string filePath)
+        {
+            if (_hasReportedInterleaving)
+            {
+                return;
+            }
+
+            (bool HasMalformedLine, int LastValidLineNumber) result =
+                InspectJsonLines(filePath);
+            if (!result.HasMalformedLine)
+            {
+                return;
+            }
+
+            _hasReportedInterleaving = true;
+            SaveLogToFile(
+                CreateDiagnosticLogEntry(
+                    "WARNING",
+                    "vibe_log_write_interleaving_detected",
+                    "Detected a malformed VibeLog JSONL entry after append.",
+                    new
+                    {
+                        log_path_identity = Path.GetFileName(filePath),
+                        source = "Unity",
+                        process_id = Process.GetCurrentProcess().Id,
+                        thread_id = Thread.CurrentThread.ManagedThreadId,
+                        last_valid_line_number = result.LastValidLineNumber
+                    }),
+                validateIntegrity: false);
+        }
+
+        private static (bool HasMalformedLine, int LastValidLineNumber) InspectJsonLines(string filePath)
+        {
+            int lineNumber = 0;
+            int lastValidLineNumber = 0;
+            foreach (string line in File.ReadLines(filePath))
+            {
+                lineNumber++;
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    JToken.Parse(line);
+                    lastValidLineNumber = lineNumber;
+                }
+                catch (JsonReaderException)
+                {
+                    return (true, lastValidLineNumber);
+                }
+            }
+
+            return (false, lastValidLineNumber);
+        }
+
+        private void TrySaveFileDiagnosticLog(
+            string operation,
+            string message,
+            object context)
+        {
+            try
+            {
+                SaveLogToFile(
+                    CreateDiagnosticLogEntry("ERROR", operation, message, context),
+                    validateIntegrity: false);
+            }
+            catch (Exception diagnosticException)
+            {
+                UnityEngine.Debug.LogWarning($"[VibeLogger] Failed to save diagnostic log: {diagnosticException.Message}");
+            }
+        }
+
+        private static VibeLogEntry CreateDiagnosticLogEntry(
+            string level,
+            string operation,
+            string message,
+            object context)
+        {
+            return new VibeLogEntry
+            {
+                timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffzzz"),
+                level = level,
+                operation = operation,
+                message = message,
+                context = context,
+                correlation_id = $"unity_{Guid.NewGuid().ToString("N")[..8]}_{DateTime.Now:HHmmss}",
+                source = "Unity",
+                environment = GetEnvironmentInfo()
+            };
         }
         
         /// <summary>

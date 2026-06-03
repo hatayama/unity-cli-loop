@@ -175,6 +175,60 @@ func TestWaitForCompileCompletionReturnsReadyStatusResult(t *testing.T) {
 	}
 }
 
+// Verifies successful compile status polling leaves start, observed, and completion diagnostics.
+func TestWaitForCompileCompletionWritesPollingVibeLogs(t *testing.T) {
+	enableCliVibeLog(t)
+	connection := compileWaitTestConnection(t)
+	requestID := "compile_poll_log_test"
+	callCount := 0
+	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		callCount++
+		if callCount == 1 {
+			return compileStatusResponse{
+				Ready:       false,
+				HasResult:   false,
+				IsCompiling: true,
+				Message:     "Compiling",
+			}, nil
+		}
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":true,"ErrorCount":0,"WarningCount":1}`),
+			Message:   "Compile result is available.",
+		}, nil
+	})
+
+	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+		connection:   connection,
+		requestID:    requestID,
+		timeout:      time.Second,
+		pollInterval: 5 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if !completed {
+		t.Fatal("compile wait did not complete")
+	}
+	if string(result) == "" {
+		t.Fatal("compile wait returned an empty result")
+	}
+
+	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_compile_status_poll_start"`,
+		`"operation":"cli_compile_status_poll_observed"`,
+		`"operation":"cli_compile_status_poll_complete"`,
+		`"request_id":"compile_poll_log_test"`,
+		`"warning_count":1`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+}
+
 // Verifies force compile waits for Unity's stored result instead of fabricating one from idle status.
 func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) {
 	connection := compileWaitTestConnection(t)
@@ -248,13 +302,20 @@ func TestWaitForCompileCompletionForceCompileTimesOutWithoutStoredResult(t *test
 	}
 }
 
-// Verifies that compile status wait timeouts are visible in CLI Vibe logs.
+// Verifies that compile status wait timeouts include the last observed Unity status.
 func TestWaitForCompileCompletionWritesTimeoutVibeLog(t *testing.T) {
 	enableCliVibeLog(t)
 	connection := compileWaitTestConnection(t)
 	requestID := "compile_timeout_log_test"
 	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
-		return compileStatusResponse{Ready: false}, nil
+		return compileStatusResponse{
+			Ready:                    false,
+			HasResult:                false,
+			IsCompiling:              true,
+			IsUpdating:               false,
+			IsDomainReloadInProgress: false,
+			Message:                  "Compiling",
+		}, nil
 	})
 
 	_, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
@@ -272,8 +333,11 @@ func TestWaitForCompileCompletionWritesTimeoutVibeLog(t *testing.T) {
 
 	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
 	for _, expected := range []string{
-		`"operation":"cli_compile_status_wait_timed_out"`,
+		`"operation":"cli_compile_status_poll_timeout"`,
 		`"request_id":"compile_timeout_log_test"`,
+		`"poll_attempts":`,
+		`"last_status"`,
+		`"message":"Compiling"`,
 	} {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)

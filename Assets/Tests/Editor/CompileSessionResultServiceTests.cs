@@ -1,8 +1,12 @@
 using System;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -137,6 +141,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Errors, Has.Length.EqualTo(1));
             Assert.That(response.Errors[0].File, Is.EqualTo("Assets/Scenes/SampleScene.unity"));
             Assert.That(response.Message, Does.Contain("externally"));
+        }
+
+        [Test]
+        public void StoreCompileResult_WhenRequestAlreadyHasResult_WritesDuplicateVibeLogContext()
+        {
+            // Verifies duplicate compile result stores are detectable from Unity-side diagnostics.
+            UnityCliLoopEditorSessionStateService sessionStateService =
+                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(sessionStateService);
+
+            try
+            {
+                sessionStateService.ClearAll();
+                VibeLogger.ClearMemoryLogs();
+                UnityCliLoopCompileResult result = new UnityCliLoopCompileResult
+                {
+                    Success = true,
+                    ErrorCount = 0,
+                    WarningCount = 0,
+                };
+
+                CompileSessionResultService.StoreCompileResult(
+                    sessionStateService,
+                    "compile_duplicate_store_request",
+                    forceRecompile: false,
+                    result,
+                    "compile_duplicate_store_request");
+                CompileSessionResultService.StoreCompileResult(
+                    sessionStateService,
+                    "compile_duplicate_store_request",
+                    forceRecompile: false,
+                    result,
+                    "compile_duplicate_store_request");
+
+                JArray logs = JArray.Parse(VibeLogger.GetLogsForAi("compile_result_session_state_store_complete"));
+                Assert.That(logs, Has.Count.EqualTo(2));
+                JObject secondContext = (JObject)logs[1]["context"];
+                Assert.That(secondContext["duplicate_result_for_request"]?.Value<bool>(), Is.True);
+                Assert.That(secondContext["store_sequence"]?.Value<int>(), Is.EqualTo(2));
+                Assert.That(secondContext["pending_request_before"]?.Value<bool>(), Is.False);
+                Assert.That(secondContext["pending_request_cleared"]?.Value<bool>(), Is.False);
+            }
+            finally
+            {
+                VibeLogger.ClearMemoryLogs();
+                originalSnapshot.Restore(sessionStateService);
+            }
         }
     }
 }
