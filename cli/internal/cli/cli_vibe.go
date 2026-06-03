@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,6 +15,8 @@ const (
 	cliVibeLogDirectory = ".uloop/outputs/VibeLogs"
 	cliVibeLogPrefix    = "cli_vibe"
 	cliVibeLogEnvName   = "ULOOP_DEBUG"
+
+	cliProjectIdentityHashLength = 16
 )
 
 type cliVibeLogEntry struct {
@@ -80,4 +84,17 @@ func isCliVibeLogEnabled() bool {
 		return false
 	}
 	return !strings.EqualFold(value, "false")
+}
+
+func projectIdentity(projectRoot string) string {
+	if projectRoot == "" {
+		return ""
+	}
+
+	canonicalProjectRoot, err := filepath.EvalSymlinks(projectRoot)
+	if err != nil {
+		canonicalProjectRoot = projectRoot
+	}
+	sum := sha256.Sum256([]byte(canonicalProjectRoot))
+	return "project_" + hex.EncodeToString(sum[:])[:cliProjectIdentityHashLength]
 }

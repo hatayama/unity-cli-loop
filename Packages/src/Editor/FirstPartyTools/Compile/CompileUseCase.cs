@@ -42,11 +42,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             PrepareResultStorage(request);
             string correlationId = ResolveCorrelationId(request);
+            LogCompileRequestReceived(request, correlationId);
 
             DateTime utcNow = DateTime.UtcNow;
             _sessionStateService.ClearExpiredCompileResult(utcNow);
             _sessionStateService.ClearExpiredPendingCompileRequest(utcNow);
-            MarkPendingCompileRequestIfNeeded(request, utcNow);
+            MarkPendingCompileRequestIfNeeded(request, utcNow, correlationId);
 
             // 1. Play Mode preparation check
             PlayModeCompilationPreparationService preparationService = new();
@@ -234,7 +235,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void MarkPendingCompileRequestIfNeeded(
             UnityCliLoopCompileRequest request,
-            DateTime markedAtUtc)
+            DateTime markedAtUtc,
+            string correlationId)
         {
             Debug.Assert(request != null, "request must not be null");
             Debug.Assert(markedAtUtc.Kind == DateTimeKind.Utc, "markedAtUtc must be UTC");
@@ -245,10 +247,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Debug.Assert(!string.IsNullOrWhiteSpace(request.RequestId), "request.RequestId must not be null or whitespace");
+            UnityCliLoopPendingCompileRequest[] previousPendingRequests =
+                _sessionStateService.GetPendingCompileRequests();
             _sessionStateService.MarkPendingCompileRequest(
                 request.RequestId,
                 request.ForceRecompile,
                 markedAtUtc);
+            VibeLogger.LogInfo(
+                "compile_request_registered_for_status_polling",
+                "Registered compile request for CLI status polling.",
+                new
+                {
+                    request_id = request.RequestId,
+                    force_recompile = request.ForceRecompile,
+                    pending_request_replaced = false,
+                    pending_request_count_before = previousPendingRequests.Length,
+                    previous_request_id = previousPendingRequests.Length > 0
+                        ? previousPendingRequests[0].RequestId
+                        : ""
+                },
+                correlationId);
+        }
+
+        private static void LogCompileRequestReceived(
+            UnityCliLoopCompileRequest request,
+            string correlationId)
+        {
+            Debug.Assert(request != null, "request must not be null");
+
+            VibeLogger.LogInfo(
+                "compile_request_received",
+                "Received compile request from CLI.",
+                new
+                {
+                    request_id = request.RequestId,
+                    force_recompile = request.ForceRecompile,
+                    wait_for_domain_reload = request.WaitForDomainReload,
+                    stop_on_external_scene_changes = !request.ReloadExternalSceneChanges,
+                    is_compiling = EditorApplication.isCompiling,
+                    is_updating = EditorApplication.isUpdating
+                },
+                correlationId);
         }
 
         private static string ResolveCorrelationId(UnityCliLoopCompileRequest request)
