@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-pause-point
-description: "Pause Unity at a named UloopPausePoint.Hit marker when input or gameplay state is hard to verify."
+description: "Pause Unity at a named UnityCliLoopDebug.Break marker when input or gameplay state is hard to verify."
 ---
 
 # uloop wait-for-pause-point
@@ -20,7 +20,7 @@ Pause Unity when execution reaches a named marker in user code.
 ```csharp
 using io.github.hatayama.UnityCliLoop.Runtime;
 
-UloopPausePoint.Hit("player-jumped");
+UnityCliLoopDebug.Break("player-jumped");
 ```
 
 2. Compile the project.
@@ -46,6 +46,6 @@ uloop clear-pause-point --id player-jumped
 
 ## Safety
 
-- `UloopPausePoint.Hit` uses Unity's conditional-call pattern and is compiled out of non-Editor call sites.
+- `UnityCliLoopDebug.Break` uses Unity's conditional-call pattern and is compiled out of non-Editor call sites.
 - Do not pass side-effect expressions as the id argument. Use stable string ids.
 - This does not collect logs or state snapshots. Use existing inspection commands after Unity pauses.

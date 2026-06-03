@@ -330,13 +330,13 @@
     },
     {
       "name": "arm-pause-point",
-      "description": "Arm a named UloopPausePoint.Hit marker so Unity pauses when that code path is reached",
+      "description": "Arm a named UnityCliLoopDebug.Break marker so Unity pauses when that code path is reached",
       "inputSchema": {
         "type": "object",
         "properties": {
           "Id": {
             "type": "string",
-            "description": "Named pause point id passed to UloopPausePoint.Hit"
+            "description": "Named pause point id passed to UnityCliLoopDebug.Break"
           },
           "TimeoutSeconds": {
             "type": "integer",
@@ -348,7 +348,7 @@
     },
     {
       "name": "clear-pause-point",
-      "description": "Clear one or all named UloopPausePoint.Hit markers",
+      "description": "Clear one or all named UnityCliLoopDebug.Break markers",
       "inputSchema": {
         "type": "object",
         "properties": {

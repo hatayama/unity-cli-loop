@@ -164,7 +164,7 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 			option:       "--" + pausePointIDFlagName,
 			expectedType: "value",
 			command:      pausePointWaitCommandName,
-			nextActions:  []string{"Pass `--id <marker-id>` matching UloopPausePoint.Hit(\"<marker-id>\")."},
+			nextActions:  []string{"Pass `--id <marker-id>` matching UnityCliLoopDebug.Break(\"<marker-id>\")."},
 		}
 	}
 
@@ -351,7 +351,7 @@ func pausePointStateError(
 		Command:     pausePointWaitCommandName,
 		NextActions: []string{
 			"Run `uloop arm-pause-point --id <marker-id>` before waiting.",
-			"Confirm the code path calls `UloopPausePoint.Hit(\"<marker-id>\")` with the same id.",
+			"Confirm the code path calls `UnityCliLoopDebug.Break(\"<marker-id>\")` with the same id.",
 		},
 		Details: map[string]any{
 			"id":                  options.id,

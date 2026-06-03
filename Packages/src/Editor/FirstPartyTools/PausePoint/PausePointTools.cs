@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ArmPausePointSchema : UnityCliLoopToolSchema
     {
-        [Description("Named pause point id passed to UloopPausePoint.Hit.")]
+        [Description("Named pause point id passed to UnityCliLoopDebug.Break.")]
         public string Id { get; set; } = string.Empty;
 
         [Description("Seconds before the arm expires and stops pausing late hits.")]

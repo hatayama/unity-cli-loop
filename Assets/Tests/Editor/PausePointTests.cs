@@ -30,10 +30,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Hit_WhenPausePointIsNotArmed_DoesNotPause()
+        public void Break_WhenPausePointIsNotArmed_DoesNotPause()
         {
             // Verifies marker calls are no-op until the CLI arms the same id.
-            UloopPausePoint.Hit("jump");
+            UnityCliLoopDebug.Break("jump");
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
@@ -43,12 +43,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Hit_WhenPausePointIsArmed_RecordsHitAndRequestsPause()
+        public void Break_WhenPausePointIsArmed_RecordsHitAndRequestsPause()
         {
             // Verifies an armed marker hit records state and requests a Unity pause.
             UloopPausePointRegistry.Arm("jump", 30);
 
-            UloopPausePoint.Hit("jump");
+            UnityCliLoopDebug.Break("jump");
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
             Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
@@ -67,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _nowUtc = _nowUtc.AddSeconds(2);
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
-            UloopPausePoint.Hit("jump");
+            UnityCliLoopDebug.Break("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
             Assert.That(snapshot.IsArmed, Is.False);
@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Arm("jump", 30);
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
-            UloopPausePoint.Hit("jump");
+            UnityCliLoopDebug.Break("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
             Assert.That(snapshot.IsArmed, Is.False);
@@ -89,16 +89,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void HitMethod_WhenSourceIsScanned_UsesUnityEditorConditionalWithoutDebugBreak()
+        public void BreakMethod_WhenSourceIsScanned_UsesUnityEditorConditionalWithoutDebugBreak()
         {
             // Verifies the public marker follows Unity's conditional call-site removal pattern.
             string sourcePath = Path.Combine(
                 Directory.GetCurrentDirectory(),
-                "Packages/src/Runtime/PausePoints/UloopPausePoint.cs");
+                "Packages/src/Runtime/PausePoints/UnityCliLoopDebug.cs");
             string source = File.ReadAllText(sourcePath);
 
             Assert.That(source, Does.Contain("[Conditional(\"UNITY_EDITOR\")]"));
-            Assert.That(source, Does.Contain("public static void Hit(string id)"));
+            Assert.That(source, Does.Contain("public static void Break(string id)"));
             Assert.That(source, Does.Not.Contain("Debug.Break"));
         }
 
