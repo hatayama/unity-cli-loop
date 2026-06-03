@@ -41,23 +41,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Break_WhenPausePointIsNotArmed_DoesNotPause()
+        public void Break_WhenPausePointIsNotEnabled_DoesNotPause()
         {
-            // Verifies marker calls are no-op until the CLI arms the same id.
+            // Verifies marker calls are no-op until the CLI enables the same id.
             UnityCliLoopDebug.Break("jump");
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
-            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.NotArmed));
-            Assert.That(snapshot.IsArmed, Is.False);
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.NotEnabled));
+            Assert.That(snapshot.IsEnabled, Is.False);
         }
 
         [Test]
-        public void Break_WhenPausePointIsArmed_RecordsHitAndRequestsPause()
+        public void Break_WhenPausePointIsEnabled_RecordsHitAndRequestsPause()
         {
-            // Verifies an armed marker hit records state and requests a Unity pause.
-            UloopPausePointRegistry.Arm("jump", 30);
+            // Verifies an enabled marker hit records state and requests a Unity pause.
+            UloopPausePointRegistry.Enable("jump", 30);
 
             UnityCliLoopDebug.Break("jump");
 
@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Hit));
             Assert.That(snapshot.IsHit, Is.True);
-            Assert.That(snapshot.IsArmed, Is.False);
+            Assert.That(snapshot.IsEnabled, Is.False);
             Assert.That(snapshot.IsPaused, Is.True);
             Assert.That(snapshot.HitCount, Is.EqualTo(1));
         }
@@ -73,29 +73,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetStatus_WhenTimeoutPasses_ExpiresAndDisarms()
         {
-            // Verifies timeout disarms the marker before a late hit can pause Unity.
-            UloopPausePointRegistry.Arm("jump", 1);
+            // Verifies timeout disables the marker before a late hit can pause Unity.
+            UloopPausePointRegistry.Enable("jump", 1);
             _nowUtc = _nowUtc.AddSeconds(2);
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
             UnityCliLoopDebug.Break("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
-            Assert.That(snapshot.IsArmed, Is.False);
+            Assert.That(snapshot.IsEnabled, Is.False);
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
         }
 
         [Test]
-        public void Clear_WhenPausePointIsArmed_DisarmsWithoutPause()
+        public void Clear_WhenPausePointIsEnabled_DisablesWithoutPause()
         {
             // Verifies explicit clear prevents later marker hits from pausing Unity.
-            UloopPausePointRegistry.Arm("jump", 30);
+            UloopPausePointRegistry.Enable("jump", 30);
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
             UnityCliLoopDebug.Break("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
-            Assert.That(snapshot.IsArmed, Is.False);
+            Assert.That(snapshot.IsEnabled, Is.False);
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
         }
 
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ClearAll_WhenPausePointWasHit_ClearsTerminalStatus()
         {
             // Verifies bulk clear hides stale terminal hit status from future waits.
-            UloopPausePointRegistry.Arm("jump", 30);
+            UloopPausePointRegistry.Enable("jump", 30);
             UnityCliLoopDebug.Break("jump");
 
             UloopPausePointClearAllResult result = UloopPausePointRegistry.ClearAll();

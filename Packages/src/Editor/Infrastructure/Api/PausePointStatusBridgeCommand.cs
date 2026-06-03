@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         public string Id { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
-        public bool IsArmed { get; set; }
+        public bool IsEnabled { get; set; }
         public bool IsHit { get; set; }
         public int HitCount { get; set; }
         public int TimeoutSeconds { get; set; }
@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 Id = snapshot.Id,
                 Status = snapshot.Status,
-                IsArmed = snapshot.IsArmed,
+                IsEnabled = snapshot.IsEnabled,
                 IsHit = snapshot.IsHit,
                 HitCount = snapshot.HitCount,
                 TimeoutSeconds = snapshot.TimeoutSeconds,

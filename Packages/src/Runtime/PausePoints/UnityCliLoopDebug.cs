@@ -8,7 +8,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     public static class UnityCliLoopDebug
     {
         /// <summary>
-        /// Breaks at a named marker when the Editor has armed the same id.
+        /// Breaks at a named marker when the Editor has enabled the same id.
         /// </summary>
         [Conditional("UNITY_EDITOR")]
         public static void Break(string id)

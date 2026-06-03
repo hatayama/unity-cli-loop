@@ -20,9 +20,9 @@ const (
 	debugBreakTimeoutFlagName        = "timeout-seconds"
 	debugBreakDefaultTimeoutSeconds  = 30
 	debugBreakStatusProbeTimeout     = 5 * time.Second
-	debugBreakStatusArmed            = "Armed"
+	debugBreakStatusEnabled          = "Enabled"
 	debugBreakStatusHit              = "Hit"
-	debugBreakStatusNotArmed         = "NotArmed"
+	debugBreakStatusNotEnabled       = "NotEnabled"
 	debugBreakStatusExpired          = "Expired"
 	debugBreakStatusCleared          = "Cleared"
 )
@@ -46,7 +46,7 @@ type debugBreakStatusOptions struct {
 type debugBreakStatusResponse struct {
 	Id                  string `json:"Id"`
 	Status              string `json:"Status"`
-	IsArmed             bool   `json:"IsArmed"`
+	IsEnabled           bool   `json:"IsEnabled"`
 	IsHit               bool   `json:"IsHit"`
 	HitCount            int    `json:"HitCount"`
 	TimeoutSeconds      int    `json:"TimeoutSeconds"`
@@ -59,11 +59,11 @@ type debugBreakStatusResponse struct {
 type debugBreakWaitState string
 
 const (
-	debugBreakWaitStateHit      debugBreakWaitState = "hit"
-	debugBreakWaitStateTimeout  debugBreakWaitState = "timeout"
-	debugBreakWaitStateNotArmed debugBreakWaitState = "not_armed"
-	debugBreakWaitStateExpired  debugBreakWaitState = "expired"
-	debugBreakWaitStateCleared  debugBreakWaitState = "cleared"
+	debugBreakWaitStateHit        debugBreakWaitState = "hit"
+	debugBreakWaitStateTimeout    debugBreakWaitState = "timeout"
+	debugBreakWaitStateNotEnabled debugBreakWaitState = "not_enabled"
+	debugBreakWaitStateExpired    debugBreakWaitState = "expired"
+	debugBreakWaitStateCleared    debugBreakWaitState = "cleared"
 )
 
 func runWaitForDebugBreakCommand(
@@ -307,13 +307,13 @@ func debugBreakWaitStateForStatus(status string) debugBreakWaitState {
 	switch status {
 	case debugBreakStatusHit:
 		return debugBreakWaitStateHit
-	case debugBreakStatusNotArmed:
-		return debugBreakWaitStateNotArmed
+	case debugBreakStatusNotEnabled:
+		return debugBreakWaitStateNotEnabled
 	case debugBreakStatusExpired:
 		return debugBreakWaitStateExpired
 	case debugBreakStatusCleared:
 		return debugBreakWaitStateCleared
-	case debugBreakStatusArmed:
+	case debugBreakStatusEnabled:
 		return ""
 	default:
 		return ""
@@ -381,9 +381,9 @@ func debugBreakWaitError(
 	state debugBreakWaitState,
 ) cliError {
 	switch state {
-	case debugBreakWaitStateNotArmed:
+	case debugBreakWaitStateNotEnabled:
 		return debugBreakStateError(
-			errorCodeDebugBreakNotArmed,
+			errorCodeDebugBreakNotEnabled,
 			"Debug break is not enabled.",
 			projectRoot,
 			options,
@@ -435,13 +435,33 @@ func debugBreakStateError(
 		NextActions: []string{
 			"Run `uloop enable-debug-break --id <marker-id>` before waiting.",
 			"Confirm the code path calls `UnityCliLoopDebug.Break(\"<marker-id>\")` with the same id.",
+			"Check `details.status`, `details.isPlaying`, `details.isPaused`, and `details.remainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+			"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
 		},
 		Details: map[string]any{
-			"id":                  options.id,
-			"status":              response.Status,
-			"hitCount":            response.HitCount,
-			"timeoutSeconds":      options.timeoutSeconds,
-			"elapsedMilliseconds": response.ElapsedMilliseconds,
+			"id":                    options.id,
+			"status":                response.Status,
+			"hitCount":              response.HitCount,
+			"timeoutSeconds":        options.timeoutSeconds,
+			"elapsedMilliseconds":   response.ElapsedMilliseconds,
+			"isPlaying":             response.IsPlaying,
+			"isPaused":              response.IsPaused,
+			"remainingMilliseconds": debugBreakRemainingMilliseconds(options, response),
+			"markerMessage":         response.Message,
 		},
 	}
+}
+
+func debugBreakRemainingMilliseconds(options waitForDebugBreakOptions, response debugBreakStatusResponse) int64 {
+	timeoutSeconds := response.TimeoutSeconds
+	if timeoutSeconds <= 0 {
+		return 0
+	}
+
+	totalMilliseconds := int64(timeoutSeconds) * int64(time.Second/time.Millisecond)
+	remainingMilliseconds := totalMilliseconds - response.ElapsedMilliseconds
+	if remainingMilliseconds <= 0 {
+		return 0
+	}
+	return remainingMilliseconds
 }

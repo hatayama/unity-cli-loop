@@ -23,7 +23,7 @@ const (
 	errorCodeCLIUpdateRequired               = "CLI_UPDATE_REQUIRED"
 	errorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
 	errorCodeControlPlayModeWaitTimeout      = "CONTROL_PLAY_MODE_WAIT_TIMEOUT"
-	errorCodeDebugBreakNotArmed              = "DEBUG_BREAK_NOT_ARMED"
+	errorCodeDebugBreakNotEnabled            = "DEBUG_BREAK_NOT_ENABLED"
 	errorCodeDebugBreakWaitTimeout           = "DEBUG_BREAK_WAIT_TIMEOUT"
 	errorCodeDebugBreakExpired               = "DEBUG_BREAK_EXPIRED"
 	errorCodeDebugBreakCleared               = "DEBUG_BREAK_CLEARED"

@@ -43,6 +43,8 @@ uloop debug-break-status --id player-jumped
 uloop wait-for-debug-break --id player-jumped --timeout-seconds 30
 ```
 
+If this command times out, the marker line was not reached while the command waited. Inspect `error.details.status`, `hitCount`, `isPlaying`, `isPaused`, and `remainingMilliseconds` to distinguish input not being consumed, gameplay conditions not being met, an id mismatch, or Unity already being paused.
+
 7. While Unity is paused, inspect state with `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, screenshots, or `uloop execute-dynamic-code`.
 8. Clear the marker if you stop waiting:
 
@@ -59,6 +61,7 @@ uloop clear-debug-break --id player-jumped
 ## Safety
 
 - `UnityCliLoopDebug.Break` uses Unity's conditional-call pattern and is compiled out of non-Editor call sites.
+- Code in a custom asmdef must reference `UnityCLILoop.PausePoints.Runtime` to use `UnityCliLoopDebug.Break`.
 - Do not pass side-effect expressions as the id argument. Use stable string ids.
 - This does not collect logs or state snapshots. Use existing inspection commands after Unity pauses.
 - If `enable-debug-break` warns about Domain Reload before PlayMode, the marker may be cleared when entering PlayMode. Domain Reload disabled is suitable for this workflow; otherwise enable again after PlayMode starts.

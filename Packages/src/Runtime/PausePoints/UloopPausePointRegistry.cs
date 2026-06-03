@@ -7,7 +7,7 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
-    /// Stores armed pause point state for the current Editor domain.
+    /// Stores enabled pause point state for the current Editor domain.
     /// </summary>
     internal static class UloopPausePointRegistry
     {
@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
 
-        public static UloopPausePointSnapshot Arm(string id, int timeoutSeconds)
+        public static UloopPausePointSnapshot Enable(string id, int timeoutSeconds)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
             Debug.Assert(timeoutSeconds > 0, "timeoutSeconds must be greater than zero");
@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             DateTime now = NowUtc();
             if (!Entries.ContainsKey(id))
             {
-                return UloopPausePointSnapshot.NotArmed(id, _pauseController);
+                return UloopPausePointSnapshot.NotEnabled(id, _pauseController);
             }
 
             UloopPausePointEntry entry = Entries[id];
@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             DateTime now = NowUtc();
             if (!Entries.ContainsKey(id))
             {
-                return UloopPausePointSnapshot.NotArmed(id, _pauseController);
+                return UloopPausePointSnapshot.NotEnabled(id, _pauseController);
             }
 
             UloopPausePointEntry entry = Entries[id];
@@ -81,18 +81,18 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             if (string.IsNullOrWhiteSpace(id))
             {
                 Debug.Assert(false, "id must not be null or empty");
-                return UloopPausePointSnapshot.NotArmed(id ?? string.Empty, _pauseController);
+                return UloopPausePointSnapshot.NotEnabled(id ?? string.Empty, _pauseController);
             }
 
             DateTime now = NowUtc();
             if (!Entries.ContainsKey(id))
             {
-                return UloopPausePointSnapshot.NotArmed(id, _pauseController);
+                return UloopPausePointSnapshot.NotEnabled(id, _pauseController);
             }
 
             UloopPausePointEntry entry = Entries[id];
             entry.ExpireIfNeeded(now);
-            if (!entry.IsArmed)
+            if (!entry.IsEnabled)
             {
                 return entry.ToSnapshot(now, _pauseController);
             }
@@ -157,7 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public UloopPausePointSnapshot(
             string id,
             string status,
-            bool isArmed,
+            bool isEnabled,
             bool isHit,
             int hitCount,
             int timeoutSeconds,
@@ -167,8 +167,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string message)
         {
             Id = id ?? string.Empty;
-            Status = status ?? UloopPausePointStatus.NotArmed;
-            IsArmed = isArmed;
+            Status = status ?? UloopPausePointStatus.NotEnabled;
+            IsEnabled = isEnabled;
             IsHit = isHit;
             HitCount = hitCount;
             TimeoutSeconds = timeoutSeconds;
@@ -180,7 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public string Id { get; }
         public string Status { get; }
-        public bool IsArmed { get; }
+        public bool IsEnabled { get; }
         public bool IsHit { get; }
         public int HitCount { get; }
         public int TimeoutSeconds { get; }
@@ -189,13 +189,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool IsPaused { get; }
         public string Message { get; }
 
-        public static UloopPausePointSnapshot NotArmed(string id, IUloopPausePointPauseController pauseController)
+        public static UloopPausePointSnapshot NotEnabled(string id, IUloopPausePointPauseController pauseController)
         {
             Debug.Assert(pauseController != null, "pauseController must not be null");
 
             return new UloopPausePointSnapshot(
                 id,
-                UloopPausePointStatus.NotArmed,
+                UloopPausePointStatus.NotEnabled,
                 false,
                 false,
                 0,
@@ -223,27 +223,27 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     }
 
     /// <summary>
-    /// Owns mutable state for one armed pause point id.
+    /// Owns mutable state for one enabled pause point id.
     /// </summary>
     internal sealed class UloopPausePointEntry
     {
-        public UloopPausePointEntry(string id, int timeoutSeconds, DateTime armedAtUtc)
+        public UloopPausePointEntry(string id, int timeoutSeconds, DateTime enabledAtUtc)
         {
             Id = id;
             TimeoutSeconds = timeoutSeconds;
-            ArmedAtUtc = armedAtUtc;
-            ExpiresAtUtc = armedAtUtc.AddSeconds(timeoutSeconds);
-            Status = UloopPausePointStatus.Armed;
-            IsArmed = true;
+            EnabledAtUtc = enabledAtUtc;
+            ExpiresAtUtc = enabledAtUtc.AddSeconds(timeoutSeconds);
+            Status = UloopPausePointStatus.Enabled;
+            IsEnabled = true;
             Message = "Debug break enabled.";
         }
 
         public string Id { get; }
         public int TimeoutSeconds { get; }
-        public DateTime ArmedAtUtc { get; }
+        public DateTime EnabledAtUtc { get; }
         public DateTime ExpiresAtUtc { get; }
         public string Status { get; private set; }
-        public bool IsArmed { get; private set; }
+        public bool IsEnabled { get; private set; }
         public int HitCount { get; private set; }
         public DateTime HitAtUtc { get; private set; }
         public bool IsPlayingAtHit { get; private set; }
@@ -252,7 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public void ExpireIfNeeded(DateTime nowUtc)
         {
-            if (!IsArmed)
+            if (!IsEnabled)
             {
                 return;
             }
@@ -262,14 +262,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 return;
             }
 
-            IsArmed = false;
+            IsEnabled = false;
             Status = UloopPausePointStatus.Expired;
             Message = "Debug break expired before it was hit.";
         }
 
         public void MarkCleared()
         {
-            IsArmed = false;
+            IsEnabled = false;
             Status = UloopPausePointStatus.Cleared;
             Message = "Debug break cleared.";
         }
@@ -280,7 +280,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             HitAtUtc = nowUtc;
             IsPlayingAtHit = isPlaying;
             IsPausedAtHit = isPaused;
-            IsArmed = false;
+            IsEnabled = false;
             Status = UloopPausePointStatus.Hit;
             Message = "Debug break hit; Unity pause was requested.";
         }
@@ -292,12 +292,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             bool isHit = Status == UloopPausePointStatus.Hit;
             bool isPlaying = isHit ? IsPlayingAtHit : pauseController.IsPlaying;
             bool isPaused = isHit ? IsPausedAtHit : pauseController.IsPaused;
-            long elapsedMilliseconds = Math.Max(0, (long)(nowUtc - ArmedAtUtc).TotalMilliseconds);
+            long elapsedMilliseconds = Math.Max(0, (long)(nowUtc - EnabledAtUtc).TotalMilliseconds);
 
             return new UloopPausePointSnapshot(
                 Id,
                 Status,
-                IsArmed,
+                IsEnabled,
                 isHit,
                 HitCount,
                 TimeoutSeconds,
@@ -313,8 +313,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     /// </summary>
     internal static class UloopPausePointStatus
     {
-        public const string NotArmed = "NotArmed";
-        public const string Armed = "Armed";
+        public const string NotEnabled = "NotEnabled";
+        public const string Enabled = "Enabled";
         public const string Hit = "Hit";
         public const string Expired = "Expired";
         public const string Cleared = "Cleared";
