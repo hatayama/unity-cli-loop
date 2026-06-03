@@ -329,6 +329,41 @@
       }
     },
     {
+      "name": "arm-pause-point",
+      "description": "Arm a named UloopPausePoint.Hit marker so Unity pauses when that code path is reached",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Named pause point id passed to UloopPausePoint.Hit"
+          },
+          "TimeoutSeconds": {
+            "type": "integer",
+            "description": "Seconds before the arm expires and stops pausing late hits",
+            "default": 30
+          }
+        }
+      }
+    },
+    {
+      "name": "clear-pause-point",
+      "description": "Clear one or all named UloopPausePoint.Hit markers",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Named pause point id to clear"
+          },
+          "All": {
+            "type": "boolean",
+            "description": "Clear every active pause point marker"
+          }
+        }
+      }
+    },
+    {
       "name": "simulate-mouse-ui",
       "description": "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates",
       "inputSchema": {

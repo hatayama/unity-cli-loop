@@ -15,7 +15,8 @@ Simulate mouse input via Input System in Unity PlayMode: $ARGUMENTS
 2. For Click/LongPress: determine the target screen position (use `uloop screenshot` to find coordinates)
 3. Execute the appropriate `uloop simulate-mouse-input` command
 4. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
-5. Report what happened
+5. If the screenshot cannot prove the gameplay state, place and arm a `UloopPausePoint.Hit("<id>")` marker after the input-handling path, run the input again, then inspect while Unity is paused
+6. Report what happened
 
 ## Tool Reference
 
