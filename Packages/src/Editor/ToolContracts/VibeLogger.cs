@@ -244,10 +244,10 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         private void SaveLogToFile(VibeLogEntry logEntry)
         {
-            SaveLogToFile(logEntry, validateIntegrity: true);
+            SaveLogToFileWithIntegrityOption(logEntry, validateIntegrity: true);
         }
 
-        private void SaveLogToFile(VibeLogEntry logEntry, bool validateIntegrity)
+        private void SaveLogToFileWithIntegrityOption(VibeLogEntry logEntry, bool validateIntegrity)
         {
             if (!Directory.Exists(_logDirectory))
             {
@@ -265,10 +265,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 string fileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd}.json";
                 string filePath = Path.Combine(_logDirectory, fileName);
                 RotateLogFileIfNeeded(filePath);
-                AppendJsonLineWithRetry(filePath, JsonConvert.SerializeObject(logEntry) + "\n");
+                string jsonLine = JsonConvert.SerializeObject(logEntry) + "\n";
+                (long Offset, int Length) appendedWrite = AppendJsonLineWithRetry(filePath, jsonLine);
                 if (validateIntegrity)
                 {
-                    DetectInterleavingIfNeeded(filePath);
+                    DetectInterleavingIfNeeded(filePath, appendedWrite.Offset, appendedWrite.Length);
                 }
             }
         }
@@ -292,18 +293,20 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             CleanupOldLogFiles();
         }
 
-        private static void AppendJsonLineWithRetry(string filePath, string jsonLine)
+        private static (long Offset, int Length) AppendJsonLineWithRetry(string filePath, string jsonLine)
         {
             byte[] payload = Encoding.UTF8.GetBytes(jsonLine);
             for (int retry = 0; retry < MAX_WRITE_RETRIES; retry++)
             {
                 try
                 {
-                    using (FileStream fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.Read))
+                    using (FileStream fileStream = new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read))
                     {
+                        long appendOffset = fileStream.Length;
+                        fileStream.Position = appendOffset;
                         fileStream.Write(payload, 0, payload.Length);
                         fileStream.Flush();
-                        return;
+                        return (appendOffset, payload.Length);
                     }
                 }
                 catch (IOException ex) when (IsFileSharingViolation(ex) && retry < MAX_WRITE_RETRIES - 1)
@@ -319,22 +322,21 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             throw new InvalidOperationException($"Failed to write VibeLogger entry after {MAX_WRITE_RETRIES} retries due to file sharing violations");
         }
 
-        private void DetectInterleavingIfNeeded(string filePath)
+        private void DetectInterleavingIfNeeded(string filePath, long appendedOffset, int appendedLength)
         {
             if (_hasReportedInterleaving)
             {
                 return;
             }
 
-            (bool HasMalformedLine, int LastValidLineNumber) result =
-                InspectJsonLines(filePath);
-            if (!result.HasMalformedLine)
+            string appendedText = ReadAppendedText(filePath, appendedOffset, appendedLength);
+            if (!HasMalformedJsonLine(appendedText))
             {
                 return;
             }
 
             _hasReportedInterleaving = true;
-            SaveLogToFile(
+            SaveLogToFileWithIntegrityOption(
                 CreateDiagnosticLogEntry(
                     "WARNING",
                     "vibe_log_write_interleaving_detected",
@@ -345,35 +347,59 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                         source = "Unity",
                         process_id = Process.GetCurrentProcess().Id,
                         thread_id = Thread.CurrentThread.ManagedThreadId,
-                        last_valid_line_number = result.LastValidLineNumber
+                        appended_offset = appendedOffset,
+                        appended_byte_length = appendedLength
                     }),
                 validateIntegrity: false);
         }
 
-        private static (bool HasMalformedLine, int LastValidLineNumber) InspectJsonLines(string filePath)
+        private static string ReadAppendedText(string filePath, long appendedOffset, int appendedLength)
         {
-            int lineNumber = 0;
-            int lastValidLineNumber = 0;
-            foreach (string line in File.ReadLines(filePath))
+            UnityEngine.Debug.Assert(appendedOffset >= 0, "appendedOffset must not be negative");
+            UnityEngine.Debug.Assert(appendedLength > 0, "appendedLength must be positive");
+
+            byte[] payload = new byte[appendedLength];
+            using (FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
-                lineNumber++;
-                if (string.IsNullOrWhiteSpace(line))
+                fileStream.Position = appendedOffset;
+                int totalBytesRead = 0;
+                while (totalBytesRead < appendedLength)
+                {
+                    int bytesRead = fileStream.Read(payload, totalBytesRead, appendedLength - totalBytesRead);
+                    if (bytesRead == 0)
+                    {
+                        break;
+                    }
+
+                    totalBytesRead += bytesRead;
+                }
+
+                return Encoding.UTF8.GetString(payload, 0, totalBytesRead);
+            }
+        }
+
+        private static bool HasMalformedJsonLine(string jsonLines)
+        {
+            string[] lines = jsonLines.Split('\n');
+            foreach (string line in lines)
+            {
+                string candidate = line.TrimEnd('\r');
+                if (string.IsNullOrWhiteSpace(candidate))
                 {
                     continue;
                 }
 
                 try
                 {
-                    JToken.Parse(line);
-                    lastValidLineNumber = lineNumber;
+                    JToken.Parse(candidate);
                 }
                 catch (JsonReaderException)
                 {
-                    return (true, lastValidLineNumber);
+                    return true;
                 }
             }
 
-            return (false, lastValidLineNumber);
+            return false;
         }
 
         private void TrySaveFileDiagnosticLog(
@@ -383,7 +409,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         {
             try
             {
-                SaveLogToFile(
+                SaveLogToFileWithIntegrityOption(
                     CreateDiagnosticLogEntry("ERROR", operation, message, context),
                     validateIntegrity: false);
             }

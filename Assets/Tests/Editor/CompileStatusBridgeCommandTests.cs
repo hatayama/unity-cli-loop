@@ -216,5 +216,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(context["is_compiling"]?.Value<bool>(), Is.True);
             Assert.That(context["message"]?.ToString(), Does.Contain("still compiling"));
         }
+
+        [Test]
+        public void BuildResponse_WhenReadyStatusRepeats_DoesNotRetainDuplicateSuppressionCache()
+        {
+            // Verifies completed status signatures do not stay in the duplicate-suppression cache.
+            VibeLogger.ClearMemoryLogs();
+            string requestId = "compile_status_ready_cache_request_" + System.Guid.NewGuid().ToString("N");
+
+            CompileStatusBridgeCommand.BuildResponse(
+                requestId,
+                isCompiling: true,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+            CompileStatusBridgeCommand.BuildResponse(
+                requestId,
+                isCompiling: true,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+            CompileStatusBridgeCommand.BuildResponse(
+                requestId,
+                isCompiling: false,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+            CompileStatusBridgeCommand.BuildResponse(
+                requestId,
+                isCompiling: false,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+
+            JArray logs = JArray.Parse(VibeLogger.GetLogsForAi("compile_status_query_received"));
+            Assert.That(logs, Has.Count.EqualTo(3));
+        }
+
+        [Test]
+        public void BuildResponse_WhenManyUniqueBusyRequestsAreQueried_BoundsDuplicateSuppressionCache()
+        {
+            // Verifies arbitrary status probes cannot grow the duplicate-suppression cache forever.
+            VibeLogger.ClearMemoryLogs();
+            const int requestCount = 257;
+            string requestPrefix = "compile_status_cache_request_" + System.Guid.NewGuid().ToString("N") + "_";
+
+            for (int index = 0; index < requestCount; index++)
+            {
+                CompileStatusBridgeCommand.BuildResponse(
+                    requestPrefix + index,
+                    isCompiling: true,
+                    isUpdating: false,
+                    isDomainReloadInProgress: false,
+                    _sessionStateService);
+            }
+
+            CompileStatusBridgeCommand.BuildResponse(
+                requestPrefix + "0",
+                isCompiling: true,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                _sessionStateService);
+
+            JArray logs = JArray.Parse(
+                VibeLogger.GetLogsForAi("compile_status_query_received", maxCount: requestCount + 1));
+            Assert.That(logs, Has.Count.EqualTo(requestCount + 1));
+        }
     }
 }

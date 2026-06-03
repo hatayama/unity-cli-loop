@@ -19,8 +19,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string RequestIdParamName = "RequestId";
         private const string RecoveredCompileResultMessage =
             "Compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. Use get-logs to inspect the compiler output.";
+#if ULOOP_DEBUG
+        private const int MaxLoggedStatusSignatureCacheEntries = 256;
         private static readonly Dictionary<string, string> LastLoggedStatusByRequestId =
             new Dictionary<string, string>();
+#endif
 
         public static GetCompileStatusResponse Execute(JToken paramsToken)
         {
@@ -165,6 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string requestId,
             GetCompileStatusResponse response)
         {
+#if ULOOP_DEBUG
             Debug.Assert(response != null, "response must not be null");
 
             string signature = CreateStatusSignature(response);
@@ -177,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (!string.IsNullOrWhiteSpace(requestId))
             {
-                LastLoggedStatusByRequestId[requestId] = signature;
+                StoreLoggedStatusSignature(requestId, signature);
             }
 
             VibeLogger.LogInfo(
@@ -194,6 +198,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     message = response.Message
                 },
                 requestId);
+
+            if (!string.IsNullOrWhiteSpace(requestId) && response.Ready)
+            {
+                LastLoggedStatusByRequestId.Remove(requestId);
+            }
+#endif
+        }
+
+#if ULOOP_DEBUG
+        private static void StoreLoggedStatusSignature(string requestId, string signature)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
+            Debug.Assert(!string.IsNullOrWhiteSpace(signature), "signature must not be null or whitespace");
+
+            if (!LastLoggedStatusByRequestId.ContainsKey(requestId) &&
+                LastLoggedStatusByRequestId.Count >= MaxLoggedStatusSignatureCacheEntries)
+            {
+                LastLoggedStatusByRequestId.Clear();
+            }
+
+            LastLoggedStatusByRequestId[requestId] = signature;
         }
 
         private static string CreateStatusSignature(GetCompileStatusResponse response)
@@ -209,5 +234,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 response.IsDomainReloadInProgress,
                 response.Message ?? "");
         }
+#endif
     }
 }
