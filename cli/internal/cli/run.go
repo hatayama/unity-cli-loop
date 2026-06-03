@@ -79,6 +79,11 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		writeClassifiedError(stderr, err, errorContext{command: command})
 		return 1
 	}
+	if isSettingsManagedNativeToolCommand(command) &&
+		isToolDisabledByToolSettings(command, loadDisabledTools(connection.ProjectRoot)) {
+		writeErrorEnvelope(stderr, nativeToolDisabledError(connection.ProjectRoot, command))
+		return 1
+	}
 	switch command {
 	case "list":
 		return runList(ctx, connection, stdout, stderr)

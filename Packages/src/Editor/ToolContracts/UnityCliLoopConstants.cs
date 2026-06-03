@@ -70,6 +70,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";
         public const string COMMAND_NAME_GET_VERSION = "get-version";
         public const string COMMAND_NAME_GET_COMPILE_STATUS = "get-compile-status";
+        public const string COMMAND_NAME_WAIT_FOR_DEBUG_BREAK = "wait-for-debug-break";
+        public const string COMMAND_NAME_DEBUG_BREAK_STATUS = "debug-break-status";
         public const string COMMAND_NAME_GET_DEBUG_BREAK_STATUS = "get-debug-break-status";
         public const string COMMAND_NAME_CLEAR_DEBUG_BREAK_STATUS = "clear-debug-break-status";
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -296,6 +297,32 @@ func TestDebugBreakExpiredErrorReportsNoRemainingTime(t *testing.T) {
 	}
 	if cliErr.Details["remainingMilliseconds"] != int64(0) {
 		t.Fatalf("remainingMilliseconds detail mismatch: %#v", cliErr.Details)
+	}
+}
+
+// Verifies disabled native debug-break commands are rejected before Unity dispatch.
+func TestRunProjectLocalWaitForDebugBreakRespectsToolSettings(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	writeToolSettings(t, projectRoot, `{"disabledTools":["wait-for-debug-break"]}`)
+	t.Chdir(filepath.Dir(projectRoot))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunProjectLocal(
+		context.Background(),
+		[]string{"--project-path", projectRoot, debugBreakWaitCommandName, "--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 1 {
+		t.Fatalf("expected disabled command failure, got %d with stdout %s", code, stdout.String())
+	}
+	envelope := parseDebugBreakErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.ErrorCode != errorCodeToolDisabled {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if envelope.Error.Command != debugBreakWaitCommandName {
+		t.Fatalf("command mismatch: %#v", envelope.Error)
 	}
 }
 
