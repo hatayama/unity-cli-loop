@@ -48,6 +48,13 @@ uloop simulate-mouse-input --action <action> [options]
 | `SmoothDelta` | Mouse.current.delta (per-frame) | Inject mouse delta smoothly over `--duration` seconds (human-like camera pan) |
 | `Scroll` | Mouse.current.scroll | Inject scroll wheel input (e.g. for hotbar or zoom) |
 
+### Debug Break verification
+
+- Use `UnityCliLoopDebug.Break("<id>")` when a screenshot cannot prove that mouse input changed gameplay state, such as block hit, camera turn, or item placement.
+- Put the marker at a natural state transition after the game consumed the mouse input, such as after a raycast hit, damage application, placement, or camera rotation update, not immediately after sending `simulate-mouse-input`.
+- If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- Use distinct marker ids for strict phases, for example `block-raycast-hit` and `block-damage-applied`.
+
 ### Global Options (optional)
 
 | Option | Description |
@@ -107,5 +114,6 @@ Returns JSON with:
 - `Button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
 - `PositionX`: Target X coordinate (nullable float; populated for `Click` / `LongPress`)
 - `PositionY`: Target Y coordinate (nullable float; populated for `Click` / `LongPress`)
+- `InterruptedByDebugBreak`: True when Unity paused during Debug Break inspection and the input bookkeeping was safely released
 
-These are the only six fields. There is no `DeltaX`, `DeltaY`, `ScrollX`, `ScrollY`, `Duration`, or hit-element field in the response — only the issued action, button, and target position are echoed back. Verify visual outcome with a follow-up screenshot.
+There is no `DeltaX`, `DeltaY`, `ScrollX`, `ScrollY`, `Duration`, or hit-element field in the response — only the issued action, button, target position, and Debug Break interruption state are echoed back. Verify visual outcome with a follow-up screenshot.

@@ -44,6 +44,13 @@ Use `Press` for edge-triggered gameplay code such as `Keyboard.current.spaceKey.
 If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` true but the game state does not change, do not immediately rewrite the user's gameplay code to `isPressed`. First verify that the gameplay component is active during the command, that it polls input in the configured Input System update phase, and that a missed `KeyDown` edge is followed by `KeyUp` before retrying.
 Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
 
+### Debug Break verification
+
+- Use `UnityCliLoopDebug.Break("<id>")` when a screenshot cannot prove that the keyboard input changed gameplay state, such as jump, sprint, or interaction.
+- Put the marker at a natural state transition after the game consumed the key, such as after jump velocity is applied, not immediately after sending `simulate-keyboard`.
+- If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- Use distinct marker ids for strict phases, for example `jump-key-read` and `jump-velocity-applied`.
+
 ### KeyDown/KeyUp Rules
 
 - `KeyDown` fails if the key is already held
@@ -85,6 +92,7 @@ Returns JSON with:
 - `Message` (string): Description of what happened or why it failed
 - `Action` (string): The `--action` value that was applied (`Press`, `KeyDown`, or `KeyUp`)
 - `KeyName` (string, nullable): The key that was acted on; may be `null` when the action could not resolve a key
+- `InterruptedByDebugBreak` (boolean): True when Unity paused during Debug Break inspection and the input bookkeeping was safely released
 
 ## Prerequisites
 
