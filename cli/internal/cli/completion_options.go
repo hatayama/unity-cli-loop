@@ -12,9 +12,9 @@ var nativeCommandOptions = map[string][]string{
 	},
 	installCommandName: {"--" + installDirFlagName},
 	updateCommandName:  {"--" + updateToVersionFlagName},
-	pausePointWaitCommandName: {
-		"--" + pausePointIDFlagName,
-		"--" + pausePointTimeoutFlagName,
+	debugBreakWaitCommandName: {
+		"--" + debugBreakIDFlagName,
+		"--" + debugBreakTimeoutFlagName,
 		"--" + projectPathFlagName,
 	},
 }

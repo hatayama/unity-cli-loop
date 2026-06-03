@@ -54,8 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(registry.IsToolRegistered("compile"), Is.True);
             Assert.That(registry.IsToolRegistered("get-logs"), Is.True);
-            Assert.That(registry.IsToolRegistered(UnityCliLoopConstants.TOOL_NAME_ARM_PAUSE_POINT), Is.True);
-            Assert.That(registry.IsToolRegistered(UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT), Is.True);
+            Assert.That(registry.IsToolRegistered(UnityCliLoopConstants.TOOL_NAME_ARM_DEBUG_BREAK), Is.True);
+            Assert.That(registry.IsToolRegistered(UnityCliLoopConstants.TOOL_NAME_CLEAR_DEBUG_BREAK), Is.True);
             Assert.That(registry.IsToolRegistered("execute-dynamic-code"), Is.True);
             Assert.That(registry.IsToolRegistered("clear-console"), Is.True);
             Assert.That(registry.IsToolRegistered("get-hierarchy"), Is.True);
@@ -257,8 +257,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that pause point tools are bundled plugins instead of application-layer tools.
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
 
-            System.Type armToolType = registry.GetToolType(UnityCliLoopConstants.TOOL_NAME_ARM_PAUSE_POINT);
-            System.Type clearToolType = registry.GetToolType(UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT);
+            System.Type armToolType = registry.GetToolType(UnityCliLoopConstants.TOOL_NAME_ARM_DEBUG_BREAK);
+            System.Type clearToolType = registry.GetToolType(UnityCliLoopConstants.TOOL_NAME_CLEAR_DEBUG_BREAK);
 
             Assert.That(armToolType, Is.Not.Null);
             Assert.That(clearToolType, Is.Not.Null);

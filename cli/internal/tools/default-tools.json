@@ -329,14 +329,14 @@
       }
     },
     {
-      "name": "arm-pause-point",
+      "name": "arm-debug-break",
       "description": "Arm a named UnityCliLoopDebug.Break marker so Unity pauses when that code path is reached",
       "inputSchema": {
         "type": "object",
         "properties": {
           "Id": {
             "type": "string",
-            "description": "Named pause point id passed to UnityCliLoopDebug.Break"
+            "description": "Named debug break id passed to UnityCliLoopDebug.Break"
           },
           "TimeoutSeconds": {
             "type": "integer",
@@ -347,18 +347,18 @@
       }
     },
     {
-      "name": "clear-pause-point",
+      "name": "clear-debug-break",
       "description": "Clear one or all named UnityCliLoopDebug.Break markers",
       "inputSchema": {
         "type": "object",
         "properties": {
           "Id": {
             "type": "string",
-            "description": "Named pause point id to clear"
+            "description": "Named debug break id to clear"
           },
           "All": {
             "type": "boolean",
-            "description": "Clear every active pause point marker"
+            "description": "Clear every active debug break marker"
           }
         }
       }

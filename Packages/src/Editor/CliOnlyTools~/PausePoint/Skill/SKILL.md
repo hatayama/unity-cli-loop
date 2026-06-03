@@ -1,9 +1,9 @@
 ---
-name: uloop-wait-for-pause-point
+name: uloop-wait-for-debug-break
 description: "Pause Unity at a named UnityCliLoopDebug.Break marker when input or gameplay state is hard to verify."
 ---
 
-# uloop wait-for-pause-point
+# uloop wait-for-debug-break
 
 Pause Unity when execution reaches a named marker in user code.
 
@@ -27,21 +27,21 @@ UnityCliLoopDebug.Break("player-jumped");
 3. Arm the marker before triggering the code path:
 
 ```bash
-uloop arm-pause-point --id player-jumped --timeout-seconds 30
+uloop arm-debug-break --id player-jumped --timeout-seconds 30
 ```
 
 4. Trigger the behavior, such as `simulate-keyboard`, `simulate-mouse-input`, UI interaction, or dynamic code.
 5. Wait for the marker:
 
 ```bash
-uloop wait-for-pause-point --id player-jumped --timeout-seconds 30
+uloop wait-for-debug-break --id player-jumped --timeout-seconds 30
 ```
 
 6. While Unity is paused, inspect state with `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, screenshots, or `uloop execute-dynamic-code`.
 7. Clear the marker if you stop waiting:
 
 ```bash
-uloop clear-pause-point --id player-jumped
+uloop clear-debug-break --id player-jumped
 ```
 
 ## Safety

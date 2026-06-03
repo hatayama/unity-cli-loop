@@ -203,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 0,
                 pauseController.IsPlaying,
                 pauseController.IsPaused,
-                "Pause point is not armed.");
+                "Debug break is not armed.");
         }
     }
 
@@ -235,7 +235,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             ExpiresAtUtc = armedAtUtc.AddSeconds(timeoutSeconds);
             Status = UloopPausePointStatus.Armed;
             IsArmed = true;
-            Message = "Pause point armed.";
+            Message = "Debug break armed.";
         }
 
         public string Id { get; }
@@ -264,14 +264,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             IsArmed = false;
             Status = UloopPausePointStatus.Expired;
-            Message = "Pause point expired before it was hit.";
+            Message = "Debug break expired before it was hit.";
         }
 
         public void MarkCleared()
         {
             IsArmed = false;
             Status = UloopPausePointStatus.Cleared;
-            Message = "Pause point cleared.";
+            Message = "Debug break cleared.";
         }
 
         public void RecordHit(DateTime nowUtc, bool isPlaying, bool isPaused)
@@ -282,7 +282,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsPausedAtHit = isPaused;
             IsArmed = false;
             Status = UloopPausePointStatus.Hit;
-            Message = "Pause point hit; Unity pause was requested.";
+            Message = "Debug break hit; Unity pause was requested.";
         }
 
         public UloopPausePointSnapshot ToSnapshot(DateTime nowUtc, IUloopPausePointPauseController pauseController)
