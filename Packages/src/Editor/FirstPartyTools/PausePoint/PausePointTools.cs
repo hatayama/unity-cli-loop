@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -43,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool IsPaused { get; set; }
         public int ClearedCount { get; set; }
         public string Message { get; set; } = string.Empty;
+        public string Warning { get; set; } = string.Empty;
 
         internal static PausePointResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -135,7 +137,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Arm(id, parameters.TimeoutSeconds);
-            return PausePointResponse.FromSnapshot(snapshot);
+            PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
+            response.Warning = CreateEnableWarning();
+            return response;
         }
 
         public PausePointResponse Clear(ClearPausePointSchema parameters)
@@ -164,6 +168,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return id;
+        }
+
+        private static string CreateEnableWarning()
+        {
+            if (EditorApplication.isPlaying)
+            {
+                return string.Empty;
+            }
+
+            if (IsDomainReloadDisabledOnEnterPlayMode())
+            {
+                return string.Empty;
+            }
+
+            return "Debug break was enabled before PlayMode while Domain Reload is enabled. " +
+                   "Entering PlayMode may clear this marker; keep Domain Reload disabled for this workflow or enable the marker after PlayMode starts.";
+        }
+
+        private static bool IsDomainReloadDisabledOnEnterPlayMode()
+        {
+            if (!EditorSettings.enterPlayModeOptionsEnabled)
+            {
+                return false;
+            }
+
+            return (EditorSettings.enterPlayModeOptions & EnterPlayModeOptions.DisableDomainReload) != 0;
         }
     }
 }

@@ -7,16 +7,26 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// </summary>
     public sealed class UnityCliLoopToolBusyException : Exception
     {
-        public UnityCliLoopToolBusyException(string runningToolName, string requestedToolName)
+        public UnityCliLoopToolBusyException(
+            string runningToolName,
+            string requestedToolName,
+            bool isPlaying = false,
+            bool isPaused = false)
             : base(CreateMessage(runningToolName, requestedToolName))
         {
             RunningToolName = runningToolName;
             RequestedToolName = requestedToolName;
+            IsPlaying = isPlaying;
+            IsPaused = isPaused;
         }
 
         public string RunningToolName { get; }
 
         public string RequestedToolName { get; }
+
+        public bool IsPlaying { get; }
+
+        public bool IsPaused { get; }
 
         private static string CreateMessage(string runningToolName, string requestedToolName)
         {

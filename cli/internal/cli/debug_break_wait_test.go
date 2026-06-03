@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -140,6 +141,54 @@ func TestWaitForDebugBreakReturnsNotArmedStateImmediately(t *testing.T) {
 // Verifies wait-for-debug-break requires a marker id.
 func TestParseWaitForDebugBreakOptionsRequiresID(t *testing.T) {
 	_, err := parseWaitForDebugBreakOptions([]string{"--timeout-seconds", "1"})
+
+	if err == nil {
+		t.Fatal("expected missing id error")
+	}
+	if !strings.Contains(err.Error(), "Missing required option") {
+		t.Fatalf("error mismatch: %v", err)
+	}
+}
+
+// Verifies debug-break-status reports the current marker state without waiting for a hit.
+func TestRunDebugBreakStatusReturnsCurrentStatus(t *testing.T) {
+	originalQuery := queryDebugBreakStatus
+	defer func() {
+		queryDebugBreakStatus = originalQuery
+	}()
+
+	queryDebugBreakStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (debugBreakStatusResponse, error) {
+		return debugBreakStatusResponse{Id: id, Status: debugBreakStatusArmed, IsArmed: true}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runDebugBreakStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+	var response debugBreakStatusResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if response.Status != debugBreakStatusArmed {
+		t.Fatalf("status mismatch: %#v", response)
+	}
+}
+
+// Verifies debug-break-status requires a marker id.
+func TestParseDebugBreakStatusOptionsRequiresID(t *testing.T) {
+	_, err := parseDebugBreakStatusOptions([]string{})
 
 	if err == nil {
 		t.Fatal("expected missing id error")

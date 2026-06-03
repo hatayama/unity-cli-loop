@@ -17,4 +17,8 @@ var nativeCommandOptions = map[string][]string{
 		"--" + debugBreakTimeoutFlagName,
 		"--" + projectPathFlagName,
 	},
+	debugBreakStatusUserCommandName: {
+		"--" + debugBreakIDFlagName,
+		"--" + projectPathFlagName,
+	},
 }

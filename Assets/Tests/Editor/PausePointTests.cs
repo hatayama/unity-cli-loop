@@ -1,7 +1,12 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using UnityEditor;
 
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -13,12 +18,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class PausePointTests
     {
         private DateTime _nowUtc;
+        private bool _originalEnterPlayModeOptionsEnabled;
+        private EnterPlayModeOptions _originalEnterPlayModeOptions;
         private FakePauseController _pauseController;
 
         [SetUp]
         public void SetUp()
         {
             _nowUtc = new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc);
+            _originalEnterPlayModeOptionsEnabled = EditorSettings.enterPlayModeOptionsEnabled;
+            _originalEnterPlayModeOptions = EditorSettings.enterPlayModeOptions;
             _pauseController = new FakePauseController();
             UloopPausePointRegistry.ConfigureForTests(_pauseController, () => _nowUtc);
         }
@@ -26,6 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TearDown]
         public void TearDown()
         {
+            EditorSettings.enterPlayModeOptionsEnabled = _originalEnterPlayModeOptionsEnabled;
+            EditorSettings.enterPlayModeOptions = _originalEnterPlayModeOptions;
             UloopPausePointRegistry.ResetForTests();
         }
 
@@ -115,6 +126,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(source, Does.Contain("[Conditional(\"UNITY_EDITOR\")]"));
             Assert.That(source, Does.Contain("public static void Break(string id)"));
             Assert.That(source, Does.Not.Contain("Debug.Break"));
+        }
+
+        [Test]
+        public async Task Enable_WhenPlayModeInactiveAndDomainReloadEnabled_ReturnsWarning()
+        {
+            // Verifies PlayMode entry risk is reported only when Domain Reload can clear the marker.
+            EditorSettings.enterPlayModeOptionsEnabled = false;
+            EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.None;
+
+            PausePointResponse response = await EnableDebugBreakAsync("jump");
+
+            Assert.That(response.Warning, Does.Contain("Domain Reload is enabled"));
+            Assert.That(response.Warning, Does.Contain("keep Domain Reload disabled"));
+        }
+
+        [Test]
+        public async Task Enable_WhenPlayModeInactiveAndDomainReloadDisabled_ReturnsNoWarning()
+        {
+            // Verifies the normal no-domain-reload workflow does not suggest re-arming after Play starts.
+            EditorSettings.enterPlayModeOptionsEnabled = true;
+            EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload;
+
+            PausePointResponse response = await EnableDebugBreakAsync("dash");
+
+            Assert.That(response.Warning, Is.Empty);
+        }
+
+        private static async Task<PausePointResponse> EnableDebugBreakAsync(string id)
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = id,
+                ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+            return response;
         }
 
         /// <summary>

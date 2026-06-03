@@ -394,6 +394,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 errorData = new ServerBusyErrorData(
                     busyEx.RunningToolName,
                     busyEx.RequestedToolName,
+                    busyEx.IsPlaying,
+                    busyEx.IsPaused,
                     exceptionResponse.Explanation ?? ex.Message);
             }
             else
@@ -501,14 +503,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public string requestedToolName { get; }
 
+        public bool isPlaying { get; }
+
+        public bool isPaused { get; }
+
         public ServerBusyErrorData(
             string runningToolName,
             string requestedToolName,
+            bool isPlaying,
+            bool isPaused,
             string message)
             : base(message)
         {
             this.runningToolName = runningToolName;
             this.requestedToolName = requestedToolName;
+            this.isPlaying = isPlaying;
+            this.isPaused = isPaused;
         }
     }
 

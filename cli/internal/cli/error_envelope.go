@@ -67,7 +67,7 @@ type errorContext struct {
 
 func writeErrorEnvelope(writer io.Writer, err cliError) {
 	if err.ErrorCode == errorCodeUnityServerBusy {
-		writeBusyStatusEnvelope(writer, err.Message)
+		writeBusyStatusEnvelope(writer, err.Message, serverBusyStatusDetailsFromError(err))
 		return
 	}
 	encoder := json.NewEncoder(writer)

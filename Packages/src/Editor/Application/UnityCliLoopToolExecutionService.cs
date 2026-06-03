@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -49,7 +50,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             if (!TryEnterExecution(toolName, out string runningToolName))
             {
-                throw new UnityCliLoopToolBusyException(runningToolName, toolName);
+                throw new UnityCliLoopToolBusyException(
+                    runningToolName,
+                    toolName,
+                    EditorApplication.isPlaying,
+                    EditorApplication.isPaused);
             }
 
             try

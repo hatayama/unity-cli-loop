@@ -13,6 +13,7 @@ import (
 
 const (
 	debugBreakWaitCommandName        = "wait-for-debug-break"
+	debugBreakStatusUserCommandName  = "debug-break-status"
 	debugBreakStatusCommandName      = "get-debug-break-status"
 	debugBreakClearStatusCommandName = "clear-debug-break-status"
 	debugBreakIDFlagName             = "id"
@@ -36,6 +37,10 @@ type waitForDebugBreakOptions struct {
 	id             string
 	timeoutSeconds int
 	timeout        time.Duration
+}
+
+type debugBreakStatusOptions struct {
+	id string
 }
 
 type debugBreakStatusResponse struct {
@@ -78,6 +83,44 @@ func runWaitForDebugBreakCommand(
 	}
 
 	return runWaitForDebugBreak(ctx, connection, options, stdout, stderr)
+}
+
+func runDebugBreakStatusCommand(
+	ctx context.Context,
+	connection unityipc.Connection,
+	args []string,
+	stdout io.Writer,
+	stderr io.Writer,
+) int {
+	options, err := parseDebugBreakStatusOptions(args)
+	if err != nil {
+		writeClassifiedError(stderr, err, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     debugBreakStatusUserCommandName,
+		})
+		return 1
+	}
+
+	response, err := queryDebugBreakStatus(ctx, connection, options.id)
+	if err != nil {
+		writeClassifiedError(stderr, err, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     debugBreakStatusUserCommandName,
+		})
+		return 1
+	}
+
+	result, err := json.Marshal(response)
+	if err != nil {
+		writeClassifiedError(stderr, err, errorContext{
+			projectRoot: connection.ProjectRoot,
+			command:     debugBreakStatusUserCommandName,
+		})
+		return 1
+	}
+
+	writeJSON(stdout, result)
+	return 0
 }
 
 func runWaitForDebugBreak(
@@ -164,6 +207,46 @@ func parseWaitForDebugBreakOptions(args []string) (waitForDebugBreakOptions, err
 			option:       "--" + debugBreakIDFlagName,
 			expectedType: "value",
 			command:      debugBreakWaitCommandName,
+			nextActions:  []string{"Pass `--id <marker-id>` matching UnityCliLoopDebug.Break(\"<marker-id>\")."},
+		}
+	}
+
+	return options, nil
+}
+
+func parseDebugBreakStatusOptions(args []string) (debugBreakStatusOptions, error) {
+	options := debugBreakStatusOptions{}
+
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		name, value, consumedNext, err := parseFlagValue(arg, args, index)
+		if err != nil {
+			return debugBreakStatusOptions{}, err
+		}
+
+		switch name {
+		case debugBreakIDFlagName:
+			options.id = value
+		default:
+			return debugBreakStatusOptions{}, &argumentError{
+				message:     "Unknown option for debug-break-status: --" + name,
+				option:      "--" + name,
+				command:     debugBreakStatusUserCommandName,
+				nextActions: []string{"Run `uloop debug-break-status --help` to inspect supported options."},
+			}
+		}
+
+		if consumedNext {
+			index++
+		}
+	}
+
+	if options.id == "" {
+		return debugBreakStatusOptions{}, &argumentError{
+			message:      "Missing required option: --id",
+			option:       "--" + debugBreakIDFlagName,
+			expectedType: "value",
+			command:      debugBreakStatusUserCommandName,
 			nextActions:  []string{"Pass `--id <marker-id>` matching UnityCliLoopDebug.Break(\"<marker-id>\")."},
 		}
 	}
