@@ -12,19 +12,20 @@ import (
 )
 
 const (
-	debugBreakWaitCommandName        = "wait-for-debug-break"
-	debugBreakStatusUserCommandName  = "debug-break-status"
-	debugBreakStatusCommandName      = "get-debug-break-status"
-	debugBreakClearStatusCommandName = "clear-debug-break-status"
-	debugBreakIDFlagName             = "id"
-	debugBreakTimeoutFlagName        = "timeout-seconds"
-	debugBreakDefaultTimeoutSeconds  = 30
-	debugBreakStatusProbeTimeout     = 5 * time.Second
-	debugBreakStatusEnabled          = "Enabled"
-	debugBreakStatusHit              = "Hit"
-	debugBreakStatusNotEnabled       = "NotEnabled"
-	debugBreakStatusExpired          = "Expired"
-	debugBreakStatusCleared          = "Cleared"
+	debugBreakWaitCommandName         = "wait-for-debug-break"
+	debugBreakStatusUserCommandName   = "debug-break-status"
+	debugBreakStatusCommandName       = "get-debug-break-status"
+	debugBreakClearStatusCommandName  = "clear-debug-break-status"
+	debugBreakIDFlagName              = "id"
+	debugBreakTimeoutFlagName         = "timeout-seconds"
+	debugBreakDefaultTimeoutSeconds   = 30
+	debugBreakStatusProbeTimeout      = 5 * time.Second
+	debugBreakStatusEnabled           = "Enabled"
+	debugBreakStatusHit               = "Hit"
+	debugBreakStatusNotEnabled        = "NotEnabled"
+	debugBreakStatusExpired           = "Expired"
+	debugBreakStatusCleared           = "Cleared"
+	debugBreakFinalStatusProbeTimeout = 250 * time.Millisecond
 )
 
 var (
@@ -291,6 +292,16 @@ func waitForDebugBreak(
 			if ctx.Err() != nil {
 				return lastResponse, "", ctx.Err()
 			}
+			finalResponse, finalState, hasFinalResponse, finalErr := queryDebugBreakStatusAtTimeout(ctx, connection, options.id)
+			if hasFinalResponse {
+				lastResponse = finalResponse
+				hasResponse = true
+				if finalState != "" {
+					return finalResponse, finalState, nil
+				}
+			} else if lastErr == nil {
+				lastErr = finalErr
+			}
 			if hasResponse {
 				return lastResponse, debugBreakWaitStateTimeout, nil
 			}
@@ -301,6 +312,22 @@ func waitForDebugBreak(
 		case <-time.After(debugBreakStatusPoll):
 		}
 	}
+}
+
+func queryDebugBreakStatusAtTimeout(
+	ctx context.Context,
+	connection unityipc.Connection,
+	id string,
+) (debugBreakStatusResponse, debugBreakWaitState, bool, error) {
+	finalContext, cancel := context.WithTimeout(ctx, debugBreakFinalStatusProbeTimeout)
+	defer cancel()
+
+	response, err := queryDebugBreakStatus(finalContext, connection, id)
+	if err != nil {
+		return debugBreakStatusResponse{}, "", false, err
+	}
+
+	return response, debugBreakWaitStateForStatus(response.Status), true, nil
 }
 
 func debugBreakWaitStateForStatus(status string) debugBreakWaitState {

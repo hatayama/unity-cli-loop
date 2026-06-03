@@ -503,15 +503,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public string requestedToolName { get; }
 
-        public bool isPlaying { get; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public bool? isPlaying { get; }
 
-        public bool isPaused { get; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public bool? isPaused { get; }
 
         public ServerBusyErrorData(
             string runningToolName,
             string requestedToolName,
-            bool isPlaying,
-            bool isPaused,
+            bool? isPlaying,
+            bool? isPaused,
             string message)
             : base(message)
         {

@@ -24,8 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(exception.RunningToolName, Is.EqualTo("running-tool"));
                 Assert.That(exception.RequestedToolName, Is.EqualTo("requested-tool"));
-                Assert.That(exception.IsPlaying, Is.False);
-                Assert.That(exception.IsPaused, Is.False);
+                Assert.That(exception.IsPlaying, Is.Null);
+                Assert.That(exception.IsPaused, Is.Null);
             }
             finally
             {

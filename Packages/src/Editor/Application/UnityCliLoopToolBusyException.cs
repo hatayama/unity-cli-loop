@@ -10,8 +10,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public UnityCliLoopToolBusyException(
             string runningToolName,
             string requestedToolName,
-            bool isPlaying = false,
-            bool isPaused = false)
+            bool? isPlaying = null,
+            bool? isPaused = null)
             : base(CreateMessage(runningToolName, requestedToolName))
         {
             RunningToolName = runningToolName;
@@ -24,9 +24,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         public string RequestedToolName { get; }
 
-        public bool IsPlaying { get; }
+        public bool? IsPlaying { get; }
 
-        public bool IsPaused { get; }
+        public bool? IsPaused { get; }
 
         private static string CreateMessage(string runningToolName, string requestedToolName)
         {

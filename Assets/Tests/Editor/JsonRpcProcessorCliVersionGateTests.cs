@@ -121,8 +121,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
-                Assert.That(data["isPlaying"]?.ToObject<bool>(), Is.EqualTo(UnityEditor.EditorApplication.isPlaying));
-                Assert.That(data["isPaused"]?.ToObject<bool>(), Is.EqualTo(UnityEditor.EditorApplication.isPaused));
+                Assert.That(data["isPlaying"], Is.Null);
+                Assert.That(data["isPaused"], Is.Null);
                 LogAssert.NoUnexpectedReceived();
             }
             finally
@@ -186,8 +186,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
-                Assert.That(data["isPlaying"]?.ToObject<bool>(), Is.EqualTo(UnityEditor.EditorApplication.isPlaying));
-                Assert.That(data["isPaused"]?.ToObject<bool>(), Is.EqualTo(UnityEditor.EditorApplication.isPaused));
+                Assert.That(data["isPlaying"], Is.Null);
+                Assert.That(data["isPaused"], Is.Null);
                 LogAssert.NoUnexpectedReceived();
             }
             finally

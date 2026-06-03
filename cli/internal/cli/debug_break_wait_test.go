@@ -132,6 +132,74 @@ func TestRunWaitForDebugBreakClearsEnabledMarkerAfterTimeout(t *testing.T) {
 	}
 }
 
+// Verifies wait-for-debug-break does one final status probe before treating timeout as missed.
+func TestRunWaitForDebugBreakReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
+	originalQuery := queryDebugBreakStatus
+	originalClear := clearDebugBreakStatus
+	defer func() {
+		queryDebugBreakStatus = originalQuery
+		clearDebugBreakStatus = originalClear
+	}()
+
+	requestCount := 0
+	queryDebugBreakStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (debugBreakStatusResponse, error) {
+		requestCount++
+		if requestCount == 1 {
+			return debugBreakStatusResponse{
+				Id:        id,
+				Status:    debugBreakStatusEnabled,
+				IsEnabled: true,
+			}, nil
+		}
+		return debugBreakStatusResponse{
+			Id:       id,
+			Status:   debugBreakStatusHit,
+			IsHit:    true,
+			IsPaused: true,
+			HitCount: 1,
+		}, nil
+	}
+
+	clearedID := ""
+	clearDebugBreakStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (debugBreakStatusResponse, error) {
+		clearedID = id
+		return debugBreakStatusResponse{Id: id, Status: debugBreakStatusCleared}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForDebugBreak(context.Background(), unityipc.Connection{}, waitForDebugBreakOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+		timeout:        5 * time.Millisecond,
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+	if clearedID != "" {
+		t.Fatalf("marker should not be cleared after final hit: %s", clearedID)
+	}
+	var response debugBreakStatusResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if response.Status != debugBreakStatusHit || response.HitCount != 1 {
+		t.Fatalf("response mismatch: %#v", response)
+	}
+	if requestCount != 2 {
+		t.Fatalf("request count mismatch: %d", requestCount)
+	}
+}
+
 // Verifies wait-for-debug-break rejects calls before the marker is enabled.
 func TestWaitForDebugBreakReturnsNotEnabledStateImmediately(t *testing.T) {
 	originalQuery := queryDebugBreakStatus
