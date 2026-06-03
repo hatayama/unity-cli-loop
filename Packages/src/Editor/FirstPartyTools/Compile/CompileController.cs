@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private bool _isForceCompile = false;
         private bool _reloadExternalSceneChanges = true;
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
+        private DateTime _compileStartedAtUtc = DateTime.MinValue;
 
         /// <summary>
         /// Event that occurs when compilation is complete.
@@ -134,6 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             _isCompiling = true;
             _compileMessages.Clear();
+            _compileStartedAtUtc = DateTime.UtcNow;
             TaskCompletionSource<CompileResult> compileTask = new();
             _currentCompileTask = compileTask;
             _isForceCompile = forceRecompile;
@@ -198,6 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _currentCompileTask = null;
                     _isCompiling = false;
                     _isForceCompile = false;
+                    _compileStartedAtUtc = DateTime.MinValue;
                     compileTask.TrySetCanceled();
                 }
             }
@@ -486,6 +489,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _isCompiling = false;
                     _isForceCompile = false;
                     _resultRecordingContext = CompileResultRecordingContext.Disabled();
+                    _compileStartedAtUtc = DateTime.MinValue;
                 }
 
                 task?.TrySetResult(result);
@@ -542,7 +546,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private void HandleCompileFinished(object context)
         {
             CompileResult result = CreateCompileResult();
+            LogCompileFinishCallbackReceived(result);
             CompleteCompileRequest(result, unregisterEvents: true);
+        }
+
+        private void LogCompileFinishCallbackReceived(CompileResult result)
+        {
+            UnityEngine.Debug.Assert(result != null, "result must not be null");
+
+            string requestId = _resultRecordingContext.Enabled
+                ? _resultRecordingContext.RequestId
+                : "";
+            VibeLogger.LogInfo(
+                "compile_finish_callback_received",
+                "Unity compilationFinished callback was received.",
+                new
+                {
+                    request_id = requestId,
+                    success = result.Success,
+                    error_count = result.ErrorCount,
+                    warning_count = result.WarningCount,
+                    is_indeterminate = result.IsIndeterminate,
+                    elapsed_ms = CompileElapsedMilliseconds()
+                },
+                requestId);
+        }
+
+        private long CompileElapsedMilliseconds()
+        {
+            if (_compileStartedAtUtc == DateTime.MinValue)
+            {
+                return 0;
+            }
+
+            return (long)(DateTime.UtcNow - _compileStartedAtUtc).TotalMilliseconds;
         }
 
         /// <summary>
@@ -755,6 +792,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _isForceCompile = false;
             _reloadExternalSceneChanges = true;
             _resultRecordingContext = CompileResultRecordingContext.Disabled();
+            _compileStartedAtUtc = DateTime.MinValue;
         }
 
         /// <summary>

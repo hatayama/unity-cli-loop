@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -175,6 +178,63 @@ func TestWaitForCompileCompletionReturnsReadyStatusResult(t *testing.T) {
 	}
 }
 
+// Verifies compile wait writes the status polling lifecycle to CLI Vibe logs.
+func TestWaitForCompileCompletionWritesPollLifecycleVibeLogs(t *testing.T) {
+	enableCliVibeLog(t)
+	connection := compileWaitTestConnection(t)
+	requestID := "compile_poll_lifecycle_test"
+	callCount := 0
+	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		callCount++
+		if callCount == 1 {
+			return compileStatusResponse{
+				Ready:       false,
+				HasResult:   false,
+				IsCompiling: true,
+				Message:     "Compiling",
+			}, nil
+		}
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":false,"ErrorCount":2,"WarningCount":1}`),
+			Message:   "Compile result is available.",
+		}, nil
+	})
+
+	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+		connection:   connection,
+		requestID:    requestID,
+		timeout:      time.Second,
+		pollInterval: 5 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if !completed {
+		t.Fatal("compile wait did not complete")
+	}
+	if string(result) != `{"Success":false,"ErrorCount":2,"WarningCount":1}` {
+		t.Fatalf("result mismatch: %s", result)
+	}
+
+	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_compile_status_poll_start"`,
+		`"operation":"cli_compile_status_poll_observed"`,
+		`"operation":"cli_compile_status_poll_complete"`,
+		`"request_id":"compile_poll_lifecycle_test"`,
+		`"poll_attempts":2`,
+		`"success":false`,
+		`"error_count":2`,
+		`"warning_count":1`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+}
+
 // Verifies force compile waits for Unity's stored result instead of fabricating one from idle status.
 func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) {
 	connection := compileWaitTestConnection(t)
@@ -254,7 +314,7 @@ func TestWaitForCompileCompletionWritesTimeoutVibeLog(t *testing.T) {
 	connection := compileWaitTestConnection(t)
 	requestID := "compile_timeout_log_test"
 	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
-		return compileStatusResponse{Ready: false}, nil
+		return compileStatusResponse{Ready: false, IsCompiling: true, Message: "Compiling"}, nil
 	})
 
 	_, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
@@ -272,12 +332,149 @@ func TestWaitForCompileCompletionWritesTimeoutVibeLog(t *testing.T) {
 
 	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
 	for _, expected := range []string{
-		`"operation":"cli_compile_status_wait_timed_out"`,
+		`"operation":"cli_compile_status_poll_start"`,
+		`"operation":"cli_compile_status_poll_observed"`,
+		`"operation":"cli_compile_status_poll_timeout"`,
 		`"request_id":"compile_timeout_log_test"`,
+		`"last_status"`,
+		`"poll_attempts"`,
 	} {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
 		}
+	}
+}
+
+// Verifies that compile status wait cancellations are visible in CLI Vibe logs.
+func TestWaitForCompileCompletionWritesCancellationVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+	connection := compileWaitTestConnection(t)
+	requestID := "compile_cancel_log_test"
+	ctx, cancel := context.WithCancel(context.Background())
+	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		cancel()
+		return compileStatusResponse{Ready: false, IsDomainReloadInProgress: true}, nil
+	})
+
+	_, completed, err := waitForCompileCompletion(ctx, compileCompletionOptions{
+		connection:   connection,
+		requestID:    requestID,
+		timeout:      time.Second,
+		pollInterval: time.Second,
+	})
+	if err == nil {
+		t.Fatal("waitForCompileCompletion should return the cancellation error")
+	}
+	if completed {
+		t.Fatal("compile wait should not complete after cancellation")
+	}
+
+	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_compile_status_poll_cancelled"`,
+		`"request_id":"compile_cancel_log_test"`,
+		`"last_status"`,
+		`"poll_attempts":1`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+}
+
+// Verifies the compile command records request preparation and send outcome diagnostics.
+func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	enableCliVibeLog(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		if _, err := unityipc.Read(bufio.NewReader(conn)); err != nil {
+			serverErr <- err
+			return
+		}
+
+		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
+		if err := unityipc.Write(conn, accepted); err != nil {
+			serverErr <- err
+			return
+		}
+
+		final := []byte(`{"jsonrpc":"2.0","result":{"Accepted":true},"id":1}`)
+		if err := unityipc.Write(conn, final); err != nil {
+			serverErr <- err
+			return
+		}
+	}()
+
+	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":false,"ErrorCount":1,"WarningCount":0}`),
+		}, nil
+	})
+
+	projectRoot := t.TempDir()
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: projectRoot,
+	}
+	params := map[string]any{
+		compileForceParam:                      true,
+		reloadExternalSceneChangesPropertyName: false,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWait(context.Background(), connection, params, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("runCompileWithDomainReloadWait failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	for _, expected := range []string{
+		`"operation":"cli_debug_mode_resolved"`,
+		`"operation":"cli_compile_request_prepared"`,
+		`"operation":"cli_compile_request_send_result"`,
+		`"debug_source":"env"`,
+		`"request_dispatched":true`,
+		`"request_accepted":true`,
+		`"response_received":true`,
+		`"force_recompile":true`,
+		`"reload_external_scene_changes":false`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
 	}
 }
 
