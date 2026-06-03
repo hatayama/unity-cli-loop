@@ -258,6 +258,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
         #endregion
 
+        #region SmoothDelta Tests
+
+        [UnityTest]
+        public IEnumerator SmoothDelta_WhenDebugBreakMarkerHitsDuringGameplayUpdate_Should_ReturnMarkerDetails()
+        {
+            // Verifies SmoothDelta observes gameplay-frame debug breaks before scheduling the next delta.
+            yield return null;
+
+            MouseDeltaDebugBreakObserver observer = mouseObserverGo.AddComponent<MouseDeltaDebugBreakObserver>();
+            observer.MarkerId = "smooth-delta";
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable(observer.MarkerId, 30);
+
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+            {
+                ["action"] = MouseInputAction.SmoothDelta.ToString(),
+                ["deltaX"] = 120f,
+                ["deltaY"] = 0f,
+                ["duration"] = 1f
+            }, System.Threading.CancellationToken.None);
+
+            yield return new WaitUntil(() => task.IsCompleted || observer.HasTriggered);
+            Assert.IsTrue(observer.HasTriggered, "The test must hit the marker from gameplay Update.");
+
+            try
+            {
+                yield return WaitForTask(task);
+            }
+            finally
+            {
+                InputSystemUpdateHelper.ResetPauseProviderForTests();
+            }
+
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.AreEqual("SmoothDelta", lastResponse.Action);
+            Assert.AreEqual("smooth-delta", lastResponse.DebugBreakId);
+            Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+        }
+
+        #endregion
+
         #region MoveDelta Tests
 
         [UnityTest]
@@ -370,6 +415,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         public void ResetCount()
         {
             LeftButtonPressedUpdateCount = 0;
+        }
+    }
+
+    /// <summary>
+    /// Test support type that hits a debug-break marker when gameplay observes mouse delta.
+    /// </summary>
+    public class MouseDeltaDebugBreakObserver : MonoBehaviour
+    {
+        public string MarkerId { get; set; } = "";
+        public bool HasTriggered { get; private set; }
+
+        private void Update()
+        {
+            if (HasTriggered)
+            {
+                return;
+            }
+
+            Mouse mouse = Mouse.current;
+            if (mouse == null)
+            {
+                return;
+            }
+
+            Vector2 delta = mouse.delta.ReadValue();
+            if (delta.sqrMagnitude <= 0f)
+            {
+                return;
+            }
+
+            HasTriggered = true;
+            UnityCliLoopDebug.Break(MarkerId);
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
         }
     }
 }

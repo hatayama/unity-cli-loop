@@ -390,7 +390,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     () => MouseInputState.InjectDelta(mouse, frameDelta), ct);
 
                 previousT = t;
-                if (EditorApplication.isPaused)
+                InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForRuntimeFrames(1, ct);
+                if (waitOutcome == InputSimulationWaitOutcome.Paused)
                 {
                     ResetDeltaIfPossible(mouse);
                     SimulateMouseInputOverlayState.Clear();
@@ -400,21 +401,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (t >= 1f)
                 {
                     break;
-                }
-
-                // Explicit/manual update completes synchronously, so an extra
-                // frame delay is needed to prevent the loop from collapsing into
-                // a single burst. Dynamic/Fixed modes already yield naturally via
-                // ApplyOnNextConfiguredUpdate's onBeforeUpdate callback.
-                if (InputUpdateTypeResolver.RequiresExplicitUpdate())
-                {
-                    InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForRuntimeFrames(1, ct);
-                    if (waitOutcome == InputSimulationWaitOutcome.Paused)
-                    {
-                        ResetDeltaIfPossible(mouse);
-                        SimulateMouseInputOverlayState.Clear();
-                        return InterruptedActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
-                    }
                 }
             }
 
