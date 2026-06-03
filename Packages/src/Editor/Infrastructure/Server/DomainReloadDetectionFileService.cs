@@ -58,6 +58,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
+            UnityCliLoopPendingCompileRequest[] pendingCompileRequests =
+                _sessionStateService.GetPendingCompileRequests();
             _sessionStateService.MarkDomainReloadStarted(serverIsRunning);
 
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(true);
@@ -68,7 +70,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 "Domain reload starting",
                 new
                 {
-                    server_running = serverIsRunning
+                    server_running = serverIsRunning,
+                    pending_compile_request_count = pendingCompileRequests.Length,
+                    pending_compile_request_ids = ToPendingCompileRequestIds(pendingCompileRequests)
                 },
                 correlationId
             );
@@ -88,6 +92,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             MigrateLegacySessionStateIfNeeded();
             bool serverWillRecover = !_sessionStateService.GetIsServerManuallyStopped();
+            UnityCliLoopPendingCompileRequest[] pendingCompileRequests =
+                _sessionStateService.GetPendingCompileRequests();
 
             // Clear Domain Reload completion flag
             _sessionStateService.ClearDomainReloadFlag();
@@ -99,7 +105,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 serverWillRecover
                     ? "Domain reload completed - starting server recovery process"
                     : "Domain reload completed - server was manually stopped before recovery",
-                new { transport = "project_ipc" },
+                new
+                {
+                    transport = "project_ipc",
+                    pending_compile_request_count = pendingCompileRequests.Length,
+                    pending_compile_request_ids = ToPendingCompileRequestIds(pendingCompileRequests)
+                },
                 correlationId
             );
         }
@@ -170,6 +181,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             _legacySessionStateReader.Clear();
+        }
+
+        private static string[] ToPendingCompileRequestIds(
+            UnityCliLoopPendingCompileRequest[] pendingCompileRequests)
+        {
+            UnityEngine.Debug.Assert(pendingCompileRequests != null, "pendingCompileRequests must not be null");
+
+            string[] requestIds = new string[pendingCompileRequests.Length];
+            for (int i = 0; i < pendingCompileRequests.Length; i++)
+            {
+                requestIds[i] = pendingCompileRequests[i].RequestId;
+            }
+
+            return requestIds;
         }
     }
 }
