@@ -37,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string FindGameObjectsAssemblyName = "UnityCLILoop.FirstPartyTools.FindGameObjects.Editor";
         private const string GetHierarchyAssemblyName = "UnityCLILoop.FirstPartyTools.GetHierarchy.Editor";
         private const string GetLogsAssemblyName = "UnityCLILoop.FirstPartyTools.GetLogs.Editor";
+        private const string PausePointAssemblyName = "UnityCLILoop.FirstPartyTools.PausePoint.Editor";
         private const string RecordInputAssemblyName = "UnityCLILoop.FirstPartyTools.RecordInput.Editor";
         private const string ReplayInputAssemblyName = "UnityCLILoop.FirstPartyTools.ReplayInput.Editor";
         private const string RunTestsAssemblyName = "UnityCLILoop.FirstPartyTools.RunTests.Editor";
@@ -53,6 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(registry.IsToolRegistered("compile"), Is.True);
             Assert.That(registry.IsToolRegistered("get-logs"), Is.True);
+            Assert.That(registry.IsToolRegistered(UnityCliLoopConstants.TOOL_NAME_ARM_PAUSE_POINT), Is.True);
+            Assert.That(registry.IsToolRegistered(UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT), Is.True);
             Assert.That(registry.IsToolRegistered("execute-dynamic-code"), Is.True);
             Assert.That(registry.IsToolRegistered("clear-console"), Is.True);
             Assert.That(registry.IsToolRegistered("get-hierarchy"), Is.True);
@@ -246,6 +249,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(SimulateMouseUiAssemblyName));
             AssertThirdPartyTool(toolType, false);
+        }
+
+        [Test]
+        public void GetToolType_WhenPausePointComesFromFirstPartyToolsAssembly_ReturnsBundledPluginType()
+        {
+            // Tests that pause point tools are bundled plugins instead of application-layer tools.
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+
+            System.Type armToolType = registry.GetToolType(UnityCliLoopConstants.TOOL_NAME_ARM_PAUSE_POINT);
+            System.Type clearToolType = registry.GetToolType(UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT);
+
+            Assert.That(armToolType, Is.Not.Null);
+            Assert.That(clearToolType, Is.Not.Null);
+            Assert.That(armToolType.Assembly.GetName().Name, Is.EqualTo(PausePointAssemblyName));
+            Assert.That(clearToolType.Assembly.GetName().Name, Is.EqualTo(PausePointAssemblyName));
+            AssertThirdPartyTool(armToolType, false);
+            AssertThirdPartyTool(clearToolType, false);
         }
 
         [Test]
@@ -497,6 +517,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(references, Does.Contain(FindGameObjectsAssemblyName));
             Assert.That(references, Does.Contain(GetHierarchyAssemblyName));
             Assert.That(references, Does.Contain(GetLogsAssemblyName));
+            Assert.That(references, Does.Contain(PausePointAssemblyName));
             Assert.That(references, Does.Contain(RecordInputAssemblyName));
             Assert.That(references, Does.Contain(ReplayInputAssemblyName));
             Assert.That(references, Does.Contain(RunTestsAssemblyName));
