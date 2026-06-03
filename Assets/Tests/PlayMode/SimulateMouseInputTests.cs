@@ -35,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
         public override void TearDown()
         {
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
             MouseInputState.ReleaseAllButtons();
             Object.DestroyImmediate(mouseObserverGo);
             base.TearDown();
@@ -99,6 +100,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.Success);
             Assert.AreEqual("Middle", lastResponse.Button);
             Assert.IsFalse(mouse.middleButton.isPressed, "Middle button should be released after click");
+        }
+
+        [UnityTest]
+        public IEnumerator Click_WhenUnityPausesDuringObservation_Should_CompleteAsDebugBreakInterruption()
+        {
+            // Verifies that a debug-break pause releases the tool slot instead of leaving the click command busy.
+            yield return null;
+
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+            {
+                ["action"] = MouseInputAction.Click.ToString(),
+                ["x"] = 400,
+                ["y"] = 300,
+                ["duration"] = 1f
+            }, System.Threading.CancellationToken.None);
+
+            yield return new WaitUntil(() => mouse.leftButton.isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the click observation window.");
+
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.AreEqual("Click", lastResponse.Action);
+            Assert.AreEqual("Left", lastResponse.Button);
+            Assert.IsFalse(SimulateMouseInputOverlayState.HasAnyActivity, "Debug-break interruption should clear mouse overlay state.");
         }
 
         #endregion
@@ -246,12 +276,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         private IEnumerator RunTool(JObject parameters)
         {
             Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
+            yield return WaitForTask(task);
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+        }
+
+        private static IEnumerator WaitForTask(Task<UnityCliLoopToolResponse> task)
+        {
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
                 task.IsCompleted || Time.realtimeSinceStartup >= timeoutAt);
             Assert.IsTrue(task.IsCompleted, "Tool execution timed out.");
             Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
-            lastResponse = (SimulateMouseInputResponse)task.Result;
         }
 
         #endregion

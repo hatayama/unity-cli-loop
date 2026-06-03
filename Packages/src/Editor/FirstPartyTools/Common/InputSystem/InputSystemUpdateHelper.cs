@@ -3,6 +3,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
@@ -11,6 +12,15 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
+    /// <summary>
+    /// Reports whether input observation finished normally or stopped because Unity paused.
+    /// </summary>
+    internal enum InputSimulationWaitOutcome
+    {
+        Completed = 0,
+        Paused = 1
+    }
+
     // Shared helper for applying Input System state changes at the correct update phase.
     // Both keyboard and mouse simulation need frame-precise timing so that
     // wasPressedThisFrame / wasReleasedThisFrame detect the injected state.
@@ -21,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const int StandardPressObservationFrames = 2;
         private const int ManualPressObservationFrames = 3;
+        private static Func<bool> isPausedProvider = () => EditorApplication.isPaused;
 
         public static Task ApplyOnNextConfiguredUpdate(Action apply, CancellationToken ct)
         {
@@ -84,12 +95,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ManualPressObservationFrames;
         }
 
-        public static async Task WaitForObservationFrames(CancellationToken ct)
+        public static async Task<InputSimulationWaitOutcome> WaitForObservationFrames(CancellationToken ct)
         {
-            await WaitForRuntimeFrames(GetMinimumObservationFrameCount(), ct);
+            return await WaitForRuntimeFrames(GetMinimumObservationFrameCount(), ct);
         }
 
-        public static async Task WaitForPressLifetime(float duration, CancellationToken ct)
+        public static async Task<InputSimulationWaitOutcome> WaitForPressLifetime(float duration, CancellationToken ct)
         {
             int minimumObservationFrames = GetMinimumObservationFrameCount();
             int startFrameCount = Time.frameCount;
@@ -99,10 +110,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             while (observedFrames < minimumObservationFrames || elapsed < duration)
             {
+                if (IsPaused())
+                {
+                    return InputSimulationWaitOutcome.Paused;
+                }
+
                 await EditorDelay.DelayFrame(1, ct);
+                if (IsPaused())
+                {
+                    return InputSimulationWaitOutcome.Paused;
+                }
+
                 observedFrames = Time.frameCount - startFrameCount;
                 elapsed = Time.realtimeSinceStartup - startTime;
             }
+
+            return InputSimulationWaitOutcome.Completed;
         }
 
         public static void RunExplicitUpdate(InputUpdateType targetUpdateType)
@@ -203,16 +226,49 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return fallbackUpdateMode;
         }
 
-        private static async Task WaitForRuntimeFrames(int frameCount, CancellationToken ct)
+        public static async Task<InputSimulationWaitOutcome> WaitForRuntimeFrames(int frameCount, CancellationToken ct)
         {
             int startFrameCount = Time.frameCount;
             int observedFrames = 0;
 
             while (observedFrames < frameCount)
             {
+                if (IsPaused())
+                {
+                    return InputSimulationWaitOutcome.Paused;
+                }
+
                 await EditorDelay.DelayFrame(1, ct);
+                if (IsPaused())
+                {
+                    return InputSimulationWaitOutcome.Paused;
+                }
+
                 observedFrames = Time.frameCount - startFrameCount;
             }
+
+            return InputSimulationWaitOutcome.Completed;
+        }
+
+        internal static void ConfigurePauseProviderForTests(Func<bool> provider)
+        {
+            Debug.Assert(provider != null, "provider must not be null");
+            if (provider == null)
+            {
+                throw new ArgumentNullException(nameof(provider));
+            }
+
+            isPausedProvider = provider;
+        }
+
+        internal static void ResetPauseProviderForTests()
+        {
+            isPausedProvider = () => EditorApplication.isPaused;
+        }
+
+        private static bool IsPaused()
+        {
+            return isPausedProvider();
         }
     }
 }

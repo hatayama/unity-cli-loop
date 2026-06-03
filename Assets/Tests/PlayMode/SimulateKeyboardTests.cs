@@ -59,6 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
         public override void TearDown()
         {
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
             InputSettings settings = RequireInputSettings();
             settings.updateMode = originalUpdateMode;
             Time.timeScale = originalTimeScale;
@@ -110,6 +111,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
             Assert.IsTrue(lastResponse.Success);
             Assert.AreEqual("Space", lastResponse.KeyName);
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WhenUnityPausesDuringObservation_Should_CompleteAsDebugBreakInterruption()
+        {
+            // Verifies that a debug-break pause releases the tool slot instead of leaving the press command busy.
+            yield return null;
+
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 1f
+            };
+            Task<SimulateKeyboardResponse> task =
+                tool.ExecuteWithCancellationAsync(parameters, CancellationToken.None);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
+
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.AreEqual("Press", lastResponse.Action);
+            Assert.AreEqual("Space", lastResponse.KeyName);
+            Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Debug-break interruption should clear keyboard overlay state.");
         }
 
         [UnityTest]

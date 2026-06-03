@@ -13,6 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Message { get; set; } = "";
         public string Action { get; set; } = "";
         public string? KeyName { get; set; }
+        public bool InterruptedByDebugBreak { get; set; }
 
         public SimulateKeyboardResponse()
         {

@@ -169,12 +169,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateKeyboardOverlayState.ShowPress(keyName);
             KeyboardKeyState.RegisterTransientKey(key);
             bool pressWasApplied = false;
+            InputSimulationWaitOutcome waitOutcome = InputSimulationWaitOutcome.Completed;
 
             try
             {
                 await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(() => KeyboardKeyState.SetKeyState(keyboard, key, true), ct);
                 pressWasApplied = true;
-                await InputSystemUpdateHelper.WaitForPressLifetime(duration, ct);
+                waitOutcome = await InputSystemUpdateHelper.WaitForPressLifetime(duration, ct);
             }
             finally
             {
@@ -182,13 +183,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     await ReleaseKeyStateIfPossible(keyboard, key);
                     KeyboardKeyState.UnregisterTransientKey(key);
-                    await FinalizePressOverlay(ct);
+                    if (waitOutcome == InputSimulationWaitOutcome.Paused)
+                    {
+                        SimulateKeyboardOverlayState.ClearPress();
+                    }
+                    else
+                    {
+                        await FinalizePressOverlay(ct);
+                    }
                 }
                 else
                 {
                     KeyboardKeyState.UnregisterTransientKey(key);
                     SimulateKeyboardOverlayState.ClearPress();
                 }
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.Paused)
+            {
+                return InterruptedPressResult(keyName);
             }
 
             string durationText = duration > 0f ? $" for {duration:F1}s" : "";
@@ -218,6 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             bool keyDownApplied = false;
             bool committed = false;
+            InputSimulationWaitOutcome waitOutcome = InputSimulationWaitOutcome.Completed;
 
             try
             {
@@ -225,8 +239,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 keyDownApplied = true;
                 KeyboardKeyState.SetKeyDown(key);
                 SimulateKeyboardOverlayState.AddHeldKey(keyName);
-                await InputSystemUpdateHelper.WaitForObservationFrames(ct);
-                committed = true;
+                waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct);
+                committed = waitOutcome == InputSimulationWaitOutcome.Completed;
             }
             finally
             {
@@ -234,6 +248,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     await RollbackHeldKey(keyboard, key, keyName);
                 }
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.Paused)
+            {
+                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName);
             }
 
             return new UnityCliLoopKeyboardSimulationResult
@@ -263,7 +282,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(() => KeyboardKeyState.SetKeyState(keyboard, key, false), ct);
             KeyboardKeyState.SetKeyUp(key);
             SimulateKeyboardOverlayState.RemoveHeldKey(keyName);
-            await InputSystemUpdateHelper.WaitForObservationFrames(ct);
+            InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct);
+            if (waitOutcome == InputSimulationWaitOutcome.Paused)
+            {
+                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName);
+            }
 
             return new UnityCliLoopKeyboardSimulationResult
             {
@@ -281,6 +304,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return Key.Enter.ToString();
             }
             return keyName;
+        }
+
+        private static UnityCliLoopKeyboardSimulationResult InterruptedPressResult(string keyName)
+        {
+            return InterruptedKeyResult(UnityCliLoopKeyboardAction.Press, keyName);
+        }
+
+        private static UnityCliLoopKeyboardSimulationResult InterruptedKeyResult(
+            UnityCliLoopKeyboardAction action,
+            string keyName)
+        {
+            return new UnityCliLoopKeyboardSimulationResult
+            {
+                Success = true,
+                Message = $"Keyboard input stopped because Unity paused during Debug Break inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
+                Action = action.ToString(),
+                KeyName = keyName,
+                InterruptedByDebugBreak = true
+            };
         }
 
         private static async Task FinalizePressOverlay(CancellationToken ct)
