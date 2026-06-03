@@ -133,6 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.AreEqual("Left", lastResponse.Button);
             Assert.IsNull(lastResponse.DebugBreakId);
             Assert.IsNull(lastResponse.DebugBreakHitCount);
+            Assert.IsFalse(mouse.leftButton.isPressed, "Debug-break interruption should release the injected mouse button state.");
             Assert.IsFalse(SimulateMouseInputOverlayState.HasAnyActivity, "Debug-break interruption should clear mouse overlay state.");
         }
 
@@ -167,6 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
             Assert.AreEqual("left-click", lastResponse.DebugBreakId);
             Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+            Assert.IsFalse(mouse.leftButton.isPressed, "Marker interruption should release the injected mouse button state.");
         }
 
         #endregion

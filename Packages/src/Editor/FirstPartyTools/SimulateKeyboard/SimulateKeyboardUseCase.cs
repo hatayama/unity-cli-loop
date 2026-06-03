@@ -384,12 +384,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            if (EditorApplication.isPaused)
+            {
+                KeyboardKeyState.SetKeyState(keyboard, key, false);
+                InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
+                return;
+            }
+
             await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(() => KeyboardKeyState.SetKeyState(keyboard, key, false), CancellationToken.None);
         }
 
         private static bool CanInjectKeyboardState(Keyboard keyboard)
         {
-            return EditorApplication.isPlaying && !EditorApplication.isPaused && Keyboard.current == keyboard;
+            return EditorApplication.isPlaying && keyboard != null;
         }
 #endif
     }

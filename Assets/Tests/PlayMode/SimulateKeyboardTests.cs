@@ -145,6 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.AreEqual("Space", lastResponse.KeyName);
             Assert.IsNull(lastResponse.DebugBreakId);
             Assert.IsNull(lastResponse.DebugBreakHitCount);
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Debug-break interruption should release the injected key state.");
             Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Debug-break interruption should clear keyboard overlay state.");
         }
 
@@ -180,6 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
             Assert.AreEqual("space-press", lastResponse.DebugBreakId);
             Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Marker interruption should release the injected key state.");
         }
 
         [UnityTest]

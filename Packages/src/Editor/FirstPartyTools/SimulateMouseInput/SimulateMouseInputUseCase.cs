@@ -392,6 +392,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 previousT = t;
                 if (EditorApplication.isPaused)
                 {
+                    ResetDeltaIfPossible(mouse);
                     SimulateMouseInputOverlayState.Clear();
                     return InterruptedActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
                 }
@@ -410,6 +411,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForRuntimeFrames(1, ct);
                     if (waitOutcome == InputSimulationWaitOutcome.Paused)
                     {
+                        ResetDeltaIfPossible(mouse);
                         SimulateMouseInputOverlayState.Clear();
                         return InterruptedActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
                     }
@@ -490,13 +492,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            if (EditorApplication.isPaused)
+            {
+                MouseInputState.SetButtonState(mouse, button, false);
+                InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
+                return;
+            }
+
             await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
                 () => MouseInputState.SetButtonState(mouse, button, false), CancellationToken.None);
         }
 
+        private static void ResetDeltaIfPossible(Mouse mouse)
+        {
+            if (!CanInjectMouseState(mouse))
+            {
+                return;
+            }
+
+            MouseInputState.InjectDelta(mouse, Vector2.zero);
+            if (EditorApplication.isPaused)
+            {
+                InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
+            }
+        }
+
         private static bool CanInjectMouseState(Mouse mouse)
         {
-            return EditorApplication.isPlaying && !EditorApplication.isPaused && Mouse.current == mouse;
+            return EditorApplication.isPlaying && mouse != null;
         }
 
         private static RuntimeMouseButton ToRuntimeMouseButton(UnityCliLoopMouseButton button)
