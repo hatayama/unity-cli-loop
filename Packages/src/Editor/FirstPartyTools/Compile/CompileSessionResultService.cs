@@ -62,6 +62,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             result.ProjectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             string resultJson = JsonConvert.SerializeObject(result, Formatting.None);
+            UnityCliLoopStoredCompileResult previousResult =
+                sessionStateService.GetCompileResult(requestId);
+            UnityCliLoopPendingCompileRequest pendingRequest =
+                sessionStateService.GetPendingCompileRequestForRequestId(requestId);
             sessionStateService.StoreCompileResult(
                 requestId,
                 forceRecompile,
@@ -80,7 +84,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     error_count = result.ErrorCount,
                     warning_count = result.WarningCount,
                     result_bytes = System.Text.Encoding.UTF8.GetByteCount(resultJson),
-                    pending_request_cleared = pendingRequestCleared
+                    store_sequence = previousResult.HasResult ? 2 : 1,
+                    pending_request_before = pendingRequest.HasRequest,
+                    pending_request_cleared = pendingRequestCleared,
+                    duplicate_result_for_request = previousResult.HasResult
                 },
                 correlationId);
         }

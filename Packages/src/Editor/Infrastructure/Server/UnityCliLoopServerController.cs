@@ -629,7 +629,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     server = _serverInstanceFactory.Create();
                     server.StartServer();
                     _bridgeServer = server;
-                    VibeLogger.LogInfo("binding_success", $"endpoint={server.Endpoint}");
+                    VibeLogger.LogInfo(
+                        "binding_success",
+                        "Unity CLI Loop server bound the project IPC endpoint.",
+                        new { endpoint = server.Endpoint });
                     return true;
                 }
                 catch (Exception ex)

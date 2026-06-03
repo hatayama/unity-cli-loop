@@ -30,12 +30,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool isDomainReloadInProgress =
                 sessionStateService.GetIsDomainReloadInProgress() ||
                 DomainReloadStateRegistry.IsDomainReloadInProgress();
-            return BuildResponse(
+            GetCompileStatusResponse response = BuildResponse(
                 requestId,
                 isCompiling,
                 isUpdating,
                 isDomainReloadInProgress,
                 sessionStateService);
+            LogCompileStatusQueryReceived(requestId, response);
+            return response;
         }
 
         internal static GetCompileStatusResponse BuildResponse(
@@ -79,6 +81,28 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             JToken requestIdToken = paramsObject.GetValue(RequestIdParamName, StringComparison.OrdinalIgnoreCase);
             return requestIdToken?.ToString() ?? "";
+        }
+
+        private static void LogCompileStatusQueryReceived(
+            string requestId,
+            GetCompileStatusResponse response)
+        {
+            Debug.Assert(response != null, "response must not be null");
+
+            VibeLogger.LogInfo(
+                "compile_status_query_received",
+                "Received compile status polling request from CLI.",
+                new
+                {
+                    request_id = requestId,
+                    ready = response.Ready,
+                    has_result = response.HasResult,
+                    is_compiling = response.IsCompiling,
+                    is_updating = response.IsUpdating,
+                    is_domain_reload_in_progress = response.IsDomainReloadInProgress,
+                    message = response.Message
+                },
+                requestId);
         }
 
         private static UnityCliLoopStoredCompileResult RecoverPendingCompileResult(
