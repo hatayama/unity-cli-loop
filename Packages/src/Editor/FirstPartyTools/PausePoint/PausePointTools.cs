@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,10 +12,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ArmPausePointSchema : UnityCliLoopToolSchema
     {
-        [Description("Named pause point id passed to UnityCliLoopDebug.Break.")]
         public string Id { get; set; } = string.Empty;
 
-        [Description("Seconds before the arm expires and stops pausing late hits.")]
         public int TimeoutSeconds { get; set; } = UloopPausePointRegistry.DefaultTimeoutSeconds;
     }
 
@@ -25,10 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ClearPausePointSchema : UnityCliLoopToolSchema
     {
-        [Description("Named pause point id to clear.")]
         public string Id { get; set; } = string.Empty;
 
-        [Description("Clear every active pause point marker.")]
         public bool All { get; set; }
     }
 

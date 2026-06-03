@@ -49,11 +49,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int clearedCount = 0;
             foreach (UloopPausePointEntry entry in Entries.Values)
             {
-                if (!entry.IsTerminal)
+                if (entry.Status == UloopPausePointStatus.Cleared)
                 {
-                    entry.MarkCleared();
-                    clearedCount++;
+                    continue;
                 }
+
+                entry.MarkCleared();
+                clearedCount++;
             }
 
             return new UloopPausePointClearAllResult(clearedCount, now);
@@ -247,11 +249,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool IsPlayingAtHit { get; private set; }
         public bool IsPausedAtHit { get; private set; }
         public string Message { get; private set; }
-
-        public bool IsTerminal =>
-            Status == UloopPausePointStatus.Hit ||
-            Status == UloopPausePointStatus.Expired ||
-            Status == UloopPausePointStatus.Cleared;
 
         public void ExpireIfNeeded(DateTime nowUtc)
         {

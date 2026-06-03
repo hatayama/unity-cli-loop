@@ -567,9 +567,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void InfrastructureAsmdef_WhenLoaded_DependsOnApplicationAndDoesNotReferencePresentation()
+        public void InfrastructureAsmdef_WhenLoaded_DependsOnApplicationRuntimeAndDoesNotReferencePresentation()
         {
-            // Tests that infrastructure and presentation remain sibling outer layers.
+            // Tests that infrastructure can bridge public runtime APIs while presentation remains a sibling outer layer.
             string[] references = ReadResolvedReferences("Packages/src/Editor/Infrastructure/UnityCLILoop.Infrastructure.asmdef");
 
             Assert.That(references, Is.EquivalentTo(new[]
@@ -577,6 +577,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 InternalApiBridgeAssemblyName,
                 ApplicationAssemblyName,
                 DomainAssemblyName,
+                PausePointsRuntimeAssemblyName,
                 ToolContractsAssemblyName
             }));
         }

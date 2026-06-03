@@ -89,6 +89,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ClearAll_WhenPausePointWasHit_ClearsTerminalStatus()
+        {
+            // Verifies bulk clear hides stale terminal hit status from future waits.
+            UloopPausePointRegistry.Arm("jump", 30);
+            UnityCliLoopDebug.Break("jump");
+
+            UloopPausePointClearAllResult result = UloopPausePointRegistry.ClearAll();
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(result.ClearedCount, Is.EqualTo(1));
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.IsHit, Is.False);
+        }
+
+        [Test]
         public void BreakMethod_WhenSourceIsScanned_UsesUnityEditorConditionalWithoutDebugBreak()
         {
             // Verifies the public marker follows Unity's conditional call-site removal pattern.
