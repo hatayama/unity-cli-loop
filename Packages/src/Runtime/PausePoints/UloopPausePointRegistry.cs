@@ -203,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 0,
                 pauseController.IsPlaying,
                 pauseController.IsPaused,
-                "Debug break is not armed.");
+                "Debug break is not enabled.");
         }
     }
 
@@ -235,7 +235,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             ExpiresAtUtc = armedAtUtc.AddSeconds(timeoutSeconds);
             Status = UloopPausePointStatus.Armed;
             IsArmed = true;
-            Message = "Debug break armed.";
+            Message = "Debug break enabled.";
         }
 
         public string Id { get; }

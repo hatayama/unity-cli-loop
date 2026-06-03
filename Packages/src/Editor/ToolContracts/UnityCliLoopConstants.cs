@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // Command name constants
         public const string TOOL_NAME_COMPILE = "compile";
         public const string TOOL_NAME_CONTROL_PLAY_MODE = "control-play-mode";
-        public const string TOOL_NAME_ARM_DEBUG_BREAK = "arm-debug-break";
+        public const string TOOL_NAME_ENABLE_DEBUG_BREAK = "enable-debug-break";
         public const string TOOL_NAME_CLEAR_DEBUG_BREAK = "clear-debug-break";
         public const string TOOL_NAME_EXECUTE_DYNAMIC_CODE = "execute-dynamic-code";
         public const string TOOL_NAME_GET_HIERARCHY = "get-hierarchy";

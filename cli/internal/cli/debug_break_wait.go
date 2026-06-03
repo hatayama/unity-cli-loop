@@ -301,7 +301,7 @@ func debugBreakWaitError(
 	case debugBreakWaitStateNotArmed:
 		return debugBreakStateError(
 			errorCodeDebugBreakNotArmed,
-			"Debug break is not armed.",
+			"Debug break is not enabled.",
 			projectRoot,
 			options,
 			response,
@@ -350,7 +350,7 @@ func debugBreakStateError(
 		ProjectRoot: projectRoot,
 		Command:     debugBreakWaitCommandName,
 		NextActions: []string{
-			"Run `uloop arm-debug-break --id <marker-id>` before waiting.",
+			"Run `uloop enable-debug-break --id <marker-id>` before waiting.",
 			"Confirm the code path calls `UnityCliLoopDebug.Break(\"<marker-id>\")` with the same id.",
 		},
 		Details: map[string]any{

@@ -24,10 +24,10 @@ UnityCliLoopDebug.Break("player-jumped");
 ```
 
 2. Compile the project.
-3. Arm the marker before triggering the code path:
+3. Enable the marker before triggering the code path:
 
 ```bash
-uloop arm-debug-break --id player-jumped --timeout-seconds 30
+uloop enable-debug-break --id player-jumped --timeout-seconds 30
 ```
 
 4. Trigger the behavior, such as `simulate-keyboard`, `simulate-mouse-input`, UI interaction, or dynamic code.

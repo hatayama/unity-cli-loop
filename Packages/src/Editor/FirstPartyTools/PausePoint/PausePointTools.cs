@@ -8,9 +8,9 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Parameters for arming one named debug break marker.
+    /// Parameters for enabling one named debug break marker.
     /// </summary>
-    public class ArmPausePointSchema : UnityCliLoopToolSchema
+    public class EnablePausePointSchema : UnityCliLoopToolSchema
     {
         public string Id { get; set; } = string.Empty;
 
@@ -83,18 +83,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Exposes debug break arming as a Unity CLI Loop tool.
+    /// Exposes debug break enabling as a Unity CLI Loop tool.
     /// </summary>
     [UnityCliLoopTool]
-    public class ArmPausePointTool : UnityCliLoopTool<ArmPausePointSchema, PausePointResponse>
+    public class EnablePausePointTool : UnityCliLoopTool<EnablePausePointSchema, PausePointResponse>
     {
-        public override string ToolName => UnityCliLoopConstants.TOOL_NAME_ARM_DEBUG_BREAK;
+        public override string ToolName => UnityCliLoopConstants.TOOL_NAME_ENABLE_DEBUG_BREAK;
 
-        protected override Task<PausePointResponse> ExecuteAsync(ArmPausePointSchema parameters, CancellationToken ct)
+        protected override Task<PausePointResponse> ExecuteAsync(EnablePausePointSchema parameters, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             PausePointUseCase useCase = new();
-            PausePointResponse response = useCase.Arm(parameters);
+            PausePointResponse response = useCase.Enable(parameters);
             return Task.FromResult(response);
         }
     }
@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class PausePointUseCase
     {
-        public PausePointResponse Arm(ArmPausePointSchema parameters)
+        public PausePointResponse Enable(EnablePausePointSchema parameters)
         {
             if (parameters == null)
             {

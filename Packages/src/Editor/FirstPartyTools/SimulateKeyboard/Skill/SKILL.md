@@ -14,7 +14,7 @@ Simulate keyboard input on Unity PlayMode: $ARGUMENTS
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. Execute the appropriate `uloop simulate-keyboard` command
 3. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
-4. If the screenshot cannot prove the gameplay state, place and arm a `UnityCliLoopDebug.Break("<id>")` marker with `uloop arm-debug-break`, run the input again, then inspect while Unity is paused
+4. If the screenshot cannot prove the gameplay state, place and enable a `UnityCliLoopDebug.Break("<id>")` marker with `uloop enable-debug-break`, run the input again, then inspect while Unity is paused
 5. Report what happened
 
 ## Tool Reference

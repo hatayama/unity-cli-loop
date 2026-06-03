@@ -329,8 +329,8 @@
       }
     },
     {
-      "name": "arm-debug-break",
-      "description": "Arm a named UnityCliLoopDebug.Break marker so Unity pauses when that code path is reached",
+      "name": "enable-debug-break",
+      "description": "Enable a named UnityCliLoopDebug.Break marker so Unity pauses when that code path is reached",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -340,7 +340,7 @@
           },
           "TimeoutSeconds": {
             "type": "integer",
-            "description": "Seconds before the arm expires and stops pausing late hits",
+            "description": "Seconds before the enable request expires and stops pausing late hits",
             "default": 30
           }
         }
