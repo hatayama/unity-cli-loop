@@ -50,11 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             if (!TryEnterExecution(toolName, out string runningToolName))
             {
-                throw new UnityCliLoopToolBusyException(
-                    runningToolName,
-                    toolName,
-                    EditorApplication.isPlaying,
-                    EditorApplication.isPaused);
+                throw CreateBusyException(runningToolName, toolName);
             }
 
             try
@@ -120,6 +116,25 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             return runningToolName == UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE
                    && requestedToolName == UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE;
+        }
+
+        internal static UnityCliLoopToolBusyException CreateBusyException(
+            string runningToolName,
+            string requestedToolName)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace");
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestedToolName), "requestedToolName must not be null or whitespace");
+
+            if (!MainThreadSwitcher.IsMainThread)
+            {
+                return new UnityCliLoopToolBusyException(runningToolName, requestedToolName);
+            }
+
+            return new UnityCliLoopToolBusyException(
+                runningToolName,
+                requestedToolName,
+                EditorApplication.isPlaying,
+                EditorApplication.isPaused);
         }
 
         private string GetRunningToolNameInsideLock()

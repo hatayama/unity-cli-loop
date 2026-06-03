@@ -14,6 +14,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class CompileSessionResultService
     {
+        private const string MissingTestFrameworkReferenceHint =
+            "Possible test asmdef issue: Unity test framework symbols are missing. Make sure com.unity.test-framework is installed and add optionalUnityReferences: [\"TestAssemblies\"] or enable testAssemblies on the test asmdef.";
+
         internal static UnityCliLoopCompileResult CreateCompileResult(
             CompileResult result,
             bool forceRecompile)
@@ -45,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 WarningCount = result.Warnings?.Length ?? 0,
                 Errors = ToIssues(result.Errors),
                 Warnings = ToIssues(result.Warnings),
-                Message = result.Message
+                Message = AddMissingTestFrameworkReferenceHint(result.Message, result.Errors)
             };
         }
 
@@ -118,6 +121,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 File = message.file,
                 Line = message.line
             }).ToArray();
+        }
+
+        private static string AddMissingTestFrameworkReferenceHint(
+            string message,
+            UnityEditor.Compilation.CompilerMessage[] errors)
+        {
+            if (!ContainsMissingTestFrameworkReference(errors))
+            {
+                return message;
+            }
+
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return MissingTestFrameworkReferenceHint;
+            }
+
+            if (message.Contains(MissingTestFrameworkReferenceHint, StringComparison.Ordinal))
+            {
+                return message;
+            }
+
+            return $"{message} {MissingTestFrameworkReferenceHint}";
+        }
+
+        private static bool ContainsMissingTestFrameworkReference(
+            UnityEditor.Compilation.CompilerMessage[] errors)
+        {
+            if (errors == null)
+            {
+                return false;
+            }
+
+            foreach (UnityEditor.Compilation.CompilerMessage error in errors)
+            {
+                string errorMessage = error.message ?? string.Empty;
+                if (errorMessage.Contains("UnityTestAttribute", StringComparison.Ordinal)
+                    || errorMessage.Contains("UnityEngine.TestTools", StringComparison.Ordinal)
+                    || errorMessage.Contains("NUnit.Framework", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 

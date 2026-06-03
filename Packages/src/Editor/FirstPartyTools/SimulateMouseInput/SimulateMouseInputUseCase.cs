@@ -222,7 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     inputPos);
             }
 
-            string durationText = request.Duration > 0f ? $" for {request.Duration:F1}s" : "";
+            string durationText = request.Duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(request.Duration)}s" : "";
             return new UnityCliLoopMouseInputSimulationResult
             {
                 Success = true,
@@ -300,7 +300,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new UnityCliLoopMouseInputSimulationResult
             {
                 Success = true,
-                Message = $"Long-pressed {buttonName} at ({inputPos.x:F1}, {inputPos.y:F1}) for {request.Duration:F1}s",
+                Message = $"Long-pressed {buttonName} at ({inputPos.x:F1}, {inputPos.y:F1}) for {InputSimulationDurationFormatter.FormatSeconds(request.Duration)}s",
                 Action = UnityCliLoopMouseInputAction.LongPress.ToString(),
                 Button = buttonName,
                 PositionX = inputPos.x,

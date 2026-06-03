@@ -206,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return InterruptedPressResult(keyName);
             }
 
-            string durationText = duration > 0f ? $" for {duration:F1}s" : "";
+            string durationText = duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(duration)}s" : "";
             return new UnityCliLoopKeyboardSimulationResult
             {
                 Success = true,
