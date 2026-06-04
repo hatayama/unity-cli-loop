@@ -129,6 +129,7 @@ namespace io.github.hatayama.uLoopMCP
         public const string ULOOPMCP_DIR = "uLoopMCP";
         public const string COMPILE_RESULTS_DIR = "compile-results";
         public const string JSON_FILE_EXTENSION = ".json";
+        public const string RUNTIME_ASSEMBLY_FILE_NAME = "uLoopMCP.Runtime.dll";
         
         // .uloop directory
         public const string ULOOP_DIR = ".uloop";

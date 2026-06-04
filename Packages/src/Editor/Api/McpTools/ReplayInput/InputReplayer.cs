@@ -9,6 +9,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.LowLevel;
+using UnityEngine.InputSystem.UI;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -36,8 +37,8 @@ namespace io.github.hatayama.uLoopMCP
         private static readonly HashSet<MouseButton> _replayHeldButtons = new();
         private static Vector2? _replayMousePosition;
 
-        // InputModule (StandaloneInputModule / InputSystemUIInputModule) ignores injected
-        // Mouse.current state, so UI interactions must go through ExecuteEvents directly.
+        // Some UI modules do not consume injected Mouse.current state, so replay keeps
+        // manual ExecuteEvents support for those modules.
         private static bool _hasMousePosition;
         private static bool _prevLeftButtonHeld;
         private static Vector2? _previousReplayMousePosition;
@@ -48,6 +49,9 @@ namespace io.github.hatayama.uLoopMCP
         private static bool _isDragging;
         private static Vector2 _pressScreenPosition;
         private static float _pressTime;
+        private static bool _delayCompletionForUiModule;
+        private static bool _hasActivePressDispatchMode;
+        private static bool _activePressDispatchesUiEventsManually;
 
         public static event Action? ReplayStarted;
         public static event Action? ReplayCompleted;
@@ -86,10 +90,8 @@ namespace io.github.hatayama.uLoopMCP
             _replayHeldButtons.Clear();
             _hasMousePosition = DetectMousePositionEvents(data!);
             ResetUiReplayState();
-            if (_hasMousePosition)
-            {
-                SimulateMouseInputOverlayState.Clear();
-            }
+            EnsureOverlayForReplay(showOverlay);
+            ClearOverlayState();
             _isReplaying = true;
 
             InputSystem.onAfterUpdate -= OnAfterUpdate;
@@ -117,11 +119,7 @@ namespace io.github.hatayama.uLoopMCP
             _replayHeldButtons.Clear();
             ResetUiReplayState();
 
-            ReplayInputOverlayState.Clear();
-            if (_hasMousePosition)
-            {
-                SimulateMouseUiOverlayState.Clear();
-            }
+            ClearOverlayState();
         }
 
         private static void OnAfterUpdate()
@@ -158,6 +156,12 @@ namespace io.github.hatayama.uLoopMCP
 
             if (_eventIndex >= _data.Frames.Count && _currentFrame > _data.Metadata.TotalFrames)
             {
+                if (_delayCompletionForUiModule)
+                {
+                    _delayCompletionForUiModule = false;
+                    return;
+                }
+
                 if (_loop)
                 {
                     ReleaseAllHeldInputs();
@@ -245,7 +249,10 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             _replayHeldKeys.Add(key);
-            SimulateKeyboardOverlayState.AddHeldKey(keyName);
+            if (_showOverlay)
+            {
+                SimulateKeyboardOverlayState.AddHeldKey(keyName);
+            }
         }
 
         private static void ProcessKeyUp(string keyName)
@@ -256,7 +263,10 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             _replayHeldKeys.Remove(key);
-            SimulateKeyboardOverlayState.RemoveHeldKey(keyName);
+            if (_showOverlay)
+            {
+                SimulateKeyboardOverlayState.RemoveHeldKey(keyName);
+            }
         }
 
         private static void ProcessMouseClick(string buttonName)
@@ -267,7 +277,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             _replayHeldButtons.Add(button);
-            if (!_hasMousePosition)
+            if (_showOverlay && !_hasMousePosition)
             {
                 SimulateMouseInputOverlayState.SetButtonHeld(button, true);
             }
@@ -281,7 +291,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             _replayHeldButtons.Remove(button);
-            if (!_hasMousePosition)
+            if (_showOverlay && !_hasMousePosition)
             {
                 SimulateMouseInputOverlayState.SetButtonHeld(button, false);
             }
@@ -290,7 +300,7 @@ namespace io.github.hatayama.uLoopMCP
         private static void ProcessMouseDelta(string data, ref Vector2 frameDelta)
         {
             frameDelta = InputRecorder.ParseVector2(data);
-            if (!_hasMousePosition)
+            if (_showOverlay && !_hasMousePosition)
             {
                 SimulateMouseInputOverlayState.SetMoveDelta(frameDelta);
             }
@@ -309,7 +319,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             frameScroll = new Vector2(0f, scrollY);
-            if (!_hasMousePosition)
+            if (_showOverlay && !_hasMousePosition)
             {
                 int direction = scrollY > 0f ? 1 : scrollY < 0f ? -1 : 0;
                 SimulateMouseInputOverlayState.SetScrollDirection(direction);
@@ -389,18 +399,21 @@ namespace io.github.hatayama.uLoopMCP
                 ApplyMouseSnapshot(mouse, _emptyButtons, Vector2.zero, Vector2.zero, null);
             }
 
-            foreach (Key key in _replayHeldKeys)
+            if (_showOverlay)
             {
-                SimulateKeyboardOverlayState.RemoveHeldKey(key.ToString());
-            }
+                foreach (Key key in _replayHeldKeys)
+                {
+                    SimulateKeyboardOverlayState.RemoveHeldKey(key.ToString());
+                }
 
-            foreach (MouseButton button in _replayHeldButtons)
-            {
-                SimulateMouseInputOverlayState.SetButtonHeld(button, false);
-            }
+                foreach (MouseButton button in _replayHeldButtons)
+                {
+                    SimulateMouseInputOverlayState.SetButtonHeld(button, false);
+                }
 
-            SimulateMouseInputOverlayState.SetMoveDelta(Vector2.zero);
-            SimulateMouseInputOverlayState.SetScrollDirection(0);
+                SimulateMouseInputOverlayState.SetMoveDelta(Vector2.zero);
+                SimulateMouseInputOverlayState.SetScrollDirection(0);
+            }
             _replayHeldKeys.Clear();
             _replayHeldButtons.Clear();
         }
@@ -466,30 +479,52 @@ namespace io.github.hatayama.uLoopMCP
 
             Vector2 gameViewSize = Handles.GetMainGameViewSize();
             Vector2 inputPos = new Vector2(screenPos.x, gameViewSize.y - screenPos.y);
+            bool currentDispatchUiEventsManually = ShouldDispatchUiEventsManually(eventSystem);
+            bool dispatchUiEventsManually = GetPointerDispatchMode(currentDispatchUiEventsManually);
 
             if (justPressed)
             {
+                StorePointerDispatchMode(currentDispatchUiEventsManually);
+                dispatchUiEventsManually = GetPointerDispatchMode(currentDispatchUiEventsManually);
                 _suppressIdleUiOverlay = false;
                 _pressTime = Time.realtimeSinceStartup;
-                OnUiPointerDown(screenPos, eventSystem);
-                SimulateMouseUiOverlayState.Update(
-                    MouseAction.Click, inputPos, null, _currentPressTarget?.name, gameViewSize);
-                SimulateMouseUiOverlayState.RequestExpandAnimation();
+                _pressScreenPosition = screenPos;
+                _isDragging = false;
+                if (dispatchUiEventsManually)
+                {
+                    OnUiPointerDown(screenPos, eventSystem);
+                }
+                if (_showOverlay)
+                {
+                    SimulateMouseUiOverlayState.Update(
+                        MouseAction.Click, inputPos, null, _currentPressTarget?.name, gameViewSize);
+                    SimulateMouseUiOverlayState.RequestExpandAnimation();
+                }
             }
-            else if (leftHeld && (_currentPressTarget != null || _currentDragTarget != null))
+            else if (leftHeld && ShouldTrackHeldPointer(dispatchUiEventsManually))
             {
-                OnUiDrag(screenPos);
+                if (dispatchUiEventsManually)
+                {
+                    OnUiDrag(screenPos);
+                }
+                else
+                {
+                    UpdateOverlayDragState(screenPos, eventSystem);
+                }
 
                 if (_isDragging)
                 {
-                    Vector2 pressInputPos = new Vector2(_pressScreenPosition.x, gameViewSize.y - _pressScreenPosition.y);
-                    SimulateMouseUiOverlayState.Update(
-                        MouseAction.Drag, inputPos, pressInputPos, null, gameViewSize);
+                    if (_showOverlay)
+                    {
+                        Vector2 pressInputPos = new Vector2(_pressScreenPosition.x, gameViewSize.y - _pressScreenPosition.y);
+                        SimulateMouseUiOverlayState.Update(
+                            MouseAction.Drag, inputPos, pressInputPos, null, gameViewSize);
+                    }
                 }
                 else
                 {
                     float elapsed = Time.realtimeSinceStartup - _pressTime;
-                    if (elapsed >= 0.5f)
+                    if (_showOverlay && elapsed >= 0.5f)
                     {
                         SimulateMouseUiOverlayState.Update(
                             MouseAction.LongPress, inputPos, null, _currentPressTarget?.name, gameViewSize);
@@ -502,16 +537,121 @@ namespace io.github.hatayama.uLoopMCP
                 // Keeping the overlay hidden until the pointer actually moves prevents release fade-out
                 // from being cancelled by the next idle frame at the same position.
                 _suppressIdleUiOverlay = false;
-                SimulateMouseUiOverlayState.Update(
-                    MouseAction.Click, inputPos, null, null, gameViewSize);
+                if (_showOverlay)
+                {
+                    SimulateMouseUiOverlayState.Update(
+                        MouseAction.Click, inputPos, null, null, gameViewSize);
+                }
             }
 
             if (justReleased)
             {
-                OnUiPointerUp(screenPos, eventSystem);
+                if (dispatchUiEventsManually)
+                {
+                    OnUiPointerUp(screenPos, eventSystem);
+                }
+                else
+                {
+                    RequestCompletionDelayForInputSystemUiModule();
+                    ClearPointerState();
+                }
                 _suppressIdleUiOverlay = true;
-                SimulateMouseUiOverlayState.RequestDissipateAnimation();
-                SimulateMouseUiOverlayState.Clear();
+                if (_showOverlay)
+                {
+                    SimulateMouseUiOverlayState.RequestDissipateAnimation();
+                    SimulateMouseUiOverlayState.Clear();
+                }
+            }
+        }
+
+        private static void EnsureOverlayForReplay(bool showOverlay)
+        {
+            if (!showOverlay)
+            {
+                return;
+            }
+
+            OverlayCanvasFactory.EnsureExists();
+            RecordReplayOverlayFactory.EnsureReplayOverlay();
+        }
+
+        private static void ClearOverlayState()
+        {
+            ReplayInputOverlayState.Clear();
+            SimulateMouseUiOverlayState.Clear();
+            SimulateMouseInputOverlayState.Clear();
+            SimulateKeyboardOverlayState.Clear();
+        }
+
+        private static bool ShouldDispatchUiEventsManually(EventSystem eventSystem)
+        {
+            BaseInputModule? inputModule = eventSystem.currentInputModule;
+            return !(inputModule is InputSystemUIInputModule);
+        }
+
+        private static bool GetPointerDispatchMode(bool currentDispatchUiEventsManually)
+        {
+            if (_hasActivePressDispatchMode)
+            {
+                return _activePressDispatchesUiEventsManually;
+            }
+
+            return currentDispatchUiEventsManually;
+        }
+
+        private static void StorePointerDispatchMode(bool dispatchUiEventsManually)
+        {
+            // EventSystem may select its currentInputModule after the press frame, so release must reuse the press path.
+            _hasActivePressDispatchMode = true;
+            _activePressDispatchesUiEventsManually = dispatchUiEventsManually;
+        }
+
+        private static void RequestCompletionDelayForInputSystemUiModule()
+        {
+            if (_loop)
+            {
+                // Looping replays do not invoke ReplayCompleted, so delaying would add an unrecorded gap before reset.
+                return;
+            }
+
+            if (!IsFinalRecordedFrame())
+            {
+                return;
+            }
+
+            // InputSystemUIInputModule consumes this release in EventSystem.Update after input update,
+            // while ReplayCompleted handlers read UI verification state synchronously.
+            _delayCompletionForUiModule = true;
+        }
+
+        private static bool IsFinalRecordedFrame()
+        {
+            Debug.Assert(_data != null, "_data must not be null while replaying");
+
+            return _eventIndex >= _data!.Frames.Count && _currentFrame >= _data.Metadata.TotalFrames;
+        }
+
+        private static bool ShouldTrackHeldPointer(bool dispatchUiEventsManually)
+        {
+            if (!dispatchUiEventsManually)
+            {
+                return true;
+            }
+
+            return _currentPressTarget != null || _currentDragTarget != null;
+        }
+
+        private static void UpdateOverlayDragState(Vector2 screenPos, EventSystem eventSystem)
+        {
+            if (_isDragging)
+            {
+                return;
+            }
+
+            float distance = (screenPos - _pressScreenPosition).magnitude;
+            if (distance > eventSystem.pixelDragThreshold)
+            {
+                _isDragging = true;
             }
         }
 
@@ -631,10 +771,17 @@ namespace io.github.hatayama.uLoopMCP
                 }
             }
 
+            ClearPointerState();
+        }
+
+        private static void ClearPointerState()
+        {
             _currentPressTarget = null;
             _currentDragTarget = null;
             _isDragging = false;
             _pointerData = null;
+            _hasActivePressDispatchMode = false;
+            _activePressDispatchesUiEventsManually = false;
         }
 
         private static bool DetectMousePositionEvents(InputRecordingData data)
@@ -664,6 +811,9 @@ namespace io.github.hatayama.uLoopMCP
             _currentDragTarget = null;
             _isDragging = false;
             _pressTime = 0f;
+            _delayCompletionForUiModule = false;
+            _hasActivePressDispatchMode = false;
+            _activePressDispatchesUiEventsManually = false;
         }
 
         private static void OnPlayModeStateChanged(PlayModeStateChange state)

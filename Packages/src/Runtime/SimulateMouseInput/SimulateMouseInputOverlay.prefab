@@ -257,7 +257,6 @@ GameObject:
   m_Component:
   - component: {fileID: 8124307820913732345}
   - component: {fileID: 8863844378423265032}
-  - component: {fileID: 5623037964506870047}
   - component: {fileID: 8237013949146870878}
   m_Layer: 0
   m_Name: SimulateMouseInputOverlay
@@ -304,18 +303,6 @@ MonoBehaviour:
   _scrollArrowTop: {fileID: 4893873975114215188}
   _scrollArrowBottom: {fileID: 6545894353452666225}
   _moveDirectionGroup: {fileID: 5622481146988834445}
---- !u!114 &5623037964506870047
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2122203629555508201}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3661bc54aaacf4bc09ae641533d2a78e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!225 &8237013949146870878
 CanvasGroup:
   m_ObjectHideFlags: 0

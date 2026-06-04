@@ -92,7 +92,7 @@
   },
   "overrides": {
     "@hono/node-server": "1.19.13",
-    "hono": "4.12.18",
+    "hono": "4.12.23",
     "minimatch": "10.2.4"
   }
 }
