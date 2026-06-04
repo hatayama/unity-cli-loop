@@ -160,6 +160,13 @@ func isSkillDisabledByToolSettings(skill skillDefinition, disabledTools []string
 	if toolName == "" {
 		return false
 	}
+	return isToolDisabledByToolSettings(toolName, disabledTools)
+}
+
+func isToolDisabledByToolSettings(toolName string, disabledTools []string) bool {
+	if len(disabledTools) == 0 {
+		return false
+	}
 	for _, disabledTool := range disabledTools {
 		if disabledTool == toolName {
 			return true

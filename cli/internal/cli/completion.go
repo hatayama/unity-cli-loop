@@ -24,20 +24,6 @@ const (
 	pwshProfileSubpath       = "Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
 )
 
-var nativeCommandOptions = map[string][]string{
-	completionCommand: {installCompletionFlag, shellFlag},
-	launchCommandName: {
-		"--" + projectPathFlagName,
-		"--delete-recovery",
-		"--max-depth",
-		"--platform",
-		"--quit",
-		"--restart",
-	},
-	installCommandName: {"--" + installDirFlagName},
-	updateCommandName:  {"--" + updateToVersionFlagName},
-}
-
 func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Writer, stderr io.Writer) (bool, int) {
 	if len(args) == 0 {
 		return false, 0

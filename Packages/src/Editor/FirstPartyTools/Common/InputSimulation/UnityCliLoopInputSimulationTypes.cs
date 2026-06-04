@@ -95,6 +95,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Message { get; set; } = "";
         public string Action { get; set; } = "";
         public string? KeyName { get; set; }
+        public bool InterruptedByDebugBreak { get; set; }
+        public string? DebugBreakId { get; set; }
+        public int? DebugBreakHitCount { get; set; }
     }
 
     /// <summary>
@@ -124,6 +127,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string? Button { get; set; }
         public float? PositionX { get; set; }
         public float? PositionY { get; set; }
+        public bool InterruptedByDebugBreak { get; set; }
+        public string? DebugBreakId { get; set; }
+        public int? DebugBreakHitCount { get; set; }
     }
 
     /// <summary>

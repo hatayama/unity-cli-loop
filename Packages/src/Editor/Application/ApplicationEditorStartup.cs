@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             UnityCliLoopEditorDomainReloadStateRegistration.RegisterForEditorStartup();
             MainThreadSwitcher.InitializeForEditorStartup();
+            UnityCliLoopEditorStateSnapshot.InitializeForEditorStartup();
             EditorDelayManager.InitializeForEditorStartup();
             domainReloadDetectionService.RegisterForEditorStartup();
         }

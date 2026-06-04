@@ -1,5 +1,6 @@
 #if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
+using System;
 using System.Collections;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
 using UnityEngine.TestTools;
+using Object = UnityEngine.Object;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
@@ -59,6 +61,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
         public override void TearDown()
         {
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+            UloopPausePointRegistry.ResetForTests();
             InputSettings settings = RequireInputSettings();
             settings.updateMode = originalUpdateMode;
             Time.timeScale = originalTimeScale;
@@ -110,6 +114,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
             Assert.IsTrue(lastResponse.Success);
             Assert.AreEqual("Space", lastResponse.KeyName);
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WhenUnityPausesDuringObservation_Should_CompleteAsDebugBreakInterruption()
+        {
+            // Verifies that a debug-break pause releases the tool slot instead of leaving the press command busy.
+            yield return null;
+
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 1f
+            };
+            Task<SimulateKeyboardResponse> task =
+                tool.ExecuteWithCancellationAsync(parameters, CancellationToken.None);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
+
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.AreEqual("Press", lastResponse.Action);
+            Assert.AreEqual("Space", lastResponse.KeyName);
+            Assert.IsNull(lastResponse.DebugBreakId);
+            Assert.IsNull(lastResponse.DebugBreakHitCount);
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Debug-break interruption should release the injected key state.");
+            Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Debug-break interruption should clear keyboard overlay state.");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WhenDebugBreakMarkerHits_Should_ReturnMarkerDetails()
+        {
+            // Verifies marker-caused interruption reports the marker id and hit count.
+            yield return null;
+
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable("space-press", 30);
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 1f
+            };
+            Task<SimulateKeyboardResponse> task =
+                tool.ExecuteWithCancellationAsync(parameters, CancellationToken.None);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
+
+            UnityCliLoopDebug.Break("space-press");
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.AreEqual("space-press", lastResponse.DebugBreakId);
+            Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Marker interruption should release the injected key state.");
         }
 
         [UnityTest]
@@ -709,6 +781,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             InputSettings? settings = InputSystem.settings;
             Debug.Assert(settings != null, "InputSystem.settings must be available in SimulateKeyboardTests");
             return settings!;
+        }
+
+        /// <summary>
+        /// Records pause requests without pausing the real Unity Editor.
+        /// </summary>
+        private sealed class FakePausePointPauseController : IUloopPausePointPauseController
+        {
+            public bool IsPlaying => true;
+            public bool IsPaused { get; private set; }
+
+            public void Pause()
+            {
+                IsPaused = true;
+            }
         }
 
         private static BadgeVisual RequireBadgeVisual(string keyName)

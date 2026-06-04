@@ -1,5 +1,6 @@
 #if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
+using System;
 using System.Collections;
 using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -10,6 +11,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.TestTools;
+using Object = UnityEngine.Object;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
@@ -35,6 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
         public override void TearDown()
         {
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+            UloopPausePointRegistry.ResetForTests();
             MouseInputState.ReleaseAllButtons();
             Object.DestroyImmediate(mouseObserverGo);
             base.TearDown();
@@ -99,6 +103,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.Success);
             Assert.AreEqual("Middle", lastResponse.Button);
             Assert.IsFalse(mouse.middleButton.isPressed, "Middle button should be released after click");
+        }
+
+        [UnityTest]
+        public IEnumerator Click_WhenUnityPausesDuringObservation_Should_CompleteAsDebugBreakInterruption()
+        {
+            // Verifies that a debug-break pause releases the tool slot instead of leaving the click command busy.
+            yield return null;
+
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+            {
+                ["action"] = MouseInputAction.Click.ToString(),
+                ["x"] = 400,
+                ["y"] = 300,
+                ["duration"] = 1f
+            }, System.Threading.CancellationToken.None);
+
+            yield return new WaitUntil(() => mouse.leftButton.isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the click observation window.");
+
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.AreEqual("Click", lastResponse.Action);
+            Assert.AreEqual("Left", lastResponse.Button);
+            Assert.IsNull(lastResponse.DebugBreakId);
+            Assert.IsNull(lastResponse.DebugBreakHitCount);
+            Assert.IsFalse(mouse.leftButton.isPressed, "Debug-break interruption should release the injected mouse button state.");
+            Assert.IsFalse(SimulateMouseInputOverlayState.HasAnyActivity, "Debug-break interruption should clear mouse overlay state.");
+        }
+
+        [UnityTest]
+        public IEnumerator Click_WhenDebugBreakMarkerHits_Should_ReturnMarkerDetails()
+        {
+            // Verifies marker-caused interruption reports the marker id and hit count.
+            yield return null;
+
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable("left-click", 30);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+            {
+                ["action"] = MouseInputAction.Click.ToString(),
+                ["x"] = 400,
+                ["y"] = 300,
+                ["duration"] = 1f
+            }, System.Threading.CancellationToken.None);
+
+            yield return new WaitUntil(() => mouse.leftButton.isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the click observation window.");
+
+            UnityCliLoopDebug.Break("left-click");
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.AreEqual("left-click", lastResponse.DebugBreakId);
+            Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+            Assert.IsFalse(mouse.leftButton.isPressed, "Marker interruption should release the injected mouse button state.");
         }
 
         #endregion
@@ -188,6 +258,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
         #endregion
 
+        #region SmoothDelta Tests
+
+        [UnityTest]
+        public IEnumerator SmoothDelta_WhenDebugBreakMarkerHitsDuringGameplayUpdate_Should_ReturnMarkerDetails()
+        {
+            // Verifies SmoothDelta observes gameplay-frame debug breaks before scheduling the next delta.
+            yield return null;
+
+            MouseDeltaDebugBreakObserver observer = mouseObserverGo.AddComponent<MouseDeltaDebugBreakObserver>();
+            observer.MarkerId = "smooth-delta";
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable(observer.MarkerId, 30);
+
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+            {
+                ["action"] = MouseInputAction.SmoothDelta.ToString(),
+                ["deltaX"] = 120f,
+                ["deltaY"] = 0f,
+                ["duration"] = 1f
+            }, System.Threading.CancellationToken.None);
+
+            yield return new WaitUntil(() => task.IsCompleted || observer.HasTriggered);
+            Assert.IsTrue(observer.HasTriggered, "The test must hit the marker from gameplay Update.");
+
+            try
+            {
+                yield return WaitForTask(task);
+            }
+            finally
+            {
+                InputSystemUpdateHelper.ResetPauseProviderForTests();
+            }
+
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.AreEqual("SmoothDelta", lastResponse.Action);
+            Assert.AreEqual("smooth-delta", lastResponse.DebugBreakId);
+            Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+        }
+
+        #endregion
+
         #region MoveDelta Tests
 
         [UnityTest]
@@ -246,12 +361,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         private IEnumerator RunTool(JObject parameters)
         {
             Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
+            yield return WaitForTask(task);
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+        }
+
+        private static IEnumerator WaitForTask(Task<UnityCliLoopToolResponse> task)
+        {
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
                 task.IsCompleted || Time.realtimeSinceStartup >= timeoutAt);
             Assert.IsTrue(task.IsCompleted, "Tool execution timed out.");
             Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
-            lastResponse = (SimulateMouseInputResponse)task.Result;
+        }
+
+        /// <summary>
+        /// Records pause requests without pausing the real Unity Editor.
+        /// </summary>
+        private sealed class FakePausePointPauseController : IUloopPausePointPauseController
+        {
+            public bool IsPlaying => true;
+            public bool IsPaused { get; private set; }
+
+            public void Pause()
+            {
+                IsPaused = true;
+            }
         }
 
         #endregion
@@ -281,6 +415,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         public void ResetCount()
         {
             LeftButtonPressedUpdateCount = 0;
+        }
+    }
+
+    /// <summary>
+    /// Test support type that hits a debug-break marker when gameplay observes mouse delta.
+    /// </summary>
+    public class MouseDeltaDebugBreakObserver : MonoBehaviour
+    {
+        public string MarkerId { get; set; } = "";
+        public bool HasTriggered { get; private set; }
+
+        private void Update()
+        {
+            if (HasTriggered)
+            {
+                return;
+            }
+
+            Mouse mouse = Mouse.current;
+            if (mouse == null)
+            {
+                return;
+            }
+
+            Vector2 delta = mouse.delta.ReadValue();
+            if (delta.sqrMagnitude <= 0f)
+            {
+                return;
+            }
+
+            HasTriggered = true;
+            UnityCliLoopDebug.Break(MarkerId);
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
         }
     }
 }

@@ -218,7 +218,7 @@ func TestClassifyServerBusyRPCError(t *testing.T) {
 		Code:    -32603,
 		Message: "Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes.",
 		Data: json.RawMessage(
-			`{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes."}`),
+			`{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","isPlaying":true,"isPaused":true,"message":"Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes."}`),
 	}
 
 	cliErr := classifyError(err, errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"})
@@ -235,6 +235,13 @@ func TestClassifyServerBusyRPCError(t *testing.T) {
 	if cliErr.Message != expectedMessage {
 		t.Fatalf("message mismatch: %s", cliErr.Message)
 	}
+	data, ok := cliErr.Details["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("busy data missing: %#v", cliErr.Details)
+	}
+	if data["isPlaying"] != true || data["isPaused"] != true {
+		t.Fatalf("play state mismatch: %#v", data)
+	}
 }
 
 func TestWriteClassifiedServerBusyRPCErrorWritesBusyStatus(t *testing.T) {
@@ -243,7 +250,7 @@ func TestWriteClassifiedServerBusyRPCErrorWritesBusyStatus(t *testing.T) {
 		Code:    -32603,
 		Message: "Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes.",
 		Data: json.RawMessage(
-			`{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes."}`),
+			`{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","isPlaying":true,"isPaused":true,"message":"Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes."}`),
 	}
 	var stderr bytes.Buffer
 
@@ -259,6 +266,15 @@ func TestWriteClassifiedServerBusyRPCErrorWritesBusyStatus(t *testing.T) {
 	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. Retry after the running tool completes."
 	if envelope.Message != expectedMessage {
 		t.Fatalf("message mismatch: %#v", envelope)
+	}
+	if envelope.RunningToolName != "compile" || envelope.RequestedToolName != "get-logs" {
+		t.Fatalf("tool names mismatch: %#v", envelope)
+	}
+	if envelope.IsPlaying == nil || *envelope.IsPlaying != true {
+		t.Fatalf("isPlaying mismatch: %#v", envelope)
+	}
+	if envelope.IsPaused == nil || *envelope.IsPaused != true {
+		t.Fatalf("isPaused mismatch: %#v", envelope)
 	}
 	if bytes.Contains(stderr.Bytes(), []byte("Success")) || bytes.Contains(stderr.Bytes(), []byte("errorCode")) {
 		t.Fatalf("busy output should not include error envelope fields: %s", stderr.String())
@@ -437,7 +453,7 @@ func TestClassifyConnectionAttemptUsesContextProjectRootFallback(t *testing.T) {
 
 func TestAvailableCommandNamesIncludesBuiltIns(t *testing.T) {
 	names := availableCommandNames(toolsCache{})
-	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "skills", "completion", "install", "update"}
+	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "wait-for-debug-break", "debug-break-status", "skills", "completion", "install", "update"}
 	for index, expected := range expectedBuiltIns {
 		if names[index] != expected {
 			t.Fatalf("built-in command mismatch: %#v", names)

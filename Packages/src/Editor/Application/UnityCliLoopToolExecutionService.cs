@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -49,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             if (!TryEnterExecution(toolName, out string runningToolName))
             {
-                throw new UnityCliLoopToolBusyException(runningToolName, toolName);
+                throw CreateBusyException(runningToolName, toolName);
             }
 
             try
@@ -115,6 +116,36 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             return runningToolName == UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE
                    && requestedToolName == UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE;
+        }
+
+        internal static UnityCliLoopToolBusyException CreateBusyException(
+            string runningToolName,
+            string requestedToolName)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace");
+            Debug.Assert(!string.IsNullOrWhiteSpace(requestedToolName), "requestedToolName must not be null or whitespace");
+
+            if (MainThreadSwitcher.IsMainThread)
+            {
+                return new UnityCliLoopToolBusyException(
+                    runningToolName,
+                    requestedToolName,
+                    EditorApplication.isPlaying,
+                    EditorApplication.isPaused);
+            }
+
+            (bool HasValue, bool IsPlaying, bool IsPaused) playState =
+                UnityCliLoopEditorStateSnapshot.GetPlayState();
+            if (playState.HasValue)
+            {
+                return new UnityCliLoopToolBusyException(
+                    runningToolName,
+                    requestedToolName,
+                    playState.IsPlaying,
+                    playState.IsPaused);
+            }
+
+            return new UnityCliLoopToolBusyException(runningToolName, requestedToolName);
         }
 
         private string GetRunningToolNameInsideLock()
