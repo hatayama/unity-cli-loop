@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Pause Unity at named runtime checkpoints to prove transient PlayMode state changes after input, physics, async, or UI events."
+description: "Pause Unity at named checkpoints for frame-specific PlayMode bugs and transient input, physics, async, or UI state changes."
 ---
 
 # uloop wait-for-debug-break
@@ -9,11 +9,11 @@ Pause Unity when execution reaches a named marker in user code.
 
 ## When to use
 
-- Use proactively when a PlayMode E2E depends on simulated input causing a runtime state transition.
+- Use when a bug appears only on a specific frame, timing window, animation step, physics tick, or `Update` / `FixedUpdate` branch.
+- Use proactively when PlayMode E2E or development debugging depends on proving a transient runtime state transition.
 - Use it alongside screenshots and logs; it is not only for cases where screenshots fail.
 - Good checkpoints include jump applied, launch complete, collision handled, score changed, line cleared, block mined, item placed, game over shown, or UI updated after input.
 - If you would otherwise poll with `execute-dynamic-code` or sleep after simulated input, prefer `wait-for-debug-break` at a named post-transition checkpoint.
-- Use during development debugging, not only E2E tests.
 
 ## Workflow
 
@@ -57,6 +57,7 @@ uloop clear-debug-break --id player-jumped
 ## Marker placement
 
 - Prefer natural gameplay or state-transition locations after input has been consumed, such as after jump velocity/state changes, physics contact, damage application, or inventory mutation.
+- For frame-specific bugs, place the marker on the suspicious state branch or immediately after the state mutation you need to freeze.
 - Enable markers after Play Mode is running, and prefer checkpoints reached after the triggering input command can return to avoid domain reload loss or tool Busy states.
 - Avoid placing the marker immediately after issuing simulated input unless that exact input handling line is the state you need to inspect; immediate markers can interrupt the input command before the resulting gameplay state settles.
 - Use separate ids for strict phases, for example `jump-input-read`, `jump-velocity-applied`, and `jump-landed`, instead of reusing one broad marker.
