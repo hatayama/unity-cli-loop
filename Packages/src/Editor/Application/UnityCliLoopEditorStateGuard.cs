@@ -42,12 +42,20 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             if ((condition & GuardCondition.NotCompiling) != 0 && isCompiling)
             {
-                throw new UnityCliLoopToolBusyException(UnityCompileOperationName, toolName);
+                throw new UnityCliLoopToolBusyException(
+                    UnityCompileOperationName,
+                    toolName,
+                    EditorApplication.isPlaying,
+                    EditorApplication.isPaused);
             }
 
             if ((condition & GuardCondition.NotUpdating) != 0 && isUpdating)
             {
-                throw new UnityCliLoopToolBusyException(UnityAssetDatabaseUpdateOperationName, toolName);
+                throw new UnityCliLoopToolBusyException(
+                    UnityAssetDatabaseUpdateOperationName,
+                    toolName,
+                    EditorApplication.isPlaying,
+                    EditorApplication.isPaused);
             }
         }
 

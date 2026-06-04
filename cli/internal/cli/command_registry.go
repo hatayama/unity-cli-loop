@@ -10,6 +10,8 @@ var nativeCommands = []nativeCommandEntry{
 	{name: "list", description: "Show Unity tools currently exposed by the Editor"},
 	{name: "sync", description: "Refresh .uloop/tools.json from the running Editor"},
 	{name: "focus-window", description: "Bring the Unity Editor window to the foreground"},
+	{name: "wait-for-debug-break", description: "Wait until a named UnityCliLoopDebug.Break marker pauses Unity"},
+	{name: "debug-break-status", description: "Show the state of a named UnityCliLoopDebug.Break marker"},
 	{name: "skills", description: "List, install, or uninstall agent skills"},
 	{name: "completion", description: "Print or install shell completion"},
 	{name: "install", description: "Configure the global uloop launcher binary"},

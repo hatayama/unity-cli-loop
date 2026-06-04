@@ -1,5 +1,5 @@
 {
-  "version": "3.0.0-beta.25",
+  "version": "3.0.0-beta.26",
   "tools": [
     {
       "name": "compile",
@@ -324,6 +324,41 @@
             "type": "integer",
             "description": "Maximum seconds to wait for the requested play mode state",
             "default": 180
+          }
+        }
+      }
+    },
+    {
+      "name": "enable-debug-break",
+      "description": "Enable a named UnityCliLoopDebug.Break marker so Unity pauses when that code path is reached",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Named debug break id passed to UnityCliLoopDebug.Break"
+          },
+          "TimeoutSeconds": {
+            "type": "integer",
+            "description": "Seconds before the enable request expires and stops pausing late hits",
+            "default": 30
+          }
+        }
+      }
+    },
+    {
+      "name": "clear-debug-break",
+      "description": "Clear one or all named UnityCliLoopDebug.Break markers",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Named debug break id to clear"
+          },
+          "All": {
+            "type": "boolean",
+            "description": "Clear every active debug break marker"
           }
         }
       }

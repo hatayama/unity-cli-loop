@@ -31,6 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string FindGameObjectsAssemblyName = "UnityCLILoop.FirstPartyTools.FindGameObjects.Editor";
         private const string GetHierarchyAssemblyName = "UnityCLILoop.FirstPartyTools.GetHierarchy.Editor";
         private const string GetLogsAssemblyName = "UnityCLILoop.FirstPartyTools.GetLogs.Editor";
+        private const string PausePointAssemblyName = "UnityCLILoop.FirstPartyTools.PausePoint.Editor";
+        private const string PausePointsRuntimeAssemblyName = "UnityCLILoop.PausePoints.Runtime";
         private const string RecordInputAssemblyName = "UnityCLILoop.FirstPartyTools.RecordInput.Editor";
         private const string ReplayInputAssemblyName = "UnityCLILoop.FirstPartyTools.ReplayInput.Editor";
         private const string RunTestsAssemblyName = "UnityCLILoop.FirstPartyTools.RunTests.Editor";
@@ -131,16 +133,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ProjectAsmdefs_WhenLoaded_AutoReferenceOnlyPublicToolContracts()
+        public void ProjectAsmdefs_WhenLoaded_AutoReferenceOnlyPublicAssemblies()
         {
-            // Tests that internal assemblies require explicit asmdef references.
+            // Tests that internal assemblies require explicit asmdef references while public API assemblies stay reachable.
             string[] offendingAssemblyNames = ReadProjectAsmdefPaths()
                 .Where(ReadAutoReferencedFromAbsolutePath)
                 .Select(ReadAsmdefName)
-                .Where(assemblyName => !string.Equals(
-                    assemblyName,
-                    ToolContractsAssemblyName,
-                    StringComparison.Ordinal))
+                .Where(assemblyName => !IsPublicAutoReferencedAssembly(assemblyName))
                 .OrderBy(assemblyName => assemblyName)
                 .ToArray();
 
@@ -568,9 +567,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void InfrastructureAsmdef_WhenLoaded_DependsOnApplicationAndDoesNotReferencePresentation()
+        public void InfrastructureAsmdef_WhenLoaded_DependsOnApplicationRuntimeAndDoesNotReferencePresentation()
         {
-            // Tests that infrastructure and presentation remain sibling outer layers.
+            // Tests that infrastructure can bridge public runtime APIs while presentation remains a sibling outer layer.
             string[] references = ReadResolvedReferences("Packages/src/Editor/Infrastructure/UnityCLILoop.Infrastructure.asmdef");
 
             Assert.That(references, Is.EquivalentTo(new[]
@@ -578,6 +577,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 InternalApiBridgeAssemblyName,
                 ApplicationAssemblyName,
                 DomainAssemblyName,
+                PausePointsRuntimeAssemblyName,
                 ToolContractsAssemblyName
             }));
         }
@@ -595,6 +595,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(references, Does.Contain(FindGameObjectsAssemblyName));
             Assert.That(references, Does.Contain(GetHierarchyAssemblyName));
             Assert.That(references, Does.Contain(GetLogsAssemblyName));
+            Assert.That(references, Does.Contain(PausePointAssemblyName));
             Assert.That(references, Does.Contain(RecordInputAssemblyName));
             Assert.That(references, Does.Contain(ReplayInputAssemblyName));
             Assert.That(references, Does.Contain(RunTestsAssemblyName));
@@ -1260,6 +1261,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string asmdefPath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), relativeAsmdefPath);
             return ReadResolvedReferencesFromAbsolutePath(asmdefPath);
+        }
+
+        private static bool IsPublicAutoReferencedAssembly(string assemblyName)
+        {
+            return string.Equals(assemblyName, ToolContractsAssemblyName, StringComparison.Ordinal) ||
+                   string.Equals(assemblyName, PausePointsRuntimeAssemblyName, StringComparison.Ordinal);
         }
 
         private static string[] ReadResolvedReferencesFromAbsolutePath(string asmdefPath)

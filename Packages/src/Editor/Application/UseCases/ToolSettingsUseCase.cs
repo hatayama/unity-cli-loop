@@ -3,11 +3,24 @@ using System.Diagnostics;
 using System.Linq;
 
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Application
 {
     internal sealed class ToolSettingsUseCase
     {
+        private static readonly ToolCatalogItem[] NativeToolCatalogItems =
+        {
+            new(
+                UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_DEBUG_BREAK,
+                displayDevelopmentOnly: false,
+                isThirdParty: false),
+            new(
+                UnityCliLoopConstants.COMMAND_NAME_DEBUG_BREAK_STATUS,
+                displayDevelopmentOnly: false,
+                isThirdParty: false)
+        };
+
         private readonly ToolSettingsService _toolSettingsService;
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
 
@@ -67,12 +80,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 return false;
             }
 
-            allTools = registry.GetToolSettingsCatalog()
+            ToolCatalogItem[] registryTools = registry.GetToolSettingsCatalog()
                 .Select(item => new ToolCatalogItem(
                     item.Name,
                     item.DisplayDevelopmentOnly,
                     item.IsThirdParty))
                 .ToArray();
+            allTools = registryTools.Concat(NativeToolCatalogItems).ToArray();
             return true;
         }
 

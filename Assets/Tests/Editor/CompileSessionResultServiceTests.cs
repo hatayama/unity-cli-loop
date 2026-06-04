@@ -138,5 +138,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Errors[0].File, Is.EqualTo("Assets/Scenes/SampleScene.unity"));
             Assert.That(response.Message, Does.Contain("externally"));
         }
+
+        [Test]
+        public void CreateCompileResult_WhenUnityTestFrameworkSymbolIsMissing_AddsTestAsmdefHint()
+        {
+            // Verifies compile failures from unmarked test asmdefs include the TestAssemblies fix.
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = "The type or namespace name 'UnityTestAttribute' could not be found",
+                file = "Assets/Tests/PlayMode/SampleTest.cs",
+                line = 8
+            };
+            CompileResult result = new CompileResult(
+                success: false,
+                errorCount: 1,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: new[] { error },
+                errors: new[] { error },
+                warnings: Array.Empty<CompilerMessage>());
+
+            UnityCliLoopCompileResult response =
+                CompileSessionResultService.CreateCompileResult(result, forceRecompile: false);
+
+            Assert.That(response.Message, Does.Contain("TestAssemblies"));
+            Assert.That(response.Message, Does.Contain("com.unity.test-framework"));
+        }
     }
 }

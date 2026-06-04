@@ -21,8 +21,13 @@ const (
 	errorCodeUnityRPCError                   = "UNITY_RPC_ERROR"
 	errorCodeUnityServerBusy                 = "UNITY_SERVER_BUSY"
 	errorCodeCLIUpdateRequired               = "CLI_UPDATE_REQUIRED"
+	errorCodeToolDisabled                    = "TOOL_DISABLED"
 	errorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
 	errorCodeControlPlayModeWaitTimeout      = "CONTROL_PLAY_MODE_WAIT_TIMEOUT"
+	errorCodeDebugBreakNotEnabled            = "DEBUG_BREAK_NOT_ENABLED"
+	errorCodeDebugBreakWaitTimeout           = "DEBUG_BREAK_WAIT_TIMEOUT"
+	errorCodeDebugBreakExpired               = "DEBUG_BREAK_EXPIRED"
+	errorCodeDebugBreakCleared               = "DEBUG_BREAK_CLEARED"
 	errorCodeInternalError                   = "INTERNAL_ERROR"
 
 	errorPhaseArgumentParsing = "argument_parsing"
@@ -63,7 +68,7 @@ type errorContext struct {
 
 func writeErrorEnvelope(writer io.Writer, err cliError) {
 	if err.ErrorCode == errorCodeUnityServerBusy {
-		writeBusyStatusEnvelope(writer, err.Message)
+		writeBusyStatusEnvelope(writer, err.Message, serverBusyStatusDetailsFromError(err))
 		return
 	}
 	encoder := json.NewEncoder(writer)
@@ -435,36 +440,6 @@ func unknownCommandError(command string, cache toolsCache, context errorContext)
 		},
 		Details: map[string]any{
 			"availableCommands": availableCommandNames(cache),
-		},
-	}
-}
-
-func compileWaitTimeoutError(projectRoot string) cliError {
-	return cliError{
-		ErrorCode:   errorCodeCompileWaitTimeout,
-		Phase:       errorPhaseCompileWaiting,
-		Message:     "Compile status wait timed out after 180000ms.",
-		Retryable:   true,
-		SafeToRetry: true,
-		ProjectRoot: projectRoot,
-		Command:     compileCommandName,
-		NextActions: []string{
-			"Retry `uloop compile` after Unity becomes responsive.",
-		},
-	}
-}
-
-func internalCLIError(message string, context errorContext) cliError {
-	return cliError{
-		ErrorCode:   errorCodeInternalError,
-		Phase:       errorPhaseExecution,
-		Message:     message,
-		Retryable:   false,
-		SafeToRetry: false,
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
-		NextActions: []string{
-			"Read the message and fix the local environment or command input before retrying.",
 		},
 	}
 }
