@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Pause Unity at a named runtime checkpoint when logs, screenshots, polling, or timing checks cannot prove a gameplay, UI, async, physics, or state transition."
+description: "Pause Unity at named runtime checkpoints to prove transient PlayMode state changes after input, physics, async, or UI events."
 ---
 
 # uloop wait-for-debug-break
@@ -9,9 +9,11 @@ Pause Unity when execution reaches a named marker in user code.
 
 ## When to use
 
-- Use when logs or screenshots cannot prove that a gameplay path was reached.
+- Use proactively when a PlayMode E2E depends on simulated input causing a runtime state transition.
+- Use it alongside screenshots and logs; it is not only for cases where screenshots fail.
+- Good checkpoints include jump applied, launch complete, collision handled, score changed, line cleared, block mined, item placed, game over shown, or UI updated after input.
+- If you would otherwise poll with `execute-dynamic-code` or sleep after simulated input, prefer `wait-for-debug-break` at a named post-transition checkpoint.
 - Use during development debugging, not only E2E tests.
-- Use after simulated keyboard or mouse input when you need to inspect exact runtime state.
 
 ## Workflow
 
@@ -55,6 +57,7 @@ uloop clear-debug-break --id player-jumped
 ## Marker placement
 
 - Prefer natural gameplay or state-transition locations after input has been consumed, such as after jump velocity/state changes, physics contact, damage application, or inventory mutation.
+- Enable markers after Play Mode is running, and prefer checkpoints reached after the triggering input command can return to avoid domain reload loss or tool Busy states.
 - Avoid placing the marker immediately after issuing simulated input unless that exact input handling line is the state you need to inspect; immediate markers can interrupt the input command before the resulting gameplay state settles.
 - Use separate ids for strict phases, for example `jump-input-read`, `jump-velocity-applied`, and `jump-landed`, instead of reusing one broad marker.
 
