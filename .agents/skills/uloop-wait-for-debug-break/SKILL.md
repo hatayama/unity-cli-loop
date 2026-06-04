@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Pause Unity at a named UnityCliLoopDebug.Break marker when input or gameplay state is hard to verify."
+description: "Pause Unity at a named runtime checkpoint when logs, screenshots, polling, or timing checks cannot prove a gameplay, UI, async, physics, or state transition."
 ---
 
 # uloop wait-for-debug-break
