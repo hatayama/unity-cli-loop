@@ -125,16 +125,27 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Debug.Assert(!string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace");
             Debug.Assert(!string.IsNullOrWhiteSpace(requestedToolName), "requestedToolName must not be null or whitespace");
 
-            if (!MainThreadSwitcher.IsMainThread)
+            if (MainThreadSwitcher.IsMainThread)
             {
-                return new UnityCliLoopToolBusyException(runningToolName, requestedToolName);
+                return new UnityCliLoopToolBusyException(
+                    runningToolName,
+                    requestedToolName,
+                    EditorApplication.isPlaying,
+                    EditorApplication.isPaused);
             }
 
-            return new UnityCliLoopToolBusyException(
-                runningToolName,
-                requestedToolName,
-                EditorApplication.isPlaying,
-                EditorApplication.isPaused);
+            (bool HasValue, bool IsPlaying, bool IsPaused) playState =
+                UnityCliLoopEditorStateSnapshot.GetPlayState();
+            if (playState.HasValue)
+            {
+                return new UnityCliLoopToolBusyException(
+                    runningToolName,
+                    requestedToolName,
+                    playState.IsPlaying,
+                    playState.IsPaused);
+            }
+
+            return new UnityCliLoopToolBusyException(runningToolName, requestedToolName);
         }
 
         private string GetRunningToolNameInsideLock()

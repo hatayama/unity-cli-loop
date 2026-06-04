@@ -11,11 +11,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class UnityCliLoopToolExecutionServiceTests
     {
         [Test]
-        public void CreateBusyException_WhenDispatcherReportsBackgroundThread_DoesNotCaptureEditorState()
+        public void CreateBusyException_WhenDispatcherReportsBackgroundThread_UsesEditorStateSnapshot()
         {
-            // Verifies busy responses can be created before the request reaches Unity's main thread.
+            // Verifies busy responses include the last editor state even before the request reaches Unity's main thread.
             CapturingMainThreadDispatcher dispatcher = new CapturingMainThreadDispatcher();
             MainThreadSwitcher.RegisterService(dispatcher);
+            UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(
+                isPlaying: true,
+                isPaused: true);
 
             try
             {
@@ -24,11 +27,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(exception.RunningToolName, Is.EqualTo("running-tool"));
                 Assert.That(exception.RequestedToolName, Is.EqualTo("requested-tool"));
-                Assert.That(exception.IsPlaying, Is.Null);
-                Assert.That(exception.IsPaused, Is.Null);
+                Assert.That(exception.IsPlaying, Is.True);
+                Assert.That(exception.IsPaused, Is.True);
             }
             finally
             {
+                UnityCliLoopEditorStateSnapshot.ClearForTesting();
                 RestoreEditorMainThreadDispatcher();
             }
         }
