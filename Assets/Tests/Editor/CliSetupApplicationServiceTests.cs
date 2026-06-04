@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.25"));
+            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.26"));
         }
 
         [Test]
@@ -49,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo("cli-v3.0.0-beta.25"));
+            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo("cli-v3.0.0-beta.26"));
         }
 
         [Test]
