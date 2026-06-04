@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -71,3 +72,4 @@ namespace io.github.hatayama.uLoopMCP
         }
     }
 }
+#endif
