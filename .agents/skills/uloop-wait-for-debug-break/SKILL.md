@@ -13,7 +13,7 @@ Pause Unity when execution reaches a named marker in user code.
 - Use proactively when PlayMode E2E or development debugging depends on proving a transient runtime state transition.
 - Use it alongside screenshots and logs; it is not only for cases where screenshots fail.
 - Good checkpoints include jump applied, launch complete, collision handled, score changed, line cleared, block mined, item placed, game over shown, or UI updated after input.
-- If you would otherwise poll with `execute-dynamic-code` or sleep after simulated input, prefer `wait-for-debug-break` at a named post-transition checkpoint.
+- If you use sleep, repeated polling, or a second state read to catch a transient PlayMode state, prefer `wait-for-debug-break` instead.
 
 ## Workflow
 
