@@ -13,10 +13,6 @@ Pause Unity when execution reaches a named marker in user code.
 - Use during development debugging, not only E2E tests.
 - Use after simulated keyboard or mouse input when you need to inspect exact runtime state.
 
-## Assumptions
-
-- `simulate-keyboard` and `simulate-mouse-input` require Player Settings > Active Input Handling to be `Input System Package (New)` or `Both`.
-
 ## Workflow
 
 1. Add a marker at the state you want to inspect:
