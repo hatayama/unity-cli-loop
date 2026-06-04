@@ -49,6 +49,9 @@ namespace io.github.hatayama.uLoopMCP
         private static bool _isDragging;
         private static Vector2 _pressScreenPosition;
         private static float _pressTime;
+        private static bool _delayCompletionForUiModule;
+        private static bool _hasActivePressDispatchMode;
+        private static bool _activePressDispatchesUiEventsManually;
 
         public static event Action? ReplayStarted;
         public static event Action? ReplayCompleted;
@@ -153,6 +156,12 @@ namespace io.github.hatayama.uLoopMCP
 
             if (_eventIndex >= _data.Frames.Count && _currentFrame > _data.Metadata.TotalFrames)
             {
+                if (_delayCompletionForUiModule)
+                {
+                    _delayCompletionForUiModule = false;
+                    return;
+                }
+
                 if (_loop)
                 {
                     ReleaseAllHeldInputs();
@@ -470,10 +479,13 @@ namespace io.github.hatayama.uLoopMCP
 
             Vector2 gameViewSize = Handles.GetMainGameViewSize();
             Vector2 inputPos = new Vector2(screenPos.x, gameViewSize.y - screenPos.y);
-            bool dispatchUiEventsManually = ShouldDispatchUiEventsManually(eventSystem);
+            bool currentDispatchUiEventsManually = ShouldDispatchUiEventsManually(eventSystem);
+            bool dispatchUiEventsManually = GetPointerDispatchMode(currentDispatchUiEventsManually);
 
             if (justPressed)
             {
+                StorePointerDispatchMode(currentDispatchUiEventsManually);
+                dispatchUiEventsManually = GetPointerDispatchMode(currentDispatchUiEventsManually);
                 _suppressIdleUiOverlay = false;
                 _pressTime = Time.realtimeSinceStartup;
                 _pressScreenPosition = screenPos;
@@ -540,6 +552,7 @@ namespace io.github.hatayama.uLoopMCP
                 }
                 else
                 {
+                    RequestCompletionDelayForInputSystemUiModule();
                     ClearPointerState();
                 }
                 _suppressIdleUiOverlay = true;
@@ -574,6 +587,48 @@ namespace io.github.hatayama.uLoopMCP
         {
             BaseInputModule? inputModule = eventSystem.currentInputModule;
             return !(inputModule is InputSystemUIInputModule);
+        }
+
+        private static bool GetPointerDispatchMode(bool currentDispatchUiEventsManually)
+        {
+            if (_hasActivePressDispatchMode)
+            {
+                return _activePressDispatchesUiEventsManually;
+            }
+
+            return currentDispatchUiEventsManually;
+        }
+
+        private static void StorePointerDispatchMode(bool dispatchUiEventsManually)
+        {
+            // EventSystem may select its currentInputModule after the press frame, so release must reuse the press path.
+            _hasActivePressDispatchMode = true;
+            _activePressDispatchesUiEventsManually = dispatchUiEventsManually;
+        }
+
+        private static void RequestCompletionDelayForInputSystemUiModule()
+        {
+            if (_loop)
+            {
+                // Looping replays do not invoke ReplayCompleted, so delaying would add an unrecorded gap before reset.
+                return;
+            }
+
+            if (!IsFinalRecordedFrame())
+            {
+                return;
+            }
+
+            // InputSystemUIInputModule consumes this release in EventSystem.Update after input update,
+            // while ReplayCompleted handlers read UI verification state synchronously.
+            _delayCompletionForUiModule = true;
+        }
+
+        private static bool IsFinalRecordedFrame()
+        {
+            Debug.Assert(_data != null, "_data must not be null while replaying");
+
+            return _eventIndex >= _data!.Frames.Count && _currentFrame >= _data.Metadata.TotalFrames;
         }
 
         private static bool ShouldTrackHeldPointer(bool dispatchUiEventsManually)
@@ -725,6 +780,8 @@ namespace io.github.hatayama.uLoopMCP
             _currentDragTarget = null;
             _isDragging = false;
             _pointerData = null;
+            _hasActivePressDispatchMode = false;
+            _activePressDispatchesUiEventsManually = false;
         }
 
         private static bool DetectMousePositionEvents(InputRecordingData data)
@@ -754,6 +811,9 @@ namespace io.github.hatayama.uLoopMCP
             _currentDragTarget = null;
             _isDragging = false;
             _pressTime = 0f;
+            _delayCompletionForUiModule = false;
+            _hasActivePressDispatchMode = false;
+            _activePressDispatchesUiEventsManually = false;
         }
 
         private static void OnPlayModeStateChanged(PlayModeStateChange state)

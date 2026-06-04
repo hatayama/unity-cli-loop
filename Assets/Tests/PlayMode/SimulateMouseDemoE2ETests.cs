@@ -22,6 +22,7 @@ namespace Tests.PlayMode
         private const string FULL_HD_LABEL = "uLoop E2E Full HD";
 
         private bool _replayCompleted;
+        private int _previousGameViewSizeIndex = -1;
 
         [UnitySetUp]
         public IEnumerator SetUp()
@@ -63,6 +64,8 @@ namespace Tests.PlayMode
             CleanupLogFile(Path.Combine(
                 ReplayVerificationControllerBase.LOG_OUTPUT_DIR,
                 ReplayVerificationControllerBase.REPLAY_LOG_FILE));
+
+            RestoreGameViewResolution();
 
             yield return null;
         }
@@ -113,12 +116,12 @@ namespace Tests.PlayMode
             _replayCompleted = true;
         }
 
-        private static void SetGameViewResolution()
+        private void SetGameViewResolution()
         {
-            System.Type gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
-            Debug.Assert(gameViewType != null, "GameView type must exist");
-
+            System.Type gameViewType = GetGameViewType();
             EditorWindow gameView = EditorWindow.GetWindow(gameViewType);
+            _previousGameViewSizeIndex = GetSelectedGameViewSizeIndex(gameViewType, gameView);
+
             MethodInfo setCustomResolution = gameViewType.GetMethod(
                 "SetCustomResolution",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
@@ -129,6 +132,65 @@ namespace Tests.PlayMode
             setCustomResolution.Invoke(
                 gameView,
                 new object[] { new Vector2(FULL_HD_WIDTH, FULL_HD_HEIGHT), FULL_HD_LABEL });
+        }
+
+        private void RestoreGameViewResolution()
+        {
+            if (_previousGameViewSizeIndex < 0)
+            {
+                return;
+            }
+
+            System.Type gameViewType = GetGameViewType();
+            EditorWindow gameView = EditorWindow.GetWindow(gameViewType);
+            SetSelectedGameViewSizeIndex(gameViewType, gameView, _previousGameViewSizeIndex);
+            UpdateGameViewZoom(gameViewType, gameView);
+            gameView.Repaint();
+            SceneView.RepaintAll();
+            _previousGameViewSizeIndex = -1;
+        }
+
+        private static System.Type GetGameViewType()
+        {
+            System.Type gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
+            Debug.Assert(gameViewType != null, "GameView type must exist");
+            return gameViewType;
+        }
+
+        private static int GetSelectedGameViewSizeIndex(System.Type gameViewType, EditorWindow gameView)
+        {
+            MethodInfo getSelectedSizeIndex = gameViewType.GetMethod(
+                "get_selectedSizeIndex",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            Debug.Assert(getSelectedSizeIndex != null, "GameView.get_selectedSizeIndex must exist");
+
+            object selectedSizeIndex = getSelectedSizeIndex.Invoke(gameView, null);
+            Debug.Assert(selectedSizeIndex is int, "GameView selected size index must be an int");
+            return (int)selectedSizeIndex;
+        }
+
+        private static void SetSelectedGameViewSizeIndex(
+            System.Type gameViewType,
+            EditorWindow gameView,
+            int selectedSizeIndex)
+        {
+            MethodInfo setSelectedSizeIndex = gameViewType.GetMethod(
+                "set_selectedSizeIndex",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            Debug.Assert(setSelectedSizeIndex != null, "GameView.set_selectedSizeIndex must exist");
+
+            // Game View size is editor-persistent; restore it so this fixed-resolution E2E test stays isolated.
+            setSelectedSizeIndex.Invoke(gameView, new object[] { selectedSizeIndex });
+        }
+
+        private static void UpdateGameViewZoom(System.Type gameViewType, EditorWindow gameView)
+        {
+            MethodInfo updateZoomArea = gameViewType.GetMethod(
+                "UpdateZoomAreaAndParent",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            Debug.Assert(updateZoomArea != null, "GameView.UpdateZoomAreaAndParent must exist");
+
+            updateZoomArea.Invoke(gameView, null);
         }
 
         private static void AssertGameViewResolution()

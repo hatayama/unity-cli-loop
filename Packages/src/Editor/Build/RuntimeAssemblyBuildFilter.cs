@@ -16,6 +16,12 @@ namespace io.github.hatayama.uLoopMCP
         {
             Debug.Assert(assemblies != null, "assemblies must be provided by Unity build pipeline");
 
+            if ((buildOptions & BuildOptions.IncludeTestAssemblies) == BuildOptions.IncludeTestAssemblies)
+            {
+                // Player test builds need runtime references from test assemblies, so filtering here breaks PlayMode test players.
+                return assemblies;
+            }
+
             List<string> filteredAssemblies = new List<string>(assemblies.Length);
             for (int i = 0; i < assemblies.Length; i++)
             {

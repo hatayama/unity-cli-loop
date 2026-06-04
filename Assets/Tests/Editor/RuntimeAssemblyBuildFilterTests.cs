@@ -27,5 +27,21 @@ namespace io.github.hatayama.uLoopMCP
                 "/build/Managed/UnityEngine.CoreModule.dll"
             }));
         }
+
+        [Test]
+        public void OnFilterAssemblies_WhenTestAssembliesAreIncluded_KeepsRuntimeAssembly()
+        {
+            RuntimeAssemblyBuildFilter filter = new RuntimeAssemblyBuildFilter();
+            string[] assemblies =
+            {
+                "/build/Managed/Assembly-CSharp.dll",
+                "/build/Managed/uLoopMCP.Runtime.dll",
+                "/build/Managed/uLoopMCP.Tests.PlayMode.dll"
+            };
+
+            string[] filteredAssemblies = filter.OnFilterAssemblies(BuildOptions.IncludeTestAssemblies, assemblies);
+
+            Assert.That(filteredAssemblies, Is.EqualTo(assemblies));
+        }
     }
 }
