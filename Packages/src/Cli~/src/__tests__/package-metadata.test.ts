@@ -28,6 +28,28 @@ const METADATA_VALIDATION_DEPENDENCY_META_PATHS = [
   'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Reflection.Metadata.dll.meta',
   'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Runtime.CompilerServices.Unsafe.dll.meta',
 ] as const;
+const METADATA_VALIDATION_PRIVATE_ASSEMBLIES = [
+  {
+    relativePath:
+      'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Collections.Immutable.dll',
+    assemblyName: 'uLoopMCP.System.Collections.Immutable',
+    assemblyReferences: ['uLoopMCP.System.Runtime.CompilerServices.Unsafe'],
+  },
+  {
+    relativePath: 'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Reflection.Metadata.dll',
+    assemblyName: 'uLoopMCP.System.Reflection.Metadata',
+    assemblyReferences: [
+      'uLoopMCP.System.Collections.Immutable',
+      'uLoopMCP.System.Runtime.CompilerServices.Unsafe',
+    ],
+  },
+  {
+    relativePath:
+      'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Runtime.CompilerServices.Unsafe.dll',
+    assemblyName: 'uLoopMCP.System.Runtime.CompilerServices.Unsafe',
+    assemblyReferences: [],
+  },
+] as const;
 
 function loadPackageManifest(): PackageManifest {
   const packageJsonPath = join(__dirname, '..', '..', 'package.json');
@@ -54,6 +76,12 @@ function loadUnityPackageText(relativePath: string): string {
   const assetPath = join(__dirname, '..', '..', '..', relativePath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   return readFileSync(assetPath, 'utf8');
+}
+
+function loadUnityPackageBytes(relativePath: string): Buffer {
+  const assetPath = join(__dirname, '..', '..', '..', relativePath);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  return readFileSync(assetPath);
 }
 
 describe('package metadata', () => {
@@ -92,6 +120,17 @@ describe('package metadata', () => {
       const metaText = loadUnityPackageText(metaPath);
 
       expect(metaText).toContain('isExplicitlyReferenced: 1');
+    }
+  });
+
+  it('uses private assembly identities for metadata validation dependencies', () => {
+    for (const assembly of METADATA_VALIDATION_PRIVATE_ASSEMBLIES) {
+      const dllBytes = loadUnityPackageBytes(assembly.relativePath);
+
+      expect(dllBytes.includes(Buffer.from(assembly.assemblyName))).toBe(true);
+      for (const assemblyReference of assembly.assemblyReferences) {
+        expect(dllBytes.includes(Buffer.from(assemblyReference))).toBe(true);
+      }
     }
   });
 });
