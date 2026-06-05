@@ -23,6 +23,11 @@ type AssemblyDefinition = {
 
 const TEST_FRAMEWORK_PACKAGE_NAME = 'com.unity.test-framework';
 const TEST_FRAMEWORK_DEFINE = 'ULOOPMCP_HAS_TEST_FRAMEWORK';
+const CODE_ANALYSIS_PLUGIN_META_PATHS = [
+  'Plugins/CodeAnalysis/System.Collections.Immutable.dll.meta',
+  'Plugins/CodeAnalysis/System.Reflection.Metadata.dll.meta',
+  'Plugins/CodeAnalysis/System.Runtime.CompilerServices.Unsafe.dll.meta',
+] as const;
 
 function loadPackageManifest(): PackageManifest {
   const packageJsonPath = join(__dirname, '..', '..', 'package.json');
@@ -43,6 +48,12 @@ function loadEditorAssemblyDefinition(): AssemblyDefinition {
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   const asmdefText = readFileSync(asmdefPath, 'utf8');
   return JSON.parse(asmdefText) as AssemblyDefinition;
+}
+
+function loadUnityPackageText(relativePath: string): string {
+  const assetPath = join(__dirname, '..', '..', '..', relativePath);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  return readFileSync(assetPath, 'utf8');
 }
 
 describe('package metadata', () => {
@@ -74,5 +85,13 @@ describe('package metadata', () => {
         define: TEST_FRAMEWORK_DEFINE,
       }),
     );
+  });
+
+  it('keeps bundled CodeAnalysis plugins out of implicit project references', () => {
+    for (const metaPath of CODE_ANALYSIS_PLUGIN_META_PATHS) {
+      const metaText = loadUnityPackageText(metaPath);
+
+      expect(metaText).toContain('isExplicitlyReferenced: 1');
+    }
   });
 });
