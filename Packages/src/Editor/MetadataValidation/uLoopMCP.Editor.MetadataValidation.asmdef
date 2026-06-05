@@ -11,9 +11,9 @@
     "allowUnsafeCode": false,
     "overrideReferences": true,
     "precompiledReferences": [
-        "System.Collections.Immutable.dll",
-        "System.Runtime.CompilerServices.Unsafe.dll",
-        "System.Reflection.Metadata.dll"
+        "uLoopMCP.System.Collections.Immutable.dll",
+        "uLoopMCP.System.Runtime.CompilerServices.Unsafe.dll",
+        "uLoopMCP.System.Reflection.Metadata.dll"
     ],
     "autoReferenced": true,
     "defineConstraints": [],

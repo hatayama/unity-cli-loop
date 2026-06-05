@@ -23,10 +23,10 @@ type AssemblyDefinition = {
 
 const TEST_FRAMEWORK_PACKAGE_NAME = 'com.unity.test-framework';
 const TEST_FRAMEWORK_DEFINE = 'ULOOPMCP_HAS_TEST_FRAMEWORK';
-const CODE_ANALYSIS_PLUGIN_META_PATHS = [
-  'Plugins/CodeAnalysis/System.Collections.Immutable.dll.meta',
-  'Plugins/CodeAnalysis/System.Reflection.Metadata.dll.meta',
-  'Plugins/CodeAnalysis/System.Runtime.CompilerServices.Unsafe.dll.meta',
+const METADATA_VALIDATION_DEPENDENCY_META_PATHS = [
+  'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Collections.Immutable.dll.meta',
+  'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Reflection.Metadata.dll.meta',
+  'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Runtime.CompilerServices.Unsafe.dll.meta',
 ] as const;
 
 function loadPackageManifest(): PackageManifest {
@@ -87,8 +87,8 @@ describe('package metadata', () => {
     );
   });
 
-  it('keeps bundled CodeAnalysis plugins out of implicit project references', () => {
-    for (const metaPath of CODE_ANALYSIS_PLUGIN_META_PATHS) {
+  it('keeps bundled metadata validation dependencies out of implicit project references', () => {
+    for (const metaPath of METADATA_VALIDATION_DEPENDENCY_META_PATHS) {
       const metaText = loadUnityPackageText(metaPath);
 
       expect(metaText).toContain('isExplicitlyReferenced: 1');
