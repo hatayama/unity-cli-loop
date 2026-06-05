@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.6](https://github.com/hatayama/unity-cli-loop/compare/v2.1.5...v2.1.6) (2026-06-04)
+
+
+### Bug Fixes
+
+* Input simulation overlays stay usable without shipping runtime DLLs ([#1285](https://github.com/hatayama/unity-cli-loop/issues/1285)) ([e271514](https://github.com/hatayama/unity-cli-loop/commit/e2715140af298ab3698a8d02efd1cd319d448670))
+
 ## [2.1.5](https://github.com/hatayama/unity-cli-loop/compare/v2.1.4...v2.1.5) (2026-06-01)
 
 
