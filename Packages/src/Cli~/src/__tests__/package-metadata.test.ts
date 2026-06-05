@@ -133,4 +133,8 @@ describe('package metadata', () => {
       }
     }
   });
+
+  it('does not keep orphaned plugin folder metadata', () => {
+    expect(() => loadUnityPackageText('Plugins.meta')).toThrow();
+  });
 });
