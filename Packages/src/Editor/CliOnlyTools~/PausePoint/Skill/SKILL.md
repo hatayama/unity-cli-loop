@@ -1,23 +1,23 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Pause Unity at named checkpoints for frame-specific PlayMode bugs and transient input, physics, async, or UI state changes."
+description: "フレーム固有のPlayModeバグや、一瞬だけ発生する入力・物理・非同期・UI状態の変化を調べるため、名前付きチェックポイントでUnityを一時停止する。"
 ---
 
 # uloop wait-for-debug-break
 
-Pause Unity when execution reaches a named marker in user code.
+ユーザーコード内の名前付きマーカーに実行が到達した時点でUnityを一時停止する。
 
-## When to use
+## 使う場面
 
-- Use when a bug appears only on a specific frame, timing window, animation step, physics tick, or `Update` / `FixedUpdate` branch.
-- Use proactively when PlayMode E2E or development debugging depends on proving a transient runtime state transition.
-- Use it alongside screenshots and logs; it is not only for cases where screenshots fail.
-- Good checkpoints include jump applied, launch complete, collision handled, score changed, line cleared, block mined, item placed, game over shown, or UI updated after input.
-- If you use sleep, repeated polling, or a second state read to catch a transient PlayMode state, prefer `wait-for-debug-break` instead.
+- 特定フレーム、タイミングの窓、アニメーション手順、物理tick、または `Update` / `FixedUpdate` の分岐でだけバグが出るときに使う。
+- PlayMode E2Eや開発中のデバッグで、一瞬だけ発生するランタイム状態遷移を証明する必要があるときは積極的に使う。
+- スクリーンショットやログと一緒に使う。スクリーンショットで失敗する場合だけの手段ではない。
+- よいチェックポイントの例は、ジャンプ適用後、発射完了後、衝突処理後、スコア変更後、ライン消去後、ブロック採掘後、アイテム配置後、ゲームオーバー表示後、入力後のUI更新後など。
+- 一瞬だけ発生するPlayMode状態を捕まえるためにsleep、繰り返しpolling、または2回目の状態読み取りを使うなら、代わりに `wait-for-debug-break` を優先する。
 
-## Workflow
+## 手順
 
-1. Add a marker at the state you want to inspect:
+1. 調べたい状態にマーカーを追加する:
 
 ```csharp
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -25,47 +25,47 @@ using io.github.hatayama.UnityCliLoop.Runtime;
 UnityCliLoopDebug.Break("player-jumped");
 ```
 
-2. Compile the project.
-3. Enable the marker before triggering the code path:
+2. プロジェクトをコンパイルする。
+3. 対象コードパスを発火させる前にマーカーを有効化する:
 
 ```bash
 uloop enable-debug-break --id player-jumped --timeout-seconds 30
 ```
 
-4. Check marker state if needed:
+4. 必要ならマーカー状態を確認する:
 
 ```bash
 uloop debug-break-status --id player-jumped
 ```
 
-5. Trigger the behavior, such as `simulate-keyboard`, `simulate-mouse-input`, UI interaction, or dynamic code.
-6. Wait for the marker:
+5. `simulate-keyboard`、`simulate-mouse-input`、UI操作、dynamic codeなどで挙動を発火させる。
+6. マーカーを待つ:
 
 ```bash
 uloop wait-for-debug-break --id player-jumped --timeout-seconds 30
 ```
 
-If this command times out, the marker line was not reached while the command waited. Inspect `error.details.status`, `hitCount`, `isPlaying`, `isPaused`, `elapsedSinceEnabledMilliseconds`, and `remainingMilliseconds` to distinguish input not being consumed, gameplay conditions not being met, an id mismatch, or Unity already being paused. `elapsedSinceEnabledMilliseconds` is measured from `enable-debug-break`, not from `wait-for-debug-break`.
+このコマンドがタイムアウトした場合、コマンドの待機中にマーカー行へ到達していない。`error.details.status`、`hitCount`、`isPlaying`、`isPaused`、`elapsedSinceEnabledMilliseconds`、`remainingMilliseconds` を見て、入力が消費されていないのか、ゲームプレイ条件を満たしていないのか、idが一致していないのか、Unityがすでに一時停止しているのかを切り分ける。`elapsedSinceEnabledMilliseconds` は `wait-for-debug-break` からではなく、`enable-debug-break` から計測される。
 
-7. While Unity is paused, inspect state with `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, screenshots, or `uloop execute-dynamic-code`.
-8. Clear the marker if you stop waiting:
+7. Unityが一時停止している間に、`uloop get-logs`、`uloop get-hierarchy`、`uloop find-game-objects`、スクリーンショット、または `uloop execute-dynamic-code` で状態を調べる。
+8. 待機をやめる場合はマーカーをクリアする:
 
 ```bash
 uloop clear-debug-break --id player-jumped
 ```
 
-## Marker placement
+## マーカー配置
 
-- Prefer natural gameplay or state-transition locations after input has been consumed, such as after jump velocity/state changes, physics contact, damage application, or inventory mutation.
-- For frame-specific bugs, place the marker on the suspicious state branch or immediately after the state mutation you need to freeze.
-- Enable markers after Play Mode is running, and prefer checkpoints reached after the triggering input command can return to avoid domain reload loss or tool Busy states.
-- Avoid placing the marker immediately after issuing simulated input unless that exact input handling line is the state you need to inspect; immediate markers can interrupt the input command before the resulting gameplay state settles.
-- Use separate ids for strict phases, for example `jump-input-read`, `jump-velocity-applied`, and `jump-landed`, instead of reusing one broad marker.
+- 入力が消費された後の自然なゲームプレイ地点や状態遷移地点を優先する。例として、ジャンプ速度や状態の変更後、物理接触後、ダメージ適用後、インベントリ変更後など。
+- フレーム固有のバグでは、疑わしい状態分岐、または止めて調べたい状態変更の直後にマーカーを置く。
+- Domain Reloadによる消失やツールのBusy状態を避けるため、Play Mode実行後にマーカーを有効化し、発火させる入力コマンドがreturnできた後に到達するチェックポイントを優先する。
+- その入力処理行自体を調べる必要がある場合を除き、疑似入力を発行した直後にマーカーを置くのは避ける。即時マーカーは、結果のゲームプレイ状態が安定する前に入力コマンドを中断することがある。
+- 1つの広いマーカーを使い回すのではなく、厳密なフェーズごとに別々のidを使う。例: `jump-input-read`、`jump-velocity-applied`、`jump-landed`。
 
-## Safety
+## 安全性
 
-- `UnityCliLoopDebug.Break` uses Unity's conditional-call pattern and is compiled out of non-Editor call sites.
-- Code in a custom asmdef must reference `UnityCLILoop.PausePoints.Runtime` to use `UnityCliLoopDebug.Break`.
-- Do not pass side-effect expressions as the id argument. Use stable string ids.
-- This does not collect logs or state snapshots. Use existing inspection commands after Unity pauses.
-- If `enable-debug-break` warns about Domain Reload before PlayMode, the marker may be cleared when entering PlayMode. Domain Reload disabled is suitable for this workflow; otherwise enable again after PlayMode starts.
+- `UnityCliLoopDebug.Break` はUnityのconditional call patternを使い、Editor以外のcall siteからはコンパイル時に除外される。
+- custom asmdef内のコードで `UnityCliLoopDebug.Break` を使うには、`UnityCLILoop.PausePoints.Runtime` を参照する必要がある。
+- id引数には副作用のある式を渡さない。安定した文字列idを使う。
+- この機能はログや状態スナップショットを収集しない。Unityが一時停止した後、既存の調査コマンドを使う。
+- PlayMode前に `enable-debug-break` がDomain Reloadについて警告する場合、PlayMode開始時にマーカーがクリアされる可能性がある。このworkflowにはDomain Reload無効が適している。有効な場合は、PlayMode開始後にもう一度有効化する。
