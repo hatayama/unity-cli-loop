@@ -1,19 +1,7 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Pause Unity at named checkpoints for frame-specific PlayMode bugs and transient input, physics, async, or UI state changes."
+description: "Pause Unity so you can inspect the paused frame by (1) checking variable and hierarchy state and (2) taking reliable screenshots."
 ---
-
-# uloop wait-for-debug-break
-
-Pause Unity when execution reaches a named marker in user code.
-
-## When to use
-
-- Use when a bug appears only on a specific frame, timing window, animation step, physics tick, or `Update` / `FixedUpdate` branch.
-- Use proactively when PlayMode E2E or development debugging depends on proving a transient runtime state transition.
-- Use it alongside screenshots and logs; it is not only for cases where screenshots fail.
-- Good checkpoints include jump applied, launch complete, collision handled, score changed, line cleared, block mined, item placed, game over shown, or UI updated after input.
-- If you use sleep, repeated polling, or a second state read to catch a transient PlayMode state, prefer `wait-for-debug-break` instead.
 
 ## Workflow
 
@@ -26,7 +14,7 @@ UnityCliLoopDebug.Break("player-jumped");
 ```
 
 2. Compile the project.
-3. Enable the marker before triggering the code path:
+3. Enable the marker before triggering the target code path:
 
 ```bash
 uloop enable-debug-break --id player-jumped --timeout-seconds 30
@@ -38,7 +26,7 @@ uloop enable-debug-break --id player-jumped --timeout-seconds 30
 uloop debug-break-status --id player-jumped
 ```
 
-5. Trigger the behavior, such as `simulate-keyboard`, `simulate-mouse-input`, UI interaction, or dynamic code.
+5. Trigger the behavior with `simulate-keyboard`, `simulate-mouse-input`, UI interaction, dynamic code, or similar commands.
 6. Wait for the marker:
 
 ```bash
@@ -54,18 +42,17 @@ If this command times out, the marker line was not reached while the command wai
 uloop clear-debug-break --id player-jumped
 ```
 
-## Marker placement
+## Marker Placement
 
-- Prefer natural gameplay or state-transition locations after input has been consumed, such as after jump velocity/state changes, physics contact, damage application, or inventory mutation.
+- Prefer natural gameplay points or state-transition points after input has been consumed, such as after jump velocity or state changes, physics contact, or damage application.
 - For frame-specific bugs, place the marker on the suspicious state branch or immediately after the state mutation you need to freeze.
-- Enable markers after Play Mode is running, and prefer checkpoints reached after the triggering input command can return to avoid domain reload loss or tool Busy states.
-- Avoid placing the marker immediately after issuing simulated input unless that exact input handling line is the state you need to inspect; immediate markers can interrupt the input command before the resulting gameplay state settles.
+- To avoid Domain Reload loss or tool Busy states, enable markers after Play Mode is running, and prefer checkpoints reached after the triggering input command can return.
+- Avoid placing the marker immediately after issuing simulated input unless that exact input handling line is the state you need to inspect. Immediate markers can interrupt the input command before the resulting gameplay state settles.
 - Use separate ids for strict phases, for example `jump-input-read`, `jump-velocity-applied`, and `jump-landed`, instead of reusing one broad marker.
 
 ## Safety
 
-- `UnityCliLoopDebug.Break` uses Unity's conditional-call pattern and is compiled out of non-Editor call sites.
 - Code in a custom asmdef must reference `UnityCLILoop.PausePoints.Runtime` to use `UnityCliLoopDebug.Break`.
 - Do not pass side-effect expressions as the id argument. Use stable string ids.
-- This does not collect logs or state snapshots. Use existing inspection commands after Unity pauses.
-- If `enable-debug-break` warns about Domain Reload before PlayMode, the marker may be cleared when entering PlayMode. Domain Reload disabled is suitable for this workflow; otherwise enable again after PlayMode starts.
+- This feature does not collect logs or state snapshots. Use existing inspection commands after Unity pauses.
+- If `enable-debug-break` warns about Domain Reload before PlayMode, the marker may be cleared when entering PlayMode. Domain Reload disabled is suitable for this workflow; otherwise enable it again after PlayMode starts.
