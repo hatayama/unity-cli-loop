@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Pause Unity so you can inspect the paused frame by (1) checking variable and hierarchy state and (2) taking reliable screenshots. This is used to capture state transitions that occur for only one to a few frames due to transient events. Avoid using `Time.timeScale = 0` and instead use this Skill."
+description: "Use this for Unity PlayMode/E2E checks when simulated input or gameplay events cause a state transition that a screenshot, durable state, or specific value log cannot prove. Pause at the natural transition point after the input/event is consumed and inspect the paused frame. Do not use simulate-* Success=true, generic action logs, sleeps/retries, testing-only counters, or Time.timeScale changes as substitutes for debug-break evidence of transient transitions."
 ---
 
 ## Workflow
