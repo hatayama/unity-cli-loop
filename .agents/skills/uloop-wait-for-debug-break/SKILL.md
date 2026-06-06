@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Pause Unity so you can inspect the paused frame by (1) checking variable and hierarchy state and (2) taking reliable screenshots. Avoid using `Time.timeScale = 0` and instead use this Skill"
+description: "Pause Unity so you can inspect the paused frame by (1) checking variable and hierarchy state and (2) taking reliable screenshots. This is used to capture state transitions that occur for only one to a few frames due to transient events. Avoid using `Time.timeScale = 0` and instead use this Skill."
 ---
 
 ## Workflow
