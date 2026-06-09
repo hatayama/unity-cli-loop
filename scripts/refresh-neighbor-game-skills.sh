@@ -1,4 +1,9 @@
 #!/bin/sh
+# Development helper for refreshing generated uloop skill files in sibling Unity projects.
+# This is not an installed agent skill or a runtime command. It exists to support local
+# uloop development by quitting each target Unity Editor, regenerating Claude/Agents
+# skill copies, committing those generated files locally, removing Library after Unity
+# has stopped, and relaunching each project.
 set -eu
 
 skill_name="refresh-neighbor-game-skills"
