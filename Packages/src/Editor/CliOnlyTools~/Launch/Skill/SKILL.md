@@ -60,6 +60,7 @@ uloop launch --quit
   - `AlreadyRunning`: whether an existing Unity process was reused
   - `Launched`: whether this command launched a Unity process
   - `Restarted`: whether this command stopped an existing process and launched a new one
+  - `Quit`: whether this command stopped Unity without launching a new process
   - `PreviousProcessId`: process ID stopped by restart or quit, when available
   - `CurrentProcessId`: current Unity process ID, when available
   - `ProjectRoot`: resolved project root
