@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Use this as the breakpoint substitute for Unity PlayMode/E2E validation when uloop-simulated input drives a core gameplay transition. Pause at the natural transition point to inspect variables/state and prove input consumption or frame-specific behavior, even when logs, screenshots, or durable state can later confirm the result."
+description: "Use this as a quick breakpoint substitute for Unity PlayMode/E2E when uloop-simulated input changes gameplay state. Add a marker, run wait-for-debug-break, and inspect paused variables/state; simulate-* success or InterruptedByDebugBreak alone is not proof."
 ---
 
 ## When To Use
@@ -8,9 +8,20 @@ description: "Use this as the breakpoint substitute for Unity PlayMode/E2E valid
 - Use this when a state transition is transient, frame-specific, or hard to prove after the fact.
 - Use this during uloop interaction or endurance validation when simulated input drives a core gameplay transition, even if durable state, logs, or screenshots can later confirm the final result.
 - Good pause points include input consumed, jump velocity applied, hard drop locked, block placed, collision resolved, damage applied, lives decremented, or game over entered.
-- Treat the pause like a lightweight breakpoint: combine nearby debug logs with paused-frame inspection to confirm the variables and component state at that point.
+- Treat the pause like a lightweight breakpoint for one important transition: combine nearby debug logs with paused-frame inspection to confirm the variables and component state at that point.
 - Do not treat `simulate-* Success=true`, generic action logs, sleeps/retries, testing-only counters, or `Time.timeScale` changes as paused-frame proof.
 - Skip this for ordinary persistent-state checks when you are not validating input delivery, event ordering, or transition-frame fidelity.
+
+## Quick Check Template
+
+Use this small loop for one transition you care about:
+
+1. Put `UnityCliLoopDebug.Break("player-jumped")` at the natural transition point.
+2. Compile, enter PlayMode, then enable the marker with `uloop enable-debug-break --id player-jumped --timeout-seconds 30`.
+3. Trigger the action with a `simulate-*` command.
+4. Run `uloop wait-for-debug-break --id player-jumped --timeout-seconds 30`, even if the trigger command already returned `InterruptedByDebugBreak=true`.
+5. While Unity is paused, capture focused evidence with `uloop execute-dynamic-code`, `uloop get-logs`, and one screenshot.
+6. Clear the marker or stop PlayMode before moving on.
 
 ## Workflow
 
