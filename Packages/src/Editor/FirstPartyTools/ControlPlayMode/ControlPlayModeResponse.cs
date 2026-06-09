@@ -9,7 +9,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public bool IsPlaying { get; set; }
         public bool IsPaused { get; set; }
+        public bool Changed { get; set; }
+        public bool WasAlreadyStopped { get; set; }
         public string Message { get; set; }
     }
 }
-

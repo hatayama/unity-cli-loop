@@ -23,9 +23,11 @@ const (
 var controlPlayModeStatePoll = 50 * time.Millisecond
 
 type controlPlayModeResponse struct {
-	IsPlaying bool   `json:"IsPlaying"`
-	IsPaused  bool   `json:"IsPaused"`
-	Message   string `json:"Message"`
+	IsPlaying         bool   `json:"IsPlaying"`
+	IsPaused          bool   `json:"IsPaused"`
+	Changed           bool   `json:"Changed"`
+	WasAlreadyStopped bool   `json:"WasAlreadyStopped"`
+	Message           string `json:"Message"`
 }
 
 func shouldWaitForControlPlayModeState(command string, params map[string]any) bool {
@@ -105,6 +107,10 @@ func runControlPlayModeWithStateWait(
 	}
 
 	response.Message = completedControlPlayModeMessage(action, initialResponse, hasInitialResponse)
+	if hasInitialResponse {
+		response.Changed = initialResponse.Changed
+		response.WasAlreadyStopped = initialResponse.WasAlreadyStopped
+	}
 	result, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
 		writeClassifiedError(stderr, marshalErr, errorContext{

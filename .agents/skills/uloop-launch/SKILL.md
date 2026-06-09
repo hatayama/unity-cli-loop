@@ -50,4 +50,11 @@ uloop launch --quit
 - Prints detected Unity version
 - Prints project path
 - If Unity is already running, focuses the existing window
+- If launching, prints when it is waiting for Unity CLI Loop server readiness
 - If launching, waits until Unity finishes startup and the CLI can connect to the project
+- When launch readiness completes, returns JSON with:
+  - `Success`: whether launch readiness completed
+  - `Ready`: whether Unity CLI Loop is ready for commands
+  - `ServerReady`: whether the Unity CLI Loop server accepted requests
+  - `ProjectIpcReady`: whether the project IPC path accepted tool requests
+  - `Message`: readiness summary
