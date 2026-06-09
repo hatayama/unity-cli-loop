@@ -126,6 +126,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task StartRecoveryIfNeededAsync_WhenEditorIsBusy_ShouldDelayReadinessProbeUntilIdle()
+        {
+            // Tests that recovery does not spend readiness timeout while Unity is still compiling or updating.
+            bool editorIsBusy = true;
+            int delayCallCount = 0;
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            TestReadinessProbe readinessProbe = new();
+            int serverStartedCount = 0;
+            lifecycleRegistry.ServerStarted += () => serverStartedCount++;
+            UnityCliLoopServerControllerService service = new(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService(_sessionStateService),
+                _sessionStateService,
+                readinessProbe,
+                new TestDomainReloadLifecycle(),
+                () => editorIsBusy,
+                (delayMilliseconds, ct) =>
+                {
+                    delayCallCount++;
+                    Assert.That(readinessProbe.CallCount, Is.EqualTo(0));
+                    editorIsBusy = false;
+                    return Task.CompletedTask;
+                });
+
+            await service.StartRecoveryIfNeededAsync(isAfterCompile: false, CancellationToken.None);
+
+            Assert.That(delayCallCount, Is.EqualTo(1));
+            Assert.That(readinessProbe.CallCount, Is.EqualTo(1));
+            Assert.That(serverStartedCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void StartRecoveryIfNeededAsync_WhenEditorNeverBecomesIdle_ShouldFailWithoutReadinessProbe()
+        {
+            // Tests that recovery does not hang forever when Unity never leaves compile or update state.
+            int delayCallCount = 0;
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            TestReadinessProbe readinessProbe = new();
+            int serverStartedCount = 0;
+            lifecycleRegistry.ServerStarted += () => serverStartedCount++;
+            UnityCliLoopServerControllerService service = new(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                new DomainReloadDetectionFileService(_sessionStateService),
+                _sessionStateService,
+                readinessProbe,
+                new TestDomainReloadLifecycle(),
+                () => true,
+                (delayMilliseconds, ct) =>
+                {
+                    delayCallCount++;
+                    return Task.CompletedTask;
+                },
+                readinessIdleTimeoutMilliseconds: 1);
+
+            System.InvalidOperationException exception =
+                Assert.ThrowsAsync<System.InvalidOperationException>(
+                    async () => await service.StartRecoveryIfNeededAsync(
+                        isAfterCompile: false,
+                        CancellationToken.None));
+
+            Assert.That(exception.Message, Does.Contain("Unity editor idle"));
+            Assert.That(delayCallCount, Is.EqualTo(1));
+            Assert.That(readinessProbe.CallCount, Is.EqualTo(0));
+            Assert.That(serverStartedCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public async Task ProbeReadinessWithTimeoutAsync_WhenProbeDoesNotComplete_ThrowsTimeout()
         {
             // Tests that readiness probing fails fast instead of leaving startup state stuck forever.
