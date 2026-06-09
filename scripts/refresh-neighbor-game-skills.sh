@@ -15,7 +15,15 @@ project_file="$(mktemp "${TMPDIR:-/tmp}/${skill_name}.projects.XXXXXX")"
 cleanup() {
     rm -f "$project_file"
 }
-trap cleanup EXIT INT TERM
+
+on_signal() {
+    cleanup
+    exit "$1"
+}
+
+trap cleanup EXIT
+trap 'on_signal 130' INT
+trap 'on_signal 143' TERM
 
 usage() {
     cat <<'USAGE'
@@ -56,8 +64,13 @@ unity_project_pids() {
     project=$1
     ps -axo pid=,command= -ww |
         awk -v project="$project" '
+            BEGIN {
+                project_re = project
+                gsub(/[][(){}.^$*+?|\\]/, "\\\\&", project_re)
+                project_re = "-projectPath[[:space:]]+" project_re "([[:space:]]|$)"
+            }
             /Unity\.app\/Contents\/MacOS\/Unity/ &&
-            index($0, "-projectPath " project) > 0 &&
+            $0 ~ project_re &&
             tolower($0) !~ /assetimportworker/ &&
             tolower($0) !~ /-batchmode/ {
                 sub(/^[[:space:]]*/, "", $0)
@@ -145,6 +158,9 @@ append_project() {
     [ -f "$project_root/ProjectSettings/ProjectVersion.txt" ] || fail "not a Unity project: $project_root"
     [ -f "$project_root/Packages/manifest.json" ] || fail "not a Unity project: $project_root"
     git -C "$project_root" rev-parse --show-toplevel >/dev/null 2>&1 || fail "not a git repository: $project_root"
+    if grep -Fqx -- "$project_root" "$project_file"; then
+        fail "duplicate project path: $project_root"
+    fi
 
     printf '%s\n' "$project_root" >>"$project_file"
 }
