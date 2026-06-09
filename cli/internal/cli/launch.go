@@ -29,6 +29,7 @@ const (
 var (
 	findRunningUnityProcessForLaunch    = findRunningUnityProcess
 	focusUnityProcessForLaunch          = focusUnityProcess
+	killUnityProcessForLaunch           = killUnityProcess
 	resolveUnityExecutablePathForLaunch = resolveUnityExecutablePath
 	waitForUnityLockfileForLaunch       = waitForUnityLockfile
 	waitForToolReadinessForLaunch       = waitForToolReadiness
@@ -203,22 +204,27 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 	if runningProcess != nil {
 		if !options.restart && !options.quit {
 			logLaunchExistingFocus(ctx, projectRoot, runningProcess.pid)
-			writeFormat(stdout, "Unity is already running for %s (PID: %d)\n", projectRoot, runningProcess.pid)
-			return 0
+			spinner := newLaunchSpinner(stdout, stderr)
+			defer spinner.Stop()
+			writeLaunchReadinessWait(stdout, spinner)
+			if err := waitForToolReadinessForLaunch(ctx, projectRoot); err != nil {
+				writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+				return 1
+			}
+			spinner.Stop()
+			return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, runningProcess.pid)
 		}
-		if err := killUnityProcess(runningProcess.pid); err != nil {
+		if err := killUnityProcessForLaunch(runningProcess.pid); err != nil {
 			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 			return 1
 		}
 		if options.quit {
-			writeFormat(stdout, "Unity process stopped (PID: %d)\n", runningProcess.pid)
-			return 0
+			return writeLaunchQuitResponse(stdout, stderr, projectRoot, &runningProcess.pid, launchStoppedMessage)
 		}
 	}
 
 	if options.quit {
-		writeLine(stdout, "No Unity process is running for this project.")
-		return 0
+		return writeLaunchQuitResponse(stdout, stderr, projectRoot, nil, launchNoProcessMessage)
 	}
 
 	removedStaleTemp, err := cleanStaleUnityTemp(projectRoot)
@@ -258,6 +264,7 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
+	currentPid := command.Process.Pid
 	if err := command.Process.Release(); err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
@@ -272,7 +279,11 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		return 1
 	}
 	spinner.Stop()
-	return writeLaunchReadyResponse(stdout, stderr, projectRoot)
+	var previousPid *int
+	if runningProcess != nil {
+		previousPid = &runningProcess.pid
+	}
+	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, currentPid)
 }
 
 func newUnityLaunchCommand(unityPath string, launchArgs []string) *exec.Cmd {
