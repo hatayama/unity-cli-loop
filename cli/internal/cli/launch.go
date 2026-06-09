@@ -27,8 +27,11 @@ const (
 )
 
 var (
-	findRunningUnityProcessForLaunch = findRunningUnityProcess
-	focusUnityProcessForLaunch       = focusUnityProcess
+	findRunningUnityProcessForLaunch    = findRunningUnityProcess
+	focusUnityProcessForLaunch          = focusUnityProcess
+	resolveUnityExecutablePathForLaunch = resolveUnityExecutablePath
+	waitForUnityLockfileForLaunch       = waitForUnityLockfile
+	waitForToolReadinessForLaunch       = waitForToolReadiness
 )
 
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
@@ -231,7 +234,7 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		writeLine(stdout, "")
 	}
 
-	unityPath, err := resolveUnityExecutablePath(projectRoot)
+	unityPath, err := resolveUnityExecutablePathForLaunch(projectRoot)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
@@ -259,15 +262,17 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
-	if err := waitForUnityLockfile(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
+	if err := waitForUnityLockfileForLaunch(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
-	if err := waitForToolReadiness(ctx, projectRoot); err != nil {
+	writeLaunchReadinessWait(stdout, spinner)
+	if err := waitForToolReadinessForLaunch(ctx, projectRoot); err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
-	return 0
+	spinner.Stop()
+	return writeLaunchReadyResponse(stdout, stderr, projectRoot)
 }
 
 func newUnityLaunchCommand(unityPath string, launchArgs []string) *exec.Cmd {

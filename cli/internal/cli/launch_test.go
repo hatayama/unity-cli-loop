@@ -112,6 +112,61 @@ func TestRunLaunchQuitDoesNotLaunchWhenUnityIsNotRunning(t *testing.T) {
 	}
 }
 
+func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
+	// Verifies launch reports an explicit ready payload after Unity accepts tool requests.
+	originalFinder := findRunningUnityProcessForLaunch
+	originalResolver := resolveUnityExecutablePathForLaunch
+	originalLockfileWait := waitForUnityLockfileForLaunch
+	originalReadinessWait := waitForToolReadinessForLaunch
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return nil, nil
+	}
+	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
+		return "/usr/bin/true", nil
+	}
+	waitForUnityLockfileForLaunch = func(context.Context, string, time.Duration, time.Duration) error {
+		return nil
+	}
+	waitForToolReadinessForLaunch = func(context.Context, string) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		resolveUnityExecutablePathForLaunch = originalResolver
+		waitForUnityLockfileForLaunch = originalLockfileWait
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(
+		context.Background(),
+		launchOptions{projectPath: projectRoot},
+		projectRoot,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"Waiting for Unity CLI Loop server readiness...",
+		`"Success": true`,
+		`"Ready": true`,
+		`"ServerReady": true`,
+		`"ProjectIpcReady": true`,
+		`"Message": "Unity CLI Loop is ready."`,
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("launch output missing %q:\n%s", expected, output)
+		}
+	}
+}
+
 // Verifies launch logs when it focuses an already-running Unity process.
 func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
 	enableCliVibeLog(t)
