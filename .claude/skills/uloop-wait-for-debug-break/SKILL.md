@@ -1,7 +1,16 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Use this for Unity PlayMode/E2E checks when simulated input or gameplay events cause a state transition that a screenshot, durable state, or specific value log cannot prove. Pause at the natural transition point after the input/event is consumed and inspect the paused frame. Do not use simulate-* Success=true, generic action logs, sleeps/retries, testing-only counters, or Time.timeScale changes as substitutes for debug-break evidence of transient transitions."
+description: "Use this as the breakpoint substitute for Unity PlayMode/E2E validation when uloop-simulated input drives a core gameplay transition. Pause at the natural transition point to inspect variables/state and prove input consumption or frame-specific behavior, even when logs, screenshots, or durable state can later confirm the result."
 ---
+
+## When To Use
+
+- Use this when a state transition is transient, frame-specific, or hard to prove after the fact.
+- Use this during uloop interaction or endurance validation when simulated input drives a core gameplay transition, even if durable state, logs, or screenshots can later confirm the final result.
+- Good pause points include input consumed, jump velocity applied, hard drop locked, block placed, collision resolved, damage applied, lives decremented, or game over entered.
+- Treat the pause like a lightweight breakpoint: combine nearby debug logs with paused-frame inspection to confirm the variables and component state at that point.
+- Do not treat `simulate-* Success=true`, generic action logs, sleeps/retries, testing-only counters, or `Time.timeScale` changes as paused-frame proof.
+- Skip this for ordinary persistent-state checks when you are not validating input delivery, event ordering, or transition-frame fidelity.
 
 ## Workflow
 
@@ -35,7 +44,7 @@ uloop wait-for-debug-break --id player-jumped --timeout-seconds 30
 
 If this command times out, the marker line was not reached while the command waited. Inspect `error.details.status`, `hitCount`, `isPlaying`, `isPaused`, `elapsedSinceEnabledMilliseconds`, and `remainingMilliseconds` to distinguish input not being consumed, gameplay conditions not being met, an id mismatch, or Unity already being paused. `elapsedSinceEnabledMilliseconds` is measured from `enable-debug-break`, not from `wait-for-debug-break`.
 
-7. While Unity is paused, inspect state with `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, screenshots, or `uloop execute-dynamic-code`.
+7. While Unity is paused, inspect state with `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, screenshots, or `uloop execute-dynamic-code`. Add focused debug logs before the marker when local variables must be captured.
 8. Clear the marker if you stop waiting:
 
 ```bash
