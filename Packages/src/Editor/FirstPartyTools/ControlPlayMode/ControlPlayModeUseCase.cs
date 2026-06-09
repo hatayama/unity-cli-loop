@@ -22,11 +22,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (parameters.StatusOnly)
             {
-                return Task.FromResult(CreateResponse("Play mode status"));
+                return Task.FromResult(CreateResponse("Play mode status", false, false));
             }
 
             string message;
             bool wasPaused = EditorApplication.isPaused;
+            bool wasPlaying = EditorApplication.isPlaying;
+            bool changed = false;
+            bool wasAlreadyStopped = false;
 
             switch (parameters.Action)
             {
@@ -39,10 +42,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         EditorApplication.isPlaying = true;
                     }
+                    changed = wasPaused || !wasPlaying;
                     message = wasPaused ? "Play mode resumed" : "Play mode started";
                     break;
 
                 case PlayModeAction.Stop:
+                    wasAlreadyStopped = !wasPlaying;
                     if (wasPaused)
                     {
                         EditorApplication.isPaused = false;
@@ -51,11 +56,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         EditorApplication.isPlaying = false;
                     }
-                    message = "Play mode stopped";
+                    changed = wasPaused || wasPlaying;
+                    message = wasAlreadyStopped ? "Play mode was already stopped" : "Play mode stopped";
                     break;
 
                 case PlayModeAction.Pause:
                     EditorApplication.isPaused = true;
+                    changed = !wasPaused;
                     message = "Play mode paused";
                     break;
 
@@ -64,15 +71,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     break;
             }
 
-            return Task.FromResult(CreateResponse(message));
+            return Task.FromResult(CreateResponse(message, changed, wasAlreadyStopped));
         }
 
-        private static ControlPlayModeResponse CreateResponse(string message)
+        private static ControlPlayModeResponse CreateResponse(string message, bool changed, bool wasAlreadyStopped)
         {
             ControlPlayModeResponse response = new()
             {
                 IsPlaying = EditorApplication.isPlaying,
                 IsPaused = EditorApplication.isPaused,
+                Changed = changed,
+                WasAlreadyStopped = wasAlreadyStopped,
                 Message = message
             };
 

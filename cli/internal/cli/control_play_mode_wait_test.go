@@ -91,6 +91,77 @@ func TestRunControlPlayModeWithStateWaitPollsStatusAfterStaleInitialResponse(t *
 	}
 }
 
+// Verifies that state polling preserves the action result fields from the initial command response.
+func TestRunControlPlayModeWithStateWaitPreservesStopChangeFields(t *testing.T) {
+	originalPoll := controlPlayModeStatePoll
+	controlPlayModeStatePoll = time.Millisecond
+	t.Cleanup(func() {
+		controlPlayModeStatePoll = originalPoll
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	serverErr := make(chan error, 1)
+	go serveControlPlayModeResponses(
+		listener,
+		make(chan map[string]any, 2),
+		serverErr,
+		[]string{
+			`{"IsPlaying":true,"IsPaused":false,"Changed":true,"WasAlreadyStopped":false,"Message":"Play mode stopped"}`,
+			`{"IsPlaying":false,"IsPaused":false,"Message":"Play mode status"}`,
+		})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runControlPlayModeWithStateWait(
+		context.Background(),
+		connection,
+		map[string]any{
+			controlPlayModeActionParam:  "Stop",
+			controlPlayModeTimeoutParam: 1,
+		},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("runControlPlayModeWithStateWait failed with %d: %s", code, stderr.String())
+	}
+
+	response := controlPlayModeResponse{}
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	if !response.Changed {
+		t.Fatalf("response should preserve Changed=true: %#v", response)
+	}
+	if response.WasAlreadyStopped {
+		t.Fatalf("response should preserve WasAlreadyStopped=false: %#v", response)
+	}
+	if response.Message != "Play mode stopped" {
+		t.Fatalf("response message mismatch: %s", response.Message)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
 // Verifies that dispatched PlayMode disconnects are treated as post-reload waits.
 func TestShouldWaitForControlPlayModeDisconnectWaitsAfterDispatchedTransportLoss(t *testing.T) {
 	outcome := unityipc.UnitySendOutcome{RequestDispatched: true}

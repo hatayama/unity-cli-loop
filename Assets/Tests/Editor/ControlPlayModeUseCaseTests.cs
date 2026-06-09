@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -33,6 +34,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
 
             Assert.That(response.Message, Is.EqualTo("Play mode status"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStopAlreadyStopped_ReturnsNoOpState()
+        {
+            // Verifies Stop distinguishes a no-op from a state-changing PlayMode exit.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase();
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Stop,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode was already stopped"));
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.WasAlreadyStopped, Is.True);
         }
     }
 }
