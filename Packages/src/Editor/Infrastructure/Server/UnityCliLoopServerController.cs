@@ -25,6 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             RestartCleanup,
         }
 
+        private const int READINESS_IDLE_POLL_INTERVAL_MS = 250;
+
         private readonly IUnityCliLoopServerInstanceFactory _serverInstanceFactory;
         private readonly UnityCliLoopServerLifecycleRegistryService _serverLifecycleRegistry;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
@@ -32,6 +34,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly SessionRecoveryService _sessionRecoveryService;
         private readonly IUnityCliLoopServerReadinessProbe _readinessProbe;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
+        private readonly Func<bool> _isReadinessProbeBlocked;
+        private readonly Func<int, CancellationToken, Task> _waitBeforeReadinessRetryAsync;
+        private readonly int _readinessIdleTimeoutMilliseconds;
         private IUnityCliLoopServerInstance _bridgeServer;
         private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
         private long _startupProtectionUntilTicks = 0;
@@ -43,7 +48,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             IDomainReloadDetectionService domainReloadDetectionService,
             UnityCliLoopEditorSessionStateService sessionStateService,
             IUnityCliLoopServerReadinessProbe readinessProbe,
-            IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle)
+            IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle,
+            Func<bool> isReadinessProbeBlocked = null,
+            Func<int, CancellationToken, Task> waitBeforeReadinessRetryAsync = null,
+            int readinessIdleTimeoutMilliseconds = UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
@@ -51,6 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
             System.Diagnostics.Debug.Assert(readinessProbe != null, "readinessProbe must not be null");
             System.Diagnostics.Debug.Assert(domainReloadLifecycle != null, "domainReloadLifecycle must not be null");
+            System.Diagnostics.Debug.Assert(readinessIdleTimeoutMilliseconds > 0, "readinessIdleTimeoutMilliseconds must be positive");
 
             _serverInstanceFactory = serverInstanceFactory ?? throw new ArgumentNullException(nameof(serverInstanceFactory));
             _serverLifecycleRegistry = serverLifecycleRegistry ?? throw new ArgumentNullException(nameof(serverLifecycleRegistry));
@@ -58,10 +67,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _sessionStateService = sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
             _readinessProbe = readinessProbe ?? throw new ArgumentNullException(nameof(readinessProbe));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
+            _isReadinessProbeBlocked = isReadinessProbeBlocked ?? IsEditorBusyForReadinessProbe;
+            _waitBeforeReadinessRetryAsync = waitBeforeReadinessRetryAsync ?? TimerDelay.Wait;
+            _readinessIdleTimeoutMilliseconds = readinessIdleTimeoutMilliseconds;
             _sessionRecoveryService = new SessionRecoveryService(
                 this,
                 _domainReloadDetectionService,
                 _sessionStateService);
+        }
+
+        private static bool IsEditorBusyForReadinessProbe()
+        {
+            return EditorApplication.isCompiling ||
+                   EditorApplication.isUpdating ||
+                   DomainReloadStateRegistry.IsDomainReloadInProgress();
         }
 
         private bool IsBackgroundUnityProcess()
@@ -678,6 +697,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             try
             {
+                await WaitForEditorIdleBeforeReadinessProbeAsync(
+                    cancellationToken,
+                    _readinessIdleTimeoutMilliseconds);
                 await ProbeReadinessWithTimeoutAsync(cancellationToken, UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS);
             }
             catch (Exception ex)
@@ -687,6 +709,37 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             _serverLifecycleRegistry.PublishServerStarted();
+        }
+
+        /// <summary>
+        /// Waits until Unity is ready for a main-thread IPC readiness probe.
+        /// </summary>
+        private async Task WaitForEditorIdleBeforeReadinessProbeAsync(
+            CancellationToken cancellationToken,
+            int timeoutMilliseconds)
+        {
+            Debug.Assert(timeoutMilliseconds > 0, "timeoutMilliseconds must be positive");
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            int remainingMilliseconds = timeoutMilliseconds;
+            while (_isReadinessProbeBlocked())
+            {
+                if (remainingMilliseconds <= 0)
+                {
+                    throw new TimeoutException(
+                        $"Readiness probe timed out after {timeoutMilliseconds}ms while waiting for Unity editor idle.");
+                }
+
+                int delayMilliseconds = Math.Min(READINESS_IDLE_POLL_INTERVAL_MS, remainingMilliseconds);
+                // Why: compile, import, and domain reload work can hold the editor thread after the
+                // endpoint is bound, so readiness timeout must start only after Unity can answer IPC.
+                await _waitBeforeReadinessRetryAsync(
+                    delayMilliseconds,
+                    cancellationToken);
+                remainingMilliseconds -= delayMilliseconds;
+                cancellationToken.ThrowIfCancellationRequested();
+            }
         }
 
         internal async Task ProbeReadinessWithTimeoutAsync(
