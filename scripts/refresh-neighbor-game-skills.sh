@@ -1,9 +1,9 @@
 #!/bin/sh
 # Development helper for refreshing generated uloop skill files in sibling Unity projects.
 # This is not an installed agent skill or a runtime command. It exists to support local
-# uloop development by quitting each target Unity Editor, regenerating Claude/Agents
-# skill copies, committing those generated files locally, removing Library after Unity
-# has stopped, and relaunching each project.
+# uloop development by resetting each target Git repository, quitting each target
+# Unity Editor, regenerating Claude/Agents skill copies, committing those generated
+# files locally, removing Library after Unity has stopped, and relaunching each project.
 set -eu
 
 skill_name="refresh-neighbor-game-skills"
@@ -31,11 +31,12 @@ Usage:
   refresh-neighbor-game-skills.sh [--dry-run] [--uloop-root PATH] [--project PATH ...]
 
 Workflow for each target Unity project:
-  0. Quit Unity if running
-  1. Install uloop skills for Claude and Agents
-  2. Commit generated skill changes without pushing
-  3. Remove Library
-  4. Launch Unity with launch-unity
+  0. Reset Git state to HEAD and remove untracked files
+  1. Quit Unity if running
+  2. Install uloop skills for Claude and Agents
+  3. Commit generated skill changes without pushing
+  4. Remove Library
+  5. Launch Unity with launch-unity
 USAGE
 }
 
@@ -238,6 +239,24 @@ assert_project_count() {
     [ "$count" -eq "$expected_project_count" ] || fail "expected $expected_project_count sibling Unity projects, found $count"
 }
 
+reset_git_state() {
+    project=$1
+    log "Resetting Git state: $project"
+    run git -C "$project" reset --hard HEAD
+    run git -C "$project" clean -fd
+
+    if [ "$dry_run" -eq 1 ]; then
+        log "[dry-run] assert Git state is clean for $project"
+        return 0
+    fi
+
+    dirty=$(git -C "$project" status --porcelain)
+    if [ -n "$dirty" ]; then
+        printf '%s\n' "$dirty" >&2
+        fail "git state is not clean after reset: $project"
+    fi
+}
+
 assert_clean_skill_dirs() {
     project=$1
     existing=$(git -C "$project" status --porcelain -- .claude/skills .agents/skills)
@@ -334,11 +353,16 @@ while IFS= read -r project; do
     log "  $project"
 done <"$project_file"
 
+log "Phase 0/5: reset Git state"
+while IFS= read -r project; do
+    reset_git_state "$project"
+done <"$project_file"
+
 while IFS= read -r project; do
     assert_clean_skill_dirs "$project"
 done <"$project_file"
 
-log "Phase 0/4: quit Unity"
+log "Phase 1/5: quit Unity"
 while IFS= read -r project; do
     quit_unity "$project"
 done <"$project_file"
@@ -347,22 +371,22 @@ while IFS= read -r project; do
     assert_unity_stopped "$project"
 done <"$project_file"
 
-log "Phase 1/4: install skills"
+log "Phase 2/5: install skills"
 while IFS= read -r project; do
     install_skills "$project"
 done <"$project_file"
 
-log "Phase 2/4: commit generated skills"
+log "Phase 3/5: commit generated skills"
 while IFS= read -r project; do
     commit_generated_skills "$project"
 done <"$project_file"
 
-log "Phase 3/4: remove Library"
+log "Phase 4/5: remove Library"
 while IFS= read -r project; do
     remove_library "$project"
 done <"$project_file"
 
-log "Phase 4/4: launch Unity"
+log "Phase 5/5: launch Unity"
 while IFS= read -r project; do
     launch_project "$project"
 done <"$project_file"
