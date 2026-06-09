@@ -7,12 +7,24 @@ description: "Use this as a quick breakpoint substitute for Unity PlayMode/E2E w
 
 Use this small loop for one transition you care about:
 
-1. Put `UnityCliLoopDebug.Break("state-transition-applied")` at the natural transition point.
-2. Compile, enter PlayMode, then enable the marker with `uloop enable-debug-break --id state-transition-applied --timeout-seconds 30`.
+1. Put a marker at the natural transition point:
+
+```csharp
+using io.github.hatayama.UnityCliLoop.Runtime;
+
+UnityCliLoopDebug.Break("state-transition-applied");
+```
+
+2. Compile, enter PlayMode, then enable the marker:
+
+```bash
+uloop enable-debug-break --id state-transition-applied --timeout-seconds 30
+```
+
 3. Trigger the action with a `simulate-*` command.
 4. Run `uloop wait-for-debug-break --id state-transition-applied --timeout-seconds 30`, even if the trigger command already returned `InterruptedByDebugBreak=true`.
-5. While Unity is paused, capture focused evidence with `uloop execute-dynamic-code`, `uloop get-logs`, and one screenshot.
-6. Clear the marker or stop PlayMode before moving on.
+5. While Unity is paused, capture focused evidence with `uloop execute-dynamic-code`, `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
+6. Clear the marker with `uloop clear-debug-break --id state-transition-applied` or stop PlayMode before moving on.
 
 ## When To Use
 
@@ -23,44 +35,11 @@ Use this small loop for one transition you care about:
 - Do not treat `simulate-* Success=true`, generic action logs, sleeps/retries, testing-only counters, or `Time.timeScale` changes as paused-frame proof.
 - Skip this for ordinary persistent-state checks when you are not validating input delivery, event ordering, or transition-frame fidelity.
 
-## Workflow
-
-1. Add a marker at the state you want to inspect:
-
-```csharp
-using io.github.hatayama.UnityCliLoop.Runtime;
-
-UnityCliLoopDebug.Break("state-transition-applied");
-```
-
-2. Compile the project.
-3. Enable the marker before triggering the target code path:
-
-```bash
-uloop enable-debug-break --id state-transition-applied --timeout-seconds 30
-```
-
-4. Check marker state if needed:
-
-```bash
-uloop debug-break-status --id state-transition-applied
-```
-
-5. Trigger the behavior with `simulate-keyboard`, `simulate-mouse-input`, UI interaction, dynamic code, or similar commands.
-6. Wait for the marker:
-
-```bash
-uloop wait-for-debug-break --id state-transition-applied --timeout-seconds 30
-```
+## Timeout Checks
 
 If this command times out, the marker line was not reached while the command waited. Inspect `error.details.status`, `hitCount`, `isPlaying`, `isPaused`, `elapsedSinceEnabledMilliseconds`, and `remainingMilliseconds` to distinguish input not being consumed, runtime conditions not being met, an id mismatch, or Unity already being paused. `elapsedSinceEnabledMilliseconds` is measured from `enable-debug-break`, not from `wait-for-debug-break`.
 
-7. While Unity is paused, inspect state with `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, screenshots, or `uloop execute-dynamic-code`. Add focused debug logs before the marker when local variables must be captured.
-8. Clear the marker if you stop waiting:
-
-```bash
-uloop clear-debug-break --id state-transition-applied
-```
+Use `uloop debug-break-status --id state-transition-applied` only when you need to confirm the marker is armed or inspect the current hit state. Add focused debug logs before the marker when local variables must be captured.
 
 ## Marker Placement
 
