@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -167,21 +168,146 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	}
 }
 
-// Verifies launch logs when it focuses an already-running Unity process.
-func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
-	enableCliVibeLog(t)
-
+func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) {
+	// Verifies launch reports machine-readable readiness when Unity was already running.
 	originalFinder := findRunningUnityProcessForLaunch
 	originalFocus := focusUnityProcessForLaunch
+	originalReadinessWait := waitForToolReadinessForLaunch
+	readinessChecked := false
 	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
 		return &unityProcess{pid: 111}, nil
 	}
 	focusUnityProcessForLaunch = func(context.Context, int) error {
 		return nil
 	}
+	waitForToolReadinessForLaunch = func(context.Context, string) error {
+		readinessChecked = true
+		return nil
+	}
 	t.Cleanup(func() {
 		findRunningUnityProcessForLaunch = originalFinder
 		focusUnityProcessForLaunch = originalFocus
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(
+		context.Background(),
+		launchOptions{projectPath: projectRoot},
+		projectRoot,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
+	}
+	if !readinessChecked {
+		t.Fatal("launch should verify tool readiness before reporting an existing Unity process as ready")
+	}
+	response := decodeLaunchResponseFromOutput(t, stdout.String())
+	if !response.Success || !response.Ready || !response.ServerReady || !response.ProjectIpcReady {
+		t.Fatalf("ready flags mismatch: %#v", response)
+	}
+	if !response.AlreadyRunning || response.Launched || response.Restarted {
+		t.Fatalf("process state flags mismatch: %#v", response)
+	}
+	if response.CurrentProcessId == nil || *response.CurrentProcessId != 111 {
+		t.Fatalf("current process id mismatch: %#v", response.CurrentProcessId)
+	}
+	if response.PreviousProcessId != nil {
+		t.Fatalf("existing launch should not report a previous process: %#v", response.PreviousProcessId)
+	}
+}
+
+func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
+	// Verifies restart reports both the stopped process and the newly launched process.
+	originalFinder := findRunningUnityProcessForLaunch
+	originalKiller := killUnityProcessForLaunch
+	originalResolver := resolveUnityExecutablePathForLaunch
+	originalLockfileWait := waitForUnityLockfileForLaunch
+	originalReadinessWait := waitForToolReadinessForLaunch
+	killedPid := 0
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 222}, nil
+	}
+	killUnityProcessForLaunch = func(pid int) error {
+		killedPid = pid
+		return nil
+	}
+	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
+		return "/usr/bin/true", nil
+	}
+	waitForUnityLockfileForLaunch = func(context.Context, string, time.Duration, time.Duration) error {
+		return nil
+	}
+	waitForToolReadinessForLaunch = func(context.Context, string) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		killUnityProcessForLaunch = originalKiller
+		resolveUnityExecutablePathForLaunch = originalResolver
+		waitForUnityLockfileForLaunch = originalLockfileWait
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, restart: true},
+		projectRoot,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
+	}
+	if killedPid != 222 {
+		t.Fatalf("restart killed pid mismatch: %d", killedPid)
+	}
+	response := decodeLaunchResponseFromOutput(t, stdout.String())
+	if !response.Success || !response.Ready || !response.ServerReady || !response.ProjectIpcReady {
+		t.Fatalf("ready flags mismatch: %#v", response)
+	}
+	if !response.Launched || !response.Restarted || response.AlreadyRunning {
+		t.Fatalf("process state flags mismatch: %#v", response)
+	}
+	if response.PreviousProcessId == nil || *response.PreviousProcessId != 222 {
+		t.Fatalf("previous process id mismatch: %#v", response.PreviousProcessId)
+	}
+	if response.CurrentProcessId == nil || *response.CurrentProcessId <= 0 {
+		t.Fatalf("current process id mismatch: %#v", response.CurrentProcessId)
+	}
+}
+
+// Verifies launch logs when it focuses an already-running Unity process.
+func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
+	enableCliVibeLog(t)
+
+	originalFinder := findRunningUnityProcessForLaunch
+	originalFocus := focusUnityProcessForLaunch
+	originalReadinessWait := waitForToolReadinessForLaunch
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 111}, nil
+	}
+	focusUnityProcessForLaunch = func(context.Context, int) error {
+		return nil
+	}
+	waitForToolReadinessForLaunch = func(context.Context, string) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		focusUnityProcessForLaunch = originalFocus
+		waitForToolReadinessForLaunch = originalReadinessWait
 	})
 
 	projectRoot := createLaunchTestProject(t)
@@ -218,15 +344,20 @@ func TestRunLaunchWritesExistingFocusFailureVibeLog(t *testing.T) {
 
 	originalFinder := findRunningUnityProcessForLaunch
 	originalFocus := focusUnityProcessForLaunch
+	originalReadinessWait := waitForToolReadinessForLaunch
 	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
 		return &unityProcess{pid: 222}, nil
 	}
 	focusUnityProcessForLaunch = func(context.Context, int) error {
 		return fmt.Errorf("activation denied")
 	}
+	waitForToolReadinessForLaunch = func(context.Context, string) error {
+		return nil
+	}
 	t.Cleanup(func() {
 		findRunningUnityProcessForLaunch = originalFinder
 		focusUnityProcessForLaunch = originalFocus
+		waitForToolReadinessForLaunch = originalReadinessWait
 	})
 
 	projectRoot := createLaunchTestProject(t)
@@ -350,4 +481,18 @@ func createLaunchTestProject(t *testing.T) string {
 		}
 	}
 	return projectRoot
+}
+
+func decodeLaunchResponseFromOutput(t *testing.T, output string) launchReadyResponse {
+	t.Helper()
+
+	jsonStart := strings.LastIndex(output, "{")
+	if jsonStart < 0 {
+		t.Fatalf("launch output did not contain a JSON object:\n%s", output)
+	}
+	var response launchReadyResponse
+	if err := json.Unmarshal([]byte(output[jsonStart:]), &response); err != nil {
+		t.Fatalf("failed to decode launch JSON: %v\n%s", err, output)
+	}
+	return response
 }
