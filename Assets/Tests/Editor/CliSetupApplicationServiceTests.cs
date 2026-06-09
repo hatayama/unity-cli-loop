@@ -31,25 +31,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetMinimumRequiredCliVersion_RequiresDebugBreakCliRelease()
+        public void GetMinimumRequiredCliVersion_UsesCliContractVersion()
         {
-            // Verifies this package release requires the CLI with debug-break native commands.
+            // Verifies setup reports the minimum CLI contract required by the package.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo("3.0.0-beta.26"));
+            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_VERSION));
         }
 
         [Test]
-        public void GetMinimumRequiredCliReleaseTag_UsesCliGitHubReleaseTag()
+        public void GetMinimumRequiredCliReleaseTag_UsesCliContractReleaseTag()
         {
-            // Verifies installers target the prefixed CLI GitHub Release tag.
+            // Verifies setup reports the prefixed release tag for the required CLI contract.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo("cli-v3.0.0-beta.26"));
+            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_RELEASE_TAG));
         }
 
         [Test]

@@ -272,8 +272,7 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		return 1
 	}
 	spinner.Stop()
-	writeLaunchReadyResponse(stdout)
-	return 0
+	return writeLaunchReadyResponse(stdout, stderr, projectRoot)
 }
 
 func newUnityLaunchCommand(unityPath string, launchArgs []string) *exec.Cmd {

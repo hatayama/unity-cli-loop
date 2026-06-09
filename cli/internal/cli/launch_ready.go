@@ -25,7 +25,7 @@ func writeLaunchReadinessWait(stdout io.Writer, spinner *terminalSpinner) {
 	}
 }
 
-func writeLaunchReadyResponse(stdout io.Writer) {
+func writeLaunchReadyResponse(stdout io.Writer, stderr io.Writer, projectRoot string) int {
 	response := launchReadyResponse{
 		Success:         true,
 		Ready:           true,
@@ -35,7 +35,9 @@ func writeLaunchReadyResponse(stdout io.Writer) {
 	}
 	payload, err := json.Marshal(response)
 	if err != nil {
-		panic(err)
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		return 1
 	}
 	writeJSON(stdout, payload)
+	return 0
 }
