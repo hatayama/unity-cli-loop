@@ -1,11 +1,11 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Use this as a quick breakpoint substitute for Unity PlayMode/E2E when uloop-simulated input changes runtime state. Add a marker, run wait-for-debug-break, and inspect paused variables/state; simulate-* success or InterruptedByDebugBreak alone is not proof."
+description: "Use this as a quick breakpoint substitute for Unity PlayMode/E2E when uloop-simulated input is expected to change runtime state. Add one marker at a representative transition, run wait-for-debug-break, and inspect paused variables/state; final logs, screenshots, or simulate-* success alone are not input-consumption proof."
 ---
 
 ## Quick Check Template
 
-Use this small loop for one transition you care about:
+Use this small loop for one representative transition you care about:
 
 1. Put a marker at the natural transition point:
 
@@ -30,10 +30,11 @@ uloop enable-debug-break --id state-transition-applied --timeout-seconds 30
 
 - Use this when a state transition is transient, frame-specific, or difficult to prove after the fact.
 - Use this during uloop interaction or endurance validation when simulated input drives a core runtime transition, even if durable state, logs, or screenshots can later confirm the final result.
+- A useful default is to check one representative input-driven transition per E2E pass, then use logs, screenshots, and durable state for the rest.
 - Good pause points include after input is consumed, a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
 - Treat the pause like a lightweight breakpoint for one important transition: combine nearby debug logs with paused-frame inspection to confirm the variables and component state at that point.
 - Do not treat `simulate-* Success=true`, generic action logs, sleeps/retries, testing-only counters, or `Time.timeScale` changes as paused-frame proof.
-- Skip this for ordinary persistent-state checks when you are not validating input delivery, event ordering, or transition-frame fidelity.
+- Skip this only for ordinary persistent-state checks when you are not validating simulated input delivery, event ordering, or transition-frame fidelity.
 
 ## Timeout Checks
 
