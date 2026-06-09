@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Use this as the standard frame proof for Unity PlayMode/E2E: pause one representative state-changing input, physics, or UI transition and inspect variables/GameObjects/state like an IDE breakpoint. If local/intermediate values are hard to inspect later, log them just before the marker and read get-logs while paused."
+description: "Use this as the standard frame proof for Unity PlayMode/E2E: pause one representative transition like an IDE breakpoint. For frame-local/intermediate values, marker-only proof is incomplete: add focused Debug.Log before the marker and read get-logs while paused."
 ---
 
 ## Quick Check Template
@@ -25,15 +25,21 @@ uloop enable-debug-break --id state-transition-applied --timeout-seconds 30
 
 3. Trigger the action with a `simulate-*` command.
 4. Run `uloop wait-for-debug-break --id state-transition-applied --timeout-seconds 30`, even if the trigger command already returned `InterruptedByDebugBreak=true`.
-5. While Unity is paused, capture focused evidence with `uloop get-logs`, `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
-6. Clear the marker with `uloop clear-debug-break --id state-transition-applied` or stop PlayMode before moving on.
+5. Before resuming, read the focused log for the same marker id:
+
+```bash
+uloop get-logs --search-text state-transition-applied --max-count 20
+```
+
+6. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
+7. Clear the marker with `uloop clear-debug-break --id state-transition-applied` or stop PlayMode before moving on.
 
 ## When To Use
 
 - Use this as the standard frame proof for state-changing PlayMode/E2E simulated input, physics, or UI transitions.
 - Pause at least one representative transition per E2E pass, even if durable state, logs, or screenshots can later confirm the final result.
 - Use this before reaching for `Time.timeScale`, sleeps, repeated polling, or after-the-fact `execute-dynamic-code`; those checks can supplement the paused-frame proof, but they are not substitutes.
-- If the value you need is a method local, an intermediate calculation, or a branch reason that `execute-dynamic-code` cannot reach, add a focused `Debug.Log` immediately before the marker and read it with `get-logs` while paused.
+- If the value you need is a method local, an intermediate calculation, or a branch reason that `execute-dynamic-code` cannot reach, add a focused `Debug.Log` immediately before the marker and read it with `get-logs` while paused. Do not count the breakpoint check complete until the matching log has been read.
 - Good pause points include after input is consumed, a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
 - Treat the pause like a lightweight breakpoint for one important transition: combine nearby debug logs with paused-frame inspection to confirm the variables and component state at that point.
 - Do not treat `simulate-* Success=true`, generic action logs, sleeps/retries, testing-only counters, or `Time.timeScale` changes as paused-frame proof.
