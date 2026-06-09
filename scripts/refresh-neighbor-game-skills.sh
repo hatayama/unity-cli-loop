@@ -67,7 +67,7 @@ unity_project_pids() {
             BEGIN {
                 project_re = project
                 gsub(/[][(){}.^$*+?|\\]/, "\\\\&", project_re)
-                project_re = "-projectPath[[:space:]]+" project_re "([[:space:]]|$)"
+                project_re = "-projectPath[[:space:]]+" project_re "/*([[:space:]]|$)"
             }
             /Unity\.app\/Contents\/MacOS\/Unity/ &&
             $0 ~ project_re &&
