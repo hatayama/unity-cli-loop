@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-keyboard
 toolName: simulate-keyboard
-description: "Simulate keyboard input in PlayMode through Unity Input System. Use for key presses, holds, releases, and state-changing E2E checks; pair one representative transition with uloop-wait-for-debug-break when input delivery matters."
+description: "Simulate keyboard input in PlayMode through Unity Input System. For state-changing PlayMode/E2E input, also use uloop-wait-for-debug-break on at least one representative frame; Time.timeScale, sleeps, screenshots, or after-the-fact checks are not substitutes."
 context: fork
 ---
 
@@ -12,7 +12,7 @@ Simulate keyboard input on Unity PlayMode: $ARGUMENTS
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
-2. If this is a state-changing E2E check, pick one representative transition for paused proof before relying on logs, screenshots, or durable state
+2. If this is a state-changing E2E check, pick one representative frame for paused variable/state proof before relying on logs, screenshots, or durable state
 3. For that representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the input and inspect while Unity is paused
 4. Execute any remaining `uloop simulate-keyboard` commands
 5. Take a screenshot to verify the visible result: `uloop screenshot --capture-mode rendering`
@@ -47,7 +47,8 @@ Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
 
 ### Debug Break verification
 
-- Prefer one `UnityCliLoopDebug.Break("<id>")` marker for a representative keyboard input that changes runtime state. This is useful even when final logs or screenshots later show the outcome, because it proves the transition frame and input consumption.
+- Use one `UnityCliLoopDebug.Break("<id>")` marker for at least one representative keyboard input that changes runtime state. This applies even when final logs, screenshots, or durable state later show the outcome, because it pauses the exact frame where variables/state can prove input consumption.
+- Use the marker before slowing time, sleeping, polling, or rewriting runtime code to work around a missed input frame. Treat those checks as supplements, not substitutes.
 - Put the marker at a natural state transition after the app consumed the key, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, or a dependent component is updated. Do not place it immediately after sending `simulate-keyboard`.
 - Treat `simulate-keyboard Success=true`, generic action logs, and final durable counters as useful evidence, but not as paused-frame proof.
 - If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. If a `UnityCliLoopDebug.Break` marker caused the pause, `DebugBreakId` and `DebugBreakHitCount` identify it. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.

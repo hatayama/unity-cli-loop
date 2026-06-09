@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-mouse-ui
 toolName: simulate-mouse-ui
-description: "Simulate PlayMode EventSystem UI mouse actions using screen coordinates. Use for UI clicks, long-presses, or drags from annotated screenshots; pair one representative state-changing UI action with uloop-wait-for-debug-break when input delivery matters."
+description: "Simulate PlayMode EventSystem UI mouse actions using screen coordinates. For state-changing PlayMode/E2E UI actions, also use uloop-wait-for-debug-break on at least one representative frame; Time.timeScale, sleeps, screenshots, or after-the-fact checks are not substitutes."
 context: fork
 ---
 
@@ -14,7 +14,7 @@ Simulate mouse interaction on Unity PlayMode UI: $ARGUMENTS
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. Get UI element info: `uloop screenshot --capture-mode rendering --annotate-elements --elements-only`
 3. Use the `AnnotatedElements` array to find the target element by `Label`, `Name`, or `Path` (A=frontmost, B=next, ...). Use `Interaction` to distinguish click targets from drag/drop/text targets, then use `SimX`/`SimY` directly as `--x`/`--y` coordinates.
-4. If this UI action changes runtime state, pick one representative transition for paused proof before relying on logs, screenshots, or durable state
+4. If this UI action changes runtime state, pick one representative frame for paused variable/state proof before relying on logs, screenshots, or durable state
 5. For that representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the UI action and inspect while Unity is paused
 6. Execute any remaining `uloop simulate-mouse-ui` commands
 7. Take a screenshot to verify the visible result: `uloop screenshot --capture-mode rendering --annotate-elements`
@@ -79,7 +79,8 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 
 ## Debug Break Verification
 
-- Prefer one `UnityCliLoopDebug.Break("<id>")` marker for a representative UI action that changes runtime state. This is useful even when final logs or screenshots later show the outcome, because it proves the transition frame and input consumption.
+- Use one `UnityCliLoopDebug.Break("<id>")` marker for at least one representative UI action that changes runtime state. This applies even when final logs, screenshots, or durable state later show the outcome, because it pauses the exact frame where variables/state can prove input consumption.
+- Use the marker before slowing time, sleeping, polling, or rewriting runtime code to work around a missed input frame. Treat those checks as supplements, not substitutes.
 - Put the marker at a natural transition after the app consumed the UI event, such as after a command is accepted, a state mutation is committed, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
 - Treat `simulate-mouse-ui Success=true`, generic action logs, and final durable counters as useful evidence, but not as paused-frame proof.
 - If a `UnityCliLoopDebug.Break` marker pauses Unity, inspect with `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
