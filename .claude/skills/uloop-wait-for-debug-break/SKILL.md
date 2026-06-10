@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Use this as the standard frame proof for Unity PlayMode/E2E: pause one representative transition like an IDE breakpoint. For frame-local/intermediate values, marker-only proof is incomplete: add focused Debug.Log before the marker and read get-logs while paused."
+description: "Use this like an IDE breakpoint for Unity PlayMode/E2E when you need to pause a specific frame and inspect variables, GameObjects, or runtime state."
 ---
 
 ## Quick Check Template
