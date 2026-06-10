@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-mouse-input
 toolName: simulate-mouse-input
-description: "Simulate Mouse.current input in PlayMode through Unity Input System. For state-changing PlayMode/E2E mouse input, also use uloop-wait-for-debug-break; when frame-local values matter, pair the marker with focused Debug.Log and get-logs before resuming. Use simulate-mouse-ui for UI."
+description: "Simulate Mouse.current input in PlayMode through Unity Input System for gameplay clicks, movement delta, or scroll. For state-changing PlayMode/E2E mouse input, uloop-wait-for-debug-break can help when paired with UnityCliLoopDebug.Break(\"id\") to pause an inspectable frame; use uloop-get-logs if you also logged local/intermediate values. Use simulate-mouse-ui for UI."
 context: fork
 ---
 
@@ -13,11 +13,11 @@ Simulate mouse input via Input System in Unity PlayMode.
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. For Click/LongPress: determine the target screen position (use `uloop screenshot` to find coordinates)
-3. If exact-frame proof would reduce uncertainty for a state-changing E2E check, pick one representative frame for paused variable/state inspection
-4. For that optional representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the input and inspect while Unity is paused
-5. Execute the needed `uloop simulate-mouse-input` commands
+3. Execute the needed `uloop simulate-mouse-input` commands
+4. If exact-frame proof would reduce uncertainty, optionally pair the scenario with `UnityCliLoopDebug.Break("<id>")` and `uloop-wait-for-debug-break`, then inspect while Unity is paused
+5. If local or intermediate values matter, log only those values near the break and read them with `uloop-get-logs`
 6. If visible output matters, capture a screenshot: `uloop screenshot --capture-mode rendering`
-7. Report what happened
+7. Report what happened and which evidence was used
 
 ## Tool Reference
 
@@ -49,15 +49,14 @@ uloop simulate-mouse-input --action <action> [options]
 | `SmoothDelta` | Mouse.current.delta (per-frame) | Inject mouse delta smoothly over `--duration` seconds (human-like camera pan) |
 | `Scroll` | Mouse.current.scroll | Inject scroll wheel input |
 
-### Debug Break verification
+### Optional Debug Break Inspection
 
-- Consider one `UnityCliLoopDebug.Break("<id>")` marker when a representative mouse input changes runtime state and exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
-- Use the marker before slowing time, sleeping, polling, or rewriting runtime code to work around a missed input frame. Treat those checks as supplements, not substitutes.
-- If the mouse handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values with `Debug.Log` immediately before the marker and read them with `get-logs` while Unity is paused. A marker-only check proves the line was reached, not the frame-local values.
-- Put the marker at a natural state transition after the app consumed the mouse input, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, or a dependent component is updated. Do not place it immediately after sending `simulate-mouse-input`.
-- Treat `simulate-mouse-input Success=true`, generic action logs, and final durable counters as useful evidence, but not as paused-frame proof.
-- If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. If a `UnityCliLoopDebug.Break` marker caused the pause, `DebugBreakId` and `DebugBreakHitCount` identify it. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
-- Use distinct marker ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.
+- Use `UnityCliLoopDebug.Break("<id>")` with `uloop-wait-for-debug-break` only when exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
+- Place the break at a natural state transition after the app consumed the mouse input, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, or a dependent component is updated. Do not place it immediately after sending `simulate-mouse-input`.
+- If the mouse handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UnityCliLoopDebug.Break("<id>")` and read them with `uloop-get-logs` while Unity is paused. A break hit proves the line was reached, not the frame-local values.
+- If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. `DebugBreakId` and `DebugBreakHitCount` identify the break that paused Unity. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- Use distinct ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.
+- Remove temporary break/log instrumentation before final validation when it was added only for inspection.
 
 ### Global Options (optional)
 
@@ -119,7 +118,7 @@ Returns JSON with:
 - `PositionX`: Target X coordinate (nullable float; populated for `Click` / `LongPress`)
 - `PositionY`: Target Y coordinate (nullable float; populated for `Click` / `LongPress`)
 - `InterruptedByDebugBreak`: True when Unity paused during Debug Break inspection and the input bookkeeping was safely released
-- `DebugBreakId`: The marker id when a `UnityCliLoopDebug.Break` marker caused the interruption
-- `DebugBreakHitCount`: The marker hit count when a `UnityCliLoopDebug.Break` marker caused the interruption
+- `DebugBreakId`: The id from `UnityCliLoopDebug.Break("<id>")` when it caused the interruption
+- `DebugBreakHitCount`: The hit count for that `UnityCliLoopDebug.Break("<id>")`
 
 There is no `DeltaX`, `DeltaY`, `ScrollX`, `ScrollY`, `Duration`, or hit-element field in the response — only the issued action, button, target position, and Debug Break interruption state are echoed back. Verify visual outcome with a follow-up screenshot.
