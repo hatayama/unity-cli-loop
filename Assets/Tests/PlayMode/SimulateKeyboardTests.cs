@@ -62,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         public override void TearDown()
         {
             InputSystemUpdateHelper.ResetPauseProviderForTests();
+            InputSystemUpdateHelper.ResetTimeoutsForTests();
             UloopPausePointRegistry.ResetForTests();
             InputSettings settings = RequireInputSettings();
             settings.updateMode = originalUpdateMode;
@@ -750,6 +751,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             });
 
             Assert.IsTrue(lastResponse.Success, "Canceled KeyDown cleanup should leave later key-down requests usable.");
+        }
+
+        [UnityTest]
+        public IEnumerator WaitForRuntimeFrames_WhenFrameGoalCannotComplete_ShouldReturnTimedOut()
+        {
+            // Verifies that frame observation has a wall-clock guard and does not wait forever.
+            yield return null;
+
+            InputSystemUpdateHelper.ConfigureTimeoutsForTests(50, 50);
+            Task<InputSimulationWaitOutcome> task =
+                InputSystemUpdateHelper.WaitForRuntimeFrames(int.MaxValue, CancellationToken.None);
+
+            yield return WaitForTask(task);
+
+            Assert.AreEqual(InputSimulationWaitOutcome.TimedOut, task.Result);
         }
 
         #endregion

@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         request.ResolutionScale);
                     Canvas.ForceUpdateCanvases();
                     // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
-                    await EditorDelay.DelayFrame(ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES, ct);
+                    await EditorFrameWaiter.WaitFramesAsync(ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES, ct);
                 }
 
                 (texture, yOffset) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(

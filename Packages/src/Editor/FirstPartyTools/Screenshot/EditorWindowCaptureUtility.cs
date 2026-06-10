@@ -73,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             window.ShowTab();
-            await EditorDelay.DelayFrame(2, ct);
+            await EditorFrameWaiter.WaitFramesAsync(2, ct);
             return CaptureWindowInternal(window, resolutionScale);
         }
 
@@ -149,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(UnityEditor.EditorApplication.isPlaying, "CaptureGameRenderingAsync requires PlayMode");
 
             // Wait for the game camera to complete at least one full render cycle after any state change
-            await EditorDelay.DelayFrame(2, ct);
+            await EditorFrameWaiter.WaitFramesAsync(2, ct);
 
             RenderTexture rt = GameViewBridge.GetRenderTexture();
             if (rt == null)
@@ -209,4 +209,3 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
     }
 }
-

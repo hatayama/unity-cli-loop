@@ -37,34 +37,5 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             }
         }
         
-        /// <summary>
-        /// Fire-and-forget extension method for DelayFrameAwaitable
-        /// Allows writing: EditorDelay.DelayFrame().Forget()
-        /// </summary>
-        /// <param name="awaitable">DelayFrameAwaitable to fire and forget</param>
-        public static void Forget(this DelayFrameAwaitable awaitable)
-        {
-            // Convert to Task and discard using consistent pattern
-            ConvertToTask(awaitable).Forget();
-        }
-        
-        /// <summary>
-        /// Convert DelayFrameAwaitable to Task for fire-and-forget operations
-        /// Includes exception handling to prevent unobserved task exceptions in fire-and-forget scenarios
-        /// </summary>
-        private static async Task ConvertToTask(DelayFrameAwaitable awaitable)
-        {
-            try
-            {
-                await awaitable;
-            }
-            catch (System.Exception ex)
-            {
-                // Log the exception to prevent silent failures
-                UnityEngine.Debug.LogException(ex);
-                // Intentionally swallow exceptions in fire-and-forget scenarios
-                // to prevent unobserved task exceptions from crashing the application
-            }
-        }
     }
 }

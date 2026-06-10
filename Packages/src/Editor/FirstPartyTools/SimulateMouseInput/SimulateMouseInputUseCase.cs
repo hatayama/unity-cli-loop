@@ -177,10 +177,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string buttonName = button.ToString();
 
             // Set mouse position before clicking
-            await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetPositionState(mouse, screenPos), ct);
+            InputSimulationWaitOutcome positionOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => MouseInputState.SetPositionState(mouse, screenPos), ct).ConfigureAwait(false);
+            if (positionOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                return TimedOutButtonResult(UnityCliLoopMouseInputAction.Click, buttonName, inputPos);
+            }
 
             // Press button
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
             MouseInputState.SetButtonDown(button);
             SimulateMouseInputOverlayState.SetButtonHeld(button, true);
             bool pressWasApplied = false;
@@ -188,29 +193,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                    () => MouseInputState.SetButtonState(mouse, button, true), ct);
-                pressWasApplied = true;
-                waitOutcome = await InputSystemUpdateHelper.WaitForPressLifetime(request.Duration, ct);
+                waitOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                    () => MouseInputState.SetButtonState(mouse, button, true), ct)
+                    .ConfigureAwait(false);
+                if (waitOutcome == InputSimulationWaitOutcome.Completed)
+                {
+                    pressWasApplied = true;
+                    waitOutcome = await InputSystemUpdateHelper.WaitForPressLifetime(request.Duration, ct)
+                        .ConfigureAwait(false);
+                }
             }
             finally
             {
-                if (pressWasApplied)
+                if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
-                    await ReleaseButtonIfPossible(mouse, button);
+                    ScheduleTimedOutButtonCleanup(mouse, button, pressWasApplied);
+                }
+                else if (pressWasApplied)
+                {
+                    await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
+                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
                     MouseInputState.SetButtonUp(button);
                 }
                 else
                 {
+                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
                     MouseInputState.SetButtonUp(button);
                 }
-                if (waitOutcome == InputSimulationWaitOutcome.Paused)
+
+                if (waitOutcome != InputSimulationWaitOutcome.TimedOut)
                 {
-                    SimulateMouseInputOverlayState.Clear();
-                }
-                else
-                {
-                    SimulateMouseInputOverlayState.SetButtonHeld(button, false);
+                    if (waitOutcome == InputSimulationWaitOutcome.Paused)
+                    {
+                        SimulateMouseInputOverlayState.Clear();
+                    }
+                    else
+                    {
+                        SimulateMouseInputOverlayState.SetButtonHeld(button, false);
+                    }
                 }
             }
 
@@ -220,6 +240,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     UnityCliLoopMouseInputAction.Click,
                     buttonName,
                     inputPos);
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                return TimedOutButtonResult(UnityCliLoopMouseInputAction.Click, buttonName, inputPos);
             }
 
             string durationText = request.Duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(request.Duration)}s" : "";
@@ -253,10 +278,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string buttonName = button.ToString();
 
             // Set mouse position before pressing
-            await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetPositionState(mouse, screenPos), ct);
+            InputSimulationWaitOutcome positionOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => MouseInputState.SetPositionState(mouse, screenPos), ct).ConfigureAwait(false);
+            if (positionOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                return TimedOutButtonResult(UnityCliLoopMouseInputAction.LongPress, buttonName, inputPos);
+            }
 
             // Press button
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
             MouseInputState.SetButtonDown(button);
             SimulateMouseInputOverlayState.SetButtonHeld(button, true);
             bool pressWasApplied = false;
@@ -264,28 +294,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                    () => MouseInputState.SetButtonState(mouse, button, true), ct);
-                pressWasApplied = true;
+                waitOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                    () => MouseInputState.SetButtonState(mouse, button, true), ct)
+                    .ConfigureAwait(false);
 
                 // Hold for at least the minimum observation frames so the press
                 // is visible to game code, then continue until duration elapses.
-                waitOutcome = await InputSystemUpdateHelper.WaitForPressLifetime(request.Duration, ct);
+                if (waitOutcome == InputSimulationWaitOutcome.Completed)
+                {
+                    pressWasApplied = true;
+                    waitOutcome = await InputSystemUpdateHelper.WaitForPressLifetime(request.Duration, ct)
+                        .ConfigureAwait(false);
+                }
             }
             finally
             {
-                if (pressWasApplied)
+                if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
-                    await ReleaseButtonIfPossible(mouse, button);
+                    ScheduleTimedOutButtonCleanup(mouse, button, pressWasApplied);
                 }
-                MouseInputState.SetButtonUp(button);
-                if (waitOutcome == InputSimulationWaitOutcome.Paused)
+                else if (pressWasApplied)
                 {
-                    SimulateMouseInputOverlayState.Clear();
+                    await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
+                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                    MouseInputState.SetButtonUp(button);
                 }
                 else
                 {
-                    SimulateMouseInputOverlayState.SetButtonHeld(button, false);
+                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                    MouseInputState.SetButtonUp(button);
+                }
+
+                if (waitOutcome != InputSimulationWaitOutcome.TimedOut)
+                {
+                    if (waitOutcome == InputSimulationWaitOutcome.Paused)
+                    {
+                        SimulateMouseInputOverlayState.Clear();
+                    }
+                    else
+                    {
+                        SimulateMouseInputOverlayState.SetButtonHeld(button, false);
+                    }
                 }
             }
 
@@ -295,6 +344,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     UnityCliLoopMouseInputAction.LongPress,
                     buttonName,
                     inputPos);
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                return TimedOutButtonResult(UnityCliLoopMouseInputAction.LongPress, buttonName, inputPos);
             }
 
             return new UnityCliLoopMouseInputSimulationResult
@@ -314,13 +368,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Vector2 delta = new(request.DeltaX, request.DeltaY);
             SimulateMouseInputOverlayState.SetMoveDelta(delta);
 
-            await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetDeltaState(mouse, delta), ct);
-            InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct);
+            InputSimulationWaitOutcome applyOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => MouseInputState.SetDeltaState(mouse, delta), ct).ConfigureAwait(false);
+            if (applyOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                ScheduleTimedOutMouseOverlayCleanup();
+                return TimedOutActionResult(UnityCliLoopMouseInputAction.MoveDelta);
+            }
+
+            InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct)
+                .ConfigureAwait(false);
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
                 SimulateMouseInputOverlayState.Clear();
                 return InterruptedActionResult(UnityCliLoopMouseInputAction.MoveDelta);
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                ScheduleTimedOutMouseOverlayCleanup();
+                return TimedOutActionResult(UnityCliLoopMouseInputAction.MoveDelta);
             }
 
             return new UnityCliLoopMouseInputSimulationResult
@@ -339,13 +407,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int scrollDir = request.ScrollY > 0f ? 1 : request.ScrollY < 0f ? -1 : 0;
             SimulateMouseInputOverlayState.SetScrollDirection(scrollDir);
 
-            await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetScrollState(mouse, scroll), ct);
-            InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct);
+            InputSimulationWaitOutcome applyOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => MouseInputState.SetScrollState(mouse, scroll), ct).ConfigureAwait(false);
+            if (applyOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                ScheduleTimedOutMouseOverlayCleanup();
+                return TimedOutActionResult(UnityCliLoopMouseInputAction.Scroll);
+            }
+
+            InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct)
+                .ConfigureAwait(false);
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
                 SimulateMouseInputOverlayState.Clear();
                 return InterruptedActionResult(UnityCliLoopMouseInputAction.Scroll);
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                ScheduleTimedOutMouseOverlayCleanup();
+                return TimedOutActionResult(UnityCliLoopMouseInputAction.Scroll);
             }
 
             return new UnityCliLoopMouseInputSimulationResult
@@ -379,6 +461,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             while (true)
             {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+
                 float elapsed = Time.realtimeSinceStartup - startTime;
                 float t = Mathf.Clamp01(elapsed / duration);
 
@@ -386,16 +470,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Vector2 frameDelta = totalDelta * frameFraction;
                 SimulateMouseInputOverlayState.SetMoveDelta(frameDelta);
 
-                await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                    () => MouseInputState.InjectDelta(mouse, frameDelta), ct);
+                InputSimulationWaitOutcome applyOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                    () => MouseInputState.InjectDelta(mouse, frameDelta), ct).ConfigureAwait(false);
+                if (applyOutcome == InputSimulationWaitOutcome.TimedOut)
+                {
+                    ScheduleTimedOutDeltaCleanup(mouse);
+                    return TimedOutActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
+                }
 
                 previousT = t;
-                InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForRuntimeFrames(1, ct);
+                InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForRuntimeFrames(1, ct)
+                    .ConfigureAwait(false);
                 if (waitOutcome == InputSimulationWaitOutcome.Paused)
                 {
+                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
                     ResetDeltaIfPossible(mouse);
                     SimulateMouseInputOverlayState.Clear();
                     return InterruptedActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
+                }
+
+                if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+                {
+                    ScheduleTimedOutDeltaCleanup(mouse);
+                    return TimedOutActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
                 }
 
                 if (t >= 1f)
@@ -405,8 +502,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // Reset delta to zero after the smooth operation completes
-            await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.InjectDelta(mouse, Vector2.zero), ct);
+            InputSimulationWaitOutcome resetOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => MouseInputState.InjectDelta(mouse, Vector2.zero), ct).ConfigureAwait(false);
+            if (resetOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                ScheduleTimedOutDeltaCleanup(mouse);
+                return TimedOutActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
+            }
 
             return new UnityCliLoopMouseInputSimulationResult
             {
@@ -442,6 +544,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return result;
         }
 
+        private static UnityCliLoopMouseInputSimulationResult TimedOutButtonResult(
+            UnityCliLoopMouseInputAction action,
+            string buttonName,
+            Vector2 inputPos)
+        {
+            UnityCliLoopMouseInputSimulationResult result = TimedOutActionResult(action);
+            result.Button = buttonName;
+            result.PositionX = inputPos.x;
+            result.PositionY = inputPos.y;
+            return result;
+        }
+
+        private static UnityCliLoopMouseInputSimulationResult TimedOutActionResult(
+            UnityCliLoopMouseInputAction action)
+        {
+            return new UnityCliLoopMouseInputSimulationResult
+            {
+                Success = false,
+                Message = "Mouse input timed out while waiting for Unity Editor update. Cleanup is queued for the next Editor tick.",
+                Action = action.ToString()
+            };
+        }
+
         private static void AttachDebugBreakHit(UnityCliLoopMouseInputSimulationResult result)
         {
             if (result == null)
@@ -473,6 +598,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static async Task ReleaseButtonIfPossible(Mouse mouse, RuntimeMouseButton button)
         {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
             if (!CanInjectMouseState(mouse))
             {
                 return;
@@ -486,7 +612,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetButtonState(mouse, button, false), CancellationToken.None);
+                () => MouseInputState.SetButtonState(mouse, button, false),
+                CancellationToken.None).ConfigureAwait(false);
         }
 
         private static void ResetDeltaIfPossible(Mouse mouse)
@@ -501,6 +628,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
             }
+        }
+
+        private static void ScheduleTimedOutButtonCleanup(Mouse mouse, RuntimeMouseButton button, bool pressWasApplied)
+        {
+            CleanupTimedOutButtonAsync(mouse, button, pressWasApplied, CancellationToken.None).Forget();
+        }
+
+        private static async Task CleanupTimedOutButtonAsync(
+            Mouse mouse,
+            RuntimeMouseButton button,
+            bool pressWasApplied,
+            CancellationToken ct)
+        {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            if (pressWasApplied)
+            {
+                await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
+            }
+
+            MouseInputState.SetButtonUp(button);
+            SimulateMouseInputOverlayState.SetButtonHeld(button, false);
+        }
+
+        private static void ScheduleTimedOutMouseOverlayCleanup()
+        {
+            CleanupTimedOutMouseOverlayAsync(CancellationToken.None).Forget();
+        }
+
+        private static async Task CleanupTimedOutMouseOverlayAsync(CancellationToken ct)
+        {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            SimulateMouseInputOverlayState.Clear();
+        }
+
+        private static void ScheduleTimedOutDeltaCleanup(Mouse mouse)
+        {
+            CleanupTimedOutDeltaAsync(mouse, CancellationToken.None).Forget();
+        }
+
+        private static async Task CleanupTimedOutDeltaAsync(Mouse mouse, CancellationToken ct)
+        {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            ResetDeltaIfPossible(mouse);
+            SimulateMouseInputOverlayState.Clear();
         }
 
         private static bool CanInjectMouseState(Mouse mouse)

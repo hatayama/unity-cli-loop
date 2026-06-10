@@ -175,15 +175,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(() => KeyboardKeyState.SetKeyState(keyboard, key, true), ct);
-                pressWasApplied = true;
-                waitOutcome = await InputSystemUpdateHelper.WaitForPressLifetime(duration, ct);
+                waitOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                    () => KeyboardKeyState.SetKeyState(keyboard, key, true),
+                    ct).ConfigureAwait(false);
+                if (waitOutcome == InputSimulationWaitOutcome.Completed)
+                {
+                    pressWasApplied = true;
+                    waitOutcome = await InputSystemUpdateHelper.WaitForPressLifetime(duration, ct)
+                        .ConfigureAwait(false);
+                }
             }
             finally
             {
-                if (pressWasApplied)
+                if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
-                    await ReleaseKeyStateIfPossible(keyboard, key);
+                    ScheduleTimedOutPressCleanup(keyboard, key, pressWasApplied);
+                }
+                else if (pressWasApplied)
+                {
+                    await ReleaseKeyStateIfPossible(keyboard, key).ConfigureAwait(false);
                     KeyboardKeyState.UnregisterTransientKey(key);
                     if (waitOutcome == InputSimulationWaitOutcome.Paused)
                     {
@@ -191,7 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
                     else
                     {
-                        await FinalizePressOverlay(ct);
+                        await FinalizePressOverlay(ct).ConfigureAwait(false);
                     }
                 }
                 else
@@ -204,6 +214,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
                 return InterruptedPressResult(keyName);
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                return TimedOutKeyResult(UnityCliLoopKeyboardAction.Press, keyName);
             }
 
             string durationText = duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(duration)}s" : "";
@@ -237,24 +252,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(() => KeyboardKeyState.SetKeyState(keyboard, key, true), ct);
-                keyDownApplied = true;
-                KeyboardKeyState.SetKeyDown(key);
-                SimulateKeyboardOverlayState.AddHeldKey(keyName);
-                waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct);
-                committed = waitOutcome == InputSimulationWaitOutcome.Completed;
+                waitOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                    () => KeyboardKeyState.SetKeyState(keyboard, key, true),
+                    ct).ConfigureAwait(false);
+                if (waitOutcome == InputSimulationWaitOutcome.Completed)
+                {
+                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+                    keyDownApplied = true;
+                    KeyboardKeyState.SetKeyDown(key);
+                    SimulateKeyboardOverlayState.AddHeldKey(keyName);
+                    waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct)
+                        .ConfigureAwait(false);
+                    committed = waitOutcome == InputSimulationWaitOutcome.Completed;
+                }
             }
             finally
             {
-                if (keyDownApplied && !committed)
+                if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
-                    await RollbackHeldKey(keyboard, key, keyName);
+                    ScheduleTimedOutHeldKeyCleanup(keyboard, key, keyName, keyDownApplied);
+                }
+                else if (keyDownApplied && !committed)
+                {
+                    await RollbackHeldKey(keyboard, key, keyName).ConfigureAwait(false);
                 }
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
                 return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName);
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                return TimedOutKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName);
             }
 
             return new UnityCliLoopKeyboardSimulationResult
@@ -281,13 +312,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
-            await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(() => KeyboardKeyState.SetKeyState(keyboard, key, false), ct);
+            InputSimulationWaitOutcome applyOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => KeyboardKeyState.SetKeyState(keyboard, key, false),
+                ct).ConfigureAwait(false);
+            if (applyOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                ScheduleTimedOutHeldKeyCleanup(keyboard, key, keyName, true);
+                return TimedOutKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName);
+            }
+
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
             KeyboardKeyState.SetKeyUp(key);
             SimulateKeyboardOverlayState.RemoveHeldKey(keyName);
-            InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct);
+            InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct)
+                .ConfigureAwait(false);
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
                 return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName);
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                return TimedOutKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName);
             }
 
             return new UnityCliLoopKeyboardSimulationResult
@@ -329,6 +375,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return result;
         }
 
+        private static UnityCliLoopKeyboardSimulationResult TimedOutKeyResult(
+            UnityCliLoopKeyboardAction action,
+            string keyName)
+        {
+            return new UnityCliLoopKeyboardSimulationResult
+            {
+                Success = false,
+                Message = $"Keyboard input timed out while waiting for Unity Editor update. Key '{keyName}' cleanup is queued for the next Editor tick.",
+                Action = action.ToString(),
+                KeyName = keyName
+            };
+        }
+
         private static void AttachDebugBreakHit(UnityCliLoopKeyboardSimulationResult result)
         {
             if (result == null)
@@ -360,6 +419,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static async Task FinalizePressOverlay(CancellationToken ct)
         {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
             if (ct.IsCancellationRequested)
             {
                 SimulateKeyboardOverlayState.ClearPress();
@@ -367,18 +427,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SimulateKeyboardOverlayState.ReleasePress();
-            await EditorDelay.DelayFrame(1, CancellationToken.None);
+            await EditorFrameWaiter.WaitFramesAsync(1, CancellationToken.None).ConfigureAwait(false);
         }
 
         private static async Task RollbackHeldKey(Keyboard keyboard, Key key, string keyName)
         {
-            await ReleaseKeyStateIfPossible(keyboard, key);
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+            await ReleaseKeyStateIfPossible(keyboard, key).ConfigureAwait(false);
             KeyboardKeyState.SetKeyUp(key);
             SimulateKeyboardOverlayState.RemoveHeldKey(keyName);
         }
 
         private static async Task ReleaseKeyStateIfPossible(Keyboard keyboard, Key key)
         {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
             if (!CanInjectKeyboardState(keyboard))
             {
                 return;
@@ -391,7 +453,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(() => KeyboardKeyState.SetKeyState(keyboard, key, false), CancellationToken.None);
+            await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => KeyboardKeyState.SetKeyState(keyboard, key, false),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+
+        private static void ScheduleTimedOutPressCleanup(Keyboard keyboard, Key key, bool pressWasApplied)
+        {
+            CleanupTimedOutPressAsync(keyboard, key, pressWasApplied, CancellationToken.None).Forget();
+        }
+
+        private static async Task CleanupTimedOutPressAsync(
+            Keyboard keyboard,
+            Key key,
+            bool pressWasApplied,
+            CancellationToken ct)
+        {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            if (pressWasApplied)
+            {
+                await ReleaseKeyStateIfPossible(keyboard, key).ConfigureAwait(false);
+            }
+
+            KeyboardKeyState.UnregisterTransientKey(key);
+            SimulateKeyboardOverlayState.ClearPress();
+        }
+
+        private static void ScheduleTimedOutHeldKeyCleanup(Keyboard keyboard, Key key, string keyName, bool keyWasApplied)
+        {
+            CleanupTimedOutHeldKeyAsync(keyboard, key, keyName, keyWasApplied, CancellationToken.None).Forget();
+        }
+
+        private static async Task CleanupTimedOutHeldKeyAsync(
+            Keyboard keyboard,
+            Key key,
+            string keyName,
+            bool keyWasApplied,
+            CancellationToken ct)
+        {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            if (keyWasApplied)
+            {
+                await ReleaseKeyStateIfPossible(keyboard, key).ConfigureAwait(false);
+            }
+
+            KeyboardKeyState.SetKeyUp(key);
+            SimulateKeyboardOverlayState.RemoveHeldKey(keyName);
         }
 
         private static bool CanInjectKeyboardState(Keyboard keyboard)
