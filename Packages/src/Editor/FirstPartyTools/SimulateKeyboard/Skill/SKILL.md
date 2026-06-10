@@ -12,10 +12,10 @@ Simulate keyboard input on Unity PlayMode: $ARGUMENTS
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
-2. Execute the appropriate `uloop simulate-keyboard` command
-3. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
-4. If the screenshot cannot prove the gameplay state, place and enable a `UnityCliLoopDebug.Break("<id>")` marker with `uloop enable-debug-break`, run the input again, then inspect while Unity is paused
-5. Report what happened
+2. Execute the needed `uloop simulate-keyboard` commands
+3. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
+4. If exact-frame proof would reduce uncertainty, treat Debug Break inspection as an optional follow-up using the section below
+5. Report what happened and which evidence was used
 
 ## Tool Reference
 
@@ -39,17 +39,19 @@ uloop simulate-keyboard --action <action> --key <key> [options]
 | `KeyDown` | KeyDown only (held until KeyUp) | Start continuous movement, hold sprint |
 | `KeyUp` | KeyUp only (release held key) | Stop movement, release sprint |
 
-Use `Press` for edge-triggered gameplay code such as `Keyboard.current.spaceKey.wasPressedThisFrame`.
+Use `Press` for edge-triggered keyboard code such as `Keyboard.current.spaceKey.wasPressedThisFrame`.
 `KeyDown` emits one initial press edge, then only keeps the key held. It does not keep `wasPressedThisFrame` true while the key remains held.
-If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` true but the game state does not change, do not immediately rewrite the user's gameplay code to `isPressed`. First verify that the gameplay component is active during the command, that it polls input in the configured Input System update phase, and that a missed `KeyDown` edge is followed by `KeyUp` before retrying.
+If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` true but runtime state does not change, do not immediately rewrite the user's runtime code to `isPressed`. First verify that the target component is active during the command, that it polls input in the configured Input System update phase, and that a missed `KeyDown` edge is followed by `KeyUp` before retrying.
 Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
 
-### Debug Break verification
+### Optional Debug Break Inspection
 
-- Use `UnityCliLoopDebug.Break("<id>")` when a screenshot cannot prove that the keyboard input changed gameplay state, such as jump, sprint, or interaction.
-- Put the marker at a natural state transition after the game consumed the key, such as after jump velocity is applied, not immediately after sending `simulate-keyboard`.
+- Use `UnityCliLoopDebug.Break("<id>")` with `uloop-wait-for-debug-break` only when exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
+- Put the marker at a natural state transition after the app consumed the key, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, or a dependent component is updated. Do not place it immediately after sending `simulate-keyboard`.
+- If the key handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UnityCliLoopDebug.Break("<id>")` and read them with `uloop-get-logs` while Unity is paused. A break hit proves the line was reached, not the frame-local values.
+- Treat `simulate-keyboard Success=true`, generic action logs, and final durable counters as useful evidence, but not as paused-frame proof.
 - If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. If a `UnityCliLoopDebug.Break` marker caused the pause, `DebugBreakId` and `DebugBreakHitCount` identify it. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
-- Use distinct marker ids for strict phases, for example `jump-key-read` and `jump-velocity-applied`.
+- Use distinct marker ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.
 
 ### KeyDown/KeyUp Rules
 
@@ -68,16 +70,16 @@ Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
 ## Examples
 
 ```bash
-# One-shot key press (tap W once)
+# One-shot key press
 uloop simulate-keyboard --action Press --key W
 
-# Jump (tap Space)
+# One-shot action key
 uloop simulate-keyboard --action Press --key Space
 
-# Hold W for 2 seconds (move forward)
+# Hold a key for 2 seconds
 uloop simulate-keyboard --action Press --key W --duration 2.0
 
-# Sprint forward (hold Shift + W, then release)
+# Hold two keys, then release them
 uloop simulate-keyboard --action KeyDown --key LeftShift
 uloop simulate-keyboard --action KeyDown --key W
 uloop screenshot --capture-mode rendering

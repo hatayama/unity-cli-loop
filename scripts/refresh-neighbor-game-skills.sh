@@ -1,13 +1,15 @@
 #!/bin/sh
 # Development helper for refreshing generated uloop skill files in sibling Unity projects.
 # This is not an installed agent skill or a runtime command. It exists to support local
-# uloop development by quitting each target Unity Editor, regenerating Claude/Agents
-# skill copies, committing those generated files locally, removing Library after Unity
-# has stopped, and relaunching each project.
+# uloop development by resetting each target Git repository, quitting each target
+# Unity Editor, regenerating Claude/Agents skill copies, committing those generated
+# files locally, removing Library after Unity has stopped, relaunching each project,
+# and opening the sample scene.
 set -eu
 
 skill_name="refresh-neighbor-game-skills"
 expected_project_count=3
+sample_scene_path="Assets/Scenes/SampleScene.unity"
 dry_run=0
 uloop_root="${ULOOP_ROOT:-}"
 project_file="$(mktemp "${TMPDIR:-/tmp}/${skill_name}.projects.XXXXXX")"
@@ -31,11 +33,13 @@ Usage:
   refresh-neighbor-game-skills.sh [--dry-run] [--uloop-root PATH] [--project PATH ...]
 
 Workflow for each target Unity project:
-  0. Quit Unity if running
-  1. Install uloop skills for Claude and Agents
-  2. Commit generated skill changes without pushing
-  3. Remove Library
-  4. Launch Unity with launch-unity
+  0. Reset Git state to HEAD and remove untracked files
+  1. Quit Unity if running
+  2. Install uloop skills for Claude and Agents
+  3. Commit generated skill changes without pushing
+  4. Remove Library
+  5. Launch Unity with launch-unity
+  6. Open Assets/Scenes/SampleScene.unity
 USAGE
 }
 
@@ -238,6 +242,24 @@ assert_project_count() {
     [ "$count" -eq "$expected_project_count" ] || fail "expected $expected_project_count sibling Unity projects, found $count"
 }
 
+reset_git_state() {
+    project=$1
+    log "Resetting Git state: $project"
+    run git -C "$project" reset --hard HEAD
+    run git -C "$project" clean -fd
+
+    if [ "$dry_run" -eq 1 ]; then
+        log "[dry-run] assert Git state is clean for $project"
+        return 0
+    fi
+
+    dirty=$(git -C "$project" status --porcelain)
+    if [ -n "$dirty" ]; then
+        printf '%s\n' "$dirty" >&2
+        fail "git state is not clean after reset: $project"
+    fi
+}
+
 assert_clean_skill_dirs() {
     project=$1
     existing=$(git -C "$project" status --porcelain -- .claude/skills .agents/skills)
@@ -320,6 +342,63 @@ launch_project() {
     run launch-unity "$project"
 }
 
+wait_for_unity_ready() {
+    project=$1
+    timeout_seconds=$2
+    elapsed_seconds=0
+
+    if [ "$dry_run" -eq 1 ]; then
+        log "[dry-run] wait until Unity responds to uloop for $project"
+        return 0
+    fi
+
+    while [ "$elapsed_seconds" -lt "$timeout_seconds" ]; do
+        if "$uloop_bin" --project-path "$project" get-logs --max-count 1 >/dev/null 2>&1; then
+            return 0
+        fi
+
+        sleep 2
+        elapsed_seconds=$((elapsed_seconds + 2))
+    done
+
+    fail "Unity did not become ready after launch: $project"
+}
+
+open_sample_scene() {
+    project=$1
+    [ -f "$project/$sample_scene_path" ] || fail "sample scene not found: $project/$sample_scene_path"
+
+    wait_for_unity_ready "$project" 300
+    code="
+using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
+
+string scenePath = \"$sample_scene_path\";
+if (SceneManager.GetActiveScene().path != scenePath)
+{
+    EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+}
+
+return SceneManager.GetActiveScene().path;
+"
+    if [ "$dry_run" -eq 1 ]; then
+        run "$uloop_bin" --project-path "$project" execute-dynamic-code --code "$code"
+        return 0
+    fi
+
+    command -v jq >/dev/null 2>&1 || fail "jq is not available on PATH"
+    response=''
+    if ! response=$("$uloop_bin" --project-path "$project" execute-dynamic-code --code "$code"); then
+        [ -z "$response" ] || printf '%s\n' "$response" >&2
+        fail "failed to execute sample scene open command: $project"
+    fi
+
+    if ! printf '%s\n' "$response" | jq -e --arg scene_path "$sample_scene_path" '.Success == true and .Result == $scene_path' >/dev/null; then
+        printf '%s\n' "$response" >&2
+        fail "failed to open sample scene: $project"
+    fi
+}
+
 parse_args "$@"
 resolve_uloop_root
 discover_projects
@@ -334,11 +413,16 @@ while IFS= read -r project; do
     log "  $project"
 done <"$project_file"
 
+log "Phase 0/6: reset Git state"
+while IFS= read -r project; do
+    reset_git_state "$project"
+done <"$project_file"
+
 while IFS= read -r project; do
     assert_clean_skill_dirs "$project"
 done <"$project_file"
 
-log "Phase 0/4: quit Unity"
+log "Phase 1/6: quit Unity"
 while IFS= read -r project; do
     quit_unity "$project"
 done <"$project_file"
@@ -347,24 +431,29 @@ while IFS= read -r project; do
     assert_unity_stopped "$project"
 done <"$project_file"
 
-log "Phase 1/4: install skills"
+log "Phase 2/6: install skills"
 while IFS= read -r project; do
     install_skills "$project"
 done <"$project_file"
 
-log "Phase 2/4: commit generated skills"
+log "Phase 3/6: commit generated skills"
 while IFS= read -r project; do
     commit_generated_skills "$project"
 done <"$project_file"
 
-log "Phase 3/4: remove Library"
+log "Phase 4/6: remove Library"
 while IFS= read -r project; do
     remove_library "$project"
 done <"$project_file"
 
-log "Phase 4/4: launch Unity"
+log "Phase 5/6: launch Unity"
 while IFS= read -r project; do
     launch_project "$project"
+done <"$project_file"
+
+log "Phase 6/6: open sample scene"
+while IFS= read -r project; do
+    open_sample_scene "$project"
 done <"$project_file"
 
 log "Done."
