@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-keyboard
 toolName: simulate-keyboard
-description: "Simulate keyboard input in PlayMode through Unity Input System. For state-changing PlayMode/E2E input, also use uloop-wait-for-debug-break; when frame-local values matter, pair the marker with focused Debug.Log and get-logs before resuming."
+description: "Simulate keyboard input in PlayMode through Unity Input System. Use for key presses, holds, releases, and game controls such as WASD or Space."
 context: fork
 ---
 
@@ -12,11 +12,10 @@ Simulate keyboard input on Unity PlayMode: $ARGUMENTS
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
-2. If exact-frame proof would reduce uncertainty for a state-changing E2E check, pick one representative frame for paused variable/state inspection
-3. For that optional representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the input and inspect while Unity is paused
-4. Execute the needed `uloop simulate-keyboard` commands
-5. If visible output matters, capture a screenshot: `uloop screenshot --capture-mode rendering`
-6. Report what happened
+2. Execute the needed `uloop simulate-keyboard` commands
+3. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
+4. If exact-frame proof would reduce uncertainty, treat Debug Break inspection as an optional follow-up using the section below
+5. Report what happened and which evidence was used
 
 ## Tool Reference
 
@@ -45,12 +44,11 @@ Use `Press` for edge-triggered keyboard code such as `Keyboard.current.spaceKey.
 If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` true but runtime state does not change, do not immediately rewrite the user's runtime code to `isPressed`. First verify that the target component is active during the command, that it polls input in the configured Input System update phase, and that a missed `KeyDown` edge is followed by `KeyUp` before retrying.
 Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
 
-### Debug Break verification
+### Optional Debug Break Inspection
 
-- Consider one `UnityCliLoopDebug.Break("<id>")` marker when a representative keyboard input changes runtime state and exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
-- Use the marker before slowing time, sleeping, polling, or rewriting runtime code to work around a missed input frame. Treat those checks as supplements, not substitutes.
-- If the key handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values with `Debug.Log` immediately before the marker and read them with `get-logs` while Unity is paused. A marker-only check proves the line was reached, not the frame-local values.
+- Use `UnityCliLoopDebug.Break("<id>")` with `uloop-wait-for-debug-break` only when exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
 - Put the marker at a natural state transition after the app consumed the key, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, or a dependent component is updated. Do not place it immediately after sending `simulate-keyboard`.
+- If the key handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UnityCliLoopDebug.Break("<id>")` and read them with `uloop-get-logs` while Unity is paused. A break hit proves the line was reached, not the frame-local values.
 - Treat `simulate-keyboard Success=true`, generic action logs, and final durable counters as useful evidence, but not as paused-frame proof.
 - If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. If a `UnityCliLoopDebug.Break` marker caused the pause, `DebugBreakId` and `DebugBreakHitCount` identify it. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
 - Use distinct marker ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.

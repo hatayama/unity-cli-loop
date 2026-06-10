@@ -381,7 +381,22 @@ if (SceneManager.GetActiveScene().path != scenePath)
 
 return SceneManager.GetActiveScene().path;
 "
-    run "$uloop_bin" --project-path "$project" execute-dynamic-code --code "$code"
+    if [ "$dry_run" -eq 1 ]; then
+        run "$uloop_bin" --project-path "$project" execute-dynamic-code --code "$code"
+        return 0
+    fi
+
+    command -v jq >/dev/null 2>&1 || fail "jq is not available on PATH"
+    response=''
+    if ! response=$("$uloop_bin" --project-path "$project" execute-dynamic-code --code "$code"); then
+        [ -z "$response" ] || printf '%s\n' "$response" >&2
+        fail "failed to execute sample scene open command: $project"
+    fi
+
+    if ! printf '%s\n' "$response" | jq -e --arg scene_path "$sample_scene_path" '.Success == true and .Result == $scene_path' >/dev/null; then
+        printf '%s\n' "$response" >&2
+        fail "failed to open sample scene: $project"
+    fi
 }
 
 parse_args "$@"
