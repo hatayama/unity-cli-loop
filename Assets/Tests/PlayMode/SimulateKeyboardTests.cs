@@ -848,6 +848,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator ApplyOnNextConfiguredUpdate_WhenApplyThrows_ShouldFaultAndRemoveCallback()
+        {
+            // Verifies that apply failures complete the wait as faulted instead of leaving the callback pending.
+            yield return null;
+
+            InputSettings settings = RequireInputSettings();
+            settings.updateMode = InputSettings.UpdateMode.ProcessEventsInDynamicUpdate;
+            InvalidOperationException expectedException = new("Apply failed.");
+            Task<InputSimulationWaitOutcome> task = InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => throw expectedException,
+                CancellationToken.None);
+
+            Assert.AreEqual(1, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount);
+
+            yield return WaitForTask(task, allowFaulted: true);
+
+            Assert.IsTrue(task.IsFaulted, "Apply failures should fault the returned task.");
+            Assert.AreSame(expectedException, task.Exception?.GetBaseException());
+            Assert.AreEqual(0, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount, "Faulted apply should remove the pending Input System callback.");
+        }
+
+        [UnityTest]
         public IEnumerator WaitForRuntimeFrames_WhenFrameGoalCannotComplete_ShouldReturnTimedOut()
         {
             // Verifies that frame observation has a wall-clock guard and does not wait forever.
@@ -874,7 +896,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             lastResponse = (SimulateKeyboardResponse)task.Result;
         }
 
-        private static IEnumerator WaitForTask(Task task, bool allowCanceled = false)
+        private static IEnumerator WaitForTask(Task task, bool allowCanceled = false, bool allowFaulted = false)
         {
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
@@ -884,7 +906,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             {
                 Assert.IsFalse(task.IsCanceled, "Tool execution should not be canceled.");
             }
-            Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+            if (!allowFaulted)
+            {
+                Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+            }
         }
 
         private static InputSettings RequireInputSettings()

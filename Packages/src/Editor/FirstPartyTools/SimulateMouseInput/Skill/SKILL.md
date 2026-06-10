@@ -15,7 +15,7 @@ Simulate mouse input via Input System in Unity PlayMode.
 2. For Click/LongPress: determine the target screen position (use `uloop screenshot` to find coordinates)
 3. Execute the needed `uloop simulate-mouse-input` commands
 4. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
-5. If exact-frame proof would reduce uncertainty, treat Debug Break inspection as an optional follow-up using the section below
+5. When this input verifies a state transition, use Debug Break inspection from the section below as the standard frame proof
 6. Report what happened and which evidence was used
 
 ## Tool Reference

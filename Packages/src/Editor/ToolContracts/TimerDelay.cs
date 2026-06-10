@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         }
 
         /// <summary>
-        /// Waits for wall-clock time, then queues an action for the next Editor main-thread callback.
+        /// Waits for wall-clock time, then executes an action after the next Editor update.
         /// </summary>
         /// <param name="milliseconds">Milliseconds to wait</param>
         /// <param name="action">Action to execute on main thread</param>
@@ -62,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             }
 
             await Wait(milliseconds, ct);
+            await EditorFrameWaiter.WaitFramesAsync(1, ct);
             action();
         }
     }

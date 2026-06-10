@@ -16,7 +16,7 @@ Simulate mouse interaction on Unity PlayMode UI.
 3. Use the `AnnotatedElements` array to find the target element by `Label`, `Name`, or `Path` (A=frontmost, B=next, ...). Use `Interaction` to distinguish click targets from drag/drop/text targets, then use `SimX`/`SimY` directly as `--x`/`--y` coordinates.
 4. Execute the needed `uloop simulate-mouse-ui` commands
 5. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
-6. If exact-frame proof would reduce uncertainty, treat Debug Break inspection as an optional follow-up using the section below
+6. When this UI input verifies a state transition, use Debug Break inspection from the section below as the standard frame proof
 7. Report what happened and which evidence was used
 
 ## Tool Reference

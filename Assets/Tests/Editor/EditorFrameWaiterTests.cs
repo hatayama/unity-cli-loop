@@ -146,6 +146,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator WaitThenExecuteOnMainThread_WithZeroMilliseconds_DefersActionUntilEditorUpdate()
+        {
+            // Verifies that an already-completed timer wait still defers the action to an Editor update.
+            bool actionRan = false;
+
+            Task waitTask = TimerDelay.WaitThenExecuteOnMainThread(
+                0,
+                () => actionRan = true,
+                CancellationToken.None);
+
+            Assert.IsFalse(actionRan);
+            yield return null;
+
+            Assert.IsTrue(waitTask.IsCompleted);
+            Assert.IsFalse(waitTask.IsFaulted, $"Delayed action should not fault: {waitTask.Exception}");
+            Assert.IsTrue(actionRan);
+        }
+
+        [UnityTest]
+        public IEnumerator WaitFramesAsync_DoesNotRunSynchronousContinuationInsideEditorUpdate()
+        {
+            // Verifies that frame wait continuations are queued instead of running inline from Editor update.
+            int mainThreadId = Thread.CurrentThread.ManagedThreadId;
+            int continuationThreadId = -1;
+            Task waitTask = EditorFrameWaiter.WaitFramesAsync(1, CancellationToken.None);
+            Task continuationTask = waitTask.ContinueWith(
+                _ => continuationThreadId = Thread.CurrentThread.ManagedThreadId,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            float startTime = Time.realtimeSinceStartup;
+
+            while (!continuationTask.IsCompleted && Time.realtimeSinceStartup - startTime < 2f)
+            {
+                yield return null;
+            }
+
+            Assert.IsTrue(continuationTask.IsCompleted);
+            Assert.AreNotEqual(mainThreadId, continuationThreadId);
+        }
+
+        [UnityTest]
         public IEnumerator WaitThenExecuteOnMainThread_RunsActionOnCapturedSynchronizationContext()
         {
             // Verifies that the delayed action resumes on the SynchronizationContext captured before the timer wait.

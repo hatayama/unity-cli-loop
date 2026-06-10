@@ -95,8 +95,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 subscription?.Dispose();
-                apply();
-                tcs.TrySetResult(InputSimulationWaitOutcome.Completed);
+                try
+                {
+                    apply();
+                    tcs.TrySetResult(InputSimulationWaitOutcome.Completed);
+                }
+                catch (Exception exception)
+                {
+                    // Convert apply failures into the awaited task result so timeout paths never wait on an orphaned TCS.
+                    tcs.TrySetException(exception);
+                }
             };
 
             subscription = new InputSystemUpdateSubscription(callback);

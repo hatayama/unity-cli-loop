@@ -54,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 return Task.CompletedTask;
             }
 
-            TaskCompletionSource<bool> completionSource = new TaskCompletionSource<bool>();
+            TaskCompletionSource<bool> completionSource =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             EditorFrameWaitRequest request;
             lock (_lockObject)
             {
