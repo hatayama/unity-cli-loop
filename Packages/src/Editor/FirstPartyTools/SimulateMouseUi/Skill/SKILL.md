@@ -1,24 +1,23 @@
 ---
 name: uloop-simulate-mouse-ui
 toolName: simulate-mouse-ui
-description: "Simulate PlayMode EventSystem UI mouse actions using screen coordinates. For state-changing PlayMode/E2E UI actions, also use uloop-wait-for-debug-break; when frame-local values matter, pair the marker with focused Debug.Log and get-logs before resuming."
+description: "Simulate PlayMode EventSystem UI mouse actions using screen coordinates. Use for UI clicks, long-presses, or drags from annotated screenshots."
 context: fork
 ---
 
 # Task
 
-Simulate mouse interaction on Unity PlayMode UI: $ARGUMENTS
+Simulate mouse interaction on Unity PlayMode UI.
 
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. Get UI element info: `uloop screenshot --capture-mode rendering --annotate-elements --elements-only`
 3. Use the `AnnotatedElements` array to find the target element by `Label`, `Name`, or `Path` (A=frontmost, B=next, ...). Use `Interaction` to distinguish click targets from drag/drop/text targets, then use `SimX`/`SimY` directly as `--x`/`--y` coordinates.
-4. If this UI action changes runtime state, pick one representative frame for paused variable/state proof before relying on logs, screenshots, or durable state
-5. For that representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the UI action and inspect while Unity is paused
-6. Execute any remaining `uloop simulate-mouse-ui` commands
-7. Take a screenshot to verify the visible result: `uloop screenshot --capture-mode rendering --annotate-elements`
-8. Report what happened
+4. Execute the needed `uloop simulate-mouse-ui` commands
+5. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
+6. If exact-frame proof would reduce uncertainty, treat Debug Break inspection as an optional follow-up using the section below
+7. Report what happened and which evidence was used
 
 ## Tool Reference
 
@@ -77,14 +76,14 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 - `--bypass-raycast` still uses coordinates for pointer event positions, but chooses the clicked, long-pressed, or dragged GameObject by `--target-path`
 - If `--target-path` or `--drop-target-path` matches multiple active GameObjects, the command fails instead of choosing an arbitrary duplicate
 
-## Debug Break Verification
+## Optional Debug Break Inspection
 
-- Use one `UnityCliLoopDebug.Break("<id>")` marker for at least one representative UI action that changes runtime state. This applies even when final logs, screenshots, or durable state later show the outcome, because it pauses the exact frame where variables/state can prove input consumption.
-- Use the marker before slowing time, sleeping, polling, or rewriting runtime code to work around a missed input frame. Treat those checks as supplements, not substitutes.
-- If the UI handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values with `Debug.Log` immediately before the marker and read them with `get-logs` while Unity is paused. A marker-only check proves the line was reached, not the frame-local values.
-- Put the marker at a natural transition after the app consumed the UI event, such as after a command is accepted, a state mutation is committed, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
-- Treat `simulate-mouse-ui Success=true`, generic action logs, and final durable counters as useful evidence, but not as paused-frame proof.
-- If a `UnityCliLoopDebug.Break` marker pauses Unity, inspect with `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- Use `UnityCliLoopDebug.Break("<id>")` with `uloop-wait-for-debug-break` only when exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
+- Place the break at a natural transition after the app consumed the UI event, such as after a command is accepted, a state mutation is committed, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
+- If the UI handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UnityCliLoopDebug.Break("<id>")` and read them with `uloop-get-logs` while Unity is paused. A break hit proves the line was reached, not the frame-local values.
+- Treat `simulate-mouse-ui Success=true`, generic action logs, and final durable counters as useful evidence, not paused-frame proof.
+- If a `UnityCliLoopDebug.Break` pauses Unity, inspect with `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- Remove temporary break/log instrumentation before final validation when it was added only for inspection.
 
 ## Examples
 
