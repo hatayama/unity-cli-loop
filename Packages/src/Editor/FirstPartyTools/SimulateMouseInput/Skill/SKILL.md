@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-mouse-input
 toolName: simulate-mouse-input
-description: "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, held button input, movement delta, or scroll when runtime code reads Mouse.current. Use simulate-mouse-ui for UI."
+description: "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, held button input, movement delta, or scroll. Use simulate-mouse-ui for UI."
 context: fork
 ---
 
@@ -50,7 +50,7 @@ uloop simulate-mouse-input --action <action> [options]
 
 ### Optional Debug Break Inspection
 
-- This is optional. Use `UnityCliLoopDebug.Break("<id>")` with `uloop-wait-for-debug-break` only when exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
+- Use `UnityCliLoopDebug.Break("<id>")` with `uloop-wait-for-debug-break` only when exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
 - Place the break at a natural state transition after the app consumed the mouse input, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, or a dependent component is updated. Do not place it immediately after sending `simulate-mouse-input`.
 - If the mouse handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UnityCliLoopDebug.Break("<id>")` and read them with `uloop-get-logs` while Unity is paused. A break hit proves the line was reached, not the frame-local values.
 - If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. `DebugBreakId` and `DebugBreakHitCount` identify the break that paused Unity. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
