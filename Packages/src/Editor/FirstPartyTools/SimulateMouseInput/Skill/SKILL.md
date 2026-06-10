@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-mouse-input
 toolName: simulate-mouse-input
-description: "Simulate Mouse.current input in PlayMode through Unity Input System for gameplay clicks, movement delta, or scroll. For state-changing PlayMode/E2E mouse input, uloop-wait-for-debug-break can help when paired with UnityCliLoopDebug.Break(\"id\") to pause an inspectable frame; use uloop-get-logs if you also logged local/intermediate values. Use simulate-mouse-ui for UI."
+description: "Simulates Mouse.current input in the PlayMode environment using the Unity Input System. Supports click actions, changes in movement speed, and scrolling during gameplay. When used in conjunction with UnityCliLoopDebug.Break(\"id\"), it allows pausing inspectable frames. For logging local values and intermediate values, please use uloop-get-logs. For UI interactions, use simulate-mouse-ui instead."
 context: fork
 ---
 
