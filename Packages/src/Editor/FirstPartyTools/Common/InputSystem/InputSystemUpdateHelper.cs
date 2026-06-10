@@ -37,9 +37,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const int DefaultApplyTimeoutMilliseconds = 5000;
         private const int DefaultFrameObservationTimeoutMilliseconds = 5000;
         private const int PressDurationTimeoutGraceMilliseconds = 5000;
+        private const int ApplyWaitStateWaiting = 0;
+        private const int ApplyWaitStateApplying = 1;
+        private const int ApplyWaitStateFinishedWithoutApply = 2;
         private static Func<bool> isPausedProvider = () => EditorApplication.isPaused;
         private static int applyTimeoutMilliseconds = DefaultApplyTimeoutMilliseconds;
         private static int frameObservationTimeoutMilliseconds = DefaultFrameObservationTimeoutMilliseconds;
+        private static int pendingConfiguredUpdateCallbackCount;
 
         public static async Task<InputSimulationWaitOutcome> ApplyOnNextConfiguredUpdate(Action apply, CancellationToken ct)
         {
@@ -55,18 +59,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ApplyOnExplicitUpdate(apply, targetUpdateType, ct);
             }
 
-            TaskCompletionSource<InputSimulationWaitOutcome> tcs = new();
+            TaskCompletionSource<InputSimulationWaitOutcome> tcs =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
             CancellationTokenRegistration registration = default;
-            int isFinished = 0;
+            int applyWaitState = ApplyWaitStateWaiting;
             Action? callback = null;
+            InputSystemUpdateSubscription? subscription = null;
 
             callback = () =>
             {
                 Debug.Assert(callback != null, "callback must be assigned before subscription");
-                if (Interlocked.CompareExchange(ref isFinished, 0, 0) != 0)
+                Debug.Assert(subscription != null, "subscription must be assigned before callback invocation");
+                if (Interlocked.CompareExchange(
+                        ref applyWaitState,
+                        ApplyWaitStateWaiting,
+                        ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
                 {
-                    InputSystem.onBeforeUpdate -= callback;
-                    registration.Dispose();
+                    subscription?.Dispose();
                     return;
                 }
 
@@ -76,41 +85,68 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return;
                 }
 
-                if (Interlocked.Exchange(ref isFinished, 1) != 0)
+                if (Interlocked.CompareExchange(
+                        ref applyWaitState,
+                        ApplyWaitStateApplying,
+                        ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
                 {
-                    InputSystem.onBeforeUpdate -= callback;
-                    registration.Dispose();
+                    subscription?.Dispose();
                     return;
                 }
 
-                InputSystem.onBeforeUpdate -= callback;
-                registration.Dispose();
+                subscription?.Dispose();
                 apply();
                 tcs.TrySetResult(InputSimulationWaitOutcome.Completed);
             };
 
-            InputSystem.onBeforeUpdate += callback;
-            if (ct.CanBeCanceled)
+            subscription = new InputSystemUpdateSubscription(callback);
+            try
             {
-                registration = ct.Register(() =>
+                if (ct.CanBeCanceled)
                 {
-                    Interlocked.Exchange(ref isFinished, 1);
-                    tcs.TrySetCanceled(ct);
-                });
-            }
+                    registration = ct.Register(() =>
+                    {
+                        if (Interlocked.CompareExchange(
+                                ref applyWaitState,
+                                ApplyWaitStateFinishedWithoutApply,
+                                ApplyWaitStateWaiting) == ApplyWaitStateWaiting)
+                        {
+                            subscription?.Dispose();
+                            tcs.TrySetCanceled(ct);
+                        }
+                    });
+                }
 
-            Task timeoutTask = TimerDelay.Wait(applyTimeoutMilliseconds, ct);
-            Task completedTask = await Task.WhenAny(tcs.Task, timeoutTask).ConfigureAwait(false);
-            if (completedTask == timeoutTask)
+                using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                Task timeoutTask = TimerDelay.Wait(applyTimeoutMilliseconds, timeoutCts.Token);
+                Task completedTask = await Task.WhenAny(tcs.Task, timeoutTask).ConfigureAwait(false);
+                if (completedTask == timeoutTask)
+                {
+                    await timeoutTask.ConfigureAwait(false);
+                    if (Interlocked.CompareExchange(
+                            ref applyWaitState,
+                            ApplyWaitStateFinishedWithoutApply,
+                            ApplyWaitStateWaiting) == ApplyWaitStateWaiting)
+                    {
+                        subscription.Dispose();
+                        return InputSimulationWaitOutcome.TimedOut;
+                    }
+
+                    InputSimulationWaitOutcome appliedOutcome = await tcs.Task.ConfigureAwait(false);
+                    await SwitchToMainThreadIfNeeded(CancellationToken.None);
+                    return appliedOutcome;
+                }
+
+                timeoutCts.Cancel();
+                InputSimulationWaitOutcome outcome = await tcs.Task.ConfigureAwait(false);
+                await SwitchToMainThreadIfNeeded(CancellationToken.None);
+                return outcome;
+            }
+            finally
             {
-                await timeoutTask.ConfigureAwait(false);
-                Interlocked.Exchange(ref isFinished, 1);
-                return InputSimulationWaitOutcome.TimedOut;
+                registration.Dispose();
+                subscription?.Dispose();
             }
-
-            InputSimulationWaitOutcome outcome = await tcs.Task.ConfigureAwait(false);
-            await SwitchToMainThreadIfNeeded(ct);
-            return outcome;
         }
 
         public static int GetMinimumObservationFrameCount()
@@ -350,6 +386,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             frameObservationTimeoutMilliseconds = DefaultFrameObservationTimeoutMilliseconds;
         }
 
+        internal static int PendingConfiguredUpdateCallbackCount => Volatile.Read(ref pendingConfiguredUpdateCallbackCount);
+
         private static bool IsPaused()
         {
             return isPausedProvider();
@@ -366,15 +404,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return InputSimulationWaitOutcome.TimedOut;
             }
 
-            Task frameTask = EditorFrameWaiter.WaitFramesAsync(1, ct);
-            Task timeoutTask = TimerDelay.Wait(remainingMilliseconds, ct);
+            using CancellationTokenSource frameCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Task frameTask = EditorFrameWaiter.WaitFramesAsync(1, frameCts.Token);
+            using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Task timeoutTask = TimerDelay.Wait(remainingMilliseconds, timeoutCts.Token);
             Task completedTask = await Task.WhenAny(frameTask, timeoutTask).ConfigureAwait(false);
             if (completedTask == timeoutTask)
             {
                 await timeoutTask.ConfigureAwait(false);
+                frameCts.Cancel();
                 return InputSimulationWaitOutcome.TimedOut;
             }
 
+            timeoutCts.Cancel();
             await frameTask.ConfigureAwait(false);
             return InputSimulationWaitOutcome.Completed;
         }
@@ -389,6 +431,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return Math.Max(frameObservationTimeoutMilliseconds, (int)timeoutMilliseconds);
+        }
+
+        /// <summary>
+        /// Owns one Input System update subscription so timeout and cancellation paths remove it exactly once.
+        /// </summary>
+        private sealed class InputSystemUpdateSubscription : IDisposable
+        {
+            private readonly Action callback;
+            private int isDisposed;
+
+            public InputSystemUpdateSubscription(Action callback)
+            {
+                Debug.Assert(callback != null, "callback must not be null");
+
+                this.callback = callback ?? throw new ArgumentNullException(nameof(callback));
+                InputSystem.onBeforeUpdate += this.callback;
+                Interlocked.Increment(ref pendingConfiguredUpdateCallbackCount);
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref isDisposed, 1) != 0)
+                {
+                    return;
+                }
+
+                Interlocked.Decrement(ref pendingConfiguredUpdateCallbackCount);
+                if (MainThreadSwitcher.IsMainThread)
+                {
+                    InputSystem.onBeforeUpdate -= callback;
+                    return;
+                }
+
+                RemoveOnMainThreadAsync(CancellationToken.None).Forget();
+            }
+
+            private async Task RemoveOnMainThreadAsync(CancellationToken ct)
+            {
+                await SwitchToMainThreadIfNeeded(ct);
+                InputSystem.onBeforeUpdate -= callback;
+            }
         }
     }
 

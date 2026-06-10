@@ -1,7 +1,7 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEditor;
 
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
@@ -51,18 +51,18 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 throw new ArgumentNullException(nameof(action));
             }
 
-            await Wait(milliseconds, ct).ConfigureAwait(false);
-
-            TaskCompletionSource<bool> completionSource = new TaskCompletionSource<bool>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-            EditorApplication.delayCall += () =>
+            SynchronizationContext synchronizationContext = SynchronizationContext.Current;
+            Debug.Assert(
+                synchronizationContext != null,
+                "WaitThenExecuteOnMainThread must start from Unity's main-thread synchronization context.");
+            if (synchronizationContext == null)
             {
-                action();
-                completionSource.TrySetResult(true);
-            };
-            EditorApplication.QueuePlayerLoopUpdate();
+                throw new InvalidOperationException(
+                    "WaitThenExecuteOnMainThread must start from Unity's main-thread synchronization context.");
+            }
 
-            await completionSource.Task.ConfigureAwait(false);
+            await Wait(milliseconds, ct);
+            action();
         }
     }
 

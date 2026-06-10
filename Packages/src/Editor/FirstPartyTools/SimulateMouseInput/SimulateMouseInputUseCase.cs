@@ -211,9 +211,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
                 else if (pressWasApplied)
                 {
-                    await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
-                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
-                    MouseInputState.SetButtonUp(button);
+                    InputSimulationWaitOutcome releaseOutcome =
+                        await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
+                    if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
+                    {
+                        waitOutcome = InputSimulationWaitOutcome.TimedOut;
+                        ScheduleTimedOutButtonCleanup(mouse, button, false);
+                    }
+                    else
+                    {
+                        await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                        MouseInputState.SetButtonUp(button);
+                    }
                 }
                 else
                 {
@@ -315,9 +324,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
                 else if (pressWasApplied)
                 {
-                    await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
-                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
-                    MouseInputState.SetButtonUp(button);
+                    InputSimulationWaitOutcome releaseOutcome =
+                        await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
+                    if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
+                    {
+                        waitOutcome = InputSimulationWaitOutcome.TimedOut;
+                        ScheduleTimedOutButtonCleanup(mouse, button, false);
+                    }
+                    else
+                    {
+                        await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                        MouseInputState.SetButtonUp(button);
+                    }
                 }
                 else
                 {
@@ -596,24 +614,55 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             result.DebugBreakHitCount = snapshot.HitCount;
         }
 
-        private static async Task ReleaseButtonIfPossible(Mouse mouse, RuntimeMouseButton button)
+        private static async Task<InputSimulationWaitOutcome> ReleaseButtonIfPossible(Mouse mouse, RuntimeMouseButton button)
         {
             await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+            if (!CanInjectMouseState(mouse))
+            {
+                return InputSimulationWaitOutcome.Completed;
+            }
+
+            if (EditorApplication.isPaused)
+            {
+                ReleaseButtonImmediately(mouse, button);
+                return InputSimulationWaitOutcome.Completed;
+            }
+
+            InputSimulationWaitOutcome releaseOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => MouseInputState.SetButtonState(mouse, button, false),
+                CancellationToken.None).ConfigureAwait(false);
+            if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                ScheduleReleaseButtonImmediately(mouse, button);
+            }
+
+            return releaseOutcome;
+        }
+
+        private static void ScheduleReleaseButtonImmediately(Mouse mouse, RuntimeMouseButton button)
+        {
+            ReleaseButtonImmediatelyOnMainThreadAsync(mouse, button, CancellationToken.None).Forget();
+        }
+
+        private static async Task ReleaseButtonImmediatelyOnMainThreadAsync(
+            Mouse mouse,
+            RuntimeMouseButton button,
+            CancellationToken ct)
+        {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            ReleaseButtonImmediately(mouse, button);
+        }
+
+        private static void ReleaseButtonImmediately(Mouse mouse, RuntimeMouseButton button)
+        {
+            Debug.Assert(CanInjectMouseState(mouse), "mouse button can only be released while PlayMode has a mouse");
             if (!CanInjectMouseState(mouse))
             {
                 return;
             }
 
-            if (EditorApplication.isPaused)
-            {
-                MouseInputState.SetButtonState(mouse, button, false);
-                InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
-                return;
-            }
-
-            await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetButtonState(mouse, button, false),
-                CancellationToken.None).ConfigureAwait(false);
+            MouseInputState.SetButtonState(mouse, button, false);
+            InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
         }
 
         private static void ResetDeltaIfPossible(Mouse mouse)

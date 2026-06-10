@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
@@ -121,6 +122,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await TimerDelay.Wait(10, CancellationToken.None);
 
             Assert.AreEqual(0, EditorFrameWaiter.PendingWaitCount);
+        }
+
+        [UnityTest]
+        public IEnumerator WaitThenExecuteOnMainThread_WhenActionThrows_FaultsReturnedTask()
+        {
+            // Verifies that delayed main-thread action failures are observable by the awaiting caller.
+            Task waitTask = TimerDelay.WaitThenExecuteOnMainThread(
+                1,
+                () => throw new InvalidOperationException("Delayed action failed."),
+                CancellationToken.None);
+            float startTime = Time.realtimeSinceStartup;
+
+            while (!waitTask.IsCompleted && Time.realtimeSinceStartup - startTime < 2f)
+            {
+                yield return null;
+            }
+
+            Assert.IsTrue(waitTask.IsFaulted);
+            Exception exception = waitTask.Exception?.GetBaseException();
+            Assert.IsInstanceOf<InvalidOperationException>(exception);
+            Assert.AreEqual("Delayed action failed.", exception.Message);
         }
     }
 }
