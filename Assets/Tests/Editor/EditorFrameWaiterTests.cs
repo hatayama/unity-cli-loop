@@ -144,5 +144,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.IsInstanceOf<InvalidOperationException>(exception);
             Assert.AreEqual("Delayed action failed.", exception.Message);
         }
+
+        [UnityTest]
+        public IEnumerator WaitThenExecuteOnMainThread_RunsActionOnCapturedSynchronizationContext()
+        {
+            // Verifies that the delayed action resumes on the SynchronizationContext captured before the timer wait.
+            SynchronizationContext capturedContext = SynchronizationContext.Current;
+            int capturedThreadId = Thread.CurrentThread.ManagedThreadId;
+            SynchronizationContext actionContext = null;
+            int actionThreadId = -1;
+            Task waitTask = TimerDelay.WaitThenExecuteOnMainThread(
+                1,
+                () =>
+                {
+                    actionContext = SynchronizationContext.Current;
+                    actionThreadId = Thread.CurrentThread.ManagedThreadId;
+                },
+                CancellationToken.None);
+            float startTime = Time.realtimeSinceStartup;
+
+            while (!waitTask.IsCompleted && Time.realtimeSinceStartup - startTime < 2f)
+            {
+                yield return null;
+            }
+
+            Assert.IsTrue(waitTask.IsCompleted);
+            Assert.IsFalse(waitTask.IsFaulted, $"Delayed action should not fault: {waitTask.Exception}");
+            Assert.AreSame(capturedContext, actionContext);
+            Assert.AreEqual(capturedThreadId, actionThreadId);
+        }
     }
 }
