@@ -81,8 +81,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         public async Task StartReconnectionUITimeoutAsync(CancellationToken ct)
         {
-            int timeoutFrames = UnityCliLoopConstants.RECONNECTION_TIMEOUT_SECONDS * 60;
-            await EditorDelay.DelayFrame(timeoutFrames, ct);
+            int timeoutMilliseconds = UnityCliLoopConstants.RECONNECTION_TIMEOUT_SECONDS * 1000;
+            await TimerDelay.Wait(timeoutMilliseconds, ct);
             ct.ThrowIfCancellationRequested();
 
             bool isStillShowingUI = _sessionStateService.GetShowReconnectingUI();

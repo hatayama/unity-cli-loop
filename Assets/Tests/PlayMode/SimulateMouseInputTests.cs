@@ -38,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         public override void TearDown()
         {
             InputSystemUpdateHelper.ResetPauseProviderForTests();
+            InputSystemUpdateHelper.ResetTimeoutsForTests();
             UloopPausePointRegistry.ResetForTests();
             MouseInputState.ReleaseAllButtons();
             Object.DestroyImmediate(mouseObserverGo);

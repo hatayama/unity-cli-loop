@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             for (int frame = 0; frame < SIGNAL_SETTLE_FRAMES; frame++)
             {
-                await EditorDelay.DelayFrame(1, ct);
+                await EditorFrameWaiter.WaitFramesAsync(1, ct);
                 if (ShouldRequestWait(_parameters, EditorApplication.isCompiling, _reloadSignalObserved))
                 {
                     return true;

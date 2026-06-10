@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-debug-break
-description: "Use this like an IDE breakpoint for Unity PlayMode/E2E when you need to pause a specific frame and inspect variables, GameObjects, or runtime state."
+description: "Standard paused-frame proof for Unity PlayMode/E2E gameplay verification. Whenever you verify behavior driven by simulate-* input, physics, or UI events, pause at least one representative state transition with a debug break and inspect the frozen frame like an IDE breakpoint. simulate-* Success=true, action logs, screenshots, sleeps/retries, and final durable state supplement but do not replace this paused-frame proof."
 ---
 
 ## Quick Check Template
