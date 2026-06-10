@@ -1,7 +1,7 @@
 ---
 name: uloop-get-logs
 toolName: get-logs
-description: "Read current Unity Console entries from a running Editor. Use during bug investigation after compile, tests, PlayMode, dynamic code, or immediately after wait-for-debug-break; read focused Debug.Log output for frame-local values before resuming."
+description: "Read current Unity Console entries from a running Editor. Use during bug investigation after compile, tests, PlayMode, dynamic code, or immediately after `uloop wait-for-debug-break`."
 ---
 
 # uloop get-logs
