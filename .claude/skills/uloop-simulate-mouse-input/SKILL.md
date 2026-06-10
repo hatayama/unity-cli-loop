@@ -1,23 +1,22 @@
 ---
 name: uloop-simulate-mouse-input
 toolName: simulate-mouse-input
-description: "Simulate Mouse.current input in PlayMode through Unity Input System. For state-changing PlayMode/E2E mouse input, also use uloop-wait-for-debug-break; when frame-local values matter, pair the marker with focused Debug.Log and get-logs before resuming. Use simulate-mouse-ui for UI."
+description: "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay clicks, mouse delta, or scroll; use simulate-mouse-ui for EventSystem UI elements."
 context: fork
 ---
 
 # Task
 
-Simulate mouse input via Input System in Unity PlayMode.
+Simulate mouse input via Input System in Unity PlayMode: $ARGUMENTS
 
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. For Click/LongPress: determine the target screen position (use `uloop screenshot` to find coordinates)
-3. If exact-frame proof would reduce uncertainty for a state-changing E2E check, pick one representative frame for paused variable/state inspection
-4. For that optional representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the input and inspect while Unity is paused
-5. Execute the needed `uloop simulate-mouse-input` commands
-6. If visible output matters, capture a screenshot: `uloop screenshot --capture-mode rendering`
-7. Report what happened
+3. Execute the appropriate `uloop simulate-mouse-input` command
+4. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
+5. If the screenshot cannot prove the gameplay state, place and enable a `UnityCliLoopDebug.Break("<id>")` marker with `uloop enable-debug-break`, run the input again, then inspect while Unity is paused
+6. Report what happened
 
 ## Tool Reference
 
@@ -43,21 +42,18 @@ uloop simulate-mouse-input --action <action> [options]
 
 | Action | What it injects | Description |
 |--------|----------------|-------------|
-| `Click` | Mouse.current button press → release | Inject a button click so runtime logic detects `wasPressedThisFrame` |
+| `Click` | Mouse.current button press → release | Inject a button click so game logic detects `wasPressedThisFrame` |
 | `LongPress` | Mouse.current button press → hold → release | Hold a button for `--duration` seconds |
-| `MoveDelta` | Mouse.current.delta | Inject mouse movement delta one-shot |
+| `MoveDelta` | Mouse.current.delta | Inject mouse movement delta one-shot (e.g. for FPS camera look) |
 | `SmoothDelta` | Mouse.current.delta (per-frame) | Inject mouse delta smoothly over `--duration` seconds (human-like camera pan) |
-| `Scroll` | Mouse.current.scroll | Inject scroll wheel input |
+| `Scroll` | Mouse.current.scroll | Inject scroll wheel input (e.g. for hotbar or zoom) |
 
 ### Debug Break verification
 
-- Consider one `UnityCliLoopDebug.Break("<id>")` marker when a representative mouse input changes runtime state and exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
-- Use the marker before slowing time, sleeping, polling, or rewriting runtime code to work around a missed input frame. Treat those checks as supplements, not substitutes.
-- If the mouse handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values with `Debug.Log` immediately before the marker and read them with `get-logs` while Unity is paused. A marker-only check proves the line was reached, not the frame-local values.
-- Put the marker at a natural state transition after the app consumed the mouse input, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, or a dependent component is updated. Do not place it immediately after sending `simulate-mouse-input`.
-- Treat `simulate-mouse-input Success=true`, generic action logs, and final durable counters as useful evidence, but not as paused-frame proof.
+- Use `UnityCliLoopDebug.Break("<id>")` when a screenshot cannot prove that mouse input changed gameplay state, such as block hit, camera turn, or item placement.
+- Put the marker at a natural state transition after the game consumed the mouse input, such as after a raycast hit, damage application, placement, or camera rotation update, not immediately after sending `simulate-mouse-input`.
 - If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. If a `UnityCliLoopDebug.Break` marker caused the pause, `DebugBreakId` and `DebugBreakHitCount` identify it. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
-- Use distinct marker ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.
+- Use distinct marker ids for strict phases, for example `block-raycast-hit` and `block-damage-applied`.
 
 ### Global Options (optional)
 
@@ -71,31 +67,31 @@ uloop simulate-mouse-input --action <action> [options]
 | Scenario | Tool |
 |----------|------|
 | Click a Unity UI Button (IPointerClickHandler) | `simulate-mouse-ui` |
-| Runtime logic reads `Mouse.current.leftButton` | `simulate-mouse-input` when the project uses the New Input System |
-| Runtime logic reads right-click | `simulate-mouse-input --button Right` when the project uses the New Input System |
+| Destroy a block in Minecraft (reads `Mouse.current.leftButton`) | `simulate-mouse-input` when the project uses the New Input System |
+| Place a block with right-click | `simulate-mouse-input --button Right` when the project uses the New Input System |
 | Drag a UI slider | `simulate-mouse-ui --action Drag` |
-| Runtime logic reads `Mouse.current.delta` | `simulate-mouse-input --action MoveDelta` when the project uses the New Input System |
-| Runtime logic reads `Mouse.current.scroll` | `simulate-mouse-input --action Scroll` when the project uses the New Input System |
+| Look around with mouse (FPS camera) | `simulate-mouse-input --action MoveDelta` when the project uses the New Input System |
+| Scroll hotbar slots | `simulate-mouse-input --action Scroll` when the project uses the New Input System |
 
 ## Examples
 
 ```bash
-# Left-click at screen center for runtime input
+# Left-click at screen center (for game logic)
 uloop simulate-mouse-input --action Click --x 400 --y 300
 
-# Right-click at screen center
+# Right-click at screen center (e.g. place block)
 uloop simulate-mouse-input --action Click --x 400 --y 300 --button Right
 
-# Hold left-click for 2 seconds
+# Hold left-click for 2 seconds (e.g. mine block)
 uloop simulate-mouse-input --action LongPress --x 400 --y 300 --duration 2.0
 
-# Send a one-shot mouse delta
+# Look right (FPS camera)
 uloop simulate-mouse-input --action MoveDelta --delta-x 100 --delta-y 0
 
-# Scroll up
+# Scroll up (e.g. previous hotbar slot)
 uloop simulate-mouse-input --action Scroll --scroll-y 120
 
-# Scroll down
+# Scroll down (e.g. next hotbar slot)
 uloop simulate-mouse-input --action Scroll --scroll-y -120
 
 # Smooth camera pan right over 0.5 seconds

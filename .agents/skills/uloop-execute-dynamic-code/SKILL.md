@@ -1,7 +1,7 @@
 ---
 name: uloop-execute-dynamic-code
 toolName: execute-dynamic-code
-description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for reachable scene/component state, scene/prefab/menu automation, and PlayMode checks. It cannot see method locals from an already-running frame; use `uloop wait-for-debug-break` with focused Debug.Log and `uloop get-logs` for those."
+description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for scene, prefab, SerializedObject, AssetDatabase refresh/.meta generation, menu, or PlayMode automation."
 context: fork
 ---
 
@@ -10,8 +10,6 @@ context: fork
 Execute the following request using `uloop execute-dynamic-code`: $ARGUMENTS
 
 For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode Selected` before this tool. Use this tool after the built-in inspection tools are not enough or when you need to modify Unity state.
-
-This tool can inspect reachable Unity state, such as GameObjects, components, public properties, static values, and method results. It cannot directly read local variables or intermediate calculations inside an already-running method. When those values matter, add a focused `Debug.Log` immediately before `UnityCliLoopDebug.Break("<id>")`, then run `get-logs --search-text <id>` while Unity is paused. Do not replace that log read with execute-dynamic-code.
 
 ## Workflow
 
