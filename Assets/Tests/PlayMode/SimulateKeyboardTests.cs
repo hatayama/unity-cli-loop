@@ -62,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         public override void TearDown()
         {
             InputSystemUpdateHelper.ResetPauseProviderForTests();
+            InputSystemUpdateHelper.ResetTimeoutsForTests();
             UloopPausePointRegistry.ResetForTests();
             InputSettings settings = RequireInputSettings();
             settings.updateMode = originalUpdateMode;
@@ -182,6 +183,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.AreEqual("space-press", lastResponse.DebugBreakId);
             Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
             Assert.IsFalse(keyboard[Key.Space].isPressed, "Marker interruption should release the injected key state.");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_Cancellation_Should_ClearPressOverlay()
+        {
+            // Verifies that canceling an applied press releases input and clears transient overlay state.
+            yield return null;
+
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 2f
+            };
+            CancellationTokenSource cts = new();
+            Task<SimulateKeyboardResponse> task = tool.ExecuteWithCancellationAsync(parameters, cts.Token);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+
+            Assert.IsFalse(task.IsCompleted, "Cancellation test must interrupt the applied press.");
+            Assert.AreEqual("Space", SimulateKeyboardOverlayState.PressKey, "Applied press should show transient overlay state before cancellation.");
+
+            cts.Cancel();
+            yield return WaitForTask(task, allowCanceled: true);
+
+            Assert.IsTrue(task.IsCanceled, "Press cancellation should remain visible to the caller.");
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Canceled Press should release the injected key state.");
+            Assert.IsNull(SimulateKeyboardOverlayState.PressKey, "Canceled Press should clear transient overlay state.");
         }
 
         [UnityTest]
@@ -724,7 +753,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         {
             yield return null;
 
-            SimulateKeyboardSchema parameters = new()            {
+            SimulateKeyboardSchema parameters = new()
+            {
                 Action = UnityCliLoopKeyboardAction.KeyDown,
                 Key = "W"
             };
@@ -752,6 +782,109 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.Success, "Canceled KeyDown cleanup should leave later key-down requests usable.");
         }
 
+        [UnityTest]
+        public IEnumerator KeyUp_CancellationAfterRelease_Should_ClearHeldState()
+        {
+            // Verifies that canceling KeyUp after release does not leave held-key bookkeeping behind.
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "W"
+            });
+            Assert.IsTrue(lastResponse.Success, "KeyUp cancellation test requires an initially held key.");
+            Assert.IsTrue(KeyboardKeyState.IsKeyHeld(Key.W), "KeyUp cancellation test requires held-key bookkeeping.");
+
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.KeyUp,
+                Key = "W"
+            };
+            CancellationTokenSource cts = new();
+            Task<SimulateKeyboardResponse> task = tool.ExecuteWithCancellationAsync(parameters, cts.Token);
+            cts.Cancel();
+
+            yield return WaitForTask(task, allowCanceled: true);
+
+            Assert.IsTrue(task.IsCanceled, "KeyUp cancellation should remain visible to the caller.");
+            Assert.IsFalse(keyboard[Key.W].isPressed, "Canceled KeyUp should release the physical key state.");
+            Assert.IsFalse(KeyboardKeyState.IsKeyHeld(Key.W), "Canceled KeyUp should clear held-key bookkeeping.");
+            CollectionAssert.DoesNotContain(SimulateKeyboardOverlayState.HeldKeys, "W", "Canceled KeyUp should clear the overlay badge.");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "W"
+            });
+
+            Assert.IsTrue(lastResponse.Success, "Canceled KeyUp cleanup should leave later key-down requests usable.");
+        }
+
+        [UnityTest]
+        public IEnumerator ApplyOnNextConfiguredUpdate_CancellationBeforeInputUpdate_ShouldRemoveCallback()
+        {
+            // Verifies that cancellation removes the pending Input System callback before the next update.
+            yield return null;
+
+            InputSettings settings = RequireInputSettings();
+            settings.updateMode = InputSettings.UpdateMode.ProcessEventsInDynamicUpdate;
+            Time.timeScale = 1f;
+            int applyCount = 0;
+            CancellationTokenSource cts = new();
+
+            Task<InputSimulationWaitOutcome> task = InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => applyCount++,
+                cts.Token);
+
+            Assert.AreEqual(1, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount);
+
+            cts.Cancel();
+            yield return WaitForTask(task, allowCanceled: true);
+
+            Assert.IsTrue(task.IsCanceled, "Apply cancellation should remain visible to the caller.");
+            Assert.AreEqual(0, applyCount, "Canceled apply should not run after callback cleanup.");
+            Assert.AreEqual(0, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount, "Canceled apply should remove the pending Input System callback.");
+        }
+
+        [UnityTest]
+        public IEnumerator ApplyOnNextConfiguredUpdate_WhenApplyThrows_ShouldFaultAndRemoveCallback()
+        {
+            // Verifies that apply failures complete the wait as faulted instead of leaving the callback pending.
+            yield return null;
+
+            InputSettings settings = RequireInputSettings();
+            settings.updateMode = InputSettings.UpdateMode.ProcessEventsInDynamicUpdate;
+            InvalidOperationException expectedException = new("Apply failed.");
+            Task<InputSimulationWaitOutcome> task = InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => throw expectedException,
+                CancellationToken.None);
+
+            Assert.AreEqual(1, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount);
+
+            yield return WaitForTask(task, allowFaulted: true);
+
+            Assert.IsTrue(task.IsFaulted, "Apply failures should fault the returned task.");
+            Assert.AreSame(expectedException, task.Exception?.GetBaseException());
+            Assert.AreEqual(0, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount, "Faulted apply should remove the pending Input System callback.");
+        }
+
+        [UnityTest]
+        public IEnumerator WaitForRuntimeFrames_WhenFrameGoalCannotComplete_ShouldReturnTimedOut()
+        {
+            // Verifies that frame observation has a wall-clock guard and does not wait forever.
+            yield return null;
+
+            InputSystemUpdateHelper.ConfigureTimeoutsForTests(50, 50);
+            Task<InputSimulationWaitOutcome> task =
+                InputSystemUpdateHelper.WaitForRuntimeFrames(int.MaxValue, CancellationToken.None);
+
+            yield return WaitForTask(task);
+
+            Assert.AreEqual(InputSimulationWaitOutcome.TimedOut, task.Result);
+            Assert.AreEqual(0, EditorFrameWaiter.PendingWaitCount, "Timed-out frame observation should cancel its pending frame wait.");
+        }
+
         #endregion
 
         #region Helpers
@@ -763,7 +896,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             lastResponse = (SimulateKeyboardResponse)task.Result;
         }
 
-        private static IEnumerator WaitForTask(Task task, bool allowCanceled = false)
+        private static IEnumerator WaitForTask(Task task, bool allowCanceled = false, bool allowFaulted = false)
         {
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
@@ -773,7 +906,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             {
                 Assert.IsFalse(task.IsCanceled, "Tool execution should not be canceled.");
             }
-            Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+            if (!allowFaulted)
+            {
+                Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+            }
         }
 
         private static InputSettings RequireInputSettings()
