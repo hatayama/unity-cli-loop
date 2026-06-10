@@ -41,7 +41,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             UloopPausePointEntry entry = Entries[id];
-            entry.MarkCleared();
+            // Resolve expiry first so a clear after the timeout reports "expired", not a normal clear.
+            entry.ExpireIfNeeded(now);
+            string message = entry.Status switch
+            {
+                UloopPausePointStatus.Hit => "Pause point was already hit (auto-disarmed); nothing to clear.",
+                UloopPausePointStatus.Expired => "Pause point had already expired before being hit; nothing to clear.",
+                UloopPausePointStatus.Cleared => "Pause point was already cleared.",
+                _ => "Pause point cleared."
+            };
+            entry.MarkCleared(message);
             ClearLatestHitSnapshotIfMatches(id);
             return entry.ToSnapshot(now, _pauseController);
         }
@@ -299,11 +308,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Message = "Pause point expired before it was hit.";
         }
 
-        public void MarkCleared()
+        public void MarkCleared(string message = "Pause point cleared.")
         {
             IsEnabled = false;
             Status = UloopPausePointStatus.Cleared;
-            Message = "Pause point cleared.";
+            Message = message;
         }
 
         public void RecordHit(DateTime nowUtc, bool isPlaying, bool isPaused)

@@ -126,6 +126,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Clear_WhenPausePointWasHit_ReportsAlreadyHitMessage()
+        {
+            // Verifies clearing an already-hit one-shot marker explains why nothing was armed anymore.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point was already hit (auto-disarmed); nothing to clear."));
+        }
+
+        [Test]
+        public void Clear_WhenPausePointExpired_ReportsAlreadyExpiredMessage()
+        {
+            // Verifies clearing an expired marker explains it was never hit instead of claiming a clear.
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point had already expired before being hit; nothing to clear."));
+        }
+
+        [Test]
+        public void Clear_WhenPausePointAlreadyCleared_ReportsAlreadyClearedMessage()
+        {
+            // Verifies a repeated clear reports the marker was already cleared.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Clear("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point was already cleared."));
+        }
+
+        [Test]
+        public async Task ClearAll_WhenNothingActive_ReportsNoActiveMessage()
+        {
+            // Verifies bulk clear with no armed markers does not claim that markers were cleared.
+            ClearPausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["all"] = true
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(0));
+            Assert.That(response.Message, Is.EqualTo("No active pause points to clear."));
+        }
+
+        [Test]
         public void Enable_WhenSamePausePointWasHit_ClearsLatestHitSnapshot()
         {
             // Verifies re-enabling a marker does not leave stale hit details for input tools.

@@ -79,7 +79,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Status = UloopPausePointStatus.Cleared,
                 ClearedCount = result.ClearedCount,
-                Message = "Pause points cleared."
+                Message = result.ClearedCount == 0
+                    ? "No active pause points to clear."
+                    : "Pause points cleared."
             };
         }
     }
