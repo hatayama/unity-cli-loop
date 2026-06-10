@@ -1,7 +1,7 @@
 ---
 name: uloop-execute-dynamic-code
 toolName: execute-dynamic-code
-description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for reachable scene/component state, scene/prefab/menu automation, and PlayMode checks. It cannot see method locals from an already-running frame; use focused Debug.Log plus get-logs during a debug-break pause for those."
+description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for reachable scene/component state, scene/prefab/menu automation, and PlayMode checks. It cannot see method locals from an already-running frame; use `uloop wait-for-debug-break` with focused Debug.Log and `uloop get-logs` for those."
 context: fork
 ---
 

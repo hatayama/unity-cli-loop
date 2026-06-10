@@ -7,16 +7,16 @@ context: fork
 
 # Task
 
-Simulate mouse input via Input System in Unity PlayMode: $ARGUMENTS
+Simulate mouse input via Input System in Unity PlayMode.
 
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. For Click/LongPress: determine the target screen position (use `uloop screenshot` to find coordinates)
-3. If this is a state-changing E2E check, pick one representative frame for paused variable/state proof before relying on logs, screenshots, or durable state
-4. For that representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the input and inspect while Unity is paused
-5. Execute any remaining `uloop simulate-mouse-input` commands
-6. Take a screenshot to verify the visible result: `uloop screenshot --capture-mode rendering`
+3. If exact-frame proof would reduce uncertainty for a state-changing E2E check, pick one representative frame for paused variable/state inspection
+4. For that optional representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the input and inspect while Unity is paused
+5. Execute the needed `uloop simulate-mouse-input` commands
+6. If visible output matters, capture a screenshot: `uloop screenshot --capture-mode rendering`
 7. Report what happened
 
 ## Tool Reference
@@ -51,7 +51,7 @@ uloop simulate-mouse-input --action <action> [options]
 
 ### Debug Break verification
 
-- Use one `UnityCliLoopDebug.Break("<id>")` marker for at least one representative mouse input that changes runtime state. This applies even when final logs, screenshots, or durable state later show the outcome, because it pauses the exact frame where variables/state can prove input consumption.
+- Consider one `UnityCliLoopDebug.Break("<id>")` marker when a representative mouse input changes runtime state and exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
 - Use the marker before slowing time, sleeping, polling, or rewriting runtime code to work around a missed input frame. Treat those checks as supplements, not substitutes.
 - If the mouse handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values with `Debug.Log` immediately before the marker and read them with `get-logs` while Unity is paused. A marker-only check proves the line was reached, not the frame-local values.
 - Put the marker at a natural state transition after the app consumed the mouse input, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, or a dependent component is updated. Do not place it immediately after sending `simulate-mouse-input`.

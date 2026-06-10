@@ -12,10 +12,10 @@ Simulate keyboard input on Unity PlayMode: $ARGUMENTS
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
-2. If this is a state-changing E2E check, pick one representative frame for paused variable/state proof before relying on logs, screenshots, or durable state
-3. For that representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the input and inspect while Unity is paused
-4. Execute any remaining `uloop simulate-keyboard` commands
-5. Take a screenshot to verify the visible result: `uloop screenshot --capture-mode rendering`
+2. If exact-frame proof would reduce uncertainty for a state-changing E2E check, pick one representative frame for paused variable/state inspection
+3. For that optional representative transition, place and enable a `UnityCliLoopDebug.Break("<id>")` marker, then run the input and inspect while Unity is paused
+4. Execute the needed `uloop simulate-keyboard` commands
+5. If visible output matters, capture a screenshot: `uloop screenshot --capture-mode rendering`
 6. Report what happened
 
 ## Tool Reference
@@ -47,7 +47,7 @@ Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
 
 ### Debug Break verification
 
-- Use one `UnityCliLoopDebug.Break("<id>")` marker for at least one representative keyboard input that changes runtime state. This applies even when final logs, screenshots, or durable state later show the outcome, because it pauses the exact frame where variables/state can prove input consumption.
+- Consider one `UnityCliLoopDebug.Break("<id>")` marker when a representative keyboard input changes runtime state and exact-frame evidence would reduce uncertainty. Final logs, screenshots, or durable state may be enough for simpler checks.
 - Use the marker before slowing time, sleeping, polling, or rewriting runtime code to work around a missed input frame. Treat those checks as supplements, not substitutes.
 - If the key handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values with `Debug.Log` immediately before the marker and read them with `get-logs` while Unity is paused. A marker-only check proves the line was reached, not the frame-local values.
 - Put the marker at a natural state transition after the app consumed the key, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, or a dependent component is updated. Do not place it immediately after sending `simulate-keyboard`.
