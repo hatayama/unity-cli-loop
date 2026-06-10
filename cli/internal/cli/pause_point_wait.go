@@ -35,9 +35,11 @@ var (
 )
 
 type waitForPausePointOptions struct {
-	id             string
-	timeoutSeconds int
-	timeout        time.Duration
+	id                   string
+	timeoutSeconds       int
+	timeout              time.Duration
+	includeMatchingLogs  bool
+	matchingLogsMaxCount int
 }
 
 type pausePointStatusOptions struct {
@@ -144,7 +146,15 @@ func runWaitForPausePoint(
 	}
 
 	if state == pausePointWaitStateHit {
-		result, marshalErr := json.Marshal(response)
+		var payload any = response
+		if options.includeMatchingLogs {
+			// Best-effort: a hit must stay a success even if Unity is busy while paused.
+			logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
+			if logsErr == nil {
+				payload = pausePointWaitResult{pausePointStatusResponse: response, MatchingLogs: logs}
+			}
+		}
+		result, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			writeClassifiedError(stderr, marshalErr, errorContext{
 				projectRoot: connection.ProjectRoot,
@@ -161,18 +171,33 @@ func runWaitForPausePoint(
 		clearPausePointAfterWaitTimeout(ctx, connection, options.id)
 	}
 
-	writeErrorEnvelope(stderr, pausePointWaitError(connection.ProjectRoot, options, response, state))
+	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state)
+	if options.includeMatchingLogs && state == pausePointWaitStateTimeout {
+		// Best-effort: the timeout diagnosis must not depend on a second Unity round trip succeeding.
+		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
+		if logsErr == nil {
+			waitErr.Details["matchingLogs"] = logs
+		}
+	}
+	writeErrorEnvelope(stderr, waitErr)
 	return 1
 }
 
 func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, error) {
 	options := waitForPausePointOptions{
-		timeoutSeconds: pausePointDefaultTimeoutSeconds,
-		timeout:        time.Duration(pausePointDefaultTimeoutSeconds) * time.Second,
+		timeoutSeconds:       pausePointDefaultTimeoutSeconds,
+		timeout:              time.Duration(pausePointDefaultTimeoutSeconds) * time.Second,
+		matchingLogsMaxCount: pausePointDefaultLogsMaxCount,
 	}
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
+		// The include flag is a bare boolean; parseFlagValue would demand a value for it.
+		if arg == "--"+pausePointIncludeLogsFlagName {
+			options.includeMatchingLogs = true
+			continue
+		}
+
 		name, value, consumedNext, err := parseFlagValue(arg, args, index)
 		if err != nil {
 			return waitForPausePointOptions{}, err
@@ -188,6 +213,13 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 			}
 			options.timeoutSeconds = timeoutSeconds
 			options.timeout = time.Duration(timeoutSeconds) * time.Second
+		case pausePointLogsMaxCountFlagName:
+			maxCount, parseErr := strconv.Atoi(value)
+			if parseErr != nil || maxCount <= 0 {
+				return waitForPausePointOptions{}, invalidValueArgumentError(
+					"--"+pausePointLogsMaxCountFlagName, value, "positive integer")
+			}
+			options.matchingLogsMaxCount = maxCount
 		default:
 			return waitForPausePointOptions{}, &argumentError{
 				message:     "Unknown option for wait-for-pause-point: --" + name,

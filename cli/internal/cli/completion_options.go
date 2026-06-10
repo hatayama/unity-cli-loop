@@ -15,6 +15,8 @@ var nativeCommandOptions = map[string][]string{
 	pausePointWaitCommandName: {
 		"--" + pausePointIDFlagName,
 		"--" + pausePointTimeoutFlagName,
+		"--" + pausePointIncludeLogsFlagName,
+		"--" + pausePointLogsMaxCountFlagName,
 		"--" + projectPathFlagName,
 	},
 	pausePointStatusUserCommandName: {
