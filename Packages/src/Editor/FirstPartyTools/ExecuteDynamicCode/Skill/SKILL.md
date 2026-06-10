@@ -11,7 +11,7 @@ Execute the following request using `uloop execute-dynamic-code`: $ARGUMENTS
 
 For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode Selected` before this tool. Use this tool after the built-in inspection tools are not enough or when you need to modify Unity state.
 
-This tool can inspect reachable Unity state, such as GameObjects, components, public properties, static values, and method results. It cannot directly read local variables or intermediate calculations inside an already-running method. When those values matter, add a focused `Debug.Log` immediately before `UnityCliLoopDebug.Break("<id>")`, then run `get-logs --search-text <id>` while Unity is paused. Do not replace that log read with execute-dynamic-code.
+This tool can inspect reachable Unity state, such as GameObjects, components, public properties, static values, and method results. It cannot directly read local variables or intermediate calculations inside an already-running method. When those values matter, add a focused `Debug.Log` immediately before `UloopPausePoint.Pause("<id>")`, then run `get-logs --search-text <id>` while Unity is paused. Do not replace that log read with execute-dynamic-code.
 
 ## Workflow
 

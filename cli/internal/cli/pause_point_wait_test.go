@@ -12,26 +12,26 @@ import (
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
-// Verifies wait-for-debug-break polls until Unity reports the marker hit.
-func TestWaitForDebugBreakReturnsHitAfterEnabledStatus(t *testing.T) {
-	originalQuery := queryDebugBreakStatus
-	originalPoll := debugBreakStatusPoll
-	debugBreakStatusPoll = time.Millisecond
+// Verifies wait-for-pause-point polls until Unity reports the marker hit.
+func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
 	defer func() {
-		queryDebugBreakStatus = originalQuery
-		debugBreakStatusPoll = originalPoll
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
 	}()
 
-	responses := []debugBreakStatusResponse{
-		{Id: "jump", Status: debugBreakStatusEnabled, IsEnabled: true},
-		{Id: "jump", Status: debugBreakStatusHit, IsHit: true, IsPaused: true, HitCount: 1},
+	responses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{Id: "jump", Status: pausePointStatusHit, IsHit: true, IsPaused: true, HitCount: 1},
 	}
 	requestCount := 0
-	queryDebugBreakStatus = func(
+	queryPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
-	) (debugBreakStatusResponse, error) {
+	) (pausePointStatusResponse, error) {
 		if id != "jump" {
 			t.Fatalf("id mismatch: %s", id)
 		}
@@ -40,18 +40,18 @@ func TestWaitForDebugBreakReturnsHitAfterEnabledStatus(t *testing.T) {
 		return response, nil
 	}
 
-	response, state, err := waitForDebugBreak(context.Background(), unityipc.Connection{}, waitForDebugBreakOptions{
+	response, state, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        time.Second,
 	})
 	if err != nil {
-		t.Fatalf("waitForDebugBreak failed: %v", err)
+		t.Fatalf("waitForPausePoint failed: %v", err)
 	}
-	if state != debugBreakWaitStateHit {
+	if state != pausePointWaitStateHit {
 		t.Fatalf("state mismatch: %s", state)
 	}
-	if response.Status != debugBreakStatusHit || response.HitCount != 1 {
+	if response.Status != pausePointStatusHit || response.HitCount != 1 {
 		t.Fatalf("response mismatch: %#v", response)
 	}
 	if requestCount != 2 {
@@ -59,48 +59,48 @@ func TestWaitForDebugBreakReturnsHitAfterEnabledStatus(t *testing.T) {
 	}
 }
 
-// Verifies wait-for-debug-break clears the enabled marker after its own timeout.
-func TestRunWaitForDebugBreakClearsEnabledMarkerAfterTimeout(t *testing.T) {
-	originalQuery := queryDebugBreakStatus
-	originalClear := clearDebugBreakStatus
-	originalPoll := debugBreakStatusPoll
-	debugBreakStatusPoll = time.Millisecond
+// Verifies wait-for-pause-point clears the enabled marker after its own timeout.
+func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalClear := clearPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
 	defer func() {
-		queryDebugBreakStatus = originalQuery
-		clearDebugBreakStatus = originalClear
-		debugBreakStatusPoll = originalPoll
+		queryPausePointStatus = originalQuery
+		clearPausePointStatus = originalClear
+		pausePointStatusPoll = originalPoll
 	}()
 
-	queryDebugBreakStatus = func(
+	queryPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
-	) (debugBreakStatusResponse, error) {
-		return debugBreakStatusResponse{
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
 			Id:                              id,
-			Status:                          debugBreakStatusEnabled,
+			Status:                          pausePointStatusEnabled,
 			IsEnabled:                       true,
 			TimeoutSeconds:                  1,
 			ElapsedSinceEnabledMilliseconds: 100,
 			IsPlaying:                       true,
 			IsPaused:                        false,
-			Message:                         "Debug break enabled.",
+			Message:                         "Pause point enabled.",
 		}, nil
 	}
 
 	clearedID := ""
-	clearDebugBreakStatus = func(
+	clearPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
-	) (debugBreakStatusResponse, error) {
+	) (pausePointStatusResponse, error) {
 		clearedID = id
-		return debugBreakStatusResponse{Id: id, Status: debugBreakStatusCleared}, nil
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusCleared}, nil
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := runWaitForDebugBreak(context.Background(), unityipc.Connection{}, waitForDebugBreakOptions{
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        5 * time.Millisecond,
@@ -112,17 +112,17 @@ func TestRunWaitForDebugBreakClearsEnabledMarkerAfterTimeout(t *testing.T) {
 	if clearedID != "jump" {
 		t.Fatalf("cleared id mismatch: %s", clearedID)
 	}
-	if !strings.Contains(stderr.String(), errorCodeDebugBreakWaitTimeout) {
+	if !strings.Contains(stderr.String(), errorCodePausePointWaitTimeout) {
 		t.Fatalf("timeout error missing from stderr: %s", stderr.String())
 	}
-	envelope := parseDebugBreakErrorEnvelope(t, stderr.Bytes())
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
 	if envelope.Error.Details["isPlaying"] != true {
 		t.Fatalf("isPlaying detail mismatch: %#v", envelope.Error.Details)
 	}
 	if envelope.Error.Details["isPaused"] != false {
 		t.Fatalf("isPaused detail mismatch: %#v", envelope.Error.Details)
 	}
-	if envelope.Error.Details["markerMessage"] != "Debug break enabled." {
+	if envelope.Error.Details["markerMessage"] != "Pause point enabled." {
 		t.Fatalf("markerMessage detail mismatch: %#v", envelope.Error.Details)
 	}
 	if envelope.Error.Details["elapsedSinceEnabledMilliseconds"] != float64(100) {
@@ -133,32 +133,32 @@ func TestRunWaitForDebugBreakClearsEnabledMarkerAfterTimeout(t *testing.T) {
 	}
 }
 
-// Verifies wait-for-debug-break does one final status probe before treating timeout as missed.
-func TestRunWaitForDebugBreakReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
-	originalQuery := queryDebugBreakStatus
-	originalClear := clearDebugBreakStatus
+// Verifies wait-for-pause-point does one final status probe before treating timeout as missed.
+func TestRunWaitForPausePointReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalClear := clearPausePointStatus
 	defer func() {
-		queryDebugBreakStatus = originalQuery
-		clearDebugBreakStatus = originalClear
+		queryPausePointStatus = originalQuery
+		clearPausePointStatus = originalClear
 	}()
 
 	requestCount := 0
-	queryDebugBreakStatus = func(
+	queryPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
-	) (debugBreakStatusResponse, error) {
+	) (pausePointStatusResponse, error) {
 		requestCount++
 		if requestCount == 1 {
-			return debugBreakStatusResponse{
+			return pausePointStatusResponse{
 				Id:        id,
-				Status:    debugBreakStatusEnabled,
+				Status:    pausePointStatusEnabled,
 				IsEnabled: true,
 			}, nil
 		}
-		return debugBreakStatusResponse{
+		return pausePointStatusResponse{
 			Id:       id,
-			Status:   debugBreakStatusHit,
+			Status:   pausePointStatusHit,
 			IsHit:    true,
 			IsPaused: true,
 			HitCount: 1,
@@ -166,18 +166,18 @@ func TestRunWaitForDebugBreakReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
 	}
 
 	clearedID := ""
-	clearDebugBreakStatus = func(
+	clearPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
-	) (debugBreakStatusResponse, error) {
+	) (pausePointStatusResponse, error) {
 		clearedID = id
-		return debugBreakStatusResponse{Id: id, Status: debugBreakStatusCleared}, nil
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusCleared}, nil
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := runWaitForDebugBreak(context.Background(), unityipc.Connection{}, waitForDebugBreakOptions{
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        5 * time.Millisecond,
@@ -189,11 +189,11 @@ func TestRunWaitForDebugBreakReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
 	if clearedID != "" {
 		t.Fatalf("marker should not be cleared after final hit: %s", clearedID)
 	}
-	var response debugBreakStatusResponse
+	var response pausePointStatusResponse
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
 	}
-	if response.Status != debugBreakStatusHit || response.HitCount != 1 {
+	if response.Status != pausePointStatusHit || response.HitCount != 1 {
 		t.Fatalf("response mismatch: %#v", response)
 	}
 	if requestCount != 2 {
@@ -201,61 +201,61 @@ func TestRunWaitForDebugBreakReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
 	}
 }
 
-// Verifies wait-for-debug-break rejects calls before the marker is enabled.
-func TestWaitForDebugBreakReturnsNotEnabledStateImmediately(t *testing.T) {
-	originalQuery := queryDebugBreakStatus
+// Verifies wait-for-pause-point rejects calls before the marker is enabled.
+func TestWaitForPausePointReturnsNotEnabledStateImmediately(t *testing.T) {
+	originalQuery := queryPausePointStatus
 	defer func() {
-		queryDebugBreakStatus = originalQuery
+		queryPausePointStatus = originalQuery
 	}()
 
-	queryDebugBreakStatus = func(
+	queryPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
-	) (debugBreakStatusResponse, error) {
-		return debugBreakStatusResponse{Id: id, Status: debugBreakStatusNotEnabled, IsPlaying: true}, nil
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusNotEnabled, IsPlaying: true}, nil
 	}
 
-	response, state, err := waitForDebugBreak(context.Background(), unityipc.Connection{}, waitForDebugBreakOptions{
+	response, state, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        time.Second,
 	})
 	if err != nil {
-		t.Fatalf("waitForDebugBreak failed: %v", err)
+		t.Fatalf("waitForPausePoint failed: %v", err)
 	}
-	if state != debugBreakWaitStateNotEnabled {
+	if state != pausePointWaitStateNotEnabled {
 		t.Fatalf("state mismatch: %s", state)
 	}
-	if response.Status != debugBreakStatusNotEnabled {
+	if response.Status != pausePointStatusNotEnabled {
 		t.Fatalf("response mismatch: %#v", response)
 	}
 }
 
 // Verifies not-enabled failures use the user-facing enabled terminology.
-func TestRunWaitForDebugBreakReportsNotEnabledError(t *testing.T) {
-	originalQuery := queryDebugBreakStatus
+func TestRunWaitForPausePointReportsNotEnabledError(t *testing.T) {
+	originalQuery := queryPausePointStatus
 	defer func() {
-		queryDebugBreakStatus = originalQuery
+		queryPausePointStatus = originalQuery
 	}()
 
-	queryDebugBreakStatus = func(
+	queryPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
-	) (debugBreakStatusResponse, error) {
-		return debugBreakStatusResponse{
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
 			Id:        id,
-			Status:    debugBreakStatusNotEnabled,
+			Status:    pausePointStatusNotEnabled,
 			IsPlaying: true,
 			IsPaused:  false,
-			Message:   "Debug break is not enabled.",
+			Message:   "Pause point is not enabled.",
 		}, nil
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := runWaitForDebugBreak(context.Background(), unityipc.Connection{}, waitForDebugBreakOptions{
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        time.Second,
@@ -264,11 +264,11 @@ func TestRunWaitForDebugBreakReportsNotEnabledError(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("expected failure, got %d with stdout %s", code, stdout.String())
 	}
-	envelope := parseDebugBreakErrorEnvelope(t, stderr.Bytes())
-	if envelope.Error.ErrorCode != errorCodeDebugBreakNotEnabled {
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.ErrorCode != errorCodePausePointNotEnabled {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
-	if envelope.Error.Details["status"] != debugBreakStatusNotEnabled {
+	if envelope.Error.Details["status"] != pausePointStatusNotEnabled {
 		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
 	}
 	if envelope.Error.Details["isPlaying"] != true || envelope.Error.Details["isPaused"] != false {
@@ -277,22 +277,22 @@ func TestRunWaitForDebugBreakReportsNotEnabledError(t *testing.T) {
 }
 
 // Verifies expired markers report no remaining enabled lifetime.
-func TestDebugBreakExpiredErrorReportsNoRemainingTime(t *testing.T) {
-	response := debugBreakStatusResponse{
+func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
+	response := pausePointStatusResponse{
 		Id:                              "jump",
-		Status:                          debugBreakStatusExpired,
+		Status:                          pausePointStatusExpired,
 		TimeoutSeconds:                  1,
 		ElapsedSinceEnabledMilliseconds: 1200,
 		IsPlaying:                       true,
-		Message:                         "Debug break expired before it was hit.",
+		Message:                         "Pause point expired before it was hit.",
 	}
 
-	cliErr := debugBreakWaitError("/tmp/MyProject", waitForDebugBreakOptions{
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, debugBreakWaitStateExpired)
+	}, response, pausePointWaitStateExpired)
 
-	if cliErr.ErrorCode != errorCodeDebugBreakExpired {
+	if cliErr.ErrorCode != errorCodePausePointExpired {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if cliErr.Details["remainingMilliseconds"] != int64(0) {
@@ -300,35 +300,35 @@ func TestDebugBreakExpiredErrorReportsNoRemainingTime(t *testing.T) {
 	}
 }
 
-// Verifies disabled native debug-break commands are rejected before Unity dispatch.
-func TestRunProjectLocalWaitForDebugBreakRespectsToolSettings(t *testing.T) {
+// Verifies disabled native pause-point commands are rejected before Unity dispatch.
+func TestRunProjectLocalWaitForPausePointRespectsToolSettings(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
-	writeToolSettings(t, projectRoot, `{"disabledTools":["wait-for-debug-break"]}`)
+	writeToolSettings(t, projectRoot, `{"disabledTools":["wait-for-pause-point"]}`)
 	t.Chdir(filepath.Dir(projectRoot))
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	code := RunProjectLocal(
 		context.Background(),
-		[]string{"--project-path", projectRoot, debugBreakWaitCommandName, "--id", "jump"},
+		[]string{"--project-path", projectRoot, pausePointWaitCommandName, "--id", "jump"},
 		&stdout,
 		&stderr)
 
 	if code != 1 {
 		t.Fatalf("expected disabled command failure, got %d with stdout %s", code, stdout.String())
 	}
-	envelope := parseDebugBreakErrorEnvelope(t, stderr.Bytes())
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
 	if envelope.Error.ErrorCode != errorCodeToolDisabled {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
-	if envelope.Error.Command != debugBreakWaitCommandName {
+	if envelope.Error.Command != pausePointWaitCommandName {
 		t.Fatalf("command mismatch: %#v", envelope.Error)
 	}
 }
 
-// Verifies wait-for-debug-break requires a marker id.
-func TestParseWaitForDebugBreakOptionsRequiresID(t *testing.T) {
-	_, err := parseWaitForDebugBreakOptions([]string{"--timeout-seconds", "1"})
+// Verifies wait-for-pause-point requires a marker id.
+func TestParseWaitForPausePointOptionsRequiresID(t *testing.T) {
+	_, err := parseWaitForPausePointOptions([]string{"--timeout-seconds", "1"})
 
 	if err == nil {
 		t.Fatal("expected missing id error")
@@ -338,24 +338,24 @@ func TestParseWaitForDebugBreakOptionsRequiresID(t *testing.T) {
 	}
 }
 
-// Verifies debug-break-status reports the current marker state without waiting for a hit.
-func TestRunDebugBreakStatusReturnsCurrentStatus(t *testing.T) {
-	originalQuery := queryDebugBreakStatus
+// Verifies pause-point-status reports the current marker state without waiting for a hit.
+func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
+	originalQuery := queryPausePointStatus
 	defer func() {
-		queryDebugBreakStatus = originalQuery
+		queryPausePointStatus = originalQuery
 	}()
 
-	queryDebugBreakStatus = func(
+	queryPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
-	) (debugBreakStatusResponse, error) {
-		return debugBreakStatusResponse{Id: id, Status: debugBreakStatusEnabled, IsEnabled: true}, nil
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled, IsEnabled: true}, nil
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := runDebugBreakStatusCommand(
+	code := runPausePointStatusCommand(
 		context.Background(),
 		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
 		[]string{"--id", "jump"},
@@ -365,18 +365,18 @@ func TestRunDebugBreakStatusReturnsCurrentStatus(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
-	var response debugBreakStatusResponse
+	var response pausePointStatusResponse
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
 	}
-	if response.Status != debugBreakStatusEnabled {
+	if response.Status != pausePointStatusEnabled {
 		t.Fatalf("status mismatch: %#v", response)
 	}
 }
 
-// Verifies debug-break-status requires a marker id.
-func TestParseDebugBreakStatusOptionsRequiresID(t *testing.T) {
-	_, err := parseDebugBreakStatusOptions([]string{})
+// Verifies pause-point-status requires a marker id.
+func TestParsePausePointStatusOptionsRequiresID(t *testing.T) {
+	_, err := parsePausePointStatusOptions([]string{})
 
 	if err == nil {
 		t.Fatal("expected missing id error")
@@ -386,7 +386,7 @@ func TestParseDebugBreakStatusOptionsRequiresID(t *testing.T) {
 	}
 }
 
-func parseDebugBreakErrorEnvelope(t *testing.T, payload []byte) cliErrorEnvelope {
+func parsePausePointErrorEnvelope(t *testing.T, payload []byte) cliErrorEnvelope {
 	t.Helper()
 
 	var envelope cliErrorEnvelope

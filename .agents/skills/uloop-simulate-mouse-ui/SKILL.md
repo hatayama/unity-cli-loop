@@ -7,16 +7,17 @@ context: fork
 
 # Task
 
-Simulate mouse interaction on Unity PlayMode UI: $ARGUMENTS
+Simulate mouse interaction on Unity PlayMode UI.
 
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. Get UI element info: `uloop screenshot --capture-mode rendering --annotate-elements --elements-only`
 3. Use the `AnnotatedElements` array to find the target element by `Label`, `Name`, or `Path` (A=frontmost, B=next, ...). Use `Interaction` to distinguish click targets from drag/drop/text targets, then use `SimX`/`SimY` directly as `--x`/`--y` coordinates.
-4. Execute the appropriate `uloop simulate-mouse-ui` command
-5. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering --annotate-elements`
-6. Report what happened
+4. Execute the needed `uloop simulate-mouse-ui` commands
+5. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
+6. When this UI input verifies a state transition, use Pause Point inspection from the section below as the standard frame proof
+7. Report what happened and which evidence was used
 
 ## Tool Reference
 
@@ -75,6 +76,15 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 - `--bypass-raycast` still uses coordinates for pointer event positions, but chooses the clicked, long-pressed, or dragged GameObject by `--target-path`
 - If `--target-path` or `--drop-target-path` matches multiple active GameObjects, the command fails instead of choosing an arbitrary duplicate
 
+## Pause Point Inspection (Standard for E2E)
+
+- Use `UloopPausePoint.Pause("<id>")` with `uloop-wait-for-pause-point` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
+- Place the pause point at a natural transition after the app consumed the UI event, such as after a command is accepted, a state mutation is committed, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
+- If the UI handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UloopPausePoint.Pause("<id>")` and read them with `uloop-get-logs` while Unity is paused. A pause point hit proves the line was reached, not the frame-local values.
+- Treat `simulate-mouse-ui Success=true`, generic action logs, and final durable counters as useful evidence, not paused-frame proof.
+- If a `UloopPausePoint.Pause` pauses Unity, inspect with `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- Remove temporary pause-point/log instrumentation before final validation when it was added only for inspection.
+
 ## Examples
 
 ```bash
@@ -114,7 +124,7 @@ uloop simulate-mouse-ui --action DragEnd --x 600 --y 300
 - Unity must be in **PlayMode**
 - Target scene must have an **EventSystem** GameObject
 - UI elements must have a **GraphicRaycaster** on their Canvas
-- If you need gameplay mouse input rather than UI pointer events, `simulate-mouse-input` assumes the project uses the New Input System; otherwise prefer `execute-dynamic-code`
+- If you need runtime mouse input rather than UI pointer events, `simulate-mouse-input` assumes the project uses the New Input System; otherwise prefer `execute-dynamic-code`
 
 ## Output
 

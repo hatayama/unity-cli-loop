@@ -15,9 +15,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string? Button { get; set; }
         public float? PositionX { get; set; }
         public float? PositionY { get; set; }
-        public bool InterruptedByDebugBreak { get; set; }
-        public string? DebugBreakId { get; set; }
-        public int? DebugBreakHitCount { get; set; }
+        public bool InterruptedByPausePoint { get; set; }
+        public string? PausePointId { get; set; }
+        public int? PausePointHitCount { get; set; }
 
         public SimulateMouseInputResponse()
         {

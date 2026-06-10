@@ -379,12 +379,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCliLoopKeyboardSimulationResult result = new()
             {
                 Success = true,
-                Message = $"Keyboard input stopped because Unity paused during Debug Break inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
+                Message = $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
                 Action = action.ToString(),
                 KeyName = keyName,
-                InterruptedByDebugBreak = true
+                InterruptedByPausePoint = true
             };
-            AttachDebugBreakHit(result);
+            AttachPausePointHit(result);
             return result;
         }
 
@@ -401,7 +401,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static void AttachDebugBreakHit(UnityCliLoopKeyboardSimulationResult result)
+        private static void AttachPausePointHit(UnityCliLoopKeyboardSimulationResult result)
         {
             if (result == null)
             {
@@ -426,8 +426,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            result.DebugBreakId = snapshotId;
-            result.DebugBreakHitCount = snapshot.HitCount;
+            result.PausePointId = snapshotId;
+            result.PausePointHitCount = snapshot.HitCount;
         }
 
         private static async Task FinalizePressOverlay(CancellationToken ct)

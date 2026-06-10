@@ -2,7 +2,7 @@ package cli
 
 func isSettingsManagedNativeToolCommand(command string) bool {
 	switch command {
-	case debugBreakWaitCommandName, debugBreakStatusUserCommandName:
+	case pausePointWaitCommandName, pausePointStatusUserCommandName:
 		return true
 	default:
 		return false

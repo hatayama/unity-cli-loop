@@ -118,9 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Press_WhenUnityPausesDuringObservation_Should_CompleteAsDebugBreakInterruption()
+        public IEnumerator Press_WhenUnityPausesDuringObservation_Should_CompleteAsPausePointInterruption()
         {
-            // Verifies that a debug-break pause releases the tool slot instead of leaving the press command busy.
+            // Verifies that a pause-point pause releases the tool slot instead of leaving the press command busy.
             yield return null;
 
             SimulateKeyboardSchema parameters = new()
@@ -141,17 +141,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
             lastResponse = task.Result;
             Assert.IsTrue(lastResponse.Success);
-            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
             Assert.AreEqual("Press", lastResponse.Action);
             Assert.AreEqual("Space", lastResponse.KeyName);
-            Assert.IsNull(lastResponse.DebugBreakId);
-            Assert.IsNull(lastResponse.DebugBreakHitCount);
-            Assert.IsFalse(keyboard[Key.Space].isPressed, "Debug-break interruption should release the injected key state.");
-            Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Debug-break interruption should clear keyboard overlay state.");
+            Assert.IsNull(lastResponse.PausePointId);
+            Assert.IsNull(lastResponse.PausePointHitCount);
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Pause-point interruption should release the injected key state.");
+            Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Pause-point interruption should clear keyboard overlay state.");
         }
 
         [UnityTest]
-        public IEnumerator Press_WhenDebugBreakMarkerHits_Should_ReturnMarkerDetails()
+        public IEnumerator Press_WhenPausePointMarkerHits_Should_ReturnMarkerDetails()
         {
             // Verifies marker-caused interruption reports the marker id and hit count.
             yield return null;
@@ -172,16 +172,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
             Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
 
-            UnityCliLoopDebug.Break("space-press");
+            UloopPausePoint.Pause("space-press");
             InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
             yield return WaitForTask(task);
             InputSystemUpdateHelper.ResetPauseProviderForTests();
 
             lastResponse = task.Result;
             Assert.IsTrue(lastResponse.Success);
-            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
-            Assert.AreEqual("space-press", lastResponse.DebugBreakId);
-            Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.AreEqual("space-press", lastResponse.PausePointId);
+            Assert.AreEqual(1, lastResponse.PausePointHitCount);
             Assert.IsFalse(keyboard[Key.Space].isPressed, "Marker interruption should release the injected key state.");
         }
 
