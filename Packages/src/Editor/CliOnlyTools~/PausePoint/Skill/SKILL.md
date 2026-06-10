@@ -24,15 +24,16 @@ uloop enable-pause-point --id state-transition-applied --timeout-seconds 30
 ```
 
 3. Trigger the action with a `simulate-*` command.
-4. Run `uloop wait-for-pause-point --id state-transition-applied --timeout-seconds 30`, even if the trigger command already returned `InterruptedByPausePoint=true`.
-5. Before resuming, read the focused log for the same marker id:
+4. Wait for the marker and read the focused log in one call, even if the trigger command already returned `InterruptedByPausePoint=true`:
 
 ```bash
-uloop get-logs --search-text state-transition-applied --max-count 20
+uloop wait-for-pause-point --id state-transition-applied --timeout-seconds 30 --include-matching-logs
 ```
 
-6. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
-7. Clear the marker with `uloop clear-pause-point --id state-transition-applied` or stop PlayMode before moving on.
+`--include-matching-logs` embeds the log entries matching the marker id as `MatchingLogs` in the hit response (`--matching-logs-max-count` adjusts the limit, default 10), so a separate `get-logs` call while paused is unnecessary. Without the flag, run `uloop get-logs --search-text state-transition-applied --max-count 20` before resuming instead.
+
+5. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
+6. Clear the marker with `uloop clear-pause-point --id state-transition-applied` or stop PlayMode before moving on.
 
 ## When To Use
 
@@ -47,7 +48,7 @@ uloop get-logs --search-text state-transition-applied --max-count 20
 
 ## Timeout Checks
 
-If this command times out, the marker line was not reached while the command waited. Inspect `error.details.status`, `hitCount`, `isPlaying`, `isPaused`, `elapsedSinceEnabledMilliseconds`, and `remainingMilliseconds` to distinguish input not being consumed, runtime conditions not being met, an id mismatch, or Unity already being paused. `elapsedSinceEnabledMilliseconds` is measured from `enable-pause-point`, not from `wait-for-pause-point`.
+If this command times out, the marker line was not reached while the command waited. Read `error.details.hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. Then inspect `error.details.status`, `hitCount`, `isPlaying`, `isPaused`, `elapsedSinceEnabledMilliseconds`, and `remainingMilliseconds` to distinguish input not being consumed, runtime conditions not being met, an id mismatch, or Unity already being paused. With `--include-matching-logs`, `error.details.matchingLogs` shows whether the marker's focused log ever appeared. `elapsedSinceEnabledMilliseconds` is measured from `enable-pause-point`, not from `wait-for-pause-point`.
 
 Use `uloop pause-point-status --id state-transition-applied` only when you need to confirm the marker is armed or inspect the current hit state. Add focused debug logs before the marker when local variables must be captured.
 
