@@ -21,13 +21,18 @@ func pausePointWaitError(
 			response,
 			false)
 	case pausePointWaitStateExpired:
-		return pausePointStateError(
+		expiredError := pausePointStateError(
 			errorCodePausePointExpired,
 			"Pause point expired before it was hit.",
 			projectRoot,
 			options,
 			response,
 			true)
+		hint := pausePointExpiredHint(response)
+		if hint != "" {
+			expiredError.Details["hint"] = hint
+		}
+		return expiredError
 	case pausePointWaitStateCleared:
 		return pausePointStateError(
 			errorCodePausePointCleared,
@@ -52,17 +57,38 @@ func pausePointWaitError(
 	}
 }
 
+const (
+	pausePointHintPlayModeNotRunning  = "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again."
+	pausePointHintEditorAlreadyPaused = "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again."
+)
+
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,
 // because timeouts are where agents struggle to tell a missed code path from Editor state.
 func pausePointTimeoutHint(response pausePointStatusResponse) string {
 	if !response.IsPlaying {
-		return "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again."
+		return pausePointHintPlayModeNotRunning
 	}
 	if response.IsPaused {
-		return "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again."
+		return pausePointHintEditorAlreadyPaused
 	}
 	if response.HitCount == 0 && response.Status == pausePointStatusEnabled {
 		return "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed."
+	}
+	return ""
+}
+
+// pausePointExpiredHint mirrors the timeout diagnosis for expired markers, because a marker
+// whose enable window ends before the wait deadline surfaces as PAUSE_POINT_EXPIRED instead
+// of a timeout and would otherwise carry no hint at all.
+func pausePointExpiredHint(response pausePointStatusResponse) string {
+	if !response.IsPlaying {
+		return pausePointHintPlayModeNotRunning
+	}
+	if response.IsPaused {
+		return pausePointHintEditorAlreadyPaused
+	}
+	if response.HitCount == 0 {
+		return "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again."
 	}
 	return ""
 }

@@ -540,8 +540,47 @@ func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 	}
 }
 
-// Verifies hints stay scoped to timeouts and to diagnosable response states.
-func TestPausePointHintIsOmittedOutsideDiagnosableTimeouts(t *testing.T) {
+// Verifies expired errors include a diagnosis hint, because a marker whose enable
+// window ends before the wait deadline surfaces as PAUSE_POINT_EXPIRED, not a timeout.
+func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
+	cases := []struct {
+		name     string
+		response pausePointStatusResponse
+		wantHint string
+	}{
+		{
+			name:     "play mode not running",
+			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired, IsPlaying: false},
+			wantHint: "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again.",
+		},
+		{
+			name:     "editor already paused",
+			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired, IsPlaying: true, IsPaused: true},
+			wantHint: "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again.",
+		},
+		{
+			name:     "marker expired before hit",
+			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired, IsPlaying: true, HitCount: 0},
+			wantHint: "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again.",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+				id:             "jump",
+				timeoutSeconds: 1,
+			}, testCase.response, pausePointWaitStateExpired)
+
+			if cliErr.Details["hint"] != testCase.wantHint {
+				t.Fatalf("hint mismatch: %#v", cliErr.Details)
+			}
+		})
+	}
+}
+
+// Verifies hints stay scoped to diagnosable response states.
+func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 	hitResponse := pausePointStatusResponse{Id: "jump", Status: pausePointStatusHit, IsPlaying: true, HitCount: 1}
 	timeoutErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
@@ -551,13 +590,13 @@ func TestPausePointHintIsOmittedOutsideDiagnosableTimeouts(t *testing.T) {
 		t.Fatalf("hint should be omitted when no diagnosis applies: %#v", timeoutErr.Details)
 	}
 
-	notPlayingResponse := pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired, IsPlaying: false}
-	expiredErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+	clearedResponse := pausePointStatusResponse{Id: "jump", Status: pausePointStatusCleared, IsPlaying: true}
+	clearedErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, notPlayingResponse, pausePointWaitStateExpired)
-	if _, exists := expiredErr.Details["hint"]; exists {
-		t.Fatalf("hint should be omitted for non-timeout states: %#v", expiredErr.Details)
+	}, clearedResponse, pausePointWaitStateCleared)
+	if _, exists := clearedErr.Details["hint"]; exists {
+		t.Fatalf("hint should be omitted for cleared markers: %#v", clearedErr.Details)
 	}
 }
 
