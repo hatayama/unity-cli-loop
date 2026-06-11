@@ -242,6 +242,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Press_WhenMultiplePausePointMarkersHit_Should_ListAllHits()
+        {
+            // Verifies the response lists every marker hit during the press, not just the latest.
+            yield return null;
+
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable("space-press", 30);
+            UloopPausePointRegistry.Enable("space-press-followup", 30);
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 1f
+            };
+            Task<SimulateKeyboardResponse> task =
+                tool.ExecuteWithCancellationAsync(parameters, CancellationToken.None);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
+
+            UloopPausePoint.Pause("space-press");
+            UloopPausePoint.Pause("space-press-followup");
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.IsNotNull(lastResponse.PausePointHits, "All hit markers must be listed.");
+            Assert.AreEqual(2, lastResponse.PausePointHits!.Count);
+            Assert.AreEqual("space-press", lastResponse.PausePointHits[0].Id);
+            Assert.AreEqual("space-press-followup", lastResponse.PausePointHits[1].Id);
+        }
+
+        [UnityTest]
         public IEnumerator Press_Cancellation_Should_ClearPressOverlay()
         {
             // Verifies that canceling an applied press releases input and clears transient overlay state.

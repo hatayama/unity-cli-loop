@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -453,6 +454,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             result.PausePointId = snapshotId;
             result.PausePointHitCount = snapshot.HitCount;
+            result.PausePointHits = CollectPausePointHits();
+        }
+
+        // One input can hit several markers in the same frame; the representative
+        // PausePointId alone forced agents into extra status calls to find the others.
+        private static List<UnityCliLoopPausePointHit> CollectPausePointHits()
+        {
+            List<UnityCliLoopPausePointHit> hits = new();
+            foreach (UloopPausePointSnapshot snapshot in UloopPausePointRegistry.GetHitSnapshots())
+            {
+                if (!snapshot.IsHit || string.IsNullOrEmpty(snapshot.Id))
+                {
+                    continue;
+                }
+                hits.Add(new UnityCliLoopPausePointHit
+                {
+                    Id = snapshot.Id,
+                    HitCount = snapshot.HitCount
+                });
+            }
+            return hits;
         }
 
         private static async Task FinalizePressOverlay(CancellationToken ct)

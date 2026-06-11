@@ -1,4 +1,5 @@
 #nullable enable
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -87,6 +88,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
+    /// Identifies one pause point marker that was hit while an input simulation ran.
+    /// </summary>
+    public sealed class UnityCliLoopPausePointHit
+    {
+        public string Id { get; set; } = "";
+        public int HitCount { get; set; }
+    }
+
+    /// <summary>
     /// Carries the result data produced by Unity CLI Loop Keyboard Simulation behavior.
     /// </summary>
     public sealed class UnityCliLoopKeyboardSimulationResult
@@ -98,6 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool InterruptedByPausePoint { get; set; }
         public string? PausePointId { get; set; }
         public int? PausePointHitCount { get; set; }
+        public List<UnityCliLoopPausePointHit>? PausePointHits { get; set; }
         public bool? PressEdgeObserved { get; set; }
     }
 
@@ -131,6 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool InterruptedByPausePoint { get; set; }
         public string? PausePointId { get; set; }
         public int? PausePointHitCount { get; set; }
+        public List<UnityCliLoopPausePointHit>? PausePointHits { get; set; }
     }
 
     /// <summary>

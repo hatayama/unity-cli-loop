@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -82,6 +83,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot, Is.Not.Null);
             Assert.That(snapshot.Id, Is.EqualTo("jump"));
             Assert.That(snapshot.HitCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Pause_WhenMultiplePausePointsHit_StoresAllHitSnapshotsInOrder()
+        {
+            // Verifies input interruption responses can list every marker hit, not just the latest.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("land", 30);
+
+            UloopPausePoint.Pause("jump");
+            UloopPausePoint.Pause("land");
+
+            IReadOnlyList<UloopPausePointSnapshot> hits = UloopPausePointRegistry.GetHitSnapshots();
+            Assert.That(hits.Count, Is.EqualTo(2));
+            Assert.That(hits[0].Id, Is.EqualTo("jump"));
+            Assert.That(hits[1].Id, Is.EqualTo("land"));
+        }
+
+        [Test]
+        public void Enable_WhenSamePausePointWasHit_RemovesItFromHitSnapshots()
+        {
+            // Verifies re-enabling a hit marker drops its stale entry from the hit list.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            Assert.That(UloopPausePointRegistry.GetHitSnapshots(), Is.Empty);
         }
 
         [Test]

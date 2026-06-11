@@ -17,6 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
         private static UloopPausePointSnapshot _latestHitSnapshot;
+        // One input can hit several markers in the same frame; tools need the full list,
+        // not just the latest hit, to report every marker that interrupted them.
+        private static readonly List<UloopPausePointSnapshot> _hitSnapshots = new();
 
         public static UloopPausePointSnapshot Enable(string id, int timeoutSeconds)
         {
@@ -114,7 +117,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             entry.RecordHit(now, _pauseController.IsPlaying, _pauseController.IsPaused);
             UloopPausePointSnapshot snapshot = entry.ToSnapshot(now, _pauseController);
             _latestHitSnapshot = snapshot;
+            _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
+            _hitSnapshots.Add(snapshot);
             return snapshot;
+        }
+
+        public static IReadOnlyList<UloopPausePointSnapshot> GetHitSnapshots()
+        {
+            return _hitSnapshots;
         }
 
         public static UloopPausePointSnapshot GetLatestHitSnapshot()
@@ -125,10 +135,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static void ClearLatestHitSnapshot()
         {
             _latestHitSnapshot = null;
+            _hitSnapshots.Clear();
         }
 
         private static void ClearLatestHitSnapshotIfMatches(string id)
         {
+            _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
             if (_latestHitSnapshot == null)
             {
                 return;
@@ -155,6 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             Entries.Clear();
             _latestHitSnapshot = null;
+            _hitSnapshots.Clear();
             _pauseController = new UnityEditorPausePointPauseController();
             _nowProvider = () => DateTime.UtcNow;
         }

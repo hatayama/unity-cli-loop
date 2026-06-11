@@ -1,5 +1,7 @@
 #nullable enable
 
+using System.Collections.Generic;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -18,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool InterruptedByPausePoint { get; set; }
         public string? PausePointId { get; set; }
         public int? PausePointHitCount { get; set; }
+        public List<UnityCliLoopPausePointHit>? PausePointHits { get; set; }
 
         public SimulateMouseInputResponse()
         {

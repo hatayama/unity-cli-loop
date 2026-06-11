@@ -60,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 InterruptedByPausePoint = result.InterruptedByPausePoint,
                 PausePointId = result.PausePointId,
                 PausePointHitCount = result.PausePointHitCount,
+                PausePointHits = result.PausePointHits,
             };
         }
     }
