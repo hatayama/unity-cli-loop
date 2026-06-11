@@ -102,17 +102,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // would release a still-active render texture and emit a Console warning.
             RenderTexture previousActive = RenderTexture.active;
             RenderTexture rt = RenderTexture.GetTemporary(descriptor);
+            Texture2D texture;
+            try
+            {
+                InternalEditorUtilityBridge.CaptureEditorWindow(window, rt);
 
-            InternalEditorUtilityBridge.CaptureEditorWindow(window, rt);
+                RenderTexture.active = rt;
 
-            RenderTexture.active = rt;
-
-            Texture2D texture = new(width, height, TextureFormat.RGB24, false);
-            texture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-            texture.Apply();
-
-            RenderTexture.active = previousActive;
-            RenderTexture.ReleaseTemporary(rt);
+                texture = new(width, height, TextureFormat.RGB24, false);
+                texture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                texture.Apply();
+            }
+            finally
+            {
+                RenderTexture.active = previousActive;
+                RenderTexture.ReleaseTemporary(rt);
+            }
 
             if (!Mathf.Approximately(resolutionScale, 1.0f))
             {
@@ -174,16 +179,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // temporary itself and releasing it would warn about an active render texture.
             RenderTexture previousActive = RenderTexture.active;
             RenderTexture flipped = RenderTexture.GetTemporary(flipDescriptor);
-            Graphics.Blit(rt, flipped, new Vector2(1f, -1f), new Vector2(0f, 1f));
+            Texture2D texture;
+            try
+            {
+                Graphics.Blit(rt, flipped, new Vector2(1f, -1f), new Vector2(0f, 1f));
 
-            RenderTexture.active = flipped;
+                RenderTexture.active = flipped;
 
-            Texture2D texture = new(rt.width, rt.height, TextureFormat.RGB24, false);
-            texture.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
-            texture.Apply();
-
-            RenderTexture.active = previousActive;
-            RenderTexture.ReleaseTemporary(flipped);
+                texture = new(rt.width, rt.height, TextureFormat.RGB24, false);
+                texture.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+                texture.Apply();
+            }
+            finally
+            {
+                RenderTexture.active = previousActive;
+                RenderTexture.ReleaseTemporary(flipped);
+            }
 
             if (!Mathf.Approximately(resolutionScale, 1.0f))
             {
@@ -205,14 +216,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // is never released while active.
             RenderTexture previousActive = RenderTexture.active;
             RenderTexture rt = RenderTexture.GetTemporary(newWidth, newHeight);
-            Graphics.Blit(originalTexture, rt);
+            try
+            {
+                Graphics.Blit(originalTexture, rt);
 
-            RenderTexture.active = rt;
-            scaledTexture.ReadPixels(new Rect(0, 0, newWidth, newHeight), 0, 0);
-            scaledTexture.Apply();
-            RenderTexture.active = previousActive;
-
-            RenderTexture.ReleaseTemporary(rt);
+                RenderTexture.active = rt;
+                scaledTexture.ReadPixels(new Rect(0, 0, newWidth, newHeight), 0, 0);
+                scaledTexture.Apply();
+            }
+            finally
+            {
+                RenderTexture.active = previousActive;
+                RenderTexture.ReleaseTemporary(rt);
+            }
             UnityEngine.Object.DestroyImmediate(originalTexture);
 
             return scaledTexture;
