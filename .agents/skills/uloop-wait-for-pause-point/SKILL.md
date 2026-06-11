@@ -54,17 +54,21 @@ Use `uloop pause-point-status --id state-transition-applied` only when you need 
 
 ## Fast-Progressing Games
 
-When the game advances on its own (a ball keeps bouncing, blocks keep falling), the state you are arranging can move past the marker before the input command and the wait are even issued. Freeze game time during setup, then restore it before triggering the marker:
+When the game advances on its own (a ball keeps bouncing, blocks keep falling), the state you are arranging can move past the marker before the input command and the wait are even issued. Pause the Editor and walk frames explicitly instead:
 
 ```bash
-# Freeze gameplay while arranging the scenario (input simulation still works)
-uloop execute-dynamic-code --code "UnityEngine.Time.timeScale = 0f; return \"frozen\";"
-# ... enable markers, position state, prepare assertions ...
-uloop execute-dynamic-code --code "UnityEngine.Time.timeScale = 1f; return \"running\";"
-# Now trigger the input and wait for the marker
+# Freeze the whole player loop while arranging the scenario
+uloop control-play-mode --action Pause
+# ... enable markers, inspect/arrange state with execute-dynamic-code, get-hierarchy, get-logs ...
+# Advance exactly one frame and stay paused (the Editor's Next Frame button)
+uloop control-play-mode --action Step
+# Resume right before sending the input you are verifying (input simulation needs an unpaused player)
+uloop control-play-mode --action Play
 ```
 
-Use this only as a setup aid. A `Time.timeScale` change is never paused-frame proof by itself, and physics-driven transitions resume the moment the scale returns to 1, so trigger and wait immediately after restoring it.
+Do not use `Time.timeScale = 0` for this: projects that read unscaled time keep advancing regardless, and the value silently persists into the next PlayMode session. Editor pause and `Step` freeze the entire player loop independent of `Time.timeScale`.
+
+A pause point hit leaves Unity in this same paused state, so `Step` also works right after a marker hits: inspect the paused frame, then step forward to watch the following frames commit one at a time.
 
 ## Marker Placement
 

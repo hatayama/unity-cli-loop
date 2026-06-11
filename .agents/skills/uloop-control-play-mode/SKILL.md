@@ -18,7 +18,7 @@ uloop control-play-mode [options]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--action` | string | `Play` | Action to perform: `Play`, `Stop`, `Pause` |
+| `--action` | string | `Play` | Action to perform: `Play`, `Stop`, `Pause`, `Step` |
 | `--timeout-seconds` | integer | `180` | Maximum seconds to wait for the requested play mode state |
 
 ## Global Options
@@ -41,6 +41,9 @@ uloop control-play-mode --action Stop
 
 # Pause play mode
 uloop control-play-mode --action Pause
+
+# Advance exactly one frame while paused (Next Frame button)
+uloop control-play-mode --action Step
 ```
 
 ## Output
@@ -57,5 +60,6 @@ Returns JSON with the current play mode state:
 - Play action starts the game in the Unity Editor (also resumes from pause)
 - Stop action exits play mode and returns to edit mode. If Play Mode was already stopped, `Changed` is `false`, `WasAlreadyStopped` is `true`, and `Message` is `Play mode was already stopped`.
 - Pause action pauses the game while remaining in play mode
+- Step action advances exactly one frame and leaves play mode paused (the Editor's Next Frame button; independent of Time.timeScale). Requires PlayMode to be running; repeat to walk transitions frame by frame
 - Useful for automated testing workflows
 - The command waits for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.
