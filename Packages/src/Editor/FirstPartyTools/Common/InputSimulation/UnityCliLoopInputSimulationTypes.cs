@@ -1,4 +1,5 @@
 #nullable enable
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -87,6 +88,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
+    /// Identifies one pause point marker that was hit while an input simulation ran.
+    /// </summary>
+    public sealed class UnityCliLoopPausePointHit
+    {
+        public string Id { get; set; } = "";
+        public int HitCount { get; set; }
+    }
+
+    /// <summary>
     /// Carries the result data produced by Unity CLI Loop Keyboard Simulation behavior.
     /// </summary>
     public sealed class UnityCliLoopKeyboardSimulationResult
@@ -95,9 +105,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Message { get; set; } = "";
         public string Action { get; set; } = "";
         public string? KeyName { get; set; }
-        public bool InterruptedByDebugBreak { get; set; }
-        public string? DebugBreakId { get; set; }
-        public int? DebugBreakHitCount { get; set; }
+        public bool InterruptedByPausePoint { get; set; }
+        public string? PausePointId { get; set; }
+        public int? PausePointHitCount { get; set; }
+        public List<UnityCliLoopPausePointHit>? PausePointHits { get; set; }
+        public bool? PressEdgeObserved { get; set; }
     }
 
     /// <summary>
@@ -127,9 +139,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string? Button { get; set; }
         public float? PositionX { get; set; }
         public float? PositionY { get; set; }
-        public bool InterruptedByDebugBreak { get; set; }
-        public string? DebugBreakId { get; set; }
-        public int? DebugBreakHitCount { get; set; }
+        public bool InterruptedByPausePoint { get; set; }
+        public string? PausePointId { get; set; }
+        public int? PausePointHitCount { get; set; }
+        public List<UnityCliLoopPausePointHit>? PausePointHits { get; set; }
     }
 
     /// <summary>

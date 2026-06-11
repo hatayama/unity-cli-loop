@@ -14,7 +14,7 @@ Simulate keyboard input on Unity PlayMode: $ARGUMENTS
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. Execute the needed `uloop simulate-keyboard` commands
 3. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
-4. If exact-frame proof would reduce uncertainty, treat Debug Break inspection as an optional follow-up using the section below
+4. If exact-frame proof would reduce uncertainty, treat Pause Point inspection as an optional follow-up using the section below
 5. Report what happened and which evidence was used
 
 ## Tool Reference
@@ -44,13 +44,13 @@ Use `Press` for edge-triggered keyboard code such as `Keyboard.current.spaceKey.
 If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` true but runtime state does not change, do not immediately rewrite the user's runtime code to `isPressed`. First verify that the target component is active during the command, that it polls input in the configured Input System update phase, and that a missed `KeyDown` edge is followed by `KeyUp` before retrying.
 Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
 
-### Debug Break Inspection (Standard for E2E)
+### Pause Point Inspection (Standard for E2E)
 
-- Use `UnityCliLoopDebug.Break("<id>")` with `uloop-wait-for-debug-break` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
+- Use `UloopPausePoint.Pause("<id>")` with `uloop-wait-for-pause-point` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
 - Put the marker at a natural state transition after the app consumed the key, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, or a dependent component is updated. Do not place it immediately after sending `simulate-keyboard`.
-- If the key handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UnityCliLoopDebug.Break("<id>")` and read them with `uloop-get-logs` while Unity is paused. A break hit proves the line was reached, not the frame-local values.
+- If the key handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UloopPausePoint.Pause("<id>")` and read them with `uloop-get-logs` while Unity is paused. A pause point hit proves the line was reached, not the frame-local values.
 - Treat `simulate-keyboard Success=true`, generic action logs, and final durable counters as useful evidence, but not as paused-frame proof.
-- If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. If a `UnityCliLoopDebug.Break` marker caused the pause, `DebugBreakId` and `DebugBreakHitCount` identify it. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- If the response has `InterruptedByPausePoint: true`, Unity is paused for inspection and the tool released its held input bookkeeping. If a `UloopPausePoint.Pause` marker caused the pause, `PausePointId` and `PausePointHitCount` identify it. Use `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, or `uloop execute-dynamic-code` before resuming.
 - Use distinct marker ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.
 
 ### KeyDown/KeyUp Rules
@@ -94,9 +94,11 @@ Returns JSON with:
 - `Message` (string): Description of what happened or why it failed
 - `Action` (string): The `--action` value that was applied (`Press`, `KeyDown`, or `KeyUp`)
 - `KeyName` (string, nullable): The key that was acted on; may be `null` when the action could not resolve a key
-- `InterruptedByDebugBreak` (boolean): True when Unity paused during Debug Break inspection and the input bookkeeping was safely released
-- `DebugBreakId` (string, nullable): The marker id when a `UnityCliLoopDebug.Break` marker caused the interruption
-- `DebugBreakHitCount` (integer, nullable): The marker hit count when a `UnityCliLoopDebug.Break` marker caused the interruption
+- `InterruptedByPausePoint` (boolean): True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
+- `PausePointId` (string, nullable): The marker id when a `UloopPausePoint.Pause` marker caused the interruption
+- `PausePointHitCount` (integer, nullable): The marker hit count when a `UloopPausePoint.Pause` marker caused the interruption
+- `PausePointHits` (array, nullable): Every marker hit during this input as `{Id, HitCount}` entries, in hit order. Read this when one input may trigger several markers; `PausePointId` only names the latest one
+- `PressEdgeObserved` (boolean, nullable): For `Press` and `KeyDown`, whether the press edge (`wasPressedThisFrame`) was actually visible inside a gameplay input update. `false` means the CLI succeeded but gameplay polling most likely missed the edge (e.g. the press was consumed by an editor-only input update) — retry the input or verify with a focused log instead of trusting `Success` alone. `null` only for `KeyUp` and for timed-out responses; pause-point interruptions still report the observed value
 
 ## Prerequisites
 

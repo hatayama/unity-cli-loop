@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -495,4 +496,97 @@ func decodeLaunchResponseFromOutput(t *testing.T, output string) launchReadyResp
 		t.Fatalf("failed to decode launch JSON: %v\n%s", err, output)
 	}
 	return response
+}
+
+// Verifies launch survives a blocked process scan (e.g. sandboxed /bin/ps) by
+// probing the project IPC and reporting the running Editor instead of failing.
+func TestRunLaunchFallsBackToIpcProbeWhenProcessScanFails(t *testing.T) {
+	originalFinder := findRunningUnityProcessForLaunch
+	originalProbe := probeProjectIpcForLaunchFallback
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
+	}
+	probeProjectIpcForLaunchFallback = func(context.Context, string) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		probeProjectIpcForLaunchFallback = originalProbe
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
+	}
+	response := decodeLaunchResponseFromOutput(t, stdout.String())
+	if !response.Success || !response.Ready || !response.AlreadyRunning {
+		t.Fatalf("fallback response mismatch: %+v", response)
+	}
+	if response.CurrentProcessId != nil {
+		t.Fatalf("fallback cannot know the process id: %+v", response)
+	}
+	if !strings.Contains(response.Message, "window was not focused") {
+		t.Fatalf("message should explain the skipped focus: %+v", response)
+	}
+}
+
+// Verifies launch still fails when the process scan is blocked and the project IPC is silent.
+func TestRunLaunchReportsScanErrorWhenIpcProbeAlsoFails(t *testing.T) {
+	originalFinder := findRunningUnityProcessForLaunch
+	originalProbe := probeProjectIpcForLaunchFallback
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
+	}
+	probeProjectIpcForLaunchFallback = func(context.Context, string) error {
+		return errors.New("connection refused")
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		probeProjectIpcForLaunchFallback = originalProbe
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected failure, got %d stdout=%s", code, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "operation not permitted") {
+		t.Fatalf("stderr should carry the scan error: %s", stderr.String())
+	}
+}
+
+// Verifies restart and quit refuse the fallback because they must kill a known process id.
+func TestRunLaunchRestartDoesNotUseIpcProbeFallback(t *testing.T) {
+	originalFinder := findRunningUnityProcessForLaunch
+	originalProbe := probeProjectIpcForLaunchFallback
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
+	}
+	probeProjectIpcForLaunchFallback = func(context.Context, string) error {
+		t.Fatal("restart must not consult the IPC probe fallback")
+		return nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		probeProjectIpcForLaunchFallback = originalProbe
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(context.Background(), launchOptions{restart: true, projectPath: projectRoot}, projectRoot, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected failure, got %d stdout=%s", code, stdout.String())
+	}
 }

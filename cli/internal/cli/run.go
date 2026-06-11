@@ -91,10 +91,10 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return runSync(ctx, connection, stdout, stderr)
 	case "focus-window":
 		return runFocusWindow(ctx, connection.ProjectRoot, stdout, stderr)
-	case debugBreakWaitCommandName:
-		return runWaitForDebugBreakCommand(ctx, connection, commandArgs, stdout, stderr)
-	case debugBreakStatusUserCommandName:
-		return runDebugBreakStatusCommand(ctx, connection, commandArgs, stdout, stderr)
+	case pausePointWaitCommandName:
+		return runWaitForPausePointCommand(ctx, connection, commandArgs, stdout, stderr)
+	case pausePointStatusUserCommandName:
+		return runPausePointStatusCommand(ctx, connection, commandArgs, stdout, stderr)
 	default:
 		tool, cache, ok, err := findToolForCommand(connection.ProjectRoot, command)
 		if err != nil {
@@ -109,8 +109,24 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 			return 1
 		}
 
+		commandArgs, dynamicCodeFilePath, err := extractDynamicCodeFileFlag(command, commandArgs)
+		if err != nil {
+			writeClassifiedError(stderr, err, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     command,
+			})
+			return 1
+		}
+
 		params, nestedProjectPath, err := buildToolParams(commandArgs, tool)
 		if err != nil {
+			writeClassifiedError(stderr, err, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     command,
+			})
+			return 1
+		}
+		if err := applyDynamicCodeFileParam(params, dynamicCodeFilePath); err != nil {
 			writeClassifiedError(stderr, err, errorContext{
 				projectRoot: connection.ProjectRoot,
 				command:     command,

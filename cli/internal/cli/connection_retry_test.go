@@ -379,3 +379,215 @@ func TestSendWithTransientConnectionRetryKeepsRetryTimeoutBeforeAcceptedAck(t *t
 	default:
 	}
 }
+
+// Verifies a server_busy response is retried, because the request was never executed
+// and Unity frees the execution slot when the running tool completes.
+func TestSendWithTransientConnectionRetryRetriesBusyResponses(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	originalPoll := serverConnectionRetryPoll
+	serverConnectionRetryPoll = 5 * time.Millisecond
+	t.Cleanup(func() {
+		serverConnectionRetryPoll = originalPoll
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	busy := `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Unity is busy running 'compile'.","data":{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"busy"}}}`
+	ok := `{"jsonrpc":"2.0","result":{"ok":true},"id":1}`
+	go func() {
+		for _, payload := range []string{busy, ok} {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			if _, err := unityipc.Read(bufio.NewReader(conn)); err != nil {
+				_ = conn.Close()
+				return
+			}
+			_ = unityipc.Write(conn, []byte(payload))
+			_ = conn.Close()
+		}
+	}()
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	outcome, err := sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil)
+	if err != nil {
+		t.Fatalf("busy response should be retried to success: %v", err)
+	}
+	if string(outcome.Result) != `{"ok":true}` {
+		t.Fatalf("final result mismatch: %s", outcome.Result)
+	}
+}
+
+// Verifies a persistently busy Unity still surfaces the busy error after the retry window.
+func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	originalTimeout := serverConnectionRetryTimeout
+	originalPoll := serverConnectionRetryPoll
+	serverConnectionRetryTimeout = 30 * time.Millisecond
+	serverConnectionRetryPoll = 5 * time.Millisecond
+	t.Cleanup(func() {
+		serverConnectionRetryTimeout = originalTimeout
+		serverConnectionRetryPoll = originalPoll
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	busy := `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Unity is busy running 'compile'.","data":{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"busy"}}}`
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			// Serve concurrently so rapid retry reconnects never queue behind a slow handler.
+			go func() {
+				defer func() {
+					_ = conn.Close()
+				}()
+				if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+					return
+				}
+				_ = unityipc.Write(conn, []byte(busy))
+			}()
+		}
+	}()
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	_, err = sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil)
+	if err == nil {
+		t.Fatal("expected busy error after retry window")
+	}
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) {
+		t.Fatalf("busy must surface as the original RPC error, got: %v", err)
+	}
+}
+
+// Verifies a dispatched RPC failure arriving after the retry window expires is not
+// masked by a busy response seen earlier in the window.
+func TestSendWithTransientConnectionRetrySurfacesDispatchedFailureAfterBusy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	originalTimeout := serverConnectionRetryTimeout
+	originalPoll := serverConnectionRetryPoll
+	retryWindow := 150 * time.Millisecond
+	serverConnectionRetryTimeout = retryWindow
+	serverConnectionRetryPoll = 5 * time.Millisecond
+	t.Cleanup(func() {
+		serverConnectionRetryTimeout = originalTimeout
+		serverConnectionRetryPoll = originalPoll
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	busy := `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Unity is busy running 'compile'.","data":{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"busy"}}}`
+	failure := `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"tool execution failed","data":{"type":"tool_error","message":"tool execution failed"}}}`
+	go func() {
+		first := true
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			sendBusy := first
+			first = false
+			go func(conn net.Conn, sendBusy bool) {
+				defer func() {
+					_ = conn.Close()
+				}()
+				if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+					return
+				}
+				if sendBusy {
+					_ = unityipc.Write(conn, []byte(busy))
+					return
+				}
+				accepted := `{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`
+				if writeErr := unityipc.Write(conn, []byte(accepted)); writeErr != nil {
+					return
+				}
+				// The delay starts only after the accepted ack is on the wire, and twice
+				// the retry window guarantees the window has expired before the failure
+				// response arrives, regardless of scheduler jitter.
+				time.Sleep(retryWindow * 2)
+				_ = unityipc.Write(conn, []byte(failure))
+			}(conn, sendBusy)
+		}
+	}()
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	_, err = sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil)
+	if err == nil {
+		t.Fatal("expected the dispatched failure to surface")
+	}
+	if isUnityServerBusyRPCError(err) {
+		t.Fatalf("dispatched failure must not be masked by the earlier busy response, got: %v", err)
+	}
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) {
+		t.Fatalf("dispatched failure must surface as the original RPC error, got: %v", err)
+	}
+}

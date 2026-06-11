@@ -211,7 +211,7 @@ func nativeCommandDescription(command string) (string, bool) {
 
 func nativeCommandUsesProject(command string) bool {
 	switch command {
-	case launchCommandName, "list", "sync", "focus-window", skillsCommandName, debugBreakWaitCommandName, debugBreakStatusUserCommandName:
+	case launchCommandName, "list", "sync", "focus-window", skillsCommandName, pausePointWaitCommandName, pausePointStatusUserCommandName:
 		return true
 	default:
 		return false

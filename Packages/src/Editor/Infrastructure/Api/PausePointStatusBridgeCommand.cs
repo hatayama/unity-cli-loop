@@ -7,7 +7,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Serves CLI-only debug break status and cleanup requests outside the normal tool slot.
+    /// Serves CLI-only pause point status and cleanup requests outside the normal tool slot.
     /// </summary>
     internal static class PausePointStatusBridgeCommand
     {
@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     }
 
     /// <summary>
-    /// Debug break status payload returned by the internal CLI polling bridge command.
+    /// Pause point status payload returned by the internal CLI polling bridge command.
     /// </summary>
     public class PausePointStatusResponse : UnityCliLoopToolResponse
     {

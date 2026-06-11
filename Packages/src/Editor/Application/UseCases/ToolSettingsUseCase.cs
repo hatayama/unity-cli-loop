@@ -12,11 +12,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
         private static readonly ToolCatalogItem[] NativeToolCatalogItems =
         {
             new(
-                UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_DEBUG_BREAK,
+                UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT,
                 displayDevelopmentOnly: false,
                 isThirdParty: false),
             new(
-                UnityCliLoopConstants.COMMAND_NAME_DEBUG_BREAK_STATUS,
+                UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS,
                 displayDevelopmentOnly: false,
                 isThirdParty: false)
         };

@@ -15,7 +15,7 @@ Simulate mouse input via Input System in Unity PlayMode.
 2. For Click/LongPress: determine the target screen position (use `uloop screenshot` to find coordinates)
 3. Execute the needed `uloop simulate-mouse-input` commands
 4. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
-5. When this input verifies a state transition, use Debug Break inspection from the section below as the standard frame proof
+5. When this input verifies a state transition, use Pause Point inspection from the section below as the standard frame proof
 6. Report what happened and which evidence was used
 
 ## Tool Reference
@@ -48,14 +48,14 @@ uloop simulate-mouse-input --action <action> [options]
 | `SmoothDelta` | Mouse.current.delta (per-frame) | Inject mouse delta smoothly over `--duration` seconds (human-like camera pan) |
 | `Scroll` | Mouse.current.scroll | Inject scroll wheel input |
 
-### Debug Break Inspection (Standard for E2E)
+### Pause Point Inspection (Standard for E2E)
 
-- Use `UnityCliLoopDebug.Break("<id>")` with `uloop-wait-for-debug-break` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
-- Place the break at a natural state transition after the app consumed the mouse input, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, or a dependent component is updated. Do not place it immediately after sending `simulate-mouse-input`.
-- If the mouse handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UnityCliLoopDebug.Break("<id>")` and read them with `uloop-get-logs` while Unity is paused. A break hit proves the line was reached, not the frame-local values.
-- If the response has `InterruptedByDebugBreak: true`, Unity is paused for inspection and the tool released its held input bookkeeping. `DebugBreakId` and `DebugBreakHitCount` identify the break that paused Unity. Use `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- Use `UloopPausePoint.Pause("<id>")` with `uloop-wait-for-pause-point` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
+- Place the pause point at a natural state transition after the app consumed the mouse input, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, or a dependent component is updated. Do not place it immediately after sending `simulate-mouse-input`.
+- If the mouse handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UloopPausePoint.Pause("<id>")` and read them with `uloop-get-logs` while Unity is paused. A pause point hit proves the line was reached, not the frame-local values.
+- If the response has `InterruptedByPausePoint: true`, Unity is paused for inspection and the tool released its held input bookkeeping. `PausePointId` and `PausePointHitCount` identify the pause point that paused Unity. Use `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, or `uloop execute-dynamic-code` before resuming.
 - Use distinct ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.
-- Remove temporary break/log instrumentation before final validation when it was added only for inspection.
+- Remove temporary pause-point/log instrumentation before final validation when it was added only for inspection.
 
 ### Global Options (optional)
 
@@ -116,8 +116,9 @@ Returns JSON with:
 - `Button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
 - `PositionX`: Target X coordinate (nullable float; populated for `Click` / `LongPress`)
 - `PositionY`: Target Y coordinate (nullable float; populated for `Click` / `LongPress`)
-- `InterruptedByDebugBreak`: True when Unity paused during Debug Break inspection and the input bookkeeping was safely released
-- `DebugBreakId`: The id from `UnityCliLoopDebug.Break("<id>")` when it caused the interruption
-- `DebugBreakHitCount`: The hit count for that `UnityCliLoopDebug.Break("<id>")`
+- `InterruptedByPausePoint`: True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
+- `PausePointId`: The id from `UloopPausePoint.Pause("<id>")` when it caused the interruption
+- `PausePointHitCount`: The hit count for that `UloopPausePoint.Pause("<id>")`
+- `PausePointHits` (array, nullable): Every marker hit during this input as `{Id, HitCount}` entries, in hit order. Read this when one input may trigger several markers; `PausePointId` only names the latest one
 
-There is no `DeltaX`, `DeltaY`, `ScrollX`, `ScrollY`, `Duration`, or hit-element field in the response — only the issued action, button, target position, and Debug Break interruption state are echoed back. Verify visual outcome with a follow-up screenshot.
+There is no `DeltaX`, `DeltaY`, `ScrollX`, `ScrollY`, `Duration`, or hit-element field in the response — only the issued action, button, target position, and Pause Point interruption state are echoed back. Verify visual outcome with a follow-up screenshot.

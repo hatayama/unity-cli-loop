@@ -9,7 +9,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Parameters for enabling one named debug break marker.
+    /// Parameters for enabling one named pause point marker.
     /// </summary>
     public class EnablePausePointSchema : UnityCliLoopToolSchema
     {
@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Parameters for clearing one or all debug break markers.
+    /// Parameters for clearing one or all pause point markers.
     /// </summary>
     public class ClearPausePointSchema : UnityCliLoopToolSchema
     {
@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Response shared by debug break tool commands.
+    /// Response shared by pause point tool commands.
     /// </summary>
     public class PausePointResponse : UnityCliLoopToolResponse
     {
@@ -79,18 +79,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Status = UloopPausePointStatus.Cleared,
                 ClearedCount = result.ClearedCount,
-                Message = "Debug breaks cleared."
+                Message = result.ClearedCount == 0
+                    ? "No active pause points to clear."
+                    : "Pause points cleared."
             };
         }
     }
 
     /// <summary>
-    /// Exposes debug break enabling as a Unity CLI Loop tool.
+    /// Exposes pause point enabling as a Unity CLI Loop tool.
     /// </summary>
     [UnityCliLoopTool]
     public class EnablePausePointTool : UnityCliLoopTool<EnablePausePointSchema, PausePointResponse>
     {
-        public override string ToolName => UnityCliLoopConstants.TOOL_NAME_ENABLE_DEBUG_BREAK;
+        public override string ToolName => UnityCliLoopConstants.TOOL_NAME_ENABLE_PAUSE_POINT;
 
         protected override Task<PausePointResponse> ExecuteAsync(EnablePausePointSchema parameters, CancellationToken ct)
         {
@@ -102,12 +104,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Exposes debug break clearing as a Unity CLI Loop tool.
+    /// Exposes pause point clearing as a Unity CLI Loop tool.
     /// </summary>
     [UnityCliLoopTool]
     public class ClearPausePointTool : UnityCliLoopTool<ClearPausePointSchema, PausePointResponse>
     {
-        public override string ToolName => UnityCliLoopConstants.TOOL_NAME_CLEAR_DEBUG_BREAK;
+        public override string ToolName => UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT;
 
         protected override Task<PausePointResponse> ExecuteAsync(ClearPausePointSchema parameters, CancellationToken ct)
         {
@@ -119,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Coordinates debug break tool validation and registry updates.
+    /// Coordinates pause point tool validation and registry updates.
     /// </summary>
     internal sealed class PausePointUseCase
     {
@@ -182,7 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return string.Empty;
             }
 
-            return "Debug break was enabled before PlayMode while Domain Reload is enabled. " +
+            return "Pause point was enabled before PlayMode while Domain Reload is enabled. " +
                    "Entering PlayMode may clear this marker; keep Domain Reload disabled for this workflow or enable the marker after PlayMode starts.";
         }
 
