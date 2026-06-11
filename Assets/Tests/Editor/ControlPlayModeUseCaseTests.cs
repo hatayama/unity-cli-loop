@@ -37,6 +37,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenStepOutsidePlayMode_ReturnsNoOpWithGuidance()
+        {
+            // Verifies Step refuses to run outside PlayMode instead of silently queuing a frame step.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase();
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Step,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode is not running. Step requires PlayMode; start it with --action Play first."));
+            Assert.That(response.Changed, Is.False);
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenStopAlreadyStopped_ReturnsNoOpState()
         {
             // Verifies Stop distinguishes a no-op from a state-changing PlayMode exit.

@@ -66,6 +66,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     message = "Play mode paused";
                     break;
 
+                case PlayModeAction.Step:
+                    // Same API as the Editor's Next Frame button: advances one frame and
+                    // leaves the player paused, independent of Time.timeScale.
+                    if (!wasPlaying)
+                    {
+                        message = "Play mode is not running. Step requires PlayMode; start it with --action Play first.";
+                        break;
+                    }
+                    EditorApplication.Step();
+                    changed = true;
+                    message = "Stepped one frame; play mode is paused.";
+                    break;
+
                 default:
                     message = $"Unknown action: {parameters.Action}";
                     break;
