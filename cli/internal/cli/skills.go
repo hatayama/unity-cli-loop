@@ -264,7 +264,17 @@ func runSkillsInstall(projectRoot string, skills []skillDefinition, options skil
 	writeLine(stdout, "")
 	writeFormat(stdout, "Installing uloop skills (%s)...\n", skillLocationName(options.global))
 	writeLine(stdout, "")
-	for _, target := range options.targets {
+	// Targets installed earlier but omitted from this invocation would keep stale
+	// skill copies that contradict the CLI, so refresh every detected install.
+	autoRefreshTargets, err := detectInstalledSkillTargets(projectRoot, skills, options)
+	if err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+		return 1
+	}
+	for _, autoTarget := range autoRefreshTargets {
+		writeFormat(stdout, "Auto-refreshing %s: an existing uloop skill install was detected there.\n\n", autoTarget.displayName)
+	}
+	for _, target := range append(append([]skillTarget{}, options.targets...), autoRefreshTargets...) {
 		result, err := installSkillsForTarget(projectRoot, target, skills, options.global, groupManagedSkillsForOptions(options))
 		if err != nil {
 			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
@@ -309,6 +319,50 @@ func runSkillsUninstall(projectRoot string, skills []skillDefinition, options sk
 		writeFormat(stdout, "  Location: %s\n\n", baseDir)
 	}
 	return 0
+}
+
+// detectInstalledSkillTargets returns known targets that already contain at least one
+// of the current uloop skills but were not requested in this invocation.
+func detectInstalledSkillTargets(projectRoot string, skills []skillDefinition, options skillCommandOptions) ([]skillTarget, error) {
+	requestedDirs := map[string]bool{}
+	for _, target := range options.targets {
+		requestedDirs[target.projectDir] = true
+	}
+
+	detected := []skillTarget{}
+	for _, targetID := range defaultSkillTargetIDs {
+		target := targetConfigs[targetID]
+		if requestedDirs[target.projectDir] {
+			continue
+		}
+		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
+		if err != nil {
+			return nil, err
+		}
+		installed, err := hasAnyInstalledSkill(baseDir, skills)
+		if err != nil {
+			return nil, err
+		}
+		if installed {
+			detected = append(detected, target)
+			requestedDirs[target.projectDir] = true
+		}
+	}
+	return detected, nil
+}
+
+func hasAnyInstalledSkill(baseDir string, skills []skillDefinition) (bool, error) {
+	for _, skill := range skills {
+		for _, grouped := range []bool{false, true} {
+			skillFile := filepath.Join(getPreferredSkillDir(baseDir, skill.name, grouped), skillFileName)
+			if _, err := os.Stat(skillFile); err == nil {
+				return true, nil
+			} else if !os.IsNotExist(err) {
+				return false, err
+			}
+		}
+	}
+	return false, nil
 }
 
 type skillInstallResult struct {

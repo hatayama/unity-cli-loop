@@ -748,6 +748,82 @@ func TestTryHandleSkillsRequestRejectsUnknownSubcommandWithoutProject(t *testing
 	}
 }
 
+// Tests that install refreshes targets that already hold uloop skills even when
+// they were not requested, because stale per-agent copies (e.g. .codex) have
+// repeatedly misled agents with retired flags.
+func TestRunSkillsInstallAutoRefreshesPreviouslyInstalledTargets(t *testing.T) {
+	projectRoot := t.TempDir()
+	sourceDir := filepath.Join(projectRoot, "source", "Skill")
+	writeSkillFile(t, sourceDir, `---
+name: uloop-sample
+---
+
+# new content
+`)
+	skill := skillDefinition{
+		name:            "uloop-sample",
+		content:         []byte("---\nname: uloop-sample\n---\n\n# new content\n"),
+		sourceDirectory: sourceDir,
+	}
+
+	codexTarget := targetConfigs["codex"]
+	codexBaseDir, err := getSkillsBaseDir(projectRoot, codexTarget, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	staleDir := getPreferredSkillDir(codexBaseDir, skill.name, false)
+	writeSkillFile(t, staleDir, "---\nname: uloop-sample\n---\n\n# stale content\n")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	options := skillCommandOptions{targets: []skillTarget{targetConfigs["claude"]}}
+	code := runSkillsInstall(projectRoot, []skillDefinition{skill}, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("install should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	refreshedContent, err := os.ReadFile(filepath.Join(staleDir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("codex skill should still exist: %v", err)
+	}
+	if !strings.Contains(string(refreshedContent), "# new content") {
+		t.Fatalf("codex skill should be refreshed: %s", string(refreshedContent))
+	}
+	if !strings.Contains(stdout.String(), "Codex CLI") {
+		t.Fatalf("output should mention the auto-refreshed target: %s", stdout.String())
+	}
+}
+
+// Tests that install never creates skill directories for targets that were
+// neither requested nor previously installed.
+func TestRunSkillsInstallLeavesUninstalledTargetsUntouched(t *testing.T) {
+	projectRoot := t.TempDir()
+	sourceDir := filepath.Join(projectRoot, "source", "Skill")
+	writeSkillFile(t, sourceDir, `---
+name: uloop-sample
+---
+
+# sample
+`)
+	skill := skillDefinition{
+		name:            "uloop-sample",
+		content:         []byte("---\nname: uloop-sample\n---\n\n# sample\n"),
+		sourceDirectory: sourceDir,
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	options := skillCommandOptions{targets: []skillTarget{targetConfigs["claude"]}}
+	code := runSkillsInstall(projectRoot, []skillDefinition{skill}, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("install should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, ".codex")); !os.IsNotExist(err) {
+		t.Fatalf(".codex should not be created without a prior install: %v", err)
+	}
+}
+
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
 	writeSkillFile(t, filepath.Join(projectRoot, filepath.FromSlash(relativeDir)), content)
