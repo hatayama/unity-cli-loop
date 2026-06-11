@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 )
 
@@ -33,6 +34,22 @@ func writeLaunchReadinessWait(stdout io.Writer, spinner *terminalSpinner) {
 	if !spinner.enabled {
 		writeLine(stdout, launchReadinessMessage)
 	}
+}
+
+// writeDetectionFallbackLaunchReadyResponse reports a running Editor that was proven via
+// the project IPC after the process scan failed, so no process id or window focus is available.
+func writeDetectionFallbackLaunchReadyResponse(stdout io.Writer, stderr io.Writer, projectRoot string, detectionErr error) int {
+	return writeLaunchResponse(stdout, stderr, launchReadyResponse{
+		Success:         true,
+		Ready:           true,
+		ServerReady:     true,
+		ProjectIpcReady: true,
+		AlreadyRunning:  true,
+		ProjectRoot:     projectRoot,
+		Message: fmt.Sprintf(
+			"Unity is already running and ready. The process scan failed (%v), so the existing window was not focused.",
+			detectionErr),
+	})
 }
 
 func writeExistingLaunchReadyResponse(stdout io.Writer, stderr io.Writer, projectRoot string, currentPid int) int {

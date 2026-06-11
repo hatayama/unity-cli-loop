@@ -33,6 +33,7 @@ var (
 	resolveUnityExecutablePathForLaunch = resolveUnityExecutablePath
 	waitForUnityLockfileForLaunch       = waitForUnityLockfile
 	waitForToolReadinessForLaunch       = waitForToolReadiness
+	probeProjectIpcForLaunchFallback    = probeToolReadinessSequence
 )
 
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
@@ -197,6 +198,12 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 
 	runningProcess, err := findRunningUnityProcessForLaunch(ctx, projectRoot)
 	if err != nil {
+		// Sandboxes can block the process scan (e.g. /bin/ps). A responding project IPC
+		// proves Unity is running, so plain launch must not fail on the scan alone.
+		// Restart and quit still fail because they need a process id to kill.
+		if !options.restart && !options.quit && probeProjectIpcForLaunchFallback(ctx, projectRoot) == nil {
+			return writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
+		}
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
