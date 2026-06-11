@@ -470,12 +470,16 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 			if err != nil {
 				return
 			}
-			if _, err := unityipc.Read(bufio.NewReader(conn)); err != nil {
-				_ = conn.Close()
-				return
-			}
-			_ = unityipc.Write(conn, []byte(busy))
-			_ = conn.Close()
+			// Serve concurrently so rapid retry reconnects never queue behind a slow handler.
+			go func() {
+				defer func() {
+					_ = conn.Close()
+				}()
+				if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+					return
+				}
+				_ = unityipc.Write(conn, []byte(busy))
+			}()
 		}
 	}()
 

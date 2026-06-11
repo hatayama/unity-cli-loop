@@ -107,6 +107,11 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			continue
 		}
 		if !shouldRetryUndispatchedConnection(err, outcome) {
+			// A transport error caused by the expiring retry window must not mask a busy
+			// response seen earlier; busy is the truer diagnosis.
+			if err != nil && retryContext.Err() != nil && isUnityServerBusyRPCError(lastErr) {
+				return lastOutcome, lastErr
+			}
 			return outcome, err
 		}
 
@@ -115,6 +120,11 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			if retryContext.Err() != nil {
 				if ctx.Err() != nil {
 					return outcome, ctx.Err()
+				}
+				// A busy response seen during the window is the truer diagnosis than a
+				// final dial cut short by the expiring retry context.
+				if isUnityServerBusyRPCError(lastErr) {
+					return lastOutcome, lastErr
 				}
 				return outcome, unityServerNotRespondingError{
 					projectRoot: connection.ProjectRoot,

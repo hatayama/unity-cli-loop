@@ -231,7 +231,7 @@ func TestClassifyServerBusyRPCError(t *testing.T) {
 	if !cliErr.Retryable || !cliErr.SafeToRetry {
 		t.Fatalf("retry flags mismatch: %#v", cliErr)
 	}
-	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. Retry after the running tool completes."
+	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. uloop is single-flight by design; never run uloop commands in parallel. The CLI already retried for up to 10 seconds, so wait for 'compile' to complete and run the command again."
 	if cliErr.Message != expectedMessage {
 		t.Fatalf("message mismatch: %s", cliErr.Message)
 	}
@@ -263,7 +263,7 @@ func TestWriteClassifiedServerBusyRPCErrorWritesBusyStatus(t *testing.T) {
 	if envelope.Status != cliStatusBusy {
 		t.Fatalf("status mismatch: %#v", envelope)
 	}
-	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. Retry after the running tool completes."
+	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. uloop is single-flight by design; never run uloop commands in parallel. The CLI already retried for up to 10 seconds, so wait for 'compile' to complete and run the command again."
 	if envelope.Message != expectedMessage {
 		t.Fatalf("message mismatch: %#v", envelope)
 	}
