@@ -193,6 +193,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.AreEqual("Space", lastResponse.KeyName);
             Assert.IsNull(lastResponse.PausePointId);
             Assert.IsNull(lastResponse.PausePointHitCount);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue,
+                "Interrupted presses must still report whether the press edge was observed.");
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved!.Value,
+                "The press reached isPressed through gameplay updates, so the edge must have been observed.");
             Assert.IsFalse(keyboard[Key.Space].isPressed, "Pause-point interruption should release the injected key state.");
             Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Pause-point interruption should clear keyboard overlay state.");
         }
@@ -229,6 +235,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.InterruptedByPausePoint);
             Assert.AreEqual("space-press", lastResponse.PausePointId);
             Assert.AreEqual(1, lastResponse.PausePointHitCount);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue,
+                "Marker-interrupted presses must still report whether the press edge was observed.");
             Assert.IsFalse(keyboard[Key.Space].isPressed, "Marker interruption should release the injected key state.");
         }
 

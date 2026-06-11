@@ -230,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedPressResult(keyName);
+                return InterruptedKeyResult(UnityCliLoopKeyboardAction.Press, keyName, pressEdgeObserved);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
@@ -313,7 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName);
+                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName, pressEdgeObserved);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
@@ -366,7 +366,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName);
+                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName, null);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
@@ -392,14 +392,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return keyName;
         }
 
-        private static UnityCliLoopKeyboardSimulationResult InterruptedPressResult(string keyName)
-        {
-            return InterruptedKeyResult(UnityCliLoopKeyboardAction.Press, keyName);
-        }
-
+        // pressEdgeObserved stays nullable because KeyUp has no press edge to report;
+        // Press/KeyDown must pass their observation so pause-point interruptions (the
+        // most common E2E path) do not silently drop the field.
         private static UnityCliLoopKeyboardSimulationResult InterruptedKeyResult(
             UnityCliLoopKeyboardAction action,
-            string keyName)
+            string keyName,
+            bool? pressEdgeObserved)
         {
             UnityCliLoopKeyboardSimulationResult result = new()
             {
@@ -407,7 +406,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
                 Action = action.ToString(),
                 KeyName = keyName,
-                InterruptedByPausePoint = true
+                InterruptedByPausePoint = true,
+                PressEdgeObserved = pressEdgeObserved
             };
             AttachPausePointHit(result);
             return result;
