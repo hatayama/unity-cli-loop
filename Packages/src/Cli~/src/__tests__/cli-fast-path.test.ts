@@ -61,6 +61,16 @@ describe('tryParseFastExecuteDynamicCodeCommand', () => {
     });
   });
 
+  it('falls back when --code-file is requested', () => {
+    const command = tryParseFastExecuteDynamicCodeCommand([
+      'execute-dynamic-code',
+      '--code-file',
+      'snippet.csx',
+    ]);
+
+    expect(command).toBeNull();
+  });
+
   it('falls back when help is requested', () => {
     const command = tryParseFastExecuteDynamicCodeCommand(['execute-dynamic-code', '--help']);
 
