@@ -109,8 +109,24 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 			return 1
 		}
 
+		commandArgs, dynamicCodeFilePath, err := extractDynamicCodeFileFlag(command, commandArgs)
+		if err != nil {
+			writeClassifiedError(stderr, err, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     command,
+			})
+			return 1
+		}
+
 		params, nestedProjectPath, err := buildToolParams(commandArgs, tool)
 		if err != nil {
+			writeClassifiedError(stderr, err, errorContext{
+				projectRoot: connection.ProjectRoot,
+				command:     command,
+			})
+			return 1
+		}
+		if err := applyDynamicCodeFileParam(params, dynamicCodeFilePath); err != nil {
 			writeClassifiedError(stderr, err, errorContext{
 				projectRoot: connection.ProjectRoot,
 				command:     command,
