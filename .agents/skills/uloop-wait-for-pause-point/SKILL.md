@@ -52,6 +52,20 @@ If this command times out, the marker line was not reached while the command wai
 
 Use `uloop pause-point-status --id state-transition-applied` only when you need to confirm the marker is armed or inspect the current hit state. Add focused debug logs before the marker when local variables must be captured.
 
+## Fast-Progressing Games
+
+When the game advances on its own (a ball keeps bouncing, blocks keep falling), the state you are arranging can move past the marker before the input command and the wait are even issued. Freeze game time during setup, then restore it before triggering the marker:
+
+```bash
+# Freeze gameplay while arranging the scenario (input simulation still works)
+uloop execute-dynamic-code --code "UnityEngine.Time.timeScale = 0f; return \"frozen\";"
+# ... enable markers, position state, prepare assertions ...
+uloop execute-dynamic-code --code "UnityEngine.Time.timeScale = 1f; return \"running\";"
+# Now trigger the input and wait for the marker
+```
+
+Use this only as a setup aid. A `Time.timeScale` change is never paused-frame proof by itself, and physics-driven transitions resume the moment the scale returns to 1, so trigger and wait immediately after restoring it.
+
 ## Marker Placement
 
 - Prefer natural runtime points after input has been consumed, such as after a command is accepted, a state value changes, an evaluation step resolves, or a dependent component is updated.
