@@ -515,7 +515,8 @@ func TestSendWithTransientConnectionRetrySurfacesDispatchedFailureAfterBusy(t *t
 
 	originalTimeout := serverConnectionRetryTimeout
 	originalPoll := serverConnectionRetryPoll
-	serverConnectionRetryTimeout = 40 * time.Millisecond
+	retryWindow := 150 * time.Millisecond
+	serverConnectionRetryTimeout = retryWindow
 	serverConnectionRetryPoll = 5 * time.Millisecond
 	t.Cleanup(func() {
 		serverConnectionRetryTimeout = originalTimeout
@@ -556,8 +557,10 @@ func TestSendWithTransientConnectionRetrySurfacesDispatchedFailureAfterBusy(t *t
 				if writeErr := unityipc.Write(conn, []byte(accepted)); writeErr != nil {
 					return
 				}
-				// Let the retry window expire while this request is already dispatched.
-				time.Sleep(80 * time.Millisecond)
+				// The delay starts only after the accepted ack is on the wire, and twice
+				// the retry window guarantees the window has expired before the failure
+				// response arrives, regardless of scheduler jitter.
+				time.Sleep(retryWindow * 2)
 				_ = unityipc.Write(conn, []byte(failure))
 			}(conn, sendBusy)
 		}
