@@ -175,7 +175,7 @@ func runWaitForPausePoint(
 		// Best-effort: the timeout diagnosis must not depend on a second Unity round trip succeeding.
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
 		if logsErr == nil {
-			waitErr.Details["matchingLogs"] = logs
+			waitErr.Details["MatchingLogs"] = logs
 		}
 	}
 	writeErrorEnvelope(stderr, waitErr)

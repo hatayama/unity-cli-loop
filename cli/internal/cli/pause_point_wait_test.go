@@ -499,9 +499,10 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 		t.Fatalf("expected timeout failure, got %d with stdout %s", code, stdout.String())
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
-	matchingLogs, ok := envelope.Error.Details["matchingLogs"].([]any)
+	// The detail key mirrors the hit-response field name, so one spelling covers both surfaces.
+	matchingLogs, ok := envelope.Error.Details["MatchingLogs"].([]any)
 	if !ok || len(matchingLogs) != 1 {
-		t.Fatalf("matchingLogs detail mismatch: %#v", envelope.Error.Details)
+		t.Fatalf("MatchingLogs detail mismatch: %#v", envelope.Error.Details)
 	}
 }
 
