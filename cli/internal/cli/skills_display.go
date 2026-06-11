@@ -75,6 +75,11 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	writeLine(stdout, "      --windsurf")
 	writeLine(stdout, "      --antigravity")
 	writeLine(stdout, "")
+	if command == "install" {
+		writeLine(stdout, "Targets that already contain uloop skills are refreshed automatically,")
+		writeLine(stdout, "even when their flag is omitted, so previously installed copies never go stale.")
+		writeLine(stdout, "")
+	}
 	printGlobalOptionsHelp(stdout)
 }
 

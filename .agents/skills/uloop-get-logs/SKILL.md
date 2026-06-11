@@ -1,12 +1,14 @@
 ---
 name: uloop-get-logs
 toolName: get-logs
-description: "Read current Unity Console entries from a running Editor. Use during bug investigation after compile, tests, PlayMode, or dynamic code to inspect logs, warnings, errors, and stack traces."
+description: "Read current Unity Console entries from a running Editor. Use during bug investigation after compile, tests, PlayMode, dynamic code, or immediately after `uloop-wait-for-pause-point`."
 ---
 
 # uloop get-logs
 
 Retrieve logs from Unity Console.
+
+When a pause-point marker pauses Unity and the value you need is a method local, intermediate calculation, or branch reason, read the focused `Debug.Log` entry added immediately before the marker before resuming PlayMode. Use `--search-text <marker-or-id>` so the marker and its log are checked as one breakpoint-style proof.
 
 ## Usage
 

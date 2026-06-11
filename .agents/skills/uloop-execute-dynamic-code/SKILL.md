@@ -1,7 +1,7 @@
 ---
 name: uloop-execute-dynamic-code
 toolName: execute-dynamic-code
-description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for scene, prefab, SerializedObject, AssetDatabase refresh/.meta generation, menu, or PlayMode automation."
+description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for reachable scene/component state, scene/prefab/menu automation, and PlayMode checks"
 context: fork
 ---
 
@@ -10,6 +10,8 @@ context: fork
 Execute the following request using `uloop execute-dynamic-code`: $ARGUMENTS
 
 For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode Selected` before this tool. Use this tool after the built-in inspection tools are not enough or when you need to modify Unity state.
+
+This tool can inspect reachable Unity state, such as GameObjects, components, public properties, static values, and method results. It cannot directly read local variables or intermediate calculations inside an already-running method. When those values matter, add a focused `Debug.Log` immediately before `UloopPausePoint.Pause("<id>")`, then run `get-logs --search-text <id>` while Unity is paused. Do not replace that log read with execute-dynamic-code.
 
 ## Workflow
 
@@ -21,8 +23,9 @@ For basic selected GameObject discovery or property inspection, use `find-game-o
 
 ## Parameters
 
-- `--code '<code>'` (required): Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
-- **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell doubles inner quotes (`'Debug.Log(""Hello!"");'`).
+- `--code '<code>'`: Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
+- `--code-file <path>`: Read the C# statements from a file instead of `--code`. Prefer this for long or multi-line snippets because it removes shell quoting entirely. Exactly one of `--code` or `--code-file` is required; combining them is an error.
+- **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell doubles inner quotes (`'Debug.Log(""Hello!"");'`). With `--code-file` no quoting is needed.
 - `--parameters {}` (advanced, optional): Pass an object when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets, and pass an object instead of a JSON string.
 - `--no-wait-for-domain-reload` (optional): Return without waiting for Domain Reload recovery. Omit this for normal editor mutation workflows.
 

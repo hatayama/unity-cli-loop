@@ -102,6 +102,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Press_Should_ReportObservedPressEdge()
+        {
+            // Verifies the response tells callers whether wasPressedThisFrame was actually
+            // observable, so agents can distinguish a delivered edge from a missed one.
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue,
+                "Press must report press-edge observability");
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved!.Value,
+                "A successful Press in PlayMode should observe the press edge");
+        }
+
+        [UnityTest]
+        public IEnumerator KeyDown_Should_ReportObservedPressEdge()
+        {
+            // Verifies KeyDown also reports edge observability, because agents fall back to it
+            // when Press appears to be missed by gameplay polling.
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue && lastResponse.PressEdgeObserved.Value,
+                "A successful KeyDown in PlayMode should observe the press edge");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyUp.ToString(),
+                ["key"] = "Space"
+            });
+        }
+
+        [UnityTest]
         public IEnumerator Press_WithDuration_Should_HoldKey()
         {
             yield return null;
@@ -118,9 +165,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Press_WhenUnityPausesDuringObservation_Should_CompleteAsDebugBreakInterruption()
+        public IEnumerator Press_WhenUnityPausesDuringObservation_Should_CompleteAsPausePointInterruption()
         {
-            // Verifies that a debug-break pause releases the tool slot instead of leaving the press command busy.
+            // Verifies that a pause-point pause releases the tool slot instead of leaving the press command busy.
             yield return null;
 
             SimulateKeyboardSchema parameters = new()
@@ -141,17 +188,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
             lastResponse = task.Result;
             Assert.IsTrue(lastResponse.Success);
-            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
             Assert.AreEqual("Press", lastResponse.Action);
             Assert.AreEqual("Space", lastResponse.KeyName);
-            Assert.IsNull(lastResponse.DebugBreakId);
-            Assert.IsNull(lastResponse.DebugBreakHitCount);
-            Assert.IsFalse(keyboard[Key.Space].isPressed, "Debug-break interruption should release the injected key state.");
-            Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Debug-break interruption should clear keyboard overlay state.");
+            Assert.IsNull(lastResponse.PausePointId);
+            Assert.IsNull(lastResponse.PausePointHitCount);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue,
+                "Interrupted presses must still report whether the press edge was observed.");
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved!.Value,
+                "The press reached isPressed through gameplay updates, so the edge must have been observed.");
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Pause-point interruption should release the injected key state.");
+            Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Pause-point interruption should clear keyboard overlay state.");
         }
 
         [UnityTest]
-        public IEnumerator Press_WhenDebugBreakMarkerHits_Should_ReturnMarkerDetails()
+        public IEnumerator Press_WhenPausePointMarkerHits_Should_ReturnMarkerDetails()
         {
             // Verifies marker-caused interruption reports the marker id and hit count.
             yield return null;
@@ -172,17 +225,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
             Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
 
-            UnityCliLoopDebug.Break("space-press");
+            UloopPausePoint.Pause("space-press");
             InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
             yield return WaitForTask(task);
             InputSystemUpdateHelper.ResetPauseProviderForTests();
 
             lastResponse = task.Result;
             Assert.IsTrue(lastResponse.Success);
-            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
-            Assert.AreEqual("space-press", lastResponse.DebugBreakId);
-            Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.AreEqual("space-press", lastResponse.PausePointId);
+            Assert.AreEqual(1, lastResponse.PausePointHitCount);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue,
+                "Marker-interrupted presses must still report whether the press edge was observed.");
             Assert.IsFalse(keyboard[Key.Space].isPressed, "Marker interruption should release the injected key state.");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WhenMultiplePausePointMarkersHit_Should_ListAllHits()
+        {
+            // Verifies the response lists every marker hit during the press, not just the latest.
+            yield return null;
+
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable("space-press", 30);
+            UloopPausePointRegistry.Enable("space-press-followup", 30);
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 1f
+            };
+            Task<SimulateKeyboardResponse> task =
+                tool.ExecuteWithCancellationAsync(parameters, CancellationToken.None);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
+
+            UloopPausePoint.Pause("space-press");
+            UloopPausePoint.Pause("space-press-followup");
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.IsNotNull(lastResponse.PausePointHits, "All hit markers must be listed.");
+            Assert.AreEqual(2, lastResponse.PausePointHits!.Count);
+            Assert.AreEqual("space-press", lastResponse.PausePointHits[0].Id);
+            Assert.AreEqual("space-press-followup", lastResponse.PausePointHits[1].Id);
         }
 
         [UnityTest]

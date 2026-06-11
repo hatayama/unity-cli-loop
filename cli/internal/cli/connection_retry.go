@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -90,7 +91,34 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			client = client.WithResponseTimeout(responseTimeout)
 		}
 		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, retryContext, method, params, progress)
+		if isUnityServerBusyRPCError(err) {
+			// Busy means the request was never executed, so a bounded retry is safe and
+			// usually absorbs back-to-back tool calls without bothering the caller.
+			lastOutcome = outcome
+			lastErr = err
+			select {
+			case <-retryContext.Done():
+				if ctx.Err() != nil {
+					return lastOutcome, ctx.Err()
+				}
+				return lastOutcome, lastErr
+			case <-time.After(serverConnectionRetryPoll):
+			}
+			continue
+		}
 		if !shouldRetryUndispatchedConnection(err, outcome) {
+			// A transport error after a busy response in this window must not mask the
+			// busy; the server answered moments ago, so busy is the truer diagnosis.
+			// An RPC error is a real Unity answer, not a transport artifact, and must
+			// surface as-is. The transport error is not compared against the window
+			// deadline because the connection deadline can fire microseconds before
+			// the context reports expiry.
+			if err != nil && !isRPCError(err) && isUnityServerBusyRPCError(lastErr) {
+				if ctx.Err() != nil {
+					return outcome, ctx.Err()
+				}
+				return lastOutcome, lastErr
+			}
 			return outcome, err
 		}
 
@@ -99,6 +127,11 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			if retryContext.Err() != nil {
 				if ctx.Err() != nil {
 					return outcome, ctx.Err()
+				}
+				// A busy response seen during the window is the truer diagnosis than a
+				// final dial cut short by the expiring retry context.
+				if isUnityServerBusyRPCError(lastErr) {
+					return lastOutcome, lastErr
 				}
 				return outcome, unityServerNotRespondingError{
 					projectRoot: connection.ProjectRoot,
@@ -109,6 +142,12 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			return outcome, processErr
 		}
 		if runningProcess == nil {
+			// Same masking as the probe-error path: a busy response seen during the
+			// window proves a server answered moments ago, so it is a truer diagnosis
+			// than a final dial cut short by the expiring retry context.
+			if retryContext.Err() != nil && isUnityServerBusyRPCError(lastErr) {
+				return lastOutcome, lastErr
+			}
 			return outcome, err
 		}
 		if !focusAttempted {
@@ -139,6 +178,25 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 		case <-time.After(serverConnectionRetryPoll):
 		}
 	}
+}
+
+// Reports whether the error is a real RPC answer from Unity rather than a
+// transport-level failure such as a dial or read timeout.
+func isRPCError(err error) bool {
+	var rpcErr *unityipc.RPCError
+	return errors.As(err, &rpcErr)
+}
+
+func isUnityServerBusyRPCError(err error) bool {
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) {
+		return false
+	}
+	decodedData := map[string]any{}
+	if len(rpcErr.Data) > 0 {
+		_ = json.Unmarshal(rpcErr.Data, &decodedData)
+	}
+	return rpcDataType(decodedData) == "server_busy"
 }
 
 func shouldRetryUndispatchedConnection(err error, outcome unityipc.UnitySendOutcome) bool {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -41,10 +42,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Break_WhenPausePointIsNotEnabled_DoesNotPause()
+        public void Pause_WhenPausePointIsNotEnabled_DoesNotPause()
         {
             // Verifies marker calls are no-op until the CLI enables the same id.
-            UnityCliLoopDebug.Break("jump");
+            UloopPausePoint.Pause("jump");
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
@@ -54,12 +55,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Break_WhenPausePointIsEnabled_RecordsHitAndRequestsPause()
+        public void Pause_WhenPausePointIsEnabled_RecordsHitAndRequestsPause()
         {
             // Verifies an enabled marker hit records state and requests a Unity pause.
             UloopPausePointRegistry.Enable("jump", 30);
 
-            UnityCliLoopDebug.Break("jump");
+            UloopPausePoint.Pause("jump");
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
             Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
@@ -71,17 +72,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Break_WhenPausePointIsEnabled_StoresLatestHitSnapshot()
+        public void Pause_WhenPausePointIsEnabled_StoresLatestHitSnapshot()
         {
             // Verifies input interruption responses can read the latest marker hit.
             UloopPausePointRegistry.Enable("jump", 30);
 
-            UnityCliLoopDebug.Break("jump");
+            UloopPausePoint.Pause("jump");
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetLatestHitSnapshot();
             Assert.That(snapshot, Is.Not.Null);
             Assert.That(snapshot.Id, Is.EqualTo("jump"));
             Assert.That(snapshot.HitCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Pause_WhenMultiplePausePointsHit_StoresAllHitSnapshotsInOrder()
+        {
+            // Verifies input interruption responses can list every marker hit, not just the latest.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("land", 30);
+
+            UloopPausePoint.Pause("jump");
+            UloopPausePoint.Pause("land");
+
+            IReadOnlyList<UloopPausePointSnapshot> hits = UloopPausePointRegistry.GetHitSnapshots();
+            Assert.That(hits.Count, Is.EqualTo(2));
+            Assert.That(hits[0].Id, Is.EqualTo("jump"));
+            Assert.That(hits[1].Id, Is.EqualTo("land"));
+        }
+
+        [Test]
+        public void Enable_WhenSamePausePointWasHit_RemovesItFromHitSnapshots()
+        {
+            // Verifies re-enabling a hit marker drops its stale entry from the hit list.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            Assert.That(UloopPausePointRegistry.GetHitSnapshots(), Is.Empty);
         }
 
         [Test]
@@ -92,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _nowUtc = _nowUtc.AddSeconds(2);
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
-            UnityCliLoopDebug.Break("jump");
+            UloopPausePoint.Pause("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
             Assert.That(snapshot.IsEnabled, Is.False);
@@ -118,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
-            UnityCliLoopDebug.Break("jump");
+            UloopPausePoint.Pause("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
             Assert.That(snapshot.IsEnabled, Is.False);
@@ -126,11 +155,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Clear_WhenPausePointWasHit_ReportsAlreadyHitMessage()
+        {
+            // Verifies clearing an already-hit one-shot marker explains why nothing was armed anymore.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point was already hit (auto-disarmed); nothing to clear."));
+        }
+
+        [Test]
+        public void Clear_WhenPausePointExpired_ReportsAlreadyExpiredMessage()
+        {
+            // Verifies clearing an expired marker explains it was never hit instead of claiming a clear.
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point had already expired before being hit; nothing to clear."));
+        }
+
+        [Test]
+        public void Clear_WhenPausePointAlreadyCleared_ReportsAlreadyClearedMessage()
+        {
+            // Verifies a repeated clear reports the marker was already cleared.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Clear("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point was already cleared."));
+        }
+
+        [Test]
+        public async Task ClearAll_WhenNothingActive_ReportsNoActiveMessage()
+        {
+            // Verifies bulk clear with no armed markers does not claim that markers were cleared.
+            ClearPausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["all"] = true
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(0));
+            Assert.That(response.Message, Is.EqualTo("No active pause points to clear."));
+        }
+
+        [Test]
         public void Enable_WhenSamePausePointWasHit_ClearsLatestHitSnapshot()
         {
             // Verifies re-enabling a marker does not leave stale hit details for input tools.
             UloopPausePointRegistry.Enable("jump", 30);
-            UnityCliLoopDebug.Break("jump");
+            UloopPausePoint.Pause("jump");
 
             UloopPausePointRegistry.Enable("jump", 30);
 
@@ -142,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies bulk clear hides stale terminal hit status from future waits.
             UloopPausePointRegistry.Enable("jump", 30);
-            UnityCliLoopDebug.Break("jump");
+            UloopPausePoint.Pause("jump");
 
             UloopPausePointClearAllResult result = UloopPausePointRegistry.ClearAll();
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
@@ -154,16 +235,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BreakMethod_WhenSourceIsScanned_UsesUnityEditorConditionalWithoutDebugBreak()
+        public void PauseMethod_WhenSourceIsScanned_UsesUnityEditorConditionalWithoutDebugBreak()
         {
             // Verifies the public marker follows Unity's conditional call-site removal pattern.
             string sourcePath = Path.Combine(
                 Directory.GetCurrentDirectory(),
-                "Packages/src/Runtime/PausePoints/UnityCliLoopDebug.cs");
+                "Packages/src/Runtime/PausePoints/UloopPausePoint.cs");
             string source = File.ReadAllText(sourcePath);
 
             Assert.That(source, Does.Contain("[Conditional(\"UNITY_EDITOR\")]"));
-            Assert.That(source, Does.Contain("public static void Break(string id)"));
+            Assert.That(source, Does.Contain("public static void Pause(string id)"));
             Assert.That(source, Does.Not.Contain("Debug.Break"));
         }
 
@@ -174,7 +255,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             EditorSettings.enterPlayModeOptionsEnabled = false;
             EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.None;
 
-            PausePointResponse response = await EnableDebugBreakAsync("jump");
+            PausePointResponse response = await EnablePausePointAsync("jump");
 
             Assert.That(response.Warning, Does.Contain("Domain Reload is enabled"));
             Assert.That(response.Warning, Does.Contain("keep Domain Reload disabled"));
@@ -187,12 +268,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             EditorSettings.enterPlayModeOptionsEnabled = true;
             EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload;
 
-            PausePointResponse response = await EnableDebugBreakAsync("dash");
+            PausePointResponse response = await EnablePausePointAsync("dash");
 
             Assert.That(response.Warning, Is.Empty);
         }
 
-        private static async Task<PausePointResponse> EnableDebugBreakAsync(string id)
+        private static async Task<PausePointResponse> EnablePausePointAsync(string id)
         {
             EnablePausePointTool tool = new();
             JObject parameters = new()

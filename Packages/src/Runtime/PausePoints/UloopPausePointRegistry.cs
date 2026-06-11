@@ -17,6 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
         private static UloopPausePointSnapshot _latestHitSnapshot;
+        // One input can hit several markers in the same frame; tools need the full list,
+        // not just the latest hit, to report every marker that interrupted them.
+        private static readonly List<UloopPausePointSnapshot> _hitSnapshots = new();
 
         public static UloopPausePointSnapshot Enable(string id, int timeoutSeconds)
         {
@@ -41,7 +44,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             UloopPausePointEntry entry = Entries[id];
-            entry.MarkCleared();
+            // Resolve expiry first so a clear after the timeout reports "expired", not a normal clear.
+            entry.ExpireIfNeeded(now);
+            string message = entry.Status switch
+            {
+                UloopPausePointStatus.Hit => "Pause point was already hit (auto-disarmed); nothing to clear.",
+                UloopPausePointStatus.Expired => "Pause point had already expired before being hit; nothing to clear.",
+                UloopPausePointStatus.Cleared => "Pause point was already cleared.",
+                _ => "Pause point cleared."
+            };
+            entry.MarkCleared(message);
             ClearLatestHitSnapshotIfMatches(id);
             return entry.ToSnapshot(now, _pauseController);
         }
@@ -105,7 +117,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             entry.RecordHit(now, _pauseController.IsPlaying, _pauseController.IsPaused);
             UloopPausePointSnapshot snapshot = entry.ToSnapshot(now, _pauseController);
             _latestHitSnapshot = snapshot;
+            _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
+            _hitSnapshots.Add(snapshot);
             return snapshot;
+        }
+
+        public static IReadOnlyList<UloopPausePointSnapshot> GetHitSnapshots()
+        {
+            return _hitSnapshots;
         }
 
         public static UloopPausePointSnapshot GetLatestHitSnapshot()
@@ -116,10 +135,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static void ClearLatestHitSnapshot()
         {
             _latestHitSnapshot = null;
+            _hitSnapshots.Clear();
         }
 
         private static void ClearLatestHitSnapshotIfMatches(string id)
         {
+            _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
             if (_latestHitSnapshot == null)
             {
                 return;
@@ -146,6 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             Entries.Clear();
             _latestHitSnapshot = null;
+            _hitSnapshots.Clear();
             _pauseController = new UnityEditorPausePointPauseController();
             _nowProvider = () => DateTime.UtcNow;
         }
@@ -235,7 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 0,
                 pauseController.IsPlaying,
                 pauseController.IsPaused,
-                "Debug break is not enabled.");
+                "Pause point is not enabled.");
         }
     }
 
@@ -267,7 +289,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             ExpiresAtUtc = enabledAtUtc.AddSeconds(timeoutSeconds);
             Status = UloopPausePointStatus.Enabled;
             IsEnabled = true;
-            Message = "Debug break enabled.";
+            Message = "Pause point enabled.";
         }
 
         public string Id { get; }
@@ -296,14 +318,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             IsEnabled = false;
             Status = UloopPausePointStatus.Expired;
-            Message = "Debug break expired before it was hit.";
+            Message = "Pause point expired before it was hit.";
         }
 
-        public void MarkCleared()
+        public void MarkCleared(string message = "Pause point cleared.")
         {
             IsEnabled = false;
             Status = UloopPausePointStatus.Cleared;
-            Message = "Debug break cleared.";
+            Message = message;
         }
 
         public void RecordHit(DateTime nowUtc, bool isPlaying, bool isPaused)
@@ -314,7 +336,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsPausedAtHit = isPaused;
             IsEnabled = false;
             Status = UloopPausePointStatus.Hit;
-            Message = "Debug break hit; Unity pause was requested.";
+            Message = "Pause point hit; Unity pause was requested.";
         }
 
         public UloopPausePointSnapshot ToSnapshot(DateTime nowUtc, IUloopPausePointPauseController pauseController)

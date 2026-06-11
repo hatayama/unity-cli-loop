@@ -15,9 +15,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class ToolSettingsUseCaseTests
     {
         [Test]
-        public void TryGetToolCatalog_WhenRegistryAvailable_IncludesNativeDebugBreakCommands()
+        public void TryGetToolCatalog_WhenRegistryAvailable_IncludesNativePausePointCommands()
         {
-            // Verifies CLI-native debug break commands are user-toggleable built-in tools.
+            // Verifies CLI-native pause point commands are user-toggleable built-in tools.
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
@@ -30,8 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string[] toolNames = allTools.Select(tool => tool.Name).ToArray();
 
             Assert.That(isAvailable, Is.True);
-            Assert.That(toolNames, Does.Contain(UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_DEBUG_BREAK));
-            Assert.That(toolNames, Does.Contain(UnityCliLoopConstants.COMMAND_NAME_DEBUG_BREAK_STATUS));
+            Assert.That(toolNames, Does.Contain(UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT));
+            Assert.That(toolNames, Does.Contain(UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS));
         }
     }
 }

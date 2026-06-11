@@ -107,9 +107,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator Click_WhenUnityPausesDuringObservation_Should_CompleteAsDebugBreakInterruption()
+        public IEnumerator Click_WhenUnityPausesDuringObservation_Should_CompleteAsPausePointInterruption()
         {
-            // Verifies that a debug-break pause releases the tool slot instead of leaving the click command busy.
+            // Verifies that a pause-point pause releases the tool slot instead of leaving the click command busy.
             yield return null;
 
             Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
@@ -129,17 +129,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
             lastResponse = (SimulateMouseInputResponse)task.Result;
             Assert.IsTrue(lastResponse.Success);
-            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
             Assert.AreEqual("Click", lastResponse.Action);
             Assert.AreEqual("Left", lastResponse.Button);
-            Assert.IsNull(lastResponse.DebugBreakId);
-            Assert.IsNull(lastResponse.DebugBreakHitCount);
-            Assert.IsFalse(mouse.leftButton.isPressed, "Debug-break interruption should release the injected mouse button state.");
-            Assert.IsFalse(SimulateMouseInputOverlayState.HasAnyActivity, "Debug-break interruption should clear mouse overlay state.");
+            Assert.IsNull(lastResponse.PausePointId);
+            Assert.IsNull(lastResponse.PausePointHitCount);
+            Assert.IsFalse(mouse.leftButton.isPressed, "Pause-point interruption should release the injected mouse button state.");
+            Assert.IsFalse(SimulateMouseInputOverlayState.HasAnyActivity, "Pause-point interruption should clear mouse overlay state.");
         }
 
         [UnityTest]
-        public IEnumerator Click_WhenDebugBreakMarkerHits_Should_ReturnMarkerDetails()
+        public IEnumerator Click_WhenPausePointMarkerHits_Should_ReturnMarkerDetails()
         {
             // Verifies marker-caused interruption reports the marker id and hit count.
             yield return null;
@@ -159,16 +159,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             yield return new WaitUntil(() => mouse.leftButton.isPressed || task.IsCompleted);
             Assert.IsFalse(task.IsCompleted, "The test must pause during the click observation window.");
 
-            UnityCliLoopDebug.Break("left-click");
+            UloopPausePoint.Pause("left-click");
             InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
             yield return WaitForTask(task);
             InputSystemUpdateHelper.ResetPauseProviderForTests();
 
             lastResponse = (SimulateMouseInputResponse)task.Result;
             Assert.IsTrue(lastResponse.Success);
-            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
-            Assert.AreEqual("left-click", lastResponse.DebugBreakId);
-            Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.AreEqual("left-click", lastResponse.PausePointId);
+            Assert.AreEqual(1, lastResponse.PausePointHitCount);
             Assert.IsFalse(mouse.leftButton.isPressed, "Marker interruption should release the injected mouse button state.");
         }
 
@@ -262,12 +262,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         #region SmoothDelta Tests
 
         [UnityTest]
-        public IEnumerator SmoothDelta_WhenDebugBreakMarkerHitsDuringGameplayUpdate_Should_ReturnMarkerDetails()
+        public IEnumerator SmoothDelta_WhenPausePointMarkerHitsDuringGameplayUpdate_Should_ReturnMarkerDetails()
         {
-            // Verifies SmoothDelta observes gameplay-frame debug breaks before scheduling the next delta.
+            // Verifies SmoothDelta observes gameplay-frame pause points before scheduling the next delta.
             yield return null;
 
-            MouseDeltaDebugBreakObserver observer = mouseObserverGo.AddComponent<MouseDeltaDebugBreakObserver>();
+            MouseDeltaPausePointObserver observer = mouseObserverGo.AddComponent<MouseDeltaPausePointObserver>();
             observer.MarkerId = "smooth-delta";
             UloopPausePointRegistry.ConfigureForTests(
                 new FakePausePointPauseController(),
@@ -296,10 +296,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
             lastResponse = (SimulateMouseInputResponse)task.Result;
             Assert.IsTrue(lastResponse.Success);
-            Assert.IsTrue(lastResponse.InterruptedByDebugBreak);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
             Assert.AreEqual("SmoothDelta", lastResponse.Action);
-            Assert.AreEqual("smooth-delta", lastResponse.DebugBreakId);
-            Assert.AreEqual(1, lastResponse.DebugBreakHitCount);
+            Assert.AreEqual("smooth-delta", lastResponse.PausePointId);
+            Assert.AreEqual(1, lastResponse.PausePointHitCount);
         }
 
         #endregion
@@ -420,9 +420,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
     }
 
     /// <summary>
-    /// Test support type that hits a debug-break marker when gameplay observes mouse delta.
+    /// Test support type that hits a pause-point marker when gameplay observes mouse delta.
     /// </summary>
-    public class MouseDeltaDebugBreakObserver : MonoBehaviour
+    public class MouseDeltaPausePointObserver : MonoBehaviour
     {
         public string MarkerId { get; set; } = "";
         public bool HasTriggered { get; private set; }
@@ -447,7 +447,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             }
 
             HasTriggered = true;
-            UnityCliLoopDebug.Break(MarkerId);
+            UloopPausePoint.Pause(MarkerId);
             InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
         }
     }

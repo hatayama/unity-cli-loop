@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -171,7 +172,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateKeyboardOverlayState.ShowPress(keyName);
             KeyboardKeyState.RegisterTransientKey(key);
             bool pressWasApplied = false;
+            bool pressEdgeObserved = false;
             InputSimulationWaitOutcome waitOutcome = InputSimulationWaitOutcome.Completed;
+
+            // The edge must be probed inside gameplay input updates: editor-tick polling can
+            // miss the single frame where wasPressedThisFrame is true, and an editor-update
+            // consumed press is exactly the failure gameplay code cannot see.
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            Action pressEdgeMonitor = () => pressEdgeObserved |= IsGameplayPressEdgeVisible(keyboard, key);
+            InputSystem.onAfterUpdate += pressEdgeMonitor;
 
             try
             {
@@ -187,6 +196,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                InputSystem.onAfterUpdate -= pressEdgeMonitor;
                 if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
                     ScheduleTimedOutPressCleanup(keyboard, key, pressWasApplied);
@@ -220,7 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedPressResult(keyName);
+                return InterruptedKeyResult(UnityCliLoopKeyboardAction.Press, keyName, pressEdgeObserved);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
@@ -229,12 +240,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string durationText = duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(duration)}s" : "";
+            string edgeText = pressEdgeObserved
+                ? ""
+                : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)";
             return new UnityCliLoopKeyboardSimulationResult
             {
                 Success = true,
-                Message = $"Pressed '{keyName}'{durationText}",
+                Message = $"Pressed '{keyName}'{durationText}{edgeText}",
                 Action = UnityCliLoopKeyboardAction.Press.ToString(),
-                KeyName = keyName
+                KeyName = keyName,
+                PressEdgeObserved = pressEdgeObserved
             };
         }
 
@@ -255,7 +270,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             bool keyDownApplied = false;
             bool committed = false;
+            bool pressEdgeObserved = false;
             InputSimulationWaitOutcome waitOutcome = InputSimulationWaitOutcome.Completed;
+
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            Action keyDownEdgeMonitor = () => pressEdgeObserved |= IsGameplayPressEdgeVisible(keyboard, key);
+            InputSystem.onAfterUpdate += keyDownEdgeMonitor;
 
             try
             {
@@ -275,6 +295,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                InputSystem.onAfterUpdate -= keyDownEdgeMonitor;
                 if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
                     ScheduleTimedOutHeldKeyCleanup(keyboard, key, keyName, keyDownApplied);
@@ -292,7 +314,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName);
+                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName, pressEdgeObserved);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
@@ -300,12 +322,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TimedOutKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName);
             }
 
+            string keyDownEdgeText = pressEdgeObserved
+                ? ""
+                : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it)";
             return new UnityCliLoopKeyboardSimulationResult
             {
                 Success = true,
-                Message = $"Key '{keyName}' held down",
+                Message = $"Key '{keyName}' held down{keyDownEdgeText}",
                 Action = UnityCliLoopKeyboardAction.KeyDown.ToString(),
-                KeyName = keyName
+                KeyName = keyName,
+                PressEdgeObserved = pressEdgeObserved
             };
         }
 
@@ -341,7 +367,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName);
+                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName, null);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
@@ -367,24 +393,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return keyName;
         }
 
-        private static UnityCliLoopKeyboardSimulationResult InterruptedPressResult(string keyName)
-        {
-            return InterruptedKeyResult(UnityCliLoopKeyboardAction.Press, keyName);
-        }
-
+        // pressEdgeObserved stays nullable because KeyUp has no press edge to report;
+        // Press/KeyDown must pass their observation so pause-point interruptions (the
+        // most common E2E path) do not silently drop the field.
         private static UnityCliLoopKeyboardSimulationResult InterruptedKeyResult(
             UnityCliLoopKeyboardAction action,
-            string keyName)
+            string keyName,
+            bool? pressEdgeObserved)
         {
             UnityCliLoopKeyboardSimulationResult result = new()
             {
                 Success = true,
-                Message = $"Keyboard input stopped because Unity paused during Debug Break inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
+                Message = $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
                 Action = action.ToString(),
                 KeyName = keyName,
-                InterruptedByDebugBreak = true
+                InterruptedByPausePoint = true,
+                PressEdgeObserved = pressEdgeObserved
             };
-            AttachDebugBreakHit(result);
+            AttachPausePointHit(result);
             return result;
         }
 
@@ -401,7 +427,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static void AttachDebugBreakHit(UnityCliLoopKeyboardSimulationResult result)
+        private static void AttachPausePointHit(UnityCliLoopKeyboardSimulationResult result)
         {
             if (result == null)
             {
@@ -426,8 +452,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            result.DebugBreakId = snapshotId;
-            result.DebugBreakHitCount = snapshot.HitCount;
+            result.PausePointId = snapshotId;
+            result.PausePointHitCount = snapshot.HitCount;
+            result.PausePointHits = CollectPausePointHits();
+        }
+
+        // One input can hit several markers in the same frame; the representative
+        // PausePointId alone forced agents into extra status calls to find the others.
+        private static List<UnityCliLoopPausePointHit> CollectPausePointHits()
+        {
+            List<UnityCliLoopPausePointHit> hits = new();
+            foreach (UloopPausePointSnapshot snapshot in UloopPausePointRegistry.GetHitSnapshots())
+            {
+                if (!snapshot.IsHit || string.IsNullOrEmpty(snapshot.Id))
+                {
+                    continue;
+                }
+                hits.Add(new UnityCliLoopPausePointHit
+                {
+                    Id = snapshot.Id,
+                    HitCount = snapshot.HitCount
+                });
+            }
+            return hits;
         }
 
         private static async Task FinalizePressOverlay(CancellationToken ct)
@@ -557,6 +604,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool CanInjectKeyboardState(Keyboard keyboard)
         {
             return EditorApplication.isPlaying && keyboard != null;
+        }
+
+        // Runs inside InputSystem.onAfterUpdate. Editor updates are excluded because a press
+        // consumed there never surfaces as wasPressedThisFrame to gameplay Update polling.
+        private static bool IsGameplayPressEdgeVisible(Keyboard keyboard, Key key)
+        {
+            if (UnityEngine.InputSystem.LowLevel.InputState.currentUpdateType == UnityEngine.InputSystem.LowLevel.InputUpdateType.Editor)
+            {
+                return false;
+            }
+            return keyboard[key].wasPressedThisFrame;
         }
 #endif
     }

@@ -3,15 +3,15 @@ using System.Diagnostics;
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
-    /// Provides Editor-only debug helpers for Unity CLI Loop workflows.
+    /// Provides the Editor-only pause point marker API for Unity CLI Loop workflows.
     /// </summary>
-    public static class UnityCliLoopDebug
+    public static class UloopPausePoint
     {
         /// <summary>
-        /// Breaks at a named marker when the Editor has enabled the same id.
+        /// Pauses at a named marker when the Editor has enabled the same id.
         /// </summary>
         [Conditional("UNITY_EDITOR")]
-        public static void Break(string id)
+        public static void Pause(string id)
         {
 #if UNITY_EDITOR
             UloopPausePointRegistry.Hit(id);

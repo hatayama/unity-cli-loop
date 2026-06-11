@@ -50,6 +50,7 @@ uloop launch --quit
 - Prints detected Unity version
 - Prints project path
 - If Unity is already running, focuses the existing window and verifies tool readiness
+- If the process scan is blocked by the environment (e.g. sandboxed `ps`), plain launch falls back to probing the project IPC; when Unity responds it reports `AlreadyRunning: true` without focusing the window instead of failing. `--restart` and `--quit` still fail because they need the process id
 - If launching or restarting, prints when it is waiting for Unity CLI Loop server readiness
 - If launching or restarting, waits until Unity finishes startup and the CLI can connect to the project
 - Successful launch, restart, existing-process, and quit paths return JSON with:

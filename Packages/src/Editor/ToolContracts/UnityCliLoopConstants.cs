@@ -61,8 +61,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // Command name constants
         public const string TOOL_NAME_COMPILE = "compile";
         public const string TOOL_NAME_CONTROL_PLAY_MODE = "control-play-mode";
-        public const string TOOL_NAME_ENABLE_DEBUG_BREAK = "enable-debug-break";
-        public const string TOOL_NAME_CLEAR_DEBUG_BREAK = "clear-debug-break";
+        public const string TOOL_NAME_ENABLE_PAUSE_POINT = "enable-pause-point";
+        public const string TOOL_NAME_CLEAR_PAUSE_POINT = "clear-pause-point";
         public const string TOOL_NAME_EXECUTE_DYNAMIC_CODE = "execute-dynamic-code";
         public const string TOOL_NAME_GET_HIERARCHY = "get-hierarchy";
         public const string TOOL_NAME_GET_LOGS = "get-logs";
@@ -70,10 +70,10 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";
         public const string COMMAND_NAME_GET_VERSION = "get-version";
         public const string COMMAND_NAME_GET_COMPILE_STATUS = "get-compile-status";
-        public const string COMMAND_NAME_WAIT_FOR_DEBUG_BREAK = "wait-for-debug-break";
-        public const string COMMAND_NAME_DEBUG_BREAK_STATUS = "debug-break-status";
-        public const string COMMAND_NAME_GET_DEBUG_BREAK_STATUS = "get-debug-break-status";
-        public const string COMMAND_NAME_CLEAR_DEBUG_BREAK_STATUS = "clear-debug-break-status";
+        public const string COMMAND_NAME_WAIT_FOR_PAUSE_POINT = "wait-for-pause-point";
+        public const string COMMAND_NAME_PAUSE_POINT_STATUS = "pause-point-status";
+        public const string COMMAND_NAME_GET_PAUSE_POINT_STATUS = "get-pause-point-status";
+        public const string COMMAND_NAME_CLEAR_PAUSE_POINT_STATUS = "clear-pause-point-status";
 
         // Optional package names
         public const string PACKAGE_NAME_TEST_FRAMEWORK = "com.unity.test-framework";
