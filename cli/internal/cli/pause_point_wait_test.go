@@ -526,7 +526,7 @@ func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 		{
 			name:     "marker never hit",
 			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled, IsPlaying: true, HitCount: 0},
-			wantHint: "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed.",
+			wantHint: "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed. In fast-progressing games the state may have already moved past the marker (for example back to Ready or GameOver), so re-trigger the code path and wait again.",
 		},
 	}
 

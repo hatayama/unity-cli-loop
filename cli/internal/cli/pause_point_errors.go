@@ -72,7 +72,7 @@ func pausePointTimeoutHint(response pausePointStatusResponse) string {
 		return pausePointHintEditorAlreadyPaused
 	}
 	if response.HitCount == 0 && response.Status == pausePointStatusEnabled {
-		return "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed."
+		return "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed. In fast-progressing games the state may have already moved past the marker (for example back to Ready or GameOver), so re-trigger the code path and wait again."
 	}
 	return ""
 }
