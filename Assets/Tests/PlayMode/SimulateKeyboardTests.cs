@@ -102,6 +102,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Press_Should_ReportObservedPressEdge()
+        {
+            // Verifies the response tells callers whether wasPressedThisFrame was actually
+            // observable, so agents can distinguish a delivered edge from a missed one.
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue,
+                "Press must report press-edge observability");
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved!.Value,
+                "A successful Press in PlayMode should observe the press edge");
+        }
+
+        [UnityTest]
+        public IEnumerator KeyDown_Should_ReportObservedPressEdge()
+        {
+            // Verifies KeyDown also reports edge observability, because agents fall back to it
+            // when Press appears to be missed by gameplay polling.
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue && lastResponse.PressEdgeObserved.Value,
+                "A successful KeyDown in PlayMode should observe the press edge");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyUp.ToString(),
+                ["key"] = "Space"
+            });
+        }
+
+        [UnityTest]
         public IEnumerator Press_WithDuration_Should_HoldKey()
         {
             yield return null;

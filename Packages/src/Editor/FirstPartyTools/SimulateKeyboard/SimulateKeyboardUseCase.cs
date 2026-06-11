@@ -171,7 +171,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateKeyboardOverlayState.ShowPress(keyName);
             KeyboardKeyState.RegisterTransientKey(key);
             bool pressWasApplied = false;
+            bool pressEdgeObserved = false;
             InputSimulationWaitOutcome waitOutcome = InputSimulationWaitOutcome.Completed;
+
+            // The edge must be probed inside gameplay input updates: editor-tick polling can
+            // miss the single frame where wasPressedThisFrame is true, and an editor-update
+            // consumed press is exactly the failure gameplay code cannot see.
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            Action pressEdgeMonitor = () => pressEdgeObserved |= IsGameplayPressEdgeVisible(keyboard, key);
+            InputSystem.onAfterUpdate += pressEdgeMonitor;
 
             try
             {
@@ -187,6 +195,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                InputSystem.onAfterUpdate -= pressEdgeMonitor;
                 if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
                     ScheduleTimedOutPressCleanup(keyboard, key, pressWasApplied);
@@ -229,12 +239,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string durationText = duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(duration)}s" : "";
+            string edgeText = pressEdgeObserved
+                ? ""
+                : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)";
             return new UnityCliLoopKeyboardSimulationResult
             {
                 Success = true,
-                Message = $"Pressed '{keyName}'{durationText}",
+                Message = $"Pressed '{keyName}'{durationText}{edgeText}",
                 Action = UnityCliLoopKeyboardAction.Press.ToString(),
-                KeyName = keyName
+                KeyName = keyName,
+                PressEdgeObserved = pressEdgeObserved
             };
         }
 
@@ -255,7 +269,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             bool keyDownApplied = false;
             bool committed = false;
+            bool pressEdgeObserved = false;
             InputSimulationWaitOutcome waitOutcome = InputSimulationWaitOutcome.Completed;
+
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+            Action keyDownEdgeMonitor = () => pressEdgeObserved |= IsGameplayPressEdgeVisible(keyboard, key);
+            InputSystem.onAfterUpdate += keyDownEdgeMonitor;
 
             try
             {
@@ -275,6 +294,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                InputSystem.onAfterUpdate -= keyDownEdgeMonitor;
                 if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
                     ScheduleTimedOutHeldKeyCleanup(keyboard, key, keyName, keyDownApplied);
@@ -300,12 +321,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TimedOutKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName);
             }
 
+            string keyDownEdgeText = pressEdgeObserved
+                ? ""
+                : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it)";
             return new UnityCliLoopKeyboardSimulationResult
             {
                 Success = true,
-                Message = $"Key '{keyName}' held down",
+                Message = $"Key '{keyName}' held down{keyDownEdgeText}",
                 Action = UnityCliLoopKeyboardAction.KeyDown.ToString(),
-                KeyName = keyName
+                KeyName = keyName,
+                PressEdgeObserved = pressEdgeObserved
             };
         }
 
@@ -557,6 +582,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool CanInjectKeyboardState(Keyboard keyboard)
         {
             return EditorApplication.isPlaying && keyboard != null;
+        }
+
+        // Runs inside InputSystem.onAfterUpdate. Editor updates are excluded because a press
+        // consumed there never surfaces as wasPressedThisFrame to gameplay Update polling.
+        private static bool IsGameplayPressEdgeVisible(Keyboard keyboard, Key key)
+        {
+            if (UnityEngine.InputSystem.LowLevel.InputState.currentUpdateType == UnityEngine.InputSystem.LowLevel.InputUpdateType.Editor)
+            {
+                return false;
+            }
+            return keyboard[key].wasPressedThisFrame;
         }
 #endif
     }

@@ -98,6 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool InterruptedByPausePoint { get; set; }
         public string? PausePointId { get; set; }
         public int? PausePointHitCount { get; set; }
+        public bool? PressEdgeObserved { get; set; }
     }
 
     /// <summary>
