@@ -78,11 +78,11 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 
 ## Pause Point Inspection (Standard for E2E)
 
-- Use `UloopPausePoint.Pause("<id>")` with `uloop-wait-for-pause-point` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
+- Use `UloopPausePoint.Pause("<id>")` with `uloop wait-for-pause-point` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
 - Place the pause point at a natural transition after the app consumed the UI event, such as after a command is accepted, a state mutation is committed, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
-- If the UI handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UloopPausePoint.Pause("<id>")` and read them with `uloop-get-logs` while Unity is paused. A pause point hit proves the line was reached, not the frame-local values.
-- Treat `simulate-mouse-ui Success=true`, generic action logs, and final durable counters as useful evidence, not paused-frame proof.
-- If a `UloopPausePoint.Pause` pauses Unity, inspect with `get-logs`, `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code` before resuming.
+- If the UI handler has local variables, intermediate calculations, or branch reasons that `uloop execute-dynamic-code` cannot inspect after the fact, log just those values near `UloopPausePoint.Pause("<id>")` and read them with `uloop get-logs` while Unity is paused. A pause point hit proves the line was reached, not the frame-local values.
+- Treat `uloop simulate-mouse-ui` `Success=true`, generic action logs, and final durable counters as useful evidence, not paused-frame proof.
+- If a `UloopPausePoint.Pause` pauses Unity, inspect with `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, or `uloop execute-dynamic-code` before resuming.
 - Remove temporary pause-point/log instrumentation before final validation when it was added only for inspection.
 
 ## Examples
