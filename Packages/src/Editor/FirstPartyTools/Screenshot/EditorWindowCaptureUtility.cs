@@ -97,11 +97,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 descriptor.sRGB = false;
             }
+            // Capture the caller's active target before the capture call, which may
+            // reassign RenderTexture.active to the temporary internally; saving afterwards
+            // would release a still-active render texture and emit a Console warning.
+            RenderTexture previousActive = RenderTexture.active;
             RenderTexture rt = RenderTexture.GetTemporary(descriptor);
 
             InternalEditorUtilityBridge.CaptureEditorWindow(window, rt);
 
-            RenderTexture previousActive = RenderTexture.active;
             RenderTexture.active = rt;
 
             Texture2D texture = new(width, height, TextureFormat.RGB24, false);
@@ -166,10 +169,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 flipDescriptor.sRGB = false;
             }
+            // Capture the caller's active target before Blit: Blit leaves the destination
+            // assigned to RenderTexture.active, so saving afterwards would "restore" the
+            // temporary itself and releasing it would warn about an active render texture.
+            RenderTexture previousActive = RenderTexture.active;
             RenderTexture flipped = RenderTexture.GetTemporary(flipDescriptor);
             Graphics.Blit(rt, flipped, new Vector2(1f, -1f), new Vector2(0f, 1f));
 
-            RenderTexture previousActive = RenderTexture.active;
             RenderTexture.active = flipped;
 
             Texture2D texture = new(rt.width, rt.height, TextureFormat.RGB24, false);
@@ -194,13 +200,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Texture2D scaledTexture = new(newWidth, newHeight, originalTexture.format, false);
 
+            // Same active-target discipline as the capture paths: save before Blit,
+            // restore before release, so the caller's target survives and the temporary
+            // is never released while active.
+            RenderTexture previousActive = RenderTexture.active;
             RenderTexture rt = RenderTexture.GetTemporary(newWidth, newHeight);
             Graphics.Blit(originalTexture, rt);
 
             RenderTexture.active = rt;
             scaledTexture.ReadPixels(new Rect(0, 0, newWidth, newHeight), 0, 0);
             scaledTexture.Apply();
-            RenderTexture.active = null;
+            RenderTexture.active = previousActive;
 
             RenderTexture.ReleaseTemporary(rt);
             UnityEngine.Object.DestroyImmediate(originalTexture);
