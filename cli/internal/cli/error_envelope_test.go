@@ -420,7 +420,9 @@ func TestClassifyInstallUnsupportedOS(t *testing.T) {
 	}
 }
 
-// Tests that compile wait timeout guidance uses the current value-less boolean flag syntax.
+// Tests that compile wait timeout guidance teaches the caller to verify Editor
+// responsiveness instead of assuming a freeze, because agents have terminated
+// whole sessions after misreading this timeout as a frozen Editor.
 func TestCompileWaitTimeoutError(t *testing.T) {
 	cliErr := compileWaitTimeoutError("/tmp/MyProject")
 
@@ -433,9 +435,22 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 	if cliErr.ProjectRoot != "/tmp/MyProject" {
 		t.Fatalf("project root mismatch: %#v", cliErr)
 	}
-	expectedRetryAction := "Retry `uloop compile` after Unity becomes responsive."
-	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != expectedRetryAction {
-		t.Fatalf("retry action mismatch: %#v", cliErr.NextActions)
+	expectedMessage := "Compile status wait timed out after 180000ms. This does not mean the Unity Editor is frozen; the compile may simply still be running."
+	if cliErr.Message != expectedMessage {
+		t.Fatalf("message mismatch: %#v", cliErr.Message)
+	}
+	expectedActions := []string{
+		"Run a light command such as `uloop get-logs --max-count 1` to check whether Unity is responsive before treating this as a freeze.",
+		"If Unity responds, retry `uloop compile`; the previous compile likely finished in the meantime.",
+		"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
+	}
+	if len(cliErr.NextActions) != len(expectedActions) {
+		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
+	}
+	for i, expected := range expectedActions {
+		if cliErr.NextActions[i] != expected {
+			t.Fatalf("next action %d mismatch: %#v", i, cliErr.NextActions)
+		}
 	}
 }
 
