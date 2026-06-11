@@ -1,10 +1,14 @@
 package cli
 
+import "fmt"
+
 func compileWaitTimeoutError(projectRoot string) cliError {
 	return cliError{
-		ErrorCode:   errorCodeCompileWaitTimeout,
-		Phase:       errorPhaseCompileWaiting,
-		Message:     "Compile status wait timed out after 180000ms. This does not mean the Unity Editor is frozen; the compile may simply still be running.",
+		ErrorCode: errorCodeCompileWaitTimeout,
+		Phase:     errorPhaseCompileWaiting,
+		Message: fmt.Sprintf(
+			"Compile status wait timed out after %dms. This does not mean the Unity Editor is frozen; the compile may simply still be running.",
+			compileWaitTimeout.Milliseconds()),
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: projectRoot,

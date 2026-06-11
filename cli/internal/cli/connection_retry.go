@@ -107,9 +107,10 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			continue
 		}
 		if !shouldRetryUndispatchedConnection(err, outcome) {
-			// A transport error caused by the expiring retry window must not mask a busy
-			// response seen earlier; busy is the truer diagnosis.
-			if err != nil && retryContext.Err() != nil && isUnityServerBusyRPCError(lastErr) {
+			// An undispatched transport error caused by the expiring retry window must not
+			// mask a busy response seen earlier; busy is the truer diagnosis. A dispatched
+			// failure is a real Unity answer and must surface as-is.
+			if err != nil && !outcome.RequestDispatched && retryContext.Err() != nil && isUnityServerBusyRPCError(lastErr) {
 				return lastOutcome, lastErr
 			}
 			return outcome, err
