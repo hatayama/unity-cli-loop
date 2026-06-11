@@ -38,7 +38,6 @@ type waitForPausePointOptions struct {
 	id                   string
 	timeoutSeconds       int
 	timeout              time.Duration
-	includeMatchingLogs  bool
 	matchingLogsMaxCount int
 }
 
@@ -146,13 +145,13 @@ func runWaitForPausePoint(
 	}
 
 	if state == pausePointWaitStateHit {
+		// Best-effort: a hit must stay a success even if Unity is busy while paused.
+		// On fetch failure MatchingLogs is omitted entirely, so an empty array always
+		// means "the fetch succeeded and no matching log exists".
 		var payload any = response
-		if options.includeMatchingLogs {
-			// Best-effort: a hit must stay a success even if Unity is busy while paused.
-			logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-			if logsErr == nil {
-				payload = pausePointWaitResult{pausePointStatusResponse: response, MatchingLogs: logs}
-			}
+		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
+		if logsErr == nil {
+			payload = pausePointWaitResult{pausePointStatusResponse: response, MatchingLogs: logs}
 		}
 		result, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
@@ -172,7 +171,7 @@ func runWaitForPausePoint(
 	}
 
 	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state)
-	if options.includeMatchingLogs && state == pausePointWaitStateTimeout {
+	if state == pausePointWaitStateTimeout {
 		// Best-effort: the timeout diagnosis must not depend on a second Unity round trip succeeding.
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
 		if logsErr == nil {
@@ -192,12 +191,6 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		// The include flag is a bare boolean; parseFlagValue would demand a value for it.
-		if arg == "--"+pausePointIncludeLogsFlagName {
-			options.includeMatchingLogs = true
-			continue
-		}
-
 		name, value, consumedNext, err := parseFlagValue(arg, args, index)
 		if err != nil {
 			return waitForPausePointOptions{}, err

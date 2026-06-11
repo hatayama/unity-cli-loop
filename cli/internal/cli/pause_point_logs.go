@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	pausePointIncludeLogsFlagName  = "include-matching-logs"
 	pausePointLogsMaxCountFlagName = "matching-logs-max-count"
 	pausePointDefaultLogsMaxCount  = 10
 	pausePointGetLogsCommandName   = "get-logs"

@@ -276,32 +276,37 @@ func TestRunWaitForPausePointReportsNotEnabledError(t *testing.T) {
 	}
 }
 
-// Verifies matching-log flags parse with safe defaults and reject non-positive counts.
+// Verifies the matching-log count flag parses with a safe default and rejects non-positive counts.
 func TestParseWaitForPausePointOptionsParsesMatchingLogFlags(t *testing.T) {
 	defaults, err := parseWaitForPausePointOptions([]string{"--id", "jump"})
 	if err != nil {
 		t.Fatalf("default parse failed: %v", err)
 	}
-	if defaults.includeMatchingLogs || defaults.matchingLogsMaxCount != pausePointDefaultLogsMaxCount {
+	if defaults.matchingLogsMaxCount != pausePointDefaultLogsMaxCount {
 		t.Fatalf("default matching-log options mismatch: %#v", defaults)
 	}
 
 	options, err := parseWaitForPausePointOptions([]string{
-		"--id", "jump", "--include-matching-logs", "--matching-logs-max-count", "5",
+		"--id", "jump", "--matching-logs-max-count", "5",
 	})
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
-	if !options.includeMatchingLogs || options.matchingLogsMaxCount != 5 {
+	if options.matchingLogsMaxCount != 5 {
 		t.Fatalf("matching-log options mismatch: %#v", options)
 	}
 
 	if _, err := parseWaitForPausePointOptions([]string{"--id", "jump", "--matching-logs-max-count", "0"}); err == nil {
 		t.Fatalf("expected error for non-positive max count")
 	}
+
+	// Log embedding is always on, so the retired opt-in flag must be rejected as unknown.
+	if _, err := parseWaitForPausePointOptions([]string{"--id", "jump", "--include-matching-logs"}); err == nil {
+		t.Fatalf("expected error for the retired include flag")
+	}
 }
 
-// Verifies a hit response embeds marker-matching logs when requested.
+// Verifies a hit response always embeds marker-matching logs.
 func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalFetch := fetchMatchingLogs
@@ -340,7 +345,6 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 		id:                   "jump",
 		timeoutSeconds:       1,
 		timeout:              time.Second,
-		includeMatchingLogs:  true,
 		matchingLogsMaxCount: 5,
 	}, &stdout, &stderr)
 
@@ -360,8 +364,9 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 	}
 }
 
-// Verifies the hit response stays unchanged when log embedding is not requested.
-func TestRunWaitForPausePointOmitsMatchingLogsByDefault(t *testing.T) {
+// Verifies a successful fetch with zero matches yields an explicit empty MatchingLogs array,
+// so agents can tell "no matching log appeared" apart from "log fetch failed" (field absent).
+func TestRunWaitForPausePointEmbedsEmptyMatchingLogsWhenNoneMatch(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalFetch := fetchMatchingLogs
 	defer func() {
@@ -382,23 +387,23 @@ func TestRunWaitForPausePointOmitsMatchingLogsByDefault(t *testing.T) {
 		searchText string,
 		maxCount int,
 	) ([]pausePointMatchingLog, error) {
-		t.Fatalf("fetchMatchingLogs must not be called without the flag")
-		return nil, nil
+		return []pausePointMatchingLog{}, nil
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
-		id:             "jump",
-		timeoutSeconds: 1,
-		timeout:        time.Second,
+		id:                   "jump",
+		timeoutSeconds:       1,
+		timeout:              time.Second,
+		matchingLogsMaxCount: pausePointDefaultLogsMaxCount,
 	}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
-	if strings.Contains(stdout.String(), "MatchingLogs") {
-		t.Fatalf("MatchingLogs must be absent without the flag: %s", stdout.String())
+	if !strings.Contains(stdout.String(), "\"MatchingLogs\": []") {
+		t.Fatalf("MatchingLogs must be an explicit empty array: %s", stdout.String())
 	}
 }
 
@@ -433,7 +438,6 @@ func TestRunWaitForPausePointIgnoresLogFetchFailure(t *testing.T) {
 		id:                   "jump",
 		timeoutSeconds:       1,
 		timeout:              time.Second,
-		includeMatchingLogs:  true,
 		matchingLogsMaxCount: pausePointDefaultLogsMaxCount,
 	}, &stdout, &stderr)
 
@@ -445,7 +449,7 @@ func TestRunWaitForPausePointIgnoresLogFetchFailure(t *testing.T) {
 	}
 }
 
-// Verifies timeout envelopes embed marker-matching logs best-effort when requested.
+// Verifies timeout envelopes always embed marker-matching logs best-effort.
 func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalClear := clearPausePointStatus
@@ -488,7 +492,6 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 		id:                   "jump",
 		timeoutSeconds:       1,
 		timeout:              5 * time.Millisecond,
-		includeMatchingLogs:  true,
 		matchingLogsMaxCount: pausePointDefaultLogsMaxCount,
 	}, &stdout, &stderr)
 
