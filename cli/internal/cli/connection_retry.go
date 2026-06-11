@@ -107,10 +107,16 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			continue
 		}
 		if !shouldRetryUndispatchedConnection(err, outcome) {
-			// An undispatched transport error caused by the expiring retry window must not
-			// mask a busy response seen earlier; busy is the truer diagnosis. A dispatched
-			// failure is a real Unity answer and must surface as-is.
-			if err != nil && !outcome.RequestDispatched && retryContext.Err() != nil && isUnityServerBusyRPCError(lastErr) {
+			// A transport error after a busy response in this window must not mask the
+			// busy; the server answered moments ago, so busy is the truer diagnosis.
+			// An RPC error is a real Unity answer, not a transport artifact, and must
+			// surface as-is. The transport error is not compared against the window
+			// deadline because the connection deadline can fire microseconds before
+			// the context reports expiry.
+			if err != nil && !isRPCError(err) && isUnityServerBusyRPCError(lastErr) {
+				if ctx.Err() != nil {
+					return outcome, ctx.Err()
+				}
 				return lastOutcome, lastErr
 			}
 			return outcome, err
@@ -136,6 +142,12 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			return outcome, processErr
 		}
 		if runningProcess == nil {
+			// Same masking as the probe-error path: a busy response seen during the
+			// window proves a server answered moments ago, so it is a truer diagnosis
+			// than a final dial cut short by the expiring retry context.
+			if retryContext.Err() != nil && isUnityServerBusyRPCError(lastErr) {
+				return lastOutcome, lastErr
+			}
 			return outcome, err
 		}
 		if !focusAttempted {
@@ -166,6 +178,13 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 		case <-time.After(serverConnectionRetryPoll):
 		}
 	}
+}
+
+// Reports whether the error is a real RPC answer from Unity rather than a
+// transport-level failure such as a dial or read timeout.
+func isRPCError(err error) bool {
+	var rpcErr *unityipc.RPCError
+	return errors.As(err, &rpcErr)
 }
 
 func isUnityServerBusyRPCError(err error) bool {
