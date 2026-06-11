@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -90,6 +91,21 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			client = client.WithResponseTimeout(responseTimeout)
 		}
 		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, retryContext, method, params, progress)
+		if isUnityServerBusyRPCError(err) {
+			// Busy means the request was never executed, so a bounded retry is safe and
+			// usually absorbs back-to-back tool calls without bothering the caller.
+			lastOutcome = outcome
+			lastErr = err
+			select {
+			case <-retryContext.Done():
+				if ctx.Err() != nil {
+					return lastOutcome, ctx.Err()
+				}
+				return lastOutcome, lastErr
+			case <-time.After(serverConnectionRetryPoll):
+			}
+			continue
+		}
 		if !shouldRetryUndispatchedConnection(err, outcome) {
 			return outcome, err
 		}
@@ -139,6 +155,18 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 		case <-time.After(serverConnectionRetryPoll):
 		}
 	}
+}
+
+func isUnityServerBusyRPCError(err error) bool {
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) {
+		return false
+	}
+	decodedData := map[string]any{}
+	if len(rpcErr.Data) > 0 {
+		_ = json.Unmarshal(rpcErr.Data, &decodedData)
+	}
+	return rpcDataType(decodedData) == "server_busy"
 }
 
 func shouldRetryUndispatchedConnection(err error, outcome unityipc.UnitySendOutcome) bool {
