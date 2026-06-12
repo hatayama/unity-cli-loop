@@ -79,10 +79,12 @@ jobs:
           cache: false
 
       # Windows-only code paths (named pipe transport, winio deadlines, typed error
-      # classification) are otherwise never executed by CI.
-      - name: Test native Go CLI on Windows
+      # classification) are otherwise never executed by CI. Scoped to the transport
+      # package: the wider test suite still has Windows-incompatible tests (path
+      # separators, missing .exe suffixes, TCP-only fixtures) that predate this job.
+      - name: Test native Go CLI transport on Windows
         shell: bash
-        run: cd cli && go test ./...
+        run: cd cli && go test ./internal/unityipc/
 
       - name: Test install release filter in Git Bash
         shell: bash
