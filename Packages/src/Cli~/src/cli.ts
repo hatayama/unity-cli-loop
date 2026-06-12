@@ -113,7 +113,10 @@ function registerToolCommand(program: Command, tool: ToolDefinition, helpGroup: 
   cmd.action(async (options: CliOptions) => {
     await runWithErrorHandling(() => {
       const params = buildParams(options, properties);
-      applyExecuteDynamicCodeCodeFileOption(tool.name, params, options);
+      // The Code property has a schema default (''), so option presence cannot tell
+      // whether the user passed --code; ask commander for the actual value source
+      const inlineCodeProvided = cmd.getOptionValueSource('code') === 'cli';
+      applyExecuteDynamicCodeCodeFileOption(tool.name, params, options, inlineCodeProvided);
 
       // Unescape \! to ! for execute-dynamic-code
       // Some shells (e.g., Claude Code's bash wrapper) escape ! as \!
@@ -191,6 +194,7 @@ function applyExecuteDynamicCodeCodeFileOption(
   toolName: string,
   params: Record<string, unknown>,
   options: Record<string, unknown>,
+  inlineCodeProvided: boolean,
 ): void {
   if (toolName !== 'execute-dynamic-code') {
     return;
@@ -205,7 +209,8 @@ function applyExecuteDynamicCodeCodeFileOption(
     throw new Error('--code-file requires a file path.');
   }
 
-  if (typeof params['Code'] === 'string' && params['Code'].length > 0) {
+  // Reject on flag presence, not content, so --code "" --code-file x also errors
+  if (inlineCodeProvided) {
     throw new Error('Use either --code or --code-file, not both.');
   }
 
