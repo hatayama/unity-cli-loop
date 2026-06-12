@@ -623,18 +623,8 @@ namespace io.github.hatayama.uLoopMCP
 
         private void UpdatePointerRaycast(PointerEventData pointerData)
         {
-            List<RaycastResult> results = new List<RaycastResult>();
-            EventSystem.current.RaycastAll(pointerData, results);
-
-            if (results.Count > 0)
-            {
-                pointerData.pointerCurrentRaycast = results[0];
-                return;
-            }
-
-            // Same Canvas-space fallback as RaycastUI for scaled Game view
-            RaycastResult? fallback = UiRaycastHelper.RaycastCanvasSpace(pointerData.position);
-            pointerData.pointerCurrentRaycast = fallback ?? new RaycastResult();
+            RaycastResult? hit = UiRaycastHelper.RaycastUI(pointerData.position, EventSystem.current);
+            pointerData.pointerCurrentRaycast = hit ?? new RaycastResult();
         }
 
         private async Task InterpolateDragPosition(

@@ -1,5 +1,6 @@
 #nullable enable
 using System.Collections;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using io.github.hatayama.uLoopMCP;
 using Newtonsoft.Json.Linq;
@@ -109,6 +110,54 @@ namespace Tests.PlayMode
             Assert.IsTrue(tracker.PointerUpCalled, "PointerUp should be fired");
             Assert.IsTrue(tracker.PointerClickCalled, "PointerClick should be fired");
             Assert.AreEqual("ClickTarget", lastResponse.HitGameObjectName);
+        }
+
+        [UnityTest]
+        public IEnumerator Click_Should_PreferScreenSpaceOverlayUiOverPhysics2DHit()
+        {
+            GameObject testRoot = new GameObject("Physics2DOverlayPriorityTest");
+
+            GameObject cameraGo = new GameObject("PhysicsRaycastCamera");
+            cameraGo.transform.SetParent(testRoot.transform, false);
+            cameraGo.transform.position = new Vector3(0f, 0f, -10f);
+            Camera camera = cameraGo.AddComponent<Camera>();
+            camera.orthographic = true;
+            cameraGo.AddComponent<Physics2DRaycaster>();
+
+            GameObject physicsTarget = new GameObject("PhysicsTarget");
+            physicsTarget.transform.SetParent(testRoot.transform, false);
+            physicsTarget.AddComponent<BoxCollider2D>().size = new Vector2(100f, 100f);
+            physicsTarget.AddComponent<SpriteRenderer>().sortingOrder = 32000;
+            ClickTracker physicsTracker = physicsTarget.AddComponent<ClickTracker>();
+
+            canvasGo.GetComponent<Canvas>().sortingOrder = 100;
+            ClickTracker overlayTracker = CreateClickableElement("OverlayTarget", Vector2.zero, new Vector2(200f, 100f));
+            yield return null;
+
+            Vector2 screenPos = GetScreenPosition(overlayTracker.gameObject);
+            PointerEventData pointerData = new PointerEventData(EventSystem.current)
+            {
+                position = screenPos
+            };
+            List<RaycastResult> raycastResults = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(pointerData, raycastResults);
+
+            Assert.IsNotEmpty(raycastResults);
+            Assert.AreEqual("PhysicsTarget", raycastResults[0].gameObject.name, "Test setup should reproduce Physics2D first-hit ordering.");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = MouseAction.Click.ToString(),
+                ["x"] = screenPos.x,
+                ["y"] = screenPos.y
+            });
+
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(overlayTracker.PointerClickCalled, "Overlay UI should receive the click");
+            Assert.IsFalse(physicsTracker.PointerClickCalled, "Physics2D target behind overlay UI should not receive the click");
+            Assert.AreEqual("OverlayTarget", lastResponse.HitGameObjectName);
+
+            Object.Destroy(testRoot);
         }
 
         [UnityTest]
