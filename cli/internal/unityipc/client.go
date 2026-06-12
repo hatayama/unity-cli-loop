@@ -46,6 +46,14 @@ type Client struct {
 
 type ProgressFunc = func(message string)
 
+// Connection-stage progress events. Consumers map these tokens to their own
+// contextual message; any other progress payload is display-ready text such
+// as the main-thread stall notice.
+const (
+	ProgressEventConnected = "connected"
+	ProgressEventAccepted  = "accepted"
+)
+
 type rpcRequest struct {
 	JSONRPC string            `json:"jsonrpc"`
 	Method  string            `json:"method"`
@@ -163,7 +171,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 	}()
 
 	if progress != nil {
-		progress("connected")
+		progress(ProgressEventConnected)
 	}
 
 	client.requestID++
@@ -208,7 +216,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 	if response.ULoop.Phase == rpcResponsePhaseAccepted {
 		outcome.RequestAccepted = true
 		if progress != nil {
-			progress("accepted")
+			progress(ProgressEventAccepted)
 		}
 
 		cancelAccept()
