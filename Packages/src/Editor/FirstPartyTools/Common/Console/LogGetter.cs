@@ -25,6 +25,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // last user pattern is kept compiled instead of being re-built on every request.
         private static Regex _cachedSearchRegex;
 
+        // User-supplied patterns can backtrack pathologically; the match timeout keeps a bad
+        // pattern from stalling the Editor main thread while scanning every log entry.
+        private static readonly TimeSpan SearchRegexMatchTimeout = TimeSpan.FromSeconds(2);
+
         static LogGetter()
         {
             LogRetriever = new ConsoleLogRetriever();
@@ -289,7 +293,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (_cachedSearchRegex == null || _cachedSearchRegex.ToString() != searchText)
             {
-                _cachedSearchRegex = new Regex(searchText, RegexOptions.Compiled);
+                _cachedSearchRegex = new Regex(searchText, RegexOptions.Compiled, SearchRegexMatchTimeout);
             }
 
             return _cachedSearchRegex;
