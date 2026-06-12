@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.8](https://github.com/hatayama/unity-cli-loop/compare/v2.1.7...v2.1.8) (2026-06-12)
+
+
+### Bug Fixes
+
+* Avoid dependency conflicts from bundled metadata DLLs ([#1288](https://github.com/hatayama/unity-cli-loop/issues/1288)) ([636439d](https://github.com/hatayama/unity-cli-loop/commit/636439d4ca5170623e5ceeb017fe8ba12d9c4c60))
+
 ## [2.1.7](https://github.com/hatayama/unity-cli-loop/compare/v2.1.6...v2.1.7) (2026-06-12)
 
 
