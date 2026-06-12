@@ -51,6 +51,39 @@ const METADATA_VALIDATION_PRIVATE_ASSEMBLIES = [
   },
 ] as const;
 
+// CoreCLR rejects assemblies whose COR20 header claims StrongNameSigned while the
+// signature and public key were stripped during the identity rewrite ("Bad IL format").
+const COMIMAGE_FLAGS_STRONGNAMESIGNED = 0x8;
+const CLI_HEADER_DATA_DIRECTORY_INDEX = 14;
+
+// Reads the Flags field of the COR20 (CLI) header from a managed PE image.
+function readCorHeaderFlags(dllBytes: Buffer): number {
+  const peSignatureOffset = dllBytes.readUInt32LE(0x3c);
+  const coffHeaderOffset = peSignatureOffset + 4;
+  const numberOfSections = dllBytes.readUInt16LE(coffHeaderOffset + 2);
+  const sizeOfOptionalHeader = dllBytes.readUInt16LE(coffHeaderOffset + 16);
+  const optionalHeaderOffset = coffHeaderOffset + 20;
+  const isPe32Plus = dllBytes.readUInt16LE(optionalHeaderOffset) === 0x20b;
+  const dataDirectoriesOffset = optionalHeaderOffset + (isPe32Plus ? 112 : 96);
+  const cliHeaderRva = dllBytes.readUInt32LE(
+    dataDirectoriesOffset + CLI_HEADER_DATA_DIRECTORY_INDEX * 8,
+  );
+
+  const sectionTableOffset = optionalHeaderOffset + sizeOfOptionalHeader;
+  for (let sectionIndex = 0; sectionIndex < numberOfSections; sectionIndex++) {
+    const sectionOffset = sectionTableOffset + sectionIndex * 40;
+    const virtualSize = dllBytes.readUInt32LE(sectionOffset + 8);
+    const virtualAddress = dllBytes.readUInt32LE(sectionOffset + 12);
+    const pointerToRawData = dllBytes.readUInt32LE(sectionOffset + 20);
+    if (cliHeaderRva >= virtualAddress && cliHeaderRva < virtualAddress + virtualSize) {
+      const cliHeaderOffset = cliHeaderRva - virtualAddress + pointerToRawData;
+      return dllBytes.readUInt32LE(cliHeaderOffset + 16);
+    }
+  }
+
+  throw new Error('CLI header RVA does not fall inside any PE section');
+}
+
 function loadPackageManifest(): PackageManifest {
   const packageJsonPath = join(__dirname, '..', '..', 'package.json');
   // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -131,6 +164,14 @@ describe('package metadata', () => {
       for (const assemblyReference of assembly.assemblyReferences) {
         expect(dllBytes.includes(Buffer.from(assemblyReference))).toBe(true);
       }
+    }
+  });
+
+  it('does not claim strong-name signing on unsigned metadata validation dependencies', () => {
+    for (const assembly of METADATA_VALIDATION_PRIVATE_ASSEMBLIES) {
+      const dllBytes = loadUnityPackageBytes(assembly.relativePath);
+
+      expect(readCorHeaderFlags(dllBytes) & COMIMAGE_FLAGS_STRONGNAMESIGNED).toBe(0);
     }
   });
 
