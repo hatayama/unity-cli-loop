@@ -170,9 +170,7 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 		connection,
 		command,
 		params,
-		func(string) {
-			spinner.Update(fmt.Sprintf("Executing %s...", command))
-		},
+		newSpinnerProgressFunc(spinner, fmt.Sprintf("Executing %s...", command)),
 	)
 	spinner.Stop()
 	if err != nil {
@@ -197,9 +195,7 @@ func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection u
 		connection,
 		executeDynamicCodeCommandName,
 		params,
-		func(string) {
-			spinner.Update("Executing execute-dynamic-code...")
-		},
+		newSpinnerProgressFunc(spinner, "Executing execute-dynamic-code..."),
 	)
 	if err != nil {
 		if shouldWaitForExecuteDynamicCodeDisconnect(err, outcome) {
@@ -261,9 +257,7 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 		connection,
 		compileCommandName,
 		params,
-		func(string) {
-			spinner.Update("Executing compile...")
-		},
+		newSpinnerProgressFunc(spinner, "Executing compile..."),
 		compileResponseTimeout,
 	)
 	logCompileRequestSendResult(connection, requestID, outcome, err, startedAt)
@@ -330,9 +324,7 @@ func runList(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 		connection,
 		"get-tool-details",
 		map[string]any{},
-		func(string) {
-			spinner.Update("Fetching tool list...")
-		},
+		newSpinnerProgressFunc(spinner, "Fetching tool list..."),
 	)
 	spinner.Stop()
 	if err != nil {
@@ -353,9 +345,7 @@ func runSync(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 		connection,
 		"get-tool-details",
 		map[string]any{},
-		func(string) {
-			spinner.Update("Syncing tools...")
-		},
+		newSpinnerProgressFunc(spinner, "Syncing tools..."),
 	)
 	spinner.Stop()
 	if err != nil {

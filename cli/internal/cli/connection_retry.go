@@ -20,6 +20,18 @@ var (
 
 const focusRestoreTimeout = 2 * time.Second
 
+// Why: domain reload on large projects can keep the IPC endpoint down well past the
+// base retry window, and an undispatched dial failure is always safe to retry. While
+// a running Unity process is confirmed, the dial-retry window stretches to
+// base * factor (60s by default) so an external reload does not fail commands
+// spuriously. Busy responses stay bounded by the base window: busy proves the server
+// is alive and surfacing it quickly lets the caller decide.
+const serverConnectionRetryUnityAliveFactor = 6
+
+func unityAliveRetryWindow() time.Duration {
+	return serverConnectionRetryTimeout * serverConnectionRetryUnityAliveFactor
+}
+
 type unityServerNotRespondingError struct {
 	projectRoot string
 	endpoint    string
@@ -69,7 +81,8 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 	progress unityipc.ProgressFunc,
 	responseTimeout time.Duration,
 ) (unityipc.UnitySendOutcome, error) {
-	retryContext, cancel := context.WithTimeout(ctx, serverConnectionRetryTimeout)
+	startedAt := time.Now()
+	retryContext, cancel := context.WithTimeout(ctx, unityAliveRetryWindow())
 	defer cancel()
 
 	var lastOutcome unityipc.UnitySendOutcome
@@ -90,12 +103,23 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 		if responseTimeout > 0 {
 			client = client.WithResponseTimeout(responseTimeout)
 		}
-		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, retryContext, method, params, progress)
+		// Each attempt keeps the base accept bound: a dispatched request that never gets
+		// acked must still fail at the base window. Only the dial-retry loop as a whole
+		// uses the extended unity-alive window.
+		attemptContext, cancelAttempt := context.WithTimeout(retryContext, serverConnectionRetryTimeout)
+		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, attemptContext, method, params, progress)
+		cancelAttempt()
 		if isUnityServerBusyRPCError(err) {
 			// Busy means the request was never executed, so a bounded retry is safe and
 			// usually absorbs back-to-back tool calls without bothering the caller.
 			lastOutcome = outcome
 			lastErr = err
+			if time.Since(startedAt) >= serverConnectionRetryTimeout {
+				if ctx.Err() != nil {
+					return lastOutcome, ctx.Err()
+				}
+				return lastOutcome, lastErr
+			}
 			select {
 			case <-retryContext.Done():
 				if ctx.Err() != nil {
@@ -165,6 +189,16 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 
 		lastOutcome = outcome
 		lastErr = err
+		if time.Since(startedAt) >= unityAliveRetryWindow() {
+			if ctx.Err() != nil {
+				return lastOutcome, ctx.Err()
+			}
+			return lastOutcome, unityServerNotRespondingError{
+				projectRoot: connection.ProjectRoot,
+				endpoint:    connection.Endpoint.Address,
+				cause:       lastErr,
+			}
+		}
 		select {
 		case <-retryContext.Done():
 			if ctx.Err() != nil {

@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
+	"os"
 	"time"
 )
 
@@ -14,7 +16,22 @@ const (
 	finalResponseTimeout = 30 * time.Minute
 )
 
-const rpcResponsePhaseAccepted = "accepted"
+const (
+	rpcResponsePhaseAccepted  = "accepted"
+	rpcResponsePhaseHeartbeat = "heartbeat"
+)
+
+// Why: heartbeat silence means the server process died without closing the socket or
+// its sender stalled; six missed heartbeats is well past scheduling jitter.
+const heartbeatSilenceGraceFactor = 6
+
+// Why: editor main-thread work running five minutes without a single update tick
+// almost always means a frozen editor. Failing here with a diagnosis beats sitting on
+// the 30-minute absolute deadline while the editor needs a restart.
+const defaultMainThreadStallLimit = 5 * time.Minute
+
+// Stall reports below this are normal editor busyness and not worth surfacing.
+const mainThreadStallProgressThresholdSeconds = 30
 
 type Client struct {
 	connection      Connection
@@ -22,9 +39,20 @@ type Client struct {
 	clientVersion   string
 	acceptTimeout   time.Duration
 	responseTimeout time.Duration
+	// Test seams: zero means "use the derived/default values".
+	heartbeatSilenceOverride time.Duration
+	mainThreadStallLimit     time.Duration
 }
 
 type ProgressFunc = func(message string)
+
+// Connection-stage progress events. Consumers map these tokens to their own
+// contextual message; any other progress payload is display-ready text such
+// as the main-thread stall notice.
+const (
+	ProgressEventConnected = "connected"
+	ProgressEventAccepted  = "accepted"
+)
 
 type rpcRequest struct {
 	JSONRPC string            `json:"jsonrpc"`
@@ -37,6 +65,7 @@ type rpcRequest struct {
 type rpcClientMetadata struct {
 	CLIVersion         string `json:"cliVersion"`
 	AcceptsDispatchAck bool   `json:"acceptsDispatchAck"`
+	AcceptsHeartbeat   bool   `json:"acceptsHeartbeat"`
 }
 
 type rpcResponse struct {
@@ -48,7 +77,21 @@ type rpcResponse struct {
 }
 
 type rpcResponseMeta struct {
-	Phase string `json:"phase,omitempty"`
+	Phase                    string  `json:"phase,omitempty"`
+	HeartbeatIntervalSeconds int     `json:"heartbeatIntervalSeconds,omitempty"`
+	MainThreadStallSeconds   float64 `json:"mainThreadStallSeconds,omitempty"`
+}
+
+// Reports that Unity's editor main thread stopped pumping while the IPC connection
+// stayed alive — the freeze case heartbeats exist to expose.
+type EditorUnresponsiveError struct {
+	StallSeconds float64
+}
+
+func (err *EditorUnresponsiveError) Error() string {
+	return fmt.Sprintf(
+		"unity editor main thread has been unresponsive for %.0f seconds; the editor is likely frozen. Restart it with 'uloop launch -r'",
+		err.StallSeconds)
 }
 
 type rpcError struct {
@@ -128,7 +171,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 	}()
 
 	if progress != nil {
-		progress("connected")
+		progress(ProgressEventConnected)
 	}
 
 	client.requestID++
@@ -139,6 +182,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 		ULoop: rpcClientMetadata{
 			CLIVersion:         client.clientVersion,
 			AcceptsDispatchAck: true,
+			AcceptsHeartbeat:   true,
 		},
 		ID: client.requestID,
 	}
@@ -172,11 +216,13 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 	if response.ULoop.Phase == rpcResponsePhaseAccepted {
 		outcome.RequestAccepted = true
 		if progress != nil {
-			progress("accepted")
+			progress(ProgressEventAccepted)
 		}
 
 		cancelAccept()
-		if err := setConnectionDeadlineFromNow(conn, client.getResponseTimeout()); err != nil {
+		heartbeatSilence := client.getHeartbeatSilence(response.ULoop.HeartbeatIntervalSeconds)
+		absoluteDeadline := time.Now().Add(client.getResponseTimeout())
+		if err := applyPostAcceptDeadline(conn, heartbeatSilence, absoluteDeadline); err != nil {
 			timing.Total = time.Since(startedAt)
 			outcome.Timing = timing
 			return outcome, err
@@ -184,14 +230,46 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 		stopCancelWatcher := watchConnectionCancellation(ctx, conn)
 		defer stopCancelWatcher()
 
-		response, err = readRPCResponse(reader, &timing)
-		if err != nil {
-			timing.Total = time.Since(startedAt)
-			outcome.Timing = timing
+		for {
+			response, err = readRPCResponse(reader, &timing)
+			if err != nil {
+				timing.Total = time.Since(startedAt)
+				outcome.Timing = timing
+				if ctx.Err() != nil {
+					return outcome, ctx.Err()
+				}
+				if heartbeatSilence > 0 && isDeadlineExpiry(err) && time.Now().Before(absoluteDeadline) {
+					return outcome, fmt.Errorf(
+						"no response or heartbeat from Unity for %s; the connection or server stalled: %w",
+						heartbeatSilence, err)
+				}
+				return outcome, err
+			}
+			if response.ULoop.Phase != rpcResponsePhaseHeartbeat {
+				break
+			}
 			if ctx.Err() != nil {
+				timing.Total = time.Since(startedAt)
+				outcome.Timing = timing
 				return outcome, ctx.Err()
 			}
-			return outcome, err
+
+			stallSeconds := response.ULoop.MainThreadStallSeconds
+			if stallSeconds >= client.getMainThreadStallLimit().Seconds() {
+				timing.Total = time.Since(startedAt)
+				outcome.Timing = timing
+				return outcome, &EditorUnresponsiveError{StallSeconds: stallSeconds}
+			}
+			if progress != nil && stallSeconds >= mainThreadStallProgressThresholdSeconds {
+				progress(fmt.Sprintf("unity editor main thread busy for %.0fs...", stallSeconds))
+			}
+			if heartbeatSilence > 0 {
+				if err := applyPostAcceptDeadline(conn, heartbeatSilence, absoluteDeadline); err != nil {
+					timing.Total = time.Since(startedAt)
+					outcome.Timing = timing
+					return outcome, err
+				}
+			}
 		}
 	}
 
@@ -230,8 +308,52 @@ func (client *Client) getResponseTimeout() time.Duration {
 	return finalResponseTimeout
 }
 
-func setConnectionDeadlineFromNow(conn net.Conn, timeout time.Duration) error {
-	return conn.SetDeadline(time.Now().Add(timeout))
+// Derives the sliding silence window for a negotiated heartbeat connection.
+// Zero disables sliding: an explicit response timeout (e.g. compile's quick fallback
+// to status polling) must stay an absolute deadline, and servers that did not
+// negotiate heartbeats keep the legacy absolute deadline too.
+func (client *Client) getHeartbeatSilence(heartbeatIntervalSeconds int) time.Duration {
+	if client.responseTimeout > 0 {
+		return 0
+	}
+	if heartbeatIntervalSeconds <= 0 {
+		return 0
+	}
+	if client.heartbeatSilenceOverride > 0 {
+		return client.heartbeatSilenceOverride
+	}
+	return time.Duration(heartbeatIntervalSeconds) * time.Second * heartbeatSilenceGraceFactor
+}
+
+func (client *Client) getMainThreadStallLimit() time.Duration {
+	if client.mainThreadStallLimit > 0 {
+		return client.mainThreadStallLimit
+	}
+	return defaultMainThreadStallLimit
+}
+
+// Reports whether the error is a connection deadline expiry. go-winio's named pipe
+// deadline error is not os.ErrDeadlineExceeded, so a Timeout() probe through the
+// unwrap chain is required for Windows.
+func isDeadlineExpiry(err error) bool {
+	if errors.Is(err, os.ErrDeadlineExceeded) || os.IsTimeout(err) {
+		return true
+	}
+	var timeoutCause interface{ Timeout() bool }
+	return errors.As(err, &timeoutCause) && timeoutCause.Timeout()
+}
+
+// Sets the connection deadline to the sliding heartbeat-silence window, capped by the
+// absolute response deadline so heartbeats can never extend the total wait past it.
+func applyPostAcceptDeadline(conn net.Conn, heartbeatSilence time.Duration, absoluteDeadline time.Time) error {
+	deadline := absoluteDeadline
+	if heartbeatSilence > 0 {
+		slidingDeadline := time.Now().Add(heartbeatSilence)
+		if slidingDeadline.Before(deadline) {
+			deadline = slidingDeadline
+		}
+	}
+	return conn.SetDeadline(deadline)
 }
 
 func watchConnectionCancellation(ctx context.Context, conn net.Conn) func() {

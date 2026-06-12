@@ -105,14 +105,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 firstResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 1),
                     CancellationToken.None,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
 
                 secondResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 2),
                     CancellationToken.None,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 string secondResponse = await AwaitWithTimeout(secondResponseTask, TimeSpan.FromMilliseconds(200));
                 JObject error = ParseError(secondResponse);
@@ -163,14 +163,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 firstDynamicCodeTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE, 1),
                     CancellationToken.None,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
 
                 secondDynamicCodeTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE, 2),
                     CancellationToken.None,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(2));
                 Assert.That(secondDynamicCodeTask.IsCompleted, Is.False);
@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 otherToolTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 3),
                     CancellationToken.None,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 string otherToolResponse = await AwaitWithTimeout(otherToolTask, TimeSpan.FromMilliseconds(200));
                 JObject error = ParseError(otherToolResponse);
@@ -227,7 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         "{\"WaitForDomainReload\":true}",
                         1),
                     CancellationToken.None,
-                    (_, shouldCancelOnClientDisconnect) =>
+                    (_, shouldCancelOnClientDisconnect, _) =>
                     {
                         cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
                         return Task.CompletedTask;
@@ -263,7 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_COMPILE, 1),
                     CancellationToken.None,
-                    (_, shouldCancelOnClientDisconnect) =>
+                    (_, shouldCancelOnClientDisconnect, _) =>
                     {
                         cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
                         return Task.CompletedTask;
@@ -302,7 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         "{\"WaitForDomainReload\":false}",
                         1),
                     CancellationToken.None,
-                    (_, shouldCancelOnClientDisconnect) =>
+                    (_, shouldCancelOnClientDisconnect, _) =>
                     {
                         cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
                         return Task.CompletedTask;
@@ -341,7 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         "{\"waitForDomainReload\":false}",
                         1),
                     CancellationToken.None,
-                    (_, shouldCancelOnClientDisconnect) =>
+                    (_, shouldCancelOnClientDisconnect, _) =>
                     {
                         cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
                         return Task.CompletedTask;
@@ -384,7 +384,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         "{\"MaxDepth\":0,\"IncludeComponents\":false}",
                         1),
                     CancellationToken.None,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
                 dispatcher.RunContinuations();
@@ -400,7 +400,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         "{\"MaxCount\":0}",
                         2),
                     CancellationToken.None,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
                 dispatcher.RunContinuations();
@@ -434,7 +434,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 responseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(UnityCliLoopConstants.COMMAND_NAME_GET_VERSION, 1),
                     CancellationToken.None,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
                 Assert.That(responseTask.IsCompleted, Is.False);
@@ -478,7 +478,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 canceledResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 1),
                     cancellationSource.Token,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
 
@@ -488,7 +488,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 secondResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 2),
                     CancellationToken.None,
-                    (_, _) => Task.CompletedTask);
+                    (_, _, _) => Task.CompletedTask);
 
                 Assert.That(secondResponseTask.IsCompleted, Is.False);
 

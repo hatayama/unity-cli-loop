@@ -53,9 +53,7 @@ func runControlPlayModeWithStateWait(
 		connection,
 		controlPlayModeCommandName,
 		params,
-		func(string) {
-			spinner.Update("Executing control-play-mode...")
-		},
+		newSpinnerProgressFunc(spinner, "Executing control-play-mode..."),
 	)
 
 	initialResponse := controlPlayModeResponse{}

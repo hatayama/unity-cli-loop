@@ -6,6 +6,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
 const (
@@ -35,6 +37,20 @@ func newLaunchSpinner(stdout io.Writer, stderr io.Writer) *terminalSpinner {
 		return newSpinner(stdout, true, "Waiting for Unity to finish starting...")
 	}
 	return newSpinner(stderr, isTerminalWriter(stderr), "Waiting for Unity to finish starting...")
+}
+
+// Maps connection-stage progress events to the contextual executing message
+// and passes display-ready payloads (such as the heartbeat main-thread stall
+// notice) through to the spinner verbatim. Without this mapping the stall
+// diagnosis built by the IPC client would never reach the user.
+func newSpinnerProgressFunc(spinner *terminalSpinner, executingMessage string) unityipc.ProgressFunc {
+	return func(message string) {
+		if message == unityipc.ProgressEventConnected || message == unityipc.ProgressEventAccepted {
+			spinner.Update(executingMessage)
+			return
+		}
+		spinner.Update(message)
+	}
 }
 
 func newSpinner(writer io.Writer, enabled bool, message string) *terminalSpinner {

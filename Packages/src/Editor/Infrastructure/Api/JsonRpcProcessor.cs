@@ -35,7 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal delegate Task JsonRpcEarlyResponseWriter(
             string responseJson,
-            bool cancelOnClientDisconnect);
+            bool cancelOnClientDisconnect,
+            Func<string> createHeartbeatJson);
 
         /// <summary>
         /// Process JSON-RPC request and generate response
@@ -85,6 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Params = request["params"],
                 ClientCliVersion = ReadClientCliVersion(request),
                 AcceptsDispatchAck = ReadAcceptsDispatchAck(request),
+                AcceptsHeartbeat = ReadAcceptsHeartbeat(request),
                 Id = request["id"]?.ToObject<object>()
             };
         }
@@ -110,6 +112,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return metadata["acceptsDispatchAck"]?.Value<bool>() ?? false;
+        }
+
+        private static bool ReadAcceptsHeartbeat(JObject request)
+        {
+            JObject metadata = request["uloop"] as JObject;
+            if (metadata == null)
+            {
+                return false;
+            }
+
+            return metadata["acceptsHeartbeat"]?.Value<bool>() ?? false;
         }
 
         /// <summary>
@@ -166,9 +179,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (request.AcceptsDispatchAck && earlyResponseWriter != null)
                 {
+                    int heartbeatIntervalSeconds = request.AcceptsHeartbeat
+                        ? UnityCliLoopServerConfig.HEARTBEAT_INTERVAL_SECONDS
+                        : 0;
+                    Func<string> createHeartbeatJson = request.AcceptsHeartbeat
+                        ? () => CreateHeartbeatResponse(
+                            request.Id,
+                            EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick())
+                        : null;
                     await earlyResponseWriter(
-                        CreateDispatchAcceptedResponse(request.Id),
-                        ShouldCancelAcceptedRequestOnClientDisconnect(request));
+                        CreateDispatchAcceptedResponse(request.Id, heartbeatIntervalSeconds),
+                        ShouldCancelAcceptedRequestOnClientDisconnect(request),
+                        createHeartbeatJson);
                 }
 
                 Stopwatch requestStopwatch = Stopwatch.StartNew();
@@ -284,8 +306,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return JsonConvert.SerializeObject(errorResponse, Formatting.None, settings);
         }
 
-        private static string CreateDispatchAcceptedResponse(object id)
+        internal static string CreateDispatchAcceptedResponse(object id, int heartbeatIntervalSeconds)
         {
+            // heartbeatIntervalSeconds is only advertised when the client negotiated
+            // heartbeats; older CLIs would treat unexpected extra frames as the final
+            // response, so the field doubles as the negotiation answer.
+            object uloopMetadata = heartbeatIntervalSeconds > 0
+                ? new
+                {
+                    phase = JsonRpcResponsePhases.Accepted,
+                    heartbeatIntervalSeconds
+                }
+                : (object)new
+                {
+                    phase = JsonRpcResponsePhases.Accepted
+                };
+
             object response = new
             {
                 jsonrpc = UnityCliLoopServerConfig.JSONRPC_VERSION,
@@ -294,9 +330,32 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     accepted = true
                 },
+                uloop = uloopMetadata
+            };
+
+            JsonSerializerSettings settings = new()
+            {
+                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
+            };
+
+            return JsonConvert.SerializeObject(response, Formatting.None, settings);
+        }
+
+        internal static string CreateHeartbeatResponse(object id, double mainThreadStallSeconds)
+        {
+            object response = new
+            {
+                jsonrpc = UnityCliLoopServerConfig.JSONRPC_VERSION,
+                id,
+                result = new
+                {
+                    alive = true
+                },
                 uloop = new
                 {
-                    phase = JsonRpcResponsePhases.Accepted
+                    phase = JsonRpcResponsePhases.Heartbeat,
+                    mainThreadStallSeconds
                 }
             };
 
@@ -445,6 +504,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     public static class JsonRpcResponsePhases
     {
         public const string Accepted = "accepted";
+        public const string Heartbeat = "heartbeat";
     }
 
     /// <summary>

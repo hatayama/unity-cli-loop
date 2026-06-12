@@ -210,7 +210,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Task serverTask = _serverTask;
             Task[] clientTasks = GetActiveClientTasks();
             _serverTask = null;
-            DisposeCancellationSourceAfterServerTaskAsync(serverTask, clientTasks, cancellationTokenSource).Forget();
+            DisposeCancellationSourceAfterServerTaskAsync(
+                serverTask,
+                clientTasks,
+                cancellationTokenSource,
+                TimeSpan.FromSeconds(UnityCliLoopServerConfig.SHUTDOWN_TIMEOUT_SECONDS)).Forget();
         }
 
         private CancellationTokenSource TakeCancellationTokenSource()
@@ -218,17 +222,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return Interlocked.Exchange(ref _cancellationTokenSource, null);
         }
 
-        private static async Task DisposeCancellationSourceAfterServerTaskAsync(
+        internal static async Task DisposeCancellationSourceAfterServerTaskAsync(
             Task serverTask,
             Task[] clientTasks,
-            CancellationTokenSource cancellationTokenSource)
+            CancellationTokenSource cancellationTokenSource,
+            TimeSpan shutdownTimeout)
         {
             Task[] tasks = BuildShutdownWaitTasks(serverTask, clientTasks);
             if (tasks.Length > 0)
             {
-                await Task.WhenAny(
-                    Task.WhenAll(tasks),
-                    Task.Delay(TimeSpan.FromSeconds(UnityCliLoopServerConfig.SHUTDOWN_TIMEOUT_SECONDS)));
+                Task allTasksCompleted = Task.WhenAll(tasks);
+                Task firstCompleted = await Task.WhenAny(
+                    allTasksCompleted,
+                    Task.Delay(shutdownTimeout));
+                if (firstCompleted != allTasksCompleted)
+                {
+                    // Why: a straggling task may still observe the token after this timeout, and
+                    // disposing the source under it surfaces ObjectDisposedException inside that
+                    // task. Leaking one CancellationTokenSource is harmless; disposing early is not.
+                    VibeLogger.LogWarning(
+                        "server_shutdown_cts_leaked",
+                        "Shutdown timed out waiting for server/client tasks; skipping CancellationTokenSource disposal.");
+                    return;
+                }
             }
 
             cancellationTokenSource?.Dispose();
@@ -459,6 +475,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     // Initialize new framing components
                     bufferManager = new DynamicBufferManager();
                     messageReassembler = new MessageReassembler(bufferManager);
+
+                    // Not disposed deliberately: a heartbeat writer could still be releasing it
+                    // during teardown, and an undisposed SemaphoreSlim holds no unmanaged state.
+                    SemaphoreSlim streamWriteLock = new(1, 1);
                     
                     // Start with initial buffer size
                     byte[] buffer = bufferManager.GetBuffer(BufferConfig.INITIAL_BUFFER_SIZE);
@@ -482,12 +502,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         {
                             if (string.IsNullOrWhiteSpace(requestJson)) continue;
 
-                            await ProcessRequestFrameAsync(client, stream, requestJson, cancellationToken);
+                            await ProcessRequestFrameAsync(client, stream, streamWriteLock, requestJson, cancellationToken);
                         }
                         
-                        // Validate reassembler state and clear if needed
+                        // Why: false means the reassembler was disposed and can no longer make
+                        // progress; closing the connection lets the CLI observe the disconnect
+                        // immediately instead of waiting silently for its own timeout.
+                        // (Corrupted framing state throws from ValidateState and is handled below.)
                         if (!messageReassembler.ValidateState())
                         {
+                            break;
                         }
                     }
                 }
@@ -575,6 +599,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private async Task ProcessRequestFrameAsync(
             BridgeClientConnection client,
             Stream stream,
+            SemaphoreSlim streamWriteLock,
             string requestJson,
             CancellationToken serverCancellationToken)
         {
@@ -582,14 +607,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                    CancellationTokenSource.CreateLinkedTokenSource(serverCancellationToken))
             {
                 Task clientDisconnectMonitorTask = null;
+                Task heartbeatTask = null;
+                CancellationTokenSource heartbeatCancellationSource = null;
                 try
                 {
                     string responseJson = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                         requestJson,
                         requestCancellationTokenSource.Token,
-                        async (responseJsonValue, cancelOnClientDisconnect) =>
+                        async (responseJsonValue, cancelOnClientDisconnect, createHeartbeatJson) =>
                         {
-                            await WriteJsonResponseAsync(stream, responseJsonValue, serverCancellationToken);
+                            await WriteJsonResponseLockedAsync(
+                                stream, streamWriteLock, responseJsonValue, serverCancellationToken);
+
+                            if (createHeartbeatJson != null)
+                            {
+                                heartbeatCancellationSource = CancellationTokenSource.CreateLinkedTokenSource(
+                                    requestCancellationTokenSource.Token);
+                                // Why: the heartbeat token must govern the write as well; with the
+                                // server token an in-flight write could ignore StopHeartbeatsAsync
+                                // and stall the final response behind a slow client.
+                                CancellationToken heartbeatToken = heartbeatCancellationSource.Token;
+                                heartbeatTask = SendHeartbeatsAsync(
+                                    createHeartbeatJson,
+                                    heartbeatJson => WriteJsonResponseLockedAsync(
+                                        stream, streamWriteLock, heartbeatJson, heartbeatToken),
+                                    TimeSpan.FromSeconds(UnityCliLoopServerConfig.HEARTBEAT_INTERVAL_SECONDS),
+                                    heartbeatToken);
+                            }
+
                             if (!cancelOnClientDisconnect)
                             {
                                 return;
@@ -599,14 +644,86 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                                 MonitorClientDisconnectAsync(client, requestCancellationTokenSource);
                         });
 
-                    await WriteJsonResponseAsync(stream, responseJson, serverCancellationToken);
+                    // Stop heartbeats before the final response so no heartbeat frame can be
+                    // queued after the response the CLI stops reading at.
+                    await StopHeartbeatsAsync(heartbeatTask, heartbeatCancellationSource);
+                    heartbeatTask = null;
+
+                    await WriteJsonResponseLockedAsync(stream, streamWriteLock, responseJson, serverCancellationToken);
                 }
                 finally
                 {
+                    await StopHeartbeatsAsync(heartbeatTask, heartbeatCancellationSource);
+                    heartbeatCancellationSource?.Dispose();
                     await StopClientDisconnectMonitorAsync(
                         clientDisconnectMonitorTask,
                         requestCancellationTokenSource);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Sends heartbeat frames at the given interval until cancelled. Write failures end
+        /// the loop silently because the connection teardown is owned by the read loop.
+        /// </summary>
+        internal static async Task SendHeartbeatsAsync(
+            Func<string> createHeartbeatJson,
+            Func<string, Task> writeFrameAsync,
+            TimeSpan interval,
+            CancellationToken ct)
+        {
+            while (true)
+            {
+                try
+                {
+                    await Task.Delay(interval, ct);
+                    await writeFrameAsync(createHeartbeatJson());
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (IOException)
+                {
+                    return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+            }
+        }
+
+        private static async Task StopHeartbeatsAsync(
+            Task heartbeatTask,
+            CancellationTokenSource heartbeatCancellationSource)
+        {
+            if (heartbeatTask == null)
+            {
+                return;
+            }
+
+            heartbeatCancellationSource?.Cancel();
+            await heartbeatTask;
+        }
+
+        private async Task WriteJsonResponseLockedAsync(
+            Stream stream,
+            SemaphoreSlim streamWriteLock,
+            string responseJson,
+            CancellationToken ct)
+        {
+            // Why: heartbeat frames are written from a background timer while the final
+            // response is written by the request task; interleaved writes would corrupt
+            // Content-Length framing, so all frame writes share one lock per connection.
+            await streamWriteLock.WaitAsync(ct);
+            try
+            {
+                await WriteJsonResponseAsync(stream, responseJson, ct);
+            }
+            finally
+            {
+                streamWriteLock.Release();
             }
         }
 
