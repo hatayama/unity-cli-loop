@@ -49,6 +49,7 @@ jest.mock('../project-root.js', () => ({
   isUnityProject: (projectPath: string): boolean => mockIsUnityProject(projectPath),
 }));
 
+import { resolve } from 'path';
 import { Command } from 'commander';
 import { orchestrateLaunch } from 'launch-unity';
 import {
@@ -232,11 +233,14 @@ describe('launch command', () => {
 
     await program.parseAsync(['node', 'uloop', 'launch', '/project', '--restart']);
 
-    expect(observedCalls).toEqual(['guard:/project', 'orchestrate']);
-    expect(mockBeginUnityRestartAttempt).toHaveBeenCalledWith('/project');
+    // The launch command resolves the CLI argument, so the expected path must be
+    // resolved too ('/project' becomes 'C:\\project' on Windows)
+    const resolvedProjectPath = resolve('/project');
+    expect(observedCalls).toEqual([`guard:${resolvedProjectPath}`, 'orchestrate']);
+    expect(mockBeginUnityRestartAttempt).toHaveBeenCalledWith(resolvedProjectPath);
     expect(orchestrateLaunchMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        projectPath: '/project',
+        projectPath: resolvedProjectPath,
         restart: true,
       }),
     );
@@ -274,7 +278,7 @@ describe('launch command', () => {
     expect(mockBeginUnityRestartAttempt).not.toHaveBeenCalled();
     expect(orchestrateLaunchMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        projectPath: '/not-a-project',
+        projectPath: resolve('/not-a-project'),
         restart: true,
       }),
     );

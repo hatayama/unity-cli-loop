@@ -14,14 +14,16 @@ For basic selected GameObject discovery or property inspection, use `find-game-o
 
 1. Read the relevant reference file(s) from the Code Examples section below
 2. Construct C# code based on the reference examples
-3. Execute via Bash: `uloop execute-dynamic-code --code '<code>'`
-4. If execution fails, adjust code and retry
-5. Report the execution result
+3. For multiline snippets, write the C# statements to a temporary `.csx` file and execute `uloop execute-dynamic-code --code-file <path>`
+4. Use `uloop execute-dynamic-code --code '<code>'` only for short one-line snippets
+5. If execution fails, adjust code and retry
+6. Report the execution result
 
 ## Parameters
 
-- `--code '<code>'` (required): Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
-- **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell doubles inner quotes (`'Debug.Log(""Hello!"");'`).
+- `--code '<code>'`: Inline C# statements to execute. Use this for one-line snippets only.
+- `--code-file <path>`: Read C# statements from a UTF-8 file. Prefer this for multiline snippets, especially on PowerShell, because Windows `.cmd` shims can lose lines from multiline inline arguments before `uloop` receives them.
+- **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell single-quoted strings can contain normal double quotes, for example `uloop execute-dynamic-code --code 'Debug.Log("Hello!");'`.
 - `--parameters {}` (advanced, optional): Pass an object when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets, and pass an object instead of a JSON string.
 - `--compile-only true` (optional): Compile the snippet without executing it. Use this when you want Roslyn diagnostics before running new code.
 
@@ -42,7 +44,7 @@ return x;
 Returns JSON:
 - `Success`: boolean — overall execution success
 - `Result`: string — value of the snippet's `return` statement (empty when omitted)
-- `Logs`: string[] — `Debug.Log` / `Debug.LogWarning` / `Debug.LogError` messages emitted during the run
+- `Logs`: string[] — execution diagnostics from the dynamic-code runner, not Unity Console entries
 - `CompilationErrors`: object[] — Roslyn diagnostics with `Message`, `Line`, `Column`, `ErrorCode`, optional `Hint` and `Suggestions`
 - `ErrorMessage`: string — top-level failure summary (empty on success)
 - `Error`: string — alias of `ErrorMessage`
@@ -51,7 +53,7 @@ Returns JSON:
 - `DiagnosticsSummary`: string|null — compact summary when diagnostics are available
 - `Diagnostics`: object[] — structured diagnostics; same shape as `CompilationErrors`, usually populated together with it
 
-On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, security violation, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
+Use `uloop get-logs` to retrieve `Debug.Log`, `Debug.LogWarning`, and `Debug.LogError` messages emitted by the snippet. On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, security violation, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
 
 ## Code Examples by Category
 

@@ -54,6 +54,10 @@ jobs:
       working-directory: Packages/src/Cli~
       run: npx knip
 
+    - name: Run CLI unit tests
+      working-directory: Packages/src/Cli~
+      run: npm run test:unit
+
     - name: Build TypeScript Server
       working-directory: Packages/src/TypeScriptServer~
       env:

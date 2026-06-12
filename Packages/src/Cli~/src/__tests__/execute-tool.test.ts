@@ -19,8 +19,9 @@ import {
   UnityServerNotRunningError,
 } from '../port-resolver.js';
 import { ProjectMismatchError } from '../project-validator.js';
-import type { Stats } from 'fs';
-import { resolve as resolvePath } from 'path';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, type Stats } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 function createStatResult(mtimeMs: number): Stats {
   return { mtimeMs } as unknown as Stats;
@@ -833,8 +834,23 @@ describe('isSettingsReadError', () => {
 });
 
 describe('resolveUnityConnectionWithStartupDiagnosis', () => {
+  // validateProjectPath reads the real filesystem, so a temp Unity project keeps
+  // these tests independent from the state of the machine running them
+  let projectRoot: string;
+
+  beforeEach(() => {
+    projectRoot = mkdtempSync(join(tmpdir(), 'uloop-startup-test-'));
+    mkdirSync(join(projectRoot, 'Assets'));
+    mkdirSync(join(projectRoot, 'ProjectSettings'));
+    mkdirSync(join(projectRoot, 'UserSettings'));
+    writeFileSync(join(projectRoot, 'UserSettings/UnityMcpSettings.json'), '{}');
+  });
+
+  afterEach(() => {
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+
   it('promotes settings read failures to UNITY_SERVER_STARTING when startup lock is fresh', async () => {
-    const projectRoot = resolvePath(process.cwd(), '..', '..', '..');
     const dependencies = {
       findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
       existsSyncFn: jest.fn().mockReturnValue(true),
@@ -871,7 +887,6 @@ describe('resolveUnityConnectionWithStartupDiagnosis', () => {
   });
 
   it('promotes retryable settings-read failures for non-dynamic-code tools when startup lock is fresh', async () => {
-    const projectRoot = resolvePath(process.cwd(), '..', '..', '..');
     const dependencies = {
       findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
       existsSyncFn: jest.fn().mockReturnValue(true),

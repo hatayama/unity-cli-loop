@@ -15,7 +15,8 @@
     "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check src/**/*.ts",
     "knip": "knip",
-    "test:cli": "jest src/__tests__ --testTimeout=60000 --runInBand"
+    "test:cli": "jest src/__tests__ --testTimeout=60000 --runInBand",
+    "test:unit": "jest src/__tests__ --testPathIgnorePatterns cli-e2e --testTimeout=60000"
   },
   "keywords": [
     "cli",

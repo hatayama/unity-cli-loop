@@ -103,22 +103,34 @@ function registerToolCommand(program: Command, tool: ToolDefinition, helpGroup: 
     }
   }
 
+  if (tool.name === 'execute-dynamic-code') {
+    cmd.option('--code-file <path>', 'Read C# code from a UTF-8 file');
+  }
+
   cmd.addOption(createHiddenPortOption());
   cmd.option('--project-path <path>', 'Unity project path');
 
   cmd.action(async (options: CliOptions) => {
-    const params = buildParams(options, properties);
+    await runWithErrorHandling(() => {
+      const params = buildParams(options, properties);
+      // The Code property has a schema default (''), so option presence cannot tell
+      // whether the user passed --code; ask commander for the actual value source
+      const inlineCodeProvided = cmd.getOptionValueSource('code') === 'cli';
+      applyExecuteDynamicCodeCodeFileOption(tool.name, params, options, inlineCodeProvided);
 
-    // Unescape \! to ! for execute-dynamic-code
-    // Some shells (e.g., Claude Code's bash wrapper) escape ! as \!
-    if (tool.name === 'execute-dynamic-code' && params['Code']) {
-      const code = params['Code'] as string;
-      params['Code'] = code.replace(/\\!/g, '!');
-    }
+      // Unescape \! to ! for execute-dynamic-code
+      // Some shells (e.g., Claude Code's bash wrapper) escape ! as \!
+      if (
+        tool.name === 'execute-dynamic-code' &&
+        options['codeFile'] === undefined &&
+        params['Code']
+      ) {
+        const code = params['Code'] as string;
+        params['Code'] = code.replace(/\\!/g, '!');
+      }
 
-    await runWithErrorHandling(() =>
-      executeToolCommand(tool.name, params, extractGlobalOptions(options)),
-    );
+      return executeToolCommand(tool.name, params, extractGlobalOptions(options));
+    });
   });
 }
 
@@ -176,6 +188,33 @@ function buildParams(
   }
 
   return params;
+}
+
+function applyExecuteDynamicCodeCodeFileOption(
+  toolName: string,
+  params: Record<string, unknown>,
+  options: Record<string, unknown>,
+  inlineCodeProvided: boolean,
+): void {
+  if (toolName !== 'execute-dynamic-code') {
+    return;
+  }
+
+  const codeFile = options['codeFile'];
+  if (codeFile === undefined) {
+    return;
+  }
+
+  if (typeof codeFile !== 'string' || codeFile.length === 0) {
+    throw new Error('--code-file requires a file path.');
+  }
+
+  // Reject on flag presence, not content, so --code "" --code-file x also errors
+  if (inlineCodeProvided) {
+    throw new Error('Use either --code or --code-file, not both.');
+  }
+
+  params['Code'] = readFileSync(codeFile, 'utf8');
 }
 
 /**
@@ -395,6 +434,7 @@ const EXECUTE_DYNAMIC_CODE_PROPERTIES: Record<string, ToolProperty> =
 
 const FAST_EXECUTE_DYNAMIC_CODE_OPTIONS = new Map<string, string>([
   ['--code', 'code'],
+  ['--code-file', 'codeFile'],
   ['--parameters', 'parameters'],
   ['--compile-only', 'compileOnly'],
   ['--yield-to-foreground-requests', 'yieldToForegroundRequests'],
@@ -461,6 +501,10 @@ export function tryParseFastExecuteDynamicCodeCommand(
 
     options[optionKey] = optionValue;
     i++;
+  }
+
+  if (typeof options['codeFile'] === 'string') {
+    return null;
   }
 
   if (typeof options['code'] !== 'string') {
@@ -983,6 +1027,9 @@ function listOptionsForCommand(cmdName: string, projectPath?: string): void {
   for (const propName of Object.keys(tool.inputSchema.properties)) {
     const kebabName = pascalToKebabCase(propName);
     options.push(`--${kebabName}`);
+  }
+  if (tool.name === 'execute-dynamic-code') {
+    options.push('--code-file');
   }
 
   console.log(options.join('\n'));
