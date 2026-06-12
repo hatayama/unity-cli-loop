@@ -210,7 +210,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Task serverTask = _serverTask;
             Task[] clientTasks = GetActiveClientTasks();
             _serverTask = null;
-            DisposeCancellationSourceAfterServerTaskAsync(serverTask, clientTasks, cancellationTokenSource).Forget();
+            DisposeCancellationSourceAfterServerTaskAsync(
+                serverTask,
+                clientTasks,
+                cancellationTokenSource,
+                TimeSpan.FromSeconds(UnityCliLoopServerConfig.SHUTDOWN_TIMEOUT_SECONDS)).Forget();
         }
 
         private CancellationTokenSource TakeCancellationTokenSource()
@@ -218,17 +222,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return Interlocked.Exchange(ref _cancellationTokenSource, null);
         }
 
-        private static async Task DisposeCancellationSourceAfterServerTaskAsync(
+        internal static async Task DisposeCancellationSourceAfterServerTaskAsync(
             Task serverTask,
             Task[] clientTasks,
-            CancellationTokenSource cancellationTokenSource)
+            CancellationTokenSource cancellationTokenSource,
+            TimeSpan shutdownTimeout)
         {
             Task[] tasks = BuildShutdownWaitTasks(serverTask, clientTasks);
             if (tasks.Length > 0)
             {
-                await Task.WhenAny(
-                    Task.WhenAll(tasks),
-                    Task.Delay(TimeSpan.FromSeconds(UnityCliLoopServerConfig.SHUTDOWN_TIMEOUT_SECONDS)));
+                Task allTasksCompleted = Task.WhenAll(tasks);
+                Task firstCompleted = await Task.WhenAny(
+                    allTasksCompleted,
+                    Task.Delay(shutdownTimeout));
+                if (firstCompleted != allTasksCompleted)
+                {
+                    // Why: a straggling task may still observe the token after this timeout, and
+                    // disposing the source under it surfaces ObjectDisposedException inside that
+                    // task. Leaking one CancellationTokenSource is harmless; disposing early is not.
+                    VibeLogger.LogWarning(
+                        "server_shutdown_cts_leaked",
+                        "Shutdown timed out waiting for server/client tasks; skipping CancellationTokenSource disposal.");
+                    return;
+                }
             }
 
             cancellationTokenSource?.Dispose();
