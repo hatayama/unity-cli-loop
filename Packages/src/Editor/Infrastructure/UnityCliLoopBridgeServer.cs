@@ -623,12 +623,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                             {
                                 heartbeatCancellationSource = CancellationTokenSource.CreateLinkedTokenSource(
                                     requestCancellationTokenSource.Token);
+                                // Why: the heartbeat token must govern the write as well; with the
+                                // server token an in-flight write could ignore StopHeartbeatsAsync
+                                // and stall the final response behind a slow client.
+                                CancellationToken heartbeatToken = heartbeatCancellationSource.Token;
                                 heartbeatTask = SendHeartbeatsAsync(
                                     createHeartbeatJson,
                                     heartbeatJson => WriteJsonResponseLockedAsync(
-                                        stream, streamWriteLock, heartbeatJson, serverCancellationToken),
+                                        stream, streamWriteLock, heartbeatJson, heartbeatToken),
                                     TimeSpan.FromSeconds(UnityCliLoopServerConfig.HEARTBEAT_INTERVAL_SECONDS),
-                                    heartbeatCancellationSource.Token);
+                                    heartbeatToken);
                             }
 
                             if (!cancelOnClientDisconnect)

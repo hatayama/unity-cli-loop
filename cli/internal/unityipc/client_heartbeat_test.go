@@ -210,7 +210,12 @@ func TestSendKeepsExplicitResponseTimeoutDespiteHeartbeats(t *testing.T) {
 			case <-done:
 				return
 			case <-time.After(20 * time.Millisecond):
-				writeFrame(t, conn, heartbeat)
+				// The client is expected to time out and close the connection while
+				// this loop is still writing, so write failures end the loop silently
+				// instead of failing the test through writeFrame's t.Errorf.
+				if err := Write(conn, []byte(heartbeat)); err != nil {
+					return
+				}
 			}
 		}
 	})
