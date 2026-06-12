@@ -219,7 +219,7 @@ func TestSendWithProgressOutcomeWaitsForFinalResponseAfterDispatchAckWithoutAcce
 			return
 		}
 
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(750 * time.Millisecond)
 
 		final := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
 		if err := Write(conn, final); err != nil {
@@ -236,7 +236,10 @@ func TestSendWithProgressOutcomeWaitsForFinalResponseAfterDispatchAckWithoutAcce
 		ProjectRoot: "/tmp/MyProject",
 	}
 	client := NewClient(connection, "3.0.0-beta.6")
-	client.acceptTimeout = 50 * time.Millisecond
+	// The accept timeout must be wide enough that the accepted ack always arrives
+	// inside it even on a loaded CI machine, while the server delays the final
+	// response well past it to prove accepted requests outlive the accept timeout.
+	client.acceptTimeout = 250 * time.Millisecond
 
 	outcome, err := client.SendWithProgressOutcome(context.Background(), "execute-dynamic-code", map[string]any{}, nil)
 	if err != nil {
