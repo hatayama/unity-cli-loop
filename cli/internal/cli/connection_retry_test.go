@@ -236,7 +236,10 @@ func TestSendWithTransientConnectionRetryDoesNotCancelAcceptedRequestAtRetryTime
 	}
 
 	originalTimeout := serverConnectionRetryTimeout
-	serverConnectionRetryTimeout = 20 * time.Millisecond
+	// The retry window must be wide enough that the dial plus accepted ack always
+	// completes inside it even on a loaded CI machine, while the server delay stays
+	// well past the window so the timeout reliably fires mid-request.
+	serverConnectionRetryTimeout = 200 * time.Millisecond
 	t.Cleanup(func() {
 		serverConnectionRetryTimeout = originalTimeout
 	})
@@ -271,7 +274,7 @@ func TestSendWithTransientConnectionRetryDoesNotCancelAcceptedRequestAtRetryTime
 			return
 		}
 
-		time.Sleep(60 * time.Millisecond)
+		time.Sleep(600 * time.Millisecond)
 
 		final := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
 		if err := unityipc.Write(conn, final); err != nil {
@@ -315,7 +318,10 @@ func TestSendWithTransientConnectionRetryKeepsRetryTimeoutBeforeAcceptedAck(t *t
 	}
 
 	originalTimeout := serverConnectionRetryTimeout
-	serverConnectionRetryTimeout = 20 * time.Millisecond
+	// The retry window must be wide enough that the dial and request write always
+	// complete inside it even on a loaded CI machine, while the server delay stays
+	// well past the window so the pre-accept timeout reliably fires first.
+	serverConnectionRetryTimeout = 200 * time.Millisecond
 	t.Cleanup(func() {
 		serverConnectionRetryTimeout = originalTimeout
 	})
@@ -344,7 +350,7 @@ func TestSendWithTransientConnectionRetryKeepsRetryTimeoutBeforeAcceptedAck(t *t
 			return
 		}
 
-		time.Sleep(60 * time.Millisecond)
+		time.Sleep(600 * time.Millisecond)
 
 		final := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
 		if err := unityipc.Write(conn, final); err != nil {
@@ -446,11 +452,26 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
 
+	originalFinder := findRunningUnityProcessForConnectionRetry
 	originalTimeout := serverConnectionRetryTimeout
 	originalPoll := serverConnectionRetryPoll
-	serverConnectionRetryTimeout = 30 * time.Millisecond
+	// The busy assertion only holds once at least one busy response lands inside the
+	// retry window. A narrow window can expire before the first dial completes on a
+	// loaded CI machine, surfacing a dial timeout instead of the busy RPC error.
+	serverConnectionRetryTimeout = 500 * time.Millisecond
 	serverConnectionRetryPoll = 5 * time.Millisecond
+	// A dial cut short by the expiring window probes for a running Unity process.
+	// The dial deadline is a separate timer that can fire microseconds before
+	// retryContext reports expiry, so an instant probe would reach the busy-masking
+	// guard while retryContext.Err() is still nil and surface the dial error instead.
+	// Block until the context is done, like a real OS process scan that always
+	// outlasts those microseconds, so the busy guard sees the expired context.
+	findRunningUnityProcessForConnectionRetry = func(ctx context.Context, projectRoot string) (*unityProcess, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	t.Cleanup(func() {
+		findRunningUnityProcessForConnectionRetry = originalFinder
 		serverConnectionRetryTimeout = originalTimeout
 		serverConnectionRetryPoll = originalPoll
 	})
