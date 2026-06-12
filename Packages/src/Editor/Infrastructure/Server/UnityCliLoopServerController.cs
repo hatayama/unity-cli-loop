@@ -210,9 +210,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             scheduledRecoveryCompletionSource.SetResult(true);
         }
 
-        public async void StartServer()
+        public void StartServer()
         {
-            await StartServerWithUseCaseAsync();
+            // Why: an async void body lets exceptions (e.g. a readiness probe failure thrown by
+            // MarkServerReadyAsync) escape to the Unity synchronization context as unhandled.
+            // Forget() observes the task and logs the exception instead.
+            StartServerWithUseCaseAsync().Forget();
         }
 
         /// <summary>
@@ -265,9 +268,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// Stops the server.
         /// </summary>
-        public async void StopServer()
+        public void StopServer()
         {
-            await StopServerWithUseCaseAsync();
+            // Why: same as StartServer — Forget() keeps shutdown failures observed and logged
+            // instead of crashing through an async void boundary.
+            StopServerWithUseCaseAsync().Forget();
         }
 
         /// <summary>
