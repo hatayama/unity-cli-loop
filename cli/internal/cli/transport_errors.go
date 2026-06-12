@@ -36,14 +36,18 @@ func isTransportDisconnectError(err error) bool {
 		strings.Contains(message, "use of closed network connection")
 }
 
-// Reports whether the error is a connection deadline expiry. os.IsTimeout covers
-// net.Error implementations (including go-winio's pipe timeout) that the typed
-// deadline check alone would miss.
+// Reports whether the error is a connection deadline expiry. The Timeout() probe
+// runs through the unwrap chain because go-winio's named pipe deadline error is not
+// os.ErrDeadlineExceeded and os.IsTimeout does not unwrap fmt.Errorf("%w") wrapping.
 func isFinalResponseTimeoutError(err error) bool {
 	if err == nil {
 		return false
 	}
 	if errors.Is(err, os.ErrDeadlineExceeded) || os.IsTimeout(err) {
+		return true
+	}
+	var timeoutCause interface{ Timeout() bool }
+	if errors.As(err, &timeoutCause) && timeoutCause.Timeout() {
 		return true
 	}
 

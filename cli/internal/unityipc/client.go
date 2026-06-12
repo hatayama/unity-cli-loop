@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -229,7 +230,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 				if ctx.Err() != nil {
 					return outcome, ctx.Err()
 				}
-				if heartbeatSilence > 0 && os.IsTimeout(err) && time.Now().Before(absoluteDeadline) {
+				if heartbeatSilence > 0 && isDeadlineExpiry(err) && time.Now().Before(absoluteDeadline) {
 					return outcome, fmt.Errorf(
 						"no response or heartbeat from Unity for %s; the connection or server stalled: %w",
 						heartbeatSilence, err)
@@ -321,6 +322,17 @@ func (client *Client) getMainThreadStallLimit() time.Duration {
 		return client.mainThreadStallLimit
 	}
 	return defaultMainThreadStallLimit
+}
+
+// Reports whether the error is a connection deadline expiry. go-winio's named pipe
+// deadline error is not os.ErrDeadlineExceeded, so a Timeout() probe through the
+// unwrap chain is required for Windows.
+func isDeadlineExpiry(err error) bool {
+	if errors.Is(err, os.ErrDeadlineExceeded) || os.IsTimeout(err) {
+		return true
+	}
+	var timeoutCause interface{ Timeout() bool }
+	return errors.As(err, &timeoutCause) && timeoutCause.Timeout()
 }
 
 // Sets the connection deadline to the sliding heartbeat-silence window, capped by the

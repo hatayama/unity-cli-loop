@@ -97,3 +97,12 @@ func TestIsFinalResponseTimeoutErrorMatchesTypedCauses(t *testing.T) {
 		t.Fatal("unrelated error was classified as timeout")
 	}
 }
+
+// Verifies that a Timeout()-reporting error stays classified even when wrapped, which
+// is how go-winio's named pipe deadline error reaches the caller on Windows.
+func TestIsFinalResponseTimeoutErrorUnwrapsTimeoutCauses(t *testing.T) {
+	wrapped := opaqueCauseError{cause: timeoutOnlyError{}}
+	if !isFinalResponseTimeoutError(wrapped) {
+		t.Fatal("wrapped Timeout()-reporting error was not classified as timeout")
+	}
+}
