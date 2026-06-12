@@ -18,14 +18,16 @@ namespace io.github.hatayama.uLoopMCP
             List<RaycastResult> results = new List<RaycastResult>();
             eventSystem.RaycastAll(pointerData, results);
 
-            RaycastResult? overlayHit = RaycastCanvasSpace(screenPosition);
-
             if (results.Count > 0)
             {
                 RaycastResult firstHit = results[0];
-                if (overlayHit != null && !IsGraphicRaycast(firstHit))
+                if (!IsGraphicRaycast(firstHit))
                 {
-                    return overlayHit;
+                    RaycastResult? overlayHit = RaycastCanvasSpace(screenPosition);
+                    if (overlayHit != null)
+                    {
+                        return overlayHit;
+                    }
                 }
 
                 return firstHit;
@@ -33,7 +35,7 @@ namespace io.github.hatayama.uLoopMCP
 
             // EventSystem clips at Screen.width/height, which can be smaller than the
             // Canvas layout space (Game view target resolution). Fall back to manual hit testing.
-            return overlayHit;
+            return RaycastCanvasSpace(screenPosition);
         }
 
         // Bypass EventSystem's Screen-bounds clipping by directly testing Graphic rects in Canvas space.
