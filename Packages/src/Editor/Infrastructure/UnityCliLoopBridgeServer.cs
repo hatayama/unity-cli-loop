@@ -119,11 +119,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public bool IsRunning => _isRunning;
         
         public string Endpoint => _transportListener?.Endpoint.DisplayName() ?? string.Empty;
-        
-        /// <summary>
-        /// Event on error.
-        /// </summary>
-        public event Action<string> OnError;
 
         public void StartServer()
         {
@@ -164,15 +159,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
             {
                 _isRunning = false;
-                string errorMessage = $"Project IPC endpoint is already in use: {endpoint.DisplayName()}";
-                OnError?.Invoke(errorMessage);
-                throw new InvalidOperationException(errorMessage, ex);
+                throw new InvalidOperationException(
+                    $"Project IPC endpoint is already in use: {endpoint.DisplayName()}", ex);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 _isRunning = false;
-                string errorMessage = $"Failed to start Unity CLI bridge: {ex.Message}";
-                OnError?.Invoke(errorMessage);
                 throw;
             }
         }
@@ -291,7 +283,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
                 catch (Exception ex)
                 {
-                    OnError?.Invoke($"Error disconnecting client {client.Key}: {ex.Message}");
+                    VibeLogger.LogWarning(
+                        "client_disconnect_failed",
+                        $"Error disconnecting client {client.Key}: {ex.Message}");
                     clientsToRemove.Add(client.Key); // Remove even if disconnect failed
                 }
             }
@@ -369,17 +363,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         // Log and re-throw ThreadAbortException
                         if (!DomainReloadStateRegistry.IsDomainReloadInProgress())
                         {
-                            OnError?.Invoke($"Unexpected thread abort: {ex.Message}");
+                            VibeLogger.LogWarning(
+                                "server_loop_thread_abort",
+                                $"Unexpected thread abort: {ex.Message}");
                         }
                         throw;
                     }
                     catch (Exception ex)
                     {
-                        if (!cancellationToken.IsCancellationRequested)
+                        if (cancellationToken.IsCancellationRequested)
                         {
-                            string errorMessage = $"Server loop error: {ex.Message}";
-                            OnError?.Invoke(errorMessage);
+                            break;
                         }
+
+                        // Why: continuing here would retry a failing accept in a tight loop
+                        // (silently pinning a CPU core, as the Mono PipeSecurity regression showed).
+                        // Exiting the loop hands the failure to the recovery path, which retries
+                        // with bounded backoff. Debug.LogError is required for visibility because
+                        // VibeLogger is compiled out unless ULOOP_DEBUG is defined.
+                        Debug.LogError(
+                            $"[{UnityCliLoopConstants.PROJECT_NAME}] Server accept loop failed; restarting the IPC server. {ex}");
+                        VibeLogger.LogError(
+                            "server_accept_loop_failed",
+                            ex.Message,
+                            new { exceptionType = ex.GetType().Name });
+                        break;
                     }
                 }
             }
@@ -413,7 +421,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     _clientTasks.TryRemove(taskId, out _);
                     if (task.IsFaulted && task.Exception != null)
                     {
-                        OnError?.Invoke(task.Exception.GetBaseException().Message);
+                        // HandleClientAsync catches expected failures itself, so a faulted task is
+                        // an anomaly worth surfacing in the console for non-debug installs.
+                        Debug.LogError(
+                            $"[{UnityCliLoopConstants.PROJECT_NAME}] Client handler task faulted: {task.Exception.GetBaseException()}");
                     }
                 },
                 CancellationToken.None,
@@ -437,7 +448,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // Log and re-throw ThreadAbortException
                 if (!DomainReloadStateRegistry.IsDomainReloadInProgress())
                 {
-                    OnError?.Invoke($"Unexpected thread abort: {ex.Message}");
+                    VibeLogger.LogWarning(
+                        "accept_thread_abort",
+                        $"Unexpected thread abort: {ex.Message}");
                 }
                 throw;
             }
@@ -536,7 +549,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             catch (Exception ex)
             {
-                OnError?.Invoke(ex.Message);
+                // Expected failures (cancellation, reload aborts, normal disconnects) are filtered
+                // above, so anything reaching here means a CLI session died abnormally and the
+                // console must say so even on installs where VibeLogger is compiled out.
+                Debug.LogError(
+                    $"[{UnityCliLoopConstants.PROJECT_NAME}] Client session for {clientKey} failed: {ex}");
             }
             finally
             {
@@ -548,7 +565,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
                 catch (Exception ex)
                 {
-                    OnError?.Invoke($"Error during client disposal: {ex.Message}");
+                    VibeLogger.LogWarning(
+                        "client_dispose_failed",
+                        $"Error during client disposal: {ex.Message}");
                 }
                 
                 _clientStreams.TryRemove(clientKey, out _);
