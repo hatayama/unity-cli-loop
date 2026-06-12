@@ -69,4 +69,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => listener.AcceptClient(CancellationToken.None));
         }
     }
+
+    /// <summary>
+    /// Test fixture that verifies the Windows named pipe listener's stopped-state behavior.
+    /// These paths run before any pipe is created, so they are platform-independent.
+    /// </summary>
+    public class WindowsNamedPipeBridgeTransportListenerTests
+    {
+        [Test]
+        public void Stop_WhenCalledTwice_DoesNotThrow()
+        {
+            // Tests that Stop is idempotent: Dispose() also calls Stop, so double stops happen
+            // routinely during shutdown and only one caller may dispose the active pipe.
+            BridgeTransportEndpoint endpoint = BridgeTransportEndpoint.CreateProjectIpc(
+                System.IO.Path.GetTempPath());
+            WindowsNamedPipeBridgeTransportListener listener = new(endpoint);
+            listener.Start();
+
+            listener.Stop();
+            Assert.DoesNotThrow(() => listener.Stop());
+        }
+
+        [Test]
+        public void AcceptClient_AfterStop_ThrowsObjectDisposedException()
+        {
+            // Tests that a stopped listener refuses to accept instead of creating a fresh
+            // pipe nobody can wake, so the server loop exits and recovers.
+            BridgeTransportEndpoint endpoint = BridgeTransportEndpoint.CreateProjectIpc(
+                System.IO.Path.GetTempPath());
+            WindowsNamedPipeBridgeTransportListener listener = new(endpoint);
+            listener.Start();
+            listener.Stop();
+
+            Assert.Throws<ObjectDisposedException>(
+                () => listener.AcceptClient(CancellationToken.None));
+        }
+    }
 }

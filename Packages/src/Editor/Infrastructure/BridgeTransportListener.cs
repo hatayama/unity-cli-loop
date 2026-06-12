@@ -180,6 +180,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private NamedPipeServerStream _activePipe;
         private long _nextClientId;
+        // Why: without a stopped state, an accept racing with Stop could create a fresh
+        // pipe that nobody can wake, leaving the accept loop blocked forever.
+        private volatile bool _stopped;
 
         public BridgeTransportEndpoint Endpoint { get; }
 
@@ -195,6 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public BridgeClientConnection AcceptClient(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
+            ThrowIfStopped();
             NamedPipeServerStream pipe = new(
                 Endpoint.PipeName,
                 PipeDirection.InOut,
@@ -202,7 +206,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous);
             _activePipe = pipe;
-            using CancellationTokenRegistration cancellationRegistration = ct.Register(DisposeActivePipe);
+            // Why: Stop may have run between the stopped check and the assignment above;
+            // re-checking after publishing the pipe guarantees one side disposes it.
+            if (_stopped)
+            {
+                Interlocked.Exchange(ref _activePipe, null)?.Dispose();
+                ThrowIfStopped();
+            }
+
+            using CancellationTokenRegistration cancellationRegistration = ct.Register(Stop);
             bool connected = false;
             try
             {
@@ -225,10 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             finally
             {
-                if (ReferenceEquals(_activePipe, pipe))
-                {
-                    _activePipe = null;
-                }
+                Interlocked.CompareExchange(ref _activePipe, null, pipe);
 
                 if (!connected)
                 {
@@ -239,8 +248,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public void Stop()
         {
-            _activePipe?.Dispose();
-            _activePipe = null;
+            // Why: Stop races between the accept-loop cancellation registration, StopServer
+            // on the main thread, and unexpected-exit cleanup on the thread pool; Interlocked
+            // hands the pipe to exactly one caller so Dispose runs once.
+            _stopped = true;
+            NamedPipeServerStream pipe = Interlocked.Exchange(ref _activePipe, null);
+            pipe?.Dispose();
         }
 
         public void Dispose()
@@ -248,9 +261,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Stop();
         }
 
-        private void DisposeActivePipe()
+        private void ThrowIfStopped()
         {
-            _activePipe?.Dispose();
+            if (_stopped)
+            {
+                // Surface as disposal so ServerLoopAsync exits the accept loop and triggers
+                // recovery instead of re-listening on a stopped listener.
+                throw new ObjectDisposedException(nameof(WindowsNamedPipeBridgeTransportListener));
+            }
         }
     }
 }
