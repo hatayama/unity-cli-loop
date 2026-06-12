@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.IO.Pipes;
 using System.Net.Sockets;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Threading;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -204,7 +206,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 PipeDirection.InOut,
                 NamedPipeServerStream.MaxAllowedServerInstances,
                 PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous);
+                PipeOptions.Asynchronous,
+                inBufferSize: 0,
+                outBufferSize: 0,
+                CreateCurrentUserPipeSecurity());
             _activePipe = pipe;
             // Why: Stop may have run between the stopped check and the assignment above;
             // re-checking after publishing the pipe guarantees one side disposes it.
@@ -269,6 +274,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // recovery instead of re-listening on a stopped listener.
                 throw new ObjectDisposedException(nameof(WindowsNamedPipeBridgeTransportListener));
             }
+        }
+
+        // Why: a named pipe created without an explicit ACL inherits a default security descriptor
+        // that lets any local user open the pipe. Because any connected client can invoke
+        // execute-dynamic-code (arbitrary C# inside this Editor process), the pipe must be reachable
+        // only by the user who owns this Editor. Granting FullControl to the current user's SID alone
+        // denies every other local principal, including other interactive/RDP users on a shared host.
+        private static PipeSecurity CreateCurrentUserPipeSecurity()
+        {
+            SecurityIdentifier currentUser = WindowsIdentity.GetCurrent().User;
+            System.Diagnostics.Debug.Assert(currentUser != null, "current Windows user SID must be resolvable");
+
+            PipeSecurity pipeSecurity = new();
+            pipeSecurity.AddAccessRule(new PipeAccessRule(
+                currentUser,
+                PipeAccessRights.FullControl,
+                AccessControlType.Allow));
+            return pipeSecurity;
         }
     }
 }
