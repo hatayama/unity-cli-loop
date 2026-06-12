@@ -1,5 +1,5 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 import {
   resolvePortFromUnitySettings,
@@ -56,8 +56,11 @@ describe('resolvePortFromUnitySettings', () => {
 
 describe('validateProjectPath', () => {
   it('throws when path does not exist', () => {
-    expect(() => validateProjectPath('/nonexistent/path/to/project')).toThrow(
-      'Path does not exist: /nonexistent/path/to/project',
+    // validateProjectPath resolves its argument, so the expected message must use
+    // the resolved form ('/nonexistent/...' becomes 'C:\\nonexistent\\...' on Windows)
+    const missingPath = '/nonexistent/path/to/project';
+    expect(() => validateProjectPath(missingPath)).toThrow(
+      `Path does not exist: ${resolve(missingPath)}`,
     );
   });
 

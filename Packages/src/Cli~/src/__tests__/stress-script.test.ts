@@ -90,7 +90,11 @@ describe('uloop compile/get-logs stress script', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('fails within the configured ready timeout when a readiness probe hangs', async () => {
+  // The stress script and its fake uloop shim are POSIX sh programs launched via
+  // shebang, which Windows cannot execute directly — skip there, CI runs on Linux
+  const itOnPosix = process.platform === 'win32' ? it.skip : it;
+
+  itOnPosix('fails within the configured ready timeout when a readiness probe hangs', async () => {
     const result = await runStressScript([tempDir]);
 
     expect(result.signal).toBeNull();
