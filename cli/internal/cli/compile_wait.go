@@ -111,6 +111,8 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 
 	logCompileStatusPollStart(options, startedAt, deadline)
 
+	ticker := time.NewTicker(options.pollInterval)
+	defer ticker.Stop()
 	for {
 		now := time.Now()
 		if !now.Before(deadline) {
@@ -134,7 +136,7 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 		case <-ctx.Done():
 			logCompileWaitCancelled(options, startedAt, attempts, lastStatus, lastErr, ctx.Err())
 			return nil, false, ctx.Err()
-		case <-time.After(options.pollInterval):
+		case <-ticker.C:
 		}
 	}
 
