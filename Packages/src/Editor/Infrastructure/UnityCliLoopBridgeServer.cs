@@ -485,9 +485,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                             await ProcessRequestFrameAsync(client, stream, requestJson, cancellationToken);
                         }
                         
-                        // Validate reassembler state and clear if needed
+                        // Why: false means the reassembler was disposed and can no longer make
+                        // progress; closing the connection lets the CLI observe the disconnect
+                        // immediately instead of waiting silently for its own timeout.
+                        // (Corrupted framing state throws from ValidateState and is handled below.)
                         if (!messageReassembler.ValidateState())
                         {
+                            break;
                         }
                     }
                 }
