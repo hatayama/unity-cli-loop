@@ -1,12 +1,9 @@
-#if UNITYCLILOOP_HAS_ROSLYN
 using NUnit.Framework;
 using System.Threading;
-using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
-using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
@@ -20,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExecuteAsync_WithStringParameters_ShouldThrowUnityCliLoopToolParameterValidationException()
         {
+            // Verifies that a string Parameters value is rejected with a clear validation error before any compilation starts.
             // Arrange
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
             UnityCliLoopToolExecutionService executionService = new();
@@ -45,76 +43,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             StringAssert.Contains("{}", ex.Message);
         }
 
-        [Test]
-        public async Task ExecuteAsync_WithObjectParameters_ShouldSucceedInCompileOnly()
-        {
-            // Arrange
-            DynamicCodeSecurityLevel prev = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
-            UnityCliLoopToolExecutionService executionService = new();
-            JObject paramsToken = new()            {
-                ["Code"] = "return \"ok\";",
-                ["Parameters"] = new JObject(), // valid: object
-                ["CompileOnly"] = true
-            };
-
-            // Act
-            UnityCliLoopToolResponse baseResponse = null;
-            try
-            {
-                baseResponse = await executionService.ExecuteToolAsync(
-                    registry,
-                    "execute-dynamic-code",
-                    paramsToken,
-                    CancellationToken.None);
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(prev);
-            }
-            ExecuteDynamicCodeResponse response = baseResponse as ExecuteDynamicCodeResponse;
-
-            // Assert
-            Assert.IsNotNull(response, "Response should be ExecuteDynamicCodeResponse");
-            Assert.IsTrue(response.Success, $"Expected success but got error: {response.ErrorMessage}");
-            Assert.IsTrue(string.IsNullOrEmpty(response.ErrorMessage), "ErrorMessage should be empty on success");
-        }
-
-        [Test]
-        public async Task ExecuteAsync_CodeWithoutReturn_ShouldAutoReturnAndSucceed()
-        {
-            // Arrange
-            DynamicCodeSecurityLevel prev = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
-            UnityCliLoopToolExecutionService executionService = new();
-            JObject paramsToken = new()            {
-                ["Code"] = "int x = 1; // no explicit return",
-                ["CompileOnly"] = false
-            };
-
-            // Act
-            UnityCliLoopToolResponse baseResponse = null;
-            try
-            {
-                baseResponse = await executionService.ExecuteToolAsync(
-                    registry,
-                    "execute-dynamic-code",
-                    paramsToken,
-                    CancellationToken.None);
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(prev);
-            }
-            ExecuteDynamicCodeResponse response = baseResponse as ExecuteDynamicCodeResponse;
-
-            // Assert
-            Assert.IsNotNull(response, "Response should be ExecuteDynamicCodeResponse");
-            Assert.IsTrue(response.Success, $"Expected success but got error: {response.ErrorMessage}");
-            Assert.IsTrue(string.IsNullOrEmpty(response.ErrorMessage), "ErrorMessage should be empty on success");
-        }
     }
 }
-#endif

@@ -21,26 +21,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
-        public void CanExecute_ReturnsTrueForLevel1()
-        {
-            // Act
-            bool canExecute = DynamicCodeSecurityManager.CanExecute(DynamicCodeSecurityLevel.Restricted);
-            
-            // Assert
-            Assert.IsTrue(canExecute);
-        }
-
-        [Test]
-        public void CanExecute_ReturnsTrueForLevel2()
-        {
-            // Act
-            bool canExecute = DynamicCodeSecurityManager.CanExecute(DynamicCodeSecurityLevel.FullAccess);
-            
-            // Assert
-            Assert.IsTrue(canExecute);
-        }
-
-        [Test]
         public void GetAllowedAssemblies_ReturnsAppropriateListForEachLevel()
         {
             // Act

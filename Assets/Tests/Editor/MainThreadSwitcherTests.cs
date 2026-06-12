@@ -24,42 +24,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies that when called from a background thread, it can switch back to main thread
-        /// </summary>
-        [UnityTest]
-        public IEnumerator SwitchToMainThread_WhenCalledFromBackgroundThread_ShouldSwitchBackToMainThread()
-        {
-            // Arrange
-            bool executedImmediately = false;
-            int executionThreadId = -1;
-            bool completed = false;
-
-            // Act
-            Task.Run(async () =>
-            {
-                try
-                {
-                    await MainThreadSwitcher.SwitchToMainThread();
-                    executedImmediately = true;
-                    executionThreadId = Thread.CurrentThread.ManagedThreadId;
-                    completed = true;
-                }
-                catch (System.Exception ex)
-                {
-                    UnityEngine.Debug.LogError($"Test failed: {ex.Message}");
-                    completed = true;
-                }
-            });
-
-            // Wait for completion
-            yield return new UnityEngine.WaitUntil(() => completed);
-
-            // Assert
-            Assert.That(executedImmediately, Is.True, "Should execute when called from background thread");
-            Assert.That(executionThreadId, Is.EqualTo(mainThreadId), "Should switch to main thread");
-        }
-
-        /// <summary>
         /// Verifies that when called from a background thread, it switches to the main thread
         /// </summary>
         [UnityTest]
