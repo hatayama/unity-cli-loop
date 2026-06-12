@@ -64,6 +64,33 @@ func TestMinimumVersionWarningSkipsMissingBaseRefBeforeRepositoryResolution(t *t
 	}
 }
 
+// Verifies that release-please release PRs skip the check before any git diff runs.
+func TestMinimumVersionWarningSkipsReleasePleaseHeadBranch(t *testing.T) {
+	t.Setenv("ULOOP_REPOSITORY_ROOT", t.TempDir())
+	t.Setenv("PR_NUMBER", "123")
+	t.Setenv("GITHUB_REPOSITORY", "owner/repository")
+	t.Setenv("GITHUB_BASE_REF", "v3-beta")
+	t.Setenv("GITHUB_HEAD_REF", "release-please--branches--v3-beta")
+	t.Setenv("CLI_MINIMUM_VERSION_BASE_REF", "")
+	t.Setenv("CLI_MINIMUM_VERSION_HEAD_REF", "")
+	t.Setenv("CLI_MINIMUM_VERSION_FAIL_ON_WARNING", "true")
+	t.Setenv("PATH", t.TempDir())
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := RunMinimumVersionWarning(context.Background(), &stdout, &stderr)
+
+	if exitCode != 0 {
+		t.Fatalf("expected release-please head branch to skip with exit code 0, got %d\n%s", exitCode, stderr.String())
+	}
+	if stdout.String() != "Skipping CLI minimum version check because this is a release-please release PR.\n" {
+		t.Fatalf("expected release-please skip message, got %q", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected no stderr on release-please skip, got %q", stderr.String())
+	}
+}
+
 // Verifies that Go CLI source changes require a minimum-version warning.
 func TestMinimumVersionWarningRequiresCommentForGoCliSourceChanges(t *testing.T) {
 	testCases := []struct {

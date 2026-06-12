@@ -26,6 +26,7 @@ type commentScriptOptions struct {
 	Mutation          string
 	BaseRef           string
 	HeadRef           string
+	HeadBranch        string
 	IncludePRNumber   bool
 	FailOnWarning     bool
 	ExpectFailure     bool
@@ -134,6 +135,21 @@ func TestCommentCliMinimumVersionWarningIgnoresUnrelatedChanges(t *testing.T) {
 	assertNotContains(t, result.GitHubLog, "PATCH")
 }
 
+// Verifies that release-please release PRs skip check mode even with Go CLI changes.
+func TestCommentCliMinimumVersionWarningSkipsReleasePleaseBranch(t *testing.T) {
+	result := runCommentScriptCase(t, commentScriptOptions{
+		Mutation:        "go-cli",
+		BaseRef:         "HEAD^",
+		HeadBranch:      "release-please--branches--v3-beta",
+		IncludePRNumber: true,
+		FailOnWarning:   true,
+	})
+
+	assertContains(t, result.Output, "release-please release PR")
+	assertNotContains(t, result.GitHubLog, "POST")
+	assertNotContains(t, result.GitHubLog, "PATCH")
+}
+
 // Verifies that non-PR runs stop before calling GitHub issue APIs.
 func TestCommentCliMinimumVersionWarningSkipsNonPullRequestRuns(t *testing.T) {
 	result := runCommentScriptCase(t, commentScriptOptions{
@@ -190,6 +206,8 @@ func runCommentScript(
 
 	command := exec.Command(filepath.Join(repositoryRoot(t), commentScriptPath))
 	command.Dir = repositoryPath
+	// GITHUB_HEAD_REF is always set explicitly because CI inherits the real PR head
+	// branch into the test process, which would trigger the release-please skip path.
 	command.Env = append(os.Environ(),
 		"PATH="+mockBinPath+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GH_LOG="+gitHubLogPath,
@@ -197,6 +215,7 @@ func runCommentScript(
 		"GH_EXISTING_COMMENT_ID="+options.ExistingCommentID,
 		"ULOOP_REPOSITORY_ROOT="+repositoryPath,
 		"GITHUB_REPOSITORY=hatayama/unity-cli-loop",
+		"GITHUB_HEAD_REF="+options.HeadBranch,
 	)
 	if options.IncludePRNumber {
 		command.Env = append(command.Env, "PR_NUMBER=123")
