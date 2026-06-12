@@ -2,8 +2,6 @@ using System;
 using System.IO;
 using System.IO.Pipes;
 using System.Net.Sockets;
-using System.Security.AccessControl;
-using System.Security.Principal;
 using System.Threading;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -180,11 +178,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal sealed class WindowsNamedPipeBridgeTransportListener : IBridgeTransportListener
     {
+        // Why: closing a non-overlapped pipe handle does not cancel a synchronous
+        // ConnectNamedPipe wait, so Stop must wake a pending accept with a loopback
+        // connection; the short timeout covers the case where no accept is pending.
+        private const int WAKE_PENDING_ACCEPT_CONNECT_TIMEOUT_MS = 250;
+
         private NamedPipeServerStream _activePipe;
         private long _nextClientId;
         // Why: without a stopped state, an accept racing with Stop could create a fresh
         // pipe that nobody can wake, leaving the accept loop blocked forever.
         private volatile bool _stopped;
+        private string _ownerOnlySddl;
 
         public BridgeTransportEndpoint Endpoint { get; }
 
@@ -195,21 +199,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public void Start()
         {
+            // Why: unit tests construct this listener on macOS/Linux where the Windows
+            // token APIs do not exist; production only accepts on the Windows editor.
+            if (UnityEngine.Application.platform != UnityEngine.RuntimePlatform.WindowsEditor)
+            {
+                return;
+            }
+
+            // Resolving the SID here makes a broken security setup fail the bind itself
+            // instead of throwing inside the accept loop on every iteration.
+            _ownerOnlySddl = WindowsOwnerOnlyNamedPipeFactory.BuildCurrentUserOnlySddl();
         }
 
         public BridgeClientConnection AcceptClient(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             ThrowIfStopped();
-            NamedPipeServerStream pipe = new(
-                Endpoint.PipeName,
-                PipeDirection.InOut,
-                NamedPipeServerStream.MaxAllowedServerInstances,
-                PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous,
-                inBufferSize: 0,
-                outBufferSize: 0,
-                CreateCurrentUserPipeSecurity());
+            System.Diagnostics.Debug.Assert(_ownerOnlySddl != null, "Start must resolve the owner-only SDDL before accepting");
+            NamedPipeServerStream pipe = WindowsOwnerOnlyNamedPipeFactory.CreateServer(Endpoint.PipeName, _ownerOnlySddl);
             _activePipe = pipe;
             // Why: Stop may have run between the stopped check and the assignment above;
             // re-checking after publishing the pipe guarantees one side disposes it.
@@ -236,6 +243,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     throw new OperationCanceledException(ct);
                 }
 
+                // Why: Stop wakes a pending accept with a loopback connection, so a wait that
+                // returned after cancellation or stop holds a wake client, not a real CLI session.
+                if (ct.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException(ct);
+                }
+
+                ThrowIfStopped();
+
                 connected = true;
                 string clientEndpoint = $"{Endpoint.Path}#{Interlocked.Increment(ref _nextClientId)}";
                 return new BridgeClientConnection(clientEndpoint, pipe, () => pipe.IsConnected);
@@ -258,7 +274,35 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // hands the pipe to exactly one caller so Dispose runs once.
             _stopped = true;
             NamedPipeServerStream pipe = Interlocked.Exchange(ref _activePipe, null);
-            pipe?.Dispose();
+            if (pipe == null)
+            {
+                return;
+            }
+
+            // Wake before Dispose: a disposed instance can no longer be connected to,
+            // which would leave a blocked synchronous WaitForConnection stuck forever.
+            WakePendingAccept();
+            pipe.Dispose();
+        }
+
+        // Why: closing the pipe handle does not cancel a pending synchronous ConnectNamedPipe
+        // wait, so the only reliable release is a loopback connection. The accept loop discards
+        // the wake connection through its stopped/cancellation checks. A connect failure means
+        // no accept was pending, which leaves nothing to wake or clean up.
+        private void WakePendingAccept()
+        {
+            try
+            {
+                using NamedPipeClientStream wakeClient = new(
+                    ".",
+                    Endpoint.PipeName,
+                    PipeDirection.InOut,
+                    PipeOptions.None);
+                wakeClient.Connect(WAKE_PENDING_ACCEPT_CONNECT_TIMEOUT_MS);
+            }
+            catch (Exception)
+            {
+            }
         }
 
         public void Dispose()
@@ -276,22 +320,5 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        // Why: a named pipe created without an explicit ACL inherits a default security descriptor
-        // that lets any local user open the pipe. Because any connected client can invoke
-        // execute-dynamic-code (arbitrary C# inside this Editor process), the pipe must be reachable
-        // only by the user who owns this Editor. Granting FullControl to the current user's SID alone
-        // denies every other local principal, including other interactive/RDP users on a shared host.
-        private static PipeSecurity CreateCurrentUserPipeSecurity()
-        {
-            SecurityIdentifier currentUser = WindowsIdentity.GetCurrent().User;
-            System.Diagnostics.Debug.Assert(currentUser != null, "current Windows user SID must be resolvable");
-
-            PipeSecurity pipeSecurity = new();
-            pipeSecurity.AddAccessRule(new PipeAccessRule(
-                currentUser,
-                PipeAccessRights.FullControl,
-                AccessControlType.Allow));
-            return pipeSecurity;
-        }
     }
 }
