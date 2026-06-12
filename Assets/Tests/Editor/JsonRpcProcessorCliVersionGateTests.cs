@@ -87,6 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies the single-flight gate is checked before queuing on Unity's main-thread dispatcher.
             CapturingMainThreadDispatcher dispatcher = new();
             MainThreadSwitcher.RegisterService(dispatcher);
+            UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
             UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
@@ -121,8 +122,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
-                Assert.That(data["isPlaying"], Is.Null);
-                Assert.That(data["isPaused"], Is.Null);
+                Assert.That(data["isPlaying"]?.ToObject<bool>(), Is.False);
+                Assert.That(data["isPaused"]?.ToObject<bool>(), Is.False);
                 LogAssert.NoUnexpectedReceived();
             }
             finally
@@ -130,6 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 dispatcher.RunContinuations();
                 await DrainTaskIfNeeded(firstResponseTask);
                 await DrainTaskIfNeeded(secondResponseTask);
+                UnityCliLoopEditorStateSnapshot.ClearForTesting();
                 UnityCliLoopToolRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
@@ -141,6 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies dynamic-code handoff stays inside the dynamic-code scheduler while other tools stay single-flight.
             CapturingMainThreadDispatcher dispatcher = new();
             MainThreadSwitcher.RegisterService(dispatcher);
+            UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
             UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
@@ -186,8 +189,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(data["type"]?.ToString(), Is.EqualTo("server_busy"));
                 Assert.That(data["runningToolName"]?.ToString(), Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
                 Assert.That(data["requestedToolName"]?.ToString(), Is.EqualTo(SingleFlightTestTool.Name));
-                Assert.That(data["isPlaying"], Is.Null);
-                Assert.That(data["isPaused"], Is.Null);
+                Assert.That(data["isPlaying"]?.ToObject<bool>(), Is.False);
+                Assert.That(data["isPaused"]?.ToObject<bool>(), Is.False);
                 LogAssert.NoUnexpectedReceived();
             }
             finally
@@ -196,6 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await DrainTaskIfNeeded(firstDynamicCodeTask);
                 await DrainTaskIfNeeded(secondDynamicCodeTask);
                 await DrainTaskIfNeeded(otherToolTask);
+                UnityCliLoopEditorStateSnapshot.ClearForTesting();
                 UnityCliLoopToolRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }

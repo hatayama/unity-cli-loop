@@ -32,29 +32,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Parameter parsing test for filtered test execution.
-        /// </summary>
-        [Test]
-        public void ParseParameters_ShouldParseCorrectly()
-        {
-            // This test is now obsolete as the new implementation uses type-safe Schema classes
-            // instead of JSON parameter parsing. The parsing is handled by the tool dispatch layer.
-            
-            // Arrange - Test the Schema object directly
-            RunTestsSchema schema = new()
-            {
-                TestMode = UnityCliLoopTestMode.PlayMode,
-                FilterType = TestFilterType.regex,
-                FilterValue = "TestClass"
-            };
-
-            // Assert - Schema properties should match what we set
-            Assert.That(schema.TestMode, Is.EqualTo(UnityCliLoopTestMode.PlayMode));
-            Assert.That(schema.FilterType, Is.EqualTo(TestFilterType.regex));
-            Assert.That(schema.FilterValue, Is.EqualTo("TestClass"));
-        }
-
-        /// <summary>
         /// Default value test with default schema.
         /// </summary>
         [Test]
