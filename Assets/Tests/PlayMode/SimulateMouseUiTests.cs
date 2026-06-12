@@ -1,5 +1,6 @@
 #nullable enable
 using System.Collections;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using io.github.hatayama.uLoopMCP;
 using Newtonsoft.Json.Linq;
@@ -109,6 +110,59 @@ namespace Tests.PlayMode
             Assert.IsTrue(tracker.PointerUpCalled, "PointerUp should be fired");
             Assert.IsTrue(tracker.PointerClickCalled, "PointerClick should be fired");
             Assert.AreEqual("ClickTarget", lastResponse.HitGameObjectName);
+        }
+
+        // Verifies that an overlay UI element clipped out of EventSystem's Screen bounds
+        // (scaled Game view resolution) still wins over a non-GraphicRaycaster hit,
+        // because ScreenSpaceOverlay UI always renders in front of world-space content.
+        [UnityTest]
+        public IEnumerator Click_Should_PreferClippedOverlayUiOverNonUiRaycastHit()
+        {
+            GameObject nonUiRoot = new GameObject("NonUiRaycasterRoot");
+
+            try
+            {
+                GameObject nonUiTarget = new GameObject("NonUiTarget");
+                nonUiTarget.transform.SetParent(nonUiRoot.transform, false);
+                ClickTracker nonUiTracker = nonUiTarget.AddComponent<ClickTracker>();
+                AlwaysHitRaycaster nonUiRaycaster = nonUiRoot.AddComponent<AlwaysHitRaycaster>();
+                nonUiRaycaster.Target = nonUiTarget;
+
+                // Place the UI element beyond Screen.width so GraphicRaycaster clips it
+                // while the Canvas-space hit test still reaches it.
+                Vector2 offscreenOffset = new Vector2(Screen.width, 0f);
+                ClickTracker overlayTracker = CreateClickableElement(
+                    "OffscreenOverlayTarget", offscreenOffset, new Vector2(200f, 100f));
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(overlayTracker.gameObject);
+                PointerEventData pointerData = new PointerEventData(EventSystem.current)
+                {
+                    position = screenPos
+                };
+                List<RaycastResult> raycastResults = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(pointerData, raycastResults);
+
+                Assert.IsNotEmpty(raycastResults, "Setup: the non-UI raycaster should hit.");
+                Assert.IsFalse(raycastResults[0].module is GraphicRaycaster,
+                    "Setup: EventSystem's first hit should not come from a GraphicRaycaster.");
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(overlayTracker.PointerClickCalled, "Overlay UI should receive the click");
+                Assert.IsFalse(nonUiTracker.PointerClickCalled, "Non-UI target behind overlay UI should not receive the click");
+                Assert.AreEqual("OffscreenOverlayTarget", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(nonUiRoot);
+            }
         }
 
         [UnityTest]
@@ -654,6 +708,26 @@ namespace Tests.PlayMode
     }
 
     // Tracks pointer click events for testing
+    // Stands in for a non-UI raycaster (e.g. PhysicsRaycaster) without requiring the
+    // physics modules: always reports a hit on Target, ignoring Screen-bounds clipping.
+    public class AlwaysHitRaycaster : BaseRaycaster
+    {
+        public GameObject Target = null!;
+
+        public override Camera eventCamera => null!;
+
+        public override void Raycast(PointerEventData eventData, List<RaycastResult> resultAppendList)
+        {
+            resultAppendList.Add(new RaycastResult
+            {
+                gameObject = Target,
+                module = this,
+                distance = 0f,
+                screenPosition = eventData.position
+            });
+        }
+    }
+
     public class ClickTracker : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler
     {
         public bool PointerDownCalled { get; private set; }

@@ -20,7 +20,19 @@ namespace io.github.hatayama.uLoopMCP
 
             if (results.Count > 0)
             {
-                return results[0];
+                RaycastResult firstHit = results[0];
+
+                if (firstHit.module is GraphicRaycaster)
+                {
+                    return firstHit;
+                }
+
+                // EventSystem clips GraphicRaycaster hits at Screen.width/height, so a non-UI
+                // raycaster (e.g. PhysicsRaycaster) can win by default even though
+                // ScreenSpaceOverlay UI always renders in front of world-space content.
+                // Prefer the Canvas-space UI hit when one exists at this position.
+                RaycastResult? canvasSpaceHit = RaycastCanvasSpace(screenPosition);
+                return canvasSpaceHit ?? firstHit;
             }
 
             // EventSystem clips at Screen.width/height, which can be smaller than the
