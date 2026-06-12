@@ -115,10 +115,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             ct.ThrowIfCancellationRequested();
             using CancellationTokenRegistration cancellationRegistration = ct.Register(Stop);
+            Socket listener = _listener;
+            if (listener == null)
+            {
+                // Why: a stopped listener must surface as disposal so ServerLoopAsync exits the
+                // accept loop and triggers recovery, instead of spinning on NullReferenceException.
+                throw new ObjectDisposedException(nameof(UnixDomainSocketBridgeTransportListener));
+            }
+
             Socket client;
             try
             {
-                client = _listener.Accept();
+                client = listener.Accept();
             }
             catch (ObjectDisposedException) when (ct.IsCancellationRequested)
             {
@@ -138,8 +146,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public void Stop()
         {
-            _listener?.Close();
-            _listener = null;
+            // Why: Stop races between the accept-loop cancellation registration, StopServer on
+            // the main thread, and unexpected-exit cleanup on the thread pool. Interlocked hands
+            // the socket to exactly one caller so Close and the socket-file delete run once.
+            Socket listener = Interlocked.Exchange(ref _listener, null);
+            if (listener == null)
+            {
+                return;
+            }
+
+            listener.Close();
             if (File.Exists(Endpoint.Path))
             {
                 File.Delete(Endpoint.Path);
