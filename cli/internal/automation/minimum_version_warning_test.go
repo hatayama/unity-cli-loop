@@ -45,6 +45,9 @@ func TestMinimumVersionWarningSkipsMissingBaseRefBeforeRepositoryResolution(t *t
 	t.Setenv("PR_NUMBER", "123")
 	t.Setenv("GITHUB_REPOSITORY", "")
 	t.Setenv("GITHUB_BASE_REF", "")
+	// CI sets the real PR head branch for every step; clear it so the
+	// release-please skip cannot fire before the base-ref skip under test.
+	t.Setenv("GITHUB_HEAD_REF", "")
 	t.Setenv("CLI_MINIMUM_VERSION_BASE_REF", "")
 	t.Setenv("CLI_MINIMUM_VERSION_HEAD_REF", "")
 	t.Setenv("PATH", t.TempDir())
