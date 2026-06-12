@@ -739,7 +739,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return;
                 }
 
-                await Task.Delay(ClientDisconnectMonitorPollMilliseconds);
+                try
+                {
+                    await Task.Delay(ClientDisconnectMonitorPollMilliseconds, requestCancellationTokenSource.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancellation is the normal stop signal from StopClientDisconnectMonitorAsync.
+                    // Without the token the delay always ran to completion, adding one poll
+                    // interval of tail latency to every request teardown and server shutdown.
+                    return;
+                }
             }
         }
 

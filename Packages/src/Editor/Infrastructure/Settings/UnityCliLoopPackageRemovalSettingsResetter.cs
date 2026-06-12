@@ -38,6 +38,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
+            // Unsubscribe first so a repeated registration cannot stack duplicate handlers,
+            // matching the guard pattern used by the other editor-lifetime subscriptions.
+            Events.registeringPackages -= HandleRegisteringPackages;
             Events.registeringPackages += HandleRegisteringPackages;
         }
 
