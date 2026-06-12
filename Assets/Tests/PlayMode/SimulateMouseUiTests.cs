@@ -166,6 +166,49 @@ namespace Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Click_Should_PreferHigherSortingOrderOverlayCanvasOverLowerOrderMask()
+        {
+            canvasGo.GetComponent<Canvas>().sortingOrder = 0;
+            GameObject mask = CreateUIElement("StencilMaskedLayer", Vector2.zero, new Vector2(2000f, 2000f));
+            mask.AddComponent<Image>();
+            ClickTracker maskTracker = mask.AddComponent<ClickTracker>();
+
+            GameObject modalCanvasGo = new GameObject("ModalCanvas");
+
+            try
+            {
+                Canvas modalCanvas = modalCanvasGo.AddComponent<Canvas>();
+                modalCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                modalCanvas.overrideSorting = true;
+                modalCanvas.sortingOrder = 100;
+                modalCanvasGo.AddComponent<CanvasScaler>();
+                modalCanvasGo.AddComponent<GraphicRaycaster>();
+
+                ClickTracker modalTracker = CreateChildClickableElement(
+                    "GoldButton", modalCanvasGo.transform, Vector2.zero, new Vector2(200f, 100f));
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(modalTracker.gameObject);
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(modalTracker.PointerClickCalled, "Higher sorting-order modal UI should receive the click");
+                Assert.IsFalse(maskTracker.PointerClickCalled, "Lower sorting-order mask should not receive the click");
+                Assert.AreEqual("GoldButton", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(modalCanvasGo);
+            }
+        }
+
+        [UnityTest]
         public IEnumerator Click_WithBypassRaycast_Should_UseTargetPathWhenNamesDuplicate()
         {
             GameObject firstPanel = CreateUIElement("FirstPanel", new Vector2(-120f, 0f), new Vector2(240f, 160f));

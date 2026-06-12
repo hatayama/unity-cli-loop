@@ -17,17 +17,15 @@ namespace io.github.hatayama.uLoopMCP
             };
             List<RaycastResult> results = new List<RaycastResult>();
             eventSystem.RaycastAll(pointerData, results);
+            RaycastResult? canvasSpaceHit = RaycastCanvasSpace(screenPosition);
 
             if (results.Count > 0)
             {
                 RaycastResult firstHit = results[0];
-                if (!IsGraphicRaycast(firstHit))
+
+                if (canvasSpaceHit != null && ShouldPreferCanvasSpaceHit(canvasSpaceHit.Value, firstHit))
                 {
-                    RaycastResult? overlayHit = RaycastCanvasSpace(screenPosition);
-                    if (overlayHit != null)
-                    {
-                        return overlayHit;
-                    }
+                    return canvasSpaceHit;
                 }
 
                 return firstHit;
@@ -35,7 +33,7 @@ namespace io.github.hatayama.uLoopMCP
 
             // EventSystem clips at Screen.width/height, which can be smaller than the
             // Canvas layout space (Game view target resolution). Fall back to manual hit testing.
-            return RaycastCanvasSpace(screenPosition);
+            return canvasSpaceHit;
         }
 
         // Bypass EventSystem's Screen-bounds clipping by directly testing Graphic rects in Canvas space.
@@ -43,9 +41,7 @@ namespace io.github.hatayama.uLoopMCP
         public static RaycastResult? RaycastCanvasSpace(Vector2 canvasPosition)
         {
             Canvas[] canvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
-            Graphic? bestHit = null;
-            int bestSortingOrder = int.MinValue;
-            int bestDepth = -1;
+            RaycastResult? bestHit = null;
 
             foreach (Canvas canvas in canvases)
             {
@@ -73,28 +69,23 @@ namespace io.github.hatayama.uLoopMCP
                         continue;
                     }
 
-                    int sortingOrder = canvas.sortingOrder;
-
-                    if (sortingOrder > bestSortingOrder ||
-                        (sortingOrder == bestSortingOrder && graphic.depth > bestDepth))
+                    RaycastResult candidate = new RaycastResult
                     {
-                        bestHit = graphic;
-                        bestSortingOrder = sortingOrder;
-                        bestDepth = graphic.depth;
+                        gameObject = graphic.gameObject,
+                        module = raycaster,
+                        sortingLayer = canvas.sortingLayerID,
+                        sortingOrder = canvas.sortingOrder,
+                        depth = graphic.depth
+                    };
+
+                    if (bestHit == null || CompareRaycastPriority(candidate, bestHit.Value) > 0)
+                    {
+                        bestHit = candidate;
                     }
                 }
             }
 
-            if (bestHit == null)
-            {
-                return null;
-            }
-
-            return new RaycastResult
-            {
-                gameObject = bestHit.gameObject,
-                sortingOrder = bestSortingOrder
-            };
+            return bestHit;
         }
 
         // Respects CanvasGroup.blocksRaycasts, Mask, RectMask2D, and custom ICanvasRaycastFilter
@@ -122,6 +113,86 @@ namespace io.github.hatayama.uLoopMCP
         private static bool IsGraphicRaycast(RaycastResult raycastResult)
         {
             return raycastResult.module is GraphicRaycaster;
+        }
+
+        private static bool ShouldPreferCanvasSpaceHit(RaycastResult canvasSpaceHit, RaycastResult eventSystemHit)
+        {
+            if (!IsGraphicRaycast(canvasSpaceHit))
+            {
+                return false;
+            }
+
+            if (!IsGraphicRaycast(eventSystemHit))
+            {
+                return true;
+            }
+
+            return CompareRaycastPriority(canvasSpaceHit, eventSystemHit) > 0;
+        }
+
+        private static int CompareRaycastPriority(RaycastResult left, RaycastResult right)
+        {
+            int sortOrderPriority = Compare(
+                GetSortOrderPriority(left),
+                GetSortOrderPriority(right));
+            if (sortOrderPriority != 0)
+            {
+                return sortOrderPriority;
+            }
+
+            int renderOrderPriority = Compare(
+                GetRenderOrderPriority(left),
+                GetRenderOrderPriority(right));
+            if (renderOrderPriority != 0)
+            {
+                return renderOrderPriority;
+            }
+
+            int sortingLayer = Compare(
+                GetSortingLayerValue(left),
+                GetSortingLayerValue(right));
+            if (sortingLayer != 0)
+            {
+                return sortingLayer;
+            }
+
+            int sortingOrder = Compare(left.sortingOrder, right.sortingOrder);
+            if (sortingOrder != 0)
+            {
+                return sortingOrder;
+            }
+
+            return Compare(left.depth, right.depth);
+        }
+
+        private static int GetSortOrderPriority(RaycastResult result)
+        {
+            return result.module != null ? result.module.sortOrderPriority : 0;
+        }
+
+        private static int GetRenderOrderPriority(RaycastResult result)
+        {
+            return result.module != null ? result.module.renderOrderPriority : 0;
+        }
+
+        private static int GetSortingLayerValue(RaycastResult result)
+        {
+            return SortingLayer.GetLayerValueFromID(result.sortingLayer);
+        }
+
+        private static int Compare(int left, int right)
+        {
+            if (left > right)
+            {
+                return 1;
+            }
+
+            if (left < right)
+            {
+                return -1;
+            }
+
+            return 0;
         }
     }
 }
