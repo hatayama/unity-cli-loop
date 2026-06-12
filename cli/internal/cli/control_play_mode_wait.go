@@ -134,6 +134,8 @@ func waitForControlPlayModeState(
 	lastResponse := controlPlayModeResponse{}
 	var lastErr error
 	hasResponse := false
+	ticker := time.NewTicker(controlPlayModeStatePoll)
+	defer ticker.Stop()
 	for {
 		response, err := requestControlPlayModeStatus(waitContext, connection)
 		if err == nil {
@@ -158,7 +160,7 @@ func waitForControlPlayModeState(
 				return lastResponse, false, fmt.Errorf("timed out waiting for play mode state: %w", lastErr)
 			}
 			return lastResponse, false, fmt.Errorf("timed out waiting for play mode state")
-		case <-time.After(controlPlayModeStatePoll):
+		case <-ticker.C:
 		}
 	}
 }

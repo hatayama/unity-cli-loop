@@ -33,6 +33,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const string WaitForDomainReloadParamName = "WaitForDomainReload";
 
+        // Shared by every response path; JsonConvert only reads the settings, so a single
+        // instance avoids allocating identical settings per response.
+        private static readonly JsonSerializerSettings ResponseSerializerSettings = new()
+        {
+            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+            MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
+        };
+
         internal delegate Task JsonRpcEarlyResponseWriter(
             string responseJson,
             bool cancelOnClientDisconnect,
@@ -297,13 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         $"{CliConstants.EXECUTABLE_NAME} update",
                         $"{CliConstants.EXECUTABLE_NAME} update --to-version {requiredCliVersion}")));
 
-            JsonSerializerSettings settings = new()
-            {
-                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
-            };
-
-            return JsonConvert.SerializeObject(errorResponse, Formatting.None, settings);
+            return JsonConvert.SerializeObject(errorResponse, Formatting.None, ResponseSerializerSettings);
         }
 
         internal static string CreateDispatchAcceptedResponse(object id, int heartbeatIntervalSeconds)
@@ -333,13 +335,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 uloop = uloopMetadata
             };
 
-            JsonSerializerSettings settings = new()
-            {
-                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
-            };
-
-            return JsonConvert.SerializeObject(response, Formatting.None, settings);
+            return JsonConvert.SerializeObject(response, Formatting.None, ResponseSerializerSettings);
         }
 
         internal static string CreateHeartbeatResponse(object id, double mainThreadStallSeconds)
@@ -359,13 +355,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             };
 
-            JsonSerializerSettings settings = new()
-            {
-                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
-            };
-
-            return JsonConvert.SerializeObject(response, Formatting.None, settings);
+            return JsonConvert.SerializeObject(response, Formatting.None, ResponseSerializerSettings);
         }
 
         private static void AppendTimingIfRequested(UnityCliLoopToolResponse result, string timing)
@@ -396,12 +386,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <param name="result">Command execution result</param>
         private static string CreateSuccessResponse(object id, UnityCliLoopToolResponse result)
         {
-            JsonSerializerSettings settings = new()
-            {
-                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
-            };
-            
             try
             {
                 JsonRpcSuccessResponse response = new(
@@ -409,7 +393,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     id,
                     result
                 );
-                return JsonConvert.SerializeObject(response, Formatting.None, settings);
+                return JsonConvert.SerializeObject(response, Formatting.None, ResponseSerializerSettings);
             }
             catch (Exception)
             {
@@ -467,14 +451,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 id,
                 new JsonRpcError(UnityCliLoopServerConfig.INTERNAL_ERROR_CODE, errorMessage, errorData)
             );
-            
-            JsonSerializerSettings settings = new()
-            {
-                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
-            };
-            
-            return JsonConvert.SerializeObject(errorResponse, Formatting.None, settings);
+
+            return JsonConvert.SerializeObject(errorResponse, Formatting.None, ResponseSerializerSettings);
         }
 
         /// <summary>

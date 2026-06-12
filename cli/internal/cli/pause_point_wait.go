@@ -299,6 +299,8 @@ func waitForPausePoint(
 	lastResponse := pausePointStatusResponse{Id: options.id}
 	var lastErr error
 	hasResponse := false
+	ticker := time.NewTicker(pausePointStatusPoll)
+	defer ticker.Stop()
 	for {
 		response, err := queryPausePointStatus(waitContext, connection, options.id)
 		if err == nil {
@@ -334,7 +336,7 @@ func waitForPausePoint(
 				return lastResponse, "", fmt.Errorf("timed out waiting for pause point status: %w", lastErr)
 			}
 			return lastResponse, pausePointWaitStateTimeout, nil
-		case <-time.After(pausePointStatusPoll):
+		case <-ticker.C:
 		}
 	}
 }
