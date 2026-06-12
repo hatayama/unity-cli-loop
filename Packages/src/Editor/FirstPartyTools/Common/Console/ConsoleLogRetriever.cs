@@ -49,6 +49,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _messageField = _logEntryType.GetField("message", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             _modeField = _logEntryType.GetField("mode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             _callstackTextStartField = _logEntryType.GetField("callstackTextStartUTF8", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+            // Missing members would otherwise surface as silently empty or zeroed log data,
+            // so an internal Unity API change must fail here instead.
+            if (_consoleFlagsProperty == null || _getCountMethod == null || _getEntryInternalMethod == null ||
+                _messageField == null || _modeField == null || _callstackTextStartField == null)
+            {
+                throw new InvalidOperationException(
+                    "Required LogEntries/LogEntry members not found. Unity version compatibility issue.");
+            }
         }
 
         /// <summary>
@@ -95,10 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private void RestoreOriginalMask(int originalUnityMask)
         {
             // Use consoleFlags property to restore the exact Unity mask
-            if (_consoleFlagsProperty != null)
-            {
-                _consoleFlagsProperty.SetValue(null, originalUnityMask);
-            }
+            _consoleFlagsProperty.SetValue(null, originalUnityMask);
         }
 
         /// <summary>
@@ -167,14 +173,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int GetCurrentMask()
         {
             // Use the consoleFlags property discovered in the investigation
-            if (_consoleFlagsProperty != null)
-            {
-                object result = _consoleFlagsProperty.GetValue(null);
-                return result != null ? (int)result : 0;
-            }
-
-            // Fallback: try to get from ConsoleWindow if available
-            return GetMaskFromConsoleWindow();
+            object result = _consoleFlagsProperty.GetValue(null);
+            return result != null ? (int)result : 0;
         }
 
         /// <summary>
@@ -187,13 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int unityMask = ConvertToUnityMask(mask);
 
             // Use the consoleFlags property
-            if (_consoleFlagsProperty != null)
-            {
-                _consoleFlagsProperty.SetValue(null, unityMask);
-                return;
-            }
-
-            Debug.LogWarning("Could not find consoleFlags property");
+            _consoleFlagsProperty.SetValue(null, unityMask);
         }
 
         /// <summary>
@@ -229,13 +223,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public int GetLogCount()
         {
-            if (_getCountMethod != null)
-            {
-                object result = _getCountMethod.Invoke(null, null);
-                return result != null ? (int)result : 0;
-            }
-
-            return 0;
+            object result = _getCountMethod.Invoke(null, null);
+            return result != null ? (int)result : 0;
         }
 
 
@@ -244,12 +233,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private LogEntryDto GetLogEntryAt(int index)
         {
-            if (_getEntryInternalMethod == null)
-            {
-                Debug.LogError("GetEntryInternal method not found");
-                return null;
-            }
-
             // Create LogEntry instance
             object logEntryInstance = Activator.CreateInstance(_logEntryType);
 
@@ -264,9 +247,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // Extract data from LogEntry instance using cached field handles
-            string fullMessage = _messageField?.GetValue(logEntryInstance)?.ToString() ?? "";
-            int mode = (int)(_modeField?.GetValue(logEntryInstance) ?? 0);
-            int callstackTextStart = (int)(_callstackTextStartField?.GetValue(logEntryInstance) ?? 0);
+            string fullMessage = _messageField.GetValue(logEntryInstance)?.ToString() ?? "";
+            int mode = (int)_modeField.GetValue(logEntryInstance);
+            int callstackTextStart = (int)_callstackTextStartField.GetValue(logEntryInstance);
 
             LogType logType = GetLogTypeFromMode(mode);
 
@@ -379,15 +362,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 LogType.Log => 4,
                 _ => 0
             };
-        }
-
-        /// <summary>
-        /// Fallback method to get mask from ConsoleWindow
-        /// </summary>
-        private int GetMaskFromConsoleWindow()
-        {
-            // Implementation would access ConsoleWindow's filter state
-            return 7; // Default to show all
         }
 
     }
