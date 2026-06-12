@@ -20,6 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public bool AcceptsDispatchAck { get; set; }
 
+        public bool AcceptsHeartbeat { get; set; }
+
         /// <summary>
         /// JSON-RPC 2.0 spec requires id type to match the request.
         /// Must be string, number, or null - same as received.

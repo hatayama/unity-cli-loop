@@ -14,6 +14,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // stays well inside the CLI's 180s readiness polling window so a late success is still picked up.
         public static readonly int[] RECOVERY_RETRY_DELAYS_MS = { 5000, 15000, 30000 };
 
+        // Heartbeats prove to the CLI that the server process is alive during long-running
+        // commands; each frame also reports how long the editor main thread has gone without
+        // an update tick so the CLI can distinguish "busy" from "frozen".
+        public const int HEARTBEAT_INTERVAL_SECONDS = 10;
+
         public const string JSONRPC_VERSION = "2.0";
 
         public const int INTERNAL_ERROR_CODE = -32603;

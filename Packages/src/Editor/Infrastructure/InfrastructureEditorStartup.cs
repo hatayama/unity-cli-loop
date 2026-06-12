@@ -13,6 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopPackageRemovalSettingsResetter packageRemovalSettingsResetter = new(editorSettingsService);
             packageRemovalSettingsResetter.RegisterForEditorStartup();
             UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsService);
+            EditorMainThreadLivenessTracker.RegisterForEditorStartup();
         }
     }
 }
