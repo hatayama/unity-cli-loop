@@ -36,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
         private readonly Func<bool> _isReadinessProbeBlocked;
         private readonly Func<int, CancellationToken, Task> _waitBeforeReadinessRetryAsync;
+        private readonly Func<int, CancellationToken, Task> _waitBeforeRecoveryRetryAsync;
         private readonly int _readinessIdleTimeoutMilliseconds;
         private IUnityCliLoopServerInstance _bridgeServer;
         private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
@@ -51,6 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle,
             Func<bool> isReadinessProbeBlocked = null,
             Func<int, CancellationToken, Task> waitBeforeReadinessRetryAsync = null,
+            Func<int, CancellationToken, Task> waitBeforeRecoveryRetryAsync = null,
             int readinessIdleTimeoutMilliseconds = UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
@@ -69,6 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
             _isReadinessProbeBlocked = isReadinessProbeBlocked ?? IsEditorBusyForReadinessProbe;
             _waitBeforeReadinessRetryAsync = waitBeforeReadinessRetryAsync ?? TimerDelay.Wait;
+            _waitBeforeRecoveryRetryAsync = waitBeforeRecoveryRetryAsync ?? TimerDelay.Wait;
             _readinessIdleTimeoutMilliseconds = readinessIdleTimeoutMilliseconds;
             _sessionRecoveryService = new SessionRecoveryService(
                 this,
@@ -466,22 +469,52 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return recoveryTask;
         }
 
-        private async Task ExecuteTrackedRecoveryAsync(Func<Task> recoveryAction)
+        /// <summary>
+        /// Runs a recovery action, retrying with backoff so one transient failure
+        /// (e.g. readiness timeout during a heavy import) does not leave the server
+        /// down until the next domain reload.
+        /// </summary>
+        internal async Task ExecuteTrackedRecoveryAsync(Func<Task> recoveryAction)
         {
             Debug.Assert(recoveryAction != null, "recoveryAction must not be null");
 
-            try
+            int failedAttemptCount = 0;
+            while (true)
             {
-                await recoveryAction();
-            }
-            catch (Exception ex)
-            {
-                string message = $"Unity CLI Loop server recovery failed before the bridge became ready. {ex.GetBaseException().Message}";
-                VibeLogger.LogError(
-                    "server_recovery_failed",
-                    message);
-                _sessionStateService.ClearServerSession();
-                throw new InvalidOperationException(message, ex);
+                try
+                {
+                    await recoveryAction();
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    if (failedAttemptCount >= UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS.Length)
+                    {
+                        string message = $"Unity CLI Loop server recovery failed before the bridge became ready. {ex.GetBaseException().Message}";
+                        VibeLogger.LogError(
+                            "server_recovery_failed",
+                            message);
+                        _sessionStateService.ClearServerSession();
+                        throw new InvalidOperationException(message, ex);
+                    }
+
+                    int delayMilliseconds = UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS[failedAttemptCount];
+                    failedAttemptCount++;
+                    VibeLogger.LogWarning(
+                        "server_recovery_retry_scheduled",
+                        $"Recovery attempt {failedAttemptCount} failed; retrying in {delayMilliseconds}ms. {ex.GetBaseException().Message}");
+                    await _waitBeforeRecoveryRetryAsync(delayMilliseconds, CancellationToken.None);
+
+                    // Why: an explicit Stop Server issued during the backoff must win over
+                    // automatic recovery, otherwise the retry would silently restart the server.
+                    if (_sessionStateService.GetIsServerManuallyStopped())
+                    {
+                        VibeLogger.LogInfo(
+                            "server_recovery_retry_abandoned",
+                            "Recovery retry abandoned because the server was manually stopped.");
+                        return;
+                    }
+                }
             }
         }
 
