@@ -5,6 +5,20 @@ using Newtonsoft.Json.Linq;
 
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
+    /// <summary>
+    /// Shared serializer for converting CLI request parameters into schema DTOs
+    /// </summary>
+    internal static class UnityCliLoopToolParameterSerializer
+    {
+        // A single shared instance lets the contract resolver reuse its per-type metadata
+        // cache across all tools and requests instead of rebuilding it per invocation.
+        // Both JsonSerializer and the resolver are thread-safe once configured.
+        internal static readonly JsonSerializer CamelCaseSerializer = JsonSerializer.Create(new JsonSerializerSettings
+        {
+            ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
+        });
+    }
+
     // Related classes:
     // - IUnityCliLoopTool: The interface that this class implements.
     // - UnityCliLoopToolRegistry: Registers and manages instances of tool implementations.
@@ -20,11 +34,15 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     {
         public abstract string ToolName { get; }
 
+        // The schema is pure reflection output over an immutable type, so it is generated
+        // once per TSchema (static fields on a generic class are per closed generic type).
+        private static readonly ToolParameterSchema CachedParameterSchema =
+            UnityCliLoopToolParameterSchemaGenerator.FromDto<TSchema>();
+
         /// <summary>
         /// Automatically generates parameter schema from TSchema type
         /// </summary>
-        public virtual ToolParameterSchema ParameterSchema =>
-            UnityCliLoopToolParameterSchemaGenerator.FromDto<TSchema>();
+        public virtual ToolParameterSchema ParameterSchema => CachedParameterSchema;
 
         /// <summary>
         /// Execute tool with type-safe Schema parameters.
@@ -60,21 +78,12 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 return new TSchema();
             }
             
-            // Create JsonSerializerSettings with CamelCasePropertyNamesContractResolver
-            // This allows client side to use camelCase while C# uses PascalCase
-            JsonSerializerSettings settings = new()
-            {
-                ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
-            };
-            
-            // Create JsonSerializer with custom settings
-            JsonSerializer serializer = JsonSerializer.Create(settings);
-            
-            // Try to deserialize from JToken with custom serializer
+            // Try to deserialize from JToken with the shared camelCase serializer.
+            // This allows client side to use camelCase while C# uses PascalCase.
             TSchema schema;
             try
             {
-                schema = paramsToken.ToObject<TSchema>(serializer);
+                schema = paramsToken.ToObject<TSchema>(UnityCliLoopToolParameterSerializer.CamelCaseSerializer);
             }
             catch (JsonSerializationException ex)
             {

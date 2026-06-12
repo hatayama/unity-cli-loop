@@ -24,6 +24,8 @@ const (
 	pwshProfileSubpath       = "Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
 )
 
+var completionBlockPattern = regexp.MustCompile(`(?s)\n?# >>> uloop completion >>>.*?# <<< uloop completion <<<\n?`)
+
 func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Writer, stderr io.Writer) (bool, int) {
 	if len(args) == 0 {
 		return false, 0
@@ -410,8 +412,7 @@ func installCompletionScript(configPath string, shellName string, script string)
 }
 
 func removeExistingCompletionBlock(content string) string {
-	pattern := regexp.MustCompile(`(?s)\n?# >>> uloop completion >>>.*?# <<< uloop completion <<<\n?`)
-	return pattern.ReplaceAllString(content, "")
+	return completionBlockPattern.ReplaceAllString(content, "")
 }
 
 func getCompletionScript(shellName string) string {

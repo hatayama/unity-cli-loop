@@ -98,6 +98,8 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 	}()
 
 	focusAttempted := false
+	retryTicker := time.NewTicker(serverConnectionRetryPoll)
+	defer retryTicker.Stop()
 	for {
 		client := unityipc.NewClient(connection, version)
 		if responseTimeout > 0 {
@@ -126,7 +128,7 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 					return lastOutcome, ctx.Err()
 				}
 				return lastOutcome, lastErr
-			case <-time.After(serverConnectionRetryPoll):
+			case <-retryTicker.C:
 			}
 			continue
 		}
@@ -209,7 +211,7 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 				endpoint:    connection.Endpoint.Address,
 				cause:       lastErr,
 			}
-		case <-time.After(serverConnectionRetryPoll):
+		case <-retryTicker.C:
 		}
 	}
 }

@@ -13,6 +13,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class ConsoleLogRetriever
     {
         private readonly Type _logEntriesType;
+        private readonly Type _logEntryType;
+        private readonly PropertyInfo _consoleFlagsProperty;
+        private readonly MethodInfo _getCountMethod;
+        private readonly MethodInfo _getEntryInternalMethod;
+        private readonly FieldInfo _messageField;
+        private readonly FieldInfo _modeField;
+        private readonly FieldInfo _callstackTextStartField;
 
         /// <summary>
         /// Initializes the retriever with necessary reflection types
@@ -26,6 +33,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (_logEntriesType == null)
             {
                 throw new InvalidOperationException("LogEntries type not found. Unity version compatibility issue.");
+            }
+
+            _logEntryType = editorAssembly.GetType("UnityEditor.LogEntry");
+            if (_logEntryType == null)
+            {
+                throw new InvalidOperationException("LogEntry type not found. Unity version compatibility issue.");
+            }
+
+            // GetLogEntryAt runs once per console entry, so member lookups are resolved once here
+            // instead of per entry; repeated GetMethod/GetField calls dominated get-logs latency.
+            _consoleFlagsProperty = _logEntriesType.GetProperty("consoleFlags", BindingFlags.Public | BindingFlags.Static);
+            _getCountMethod = _logEntriesType.GetMethod("GetCount", BindingFlags.Public | BindingFlags.Static);
+            _getEntryInternalMethod = _logEntriesType.GetMethod("GetEntryInternal", BindingFlags.Public | BindingFlags.Static);
+            _messageField = _logEntryType.GetField("message", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            _modeField = _logEntryType.GetField("mode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            _callstackTextStartField = _logEntryType.GetField("callstackTextStartUTF8", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+            // Missing members would otherwise surface as silently empty or zeroed log data,
+            // so an internal Unity API change must fail here instead.
+            if (_consoleFlagsProperty == null || _getCountMethod == null || _getEntryInternalMethod == null ||
+                _messageField == null || _modeField == null || _callstackTextStartField == null)
+            {
+                throw new InvalidOperationException(
+                    "Required LogEntries/LogEntry members not found. Unity version compatibility issue.");
             }
         }
 
@@ -73,11 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private void RestoreOriginalMask(int originalUnityMask)
         {
             // Use consoleFlags property to restore the exact Unity mask
-            PropertyInfo consoleFlagsProperty = _logEntriesType.GetProperty("consoleFlags", BindingFlags.Public | BindingFlags.Static);
-            if (consoleFlagsProperty != null)
-            {
-                consoleFlagsProperty.SetValue(null, originalUnityMask);
-            }
+            _consoleFlagsProperty.SetValue(null, originalUnityMask);
         }
 
         /// <summary>
@@ -146,15 +173,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int GetCurrentMask()
         {
             // Use the consoleFlags property discovered in the investigation
-            PropertyInfo consoleFlagsProperty = _logEntriesType.GetProperty("consoleFlags", BindingFlags.Public | BindingFlags.Static);
-            if (consoleFlagsProperty != null)
-            {
-                object result = consoleFlagsProperty.GetValue(null);
-                return result != null ? (int)result : 0;
-            }
-
-            // Fallback: try to get from ConsoleWindow if available
-            return GetMaskFromConsoleWindow();
+            object result = _consoleFlagsProperty.GetValue(null);
+            return result != null ? (int)result : 0;
         }
 
         /// <summary>
@@ -167,14 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int unityMask = ConvertToUnityMask(mask);
 
             // Use the consoleFlags property
-            PropertyInfo consoleFlagsProperty = _logEntriesType.GetProperty("consoleFlags", BindingFlags.Public | BindingFlags.Static);
-            if (consoleFlagsProperty != null)
-            {
-                consoleFlagsProperty.SetValue(null, unityMask);
-                return;
-            }
-
-            Debug.LogWarning("Could not find consoleFlags property");
+            _consoleFlagsProperty.SetValue(null, unityMask);
         }
 
         /// <summary>
@@ -210,14 +223,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public int GetLogCount()
         {
-            MethodInfo getCount = _logEntriesType.GetMethod("GetCount", BindingFlags.Public | BindingFlags.Static);
-            if (getCount != null)
-            {
-                object result = getCount.Invoke(null, null);
-                return result != null ? (int)result : 0;
-            }
-
-            return 0;
+            object result = _getCountMethod.Invoke(null, null);
+            return result != null ? (int)result : 0;
         }
 
 
@@ -226,29 +233,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private LogEntryDto GetLogEntryAt(int index)
         {
-            // Get LogEntry type from Unity's internal assembly
-            Assembly editorAssembly = Assembly.GetAssembly(typeof(EditorWindow));
-            Type logEntryType = editorAssembly.GetType("UnityEditor.LogEntry");
-            if (logEntryType == null)
-            {
-                Debug.LogError("LogEntry type not found");
-                return null;
-            }
-
             // Create LogEntry instance
-            object logEntryInstance = Activator.CreateInstance(logEntryType);
-
-            // Use GetEntryInternal method discovered in investigation
-            MethodInfo getEntryInternal = _logEntriesType.GetMethod("GetEntryInternal", BindingFlags.Public | BindingFlags.Static);
-            if (getEntryInternal == null)
-            {
-                Debug.LogError("GetEntryInternal method not found");
-                return null;
-            }
+            object logEntryInstance = Activator.CreateInstance(_logEntryType);
 
             // Call GetEntryInternal(int row, LogEntry outputEntry)
             object[] parameters = new object[] { index, logEntryInstance };
-            bool success = (bool)getEntryInternal.Invoke(null, parameters);
+            bool success = (bool)_getEntryInternalMethod.Invoke(null, parameters);
 
             if (!success)
             {
@@ -256,10 +246,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            // Extract data from LogEntry instance using reflection
-            string fullMessage = GetFieldValue(logEntryInstance, "message")?.ToString() ?? "";
-            int mode = (int)(GetFieldValue(logEntryInstance, "mode") ?? 0);
-            int callstackTextStart = (int)(GetFieldValue(logEntryInstance, "callstackTextStartUTF8") ?? 0);
+            // Extract data from LogEntry instance using cached field handles
+            string fullMessage = _messageField.GetValue(logEntryInstance)?.ToString() ?? "";
+            int mode = (int)_modeField.GetValue(logEntryInstance);
+            int callstackTextStart = (int)_callstackTextStartField.GetValue(logEntryInstance);
 
             LogType logType = GetLogTypeFromMode(mode);
 
@@ -268,16 +258,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string unityCliLoopLogType = ConvertLogTypeToUnityCliLoopLogType(logType);
             return new LogEntryDto(unityCliLoopLogType, message, stackTrace);
-        }
-
-        /// <summary>
-        /// Helper method to get field value from object using reflection
-        /// </summary>
-        private object GetFieldValue(object obj, string fieldName)
-        {
-            Type type = obj.GetType();
-            FieldInfo field = type.GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            return field?.GetValue(obj);
         }
 
         /// <summary>
@@ -382,15 +362,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 LogType.Log => 4,
                 _ => 0
             };
-        }
-
-        /// <summary>
-        /// Fallback method to get mask from ConsoleWindow
-        /// </summary>
-        private int GetMaskFromConsoleWindow()
-        {
-            // Implementation would access ConsoleWindow's filter state
-            return 7; // Default to show all
         }
 
     }

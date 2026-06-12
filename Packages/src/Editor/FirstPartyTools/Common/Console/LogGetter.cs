@@ -21,6 +21,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static readonly Regex CompilerErrorPattern = new Regex(@":\s*error CS\d+\b", RegexOptions.Compiled);
         private static readonly Regex CompilerWarningPattern = new Regex(@":\s*warning CS\d+\b", RegexOptions.Compiled);
 
+        // AI clients typically poll get-logs with the same search pattern repeatedly, so the
+        // last user pattern is kept compiled instead of being re-built on every request.
+        private static Regex _cachedSearchRegex;
+
+        // User-supplied patterns can backtrack pathologically; the match timeout keeps a bad
+        // pattern from stalling the Editor main thread while scanning every log entry.
+        private static readonly TimeSpan SearchRegexMatchTimeout = TimeSpan.FromSeconds(2);
+
         static LogGetter()
         {
             LogRetriever = new ConsoleLogRetriever();
@@ -254,8 +262,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (useRegex)
                 {
-                    Regex regex = new(searchText);
-                    allEntries = allEntries.FindAll(entry => 
+                    Regex regex = GetOrCreateSearchRegex(searchText);
+                    allEntries = allEntries.FindAll(entry =>
                     {
                         bool messageMatch = regex.IsMatch(entry.Message);
                         bool stackTraceMatch = searchInStackTrace && !string.IsNullOrEmpty(entry.StackTrace) && regex.IsMatch(entry.StackTrace);
@@ -275,6 +283,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             
             return new LogDisplayDto(allEntries.ToArray(), allEntries.Count);
+        }
+
+        /// <summary>
+        /// Returns a compiled regex for the user search pattern, reusing the previous
+        /// instance when the pattern is unchanged
+        /// </summary>
+        private static Regex GetOrCreateSearchRegex(string searchText)
+        {
+            if (_cachedSearchRegex == null || _cachedSearchRegex.ToString() != searchText)
+            {
+                _cachedSearchRegex = new Regex(searchText, RegexOptions.Compiled, SearchRegexMatchTimeout);
+            }
+
+            return _cachedSearchRegex;
         }
 
         /// <summary>

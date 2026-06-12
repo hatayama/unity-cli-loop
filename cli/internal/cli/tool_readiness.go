@@ -28,6 +28,8 @@ func waitForToolReadiness(ctx context.Context, projectRoot string) error {
 	defer cancel()
 
 	var lastErr error
+	ticker := time.NewTicker(toolReadinessPoll)
+	defer ticker.Stop()
 	for {
 		if err := probeToolReadinessSequence(timeoutContext, projectRoot); err == nil {
 			return nil
@@ -38,7 +40,7 @@ func waitForToolReadiness(ctx context.Context, projectRoot string) error {
 		select {
 		case <-timeoutContext.Done():
 			return toolReadinessDoneError(ctx, projectRoot, lastErr)
-		case <-time.After(toolReadinessPoll):
+		case <-ticker.C:
 		}
 	}
 }
@@ -62,8 +64,12 @@ func toolReadinessDoneError(ctx context.Context, projectRoot string, cause error
 }
 
 func probeToolReadinessSequence(ctx context.Context, projectRoot string) error {
+	// The tool catalog is read from disk; it can change between poll ticks (Unity writes
+	// it during server startup) but not within one probe sequence, so read it once here
+	// instead of once per probe.
+	executeDynamicCodeAvailable := isExecuteDynamicCodeAvailable(projectRoot)
 	for probeIndex := 0; probeIndex < toolReadinessProbeCount; probeIndex++ {
-		if err := probeToolReadiness(ctx, projectRoot); err != nil {
+		if err := probeToolReadiness(ctx, projectRoot, executeDynamicCodeAvailable); err != nil {
 			return err
 		}
 	}
@@ -71,7 +77,7 @@ func probeToolReadinessSequence(ctx context.Context, projectRoot string) error {
 	return nil
 }
 
-func probeToolReadiness(ctx context.Context, projectRoot string) error {
+func probeToolReadiness(ctx context.Context, projectRoot string, executeDynamicCodeAvailable bool) error {
 	probeContext, cancel := context.WithTimeout(ctx, toolReadinessProbeTimeout)
 	defer cancel()
 
@@ -80,7 +86,7 @@ func probeToolReadiness(ctx context.Context, projectRoot string) error {
 		return err
 	}
 
-	if !isExecuteDynamicCodeAvailable(projectRoot) {
+	if !executeDynamicCodeAvailable {
 		_, err := unityipc.NewClient(connection, version).Send(probeContext, "get-version", map[string]any{})
 		return err
 	}

@@ -79,6 +79,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
 
             StartTestExecution(testMode, filter, callback);
+            // Without this registration the await below never completes on cancellation,
+            // keeping the TestRunnerApi callback subscription alive forever.
+            using CancellationTokenRegistration cancellationRegistration =
+                ct.Register(() => taskCompletionSource.TrySetCanceled(ct));
             SerializableTestResult result = await taskCompletionSource.Task;
             ct.ThrowIfCancellationRequested();
             return result;

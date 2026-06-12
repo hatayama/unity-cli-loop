@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -22,17 +21,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentOutOfRangeException(nameof(maxCount), "maxCount must be zero or greater.");
             }
 
-            UnityCliLoopConsoleLogEntry[] limitedEntries = entries.Length > maxCount
-                ? entries.Skip(entries.Length - maxCount).ToArray()
-                : entries;
+            // Take the newest maxCount entries and return them newest-first in a single
+            // pass; the previous LINQ chain copied the entries into three arrays per call.
+            int resultCount = Math.Min(entries.Length, maxCount);
+            LogEntry[] result = new LogEntry[resultCount];
+            for (int i = 0; i < resultCount; i++)
+            {
+                UnityCliLoopConsoleLogEntry entry = entries[entries.Length - 1 - i];
+                result[i] = new LogEntry(
+                    type: entry.Type,
+                    message: entry.Message,
+                    stackTrace: includeStackTrace ? entry.StackTrace : null
+                );
+            }
 
-            limitedEntries = limitedEntries.Reverse().ToArray();
-
-            return limitedEntries.Select(entry => new LogEntry(
-                type: entry.Type,
-                message: entry.Message,
-                stackTrace: includeStackTrace ? entry.StackTrace : null
-            )).ToArray();
+            return result;
         }
     }
 }
