@@ -527,6 +527,169 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 	}
 }
 
+// Verifies that undispatched dial failures keep retrying past the base window while a
+// running Unity process is confirmed, so a domain reload longer than the base window
+// (e.g. on large projects) does not fail the command spuriously.
+func TestSendWithTransientConnectionRetryExtendsWindowWhileUnityProcessRuns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	originalFinder := findRunningUnityProcessForConnectionRetry
+	originalFocus := focusUnityProcessForConnectionRetry
+	originalTimeout := serverConnectionRetryTimeout
+	originalPoll := serverConnectionRetryPoll
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 123}, nil
+	}
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+		return func(context.Context) error { return nil }, nil
+	}
+	// Base window expires well before the server comes up; only the extended
+	// unity-alive window (base * factor) allows the late dial to succeed.
+	serverConnectionRetryTimeout = 100 * time.Millisecond
+	serverConnectionRetryPoll = 10 * time.Millisecond
+	t.Cleanup(func() {
+		findRunningUnityProcessForConnectionRetry = originalFinder
+		focusUnityProcessForConnectionRetry = originalFocus
+		serverConnectionRetryTimeout = originalTimeout
+		serverConnectionRetryPoll = originalPoll
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	address := listener.Addr().String()
+	// Simulate the IPC endpoint being down during a domain reload: nothing accepts
+	// until the "reload" finishes at 250ms, past the 100ms base window.
+	_ = listener.Close()
+
+	serverReady := make(chan net.Listener, 1)
+	go func() {
+		time.Sleep(250 * time.Millisecond)
+		lateListener, listenErr := net.Listen("tcp", address)
+		if listenErr != nil {
+			serverReady <- nil
+			return
+		}
+		serverReady <- lateListener
+		success := `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`
+		for {
+			conn, acceptErr := lateListener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			go func() {
+				defer func() {
+					_ = conn.Close()
+				}()
+				if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+					return
+				}
+				_ = unityipc.Write(conn, []byte(success))
+			}()
+		}
+	}()
+	t.Cleanup(func() {
+		if lateListener := <-serverReady; lateListener != nil {
+			_ = lateListener.Close()
+		}
+	})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: address,
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	outcome, err := sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil)
+	if err != nil {
+		t.Fatalf("expected success after server came back inside the extended window, got %v", err)
+	}
+	if len(outcome.Result) == 0 {
+		t.Fatal("expected a result from the recovered server")
+	}
+}
+
+// Verifies busy responses still stop retrying at the base window even though the
+// unity-alive window for dial failures is longer.
+func TestSendWithTransientConnectionRetryKeepsBusyBoundedByBaseWindow(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	originalTimeout := serverConnectionRetryTimeout
+	originalPoll := serverConnectionRetryPoll
+	serverConnectionRetryTimeout = 200 * time.Millisecond
+	serverConnectionRetryPoll = 10 * time.Millisecond
+	t.Cleanup(func() {
+		serverConnectionRetryTimeout = originalTimeout
+		serverConnectionRetryPoll = originalPoll
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	busy := `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Unity is busy running 'compile'.","data":{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"busy"}}}`
+	go func() {
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			go func() {
+				defer func() {
+					_ = conn.Close()
+				}()
+				if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+					return
+				}
+				_ = unityipc.Write(conn, []byte(busy))
+			}()
+		}
+	}()
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	startedAt := time.Now()
+	_, err = sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil)
+	elapsed := time.Since(startedAt)
+
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) {
+		t.Fatalf("busy must surface as the original RPC error, got: %v", err)
+	}
+	// Generous CI margin: the assertion only needs to prove busy did not run for the
+	// full extended window (base * factor = 1200ms here).
+	if elapsed >= unityAliveRetryWindow() {
+		t.Fatalf("busy retries ran into the extended window: %v", elapsed)
+	}
+}
+
 // Verifies a dispatched RPC failure arriving after the retry window expires is not
 // masked by a busy response seen earlier in the window.
 func TestSendWithTransientConnectionRetrySurfacesDispatchedFailureAfterBusy(t *testing.T) {

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
 func TestSpinnerDoesNotWriteWhenDisabled(t *testing.T) {
@@ -47,6 +49,40 @@ func TestLaunchSpinnerWritesStartupMessage(t *testing.T) {
 	}
 	if !strings.HasSuffix(output, "\r\x1b[K\n") {
 		t.Fatalf("launch spinner output did not clear the line before returning: %q", output)
+	}
+}
+
+func TestSpinnerProgressFuncShowsStallMessageVerbatim(t *testing.T) {
+	// Verifies that heartbeat stall payloads reach the spinner verbatim.
+	var stderr bytes.Buffer
+	spinner := newSpinner(&stderr, true, "Connecting to Unity...")
+	progress := newSpinnerProgressFunc(spinner, "Executing get-logs...")
+
+	progress("unity editor main thread busy for 38s...")
+	spinner.Stop()
+
+	if !strings.Contains(stderr.String(), "unity editor main thread busy for 38s...") {
+		t.Fatalf("spinner output did not include stall message: %q", stderr.String())
+	}
+}
+
+func TestSpinnerProgressFuncMapsConnectionEventsToExecutingMessage(t *testing.T) {
+	// Verifies that connection-stage events show the contextual executing message
+	// instead of the raw event token.
+	var stderr bytes.Buffer
+	spinner := newSpinner(&stderr, true, "Connecting to Unity...")
+	progress := newSpinnerProgressFunc(spinner, "Executing get-logs...")
+
+	progress(unityipc.ProgressEventConnected)
+	progress(unityipc.ProgressEventAccepted)
+	spinner.Stop()
+
+	output := stderr.String()
+	if !strings.Contains(output, "Executing get-logs...") {
+		t.Fatalf("spinner output did not include executing message: %q", output)
+	}
+	if strings.Contains(output, unityipc.ProgressEventConnected) || strings.Contains(output, unityipc.ProgressEventAccepted) {
+		t.Fatalf("spinner output leaked a raw progress event token: %q", output)
 	}
 }
 

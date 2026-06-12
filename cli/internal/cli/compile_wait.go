@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
@@ -187,19 +186,6 @@ func shouldWaitForCompileStatus(err error, outcome unityipc.UnitySendOutcome) bo
 		return true
 	}
 	return outcome.RequestAccepted && isFinalResponseTimeoutError(err)
-}
-
-func isTransportDisconnectError(err error) bool {
-	message := err.Error()
-	return message == "UNITY_NO_RESPONSE" ||
-		strings.Contains(message, "EOF") ||
-		strings.Contains(message, "connection reset") ||
-		strings.Contains(message, "broken pipe") ||
-		strings.Contains(message, "use of closed network connection")
-}
-
-func isFinalResponseTimeoutError(err error) bool {
-	return strings.Contains(err.Error(), "i/o timeout")
 }
 
 func logCliDebugModeResolved(connection unityipc.Connection, command string) {

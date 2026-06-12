@@ -72,6 +72,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
+
+      # Windows-only code paths (named pipe transport, winio deadlines, typed error
+      # classification) are otherwise never executed by CI. Scoped to the transport
+      # package: the wider test suite still has Windows-incompatible tests (path
+      # separators, missing .exe suffixes, TCP-only fixtures) that predate this job.
+      - name: Test native Go CLI transport on Windows
+        shell: bash
+        run: cd cli && go test ./internal/unityipc/
+
       - name: Test install release filter in Git Bash
         shell: bash
         run: sh scripts/test-install-release-filter.sh

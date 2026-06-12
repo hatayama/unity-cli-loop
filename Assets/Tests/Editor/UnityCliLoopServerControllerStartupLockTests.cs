@@ -221,6 +221,93 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteTrackedRecoveryAsync_WhenRecoveryFailsOnce_RetriesAfterBackoffAndSucceeds()
+        {
+            // Tests that a transient recovery failure (e.g. readiness timeout during a heavy import)
+            // is retried with backoff instead of leaving the server down until the next domain reload.
+            System.Collections.Generic.List<int> recordedWaits = new();
+            int recoveryAttempts = 0;
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                new TestReadinessProbe(),
+                (delayMilliseconds, ct) =>
+                {
+                    recordedWaits.Add(delayMilliseconds);
+                    return Task.CompletedTask;
+                });
+
+            await service.ExecuteTrackedRecoveryAsync(() =>
+            {
+                recoveryAttempts++;
+                if (recoveryAttempts == 1)
+                {
+                    throw new System.TimeoutException("readiness probe timed out");
+                }
+
+                return Task.CompletedTask;
+            });
+
+            Assert.That(recoveryAttempts, Is.EqualTo(2));
+            Assert.That(recordedWaits, Is.EqualTo(new[]
+            {
+                UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS[0]
+            }));
+        }
+
+        [Test]
+        public void ExecuteTrackedRecoveryAsync_WhenRecoveryKeepsFailing_GivesUpAfterAllRetriesAndClearsSession()
+        {
+            // Tests that persistent recovery failure exhausts the full backoff schedule before
+            // surfacing the error and clearing the server session.
+            _sessionStateService.MarkServerStarted();
+            System.Collections.Generic.List<int> recordedWaits = new();
+            int recoveryAttempts = 0;
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                new TestReadinessProbe(),
+                (delayMilliseconds, ct) =>
+                {
+                    recordedWaits.Add(delayMilliseconds);
+                    return Task.CompletedTask;
+                });
+
+            System.InvalidOperationException exception =
+                Assert.ThrowsAsync<System.InvalidOperationException>(async () =>
+                    await service.ExecuteTrackedRecoveryAsync(() =>
+                    {
+                        recoveryAttempts++;
+                        throw new System.TimeoutException("readiness probe timed out");
+                    }));
+
+            Assert.That(exception.Message, Does.Contain("recovery failed"));
+            Assert.That(recoveryAttempts, Is.EqualTo(UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS.Length + 1));
+            Assert.That(
+                recordedWaits,
+                Is.EqualTo(UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS));
+            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
+        }
+
+        [Test]
+        public async Task ExecuteTrackedRecoveryAsync_WhenServerManuallyStoppedDuringBackoff_AbandonsRetry()
+        {
+            // Tests that an explicit Stop Server during the retry backoff wins over automatic recovery.
+            int recoveryAttempts = 0;
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                new TestReadinessProbe(),
+                (delayMilliseconds, ct) =>
+                {
+                    _sessionStateService.MarkServerManuallyStopped();
+                    return Task.CompletedTask;
+                });
+
+            await service.ExecuteTrackedRecoveryAsync(() =>
+            {
+                recoveryAttempts++;
+                throw new System.TimeoutException("readiness probe timed out");
+            });
+
+            Assert.That(recoveryAttempts, Is.EqualTo(1));
+        }
+
+        [Test]
         public async Task RestoreServerStateIfNeeded_WhenServerWasManuallyStopped_ShouldSkipStartupRecovery()
         {
             // Tests that explicit Stop Server is preserved when startup recovery runs after Domain Reload.
@@ -311,12 +398,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
         }
 
-        private UnityCliLoopServerControllerService CreateControllerService()
-        {
-            return CreateControllerService(new TestReadinessProbe());
-        }
-
-        private UnityCliLoopServerControllerService CreateControllerService(TestReadinessProbe readinessProbe)
+        private UnityCliLoopServerControllerService CreateControllerService(
+            TestReadinessProbe readinessProbe = null,
+            System.Func<int, CancellationToken, Task> waitBeforeRecoveryRetryAsync = null)
         {
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
@@ -326,8 +410,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lifecycleRegistry,
                 new DomainReloadDetectionFileService(_sessionStateService),
                 _sessionStateService,
-                readinessProbe,
-                new TestDomainReloadLifecycle());
+                readinessProbe ?? new TestReadinessProbe(),
+                new TestDomainReloadLifecycle(),
+                waitBeforeRecoveryRetryAsync: waitBeforeRecoveryRetryAsync);
         }
 
         /// <summary>
