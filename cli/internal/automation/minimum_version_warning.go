@@ -25,6 +25,8 @@ Please confirm whether the Unity package can still accept older CLI versions. If
 Resolved: this PR no longer has Go CLI changes without a ` + "`MINIMUM_REQUIRED_CLI_VERSION`" + ` update.
 `
 	goCliPackageRoot = "cli/"
+	// release-please names its release branches "release-please--branches--<target>".
+	releasePleaseBranchPrefix = "release-please--"
 )
 
 var minimumVersionWarningValuePattern = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
@@ -35,6 +37,7 @@ type minimumVersionWarningConfig struct {
 	repository     string
 	baseRef        string
 	headRef        string
+	headBranch     string
 	failOnWarning  bool
 }
 
@@ -46,6 +49,13 @@ func RunMinimumVersionWarning(ctx context.Context, stdout io.Writer, stderr io.W
 	}
 	if config.pullRequest == "" && !config.failOnWarning {
 		writeMinimumVersionWarningLine(stdout, "Skipping CLI minimum version comment because no PR number was provided.")
+		return 0
+	}
+
+	// Release PRs only contain release-please version stamps (cli/contract.json and
+	// internal/tools/default-tools.json); the reminder targets human-authored CLI changes.
+	if strings.HasPrefix(config.headBranch, releasePleaseBranchPrefix) {
+		writeMinimumVersionWarningLine(stdout, "Skipping CLI minimum version check because this is a release-please release PR.")
 		return 0
 	}
 
@@ -127,6 +137,7 @@ func minimumVersionWarningConfigFromEnvironment() (minimumVersionWarningConfig, 
 		repository:     os.Getenv("GITHUB_REPOSITORY"),
 		baseRef:        baseRef,
 		headRef:        headRef,
+		headBranch:     os.Getenv("GITHUB_HEAD_REF"),
 		failOnWarning:  os.Getenv("CLI_MINIMUM_VERSION_FAIL_ON_WARNING") == "true",
 	}, nil
 }
