@@ -24,6 +24,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const int SDDL_REVISION_1 = 1;
         private const uint PIPE_ACCESS_DUPLEX = 0x00000003;
         private const uint PIPE_TYPE_BYTE_READMODE_BYTE_WAIT = 0x00000000;
+        // Why: defense in depth alongside the owner-only DACL — reject clients connecting over the
+        // network so the execute-code channel never accepts a remote principal. The managed
+        // NamedPipeServerStream sets this by default; the native CreateNamedPipeW path does not.
+        private const uint PIPE_REJECT_REMOTE_CLIENTS = 0x00000008;
         private const uint PIPE_UNLIMITED_INSTANCES = 255;
 
         /// <summary>
@@ -65,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 IntPtr handle = CreateNamedPipeW(
                     @"\\.\pipe\" + pipeName,
                     PIPE_ACCESS_DUPLEX,
-                    PIPE_TYPE_BYTE_READMODE_BYTE_WAIT,
+                    PIPE_TYPE_BYTE_READMODE_BYTE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
                     PIPE_UNLIMITED_INSTANCES,
                     0,
                     0,

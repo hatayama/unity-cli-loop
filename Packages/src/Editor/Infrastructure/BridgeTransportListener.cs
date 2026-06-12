@@ -4,6 +4,8 @@ using System.IO.Pipes;
 using System.Net.Sockets;
 using System.Threading;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
@@ -300,8 +302,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     PipeOptions.None);
                 wakeClient.Connect(WAKE_PENDING_ACCEPT_CONNECT_TIMEOUT_MS);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                // A connect failure when no accept was pending is the expected, harmless case,
+                // so this stays at debug level. But it is also the only signal that the single
+                // unblock path failed, so record it: if a stuck accept ever causes a shutdown
+                // hang, this is the breadcrumb that points here.
+                VibeLogger.LogDebug(
+                    "wake_pending_accept_failed",
+                    ex.Message,
+                    new { exceptionType = ex.GetType().Name });
             }
         }
 
