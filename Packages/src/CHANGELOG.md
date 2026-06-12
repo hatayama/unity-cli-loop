@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.7](https://github.com/hatayama/unity-cli-loop/compare/v2.1.6...v2.1.7) (2026-06-12)
+
+
+### Bug Fixes
+
+* Multiline dynamic code snippets work reliably on Windows ([#1319](https://github.com/hatayama/unity-cli-loop/issues/1319)) ([aff5ddd](https://github.com/hatayama/unity-cli-loop/commit/aff5dddf53f586c2da19a571784549eb4f4079d8))
+
 ## [2.1.6](https://github.com/hatayama/unity-cli-loop/compare/v2.1.5...v2.1.6) (2026-06-04)
 
 
