@@ -47,7 +47,7 @@ func shouldWaitForCompileDomainReload(command string, params map[string]any) boo
 	if command != compileCommandName {
 		return false
 	}
-	return domainReloadWaitEnabled(params)
+	return domainReloadWaitEnabled(params, true)
 }
 
 func prepareCompileWaitParams(params map[string]any) (string, error) {

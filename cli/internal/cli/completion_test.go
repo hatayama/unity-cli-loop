@@ -101,8 +101,8 @@ func TestCompletionListOptionsUsesEmbeddedFirstPartyToolSchema(t *testing.T) {
 	}
 }
 
-func TestCompletionListOptionsUsesExecuteDynamicCodeNoWaitFlag(t *testing.T) {
-	// Verifies shell completion exposes the default-on reload wait as a negated flag.
+func TestCompletionListOptionsUsesExecuteDynamicCodeWaitFlag(t *testing.T) {
+	// Verifies shell completion exposes reload waiting as an explicit opt-in flag.
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
 		[]string{"--list-options", executeDynamicCodeCommandName},
@@ -119,11 +119,11 @@ func TestCompletionListOptionsUsesExecuteDynamicCodeNoWaitFlag(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "--no-wait-for-domain-reload") {
-		t.Fatalf("execute-dynamic-code no-wait option was not listed: %s", output)
+	if !strings.Contains(output, "--wait-for-domain-reload") {
+		t.Fatalf("execute-dynamic-code wait option was not listed: %s", output)
 	}
-	if strings.Contains(output, "--wait-for-domain-reload") {
-		t.Fatalf("execute-dynamic-code wait option should be negated only: %s", output)
+	if strings.Contains(output, "--no-wait-for-domain-reload") {
+		t.Fatalf("execute-dynamic-code no-wait option should not be listed: %s", output)
 	}
 	if strings.Contains(output, "--compile-only") {
 		t.Fatalf("execute-dynamic-code internal compile-only option should stay hidden: %s", output)
@@ -161,7 +161,7 @@ func TestCompletionListOptionsUsesEmbeddedExecuteDynamicCodeDefinition(t *testin
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "--no-wait-for-domain-reload") {
+	if !strings.Contains(output, "--wait-for-domain-reload") {
 		t.Fatalf("embedded execute-dynamic-code options were not used: %s", output)
 	}
 }

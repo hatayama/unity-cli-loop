@@ -19,18 +19,16 @@ func shouldWaitForExecuteDynamicCodeDomainReload(command string, params map[stri
 	if compileOnly, ok := params[dynamicCodeCompileOnlyParam].(bool); ok && compileOnly {
 		return false
 	}
-	return domainReloadWaitEnabled(params)
+	return domainReloadWaitEnabled(params, false)
 }
 
-func domainReloadWaitEnabled(params map[string]any) bool {
+func domainReloadWaitEnabled(params map[string]any, defaultValue bool) bool {
 	value, ok := params[domainReloadWaitParam].(bool)
 	if ok {
 		return value
 	}
 
-	// Why: user-facing Unity mutation commands are checkpoints; returning only
-	// after reload recovery avoids handing the next tool a half-reset editor.
-	return true
+	return defaultValue
 }
 
 func executeDynamicCodeDomainReloadWaitRequired(result []byte) bool {
