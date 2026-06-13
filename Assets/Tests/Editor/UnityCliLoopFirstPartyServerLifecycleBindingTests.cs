@@ -18,7 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject request = JObject.Parse(requestJson);
 
             Assert.That(request["method"]?.ToString(), Is.EqualTo("get-version"));
-            Assert.That(request["uloop"]?["cliVersion"]?.ToString(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_VERSION));
+            Assert.That(
+                request["uloop"]?["protocolVersion"]?.ToObject<int>(),
+                Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION));
         }
     }
 }

@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 ["id"] = 1,
                 ["uloop"] = new JObject
                 {
-                    ["cliVersion"] = CliConstants.MINIMUM_REQUIRED_CLI_VERSION
+                    ["protocolVersion"] = CliConstants.REQUIRED_CLI_PROTOCOL_VERSION
                 }
             };
             return request.ToString(Formatting.None);

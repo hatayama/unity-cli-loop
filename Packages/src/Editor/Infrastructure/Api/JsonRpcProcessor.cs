@@ -93,6 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Method = request["method"]?.ToString(),
                 Params = request["params"],
                 ClientCliVersion = ReadClientCliVersion(request),
+                ClientProtocolVersion = ReadClientProtocolVersion(request),
                 AcceptsDispatchAck = ReadAcceptsDispatchAck(request),
                 AcceptsHeartbeat = ReadAcceptsHeartbeat(request),
                 Id = request["id"]?.ToObject<object>()
@@ -109,6 +110,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string cliVersion = metadata["cliVersion"]?.ToString();
             return string.IsNullOrWhiteSpace(cliVersion) ? null : cliVersion;
+        }
+
+        private static int? ReadClientProtocolVersion(JObject request)
+        {
+            JObject metadata = request["uloop"] as JObject;
+            if (metadata == null)
+            {
+                return null;
+            }
+
+            JToken protocolVersionToken = metadata["protocolVersion"];
+            if (protocolVersionToken == null || protocolVersionToken.Type != JTokenType.Integer)
+            {
+                return null;
+            }
+
+            return protocolVersionToken.Value<int>();
         }
 
         private static bool ReadAcceptsDispatchAck(JObject request)
@@ -180,9 +198,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             try
             {
                 ct.ThrowIfCancellationRequested();
-                if (IsCliUpdateRequired(request.ClientCliVersion))
+                if (IsCliUpdateRequired(request.ClientProtocolVersion))
                 {
-                    return CreateCliUpdateRequiredResponse(request.Id, request.ClientCliVersion);
+                    return CreateCliUpdateRequiredResponse(
+                        request.Id,
+                        request.ClientCliVersion,
+                        request.ClientProtocolVersion);
                 }
 
                 if (request.AcceptsDispatchAck && earlyResponseWriter != null)
@@ -278,21 +299,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return waitForDomainReloadToken.Value<bool>();
         }
 
-        private static bool IsCliUpdateRequired(string currentCliVersion)
+        private static bool IsCliUpdateRequired(int? currentProtocolVersion)
         {
-            if (string.IsNullOrWhiteSpace(currentCliVersion))
+            if (currentProtocolVersion == null)
             {
                 return true;
             }
 
-            return !CliVersionComparer.IsVersionGreaterThanOrEqual(
-                currentCliVersion,
-                CliConstants.MINIMUM_REQUIRED_CLI_VERSION);
+            return currentProtocolVersion.Value < CliConstants.REQUIRED_CLI_PROTOCOL_VERSION;
         }
 
-        private static string CreateCliUpdateRequiredResponse(object id, string currentCliVersion)
+        private static string CreateCliUpdateRequiredResponse(
+            object id,
+            string currentCliVersion,
+            int? currentProtocolVersion)
         {
-            string requiredCliVersion = CliConstants.MINIMUM_REQUIRED_CLI_VERSION;
             JsonRpcErrorResponse errorResponse = new(
                 UnityCliLoopServerConfig.JSONRPC_VERSION,
                 id,
@@ -301,9 +322,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     "The installed uloop CLI is too old for this Unity package.",
                     new CliUpdateRequiredErrorData(
                         currentCliVersion,
-                        requiredCliVersion,
-                        $"{CliConstants.EXECUTABLE_NAME} update",
-                        $"{CliConstants.EXECUTABLE_NAME} update --to-version {requiredCliVersion}")));
+                        currentProtocolVersion,
+                        CliConstants.REQUIRED_CLI_PROTOCOL_VERSION,
+                        $"{CliConstants.EXECUTABLE_NAME} update")));
 
             return JsonConvert.SerializeObject(errorResponse, Formatting.None, ResponseSerializerSettings);
         }
@@ -563,7 +584,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     }
 
     /// <summary>
-    /// Carries exact CLI update instructions so clients do not infer release tags.
+    /// Carries CLI update instructions plus the protocol generations that failed the gate.
     /// </summary>
     public class CliUpdateRequiredErrorData : JsonRpcErrorData
     {
@@ -571,24 +592,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public string currentCliVersion { get; }
 
-        public string requiredCliVersion { get; }
+        public int? currentProtocolVersion { get; }
+
+        public int requiredProtocolVersion { get; }
 
         public string updateCommand { get; }
-
-        public string targetUpdateCommand { get; }
 
         public bool retryableAfterUpdate { get; }
 
         public CliUpdateRequiredErrorData(
             string currentCliVersion,
-            string requiredCliVersion,
-            string updateCommand,
-            string targetUpdateCommand) : base("Update the uloop CLI and retry the original command.")
+            int? currentProtocolVersion,
+            int requiredProtocolVersion,
+            string updateCommand) : base("Update the uloop CLI and retry the original command.")
         {
             this.currentCliVersion = string.IsNullOrWhiteSpace(currentCliVersion) ? null : currentCliVersion;
-            this.requiredCliVersion = requiredCliVersion;
+            this.currentProtocolVersion = currentProtocolVersion;
+            this.requiredProtocolVersion = requiredProtocolVersion;
             this.updateCommand = updateCommand;
-            this.targetUpdateCommand = targetUpdateCommand;
             retryableAfterUpdate = true;
         }
     }
