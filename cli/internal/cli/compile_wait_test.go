@@ -67,10 +67,10 @@ func TestShouldWaitForCompileDomainReloadRespectsExplicitFalse(t *testing.T) {
 	}
 }
 
-// Verifies that execute-dynamic-code waits for domain reload by default.
-func TestShouldWaitForExecuteDynamicCodeDomainReloadDefaultsToExecuteDynamicCode(t *testing.T) {
-	if !shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, map[string]any{}) {
-		t.Fatal("execute-dynamic-code should wait for domain reload by default")
+// Verifies that execute-dynamic-code keeps the default hot path free from reload waiting.
+func TestShouldWaitForExecuteDynamicCodeDomainReloadDefaultsToHotPath(t *testing.T) {
+	if shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, map[string]any{}) {
+		t.Fatal("execute-dynamic-code should not wait for domain reload by default")
 	}
 
 	if shouldWaitForExecuteDynamicCodeDomainReload("get-logs", map[string]any{}) {
@@ -78,12 +78,12 @@ func TestShouldWaitForExecuteDynamicCodeDomainReloadDefaultsToExecuteDynamicCode
 	}
 }
 
-// Verifies that execute-dynamic-code can preserve the fast no-wait path.
-func TestShouldWaitForExecuteDynamicCodeDomainReloadRespectsExplicitFalse(t *testing.T) {
-	params := map[string]any{compileWaitParam: false}
+// Verifies that execute-dynamic-code can opt into post-reload safety when needed.
+func TestShouldWaitForExecuteDynamicCodeDomainReloadRespectsExplicitTrue(t *testing.T) {
+	params := map[string]any{compileWaitParam: true}
 
-	if shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, params) {
-		t.Fatal("execute-dynamic-code wait should be disabled by an explicit false flag")
+	if !shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, params) {
+		t.Fatal("execute-dynamic-code wait should be enabled by an explicit true flag")
 	}
 }
 

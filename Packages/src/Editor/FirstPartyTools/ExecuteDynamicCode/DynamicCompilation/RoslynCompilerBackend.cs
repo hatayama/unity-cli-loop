@@ -91,7 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         platform = UnityEngine.Application.platform.ToString(),
                         dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                        compiler_dll_path = externalCompilerPaths.CompilerDllPath
+                        compiler_dll_path = externalCompilerPaths.CompilerDllPath,
+                        layout_kind = externalCompilerPaths.LayoutKind.ToString()
                     });
 
                 ct.ThrowIfCancellationRequested();
@@ -154,7 +155,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 incrementBuildCount();
 
-                ProcessStartInfo startInfo = new()                {
+                ProcessStartInfo startInfo = new()
+                {
                     FileName = externalCompilerPaths.DotnetHostPath,
                     Arguments = $"{QuoteCommandLineArgument(externalCompilerPaths.CompilerDllPath)} @{QuoteCommandLineArgument(responseFilePath)}",
                     WorkingDirectory = Directory.GetCurrentDirectory(),
@@ -174,7 +176,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         DynamicCompilationHealthMonitor.ReportOneShotCompilerStartFailure(new
                         {
                             dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                            compiler_dll_path = externalCompilerPaths.CompilerDllPath
+                            compiler_dll_path = externalCompilerPaths.CompilerDllPath,
+                            layout_kind = externalCompilerPaths.LayoutKind.ToString()
                         });
 
                         return OneShotCompileResult.Fallback();
@@ -217,7 +220,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyCollection<string> defineSymbols,
             bool allowUnsafeCode)
         {
-            List<string> lines = new()            {
+            List<string> lines = new()
+            {
                 "-nologo",
                 "-nostdlib+",
                 "-target:library",
@@ -436,7 +440,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 reason = "infrastructure_failure",
                 exit_code = exitCode,
                 dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                compiler_dll_path = externalCompilerPaths.CompilerDllPath
+                compiler_dll_path = externalCompilerPaths.CompilerDllPath,
+                layout_kind = externalCompilerPaths.LayoutKind.ToString()
             });
         }
 

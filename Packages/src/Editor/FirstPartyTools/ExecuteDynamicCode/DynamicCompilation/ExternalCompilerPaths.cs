@@ -2,6 +2,18 @@
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
+    /// Identifies the Unity-bundled compiler layout selected for dynamic code compilation.
+    /// </summary>
+    internal enum ExternalCompilerLayoutKind
+    {
+        Unknown = 0,
+        ContentsRootDotNetSdkRoslyn = 1,
+        ContentsRootDotNetSdk = 2,
+        ResourcesScripting = 3,
+        Scanned = 4
+    }
+
+    /// <summary>
     /// Provides External Compiler Paths behavior for Unity CLI Loop.
     /// </summary>
     internal sealed class ExternalCompilerPaths
@@ -24,6 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string NetCoreRuntimeSharedDirectoryPath { get; }
 
+        public ExternalCompilerLayoutKind LayoutKind { get; }
+
         public ExternalCompilerPaths(
             string editorContentsPath,
             string scriptingRootPath,
@@ -33,7 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string compilerDepsFilePath,
             string codeAnalysisDllPath,
             string codeAnalysisCSharpDllPath,
-            string netCoreRuntimeSharedDirectoryPath)
+            string netCoreRuntimeSharedDirectoryPath,
+            ExternalCompilerLayoutKind layoutKind)
         {
             EditorContentsPath = editorContentsPath;
             ScriptingRootPath = scriptingRootPath;
@@ -44,6 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CodeAnalysisDllPath = codeAnalysisDllPath;
             CodeAnalysisCSharpDllPath = codeAnalysisCSharpDllPath;
             NetCoreRuntimeSharedDirectoryPath = netCoreRuntimeSharedDirectoryPath;
+            LayoutKind = layoutKind;
         }
     }
 }
