@@ -295,7 +295,7 @@
           "WaitForDomainReload": {
             "type": "boolean",
             "description": "Wait for domain reload completion before returning",
-            "default": true
+            "default": false
           },
           "YieldToForegroundRequests": {
             "type": "boolean",

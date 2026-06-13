@@ -68,19 +68,19 @@ func TestBuildToolParamsConvertsDefaultTrueBooleanToNegatedFlag(t *testing.T) {
 	}
 }
 
-// Tests that execute-dynamic-code accepts --no-wait-for-domain-reload from embedded tools.
-func TestBuildToolParamsConvertsExecuteDynamicCodeNoWaitFlag(t *testing.T) {
+// Tests that execute-dynamic-code accepts explicit reload waiting from embedded tools.
+func TestBuildToolParamsConvertsExecuteDynamicCodeWaitFlag(t *testing.T) {
 	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
 	if !ok {
 		t.Fatal("execute-dynamic-code was not found in default tools")
 	}
 
-	params, _, err := buildToolParams([]string{"--no-wait-for-domain-reload"}, tool)
+	params, _, err := buildToolParams([]string{"--wait-for-domain-reload"}, tool)
 	if err != nil {
 		t.Fatalf("buildToolParams failed: %v", err)
 	}
 
-	if params[compileWaitParam] != false {
+	if params[compileWaitParam] != true {
 		t.Fatalf("WaitForDomainReload mismatch: %#v", params[compileWaitParam])
 	}
 }

@@ -46,12 +46,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
-        public void ExecuteDynamicCodeSchema_WhenCreated_ShouldWaitForDomainReloadByDefault()
+        public void ExecuteDynamicCodeSchema_WhenCreated_ShouldNotWaitForDomainReloadByDefault()
         {
-            // Tests that execute-dynamic-code keeps CLI calls on the safe post-reload path by default.
+            // Tests that ordinary execute-dynamic-code calls keep the low-latency path by default.
             ExecuteDynamicCodeSchema schema = new();
 
-            Assert.That(schema.WaitForDomainReload, Is.True);
+            Assert.That(schema.WaitForDomainReload, Is.False);
         }
     }
 }
