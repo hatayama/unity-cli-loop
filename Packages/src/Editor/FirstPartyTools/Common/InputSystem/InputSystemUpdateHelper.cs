@@ -34,8 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const int StandardPressObservationFrames = 2;
         private const int ManualPressObservationFrames = 3;
-        private const int DefaultApplyTimeoutMilliseconds = 5000;
-        private const int DefaultFrameObservationTimeoutMilliseconds = 5000;
+        private const int DefaultApplyTimeoutMilliseconds = UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS;
+        private const int DefaultFrameObservationTimeoutMilliseconds = UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS;
         private const int PressDurationTimeoutGraceMilliseconds = 5000;
         private const int ApplyWaitStateWaiting = 0;
         private const int ApplyWaitStateApplying = 1;
@@ -412,21 +412,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return InputSimulationWaitOutcome.TimedOut;
             }
 
-            using CancellationTokenSource frameCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            Task frameTask = EditorFrameWaiter.WaitFramesAsync(1, frameCts.Token);
-            using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            Task timeoutTask = TimerDelay.Wait(remainingMilliseconds, timeoutCts.Token);
-            Task completedTask = await Task.WhenAny(frameTask, timeoutTask).ConfigureAwait(false);
-            if (completedTask == timeoutTask)
-            {
-                await timeoutTask.ConfigureAwait(false);
-                frameCts.Cancel();
-                return InputSimulationWaitOutcome.TimedOut;
-            }
-
-            timeoutCts.Cancel();
-            await frameTask.ConfigureAwait(false);
-            return InputSimulationWaitOutcome.Completed;
+            bool frameObserved = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                1,
+                remainingMilliseconds,
+                ct).ConfigureAwait(false);
+            return frameObserved
+                ? InputSimulationWaitOutcome.Completed
+                : InputSimulationWaitOutcome.TimedOut;
         }
 
         private static int GetPressLifetimeTimeoutMilliseconds(float duration)

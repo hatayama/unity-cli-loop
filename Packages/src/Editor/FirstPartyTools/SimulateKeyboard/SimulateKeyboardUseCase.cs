@@ -487,7 +487,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SimulateKeyboardOverlayState.ReleasePress();
-            await EditorFrameWaiter.WaitFramesAsync(1, CancellationToken.None).ConfigureAwait(false);
+            await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                1,
+                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                CancellationToken.None).ConfigureAwait(false);
         }
 
         private static async Task<InputSimulationWaitOutcome> RollbackHeldKey(Keyboard keyboard, Key key, string keyName)

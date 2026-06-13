@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -429,7 +430,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 while (elapsed < parameters.Duration)
                 {
                     SimulateMouseUiOverlayState.UpdateLongPressElapsed(elapsed);
-                    await EditorFrameWaiter.WaitFramesAsync(1, ct);
+                    await WaitForEditorFrameOrThrow(ct);
                     elapsed = Time.realtimeSinceStartup - startTime;
                 }
                 SimulateMouseUiOverlayState.UpdateLongPressElapsed(parameters.Duration);
@@ -570,7 +571,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 await PlayExpandAnimation(ct);
                 await InterpolateDragPosition(pointerData, target, screenEnd, parameters.DragSpeed, ct);
-                await EditorFrameWaiter.WaitFramesAsync(1, ct);
+                await WaitForEditorFrameOrThrow(ct);
             }
             finally
             {
@@ -656,7 +657,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (duration <= 0f)
             {
-                await EditorFrameWaiter.WaitFramesAsync(1, ct);
+                await WaitForEditorFrameOrThrow(ct);
 
                 Vector2 previousPosition = pointerData.position;
                 pointerData.position = endPos;
@@ -672,7 +673,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 do
                 {
-                    await EditorFrameWaiter.WaitFramesAsync(1, ct);
+                    await WaitForEditorFrameOrThrow(ct);
 
                     float elapsed = Time.realtimeSinceStartup - startTime;
                     t = Mathf.Clamp01(elapsed / duration);
@@ -893,7 +894,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 await InterpolateDragPosition(
                     MouseDragState.PointerData!, MouseDragState.Target!, screenEnd,
                     parameters.DragSpeed, ct);
-                await EditorFrameWaiter.WaitFramesAsync(1, ct);
+                await WaitForEditorFrameOrThrow(ct);
             }
             finally
             {
@@ -962,7 +963,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 float t = elapsed / EXPAND_DURATION;
                 overlay.SetCursorScale(Mathf.Lerp(EXPAND_START_SCALE, 1f, t));
-                await EditorFrameWaiter.WaitFramesAsync(1, ct);
+                await WaitForEditorFrameOrThrow(ct);
                 elapsed = Time.realtimeSinceStartup - startTime;
             }
             overlay.SetCursorScale(1f);
@@ -979,12 +980,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 float t = elapsed / DISSIPATE_DURATION;
                 overlay.SetCursorScale(Mathf.Lerp(1f, 0f, t));
                 overlay.SetAlpha(Mathf.Lerp(1f, 0f, t));
-                await EditorFrameWaiter.WaitFramesAsync(1, ct);
+                await WaitForEditorFrameOrThrow(ct);
                 elapsed = Time.realtimeSinceStartup - startTime;
             }
             overlay!.SetCursorScale(0f);
             overlay!.SetAlpha(0f);
             SimulateMouseUiOverlayState.Clear();
+        }
+
+        private static async Task WaitForEditorFrameOrThrow(CancellationToken ct)
+        {
+            bool frameReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                1,
+                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                ct).ConfigureAwait(false);
+            if (!frameReady)
+            {
+                throw new TimeoutException(
+                    $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for an editor frame.");
+            }
+
+            await MainThreadSwitcher.SwitchToMainThread(ct);
         }
 
         private static RaycastResult? RaycastUI(Vector2 screenPosition, EventSystem eventSystem)

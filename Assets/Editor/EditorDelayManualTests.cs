@@ -16,6 +16,14 @@ namespace io.github.hatayama.UnityCliLoop.Dev
     {
         private static int testFrameStart;
         private static int testCounter = 0;
+
+        private static Task<bool> WaitFramesForManualTestAsync(int frameCount, CancellationToken ct = default)
+        {
+            return EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                frameCount,
+                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                ct);
+        }
         
         [MenuItem("UnityCliLoop/Debug/EditorFrameWaiter Tests/Basic Frame Wait Tests")]
         public static void TestBasicDelays()
@@ -37,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             int currentFrame = Time.frameCount;
             Debug.Log($"[Test {++testCounter}] Zero Frame Delay - Start (Frame: {currentFrame})");
             
-            await EditorFrameWaiter.WaitFramesAsync(0);
+            await WaitFramesForManualTestAsync(0);
             
             int completionFrame = Time.frameCount;
             Debug.Log($"[Test {testCounter}] Zero Frame Delay - Complete (Frame: {completionFrame}) - Immediate: {currentFrame == completionFrame}");
@@ -48,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             int currentFrame = Time.frameCount;
             Debug.Log($"[Test {++testCounter}] Single Frame Delay - Start (Frame: {currentFrame})");
             
-            await EditorFrameWaiter.WaitFramesAsync(1);
+            await WaitFramesForManualTestAsync(1);
             
             int completionFrame = Time.frameCount;
             int framesDiff = completionFrame - currentFrame;
@@ -61,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             int currentFrame = Time.frameCount;
             Debug.Log($"[Test {++testCounter}] Multiple Frame Delay ({delayFrames}) - Start (Frame: {currentFrame})");
             
-            await EditorFrameWaiter.WaitFramesAsync(delayFrames);
+            await WaitFramesForManualTestAsync(delayFrames);
             
             int completionFrame = Time.frameCount;
             int framesDiff = completionFrame - currentFrame;
@@ -92,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             int startFrame = Time.frameCount;
             Debug.Log($"Task {taskName}: Start (Frame: {startFrame}, Delay: {frames} frames)");
             
-            await EditorFrameWaiter.WaitFramesAsync(frames);
+            await WaitFramesForManualTestAsync(frames);
             
             int endFrame = Time.frameCount;
             int elapsed = endFrame - testFrameStart;
@@ -132,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         
         private static async Task StressTaskAsync(int taskId, Action onComplete)
         {
-            await EditorFrameWaiter.WaitFramesAsync(2); // All tasks execute after 2 frames
+            await WaitFramesForManualTestAsync(2); // All tasks execute after 2 frames
             onComplete?.Invoke();
         }
         
@@ -160,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             try
             {
                 Debug.Log("Cancellable Task: Start (will be cancelled)");
-                await EditorFrameWaiter.WaitFramesAsync(10, cancellationToken);
+                await WaitFramesForManualTestAsync(10, cancellationToken);
                 Debug.Log("Cancellable Task: Complete (should not reach here)");
             }
             catch (OperationCanceledException)
@@ -191,13 +199,13 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             Debug.Log("Simulation: Starting server restoration sequence...");
             
             // Test with the same pattern as UnityCliLoopServerController
-            await EditorFrameWaiter.WaitFramesAsync(1);
+            await WaitFramesForManualTestAsync(1);
             Debug.Log("Simulation: Phase 1 - Port release wait completed");
             
-            await EditorFrameWaiter.WaitFramesAsync(1);
+            await WaitFramesForManualTestAsync(1);
             Debug.Log("Simulation: Phase 2 - Server startup completed");
             
-            await EditorFrameWaiter.WaitFramesAsync(1);
+            await WaitFramesForManualTestAsync(1);
             Debug.Log("Simulation: Phase 3 - Notification sent");
             
             Debug.Log("Simulation: Server restoration sequence completed!");

@@ -16,7 +16,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class ScreenshotUseCase : IUnityCliLoopScreenshotService
     {
         private const int ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES = 2;
-        private const int FRAME_WAIT_TIMEOUT_MILLISECONDS = 5000;
 
         public async Task<UnityCliLoopScreenshotResult> CaptureAsync(
             UnityCliLoopScreenshotRequest request,
@@ -96,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
                     bool overlayFramesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
                         ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
-                        FRAME_WAIT_TIMEOUT_MILLISECONDS,
+                        UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
                         ct).ConfigureAwait(false);
                     if (!overlayFramesReady)
                     {
@@ -108,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 (texture, yOffset, timedOut) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
                     request.ResolutionScale,
-                    FRAME_WAIT_TIMEOUT_MILLISECONDS,
+                    UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
                     ct).ConfigureAwait(false);
                 if (timedOut)
                 {
@@ -214,7 +213,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 (Texture2D texture, bool timedOut) = await EditorWindowCaptureUtility.CaptureWindowAsync(
                     window,
                     request.ResolutionScale,
-                    FRAME_WAIT_TIMEOUT_MILLISECONDS,
+                    UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
                     ct).ConfigureAwait(false);
                 if (timedOut)
                 {
@@ -281,11 +280,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static UnityCliLoopScreenshotResult CreateTimedOutResult(string waitName, string correlationId)
         {
             string message =
-                $"Timed out after {FRAME_WAIT_TIMEOUT_MILLISECONDS}ms while waiting for {waitName} frames.";
+                $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for {waitName} frames.";
             VibeLogger.LogWarning(
                 "screenshot_timeout",
                 message,
-                new { WaitName = waitName, TimeoutMilliseconds = FRAME_WAIT_TIMEOUT_MILLISECONDS },
+                new { WaitName = waitName, TimeoutMilliseconds = UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS },
                 correlationId: correlationId
             );
 
