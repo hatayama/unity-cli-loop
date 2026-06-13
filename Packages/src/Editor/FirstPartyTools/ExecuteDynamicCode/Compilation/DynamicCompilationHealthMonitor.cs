@@ -49,20 +49,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "Investigate shared worker startup, protocol, or platform support.");
         }
 
-        internal static void ReportSharedWorkerSkipped(string reason, object context = null)
-        {
-            string issueKey = $"shared_worker_skipped::{reason}";
-            string message =
-                $"execute-dynamic-code shared Roslyn worker skipped; one-shot compiler execution will be used; reason={reason}";
-            LogInfoOnce(
-                issueKey,
-                "dynamic_code_shared_worker_skipped",
-                message,
-                context ?? new { reason },
-                "Shared worker fast path was intentionally skipped.",
-                "No action is required unless one-shot compiler execution becomes slow or fails.");
-        }
-
         public static void ReportSharedWorkerFailure(string reason, object context = null)
         {
             string issueKey = $"shared_worker_failure::{reason}";
@@ -113,32 +99,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 humanNote: humanNote,
                 aiTodo: aiTodo);
             Debug.LogError(FormatConsoleErrorMessage(operation, message, context));
-        }
-
-        private static void LogInfoOnce(
-            string issueKey,
-            string operation,
-            string message,
-            object context,
-            string humanNote,
-            string aiTodo)
-        {
-            string effectiveIssueKey = CreateEffectiveIssueKey(issueKey);
-
-            lock (ReportedIssueLock)
-            {
-                if (!ReportedIssues.Add(effectiveIssueKey))
-                {
-                    return;
-                }
-            }
-
-            VibeLogger.LogInfo(
-                operation,
-                message,
-                context,
-                humanNote: humanNote,
-                aiTodo: aiTodo);
         }
 
         private static string CreateEffectiveIssueKey(string issueKey)

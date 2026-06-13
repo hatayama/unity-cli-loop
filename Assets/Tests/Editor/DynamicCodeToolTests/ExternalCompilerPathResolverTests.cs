@@ -1,5 +1,10 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEditor.Compilation;
 using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -214,40 +219,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
-        public void ShouldUseSharedWorker_WhenContentsRootLegacyRoslynLayoutIsResolved_ShouldReturnFalse()
+        public async Task CompileAsync_WhenSharedWorkerBuildFails_ShouldFallbackToOneShotRoslyn()
         {
-            // Verifies Unity 2022-style compiler roots skip the shared worker to avoid long Busy stalls.
-            ExternalCompilerPaths compilerPaths = CreateCompilerPaths(
-                ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn);
+            // Verifies a broken worker cannot disable execute-dynamic-code; the bounded fallback still completes.
+            ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(externalCompilerPaths, Is.Not.Null, "Unity external compiler layout should be available.");
 
-            bool shouldUseSharedWorker = RoslynCompilerBackend.ShouldUseSharedWorkerForTests(compilerPaths);
+            string sourcePath = Path.Combine(_tempDirectoryPath, "WorkerFallbackSmoke.cs");
+            string dllPath = Path.Combine(_tempDirectoryPath, "WorkerFallbackSmoke.dll");
+            File.WriteAllText(
+                sourcePath,
+                "public static class WorkerFallbackSmoke { public static int Execute() { return 7; } }");
+            DynamicReferenceSetBuilderService referenceSetBuilder = new DynamicReferenceSetBuilderService();
+            List<string> references = referenceSetBuilder.BuildReferenceSet(
+                new List<string>(),
+                null,
+                externalCompilerPaths);
+            int buildCount = 0;
+            bool buildStarted = false;
+            bool buildFinished = false;
 
-            Assert.That(shouldUseSharedWorker, Is.False);
-        }
-
-        [Test]
-        public void ShouldUseSharedWorker_WhenResourcesScriptingLayoutIsResolved_ShouldReturnTrue()
-        {
-            // Verifies Unity 6-style compiler roots keep the shared worker optimization.
-            ExternalCompilerPaths compilerPaths = CreateCompilerPaths(
-                ExternalCompilerLayoutKind.ResourcesScripting);
-
-            bool shouldUseSharedWorker = RoslynCompilerBackend.ShouldUseSharedWorkerForTests(compilerPaths);
-
-            Assert.That(shouldUseSharedWorker, Is.True);
-        }
-
-        [Test]
-        public void ReportSharedWorkerSkipped_WhenContentsRootLegacyLayoutIsSkipped_ShouldNotEmitConsoleError()
-        {
-            // Verifies the intentional Unity 2022 legacy-layout skip is not reported as a Unity Console error.
             DynamicCompilationHealthMonitor.ResetForTests();
+            SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                new System.Text.RegularExpressions.Regex(
+                    "execute-dynamic-code shared Roslyn worker failed to operate correctly; reason=worker_build_failed"));
+            LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                new System.Text.RegularExpressions.Regex(
+                    "execute-dynamic-code shared Roslyn worker is unavailable; falling back to one-shot compiler execution; reason=worker_unavailable"));
 
-            DynamicCompilationHealthMonitor.ReportSharedWorkerSkipped(
-                "contents_root_legacy_layout",
-                new { layout_kind = ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn.ToString() });
+            Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> previousWorkerCompiler =
+                SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
+                    (ExternalCompilerPaths paths, string workerSourcePath, string workerAssemblyPath, string workerCompileResponseFilePath) =>
+                        new CompilerMessage[]
+                        {
+                            new CompilerMessage
+                            {
+                                type = CompilerMessageType.Error,
+                                message = "synthetic worker build failure"
+                            }
+                        });
 
-            LogAssert.NoUnexpectedReceived();
+            try
+            {
+                DynamicCompilationBackendResult result = await RoslynCompilerBackend.CompileAsync(
+                    sourcePath,
+                    dllPath,
+                    references,
+                    externalCompilerPaths,
+                    CancellationToken.None,
+                    () => buildStarted = true,
+                    () => buildFinished = true,
+                    () => buildCount++);
+
+                Assert.That(result, Is.Not.Null);
+                Assert.That(result.BackendKind, Is.EqualTo(DynamicCompilationBackendKind.OneShotRoslyn));
+                Assert.That(File.Exists(dllPath), Is.True);
+                Assert.That(buildCount, Is.EqualTo(1));
+                Assert.That(buildStarted, Is.True);
+                Assert.That(buildFinished, Is.True);
+            }
+            finally
+            {
+                SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(previousWorkerCompiler);
+                SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            }
         }
 
         private string CreateDirectory(string relativePath)
@@ -265,33 +303,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             return filePath;
         }
 
-        private ExternalCompilerPaths CreateCompilerPaths(ExternalCompilerLayoutKind layoutKind)
-        {
-            string contentsPath = CreateDirectory("CompilerPaths");
-            string scriptingRelativePath = layoutKind == ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn
-                ? "CompilerPaths"
-                : Path.Combine("CompilerPaths", "Resources", "Scripting");
-            string scriptingRootPath = layoutKind == ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn
-                ? contentsPath
-                : CreateDirectory(scriptingRelativePath);
-            string compilerDirectoryPath = CreateDirectory(Path.Combine(scriptingRelativePath, "DotNetSdkRoslyn"));
-            string runtimeDirectoryPath = CreateDirectory(Path.Combine(
-                scriptingRelativePath,
-                "NetCoreRuntime",
-                "shared",
-                "Microsoft.NETCore.App",
-                "6.0.0"));
-            return new ExternalCompilerPaths(
-                contentsPath,
-                scriptingRootPath,
-                Path.Combine(scriptingRootPath, "NetCoreRuntime", "dotnet"),
-                Path.Combine(compilerDirectoryPath, "csc.dll"),
-                Path.Combine(compilerDirectoryPath, "csc.runtimeconfig.json"),
-                Path.Combine(compilerDirectoryPath, "csc.deps.json"),
-                Path.Combine(compilerDirectoryPath, "Microsoft.CodeAnalysis.dll"),
-                Path.Combine(compilerDirectoryPath, "Microsoft.CodeAnalysis.CSharp.dll"),
-                runtimeDirectoryPath,
-                layoutKind);
-        }
     }
 }

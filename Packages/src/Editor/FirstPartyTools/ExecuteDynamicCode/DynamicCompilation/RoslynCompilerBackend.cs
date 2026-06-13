@@ -63,52 +63,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                if (ShouldUseSharedWorker(externalCompilerPaths))
-                {
-                    WriteWorkerRequestFile(
-                        workerRequestFilePath,
-                        sourcePath,
-                        dllPath,
-                        references,
-                        defineSymbols,
-                        allowUnsafeCode);
+                WriteWorkerRequestFile(
+                    workerRequestFilePath,
+                    sourcePath,
+                    dllPath,
+                    references,
+                    defineSymbols,
+                    allowUnsafeCode);
 
-                    CompilerMessage[] workerMessages = SharedRoslynCompilerWorkerHost.TryCompile(
-                        workerRequestFilePath,
-                        externalCompilerPaths,
-                        ct,
-                        markBuildStarted,
-                        markBuildFinished,
-                        incrementBuildCount);
-                    if (workerMessages != null)
+                CompilerMessage[] workerMessages = SharedRoslynCompilerWorkerHost.TryCompile(
+                    workerRequestFilePath,
+                    externalCompilerPaths,
+                    ct,
+                    markBuildStarted,
+                    markBuildFinished,
+                    incrementBuildCount);
+                if (workerMessages != null)
+                {
+                    return new DynamicCompilationBackendResult(
+                        workerMessages,
+                        DynamicCompilationBackendKind.SharedRoslynWorker);
+                }
+
+                DynamicCompilationHealthMonitor.ReportSharedWorkerFallback(
+                    "worker_unavailable",
+                    new
                     {
-                        return new DynamicCompilationBackendResult(
-                            workerMessages,
-                            DynamicCompilationBackendKind.SharedRoslynWorker);
-                    }
-
-                    DynamicCompilationHealthMonitor.ReportSharedWorkerFallback(
-                        "worker_unavailable",
-                        new
-                        {
-                            platform = UnityEngine.Application.platform.ToString(),
-                            dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                            compiler_dll_path = externalCompilerPaths.CompilerDllPath,
-                            layout_kind = externalCompilerPaths.LayoutKind.ToString()
-                        });
-                }
-                else
-                {
-                    DynamicCompilationHealthMonitor.ReportSharedWorkerSkipped(
-                        "contents_root_legacy_layout",
-                        new
-                        {
-                            platform = UnityEngine.Application.platform.ToString(),
-                            dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                            compiler_dll_path = externalCompilerPaths.CompilerDllPath,
-                            layout_kind = externalCompilerPaths.LayoutKind.ToString()
-                        });
-                }
+                        platform = UnityEngine.Application.platform.ToString(),
+                        dotnet_host_path = externalCompilerPaths.DotnetHostPath,
+                        compiler_dll_path = externalCompilerPaths.CompilerDllPath,
+                        layout_kind = externalCompilerPaths.LayoutKind.ToString()
+                    });
 
                 ct.ThrowIfCancellationRequested();
                 OneShotCompileResult oneShotResult = await CompileWithOneShotAsync(
@@ -145,17 +130,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal static bool ShouldUseSharedWorkerForTests(ExternalCompilerPaths externalCompilerPaths)
-        {
-            return ShouldUseSharedWorker(externalCompilerPaths);
-        }
-
-        private static bool ShouldUseSharedWorker(ExternalCompilerPaths externalCompilerPaths)
-        {
-            System.Diagnostics.Debug.Assert(externalCompilerPaths != null, "externalCompilerPaths must not be null");
-            return externalCompilerPaths.LayoutKind != ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn;
-        }
-
         private static async Task<OneShotCompileResult> CompileWithOneShotAsync(
             string sourcePath,
             string dllPath,
@@ -181,7 +155,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 incrementBuildCount();
 
-                ProcessStartInfo startInfo = new()                {
+                ProcessStartInfo startInfo = new()
+                {
                     FileName = externalCompilerPaths.DotnetHostPath,
                     Arguments = $"{QuoteCommandLineArgument(externalCompilerPaths.CompilerDllPath)} @{QuoteCommandLineArgument(responseFilePath)}",
                     WorkingDirectory = Directory.GetCurrentDirectory(),
@@ -244,7 +219,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyCollection<string> defineSymbols,
             bool allowUnsafeCode)
         {
-            List<string> lines = new()            {
+            List<string> lines = new()
+            {
                 "-nologo",
                 "-nostdlib+",
                 "-target:library",
