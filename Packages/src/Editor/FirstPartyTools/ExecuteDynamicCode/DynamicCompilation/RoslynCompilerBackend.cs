@@ -176,7 +176,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         DynamicCompilationHealthMonitor.ReportOneShotCompilerStartFailure(new
                         {
                             dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                            compiler_dll_path = externalCompilerPaths.CompilerDllPath
+                            compiler_dll_path = externalCompilerPaths.CompilerDllPath,
+                            layout_kind = externalCompilerPaths.LayoutKind.ToString()
                         });
 
                         return OneShotCompileResult.Fallback();
@@ -439,7 +440,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 reason = "infrastructure_failure",
                 exit_code = exitCode,
                 dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                compiler_dll_path = externalCompilerPaths.CompilerDllPath
+                compiler_dll_path = externalCompilerPaths.CompilerDllPath,
+                layout_kind = externalCompilerPaths.LayoutKind.ToString()
             });
         }
 

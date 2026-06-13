@@ -292,6 +292,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             }
         }
 
+        [Test]
+        public void ReportInfrastructureFallback_WhenCompilerPathLayoutIsKnown_ShouldIncludeLayoutKind()
+        {
+            DynamicCompilationHealthMonitor.ResetForTests();
+            ExternalCompilerPaths externalCompilerPaths = CreateExternalCompilerPaths(ExternalCompilerLayoutKind.Scanned);
+            LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                new System.Text.RegularExpressions.Regex(
+                    "dynamic_code_one_shot_compiler_start_failure[\\s\\S]*layout_kind = Scanned"));
+
+            RoslynCompilerBackend.ReportInfrastructureFallback(externalCompilerPaths, 57);
+        }
+
         private string CreateDirectory(string relativePath)
         {
             string directoryPath = Path.Combine(_tempDirectoryPath, relativePath);
@@ -305,6 +318,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
             File.WriteAllText(filePath, string.Empty);
             return filePath;
+        }
+
+        private ExternalCompilerPaths CreateExternalCompilerPaths(ExternalCompilerLayoutKind layoutKind)
+        {
+            string editorContentsPath = CreateDirectory("EditorContents");
+            string scriptingRootPath = CreateDirectory("Scripting");
+            string dotnetHostPath = CreateFile(Path.Combine("DotNet", "dotnet"));
+            string compilerDllPath = CreateFile(Path.Combine("Roslyn", "csc.dll"));
+            string compilerRuntimeConfigPath = CreateFile(Path.Combine("Roslyn", "csc.runtimeconfig.json"));
+            string compilerDepsFilePath = CreateFile(Path.Combine("Roslyn", "csc.deps.json"));
+            string codeAnalysisDllPath = CreateFile(Path.Combine("Roslyn", "Microsoft.CodeAnalysis.dll"));
+            string codeAnalysisCSharpDllPath = CreateFile(Path.Combine("Roslyn", "Microsoft.CodeAnalysis.CSharp.dll"));
+            string netCoreRuntimeSharedDirectoryPath = CreateDirectory(Path.Combine("Runtime", "shared"));
+
+            return new ExternalCompilerPaths(
+                editorContentsPath,
+                scriptingRootPath,
+                dotnetHostPath,
+                compilerDllPath,
+                compilerRuntimeConfigPath,
+                compilerDepsFilePath,
+                codeAnalysisDllPath,
+                codeAnalysisCSharpDllPath,
+                netCoreRuntimeSharedDirectoryPath,
+                layoutKind);
         }
 
     }
