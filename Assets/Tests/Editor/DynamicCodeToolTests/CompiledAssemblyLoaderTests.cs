@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -17,6 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     [TestFixture]
     public class CompiledAssemblyLoaderTests
     {
+        private const int CompilerProcessTimeoutMilliseconds = 30000;
+
         private IPreloadAssemblySecurityValidator _previousValidator;
         private string _tempDirectoryPath;
 
@@ -106,9 +109,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             using Process process = ProcessStartHelper.TryStart(startInfo);
             Assert.That(process, Is.Not.Null, "The external C# compiler should start for loader tests");
 
-            string stdout = process.StandardOutput.ReadToEnd();
-            string stderr = process.StandardError.ReadToEnd();
+            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+            bool exited = process.WaitForExit(CompilerProcessTimeoutMilliseconds);
+            if (!exited)
+            {
+                process.Kill();
+                Assert.Fail("The external C# compiler did not exit before the timeout.");
+            }
+
             process.WaitForExit();
+            string stdout = stdoutTask.Result;
+            string stderr = stderrTask.Result;
 
             Assert.That(process.ExitCode, Is.EqualTo(0), $"{stdout}\n{stderr}");
             return File.ReadAllBytes(dllPath);

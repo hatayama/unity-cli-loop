@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     [TestFixture]
     public class DynamicCodeExecutionFacadeTests
     {
+        private static readonly TimeSpan CancellationPropagationTimeout = TimeSpan.FromSeconds(1);
+
         [Test]
         public async Task ExecuteAsync_WhenSameSecurityLevelUsedTwice_ShouldReuseExecutor()
         {
@@ -105,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             cancellationTokenSource.Cancel();
 
-            Assert.That(async () => await firstExecution, Throws.InstanceOf<OperationCanceledException>());
+            await AssertCanceledWithinTimeoutAsync(firstExecution);
 
             ExecutionResult secondExecution = await facade.ExecuteAsync(
                 CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 2;"),
@@ -113,6 +115,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             Assert.That(secondExecution.Success, Is.True);
             Assert.That(secondExecution.Result, Is.EqualTo("return 2;"));
+        }
+
+        private static async Task AssertCanceledWithinTimeoutAsync(Task task)
+        {
+            Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
+            Task completedTask = await Task.WhenAny(task, timeoutTask);
+            if (completedTask == timeoutTask)
+            {
+                Assert.Fail("Foreground execution task did not complete before the timeout.");
+            }
+
+            if (task.IsFaulted)
+            {
+                Assert.Fail($"Expected cancellation, but the task faulted: {task.Exception}");
+            }
+
+            Assert.That(task.IsCanceled, Is.True);
         }
 
         private static DynamicCodeExecutionRequest CreateRequest(
@@ -181,7 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 if (code == BlockingCode)
                 {
                     _blockingExecutionStartedCompletionSource.TrySetResult(true);
-                    await Task.Delay(Timeout.Infinite, cancellationToken);
+                    await WaitForCancellationOrFailAsync(cancellationToken);
                 }
 
                 return new ExecutionResult
@@ -199,6 +218,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             public void Dispose()
             {
                 DisposeCallCount++;
+            }
+
+            /// <summary>
+            /// Waits for cancellation with a bounded timeout so regression failures do not freeze Unity.
+            /// </summary>
+            private static async Task WaitForCancellationOrFailAsync(CancellationToken cancellationToken)
+            {
+                TaskCompletionSource<bool> cancellationCompletionSource =
+                    new(TaskCreationOptions.RunContinuationsAsynchronously);
+                using CancellationTokenRegistration cancellationRegistration =
+                    cancellationToken.Register(() => cancellationCompletionSource.TrySetCanceled());
+                Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
+                Task completedTask = await Task.WhenAny(cancellationCompletionSource.Task, timeoutTask);
+
+                if (completedTask == timeoutTask)
+                {
+                    Assert.Fail("Foreground execution cancellation was not observed before the timeout.");
+                }
+
+                await cancellationCompletionSource.Task;
             }
         }
 
