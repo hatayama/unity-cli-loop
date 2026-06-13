@@ -2,7 +2,7 @@ name: Unity Compile Check
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, v3-beta ]
     paths:
       - 'Packages/src/Editor/**/*.cs'
       - 'Packages/src/Runtime/**/*.cs'
