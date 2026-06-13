@@ -15,6 +15,7 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using NUnitMethodInfo = NUnit.Framework.Interfaces.IMethodInfo;
 using NUnitTNode = NUnit.Framework.Interfaces.TNode;
 using NUnitTypeInfo = NUnit.Framework.Interfaces.ITypeInfo;
+using TestRunnerMode = UnityEditor.TestTools.TestRunner.Api.TestMode;
 using TestResultStatus = UnityEditor.TestTools.TestRunner.Api.TestStatus;
 using TestRunState = UnityEditor.TestTools.TestRunner.Api.RunState;
 
@@ -285,7 +286,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public string UniqueName => FullName;
             public string ParentUniqueName => string.Empty;
             public int ChildIndex => 0;
-            public TestMode TestMode => TestMode.EditMode;
+            public TestRunnerMode TestMode => TestRunnerMode.EditMode;
         }
     }
 }
