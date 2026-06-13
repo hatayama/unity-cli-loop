@@ -68,7 +68,7 @@ jobs:
         run: dotnet test tests/DynamicCodeExecutionScheduler.UnitTests/DynamicCodeExecutionScheduler.UnitTests.csproj --configuration Release
 
       - name: Cache Library folder
-        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
+        if: env.HAS_UNITY_LICENSE == 'true'
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: Library
