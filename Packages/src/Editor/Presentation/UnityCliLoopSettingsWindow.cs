@@ -617,6 +617,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private CliSetupData CreateCliSetupData(bool includeSkillDirectoryChecks = true)
         {
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            int? cliProtocolVersion = CliSetupApplicationFacade.GetCachedCliProtocolVersion();
             string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
             string requiredCliVersion = GetMinimumRequiredCliVersion();
 
@@ -628,8 +629,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 || _isRefreshingVersion
                 || _isRefreshingCliPathSetup
                 || !includeSkillDirectoryChecks;
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredCliVersion);
-            bool needsDowngrade = false;
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliProtocolVersion);
+            bool needsDowngrade = IsCliDowngradeNeeded(cliProtocolVersion);
             bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
             SkillInstallState selectedTargetInstallState = includeSkillDirectoryChecks
                 ? _selectedTargetInstallState
@@ -832,6 +833,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private CliPrimaryButtonAction GetCurrentCliPrimaryButtonAction()
         {
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            int? cliProtocolVersion = CliSetupApplicationFacade.GetCachedCliProtocolVersion();
             string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
             bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
@@ -839,48 +841,52 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return ResolveCliPrimaryButtonAction(
                 _needsCliPathSetup,
                 cliVersion,
-                GetMinimumRequiredCliVersion(),
+                cliProtocolVersion,
                 canUninstallCli);
         }
 
         private bool ShouldUninstallCliFromPrimaryButton()
         {
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            int? cliProtocolVersion = CliSetupApplicationFacade.GetCachedCliProtocolVersion();
             string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
             bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);
             return ShouldUninstallCliFromPrimaryButton(
                 cliVersion,
-                GetMinimumRequiredCliVersion(),
+                cliProtocolVersion,
                 canUninstallCli);
         }
 
         internal static bool ShouldUninstallCliFromPrimaryButton(
             string cliVersion,
-            string requiredCliVersion,
+            int? cliProtocolVersion,
             bool canUninstallCli)
         {
             bool isCliInstalled = cliVersion != null;
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredCliVersion);
-            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade: false, canUninstallCli);
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliProtocolVersion);
+            bool needsDowngrade = IsCliDowngradeNeeded(cliProtocolVersion);
+            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade, canUninstallCli);
         }
 
         internal static CliPrimaryButtonAction ResolveCliPrimaryButtonAction(
             bool needsCliPathSetup,
             string cliVersion,
-            string requiredCliVersion,
+            int? cliProtocolVersion,
             bool canUninstallCli)
         {
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, requiredCliVersion);
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliProtocolVersion);
+            bool needsDowngrade = IsCliDowngradeNeeded(cliProtocolVersion);
             if (ShouldRepairCliPathFromPrimaryButton(
                     needsCliPathSetup,
-                    needsUpdate))
+                    needsUpdate,
+                    needsDowngrade))
             {
                 return CliPrimaryButtonAction.RepairPath;
             }
 
-            if (ShouldUninstallCliFromPrimaryButton(cliVersion, requiredCliVersion, canUninstallCli))
+            if (ShouldUninstallCliFromPrimaryButton(cliVersion, cliProtocolVersion, canUninstallCli))
             {
                 return CliPrimaryButtonAction.Uninstall;
             }
@@ -908,9 +914,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(
             bool needsCliPathSetup,
-            bool needsUpdate)
+            bool needsUpdate,
+            bool needsDowngrade)
         {
-            return needsCliPathSetup && !needsUpdate;
+            return needsCliPathSetup && !needsUpdate && !needsDowngrade;
         }
 
         private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)
@@ -963,10 +970,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        internal static bool IsCliUpdateNeeded(string cliVersion, string requiredCliVersion)
+        internal static bool IsCliUpdateNeeded(string cliVersion, int? cliProtocolVersion)
         {
-            return cliVersion != null
-                && CliSetupApplicationFacade.IsCliVersionLessThan(cliVersion, requiredCliVersion);
+            if (string.IsNullOrEmpty(cliVersion))
+            {
+                return false;
+            }
+
+            if (cliProtocolVersion == null)
+            {
+                return true;
+            }
+
+            return cliProtocolVersion.Value < CliConstants.REQUIRED_CLI_PROTOCOL_VERSION;
+        }
+
+        internal static bool IsCliDowngradeNeeded(int? cliProtocolVersion)
+        {
+            return cliProtocolVersion != null
+                && cliProtocolVersion.Value > CliConstants.REQUIRED_CLI_PROTOCOL_VERSION;
         }
 
         private async Task HandleUninstallCli()

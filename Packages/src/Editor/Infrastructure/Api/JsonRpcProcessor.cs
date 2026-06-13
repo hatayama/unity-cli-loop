@@ -198,9 +198,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             try
             {
                 ct.ThrowIfCancellationRequested();
-                if (IsCliUpdateRequired(request.ClientProtocolVersion))
+                if (IsCliProtocolMismatch(request.ClientProtocolVersion))
                 {
-                    return CreateCliUpdateRequiredResponse(
+                    return CreateCliProtocolMismatchResponse(
                         request.Id,
                         request.ClientCliVersion,
                         request.ClientProtocolVersion);
@@ -299,17 +299,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return waitForDomainReloadToken.Value<bool>();
         }
 
-        private static bool IsCliUpdateRequired(int? currentProtocolVersion)
+        private static bool IsCliProtocolMismatch(int? currentProtocolVersion)
         {
             if (currentProtocolVersion == null)
             {
                 return true;
             }
 
-            return currentProtocolVersion.Value < CliConstants.REQUIRED_CLI_PROTOCOL_VERSION;
+            return currentProtocolVersion.Value != CliConstants.REQUIRED_CLI_PROTOCOL_VERSION;
         }
 
-        private static string CreateCliUpdateRequiredResponse(
+        private static string CreateCliProtocolMismatchResponse(
             object id,
             string currentCliVersion,
             int? currentProtocolVersion)
@@ -319,14 +319,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 id,
                 new JsonRpcError(
                     UnityCliLoopServerConfig.INTERNAL_ERROR_CODE,
-                    "The installed uloop CLI is too old for this Unity package.",
+                    "The installed uloop CLI uses an IPC protocol that does not match this Unity package.",
                     new CliUpdateRequiredErrorData(
                         currentCliVersion,
                         currentProtocolVersion,
                         CliConstants.REQUIRED_CLI_PROTOCOL_VERSION,
-                        $"{CliConstants.EXECUTABLE_NAME} update")));
+                        GetCliUpdateCommandForProtocolMismatch(currentProtocolVersion))));
 
             return JsonConvert.SerializeObject(errorResponse, Formatting.None, ResponseSerializerSettings);
+        }
+
+        private static string GetCliUpdateCommandForProtocolMismatch(int? currentProtocolVersion)
+        {
+            if (currentProtocolVersion == null)
+            {
+                return CreateCliUpdateCommand();
+            }
+
+            if (currentProtocolVersion.Value < CliConstants.REQUIRED_CLI_PROTOCOL_VERSION)
+            {
+                return CreateCliUpdateCommand();
+            }
+
+            return null;
+        }
+
+        private static string CreateCliUpdateCommand()
+        {
+            return $"{CliConstants.EXECUTABLE_NAME} update";
         }
 
         internal static string CreateDispatchAcceptedResponse(object id, int heartbeatIntervalSeconds)
@@ -584,7 +604,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     }
 
     /// <summary>
-    /// Carries CLI update instructions plus the protocol generations that failed the gate.
+    /// Carries protocol mismatch details plus optional CLI update instructions.
     /// </summary>
     public class CliUpdateRequiredErrorData : JsonRpcErrorData
     {
@@ -596,6 +616,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public int requiredProtocolVersion { get; }
 
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string updateCommand { get; }
 
         public bool retryableAfterUpdate { get; }
@@ -604,7 +625,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string currentCliVersion,
             int? currentProtocolVersion,
             int requiredProtocolVersion,
-            string updateCommand) : base("Update the uloop CLI and retry the original command.")
+            string updateCommand) : base("Install matching uloop CLI and Unity package versions, then retry the original command.")
         {
             this.currentCliVersion = string.IsNullOrWhiteSpace(currentCliVersion) ? null : currentCliVersion;
             this.currentProtocolVersion = currentProtocolVersion;

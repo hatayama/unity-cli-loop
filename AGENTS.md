@@ -16,14 +16,17 @@ Runtime compatibility between the Unity package and the native CLI is gated on a
 protocol version, not on release numbers. Two declarations must always stay equal:
 
 - Go side: `protocolVersion` in `cli/contract.json` (the generation the CLI advertises over IPC).
-- C# side: `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` (the minimum generation the package accepts).
+- C# side: `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` (the exact generation the package accepts).
 
 `TestProtocolVersionMatchesUnityPackage` fails the build if they diverge, so never bump one alone.
+The runtime gate expects equality because the protocol version is a contract generation, not a
+minimum-compatible range.
 
 Bump both, together, in the same PR only when the IPC contract changes in a way that makes an
-older CLI and this package unable to interoperate — for example renaming or removing a request
-field, changing the readiness/dispatch handshake, or altering a response shape the other side
-parses. Ordinary CLI features and bug fixes that keep the wire format compatible must not bump it.
+CLI and package from different protocol generations unable to interoperate — for example renaming
+or removing a request field, changing the readiness/dispatch handshake, or altering a response
+shape the other side parses. Ordinary CLI features and bug fixes that keep the wire format
+compatible must not bump it.
 
 Do not touch the protocol version to "keep up with releases":
 
@@ -31,6 +34,9 @@ Do not touch the protocol version to "keep up with releases":
   stamped by release-please only. Never edit them by hand in a feature PR.
 - `CliConstants.MINIMUM_REQUIRED_CLI_VERSION` is the release that setup installs. It must always
   point at a published CLI release, so it advances after a release, never inside a feature PR.
+- Runtime protocol mismatch guidance must not pin updates to `MINIMUM_REQUIRED_CLI_VERSION`; that
+  value may be older than the protocol the package now requires. Use the unpinned CLI update path
+  for older clients and tell newer clients to align the package and CLI releases.
 
 ## Generated Skill Files
 

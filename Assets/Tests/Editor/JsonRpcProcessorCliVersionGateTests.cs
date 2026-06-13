@@ -35,22 +35,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ProcessRequest_WhenProtocolVersionIsNewer_AllowsRequest()
+        public async Task ProcessRequest_WhenProtocolVersionIsNewer_ReturnsCliProtocolMismatchError()
         {
-            // Verifies a newer CLI keeps working against this package version.
+            // Verifies future protocol clients are rejected because IPC compatibility is exact-match.
             string response = await JsonRpcProcessor.ProcessRequest(
                 BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION + 1),
                 CancellationToken.None);
-            JObject parsed = JObject.Parse(response);
+            JObject error = ParseError(response);
+            JObject data = ParseErrorData(response);
 
-            Assert.That(parsed["error"], Is.Null);
-            Assert.That(parsed["result"], Is.Not.Null);
+            Assert.That(error["message"]?.ToString(), Does.Contain("does not match"));
+            Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
+            Assert.That(
+                data["currentProtocolVersion"]?.ToObject<int>(),
+                Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION + 1));
+            Assert.That(
+                data["requiredProtocolVersion"]?.ToObject<int>(),
+                Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION));
+            Assert.That(data["updateCommand"], Is.Null);
         }
 
         [Test]
         public async Task ProcessRequest_WhenProtocolVersionIsTooOld_ReturnsCliUpdateRequiredError()
         {
-            // Verifies CLIs on an older IPC protocol receive update instructions before any tool runs.
+            // Verifies CLIs on an older IPC protocol receive CLI update instructions before any tool runs.
             string response = await JsonRpcProcessor.ProcessRequest(
                 BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION - 1),
                 CancellationToken.None);
@@ -63,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 data["requiredProtocolVersion"]?.ToObject<int>(),
                 Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION));
-            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo("uloop update"));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
             Assert.That(data["retryableAfterUpdate"]?.ToObject<bool>(), Is.True);
         }
 
@@ -79,6 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
             Assert.That(data["currentProtocolVersion"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(data["currentCliVersion"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
         }
 
         [Test]
@@ -94,6 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
             Assert.That(data["currentProtocolVersion"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(data["currentCliVersion"]?.ToString(), Is.EqualTo("3.0.0-beta.24"));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
         }
 
         [Test]
@@ -108,6 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
             Assert.That(data["currentProtocolVersion"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
         }
 
         [Test]
@@ -544,6 +555,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1,\"uloop\":{\"protocolVersion\":" +
                 protocolVersion +
                 "}}";
+        }
+
+        private static string ExpectedCliUpdateCommand()
+        {
+            return "uloop update";
         }
 
         private static string BuildToolRequest(string toolName, int id)

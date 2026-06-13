@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         bool IsCliInstalled();
         string GetCachedCliVersion();
+        int? GetCachedCliProtocolVersion();
         string GetCachedCliExecutablePath();
         bool IsCheckCompleted();
         Task RefreshCliVersionAsync(CancellationToken ct);
@@ -92,6 +93,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _cliInstallationDetector.GetCachedCliVersion();
         }
 
+        public int? GetCachedCliProtocolVersion()
+        {
+            return _cliInstallationDetector.GetCachedCliProtocolVersion();
+        }
+
         public string GetCachedCliExecutablePath()
         {
             return _cliInstallationDetector.GetCachedCliExecutablePath();
@@ -144,9 +150,19 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return CliVersionComparer.IsVersionLessThan(leftVersion, rightVersion);
         }
 
+        public bool IsCliVersionGreaterThan(string leftVersion, string rightVersion)
+        {
+            return CliVersionComparer.IsVersionGreaterThan(leftVersion, rightVersion);
+        }
+
         public bool IsCliVersionGreaterThanOrEqual(string leftVersion, string rightVersion)
         {
             return CliVersionComparer.IsVersionGreaterThanOrEqual(leftVersion, rightVersion);
+        }
+
+        public bool IsCliVersionEqual(string leftVersion, string rightVersion)
+        {
+            return CliVersionComparer.IsVersionEqual(leftVersion, rightVersion);
         }
 
         public async Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
@@ -269,6 +285,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return GetService().GetCachedCliVersion();
         }
 
+        public static int? GetCachedCliProtocolVersion()
+        {
+            return GetService().GetCachedCliProtocolVersion();
+        }
+
         public static string GetCachedCliExecutablePath()
         {
             return GetService().GetCachedCliExecutablePath();
@@ -321,9 +342,19 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return GetService().IsCliVersionLessThan(leftVersion, rightVersion);
         }
 
+        public static bool IsCliVersionGreaterThan(string leftVersion, string rightVersion)
+        {
+            return GetService().IsCliVersionGreaterThan(leftVersion, rightVersion);
+        }
+
         public static bool IsCliVersionGreaterThanOrEqual(string leftVersion, string rightVersion)
         {
             return GetService().IsCliVersionGreaterThanOrEqual(leftVersion, rightVersion);
+        }
+
+        public static bool IsCliVersionEqual(string leftVersion, string rightVersion)
+        {
+            return GetService().IsCliVersionEqual(leftVersion, rightVersion);
         }
 
         public static Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
