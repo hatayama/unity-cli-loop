@@ -146,6 +146,9 @@ namespace Tests.PlayMode
                 Assert.IsNotEmpty(raycastResults, "Setup: the non-UI raycaster should hit.");
                 Assert.IsFalse(raycastResults[0].module is GraphicRaycaster,
                     "Setup: EventSystem's first hit should not come from a GraphicRaycaster.");
+                Assert.IsFalse(
+                    raycastResults.Exists(result => result.gameObject == overlayTracker.gameObject),
+                    "Setup: overlay UI must be clipped out of EventSystem results for this regression test.");
 
                 yield return RunTool(new JObject
                 {

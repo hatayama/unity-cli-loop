@@ -46,6 +46,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             Canvas[] canvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
             Graphic? bestHit = null;
+            int bestSortingLayerValue = int.MinValue;
             int bestSortingOrder = int.MinValue;
             int bestDepth = -1;
 
@@ -67,6 +68,11 @@ namespace io.github.hatayama.uLoopMCP
                     continue;
                 }
 
+                // Sorting layer outranks sorting order, which outranks Graphic depth —
+                // sortingOrder only orders canvases within the same sorting layer.
+                int sortingLayerValue = SortingLayer.GetLayerValueFromID(canvas.sortingLayerID);
+                int sortingOrder = canvas.sortingOrder;
+
                 Graphic[] graphics = canvas.GetComponentsInChildren<Graphic>();
                 foreach (Graphic graphic in graphics)
                 {
@@ -75,12 +81,16 @@ namespace io.github.hatayama.uLoopMCP
                         continue;
                     }
 
-                    int sortingOrder = canvas.sortingOrder;
+                    bool isInFront =
+                        sortingLayerValue > bestSortingLayerValue ||
+                        (sortingLayerValue == bestSortingLayerValue && sortingOrder > bestSortingOrder) ||
+                        (sortingLayerValue == bestSortingLayerValue && sortingOrder == bestSortingOrder &&
+                         graphic.depth > bestDepth);
 
-                    if (sortingOrder > bestSortingOrder ||
-                        (sortingOrder == bestSortingOrder && graphic.depth > bestDepth))
+                    if (isInFront)
                     {
                         bestHit = graphic;
+                        bestSortingLayerValue = sortingLayerValue;
                         bestSortingOrder = sortingOrder;
                         bestDepth = graphic.depth;
                     }
