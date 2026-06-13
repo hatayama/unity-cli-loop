@@ -1,5 +1,6 @@
 using System.IO;
 using NUnit.Framework;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -78,6 +79,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
 
             Assert.That(resolvedScriptingRootPath, Is.EqualTo(contentsPath));
+        }
+
+        [Test]
+        public void ResolveCompilerLayoutKind_WhenContentsRootLegacyRoslynLayoutExists_ShouldReturnContentsRootDotNetSdkRoslyn()
+        {
+            // Verifies Unity 2022-style compiler roots are classified as legacy contents-root Roslyn.
+            string contentsPath = CreateDirectory("Contents");
+            string compilerDirectoryPath = CreateDirectory(Path.Combine("Contents", "DotNetSdkRoslyn"));
+
+            ExternalCompilerLayoutKind layoutKind = ExternalCompilerPathResolver.ResolveCompilerLayoutKind(
+                contentsPath,
+                contentsPath,
+                compilerDirectoryPath);
+
+            Assert.That(layoutKind, Is.EqualTo(ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn));
+        }
+
+        [Test]
+        public void ResolveCompilerLayoutKind_WhenResourcesScriptingRoslynLayoutExists_ShouldReturnResourcesScripting()
+        {
+            // Verifies Unity 6-style Resources/Scripting compiler roots stay on the current shared-worker path.
+            string contentsPath = CreateDirectory("Contents");
+            string scriptingRootPath = CreateDirectory(Path.Combine("Contents", "Resources", "Scripting"));
+            string compilerDirectoryPath = CreateDirectory(Path.Combine("Contents", "Resources", "Scripting", "DotNetSdkRoslyn"));
+
+            ExternalCompilerLayoutKind layoutKind = ExternalCompilerPathResolver.ResolveCompilerLayoutKind(
+                contentsPath,
+                scriptingRootPath,
+                compilerDirectoryPath);
+
+            Assert.That(layoutKind, Is.EqualTo(ExternalCompilerLayoutKind.ResourcesScripting));
         }
 
         [Test]
@@ -181,6 +213,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(resolvedCompilerDirectoryPath, Is.EqualTo(expectedCompilerDirectoryPath));
         }
 
+        [Test]
+        public void ShouldUseSharedWorker_WhenContentsRootLegacyRoslynLayoutIsResolved_ShouldReturnFalse()
+        {
+            // Verifies Unity 2022-style compiler roots skip the shared worker to avoid long Busy stalls.
+            ExternalCompilerPaths compilerPaths = CreateCompilerPaths(
+                ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn);
+
+            bool shouldUseSharedWorker = RoslynCompilerBackend.ShouldUseSharedWorkerForTests(compilerPaths);
+
+            Assert.That(shouldUseSharedWorker, Is.False);
+        }
+
+        [Test]
+        public void ShouldUseSharedWorker_WhenResourcesScriptingLayoutIsResolved_ShouldReturnTrue()
+        {
+            // Verifies Unity 6-style compiler roots keep the shared worker optimization.
+            ExternalCompilerPaths compilerPaths = CreateCompilerPaths(
+                ExternalCompilerLayoutKind.ResourcesScripting);
+
+            bool shouldUseSharedWorker = RoslynCompilerBackend.ShouldUseSharedWorkerForTests(compilerPaths);
+
+            Assert.That(shouldUseSharedWorker, Is.True);
+        }
+
+        [Test]
+        public void ReportSharedWorkerSkipped_WhenContentsRootLegacyLayoutIsSkipped_ShouldNotEmitConsoleError()
+        {
+            // Verifies the intentional Unity 2022 legacy-layout skip is not reported as a Unity Console error.
+            DynamicCompilationHealthMonitor.ResetForTests();
+
+            DynamicCompilationHealthMonitor.ReportSharedWorkerSkipped(
+                "contents_root_legacy_layout",
+                new { layout_kind = ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn.ToString() });
+
+            LogAssert.NoUnexpectedReceived();
+        }
+
         private string CreateDirectory(string relativePath)
         {
             string directoryPath = Path.Combine(_tempDirectoryPath, relativePath);
@@ -194,6 +263,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
             File.WriteAllText(filePath, string.Empty);
             return filePath;
+        }
+
+        private ExternalCompilerPaths CreateCompilerPaths(ExternalCompilerLayoutKind layoutKind)
+        {
+            string contentsPath = CreateDirectory("CompilerPaths");
+            string scriptingRelativePath = layoutKind == ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn
+                ? "CompilerPaths"
+                : Path.Combine("CompilerPaths", "Resources", "Scripting");
+            string scriptingRootPath = layoutKind == ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn
+                ? contentsPath
+                : CreateDirectory(scriptingRelativePath);
+            string compilerDirectoryPath = CreateDirectory(Path.Combine(scriptingRelativePath, "DotNetSdkRoslyn"));
+            string runtimeDirectoryPath = CreateDirectory(Path.Combine(
+                scriptingRelativePath,
+                "NetCoreRuntime",
+                "shared",
+                "Microsoft.NETCore.App",
+                "6.0.0"));
+            return new ExternalCompilerPaths(
+                contentsPath,
+                scriptingRootPath,
+                Path.Combine(scriptingRootPath, "NetCoreRuntime", "dotnet"),
+                Path.Combine(compilerDirectoryPath, "csc.dll"),
+                Path.Combine(compilerDirectoryPath, "csc.runtimeconfig.json"),
+                Path.Combine(compilerDirectoryPath, "csc.deps.json"),
+                Path.Combine(compilerDirectoryPath, "Microsoft.CodeAnalysis.dll"),
+                Path.Combine(compilerDirectoryPath, "Microsoft.CodeAnalysis.CSharp.dll"),
+                runtimeDirectoryPath,
+                layoutKind);
         }
     }
 }

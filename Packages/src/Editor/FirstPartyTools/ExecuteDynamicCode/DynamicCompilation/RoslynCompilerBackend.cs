@@ -63,36 +63,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                WriteWorkerRequestFile(
-                    workerRequestFilePath,
-                    sourcePath,
-                    dllPath,
-                    references,
-                    defineSymbols,
-                    allowUnsafeCode);
-
-                CompilerMessage[] workerMessages = SharedRoslynCompilerWorkerHost.TryCompile(
-                    workerRequestFilePath,
-                    externalCompilerPaths,
-                    ct,
-                    markBuildStarted,
-                    markBuildFinished,
-                    incrementBuildCount);
-                if (workerMessages != null)
+                if (ShouldUseSharedWorker(externalCompilerPaths))
                 {
-                    return new DynamicCompilationBackendResult(
-                        workerMessages,
-                        DynamicCompilationBackendKind.SharedRoslynWorker);
-                }
+                    WriteWorkerRequestFile(
+                        workerRequestFilePath,
+                        sourcePath,
+                        dllPath,
+                        references,
+                        defineSymbols,
+                        allowUnsafeCode);
 
-                DynamicCompilationHealthMonitor.ReportSharedWorkerFallback(
-                    "worker_unavailable",
-                    new
+                    CompilerMessage[] workerMessages = SharedRoslynCompilerWorkerHost.TryCompile(
+                        workerRequestFilePath,
+                        externalCompilerPaths,
+                        ct,
+                        markBuildStarted,
+                        markBuildFinished,
+                        incrementBuildCount);
+                    if (workerMessages != null)
                     {
-                        platform = UnityEngine.Application.platform.ToString(),
-                        dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                        compiler_dll_path = externalCompilerPaths.CompilerDllPath
-                    });
+                        return new DynamicCompilationBackendResult(
+                            workerMessages,
+                            DynamicCompilationBackendKind.SharedRoslynWorker);
+                    }
+
+                    DynamicCompilationHealthMonitor.ReportSharedWorkerFallback(
+                        "worker_unavailable",
+                        new
+                        {
+                            platform = UnityEngine.Application.platform.ToString(),
+                            dotnet_host_path = externalCompilerPaths.DotnetHostPath,
+                            compiler_dll_path = externalCompilerPaths.CompilerDllPath,
+                            layout_kind = externalCompilerPaths.LayoutKind.ToString()
+                        });
+                }
+                else
+                {
+                    DynamicCompilationHealthMonitor.ReportSharedWorkerSkipped(
+                        "contents_root_legacy_layout",
+                        new
+                        {
+                            platform = UnityEngine.Application.platform.ToString(),
+                            dotnet_host_path = externalCompilerPaths.DotnetHostPath,
+                            compiler_dll_path = externalCompilerPaths.CompilerDllPath,
+                            layout_kind = externalCompilerPaths.LayoutKind.ToString()
+                        });
+                }
 
                 ct.ThrowIfCancellationRequested();
                 OneShotCompileResult oneShotResult = await CompileWithOneShotAsync(
@@ -127,6 +143,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     File.Delete(workerRequestFilePath);
                 }
             }
+        }
+
+        internal static bool ShouldUseSharedWorkerForTests(ExternalCompilerPaths externalCompilerPaths)
+        {
+            return ShouldUseSharedWorker(externalCompilerPaths);
+        }
+
+        private static bool ShouldUseSharedWorker(ExternalCompilerPaths externalCompilerPaths)
+        {
+            System.Diagnostics.Debug.Assert(externalCompilerPaths != null, "externalCompilerPaths must not be null");
+            return externalCompilerPaths.LayoutKind != ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn;
         }
 
         private static async Task<OneShotCompileResult> CompileWithOneShotAsync(
