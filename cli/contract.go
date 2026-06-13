@@ -17,8 +17,11 @@ var contractFiles embed.FS
 var Current = mustLoad()
 
 type Contract struct {
-	SchemaVersion int    `json:"schemaVersion"`
-	CliVersion    string `json:"cliVersion"`
+	SchemaVersion int `json:"schemaVersion"`
+	// ProtocolVersion is the C# IPC contract generation this binary speaks. It moves only
+	// when the Unity package and the CLI can no longer interoperate, never per release.
+	ProtocolVersion int    `json:"protocolVersion"`
+	CliVersion      string `json:"cliVersion"`
 }
 
 func mustLoad() Contract {
@@ -35,6 +38,9 @@ func mustLoad() Contract {
 		panic(fmt.Sprintf("CLI contract schema version mismatch: %d", contract.SchemaVersion))
 	}
 	requireString(contract.CliVersion, "cliVersion")
+	if contract.ProtocolVersion < 1 {
+		panic(fmt.Sprintf("CLI contract protocolVersion must be at least 1, got %d", contract.ProtocolVersion))
+	}
 	return contract
 }
 
