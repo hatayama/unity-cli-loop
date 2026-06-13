@@ -22,8 +22,8 @@ protocol version, not on release numbers. Two declarations must always stay equa
 The runtime gate expects equality because the protocol version is a contract generation, not a
 minimum-compatible range.
 
-Bump both, together, in the same PR only when the IPC contract changes in a way that makes an
-CLI and package from different protocol generations unable to interoperate — for example renaming
+Bump both, together, in the same PR only when the IPC contract changes in a way that makes
+CLI and package builds from different protocol generations unable to interoperate — for example renaming
 or removing a request field, changing the readiness/dispatch handshake, or altering a response
 shape the other side parses. Ordinary CLI features and bug fixes that keep the wire format
 compatible must not bump it.
