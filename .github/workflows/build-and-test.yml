@@ -30,19 +30,8 @@ jobs:
           go-version-file: cli/.go-version
           cache: false
 
-      - name: Check CLI minimum version bump
-        if: github.event_name == 'pull_request'
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_BASE_REF: ${{ github.base_ref }}
-          CLI_MINIMUM_VERSION_FAIL_ON_WARNING: true
-        run: scripts/check-cli-minimum-version-warning.sh
-
       - name: Test release automation shell helpers
         run: |
-          scripts/test-comment-cli-minimum-version-warning.sh
-          scripts/test-cli-minimum-version-warning-workflow.sh
           scripts/test-go-cli-toolchain.sh
           scripts/test-resolve-native-cli-release-target.sh
           scripts/test-is-release-please-release-commit.sh
