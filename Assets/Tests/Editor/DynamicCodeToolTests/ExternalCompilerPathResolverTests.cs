@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     [TestFixture]
     public class ExternalCompilerPathResolverTests
     {
+        private const int FallbackCompileTimeoutMilliseconds = 30000;
+
         private string _tempDirectoryPath;
 
         [SetUp]
@@ -264,12 +266,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             try
             {
+                using CancellationTokenSource compileCancellationTokenSource = new CancellationTokenSource();
+                compileCancellationTokenSource.CancelAfter(FallbackCompileTimeoutMilliseconds);
                 DynamicCompilationBackendResult result = await RoslynCompilerBackend.CompileAsync(
                     sourcePath,
                     dllPath,
                     references,
                     externalCompilerPaths,
-                    CancellationToken.None,
+                    compileCancellationTokenSource.Token,
                     () => buildStarted = true,
                     () => buildFinished = true,
                     () => buildCount++);
