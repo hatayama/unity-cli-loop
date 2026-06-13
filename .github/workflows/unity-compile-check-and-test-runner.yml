@@ -1,15 +1,14 @@
 name: Unity Compile Check
 
+# This job is a required status check, so it must report exactly one
+# "Compile Check (Linux)" result on every PR. A workflow-level paths filter
+# would skip the job for PRs that touch no C# files, leaving the required
+# check unreported and blocking the PR forever. Instead the workflow always
+# runs and a change-detection step decides whether to do the real Unity work
+# or report success immediately.
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - 'Packages/src/Editor/**/*.cs'
-      - 'Packages/src/Runtime/**/*.cs'
-      - 'Assets/**/*.cs'
-      - 'tests/**/*.cs'
-      - 'tests/**/*.csproj'
-      - '.github/workflows/unity-compile-check-and-test-runner.yml'
   workflow_dispatch:
 
 permissions:
@@ -27,14 +26,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Full history is required so the change-detection step can diff the
+          # PR head against its base.
+          fetch-depth: 0
           lfs: true
 
+      - name: Detect C# changes
+        id: changes
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # workflow_dispatch has no PR context, so run the full check.
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+            echo "csharp=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "=== Changed files ==="
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -qE '^(Packages/src/Editor/.*\.cs|Packages/src/Runtime/.*\.cs|Assets/.*\.cs|tests/.*\.cs|tests/.*\.csproj|Packages/.*\.asmdef|Assets/.*\.asmdef|Packages/manifest\.json|Packages/packages-lock\.json|\.github/workflows/unity-compile-check-and-test-runner\.yml)$'; then
+            echo "csharp=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "csharp=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip notice
+        if: steps.changes.outputs.csharp != 'true'
+        run: echo "No C# changes detected; compile check is satisfied without running Unity."
+
       - name: Setup .NET
+        if: steps.changes.outputs.csharp == 'true'
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
       - name: Run concurrency unit tests
+        if: steps.changes.outputs.csharp == 'true'
         run: dotnet test tests/DynamicCodeExecutionScheduler.UnitTests/DynamicCodeExecutionScheduler.UnitTests.csproj --configuration Release
 
       - name: Cache Library folder
@@ -47,7 +77,7 @@ jobs:
             Library-2022.3.62f1-
 
       - name: Compile Unity project
-        if: env.HAS_UNITY_LICENSE == 'true'
+        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
         id: compile
         uses: game-ci/unity-builder@v5
         timeout-minutes: 30
@@ -63,7 +93,7 @@ jobs:
         continue-on-error: true
 
       - name: Check for compile errors and warnings
-        if: env.HAS_UNITY_LICENSE == 'true'
+        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
         run: |
           LOG_FILE=$(find . -name "*.log" -path "*/build/*" -o -name "Editor.log" 2>/dev/null | head -1)
 
