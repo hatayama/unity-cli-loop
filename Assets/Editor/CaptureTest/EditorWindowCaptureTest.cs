@@ -13,6 +13,8 @@ namespace io.github.hatayama.UnityCliLoop.Dev
     /// </summary>
     public class EditorWindowCaptureTest : EditorWindow
     {
+        private const int FRAME_WAIT_TIMEOUT_MILLISECONDS = 5000;
+
         private string _windowName = "Console";
         private WindowMatchMode _matchMode = WindowMatchMode.exact;
         private string _lastResult = "";
@@ -136,7 +138,16 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             for (int i = 0; i < windows.Length; i++)
             {
                 EditorWindow window = windows[i];
-                Texture2D texture = await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, CancellationToken.None);
+                (Texture2D texture, bool timedOut) = await EditorWindowCaptureUtility.CaptureWindowAsync(
+                    window,
+                    1.0f,
+                    FRAME_WAIT_TIMEOUT_MILLISECONDS,
+                    CancellationToken.None);
+                if (timedOut)
+                {
+                    sb.AppendLine($"  [{i + 1}] Timed out while waiting for Editor frames");
+                    continue;
+                }
 
                 if (texture == null)
                 {
@@ -193,4 +204,3 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         }
     }
 }
-

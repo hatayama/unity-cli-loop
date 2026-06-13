@@ -71,6 +71,40 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             return completionSource.Task;
         }
 
+        public async Task<bool> WaitFramesOrTimeoutAsync(
+            int frameCount,
+            int timeoutMilliseconds,
+            CancellationToken ct)
+        {
+            Debug.Assert(frameCount >= 0, "frameCount must be non-negative");
+            Debug.Assert(timeoutMilliseconds > 0, "timeoutMilliseconds must be positive");
+            ct.ThrowIfCancellationRequested();
+
+            if (frameCount <= 0)
+            {
+                return true;
+            }
+
+            using CancellationTokenSource frameCancellationSource =
+                CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Task frameTask = WaitFramesAsync(frameCount, frameCancellationSource.Token);
+            using CancellationTokenSource timeoutCancellationSource =
+                CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Task timeoutTask = TimerDelay.Wait(timeoutMilliseconds, timeoutCancellationSource.Token);
+
+            Task completedTask = await Task.WhenAny(frameTask, timeoutTask).ConfigureAwait(false);
+            if (completedTask == timeoutTask)
+            {
+                await timeoutTask.ConfigureAwait(false);
+                frameCancellationSource.Cancel();
+                return false;
+            }
+
+            timeoutCancellationSource.Cancel();
+            await frameTask.ConfigureAwait(false);
+            return true;
+        }
+
         public void ClearAllForTests()
         {
             List<EditorFrameWaitRequest> requestsToCancel;
@@ -237,6 +271,14 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public static Task WaitFramesAsync(int frameCount, CancellationToken ct = default)
         {
             return ServiceValue.WaitFramesAsync(frameCount, ct);
+        }
+
+        public static Task<bool> WaitFramesOrTimeoutAsync(
+            int frameCount,
+            int timeoutMilliseconds,
+            CancellationToken ct = default)
+        {
+            return ServiceValue.WaitFramesOrTimeoutAsync(frameCount, timeoutMilliseconds, ct);
         }
 
         public static void ClearAllForTests()

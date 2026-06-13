@@ -37,6 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class ScreenshotResponse : UnityCliLoopToolResponse
     {
         public List<ScreenshotInfo> Screenshots { get; set; } = new List<ScreenshotInfo>();
+        public bool TimedOut { get; set; }
+        public string Message { get; set; } = "";
 
         public int ScreenshotCount => Screenshots.Count;
     }
