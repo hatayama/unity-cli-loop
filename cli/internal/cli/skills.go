@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -204,14 +203,7 @@ func unknownSkillsSubcommandError(subcommand string, context errorContext) cliEr
 
 func resolveSkillsProjectRoot(startPath string, explicitProjectPath string, global bool) (string, error) {
 	if explicitProjectPath != "" {
-		projectRoot, err := filepath.Abs(explicitProjectPath)
-		if err != nil {
-			return "", err
-		}
-		if !project.IsUnityProject(projectRoot) {
-			return "", fmt.Errorf("not a Unity project: %s", projectRoot)
-		}
-		return projectRoot, nil
+		return project.ResolveExplicitProjectRoot(explicitProjectPath)
 	}
 	if global {
 		projectRoot, err := project.FindUnityProjectRoot(startPath)
