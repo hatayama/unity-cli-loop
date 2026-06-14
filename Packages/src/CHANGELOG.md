@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.0.0-beta.33](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.32...v3.0.0-beta.33) (2026-06-14)
+
+
+### Features
+
+* Gate CLI/Unity compatibility on an IPC protocol version instead of release numbers ([#1329](https://github.com/hatayama/unity-cli-loop/issues/1329)) ([85c21d3](https://github.com/hatayama/unity-cli-loop/commit/85c21d328b8aa412c7e5b60b93e7a89720ee6680))
+* Pause point waits now explain their evidence ([#1338](https://github.com/hatayama/unity-cli-loop/issues/1338)) ([0b5b468](https://github.com/hatayama/unity-cli-loop/commit/0b5b468ca1681b8ca750dbbf97267d7bbb6f7cb6))
+
+
+### Bug Fixes
+
+* Expired pause points now explain how to recover ([#1335](https://github.com/hatayama/unity-cli-loop/issues/1335)) ([2b7ae47](https://github.com/hatayama/unity-cli-loop/commit/2b7ae47e884cd7231a37c83314251d268ad9058b))
+* Keep dynamic code execution responsive by default ([#1331](https://github.com/hatayama/unity-cli-loop/issues/1331)) ([148c109](https://github.com/hatayama/unity-cli-loop/commit/148c1098bb052b8d638cd7345d86a7843d78118c))
+* run-tests now identifies zero-test runs ([#1336](https://github.com/hatayama/unity-cli-loop/issues/1336)) ([1ff3b6b](https://github.com/hatayama/unity-cli-loop/commit/1ff3b6bf64adf0161fcfaed3ea454205ce752d5f))
+* Unity tools no longer hang while waiting for editor frames ([#1333](https://github.com/hatayama/unity-cli-loop/issues/1333)) ([9b415a2](https://github.com/hatayama/unity-cli-loop/commit/9b415a2b54bce8fcfef2cb7d4a24b1ceb24db2fc))
+
 ## [3.0.0-beta.32](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.31...v3.0.0-beta.32) (2026-06-12)
 
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.0.0-beta.33](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.32...cli-v3.0.0-beta.33) (2026-06-14)
+
+
+### Features
+
+* Gate CLI/Unity compatibility on an IPC protocol version instead of release numbers ([#1329](https://github.com/hatayama/unity-cli-loop/issues/1329)) ([85c21d3](https://github.com/hatayama/unity-cli-loop/commit/85c21d328b8aa412c7e5b60b93e7a89720ee6680))
+* Pause point waits now explain their evidence ([#1338](https://github.com/hatayama/unity-cli-loop/issues/1338)) ([0b5b468](https://github.com/hatayama/unity-cli-loop/commit/0b5b468ca1681b8ca750dbbf97267d7bbb6f7cb6))
+
+
+### Bug Fixes
+
+* Expired pause points now explain how to recover ([#1335](https://github.com/hatayama/unity-cli-loop/issues/1335)) ([2b7ae47](https://github.com/hatayama/unity-cli-loop/commit/2b7ae47e884cd7231a37c83314251d268ad9058b))
+* Unity launch waits reliably during slow startup and restart ([#1339](https://github.com/hatayama/unity-cli-loop/issues/1339)) ([6f92adb](https://github.com/hatayama/unity-cli-loop/commit/6f92adbf5761ac33548ee213231980370c9acb0d))
+* Windows CLI accepts WSL and Git Bash project paths ([#1334](https://github.com/hatayama/unity-cli-loop/issues/1334)) ([0d6fdeb](https://github.com/hatayama/unity-cli-loop/commit/0d6fdeb479fada253b5475f8d88be1cc6b393de0))
+
 ## [3.0.0-beta.32](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.31...cli-v3.0.0-beta.32) (2026-06-13)
 
 
