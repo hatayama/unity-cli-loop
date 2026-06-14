@@ -111,6 +111,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCliLoopTestExecutionResult response = new UnityCliLoopTestExecutionResult
             {
                 Success = result.success,
+                Status = result.status,
+                HasFailures = result.hasFailures,
+                NoTestsFound = result.noTestsFound,
+                NoTestsFoundExplanation = result.noTestsFoundExplanation,
                 Message = result.message,
                 CompletedAt = result.completedAt,
                 TestCount = result.testCount,
@@ -150,6 +154,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new UnityCliLoopTestExecutionResult
             {
                 Success = false,
+                Status = RunTestsExecutionStatus.ExecutionFailed,
+                HasFailures = false,
+                NoTestsFound = false,
+                NoTestsFoundExplanation = string.Empty,
                 Message = message,
                 CompletedAt = DateTime.UtcNow.ToString("o"),
                 TestCount = 0,

@@ -17,6 +17,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new SerializableTestResult
                 {
                     success = false,
+                    status = RunTestsExecutionStatus.ExecutionFailed,
+                    hasFailures = false,
+                    noTestsFound = false,
+                    noTestsFoundExplanation = string.Empty,
                     message = "Test execution failed: no test result was produced",
                     completedAt = DateTime.UtcNow.ToString("o"),
                     testCount = 0,
@@ -31,12 +35,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int passedTests = CountPassedTests(result);
             int failedTests = CountFailedTests(result);
             int skippedTests = CountSkippedTests(result);
+            bool noTestsFound = totalTests == 0;
+            bool hasFailures = failedTests > 0;
             bool success = totalTests > 0 && result.TestStatus == TestStatus.Passed;
             string message = CreateMessage(result, totalTests);
+            string status = CreateStatus(result, noTestsFound, hasFailures);
+            string noTestsFoundExplanation = noTestsFound
+                ? RunTestsResponse.NoTestsFoundExplanationText
+                : string.Empty;
 
             return new SerializableTestResult
             {
                 success = success,
+                status = status,
+                hasFailures = hasFailures,
+                noTestsFound = noTestsFound,
+                noTestsFoundExplanation = noTestsFoundExplanation,
                 message = message,
                 completedAt = DateTime.UtcNow.ToString("o"),
                 testCount = totalTests,
@@ -45,6 +59,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 skippedCount = skippedTests,
                 xmlPath = null
             };
+        }
+
+        private static string CreateStatus(ITestResultAdaptor result, bool noTestsFound, bool hasFailures)
+        {
+            if (noTestsFound)
+            {
+                return RunTestsExecutionStatus.NoTestsFound;
+            }
+
+            if (hasFailures)
+            {
+                return RunTestsExecutionStatus.Failed;
+            }
+
+            if (result.TestStatus == TestStatus.Passed)
+            {
+                return RunTestsExecutionStatus.Passed;
+            }
+
+            return result.TestStatus.ToString();
         }
 
         private static string CreateMessage(ITestResultAdaptor result, int totalTests)
