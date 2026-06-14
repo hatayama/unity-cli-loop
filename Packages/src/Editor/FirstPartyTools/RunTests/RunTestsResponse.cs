@@ -82,16 +82,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public RunTestsResponse(bool success, string message, string completedAt, int testCount, 
                                int passedCount, int failedCount, int skippedCount, string xmlPath = null,
-                               string status = RunTestsExecutionStatus.ExecutionFailed,
-                               bool hasFailures = false,
-                               bool noTestsFound = false,
-                               string noTestsFoundExplanation = "")
+                               string status = null,
+                               bool? hasFailures = null,
+                               bool? noTestsFound = null,
+                               string noTestsFoundExplanation = null)
         {
             Success = success;
-            Status = status;
-            HasFailures = hasFailures;
-            NoTestsFound = noTestsFound;
-            NoTestsFoundExplanation = noTestsFoundExplanation;
             Message = message;
             CompletedAt = completedAt;
             TestCount = testCount;
@@ -99,6 +95,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FailedCount = failedCount;
             SkippedCount = skippedCount;
             XmlPath = xmlPath;
+            HasFailures = hasFailures ?? failedCount > 0;
+            NoTestsFound = noTestsFound ?? IsNoTestsFound(success, message, testCount, failedCount);
+            Status = string.IsNullOrEmpty(status)
+                ? DeriveStatus(success, testCount, FailedCount, NoTestsFound)
+                : status;
+            NoTestsFoundExplanation = noTestsFoundExplanation ?? DeriveNoTestsFoundExplanation(NoTestsFound);
         }
 
         /// <summary>
@@ -128,6 +130,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailures: false,
                 noTestsFound: false,
                 noTestsFoundExplanation: string.Empty);
+        }
+
+        private static bool IsNoTestsFound(bool success, string message, int testCount, int failedCount)
+        {
+            return !success
+                   && testCount == 0
+                   && failedCount == 0
+                   && string.Equals(message, NoTestsFoundMessage, StringComparison.Ordinal);
+        }
+
+        private static string DeriveStatus(bool success, int testCount, int failedCount, bool noTestsFound)
+        {
+            if (noTestsFound)
+            {
+                return RunTestsExecutionStatus.NoTestsFound;
+            }
+
+            if (failedCount > 0)
+            {
+                return RunTestsExecutionStatus.Failed;
+            }
+
+            if (success && testCount > 0)
+            {
+                return RunTestsExecutionStatus.Passed;
+            }
+
+            return RunTestsExecutionStatus.ExecutionFailed;
+        }
+
+        private static string DeriveNoTestsFoundExplanation(bool noTestsFound)
+        {
+            return noTestsFound ? NoTestsFoundExplanationText : string.Empty;
         }
     }
 }

@@ -102,5 +102,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.SkippedCount, Is.EqualTo(0));
             Assert.That(response.XmlPath, Is.Null);
         }
+
+        [Test]
+        public void Constructor_WhenLegacySuccessfulCallerOmitsStatus_ShouldDerivePassedStatus()
+        {
+            // Verifies source-compatible constructor calls cannot report success as execution failure.
+            RunTestsResponse response = new(
+                success: true,
+                message: "Test execution completed with status: Passed",
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 1,
+                passedCount: 1,
+                failedCount: 0,
+                skippedCount: 0);
+
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.Passed));
+            Assert.That(response.HasFailures, Is.False);
+            Assert.That(response.NoTestsFound, Is.False);
+            Assert.That(response.NoTestsFoundExplanation, Is.Empty);
+        }
+
+        [Test]
+        public void Constructor_WhenLegacyNoTestsCallerOmitsStatus_ShouldDeriveNoTestsFoundStatus()
+        {
+            // Verifies source-compatible zero-discovery responses remain distinct from execution failures.
+            RunTestsResponse response = new(
+                success: false,
+                message: RunTestsResponse.NoTestsFoundMessage,
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 0,
+                passedCount: 0,
+                failedCount: 0,
+                skippedCount: 0);
+
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.NoTestsFound));
+            Assert.That(response.HasFailures, Is.False);
+            Assert.That(response.NoTestsFound, Is.True);
+            Assert.That(response.NoTestsFoundExplanation, Does.Contain("not a test failure"));
+        }
     }
 } 
