@@ -15,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public async Task ExecuteAsync_WithInvalidExecutionState_ShouldFailFastWithoutRunningTests()
         {
+            // Verifies validation failures remain command failures without pretending tests failed.
             StubTestExecutionService executionService = new();
             StubTestExecutionStateValidationService validationService = new(
                 ValidationResult.Failure("EditMode tests cannot run during play mode"));
@@ -32,6 +33,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(response.HasFailures, Is.False);
+            Assert.That(response.NoTestsFound, Is.False);
+            Assert.That(response.NoTestsFoundExplanation, Is.Empty);
             Assert.That(response.Message, Is.EqualTo("EditMode tests cannot run during play mode"));
             Assert.That(response.CompletedAt, Is.Not.Empty);
             Assert.That(response.TestCount, Is.EqualTo(0));
@@ -89,6 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public async Task ExecuteAsync_WhenTestFrameworkUnavailable_ShouldFailFastWithoutValidation()
         {
+            // Verifies missing Unity Test Framework is distinct from a failed test suite.
             StubTestExecutionService executionService = new()
             {
                 TestFrameworkAvailable = false
@@ -108,10 +114,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(response.HasFailures, Is.False);
+            Assert.That(response.NoTestsFound, Is.False);
+            Assert.That(response.NoTestsFoundExplanation, Is.Empty);
             Assert.That(response.Message, Is.EqualTo(RunTestsResponse.TestFrameworkUnavailableMessage));
             Assert.That(response.TestCount, Is.EqualTo(0));
             Assert.That(executionService.WasCalled, Is.False);
             Assert.That(validationService.WasCalled, Is.False);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenNoTestsWereFound_ShouldExposeNoTestsFoundState()
+        {
+            // Verifies UseCase responses expose zero-discovery as its own machine-readable state.
+            StubTestExecutionService executionService = new()
+            {
+                NextResult = new SerializableTestResult
+                {
+                    success = false,
+                    status = RunTestsExecutionStatus.NoTestsFound,
+                    hasFailures = false,
+                    noTestsFound = true,
+                    noTestsFoundExplanation = RunTestsResponse.NoTestsFoundExplanationText,
+                    message = RunTestsResponse.NoTestsFoundMessage,
+                    completedAt = "2026-01-01T00:00:00.0000000Z",
+                    testCount = 0,
+                    passedCount = 0,
+                    failedCount = 0,
+                    skippedCount = 0,
+                    xmlPath = null
+                }
+            };
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService
+            );
+            UnityCliLoopTestExecutionRequest parameters = new()
+            {
+                TestMode = UnityCliLoopTestMode.PlayMode,
+                FilterType = TestFilterType.exact,
+                FilterValue = "MissingTest"
+            };
+
+            UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.NoTestsFound));
+            Assert.That(response.HasFailures, Is.False);
+            Assert.That(response.NoTestsFound, Is.True);
+            Assert.That(response.NoTestsFoundExplanation, Does.Contain("not a test failure"));
+            Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
+            Assert.That(response.TestCount, Is.EqualTo(0));
+            Assert.That(response.FailedCount, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -144,6 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public bool TestFrameworkAvailable { get; set; } = true;
             public bool WasCalled { get; private set; }
+            public SerializableTestResult NextResult { get; set; } = new();
 
             public override bool IsTestFrameworkAvailable => TestFrameworkAvailable;
 
@@ -151,14 +209,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
-                return Task.FromResult(new SerializableTestResult());
+                return Task.FromResult(NextResult);
             }
 
             public override Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
-                return Task.FromResult(new SerializableTestResult());
+                return Task.FromResult(NextResult);
             }
         }
     }

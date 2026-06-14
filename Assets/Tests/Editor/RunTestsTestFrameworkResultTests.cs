@@ -125,12 +125,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(null);
 
             Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(result.hasFailures, Is.False);
+            Assert.That(result.noTestsFound, Is.False);
+            Assert.That(result.noTestsFoundExplanation, Is.Empty);
             Assert.That(result.message, Is.EqualTo("Test execution failed: no test result was produced"));
             Assert.That(result.testCount, Is.EqualTo(0));
             Assert.That(result.passedCount, Is.EqualTo(0));
             Assert.That(result.failedCount, Is.EqualTo(0));
             Assert.That(result.skippedCount, Is.EqualTo(0));
             Assert.That(result.xmlPath, Is.Null);
+        }
+
+        [Test]
+        public void FromTestResult_WhenNoTestsWereDiscovered_ReturnsNoTestsFoundState()
+        {
+            // Verifies that zero discovered tests are reported separately from failed tests.
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Passed,
+                0.1,
+                new List<ITestResultAdaptor>());
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo(RunTestsExecutionStatus.NoTestsFound));
+            Assert.That(result.hasFailures, Is.False);
+            Assert.That(result.noTestsFound, Is.True);
+            Assert.That(result.noTestsFoundExplanation, Does.Contain("not a test failure"));
+            Assert.That(result.message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
+            Assert.That(result.testCount, Is.EqualTo(0));
+            Assert.That(result.failedCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void FromTestResult_WhenAChildTestFails_ReturnsFailureState()
+        {
+            // Verifies that real failed tests are marked independently from command success.
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("FailingTest", TestResultStatus.Failed, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo(RunTestsExecutionStatus.Failed));
+            Assert.That(result.hasFailures, Is.True);
+            Assert.That(result.noTestsFound, Is.False);
+            Assert.That(result.noTestsFoundExplanation, Is.Empty);
+            Assert.That(result.testCount, Is.EqualTo(1));
+            Assert.That(result.failedCount, Is.EqualTo(1));
         }
 
         [Test]

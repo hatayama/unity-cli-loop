@@ -90,6 +90,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsResponse response = RunTestsResponse.CreateTestFrameworkUnavailable();
 
             Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(response.HasFailures, Is.False);
+            Assert.That(response.NoTestsFound, Is.False);
+            Assert.That(response.NoTestsFoundExplanation, Is.Empty);
             Assert.That(response.Message, Does.Contain(UnityCliLoopConstants.PACKAGE_NAME_TEST_FRAMEWORK));
             Assert.That(response.CompletedAt, Is.Not.Empty);
             Assert.That(response.TestCount, Is.EqualTo(0));
