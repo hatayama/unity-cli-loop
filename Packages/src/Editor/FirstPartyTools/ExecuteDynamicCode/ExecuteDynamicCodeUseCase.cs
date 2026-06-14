@@ -80,7 +80,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     originalCode);
                 response.SecurityLevel = editorLevel.ToString();
                 response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
-                response.DomainReloadWaitRequired = await domainReloadWaitSignal.ShouldWaitAsync(cancellationToken);
+                // Why: domain-reload timeouts can complete while Unity's synchronization context is stalled.
+                bool domainReloadWaitRequired =
+                    await domainReloadWaitSignal.ShouldWaitAsync(cancellationToken).ConfigureAwait(false);
+                response.DomainReloadWaitRequired = domainReloadWaitRequired;
                 return response;
             }
             catch (OperationCanceledException)

@@ -299,7 +299,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             GameObject annotationOverlay,
             SynchronizationContext editorContext)
         {
-            if (annotationOverlay == null)
+            if (ReferenceEquals(annotationOverlay, null))
             {
                 return;
             }

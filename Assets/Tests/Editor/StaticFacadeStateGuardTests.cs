@@ -71,6 +71,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             @"\b(public|internal|private|protected)\s+static\s+class\b",
             RegexOptions.Compiled);
 
+        private static readonly Regex DiscardedMainThreadTimerTaskPattern = new Regex(
+            @"_\s*=\s*TimerDelay\.WaitThenExecuteOnMainThread",
+            RegexOptions.Compiled);
+
         private static readonly Regex AllowedStaticIdentifierPattern = new Regex(
             @"\b(ServiceValue|RepositoryValue|RegistryValue|RegisteredUseCase)\b",
             RegexOptions.Compiled);
@@ -136,9 +140,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(isViolation, Is.True);
         }
 
+        [Test]
+        public void RecordingsApplicationFacade_WhenStartingDelayedRecording_DoesNotDiscardTimerTask()
+        {
+            // Tests that delayed recording observes timeout faults and keeps its countdown cleanup path reachable.
+            string source = ReadSourceFile(
+                "Packages/src/Editor/FirstPartyTools/RecordInput/Application/RecordingsApplicationFacade.cs");
+
+            Assert.That(DiscardedMainThreadTimerTaskPattern.IsMatch(source), Is.False);
+            Assert.That(source, Does.Contain("QueueCountdownCleanup"));
+            Assert.That(source, Does.Contain("StartDelayedRecordingAsync(delayMilliseconds, generation, CancellationToken.None)"));
+            Assert.That(source, Does.Contain("StartDelayedRecordingAsync(int delayMilliseconds, int generation, CancellationToken ct)"));
+        }
+
+        [Test]
+        public void ScreenshotUseCase_WhenDestroyingTimedOutAnnotationOverlay_UsesReferenceNullCheck()
+        {
+            // Tests that screenshot timeout cleanup does not call UnityEngine.Object null operators off-thread.
+            string source = ReadSourceFile("Packages/src/Editor/FirstPartyTools/Screenshot/ScreenshotUseCase.cs");
+
+            Assert.That(source, Does.Contain("ReferenceEquals(annotationOverlay, null)"));
+            Assert.That(source, Does.Not.Contain("annotationOverlay == null"));
+        }
+
+        [Test]
+        public void SimulateMouseUiUseCase_WhenReturningAfterTimeout_UsesCapturedUnityObjectState()
+        {
+            // Tests that timeout result branches use plain captured bools instead of UnityEngine.Object null checks.
+            string source = ReadSourceFile("Packages/src/Editor/FirstPartyTools/SimulateMouseUi/SimulateMouseUiUseCase.cs");
+
+            Assert.That(source, Does.Contain("bool hitTarget = target != null;"));
+            Assert.That(source, Does.Contain("bool shouldReleasePointer = rawTarget != null && target != null;"));
+            Assert.That(source, Does.Not.Contain("CreateClickResult(parameters, inputPos, targetName, target != null)"));
+            Assert.That(source, Does.Not.Contain("CreateLongPressResult(parameters, inputPos, targetName, target != null)"));
+        }
+
+        [Test]
+        public void VibeLogger_WhenCollectingEnvironmentInfo_GatesUnityEditorApiBehindMainThreadCheck()
+        {
+            // Tests that debug logging from timeout continuations does not read UnityEditor APIs off-thread.
+            string source = ReadSourceFile("Packages/src/Editor/ToolContracts/VibeLogger.cs");
+            int methodIndex = source.IndexOf("private EnvironmentInfo GetEnvironmentInfo()", System.StringComparison.Ordinal);
+            int mainThreadCheckIndex = source.IndexOf("if (!IsEditorMainThread)", methodIndex, System.StringComparison.Ordinal);
+            int editorApplicationIndex = source.IndexOf("EditorApplication.isCompiling", methodIndex, System.StringComparison.Ordinal);
+
+            Assert.That(methodIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(mainThreadCheckIndex, Is.GreaterThan(methodIndex));
+            Assert.That(editorApplicationIndex, Is.GreaterThan(mainThreadCheckIndex));
+            Assert.That(source, Does.Contain("DOMAIN_RELOAD_STATE_UNAVAILABLE_OFF_MAIN_THREAD"));
+            Assert.That(source, Does.Not.Contain("UnityEngine.Application.dataPath"));
+            Assert.That(source, Does.Not.Contain("Path.Combine(_logDirectory"));
+        }
+
         private static List<string> FindMutableStaticFieldViolations()
         {
             return FindMutableStaticFieldViolations(MigratedFacadePaths);
+        }
+
+        private static string ReadSourceFile(string relativePath)
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            string absolutePath = Path.Combine(projectRoot, relativePath);
+            return File.ReadAllText(absolutePath);
         }
 
         private static List<string> FindMutableStaticFieldViolations(string[] relativePaths)

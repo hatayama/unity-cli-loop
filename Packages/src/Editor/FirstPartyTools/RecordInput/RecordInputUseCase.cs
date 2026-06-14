@@ -12,6 +12,7 @@ using UnityEngine.InputSystem;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
+using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -56,7 +57,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             switch (request.Action)
             {
                 case RecordInputAction.Start:
-                    response = await ExecuteStartAsync(request, ct);
+                    // Why: delayed-start timeouts must propagate without recapturing Unity's stalled synchronization context.
+                    response = await ExecuteStartAsync(request, ct).ConfigureAwait(false);
+                    await MainThreadSwitcher.SwitchToMainThread(ct);
                     break;
 
                 case RecordInputAction.Stop:
@@ -79,7 +82,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
 #if ULOOP_HAS_INPUT_SYSTEM
-        private static async Task<UnityCliLoopRecordInputResult> ExecuteStartAsync(UnityCliLoopRecordInputRequest request, CancellationToken ct)
+        private static async Task<UnityCliLoopRecordInputResult> ExecuteStartAsync(
+            UnityCliLoopRecordInputRequest request,
+            CancellationToken ct)
         {
             if (!EditorApplication.isPlaying)
             {
@@ -142,33 +147,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (delaySeconds > 0)
             {
-                RecordInputOverlayState.StartCountdown(delaySeconds);
-
-                try
-                {
-                    await TimerDelay.WaitThenExecuteOnMainThread(delaySeconds * 1000, () =>
-                    {
-                        if (!EditorApplication.isPlaying || RecordInputOverlayState.Phase != RecordInputOverlayPhase.Countdown)
-                        {
-                            RecordInputOverlayState.Clear();
-                            return;
-                        }
-
-                        RecordInputOverlayState.StartRecording();
-                        InputRecorder.StartRecording(keyFilter);
-                    }, ct);
-                }
-                finally
-                {
-                    // Cancelled mid-countdown: clear stale countdown state so next Start isn't blocked
-                    if (!InputRecorder.IsRecording &&
-                        RecordInputOverlayState.Phase == RecordInputOverlayPhase.Countdown)
-                    {
-                        RecordInputOverlayState.Clear();
-                    }
-                }
-
-                if (!EditorApplication.isPlaying || !InputRecorder.IsRecording)
+                RecordInputDelayedStartOutcome delayedStartOutcome =
+                    await ExecuteDelayedStartAsync(delaySeconds, keyFilter, ct)
+                        .ConfigureAwait(false);
+                if (delayedStartOutcome != RecordInputDelayedStartOutcome.Started)
                 {
                     return new UnityCliLoopRecordInputResult
                     {
@@ -248,6 +230,66 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TotalFrames = data.Metadata.TotalFrames,
                 DurationSeconds = data.Metadata.DurationSeconds
             };
+        }
+
+        private static async Task<RecordInputDelayedStartOutcome> ExecuteDelayedStartAsync(
+            int delaySeconds,
+            HashSet<Key>? keyFilter,
+            CancellationToken ct)
+        {
+            RecordInputDelayedStartOutcome outcome = RecordInputDelayedStartOutcome.Cancelled;
+            bool waitCompleted = false;
+            RecordInputOverlayState.StartCountdown(delaySeconds);
+
+            try
+            {
+                await TimerDelay.WaitThenExecuteOnMainThread(delaySeconds * 1000, () =>
+                {
+                    if (!EditorApplication.isPlaying || RecordInputOverlayState.Phase != RecordInputOverlayPhase.Countdown)
+                    {
+                        RecordInputOverlayState.Clear();
+                        outcome = RecordInputDelayedStartOutcome.Cancelled;
+                        return;
+                    }
+
+                    RecordInputOverlayState.StartRecording();
+                    InputRecorder.StartRecording(keyFilter);
+                    outcome = RecordInputDelayedStartOutcome.Started;
+                }, ct).ConfigureAwait(false);
+                waitCompleted = true;
+                return outcome;
+            }
+            finally
+            {
+                if (!waitCompleted)
+                {
+                    QueueCountdownCleanup();
+                }
+            }
+        }
+
+        private enum RecordInputDelayedStartOutcome
+        {
+            Cancelled = 0,
+            Started = 1
+        }
+
+        private static void QueueCountdownCleanup()
+        {
+            CleanupCountdownOnMainThreadAsync(CancellationToken.None).Forget();
+        }
+
+        private static async Task CleanupCountdownOnMainThreadAsync(
+            CancellationToken ct)
+        {
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+
+            // Why: timeout/cancellation can resume off-thread, so stale countdown state is cleared only on Unity's context.
+            if (!InputRecorder.IsRecording &&
+                RecordInputOverlayState.Phase == RecordInputOverlayPhase.Countdown)
+            {
+                RecordInputOverlayState.Clear();
+            }
         }
 #endif
     }

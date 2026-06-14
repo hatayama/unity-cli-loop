@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             SimulateMouseUiUseCase useCase = new();
             UnityCliLoopMouseUiSimulationResult result =
-                await useCase.SimulateMouseUiAsync(ToRequest(parameters), ct);
+                await useCase.SimulateMouseUiAsync(ToRequest(parameters), ct).ConfigureAwait(false);
             return ToResponse(result);
         }
 
