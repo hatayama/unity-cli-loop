@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 )
 
@@ -27,7 +26,7 @@ func waitForLaunchReadiness(ctx context.Context, projectRoot string) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || isReadinessCLIUpdateRequiredError(err) {
+	if ctx.Err() != nil || isReadinessCLIUpdateRequiredError(err) {
 		return err
 	}
 	return launchStartupTimeoutError{

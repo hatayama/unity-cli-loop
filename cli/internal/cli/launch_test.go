@@ -207,6 +207,46 @@ func TestWaitForLaunchReadinessWrapsStartupTimeout(t *testing.T) {
 	}
 }
 
+func TestWaitForLaunchReadinessWrapsInternalProbeDeadline(t *testing.T) {
+	// Verifies probe deadlines are classified as launch startup timeouts while the parent context is active.
+	originalReadinessWait := waitForToolReadinessForLaunch
+	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+		return fmt.Errorf("probe deadline: %w", context.DeadlineExceeded)
+	}
+	t.Cleanup(func() {
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+
+	err := waitForLaunchReadiness(context.Background(), t.TempDir())
+
+	var startupErr launchStartupTimeoutError
+	if !errors.As(err, &startupErr) {
+		t.Fatalf("expected launch startup timeout error, got %v", err)
+	}
+	if !errors.Is(startupErr.Unwrap(), context.DeadlineExceeded) {
+		t.Fatalf("startup timeout should preserve probe deadline cause: %v", startupErr.Unwrap())
+	}
+}
+
+func TestWaitForLaunchReadinessPreservesParentCancellation(t *testing.T) {
+	// Verifies caller cancellation is not converted into a launch startup timeout.
+	originalReadinessWait := waitForToolReadinessForLaunch
+	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+		return ctx.Err()
+	}
+	t.Cleanup(func() {
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := waitForLaunchReadiness(ctx, t.TempDir())
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected parent cancellation, got %v", err)
+	}
+}
+
 func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) {
 	// Verifies launch reports machine-readable readiness when Unity was already running.
 	originalFinder := findRunningUnityProcessForLaunch
@@ -613,6 +653,27 @@ func TestWaitForUnityStartupMarkerReturnsNilWhenLockfileDoesNotAppear(t *testing
 	err := waitForUnityStartupMarkerOrTimeout(context.Background(), lockfilePath, time.Millisecond, time.Millisecond)
 	if err != nil {
 		t.Fatalf("missing startup marker should not fail launch: %v", err)
+	}
+}
+
+func TestWaitForUnityProcessExitBoundsProcessScan(t *testing.T) {
+	// Verifies exit waiting applies the exit timeout to each running-process scan.
+	originalFinder := findRunningUnityProcessForLaunch
+	findRunningUnityProcessForLaunch = func(ctx context.Context, projectRoot string) (*unityProcess, error) {
+		if _, ok := ctx.Deadline(); !ok {
+			return nil, errors.New("missing process scan deadline")
+		}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+	})
+
+	err := waitForUnityProcessExit(context.Background(), t.TempDir(), 123, time.Hour, 10*time.Millisecond)
+
+	if err == nil || err.Error() != "timed out waiting for Unity process 123 to exit" {
+		t.Fatalf("process exit timeout mismatch: %v", err)
 	}
 }
 

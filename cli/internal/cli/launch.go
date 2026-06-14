@@ -323,13 +323,22 @@ func cleanStaleUnityTemp(projectRoot string) (bool, error) {
 func waitForUnityProcessExit(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
 	timeoutContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	timeoutError := func() error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("timed out waiting for Unity process %d to exit", pid)
+	}
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
-		runningProcess, err := findRunningUnityProcessForLaunch(ctx, projectRoot)
+		runningProcess, err := findRunningUnityProcessForLaunch(timeoutContext, projectRoot)
 		if err != nil {
+			if timeoutContext.Err() != nil {
+				return timeoutError()
+			}
 			return err
 		}
 		if runningProcess == nil || runningProcess.pid != pid {
@@ -338,10 +347,7 @@ func waitForUnityProcessExit(ctx context.Context, projectRoot string, pid int, p
 
 		select {
 		case <-timeoutContext.Done():
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return fmt.Errorf("timed out waiting for Unity process %d to exit", pid)
+			return timeoutError()
 		case <-ticker.C:
 		}
 	}
