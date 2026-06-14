@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         private static readonly Dictionary<string, UloopPausePointEntry> Entries = new();
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
+        private static int _nextGeneration;
         private static UloopPausePointSnapshot _latestHitSnapshot;
         // One input can hit several markers in the same frame; tools need the full list,
         // not just the latest hit, to report every marker that interrupted them.
@@ -27,7 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Debug.Assert(timeoutSeconds > 0, "timeoutSeconds must be greater than zero");
 
             DateTime now = NowUtc();
-            UloopPausePointEntry entry = new(id, timeoutSeconds, now);
+            int generation = ++_nextGeneration;
+            UloopPausePointEntry entry = new(id, timeoutSeconds, now, generation);
             Entries[id] = entry;
             ClearLatestHitSnapshotIfMatches(id);
             return entry.ToSnapshot(now, _pauseController);
@@ -166,6 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static void ResetForTests()
         {
             Entries.Clear();
+            _nextGeneration = 0;
             _latestHitSnapshot = null;
             _hitSnapshots.Clear();
             _pauseController = new UnityEditorPausePointPauseController();
@@ -215,10 +218,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             bool isHit,
             int hitCount,
             int timeoutSeconds,
+            bool expired,
+            string enabledAtUtc,
             long elapsedMilliseconds,
+            long remainingMilliseconds,
+            int generation,
             bool isPlaying,
             bool isPaused,
-            string message)
+            string message,
+            string recommendedNextAction)
         {
             Id = id ?? string.Empty;
             Status = status ?? UloopPausePointStatus.NotEnabled;
@@ -226,10 +234,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsHit = isHit;
             HitCount = hitCount;
             TimeoutSeconds = timeoutSeconds;
+            Expired = expired;
+            EnabledAtUtc = enabledAtUtc ?? string.Empty;
             ElapsedSinceEnabledMilliseconds = elapsedMilliseconds;
+            RemainingMilliseconds = remainingMilliseconds;
+            Generation = generation;
             IsPlaying = isPlaying;
             IsPaused = isPaused;
             Message = message ?? string.Empty;
+            RecommendedNextAction = recommendedNextAction ?? string.Empty;
         }
 
         public string Id { get; }
@@ -238,10 +251,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool IsHit { get; }
         public int HitCount { get; }
         public int TimeoutSeconds { get; }
+        public bool Expired { get; }
+        public string EnabledAtUtc { get; }
         public long ElapsedSinceEnabledMilliseconds { get; }
+        public long RemainingMilliseconds { get; }
+        public int Generation { get; }
         public bool IsPlaying { get; }
         public bool IsPaused { get; }
         public string Message { get; }
+        public string RecommendedNextAction { get; }
 
         public static UloopPausePointSnapshot NotEnabled(string id, IUloopPausePointPauseController pauseController)
         {
@@ -254,10 +272,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 false,
                 0,
                 0,
+                false,
+                string.Empty,
+                0,
+                0,
                 0,
                 pauseController.IsPlaying,
                 pauseController.IsPaused,
-                "Pause point is not enabled.");
+                "Pause point is not enabled.",
+                string.Empty);
         }
     }
 
@@ -281,12 +304,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     /// </summary>
     internal sealed class UloopPausePointEntry
     {
-        public UloopPausePointEntry(string id, int timeoutSeconds, DateTime enabledAtUtc)
+        public UloopPausePointEntry(string id, int timeoutSeconds, DateTime enabledAtUtc, int generation)
         {
             Id = id;
             TimeoutSeconds = timeoutSeconds;
             EnabledAtUtc = enabledAtUtc;
             ExpiresAtUtc = enabledAtUtc.AddSeconds(timeoutSeconds);
+            Generation = generation;
             Status = UloopPausePointStatus.Enabled;
             IsEnabled = true;
             Message = "Pause point enabled.";
@@ -296,6 +320,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public int TimeoutSeconds { get; }
         public DateTime EnabledAtUtc { get; }
         public DateTime ExpiresAtUtc { get; }
+        public int Generation { get; }
         public string Status { get; private set; }
         public bool IsEnabled { get; private set; }
         public int HitCount { get; private set; }
@@ -344,9 +369,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Debug.Assert(pauseController != null, "pauseController must not be null");
 
             bool isHit = Status == UloopPausePointStatus.Hit;
+            bool expired = Status == UloopPausePointStatus.Expired;
             bool isPlaying = isHit ? IsPlayingAtHit : pauseController.IsPlaying;
             bool isPaused = isHit ? IsPausedAtHit : pauseController.IsPaused;
             long elapsedMilliseconds = Math.Max(0, (long)(nowUtc - EnabledAtUtc).TotalMilliseconds);
+            long remainingMilliseconds = CalculateRemainingMilliseconds(nowUtc);
+            string recommendedNextAction = expired ? CreateExpiredRecommendedNextAction() : string.Empty;
 
             return new UloopPausePointSnapshot(
                 Id,
@@ -355,10 +383,37 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 isHit,
                 HitCount,
                 TimeoutSeconds,
+                expired,
+                FormatUtc(EnabledAtUtc),
                 elapsedMilliseconds,
+                remainingMilliseconds,
+                Generation,
                 isPlaying,
                 isPaused,
-                Message);
+                Message,
+                recommendedNextAction);
+        }
+
+        private long CalculateRemainingMilliseconds(DateTime nowUtc)
+        {
+            if (!IsEnabled)
+            {
+                return 0;
+            }
+
+            long remainingMilliseconds = (long)(ExpiresAtUtc - nowUtc).TotalMilliseconds;
+            return Math.Max(0, remainingMilliseconds);
+        }
+
+        private string CreateExpiredRecommendedNextAction()
+        {
+            return "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.";
+        }
+
+        private static string FormatUtc(DateTime value)
+        {
+            DateTime utcValue = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
+            return utcValue.ToString("O");
         }
     }
 
