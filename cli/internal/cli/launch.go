@@ -17,13 +17,15 @@ import (
 )
 
 const (
-	launchCommandName       = "launch"
-	launchLockfilePoll      = 100 * time.Millisecond
-	launchLockfileTimeout   = 5 * time.Second
-	projectVersionFilePath  = "ProjectSettings/ProjectVersion.txt"
-	recoveryDirectoryPath   = "Assets/_Recovery"
-	launchTempDirectoryName = "Temp"
-	unityLockfileName       = "UnityLockfile"
+	launchCommandName        = "launch"
+	launchLockfilePoll       = 100 * time.Millisecond
+	launchLockfileTimeout    = 5 * time.Second
+	launchProcessExitPoll    = 100 * time.Millisecond
+	launchProcessExitTimeout = 20 * time.Second
+	projectVersionFilePath   = "ProjectSettings/ProjectVersion.txt"
+	recoveryDirectoryPath    = "Assets/_Recovery"
+	launchTempDirectoryName  = "Temp"
+	unityLockfileName        = "UnityLockfile"
 )
 
 var (
@@ -31,6 +33,7 @@ var (
 	focusUnityProcessForLaunch          = focusUnityProcess
 	killUnityProcessForLaunch           = killUnityProcess
 	resolveUnityExecutablePathForLaunch = resolveUnityExecutablePath
+	waitForUnityProcessExitForLaunch    = waitForUnityProcessExit
 	waitForUnityLockfileForLaunch       = waitForUnityLockfile
 	waitForToolReadinessForLaunch       = waitForToolReadiness
 	probeProjectIpcForLaunchFallback    = probeToolReadinessSequence
@@ -225,6 +228,10 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 			return 1
 		}
+		if err := waitForUnityProcessExitForLaunch(ctx, projectRoot, runningProcess.pid, launchProcessExitPoll, launchProcessExitTimeout); err != nil {
+			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+			return 1
+		}
 		if options.quit {
 			return writeLaunchQuitResponse(stdout, stderr, projectRoot, &runningProcess.pid, launchStoppedMessage)
 		}
@@ -310,6 +317,33 @@ func cleanStaleUnityTemp(projectRoot string) (bool, error) {
 	}
 
 	return true, os.RemoveAll(filepath.Join(projectRoot, launchTempDirectoryName))
+}
+
+func waitForUnityProcessExit(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
+	timeoutContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		runningProcess, err := findRunningUnityProcessForLaunch(ctx, projectRoot)
+		if err != nil {
+			return err
+		}
+		if runningProcess == nil || runningProcess.pid != pid {
+			return nil
+		}
+
+		select {
+		case <-timeoutContext.Done():
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("timed out waiting for Unity process %d to exit", pid)
+		case <-ticker.C:
+		}
+	}
 }
 
 func waitForUnityLockfile(ctx context.Context, lockfilePath string, pollInterval time.Duration, timeout time.Duration) error {

@@ -229,14 +229,20 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	originalFinder := findRunningUnityProcessForLaunch
 	originalKiller := killUnityProcessForLaunch
 	originalResolver := resolveUnityExecutablePathForLaunch
+	originalExitWait := waitForUnityProcessExitForLaunch
 	originalLockfileWait := waitForUnityLockfileForLaunch
 	originalReadinessWait := waitForToolReadinessForLaunch
 	killedPid := 0
+	waitedPid := 0
 	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
 		return &unityProcess{pid: 222}, nil
 	}
 	killUnityProcessForLaunch = func(pid int) error {
 		killedPid = pid
+		return nil
+	}
+	waitForUnityProcessExitForLaunch = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
+		waitedPid = pid
 		return nil
 	}
 	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
@@ -252,6 +258,7 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 		findRunningUnityProcessForLaunch = originalFinder
 		killUnityProcessForLaunch = originalKiller
 		resolveUnityExecutablePathForLaunch = originalResolver
+		waitForUnityProcessExitForLaunch = originalExitWait
 		waitForUnityLockfileForLaunch = originalLockfileWait
 		waitForToolReadinessForLaunch = originalReadinessWait
 	})
@@ -274,6 +281,9 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	if killedPid != 222 {
 		t.Fatalf("restart killed pid mismatch: %d", killedPid)
 	}
+	if waitedPid != 222 {
+		t.Fatalf("restart waited pid mismatch: %d", waitedPid)
+	}
 	response := decodeLaunchResponseFromOutput(t, stdout.String())
 	if !response.Success || !response.Ready || !response.ServerReady || !response.ProjectIpcReady {
 		t.Fatalf("ready flags mismatch: %#v", response)
@@ -286,6 +296,105 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	}
 	if response.CurrentProcessId == nil || *response.CurrentProcessId <= 0 {
 		t.Fatalf("current process id mismatch: %#v", response.CurrentProcessId)
+	}
+}
+
+func TestRunLaunchQuitWaitsForKilledUnityProcess(t *testing.T) {
+	// Verifies quit does not report success before the killed Unity process disappears.
+	originalFinder := findRunningUnityProcessForLaunch
+	originalKiller := killUnityProcessForLaunch
+	originalExitWait := waitForUnityProcessExitForLaunch
+	waitedPid := 0
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 333}, nil
+	}
+	killUnityProcessForLaunch = func(pid int) error {
+		return nil
+	}
+	waitForUnityProcessExitForLaunch = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
+		waitedPid = pid
+		return nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		killUnityProcessForLaunch = originalKiller
+		waitForUnityProcessExitForLaunch = originalExitWait
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, quit: true},
+		projectRoot,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
+	}
+	if waitedPid != 333 {
+		t.Fatalf("quit waited pid mismatch: %d", waitedPid)
+	}
+	response := decodeLaunchResponseFromOutput(t, stdout.String())
+	if !response.Success || !response.Quit {
+		t.Fatalf("quit response mismatch: %#v", response)
+	}
+	if response.PreviousProcessId == nil || *response.PreviousProcessId != 333 {
+		t.Fatalf("previous process id mismatch: %#v", response.PreviousProcessId)
+	}
+}
+
+func TestRunLaunchRestartReportsProcessExitWaitFailure(t *testing.T) {
+	// Verifies restart stops before Temp cleanup when the killed Unity process still holds files.
+	originalFinder := findRunningUnityProcessForLaunch
+	originalKiller := killUnityProcessForLaunch
+	originalExitWait := waitForUnityProcessExitForLaunch
+	originalResolver := resolveUnityExecutablePathForLaunch
+	resolverCalled := false
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 444}, nil
+	}
+	killUnityProcessForLaunch = func(pid int) error {
+		return nil
+	}
+	waitForUnityProcessExitForLaunch = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
+		return errors.New("still exiting")
+	}
+	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
+		resolverCalled = true
+		return "/usr/bin/true", nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		killUnityProcessForLaunch = originalKiller
+		waitForUnityProcessExitForLaunch = originalExitWait
+		resolveUnityExecutablePathForLaunch = originalResolver
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, restart: true},
+		projectRoot,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 1 {
+		t.Fatalf("expected failure, got %d stdout=%s", code, stdout.String())
+	}
+	if resolverCalled {
+		t.Fatal("restart should not launch a new Unity process before the old one exits")
+	}
+	if !strings.Contains(stderr.String(), "still exiting") {
+		t.Fatalf("stderr should include wait failure: %s", stderr.String())
 	}
 }
 
