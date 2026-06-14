@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -27,6 +28,10 @@ func waitForLaunchReadiness(ctx context.Context, projectRoot string) error {
 		return nil
 	}
 	if ctx.Err() != nil || isReadinessCLIUpdateRequiredError(err) {
+		return err
+	}
+	var notRespondingErr unityServerNotRespondingError
+	if !errors.As(err, &notRespondingErr) {
 		return err
 	}
 	return launchStartupTimeoutError{

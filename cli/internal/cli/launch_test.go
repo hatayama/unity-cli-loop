@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
 func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
@@ -193,7 +195,11 @@ func TestWaitForLaunchReadinessWrapsStartupTimeout(t *testing.T) {
 	// Verifies launch timeout errors receive the launch-specific startup classification.
 	originalReadinessWait := waitForToolReadinessForLaunch
 	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
-		return errors.New("timed out waiting for Unity tool readiness")
+		return unityServerNotRespondingError{
+			projectRoot: projectRoot,
+			endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+			cause:       errors.New("timed out waiting for Unity tool readiness"),
+		}
 	}
 	t.Cleanup(func() {
 		waitForToolReadinessForLaunch = originalReadinessWait
@@ -211,7 +217,11 @@ func TestWaitForLaunchReadinessWrapsInternalProbeDeadline(t *testing.T) {
 	// Verifies probe deadlines are classified as launch startup timeouts while the parent context is active.
 	originalReadinessWait := waitForToolReadinessForLaunch
 	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
-		return fmt.Errorf("probe deadline: %w", context.DeadlineExceeded)
+		return unityServerNotRespondingError{
+			projectRoot: projectRoot,
+			endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+			cause:       fmt.Errorf("probe deadline: %w", context.DeadlineExceeded),
+		}
 	}
 	t.Cleanup(func() {
 		waitForToolReadinessForLaunch = originalReadinessWait
@@ -225,6 +235,35 @@ func TestWaitForLaunchReadinessWrapsInternalProbeDeadline(t *testing.T) {
 	}
 	if !errors.Is(startupErr.Unwrap(), context.DeadlineExceeded) {
 		t.Fatalf("startup timeout should preserve probe deadline cause: %v", startupErr.Unwrap())
+	}
+}
+
+func TestWaitForLaunchReadinessPreservesNoProcessReachability(t *testing.T) {
+	// Verifies a launch whose Editor exited before readiness does not report that Unity is running.
+	originalReadinessWait := waitForToolReadinessForLaunch
+	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+		return fmt.Errorf("timed out waiting for Unity tool readiness: %w", &unityipc.ConnectionAttemptError{
+			ProjectRoot: projectRoot,
+			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+			Cause:       errors.New("connect failed"),
+		})
+	}
+	t.Cleanup(func() {
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+
+	err := waitForLaunchReadiness(context.Background(), t.TempDir())
+
+	var startupErr launchStartupTimeoutError
+	if errors.As(err, &startupErr) {
+		t.Fatalf("exited launch should not be classified as startup timeout: %v", err)
+	}
+	cliErr := classifyError(err, errorContext{command: launchCommandName})
+	if cliErr.ErrorCode != errorCodeUnityNotReachable {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if strings.Contains(cliErr.Message, "Unity is running") {
+		t.Fatalf("message should not claim Unity is running: %#v", cliErr)
 	}
 }
 
@@ -672,8 +711,12 @@ func TestWaitForUnityProcessExitBoundsProcessScan(t *testing.T) {
 
 	err := waitForUnityProcessExit(context.Background(), t.TempDir(), 123, time.Hour, 10*time.Millisecond)
 
-	if err == nil || err.Error() != "timed out waiting for Unity process 123 to exit" {
+	var timeoutErr launchProcessExitTimeoutError
+	if !errors.As(err, &timeoutErr) {
 		t.Fatalf("process exit timeout mismatch: %v", err)
+	}
+	if timeoutErr.pid != 123 {
+		t.Fatalf("process exit timeout pid mismatch: %#v", timeoutErr)
 	}
 }
 

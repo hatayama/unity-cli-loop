@@ -167,6 +167,28 @@ func TestClassifyLaunchStartupTimeoutError(t *testing.T) {
 	}
 }
 
+func TestClassifyLaunchProcessExitTimeoutError(t *testing.T) {
+	// Verifies restart and quit process-exit timeouts are structured as retryable launch failures.
+	cliErr := classifyError(
+		launchProcessExitTimeoutError{
+			projectRoot: "/tmp/MyProject",
+			pid:         123,
+			timeout:     launchProcessExitTimeout,
+		},
+		errorContext{projectRoot: "/tmp/MyProject", command: launchCommandName},
+	)
+
+	if cliErr.ErrorCode != errorCodeUnityProcessExitTimeout {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if !cliErr.Retryable || !cliErr.SafeToRetry {
+		t.Fatalf("process exit timeout should be retryable: %#v", cliErr)
+	}
+	if cliErr.Details["pid"] != 123 {
+		t.Fatalf("pid details mismatch: %#v", cliErr.Details)
+	}
+}
+
 func TestWriteToolFailureWhenServerStopsBeforeAcceptingDispatchedRequestIsNotSafeToRetry(t *testing.T) {
 	// Verifies pre-accept server silence does not advertise a dispatched state-changing command as safe to retry.
 	var stderr bytes.Buffer

@@ -327,7 +327,11 @@ func waitForUnityProcessExit(ctx context.Context, projectRoot string, pid int, p
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return fmt.Errorf("timed out waiting for Unity process %d to exit", pid)
+		return launchProcessExitTimeoutError{
+			projectRoot: projectRoot,
+			pid:         pid,
+			timeout:     timeout,
+		}
 	}
 
 	ticker := time.NewTicker(pollInterval)

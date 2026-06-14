@@ -16,6 +16,7 @@ const (
 	errorCodeProjectNotFound                 = "PROJECT_NOT_FOUND"
 	errorCodeUnityNotReachable               = "UNITY_NOT_REACHABLE"
 	errorCodeUnityStartupTimeout             = "UNITY_STARTUP_TIMEOUT"
+	errorCodeUnityProcessExitTimeout         = "UNITY_PROCESS_EXIT_TIMEOUT"
 	errorCodeUnityDisconnectedAfterDispatch  = "UNITY_DISCONNECTED_AFTER_DISPATCH"
 	errorCodeUnityDisconnectedAfterAccept    = "UNITY_DISCONNECTED_AFTER_ACCEPT"
 	errorCodeUnityResponseTimeoutAfterAccept = "UNITY_RESPONSE_TIMEOUT_AFTER_ACCEPT"
@@ -149,6 +150,11 @@ func classifyError(err error, context errorContext) cliError {
 	var startupTimeoutErr launchStartupTimeoutError
 	if errors.As(err, &startupTimeoutErr) {
 		return unityStartupTimeoutCLIError(startupTimeoutErr, context)
+	}
+
+	var processExitTimeoutErr launchProcessExitTimeoutError
+	if errors.As(err, &processExitTimeoutErr) {
+		return unityProcessExitTimeoutCLIError(processExitTimeoutErr, context)
 	}
 
 	var notRespondingErr unityServerNotRespondingError
