@@ -26,6 +26,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
+    /// Defines machine-readable run-tests result states returned to CLI callers.
+    /// </summary>
+    internal static class RunTestsExecutionStatus
+    {
+        public const string Passed = "Passed";
+        public const string Failed = "Failed";
+        public const string NoTestsFound = "NoTestsFound";
+        public const string ExecutionFailed = "ExecutionFailed";
+    }
+
+    /// <summary>
     /// Carries the request data needed for Unity CLI Loop Test Execution behavior.
     /// </summary>
     public sealed class UnityCliLoopTestExecutionRequest
@@ -42,6 +53,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public sealed class UnityCliLoopTestExecutionResult
     {
         public bool Success { get; set; }
+        public string Status { get; set; } = "";
+        public bool HasFailures { get; set; }
+        public bool NoTestsFound { get; set; }
+        public string NoTestsFoundExplanation { get; set; } = "";
         public string Message { get; set; } = "";
         public string CompletedAt { get; set; } = "";
         public int TestCount { get; set; }

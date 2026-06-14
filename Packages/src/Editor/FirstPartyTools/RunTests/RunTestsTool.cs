@@ -51,7 +51,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 passedCount: result.PassedCount,
                 failedCount: result.FailedCount,
                 skippedCount: result.SkippedCount,
-                xmlPath: result.XmlPath);
+                xmlPath: result.XmlPath,
+                status: result.Status,
+                hasFailures: result.HasFailures,
+                noTestsFound: result.NoTestsFound,
+                noTestsFoundExplanation: result.NoTestsFoundExplanation);
         }
     }
 }

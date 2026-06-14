@@ -10,6 +10,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class SerializableTestResult
     {
         [SerializeField] public bool success;
+        [SerializeField] public string status;
+        [SerializeField] public bool hasFailures;
+        [SerializeField] public bool noTestsFound;
+        [SerializeField] public string noTestsFoundExplanation;
         [SerializeField] public string message;
         [SerializeField] public string completedAt;
         [SerializeField] public int testCount;
@@ -23,6 +27,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new SerializableTestResult
             {
                 success = false,
+                status = RunTestsExecutionStatus.ExecutionFailed,
+                hasFailures = false,
+                noTestsFound = false,
+                noTestsFoundExplanation = string.Empty,
                 message = RunTestsResponse.TestFrameworkUnavailableMessage,
                 completedAt = DateTime.UtcNow.ToString("o"),
                 testCount = 0,
