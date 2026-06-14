@@ -2,6 +2,7 @@
     "name": "UnityCLILoop.FirstPartyTools.Screenshot.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
+        "GUID:214998e563c124e8a88199b2dd1f522d",
         "GUID:5079a8d3a72924a81aa1cbc25f65ed1b",
         "GUID:a2d87883023de4cf59b7d1962d5dd8aa",
         "GUID:fc3fd32eddbee40e39c2d76dc184957b"

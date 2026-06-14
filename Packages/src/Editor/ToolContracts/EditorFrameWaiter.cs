@@ -10,7 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// <summary>
     /// Waits for Unity Editor update frames when code must observe rendered or runtime frame progress.
     /// </summary>
-    public sealed class EditorFrameWaiterService
+    internal sealed class EditorFrameWaiterService
     {
         private readonly object _lockObject = new object();
         private readonly List<EditorFrameWaitRequest> _requests = new List<EditorFrameWaitRequest>();
@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             EditorApplication.update += UpdateRequests;
         }
 
-        public Task WaitFramesAsync(int frameCount, CancellationToken ct)
+        private Task WaitFramesCoreAsync(int frameCount, CancellationToken ct)
         {
             Debug.Assert(frameCount >= 0, "frameCount must be non-negative");
             ct.ThrowIfCancellationRequested();
@@ -69,6 +69,40 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             request.RegisterCancellation(ct);
             EditorApplication.QueuePlayerLoopUpdate();
             return completionSource.Task;
+        }
+
+        public async Task<bool> WaitFramesOrTimeoutAsync(
+            int frameCount,
+            int timeoutMilliseconds,
+            CancellationToken ct)
+        {
+            Debug.Assert(frameCount >= 0, "frameCount must be non-negative");
+            Debug.Assert(timeoutMilliseconds > 0, "timeoutMilliseconds must be positive");
+            ct.ThrowIfCancellationRequested();
+
+            if (frameCount <= 0)
+            {
+                return true;
+            }
+
+            using CancellationTokenSource frameCancellationSource =
+                CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Task frameTask = WaitFramesCoreAsync(frameCount, frameCancellationSource.Token);
+            using CancellationTokenSource timeoutCancellationSource =
+                CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Task timeoutTask = TimerDelay.Wait(timeoutMilliseconds, timeoutCancellationSource.Token);
+
+            Task completedTask = await Task.WhenAny(frameTask, timeoutTask).ConfigureAwait(false);
+            if (completedTask == timeoutTask)
+            {
+                await timeoutTask.ConfigureAwait(false);
+                frameCancellationSource.Cancel();
+                return false;
+            }
+
+            timeoutCancellationSource.Cancel();
+            await frameTask.ConfigureAwait(false);
+            return true;
         }
 
         public void ClearAllForTests()
@@ -220,7 +254,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     }
 
     /// <summary>
-    /// Provides Editor update frame waits without representing them as wall-clock timeouts.
+    /// Provides Editor update frame waits guarded by wall-clock timeouts.
     /// </summary>
     public static class EditorFrameWaiter
     {
@@ -234,9 +268,12 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             ServiceValue.InitializeForEditorStartup();
         }
 
-        public static Task WaitFramesAsync(int frameCount, CancellationToken ct = default)
+        public static Task<bool> WaitFramesOrTimeoutAsync(
+            int frameCount,
+            int timeoutMilliseconds,
+            CancellationToken ct = default)
         {
-            return ServiceValue.WaitFramesAsync(frameCount, ct);
+            return ServiceValue.WaitFramesOrTimeoutAsync(frameCount, timeoutMilliseconds, ct);
         }
 
         public static void ClearAllForTests()

@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Compile only (do not execute)</summary>
         public bool CompileOnly { get; set; } = false;
 
-        public bool WaitForDomainReload { get; set; } = true;
+        public bool WaitForDomainReload { get; set; } = false;
 
         public bool YieldToForegroundRequests { get; set; } = false;
 

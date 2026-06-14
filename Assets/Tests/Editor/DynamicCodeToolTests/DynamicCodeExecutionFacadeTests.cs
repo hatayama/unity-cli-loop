@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     [TestFixture]
     public class DynamicCodeExecutionFacadeTests
     {
+        private static readonly TimeSpan CancellationPropagationTimeout = TimeSpan.FromSeconds(1);
+
         [Test]
         public async Task ExecuteAsync_WhenSameSecurityLevelUsedTwice_ShouldReuseExecutor()
         {
@@ -87,6 +90,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             runtime.CompleteShutdown();
         }
 
+        [Test]
+        public async Task ExecuteAsync_WhenForegroundExecutionIsCancelled_ShouldAllowNextExecution()
+        {
+            // Verifies CLI disconnect cancellation releases the scheduler slot instead of leaving execute-dynamic-code busy.
+            FakeDynamicCodeExecutorProvider provider = new();
+            using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
+            using DynamicCodeExecutionFacade facade = new DynamicCodeExecutionFacade(pool);
+            using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+
+            Task<ExecutionResult> firstExecution = facade.ExecuteAsync(
+                CreateRequest(DynamicCodeSecurityLevel.Restricted, FakeDynamicCodeExecutor.BlockingCode),
+                cancellationTokenSource.Token);
+            FakeDynamicCodeExecutor executor = await provider.CreatedExecutorTask;
+            await executor.BlockingExecutionStartedTask;
+
+            cancellationTokenSource.Cancel();
+
+            await AssertCanceledWithinTimeoutAsync(firstExecution);
+
+            ExecutionResult secondExecution = await facade.ExecuteAsync(
+                CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 2;"),
+                CancellationToken.None);
+
+            Assert.That(secondExecution.Success, Is.True);
+            Assert.That(secondExecution.Result, Is.EqualTo("return 2;"));
+        }
+
+        private static async Task AssertCanceledWithinTimeoutAsync(Task task)
+        {
+            Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
+            Task completedTask = await Task.WhenAny(task, timeoutTask);
+            if (completedTask == timeoutTask)
+            {
+                Assert.Fail("Foreground execution task did not complete before the timeout.");
+            }
+
+            if (task.IsFaulted)
+            {
+                Assert.Fail($"Expected cancellation, but the task faulted: {task.Exception}");
+            }
+
+            Assert.That(task.IsCanceled, Is.True);
+        }
+
         private static DynamicCodeExecutionRequest CreateRequest(
             DynamicCodeSecurityLevel securityLevel,
             string code)
@@ -108,6 +155,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             public List<FakeDynamicCodeExecutor> CreatedExecutors { get; } = new();
 
+            private readonly TaskCompletionSource<FakeDynamicCodeExecutor> _createdExecutorCompletionSource =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public Task<FakeDynamicCodeExecutor> CreatedExecutorTask => _createdExecutorCompletionSource.Task;
+
             public IDynamicCodeExecutor Create(DynamicCodeSecurityLevel securityLevel)
             {
                 if (!CreateCallsBySecurityLevel.ContainsKey(securityLevel))
@@ -119,6 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
                 FakeDynamicCodeExecutor executor = new();
                 CreatedExecutors.Add(executor);
+                _createdExecutorCompletionSource.TrySetResult(executor);
                 return executor;
             }
         }
@@ -128,20 +181,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         /// </summary>
         private sealed class FakeDynamicCodeExecutor : IDynamicCodeExecutor
         {
+            public const string BlockingCode = "__block_until_cancel__";
+
+            private readonly TaskCompletionSource<bool> _blockingExecutionStartedCompletionSource =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+
             public int DisposeCallCount { get; private set; }
 
-            public Task<ExecutionResult> ExecuteCodeAsync(
+            public Task BlockingExecutionStartedTask => _blockingExecutionStartedCompletionSource.Task;
+
+            public async Task<ExecutionResult> ExecuteCodeAsync(
                 string code,
                 string className = DynamicCodeConstants.DEFAULT_CLASS_NAME,
                 object[] parameters = null,
                 CancellationToken cancellationToken = default,
                 bool compileOnly = false)
             {
-                return Task.FromResult(new ExecutionResult
+                if (code == BlockingCode)
+                {
+                    _blockingExecutionStartedCompletionSource.TrySetResult(true);
+                    await WaitForCancellationOrFailAsync(cancellationToken);
+                }
+
+                return new ExecutionResult
                 {
                     Success = true,
                     Result = code
-                });
+                };
             }
 
             public ExecutionStatistics GetStatistics()
@@ -152,6 +218,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             public void Dispose()
             {
                 DisposeCallCount++;
+            }
+
+            /// <summary>
+            /// Waits for cancellation with a bounded timeout so regression failures do not freeze Unity.
+            /// </summary>
+            private static async Task WaitForCancellationOrFailAsync(CancellationToken cancellationToken)
+            {
+                TaskCompletionSource<bool> cancellationCompletionSource =
+                    new(TaskCreationOptions.RunContinuationsAsynchronously);
+                using CancellationTokenRegistration cancellationRegistration =
+                    cancellationToken.Register(() => cancellationCompletionSource.TrySetCanceled());
+                Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
+                Task completedTask = await Task.WhenAny(cancellationCompletionSource.Task, timeoutTask);
+
+                if (completedTask == timeoutTask)
+                {
+                    Assert.Fail("Foreground execution cancellation was not observed before the timeout.");
+                }
+
+                await cancellationCompletionSource.Task;
             }
         }
 

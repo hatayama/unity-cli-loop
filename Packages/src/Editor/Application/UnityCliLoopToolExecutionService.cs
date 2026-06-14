@@ -59,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 ct.ThrowIfCancellationRequested();
                 UnityCliLoopEditorStateGuard.Validate(toolName);
 
-                UnityCliLoopToolResponse response = await tool.ExecuteAsync(paramsToken, ct);
+                UnityCliLoopToolResponse response = await tool.ExecuteAsync(paramsToken, ct).ConfigureAwait(false);
                 if (response == null)
                 {
                     throw new InvalidOperationException($"Tool returned null response: {toolName}");

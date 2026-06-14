@@ -69,5 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public sealed class UnityCliLoopScreenshotResult
     {
         public List<UnityCliLoopScreenshotInfo> Screenshots { get; set; } = new List<UnityCliLoopScreenshotInfo>();
+        public bool TimedOut { get; set; }
+        public string Message { get; set; } = "";
     }
 }

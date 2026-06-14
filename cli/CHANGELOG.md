@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.32](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.31...cli-v3.0.0-beta.32) (2026-06-13)
+
+
+### Bug Fixes
+
+* Restore the Unity 2022 execute-dynamic-code fast path and make reload waiting opt-in
+
 ## [3.0.0-beta.31](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.24...cli-v3.0.0-beta.31) (2026-06-12)
 
 

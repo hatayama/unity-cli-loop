@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.Compilation;
 
+using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -20,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly bool _isObserving;
 
         private bool _reloadSignalObserved;
+        private int _isDisposed;
 
         private DynamicCodeDomainReloadWaitSignal(ExecuteDynamicCodeSchema parameters)
         {
@@ -46,15 +48,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            if (ShouldRequestWait(_parameters, EditorApplication.isCompiling, _reloadSignalObserved))
+            if (Volatile.Read(ref _reloadSignalObserved))
+            {
+                return true;
+            }
+
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            if (ShouldRequestWait(
+                    _parameters,
+                    EditorApplication.isCompiling,
+                    reloadSignalObserved: Volatile.Read(ref _reloadSignalObserved)))
             {
                 return true;
             }
 
             for (int frame = 0; frame < SIGNAL_SETTLE_FRAMES; frame++)
             {
-                await EditorFrameWaiter.WaitFramesAsync(1, ct);
-                if (ShouldRequestWait(_parameters, EditorApplication.isCompiling, _reloadSignalObserved))
+                bool frameReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                    1,
+                    UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                    ct).ConfigureAwait(false);
+                if (!frameReady)
+                {
+                    // Why: a reload can stop editor frames before the follow-up EditorApplication check can run.
+                    return ShouldRequestWait(
+                        _parameters,
+                        editorIsCompiling: false,
+                        reloadSignalObserved: Volatile.Read(ref _reloadSignalObserved));
+                }
+
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+                if (ShouldRequestWait(
+                        _parameters,
+                        EditorApplication.isCompiling,
+                        Volatile.Read(ref _reloadSignalObserved)))
                 {
                     return true;
                 }
@@ -83,6 +110,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
+            {
+                return;
+            }
+
+            if (MainThreadSwitcher.IsMainThread)
+            {
+                UnsubscribeFromEditorEvents();
+                return;
+            }
+
+            // Why: timeout continuations can resume off-thread, but UnityEditor event removal belongs on the editor thread.
+            UnsubscribeFromEditorEventsOnMainThreadAsync(CancellationToken.None).Forget();
+        }
+
+        private async Task UnsubscribeFromEditorEventsOnMainThreadAsync(CancellationToken ct)
+        {
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            UnsubscribeFromEditorEvents();
+        }
+
+        private void UnsubscribeFromEditorEvents()
+        {
             CompilationPipeline.compilationStarted -= OnCompilationStarted;
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
         }
@@ -96,12 +146,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void OnCompilationStarted(object context)
         {
-            _reloadSignalObserved = true;
+            Volatile.Write(ref _reloadSignalObserved, true);
         }
 
         private void OnBeforeAssemblyReload()
         {
-            _reloadSignalObserved = true;
+            Volatile.Write(ref _reloadSignalObserved, true);
         }
     }
 }

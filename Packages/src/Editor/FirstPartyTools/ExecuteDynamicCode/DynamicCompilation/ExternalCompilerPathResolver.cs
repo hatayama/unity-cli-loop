@@ -72,6 +72,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string codeAnalysisCSharpDllPath = Path.Combine(compilerDirectoryPath, CodeAnalysisCSharpDllFileName);
             string netCoreRuntimeSharedRootPath = Path.Combine(effectiveScriptingRootPath, NetCoreRuntimeDirectoryName, NetCoreRuntimeSharedDirectoryName, NetCoreRuntimeSharedFrameworkName);
             string netCoreRuntimeSharedDirectoryPath = ResolveNetCoreRuntimeSharedDirectoryPath(netCoreRuntimeSharedRootPath);
+            ExternalCompilerLayoutKind layoutKind = ResolveCompilerLayoutKind(
+                contentsPath,
+                effectiveScriptingRootPath,
+                compilerDirectoryPath);
 
             if (!File.Exists(dotnetHostPath))
             {
@@ -126,7 +130,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compilerDepsFilePath,
                 codeAnalysisDllPath,
                 codeAnalysisCSharpDllPath,
-                netCoreRuntimeSharedDirectoryPath);
+                netCoreRuntimeSharedDirectoryPath,
+                layoutKind);
         }
 
         internal static string ResolveScriptingRootPath(string contentsPath)
@@ -207,6 +212,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ResolveDotNetSdkCompilerDirectoryPath(scriptingRootPath);
         }
 
+        internal static ExternalCompilerLayoutKind ResolveCompilerLayoutKind(
+            string contentsPath,
+            string scriptingRootPath,
+            string compilerDirectoryPath)
+        {
+            if (string.IsNullOrEmpty(contentsPath) ||
+                string.IsNullOrEmpty(scriptingRootPath) ||
+                string.IsNullOrEmpty(compilerDirectoryPath))
+            {
+                return ExternalCompilerLayoutKind.Unknown;
+            }
+
+            string resourcesScriptingRootPath = Path.Combine(contentsPath, "Resources", "Scripting");
+            if (PathsEqual(scriptingRootPath, resourcesScriptingRootPath))
+            {
+                return ExternalCompilerLayoutKind.ResourcesScripting;
+            }
+
+            if (!PathsEqual(scriptingRootPath, contentsPath))
+            {
+                return ExternalCompilerLayoutKind.Scanned;
+            }
+
+            string contentsRootLegacyCompilerDirectoryPath = Path.Combine(contentsPath, DotNetSdkRoslynDirectoryName);
+            if (PathsEqual(compilerDirectoryPath, contentsRootLegacyCompilerDirectoryPath))
+            {
+                return ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn;
+            }
+
+            return ExternalCompilerLayoutKind.ContentsRootDotNetSdk;
+        }
+
         private static bool IsUsableCompilerDirectory(string compilerDirectoryPath)
         {
             return Directory.Exists(compilerDirectoryPath)
@@ -261,6 +298,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return string.Compare(rightVersionText, leftVersionText, StringComparison.Ordinal);
+        }
+
+        private static bool PathsEqual(string leftPath, string rightPath)
+        {
+            if (string.IsNullOrEmpty(leftPath) || string.IsNullOrEmpty(rightPath))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                NormalizePath(leftPath),
+                NormalizePath(rightPath),
+                StringComparison.Ordinal);
+        }
+
+        private static string NormalizePath(string path)
+        {
+            return Path.GetFullPath(path)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
         private static string ResolveScriptingRootPathByScan(string contentsPath)
