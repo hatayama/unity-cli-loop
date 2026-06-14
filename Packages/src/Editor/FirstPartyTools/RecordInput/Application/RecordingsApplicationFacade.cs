@@ -2,9 +2,12 @@
 #nullable enable
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -249,13 +252,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int generation = ++_countdownGeneration;
             RecordInputOverlayState.StartCountdown(delaySeconds);
             int delayMilliseconds = delaySeconds * 1000;
-            _ = TimerDelay.WaitThenExecuteOnMainThread(delayMilliseconds, () => StartRecordingAfterCountdown(generation));
+            StartDelayedRecordingAsync(delayMilliseconds, generation, CancellationToken.None).Forget();
+        }
+
+        private async Task StartDelayedRecordingAsync(int delayMilliseconds, int generation, CancellationToken ct)
+        {
+            bool waitCompleted = false;
+
+            try
+            {
+                await TimerDelay.WaitThenExecuteOnMainThread(
+                    delayMilliseconds,
+                    () => StartRecordingAfterCountdown(generation),
+                    ct).ConfigureAwait(false);
+                waitCompleted = true;
+            }
+            finally
+            {
+                if (!waitCompleted)
+                {
+                    QueueCountdownCleanup(generation);
+                }
+            }
+        }
+
+        private void QueueCountdownCleanup(int generation)
+        {
+            CleanupCountdownOnMainThreadAsync(generation, CancellationToken.None).Forget();
+        }
+
+        private async Task CleanupCountdownOnMainThreadAsync(int generation, CancellationToken ct)
+        {
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            if (generation != _countdownGeneration)
+            {
+                return;
+            }
+
+            // Why: delayed recording timeouts can complete off-thread after the overlay entered Countdown.
+            if (!InputRecorder.IsRecording
+                && RecordInputOverlayState.Phase == RecordInputOverlayPhase.Countdown)
+            {
+                RecordInputOverlayState.Clear();
+            }
         }
 
         private void StartRecordingAfterCountdown(int generation)
         {
+            if (generation != _countdownGeneration)
+            {
+                return;
+            }
+
             if (!EditorApplication.isPlaying
-                || generation != _countdownGeneration
                 || RecordInputOverlayState.Phase != RecordInputOverlayPhase.Countdown)
             {
                 RecordInputOverlayState.Clear();

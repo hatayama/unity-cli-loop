@@ -16,7 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<RecordInputResponse> ExecuteAsync(RecordInputSchema parameters, CancellationToken ct)
         {
             RecordInputUseCase useCase = new();
-            UnityCliLoopRecordInputResult result = await useCase.RecordInputAsync(ToRequest(parameters), ct);
+            UnityCliLoopRecordInputResult result =
+                await useCase.RecordInputAsync(ToRequest(parameters), ct).ConfigureAwait(false);
             return ToResponse(result);
         }
 

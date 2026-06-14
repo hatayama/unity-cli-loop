@@ -59,8 +59,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 schema,
                 editorIsCompiling: true,
                 reloadSignalObserved: false);
+            bool reloadSignalShouldWait = DynamicCodeDomainReloadWaitSignal.ShouldRequestWait(
+                schema,
+                editorIsCompiling: false,
+                reloadSignalObserved: true);
 
             Assert.That(shouldWait, Is.True);
+            Assert.That(reloadSignalShouldWait, Is.True);
         }
 
         [Test]
@@ -89,6 +94,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             Assert.That(compileOnlyShouldWait, Is.False);
             Assert.That(noWaitShouldWait, Is.False);
+        }
+
+        [Test]
+        public void DynamicCodeDomainReloadWaitSignal_WhenDisposedOffMainThread_QueuesEditorEventCleanup()
+        {
+            // Tests that timeout continuations do not remove UnityEditor event handlers off the editor thread.
+            QueuedMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+            DynamicCodeDomainReloadWaitSignal signal = DynamicCodeDomainReloadWaitSignal.Start(
+                new ExecuteDynamicCodeSchema
+                {
+                    WaitForDomainReload = true,
+                    CompileOnly = false
+                });
+
+            try
+            {
+                signal.Dispose();
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
+
+                dispatcher.RunQueuedContinuationsAsMainThread();
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(0));
+            }
+            finally
+            {
+                signal.Dispose();
+                RestoreEditorMainThreadDispatcher();
+            }
         }
 
         [Test]
@@ -924,6 +959,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 DynamicCodeConstants.DEFAULT_CLASS_NAME);
 
             Assert.That(prewarm.PreparedSource, Is.EqualTo(userReturn.PreparedSource));
+        }
+
+        private static void RestoreEditorMainThreadDispatcher()
+        {
+            io.github.hatayama.UnityCliLoop.Infrastructure.EditorMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+            dispatcher.Initialize();
+        }
+
+        private sealed class QueuedMainThreadDispatcher : IMainThreadDispatcher
+        {
+            private readonly Queue<Action> _continuations = new();
+            private bool _isMainThread;
+
+            public bool IsMainThread => _isMainThread;
+
+            public int PendingContinuationCount => _continuations.Count;
+
+            public void Initialize()
+            {
+            }
+
+            public void AddContinuation(Action continuation)
+            {
+                Assert.That(continuation, Is.Not.Null);
+                _continuations.Enqueue(continuation);
+            }
+
+            public void RunQueuedContinuationsAsMainThread()
+            {
+                _isMainThread = true;
+                try
+                {
+                    while (_continuations.Count > 0)
+                    {
+                        Action continuation = _continuations.Dequeue();
+                        continuation();
+                    }
+                }
+                finally
+                {
+                    _isMainThread = false;
+                }
+            }
         }
 
         /// <summary>
