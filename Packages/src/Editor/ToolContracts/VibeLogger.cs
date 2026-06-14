@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
@@ -20,14 +21,19 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// </summary>
     public sealed class VibeLoggerService
     {
-        private readonly string _logDirectory = Path.Combine(UnityEngine.Application.dataPath, "..", UnityCliLoopConstants.OUTPUT_ROOT_DIR, UnityCliLoopConstants.VIBE_LOGS_DIR);
         private const string LOG_FILE_PREFIX = "unity_vibe";
         private const int MAX_FILE_SIZE_MB = 10;
         private const int MAX_MEMORY_LOGS = 1000;
         private const int MAX_LOG_FILES = 3;
+        private const int UNINITIALIZED_MAIN_THREAD_ID = 0;
+        private const string DOMAIN_RELOAD_STATE_IN_PROGRESS = "InProgress";
+        private const string DOMAIN_RELOAD_STATE_IDLE = "Idle";
+        private const string DOMAIN_RELOAD_STATE_UNAVAILABLE_OFF_MAIN_THREAD = "UnavailableOffMainThread";
         
         private readonly List<VibeLogEntry> _memoryLogs = new List<VibeLogEntry>();
         private readonly object _lockObject = new object();
+        private string _logDirectory = string.Empty;
+        private int _mainThreadId = UNINITIALIZED_MAIN_THREAD_ID;
         private bool _hasCleanedUpOnStartup = false;
         
         /// <summary>
@@ -56,6 +62,15 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public class EnvironmentInfo
         {
             public string domain_reload_state;
+        }
+
+        /// <summary>
+        /// Captures Unity main-thread-only logger state during editor startup.
+        /// </summary>
+        public void InitializeForEditorLoad()
+        {
+            Volatile.Write(ref _mainThreadId, Thread.CurrentThread.ManagedThreadId);
+            CacheUnityProjectLogDirectory();
         }
         
         /// <summary>
@@ -226,9 +241,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         private void SaveLogToFile(VibeLogEntry logEntry)
         {
-            if (!Directory.Exists(_logDirectory))
+            string logDirectory = GetLogDirectory();
+
+            if (!Directory.Exists(logDirectory))
             {
-                Directory.CreateDirectory(_logDirectory);
+                Directory.CreateDirectory(logDirectory);
             }
             
             // Clean up old log files on first access only
@@ -242,7 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             }
             
             string fileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd}.json";
-            string filePath = Path.Combine(_logDirectory, fileName);
+            string filePath = Path.Combine(logDirectory, fileName);
             
             // Check file size and rotate if necessary
             if (File.Exists(filePath))
@@ -251,7 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 if (fileInfo.Length > MAX_FILE_SIZE_MB * 1024 * 1024)
                 {
                     string rotatedFileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
-                    string rotatedFilePath = Path.Combine(_logDirectory, rotatedFileName);
+                    string rotatedFilePath = Path.Combine(logDirectory, rotatedFileName);
                     File.Move(filePath, rotatedFilePath);
                     
                     // Clean up old files after rotation
@@ -308,13 +325,15 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         private void CleanupOldLogFiles()
         {
+            string logDirectory = GetLogDirectory();
+
             try
             {
-                if (!Directory.Exists(_logDirectory))
+                if (!Directory.Exists(logDirectory))
                     return;
                     
                 // Get all vibe log files, sorted by creation time (newest first)
-                FileInfo[] logFiles = Directory.GetFiles(_logDirectory, $"{LOG_FILE_PREFIX}_*.json")
+                FileInfo[] logFiles = Directory.GetFiles(logDirectory, $"{LOG_FILE_PREFIX}_*.json")
                     .Select(file => new FileInfo(file))
                     .OrderByDescending(file => file.CreationTime)
                     .ToArray();
@@ -342,14 +361,66 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// <summary>
         /// Get current environment information
         /// </summary>
-        private static EnvironmentInfo GetEnvironmentInfo()
+        private EnvironmentInfo GetEnvironmentInfo()
         {
+            if (!IsEditorMainThread)
+            {
+                return new EnvironmentInfo
+                {
+                    domain_reload_state = DOMAIN_RELOAD_STATE_UNAVAILABLE_OFF_MAIN_THREAD
+                };
+            }
+
+            // Why: timeout continuations can run off-thread, so UnityEditor state is read only
+            // after the cached editor main-thread check above confirms this call is safe.
             bool isDomainReloadInProgress = EditorApplication.isCompiling;
 
             return new EnvironmentInfo
             {
-                domain_reload_state = isDomainReloadInProgress ? "InProgress" : "Idle"
+                domain_reload_state = isDomainReloadInProgress ? DOMAIN_RELOAD_STATE_IN_PROGRESS : DOMAIN_RELOAD_STATE_IDLE
             };
+        }
+
+        private bool IsEditorMainThread
+        {
+            get
+            {
+                int mainThreadId = Volatile.Read(ref _mainThreadId);
+                return mainThreadId != UNINITIALIZED_MAIN_THREAD_ID
+                    && Thread.CurrentThread.ManagedThreadId == mainThreadId;
+            }
+        }
+
+        private string GetLogDirectory()
+        {
+            string logDirectory = Volatile.Read(ref _logDirectory);
+            if (!string.IsNullOrEmpty(logDirectory))
+            {
+                return logDirectory;
+            }
+
+            if (IsEditorMainThread)
+            {
+                return CacheUnityProjectLogDirectory();
+            }
+
+            return CreateLogDirectoryPath(Directory.GetCurrentDirectory());
+        }
+
+        private string CacheUnityProjectLogDirectory()
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            string logDirectory = CreateLogDirectoryPath(projectRoot);
+            Volatile.Write(ref _logDirectory, logDirectory);
+            return logDirectory;
+        }
+
+        private static string CreateLogDirectoryPath(string projectRoot)
+        {
+            return Path.Combine(
+                projectRoot,
+                UnityCliLoopConstants.OUTPUT_ROOT_DIR,
+                UnityCliLoopConstants.VIBE_LOGS_DIR);
         }
     }
 
@@ -359,6 +430,12 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     public static class VibeLogger
     {
         private static readonly VibeLoggerService ServiceValue = new VibeLoggerService();
+
+        [InitializeOnLoadMethod]
+        private static void InitializeForEditorLoad()
+        {
+            ServiceValue.InitializeForEditorLoad();
+        }
 
         [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
         public static void LogInfo(string operation, string message, object context = null,

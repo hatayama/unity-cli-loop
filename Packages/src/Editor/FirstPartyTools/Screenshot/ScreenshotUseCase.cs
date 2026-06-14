@@ -38,15 +38,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (request.CaptureMode == CaptureMode.rendering)
             {
-                return await CaptureRenderingAsync(request, correlationId, ct);
+                return await CaptureRenderingAsync(request, correlationId, ct).ConfigureAwait(false);
             }
 
-            return await CaptureWindowsAsync(request, correlationId, ct);
+            return await CaptureWindowsAsync(request, correlationId, ct).ConfigureAwait(false);
         }
 
         private async Task<UnityCliLoopScreenshotResult> CaptureRenderingAsync(
             UnityCliLoopScreenshotRequest request, string correlationId, CancellationToken ct)
         {
+            SynchronizationContext editorContext =
+                CapturedEditorSynchronizationContext.RequireCurrent("rendering screenshot use case");
+
             if (!EditorApplication.isPlaying)
             {
                 VibeLogger.LogError(
@@ -80,6 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             GameObject annotationOverlay = null;
             Texture2D texture;
             int yOffset;
+            bool timedOut;
             try
             {
                 if (request.AnnotateElements)
@@ -89,15 +93,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         request.ResolutionScale);
                     Canvas.ForceUpdateCanvases();
                     // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
-                    await EditorFrameWaiter.WaitFramesAsync(ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES, ct);
+                    bool overlayFramesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                        ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
+                        UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                        ct).ConfigureAwait(false);
+                    if (!overlayFramesReady)
+                    {
+                        return CreateTimedOutResult(
+                            "annotation overlay render",
+                            correlationId,
+                            new List<UnityCliLoopScreenshotInfo>());
+                    }
+
+                    await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
                 }
 
-                (texture, yOffset) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
-                    request.ResolutionScale, ct);
+                (texture, yOffset, timedOut) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
+                    request.ResolutionScale,
+                    UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                    ct).ConfigureAwait(false);
+                if (timedOut)
+                {
+                    return CreateTimedOutResult(
+                        "GameView rendering capture",
+                        correlationId,
+                        new List<UnityCliLoopScreenshotInfo>());
+                }
+
+                await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
             }
             finally
             {
-                UIElementAnnotator.DestroyAnnotationOverlay(annotationOverlay);
+                DestroyAnnotationOverlay(annotationOverlay, editorContext);
             }
 
             UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, (int)Handles.GetMainGameViewSize().y);
@@ -125,7 +152,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SaveTextureAsPng(texture, savedPath);
 
                 FileInfo savedFileInfo = new(savedPath);
-                UnityCliLoopScreenshotInfo info = new()                {
+                UnityCliLoopScreenshotInfo info = new()
+                {
                     ImagePath = savedPath,
                     FileSizeBytes = savedFileInfo.Length,
                     Width = width,
@@ -167,6 +195,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private async Task<UnityCliLoopScreenshotResult> CaptureWindowsAsync(
             UnityCliLoopScreenshotRequest request, string correlationId, CancellationToken ct)
         {
+            SynchronizationContext editorContext =
+                CapturedEditorSynchronizationContext.RequireCurrent("window screenshot use case");
             EditorWindow[] windows = EditorWindowCaptureUtility.FindWindowsByName(request.WindowName, request.MatchMode);
             if (windows.Length == 0)
             {
@@ -186,7 +216,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int i = 0; i < windows.Length; i++)
             {
                 EditorWindow window = windows[i];
-                Texture2D texture = await EditorWindowCaptureUtility.CaptureWindowAsync(window, request.ResolutionScale, ct);
+                (Texture2D texture, bool timedOut) = await EditorWindowCaptureUtility.CaptureWindowAsync(
+                    window,
+                    request.ResolutionScale,
+                    UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                    ct).ConfigureAwait(false);
+                if (timedOut)
+                {
+                    return CreateTimedOutResult("EditorWindow capture", correlationId, screenshots);
+                }
+
+                await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
                 if (texture == null)
                 {
                     VibeLogger.LogWarning(
@@ -241,6 +281,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
 
             return new UnityCliLoopScreenshotResult { Screenshots = screenshots };
+        }
+
+        private static UnityCliLoopScreenshotResult CreateTimedOutResult(
+            string waitName,
+            string correlationId,
+            List<UnityCliLoopScreenshotInfo> screenshots)
+        {
+            string message =
+                $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for {waitName} frames.";
+            VibeLogger.LogWarning(
+                "screenshot_timeout",
+                message,
+                new { WaitName = waitName, TimeoutMilliseconds = UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS },
+                correlationId: correlationId
+            );
+
+            return new UnityCliLoopScreenshotResult
+            {
+                TimedOut = true,
+                Message = message,
+                Screenshots = screenshots,
+            };
+        }
+
+        private static void DestroyAnnotationOverlay(
+            GameObject annotationOverlay,
+            SynchronizationContext editorContext)
+        {
+            if (ReferenceEquals(annotationOverlay, null))
+            {
+                return;
+            }
+
+            if (SynchronizationContext.Current == editorContext)
+            {
+                UIElementAnnotator.DestroyAnnotationOverlay(annotationOverlay);
+                return;
+            }
+
+            // Why: timeout results may complete from the timer thread while Unity's main thread is stalled.
+            editorContext.Post(_ => UIElementAnnotator.DestroyAnnotationOverlay(annotationOverlay), null);
         }
 
         private void ValidateParameters(UnityCliLoopScreenshotRequest request)

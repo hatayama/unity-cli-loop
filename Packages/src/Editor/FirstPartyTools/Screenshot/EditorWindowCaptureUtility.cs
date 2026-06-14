@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -65,16 +66,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <param name="resolutionScale">Resolution scale (0.1 to 1.0)</param>
         /// <param name="ct">Cancellation token</param>
         /// <returns>Captured Texture2D, or null if capture failed</returns>
-        public static async Task<Texture2D?> CaptureWindowAsync(EditorWindow window, float resolutionScale, CancellationToken ct)
+        public static async Task<(Texture2D? texture, bool timedOut)> CaptureWindowAsync(
+            EditorWindow window,
+            float resolutionScale,
+            int frameWaitTimeoutMilliseconds,
+            CancellationToken ct)
         {
             if (window == null)
             {
-                return null;
+                return (null, false);
             }
 
+            SynchronizationContext editorContext =
+                CapturedEditorSynchronizationContext.RequireCurrent("window screenshot capture");
             window.ShowTab();
-            await EditorFrameWaiter.WaitFramesAsync(2, ct);
-            return CaptureWindowInternal(window, resolutionScale);
+            bool framesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                2,
+                frameWaitTimeoutMilliseconds,
+                ct).ConfigureAwait(false);
+            if (!framesReady)
+            {
+                return (null, true);
+            }
+
+            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+            return (CaptureWindowInternal(window, resolutionScale), false);
         }
 
         /// <summary>
@@ -152,18 +168,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Coordinate mapping to simulate-mouse:
         //   sim_x = image_x / resolutionScale, sim_y = image_y / resolutionScale + YOffset
         // where YOffset = Screen.height - RenderTexture.height (returned in the tuple).
-        public static async Task<(Texture2D? texture, int yOffset)> CaptureGameRenderingAsync(float resolutionScale, CancellationToken ct)
+        public static async Task<(Texture2D? texture, int yOffset, bool timedOut)> CaptureGameRenderingAsync(
+            float resolutionScale,
+            int frameWaitTimeoutMilliseconds,
+            CancellationToken ct)
         {
             Debug.Assert(UnityEditor.EditorApplication.isPlaying, "CaptureGameRenderingAsync requires PlayMode");
 
+            SynchronizationContext editorContext =
+                CapturedEditorSynchronizationContext.RequireCurrent("rendering screenshot capture");
             // Wait for the game camera to complete at least one full render cycle after any state change
-            await EditorFrameWaiter.WaitFramesAsync(2, ct);
+            bool framesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                2,
+                frameWaitTimeoutMilliseconds,
+                ct).ConfigureAwait(false);
+            if (!framesReady)
+            {
+                return (null, 0, true);
+            }
+
+            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
 
             RenderTexture rt = GameViewBridge.GetRenderTexture();
             if (rt == null)
             {
                 Debug.LogWarning("[EditorWindowCaptureUtility] GameView RenderTexture is not available");
-                return (null, 0);
+                return (null, 0, false);
             }
 
             int yOffset = (int)Handles.GetMainGameViewSize().y - rt.height;
@@ -201,7 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 texture = ApplyResolutionScaling(texture, resolutionScale);
             }
 
-            return (texture, yOffset);
+            return (texture, yOffset, false);
         }
 
         private static Texture2D ApplyResolutionScaling(Texture2D originalTexture, float scale)
@@ -232,6 +262,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityEngine.Object.DestroyImmediate(originalTexture);
 
             return scaledTexture;
+        }
+    }
+
+    /// <summary>
+    /// Switches screenshot continuations back to the Editor synchronization context captured before a timeout race.
+    /// </summary>
+    internal static class CapturedEditorSynchronizationContext
+    {
+        public static SynchronizationContext RequireCurrent(string operationName)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(operationName), "operationName must not be null or whitespace");
+
+            SynchronizationContext context = SynchronizationContext.Current;
+            Debug.Assert(context != null, $"{operationName} must start on Unity's editor synchronization context.");
+            if (context == null)
+            {
+                throw new InvalidOperationException(
+                    $"{operationName} must start on Unity's editor synchronization context.");
+            }
+
+            return context;
+        }
+
+        public static SwitchToMainThreadAwaitable SwitchTo(
+            SynchronizationContext context,
+            CancellationToken ct)
+        {
+            Debug.Assert(context != null, "context must not be null");
+
+            if (context == null)
+            {
+                throw new ArgumentNullException(nameof(context));
+            }
+
+            return MainThreadSwitcher.SwitchToMainThread(ct);
         }
     }
 }

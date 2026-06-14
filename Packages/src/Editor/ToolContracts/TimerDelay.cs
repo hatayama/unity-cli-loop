@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         }
 
         /// <summary>
-        /// Waits for wall-clock time, then executes an action after the next Editor update.
+        /// Waits for wall-clock time, then executes an action on Unity's main thread.
         /// </summary>
         /// <param name="milliseconds">Milliseconds to wait</param>
         /// <param name="action">Action to execute on main thread</param>
@@ -61,9 +61,72 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                     "WaitThenExecuteOnMainThread must start from Unity's main-thread synchronization context.");
             }
 
-            await Wait(milliseconds, ct);
-            await EditorFrameWaiter.WaitFramesAsync(1, ct);
-            action();
+            await Wait(milliseconds, ct).ConfigureAwait(false);
+            await ExecuteOnSynchronizationContextOrTimeoutAsync(
+                synchronizationContext,
+                action,
+                ct).ConfigureAwait(false);
+        }
+
+        private static async Task ExecuteOnSynchronizationContextOrTimeoutAsync(
+            SynchronizationContext synchronizationContext,
+            Action action,
+            CancellationToken ct)
+        {
+            TaskCompletionSource<bool> completionSource =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            int completionState = 0;
+
+            using CancellationTokenRegistration registration = ct.CanBeCanceled
+                ? ct.Register(() =>
+                {
+                    if (Interlocked.Exchange(ref completionState, 1) == 0)
+                    {
+                        completionSource.TrySetCanceled(ct);
+                    }
+                })
+                : default;
+
+            synchronizationContext.Post(_ =>
+            {
+                if (Interlocked.Exchange(ref completionState, 1) != 0)
+                {
+                    return;
+                }
+
+                try
+                {
+                    action();
+                    completionSource.TrySetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    completionSource.TrySetException(ex);
+                }
+            }, null);
+
+            // Why: Unity may be paused or backgrounded after the wall-clock delay, so the posted action must not hang callers forever.
+            using CancellationTokenSource timeoutCancellationSource =
+                CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Task timeoutTask = Wait(
+                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                timeoutCancellationSource.Token);
+            Task completedTask = await Task.WhenAny(completionSource.Task, timeoutTask).ConfigureAwait(false);
+            if (completedTask == timeoutTask)
+            {
+                await timeoutTask.ConfigureAwait(false);
+                if (Interlocked.Exchange(ref completionState, 1) == 0)
+                {
+                    completionSource.TrySetException(new TimeoutException(
+                        $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for Unity main-thread action execution."));
+                }
+            }
+            else
+            {
+                timeoutCancellationSource.Cancel();
+            }
+
+            await completionSource.Task.ConfigureAwait(false);
         }
     }
 

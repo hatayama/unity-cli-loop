@@ -47,8 +47,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.CompileOnly,
                     editorLevel,
                     parameters.YieldToForegroundRequests);
-                await WarmForegroundExecutionPathIfNeededAsync(parameters, editorLevel, cancellationToken);
-                ExecutionResult executionResult = await ExecuteRequestAsync(request, cancellationToken);
+                await WarmForegroundExecutionPathIfNeededAsync(parameters, editorLevel, cancellationToken)
+                    .ConfigureAwait(false);
+                ExecutionResult executionResult = await ExecuteRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
                 ExecutionResult finalResult = await RetryMissingReturnIfNeeded(
                     executionResult,
@@ -57,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.CompileOnly,
                     editorLevel,
                     parameters.YieldToForegroundRequests,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
 
                 if (ShouldMarkExecutionPathWarm(parameters, finalResult))
                 {
@@ -80,7 +81,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     originalCode);
                 response.SecurityLevel = editorLevel.ToString();
                 response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
-                response.DomainReloadWaitRequired = await domainReloadWaitSignal.ShouldWaitAsync(cancellationToken);
+                // Why: domain-reload timeouts can complete while Unity's synchronization context is stalled.
+                bool domainReloadWaitRequired =
+                    await domainReloadWaitSignal.ShouldWaitAsync(cancellationToken).ConfigureAwait(false);
+                response.DomainReloadWaitRequired = domainReloadWaitRequired;
                 return response;
             }
             catch (OperationCanceledException)
@@ -178,7 +182,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compileOnly,
                 securityLevel,
                 yieldToForegroundRequests);
-            ExecutionResult retryResult = await ExecuteRequestAsync(retryRequest, cancellationToken);
+            ExecutionResult retryResult = await ExecuteRequestAsync(retryRequest, cancellationToken)
+                .ConfigureAwait(false);
             if (retryResult.Success)
             {
                 return retryResult;
@@ -251,12 +256,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (!request.YieldToForegroundRequests)
             {
-                return await _runtime.ExecuteAsync(request, cancellationToken);
+                return await _runtime.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
             }
 
             (bool entered, ExecutionResult result) = await _runtime.TryExecuteIfIdleAsync(
                 request,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             if (entered)
             {
                 return result;
@@ -289,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 completed = await ExecuteForegroundWarmupSequenceAsync(
                     securityLevel,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
                 if (completed)
                 {
                     DynamicCodeForegroundWarmupState.MarkCompleted();
@@ -312,7 +317,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _runtime,
                 securityLevel,
                 yieldToForegroundRequests: false,
-                ct);
+                ct).ConfigureAwait(false);
         }
 
         private static bool ShouldWarmForegroundExecutionPath(ExecuteDynamicCodeSchema parameters)

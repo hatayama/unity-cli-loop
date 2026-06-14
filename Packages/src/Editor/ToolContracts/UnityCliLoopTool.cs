@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             TSchema parameters = ConvertToSchema(paramsToken);
 
             // Execute with type-safe parameters
-            TResponse response = await ExecuteAsync(parameters, ct);
+            TResponse response = await ExecuteAsync(parameters, ct).ConfigureAwait(false);
 
             // Return as UnityCliLoopToolResponse for IUnityCliLoopTool interface compatibility
             return response;

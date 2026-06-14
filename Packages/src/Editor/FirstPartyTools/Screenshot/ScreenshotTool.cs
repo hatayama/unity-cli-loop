@@ -17,7 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<ScreenshotResponse> ExecuteAsync(ScreenshotSchema parameters, CancellationToken ct)
         {
             ScreenshotUseCase useCase = new();
-            UnityCliLoopScreenshotResult result = await useCase.CaptureAsync(ToRequest(parameters), ct);
+            UnityCliLoopScreenshotResult result = await useCase.CaptureAsync(ToRequest(parameters), ct)
+                .ConfigureAwait(false);
             return ToResponse(result);
         }
 
@@ -40,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static ScreenshotResponse ToResponse(UnityCliLoopScreenshotResult result)
+        internal static ScreenshotResponse ToResponse(UnityCliLoopScreenshotResult result)
         {
             if (result == null)
             {
@@ -50,6 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new ScreenshotResponse
             {
                 Screenshots = ToScreenshotInfos(result.Screenshots),
+                TimedOut = result.TimedOut,
+                Message = result.Message,
             };
         }
 
