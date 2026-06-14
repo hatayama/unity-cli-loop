@@ -89,7 +89,7 @@ jobs:
         echo "Note: node_modules will be automatically cleaned up when GitHub Actions environment is destroyed"
         
     - name: Commit built files (if changed)
-      if: github.event_name == 'pull_request'
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
@@ -126,6 +126,20 @@ jobs:
           git commit -m "chore: rebuild server bundle [skip ci]"
           git push origin "$BRANCH_NAME"
           echo "Built files committed successfully"
+        fi
+
+    - name: Verify built files are committed for fork PRs
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+      run: |
+        echo "Fork PR detected; skipping automatic bundle commit."
+        echo "Verifying built server bundle matches committed files..."
+        if git diff --quiet -- Packages/src/TypeScriptServer~/dist/server.bundle.js Packages/src/TypeScriptServer~/dist/server.bundle.js.map; then
+          echo "Built server bundle is already committed."
+        else
+          echo "Built server bundle differs from committed files."
+          echo "Please commit Packages/src/TypeScriptServer~/dist/server.bundle.js and server.bundle.js.map."
+          git diff --stat -- Packages/src/TypeScriptServer~/dist/server.bundle.js Packages/src/TypeScriptServer~/dist/server.bundle.js.map
+          exit 1
         fi
         
   test-unity-package:
