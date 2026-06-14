@@ -17,12 +17,20 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         private static int testFrameStart;
         private static int testCounter = 0;
 
-        private static Task<bool> WaitFramesForManualTestAsync(int frameCount, CancellationToken ct = default)
+        private static async Task WaitFramesForManualTestAsync(int frameCount, CancellationToken ct = default)
         {
-            return EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+            bool completed = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
                 frameCount,
                 UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
                 ct);
+            if (completed)
+            {
+                return;
+            }
+
+            Debug.LogWarning($"[WaitFramesForManualTestAsync] Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms waiting for {frameCount} frame(s).");
+            throw new TimeoutException(
+                $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms waiting for {frameCount} frame(s).");
         }
         
         [MenuItem("UnityCliLoop/Debug/EditorFrameWaiter Tests/Basic Frame Wait Tests")]

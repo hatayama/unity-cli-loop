@@ -82,6 +82,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
 #if ULOOP_HAS_INPUT_SYSTEM
+        private static int _delayedStartGeneration;
+
         private static async Task<UnityCliLoopRecordInputResult> ExecuteStartAsync(
             UnityCliLoopRecordInputRequest request,
             CancellationToken ct)
@@ -180,6 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (RecordInputOverlayState.Phase == RecordInputOverlayPhase.Countdown)
             {
+                Interlocked.Increment(ref _delayedStartGeneration);
                 RecordInputOverlayState.Clear();
                 return new UnityCliLoopRecordInputResult
                 {
@@ -239,12 +242,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             RecordInputDelayedStartOutcome outcome = RecordInputDelayedStartOutcome.Cancelled;
             bool waitCompleted = false;
+            int generation = Interlocked.Increment(ref _delayedStartGeneration);
             RecordInputOverlayState.StartCountdown(delaySeconds);
 
             try
             {
                 await TimerDelay.WaitThenExecuteOnMainThread(delaySeconds * 1000, () =>
                 {
+                    if (!IsCurrentDelayedStartGeneration(generation))
+                    {
+                        return;
+                    }
+
                     if (!EditorApplication.isPlaying || RecordInputOverlayState.Phase != RecordInputOverlayPhase.Countdown)
                     {
                         RecordInputOverlayState.Clear();
@@ -263,7 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (!waitCompleted)
                 {
-                    QueueCountdownCleanup();
+                    QueueCountdownCleanup(generation);
                 }
             }
         }
@@ -274,15 +283,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Started = 1
         }
 
-        private static void QueueCountdownCleanup()
+        private static void QueueCountdownCleanup(int generation)
         {
-            CleanupCountdownOnMainThreadAsync(CancellationToken.None).Forget();
+            CleanupCountdownOnMainThreadAsync(generation, CancellationToken.None).Forget();
         }
 
         private static async Task CleanupCountdownOnMainThreadAsync(
+            int generation,
             CancellationToken ct)
         {
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            if (!IsCurrentDelayedStartGeneration(generation))
+            {
+                return;
+            }
 
             // Why: timeout/cancellation can resume off-thread, so stale countdown state is cleared only on Unity's context.
             if (!InputRecorder.IsRecording &&
@@ -290,6 +304,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 RecordInputOverlayState.Clear();
             }
+        }
+
+        private static bool IsCurrentDelayedStartGeneration(int generation)
+        {
+            return Volatile.Read(ref _delayedStartGeneration) == generation;
         }
 #endif
     }

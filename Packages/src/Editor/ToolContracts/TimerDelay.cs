@@ -106,7 +106,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             }, null);
 
             // Why: Unity may be paused or backgrounded after the wall-clock delay, so the posted action must not hang callers forever.
-            Task timeoutTask = Wait(UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct);
+            using CancellationTokenSource timeoutCancellationSource =
+                CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Task timeoutTask = Wait(
+                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                timeoutCancellationSource.Token);
             Task completedTask = await Task.WhenAny(completionSource.Task, timeoutTask).ConfigureAwait(false);
             if (completedTask == timeoutTask)
             {
@@ -116,6 +120,10 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                     completionSource.TrySetException(new TimeoutException(
                         $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for Unity main-thread action execution."));
                 }
+            }
+            else
+            {
+                timeoutCancellationSource.Cancel();
             }
 
             await completionSource.Task.ConfigureAwait(false);

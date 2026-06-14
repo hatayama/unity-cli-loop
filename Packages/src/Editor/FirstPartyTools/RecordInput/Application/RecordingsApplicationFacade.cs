@@ -284,10 +284,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private async Task CleanupCountdownOnMainThreadAsync(int generation, CancellationToken ct)
         {
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            if (generation != _countdownGeneration)
+            {
+                return;
+            }
 
             // Why: delayed recording timeouts can complete off-thread after the overlay entered Countdown.
             if (!InputRecorder.IsRecording
-                && generation == _countdownGeneration
                 && RecordInputOverlayState.Phase == RecordInputOverlayPhase.Countdown)
             {
                 RecordInputOverlayState.Clear();
@@ -296,8 +299,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void StartRecordingAfterCountdown(int generation)
         {
+            if (generation != _countdownGeneration)
+            {
+                return;
+            }
+
             if (!EditorApplication.isPlaying
-                || generation != _countdownGeneration
                 || RecordInputOverlayState.Phase != RecordInputOverlayPhase.Countdown)
             {
                 RecordInputOverlayState.Clear();

@@ -154,6 +154,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void RecordInputDelayedStarts_WhenCallbackIsStale_DoNotClearCurrentCountdown()
+        {
+            // Tests that stale delayed-recording callbacks cannot clear a newer countdown instance.
+            string facadeSource = ReadSourceFile(
+                "Packages/src/Editor/FirstPartyTools/RecordInput/Application/RecordingsApplicationFacade.cs");
+            string useCaseSource = ReadSourceFile(
+                "Packages/src/Editor/FirstPartyTools/RecordInput/RecordInputUseCase.cs");
+
+            Assert.That(facadeSource, Does.Contain("if (generation != _countdownGeneration)\n            {\n                return;\n            }"));
+            Assert.That(useCaseSource, Does.Contain("int generation = Interlocked.Increment(ref _delayedStartGeneration);"));
+            Assert.That(useCaseSource, Does.Contain("QueueCountdownCleanup(generation);"));
+            Assert.That(useCaseSource, Does.Contain("if (!IsCurrentDelayedStartGeneration(generation))"));
+        }
+
+        [Test]
+        public void TimerDelay_WhenMainThreadActionCompletes_CancelsTimeoutWait()
+        {
+            // Tests that successful posted actions do not leave the timeout timer running until expiry.
+            string source = ReadSourceFile("Packages/src/Editor/ToolContracts/TimerDelay.cs");
+
+            Assert.That(source, Does.Contain("CancellationTokenSource.CreateLinkedTokenSource(ct)"));
+            Assert.That(source, Does.Contain("timeoutCancellationSource.Cancel();"));
+        }
+
+        [Test]
+        public void EditorFrameWaiterManualTests_WhenWaitTimesOut_ReportFailureBeforeCompletionLogs()
+        {
+            // Tests that manual frame-wait checks surface timeout failures instead of silently continuing.
+            string source = ReadSourceFile("Assets/Editor/EditorDelayManualTests.cs");
+
+            Assert.That(source, Does.Contain("private static async Task WaitFramesForManualTestAsync"));
+            Assert.That(source, Does.Contain("Debug.LogWarning($\"[WaitFramesForManualTestAsync] Timed out after"));
+            Assert.That(source, Does.Contain("throw new TimeoutException("));
+        }
+
+        [Test]
         public void ScreenshotUseCase_WhenDestroyingTimedOutAnnotationOverlay_UsesReferenceNullCheck()
         {
             // Tests that screenshot timeout cleanup does not call UnityEngine.Object null operators off-thread.
@@ -194,6 +230,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(methodIndex, Is.GreaterThanOrEqualTo(0));
             Assert.That(mainThreadSwitchIndex, Is.GreaterThan(methodIndex));
             Assert.That(editorCompilingIndex, Is.GreaterThan(mainThreadSwitchIndex));
+        }
+
+        [Test]
+        public void ExecuteDynamicCodeUseCase_WhenAwaitingWorkflow_DoesNotCaptureEditorSynchronizationContext()
+        {
+            // Tests that timeout-sensitive dynamic-code awaits do not capture Unity's synchronization context.
+            string source = ReadSourceFile(
+                "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/ExecuteDynamicCodeUseCase.cs");
+
+            Assert.That(source, Does.Contain("await WarmForegroundExecutionPathIfNeededAsync(parameters, editorLevel, cancellationToken)\n                    .ConfigureAwait(false);"));
+            Assert.That(source, Does.Contain("await ExecuteRequestAsync(request, cancellationToken).ConfigureAwait(false);"));
+            Assert.That(source, Does.Contain("await RetryMissingReturnIfNeeded(\n                    executionResult,"));
+            Assert.That(source, Does.Contain("cancellationToken).ConfigureAwait(false);"));
+            Assert.That(source, Does.Contain("await _runtime.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);"));
+            Assert.That(source, Does.Contain("await _runtime.TryExecuteIfIdleAsync(\n                request,\n                cancellationToken).ConfigureAwait(false);"));
         }
 
         [Test]
