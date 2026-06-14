@@ -133,6 +133,80 @@ func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 	}
 }
 
+// Verifies pause point wait errors expose recovery and generation details from Unity.
+func TestPausePointExpiredErrorReportsRecoveryFields(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:                              "jump",
+		Status:                          pausePointStatusExpired,
+		Expired:                         true,
+		TimeoutSeconds:                  1,
+		EnabledAtUtc:                    "2026-06-03T00:00:00.0000000Z",
+		ElapsedSinceEnabledMilliseconds: 1200,
+		RemainingMilliseconds:           0,
+		Generation:                      7,
+		IsPlaying:                       true,
+		Message:                         "Pause point expired before it was hit.",
+		RecommendedNextAction:           "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.",
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+	}, response, pausePointWaitStateExpired)
+
+	if cliErr.Details["expired"] != true {
+		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["enabledAtUtc"] != "2026-06-03T00:00:00.0000000Z" {
+		t.Fatalf("enabledAtUtc detail mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["generation"] != 7 {
+		t.Fatalf("generation detail mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["recommendedNextAction"] != response.RecommendedNextAction {
+		t.Fatalf("recommendedNextAction detail mismatch: %#v", cliErr.Details)
+	}
+}
+
+// Verifies recovery details use the marker lifetime instead of the wait deadline.
+func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:             "jump",
+		Status:         pausePointStatusExpired,
+		TimeoutSeconds: 30,
+		IsPlaying:      true,
+		Message:        "Pause point expired before it was hit.",
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 5,
+	}, response, pausePointWaitStateExpired)
+
+	if cliErr.Details["timeoutSeconds"] != 30 {
+		t.Fatalf("timeoutSeconds detail mismatch: %#v", cliErr.Details)
+	}
+}
+
+// Verifies wait errors derive Expired from Status when older Unity packages omit the bool field.
+func TestPausePointExpiredErrorDerivesExpiredFromStatus(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:        "jump",
+		Status:    pausePointStatusExpired,
+		IsPlaying: true,
+		Message:   "Pause point expired before it was hit.",
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+	}, response, pausePointWaitStateExpired)
+
+	if cliErr.Details["expired"] != true {
+		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
+	}
+}
+
 // Verifies wait-for-pause-point does one final status probe before treating timeout as missed.
 func TestRunWaitForPausePointReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
 	originalQuery := queryPausePointStatus
@@ -678,7 +752,15 @@ func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled, IsEnabled: true}, nil
+		return pausePointStatusResponse{
+			Id:                    id,
+			Status:                pausePointStatusEnabled,
+			IsEnabled:             true,
+			EnabledAtUtc:          "2026-06-03T00:00:00.0000000Z",
+			RemainingMilliseconds: 30000,
+			Generation:            3,
+			RecommendedNextAction: "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.",
+		}, nil
 	}
 
 	var stdout bytes.Buffer
@@ -699,6 +781,99 @@ func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 	}
 	if response.Status != pausePointStatusEnabled {
 		t.Fatalf("status mismatch: %#v", response)
+	}
+	if response.EnabledAtUtc != "2026-06-03T00:00:00.0000000Z" {
+		t.Fatalf("enabledAtUtc mismatch: %#v", response)
+	}
+	if response.RemainingMilliseconds != 30000 {
+		t.Fatalf("remaining milliseconds mismatch: %#v", response)
+	}
+	if response.Generation != 3 {
+		t.Fatalf("generation mismatch: %#v", response)
+	}
+	if response.RecommendedNextAction != "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values." {
+		t.Fatalf("recommendedNextAction mismatch: %#v", response)
+	}
+}
+
+// Verifies pause-point-status derives Expired from Status when older Unity packages omit the bool field.
+func TestRunPausePointStatusDerivesExpiredFromStatus(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:     id,
+			Status: pausePointStatusExpired,
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+	var response pausePointStatusResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if !response.Expired {
+		t.Fatalf("expired mismatch: %#v", response)
+	}
+}
+
+// Verifies pause-point-status derives remaining time when older Unity packages omit the field.
+func TestRunPausePointStatusDerivesRemainingTimeFromOlderResponse(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:                              id,
+			Status:                          pausePointStatusEnabled,
+			IsEnabled:                       true,
+			TimeoutSeconds:                  30,
+			ElapsedSinceEnabledMilliseconds: 1200,
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+	var response pausePointStatusResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if response.RemainingMilliseconds != 28800 {
+		t.Fatalf("remaining milliseconds mismatch: %#v", response)
 	}
 }
 

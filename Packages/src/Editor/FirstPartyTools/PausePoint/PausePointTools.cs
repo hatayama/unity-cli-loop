@@ -39,11 +39,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool IsHit { get; set; }
         public int HitCount { get; set; }
         public int TimeoutSeconds { get; set; }
+        public bool Expired { get; set; }
+        public string EnabledAtUtc { get; set; } = string.Empty;
         public long ElapsedSinceEnabledMilliseconds { get; set; }
+        public long RemainingMilliseconds { get; set; }
+        public int Generation { get; set; }
         public bool IsPlaying { get; set; }
         public bool IsPaused { get; set; }
         public int ClearedCount { get; set; }
         public string Message { get; set; } = string.Empty;
+        public string RecommendedNextAction { get; set; } = string.Empty;
         public string Warning { get; set; } = string.Empty;
 
         internal static PausePointResponse FromSnapshot(UloopPausePointSnapshot snapshot)
@@ -61,10 +66,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 IsHit = snapshot.IsHit,
                 HitCount = snapshot.HitCount,
                 TimeoutSeconds = snapshot.TimeoutSeconds,
+                Expired = snapshot.Expired,
+                EnabledAtUtc = snapshot.EnabledAtUtc,
                 ElapsedSinceEnabledMilliseconds = snapshot.ElapsedSinceEnabledMilliseconds,
+                RemainingMilliseconds = snapshot.RemainingMilliseconds,
+                Generation = snapshot.Generation,
                 IsPlaying = snapshot.IsPlaying,
                 IsPaused = snapshot.IsPaused,
-                Message = snapshot.Message
+                Message = snapshot.Message,
+                RecommendedNextAction = snapshot.RecommendedNextAction
             };
         }
 

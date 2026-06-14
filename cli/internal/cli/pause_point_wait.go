@@ -52,10 +52,15 @@ type pausePointStatusResponse struct {
 	IsHit                           bool   `json:"IsHit"`
 	HitCount                        int    `json:"HitCount"`
 	TimeoutSeconds                  int    `json:"TimeoutSeconds"`
+	Expired                         bool   `json:"Expired"`
+	EnabledAtUtc                    string `json:"EnabledAtUtc"`
 	ElapsedSinceEnabledMilliseconds int64  `json:"ElapsedSinceEnabledMilliseconds"`
+	RemainingMilliseconds           int64  `json:"RemainingMilliseconds"`
+	Generation                      int    `json:"Generation"`
 	IsPlaying                       bool   `json:"IsPlaying"`
 	IsPaused                        bool   `json:"IsPaused"`
 	Message                         string `json:"Message"`
+	RecommendedNextAction           string `json:"RecommendedNextAction"`
 }
 
 type pausePointWaitState string
@@ -67,6 +72,31 @@ const (
 	pausePointWaitStateExpired    pausePointWaitState = "expired"
 	pausePointWaitStateCleared    pausePointWaitState = "cleared"
 )
+
+func normalizePausePointStatusResponse(response pausePointStatusResponse) pausePointStatusResponse {
+	if response.Status == pausePointStatusExpired {
+		response.Expired = true
+		response.RemainingMilliseconds = 0
+		return response
+	}
+
+	if response.Status != pausePointStatusEnabled || response.RemainingMilliseconds > 0 {
+		return response
+	}
+
+	if response.TimeoutSeconds <= 0 {
+		return response
+	}
+
+	totalMilliseconds := int64(response.TimeoutSeconds) * int64(time.Second/time.Millisecond)
+	remainingMilliseconds := totalMilliseconds - response.ElapsedSinceEnabledMilliseconds
+	if remainingMilliseconds <= 0 {
+		return response
+	}
+
+	response.RemainingMilliseconds = remainingMilliseconds
+	return response
+}
 
 func runWaitForPausePointCommand(
 	ctx context.Context,
@@ -111,6 +141,7 @@ func runPausePointStatusCommand(
 		})
 		return 1
 	}
+	response = normalizePausePointStatusResponse(response)
 
 	result, err := json.Marshal(response)
 	if err != nil {

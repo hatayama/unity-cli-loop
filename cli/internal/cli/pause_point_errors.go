@@ -11,6 +11,8 @@ func pausePointWaitError(
 	response pausePointStatusResponse,
 	state pausePointWaitState,
 ) cliError {
+	response = normalizePausePointStatusResponse(response)
+
 	switch state {
 	case pausePointWaitStateNotEnabled:
 		return pausePointStateError(
@@ -118,18 +120,37 @@ func pausePointStateError(
 		Details: map[string]any{
 			"id":                              options.id,
 			"status":                          response.Status,
+			"expired":                         response.Expired,
 			"hitCount":                        response.HitCount,
-			"timeoutSeconds":                  options.timeoutSeconds,
+			"timeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
+			"enabledAtUtc":                    response.EnabledAtUtc,
 			"elapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
+			"generation":                      response.Generation,
 			"isPlaying":                       response.IsPlaying,
 			"isPaused":                        response.IsPaused,
 			"remainingMilliseconds":           pausePointRemainingMilliseconds(options, response),
 			"markerMessage":                   response.Message,
+			"recommendedNextAction":           response.RecommendedNextAction,
 		},
 	}
 }
 
+func pausePointMarkerTimeoutSeconds(options waitForPausePointOptions, response pausePointStatusResponse) int {
+	if response.TimeoutSeconds > 0 {
+		return response.TimeoutSeconds
+	}
+	return options.timeoutSeconds
+}
+
 func pausePointRemainingMilliseconds(options waitForPausePointOptions, response pausePointStatusResponse) int64 {
+	if response.RemainingMilliseconds > 0 {
+		return response.RemainingMilliseconds
+	}
+	if response.Expired || response.Status == pausePointStatusExpired || response.Status == pausePointStatusHit ||
+		response.Status == pausePointStatusCleared {
+		return 0
+	}
+
 	timeoutSeconds := response.TimeoutSeconds
 	if timeoutSeconds <= 0 {
 		return 0
