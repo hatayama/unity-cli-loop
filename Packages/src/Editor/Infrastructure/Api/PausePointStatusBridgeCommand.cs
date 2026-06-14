@@ -55,8 +55,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public long ElapsedSinceEnabledMilliseconds { get; set; }
         public long RemainingMilliseconds { get; set; }
         public int Generation { get; set; }
-        public bool IsPlaying { get; set; }
-        public bool IsPaused { get; set; }
+        public PausePointStatusEditorState EditorState { get; set; } = new();
+        public string FirstHitAtUtc { get; set; } = string.Empty;
+        public string LastHitAtUtc { get; set; } = string.Empty;
+        public int FirstHitSequence { get; set; }
+        public int LastHitSequence { get; set; }
         public string Message { get; set; } = string.Empty;
         public string RecommendedNextAction { get; set; } = string.Empty;
 
@@ -80,10 +83,38 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ElapsedSinceEnabledMilliseconds = snapshot.ElapsedSinceEnabledMilliseconds,
                 RemainingMilliseconds = snapshot.RemainingMilliseconds,
                 Generation = snapshot.Generation,
-                IsPlaying = snapshot.IsPlaying,
-                IsPaused = snapshot.IsPaused,
+                EditorState = PausePointStatusEditorState.FromSnapshot(snapshot.EditorState),
+                FirstHitAtUtc = snapshot.FirstHitAtUtc,
+                LastHitAtUtc = snapshot.LastHitAtUtc,
+                FirstHitSequence = snapshot.FirstHitSequence,
+                LastHitSequence = snapshot.LastHitSequence,
                 Message = snapshot.Message,
                 RecommendedNextAction = snapshot.RecommendedNextAction
+            };
+        }
+    }
+
+    /// <summary>
+    /// Unity Editor play state attached to pause point status evidence.
+    /// </summary>
+    public class PausePointStatusEditorState
+    {
+        public bool IsPlaying { get; set; }
+        public bool IsPaused { get; set; }
+        public string CapturedAt { get; set; } = string.Empty;
+
+        internal static PausePointStatusEditorState FromSnapshot(UloopPausePointEditorStateSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointStatusEditorState
+            {
+                IsPlaying = snapshot.IsPlaying,
+                IsPaused = snapshot.IsPaused,
+                CapturedAt = snapshot.CapturedAt
             };
         }
     }

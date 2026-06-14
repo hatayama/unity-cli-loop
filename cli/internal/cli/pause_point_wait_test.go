@@ -24,7 +24,13 @@ func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {
 
 	responses := []pausePointStatusResponse{
 		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
-		{Id: "jump", Status: pausePointStatusHit, IsHit: true, IsPaused: true, HitCount: 1},
+		{
+			Id:          "jump",
+			Status:      pausePointStatusHit,
+			IsHit:       true,
+			HitCount:    1,
+			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		},
 	}
 	requestCount := 0
 	queryPausePointStatus = func(
@@ -82,8 +88,7 @@ func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 			IsEnabled:                       true,
 			TimeoutSeconds:                  1,
 			ElapsedSinceEnabledMilliseconds: 100,
-			IsPlaying:                       true,
-			IsPaused:                        false,
+			EditorState:                     pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 			Message:                         "Pause point enabled.",
 		}, nil
 	}
@@ -116,11 +121,9 @@ func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 		t.Fatalf("timeout error missing from stderr: %s", stderr.String())
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
-	if envelope.Error.Details["isPlaying"] != true {
-		t.Fatalf("isPlaying detail mismatch: %#v", envelope.Error.Details)
-	}
-	if envelope.Error.Details["isPaused"] != false {
-		t.Fatalf("isPaused detail mismatch: %#v", envelope.Error.Details)
+	editorState, ok := envelope.Error.Details["editorState"].(map[string]any)
+	if !ok || editorState["IsPlaying"] != true || editorState["IsPaused"] != false || editorState["CapturedAt"] != "Current" {
+		t.Fatalf("editorState detail mismatch: %#v", envelope.Error.Details)
 	}
 	if envelope.Error.Details["markerMessage"] != "Pause point enabled." {
 		t.Fatalf("markerMessage detail mismatch: %#v", envelope.Error.Details)
@@ -144,7 +147,7 @@ func TestPausePointExpiredErrorReportsRecoveryFields(t *testing.T) {
 		ElapsedSinceEnabledMilliseconds: 1200,
 		RemainingMilliseconds:           0,
 		Generation:                      7,
-		IsPlaying:                       true,
+		EditorState:                     pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 		Message:                         "Pause point expired before it was hit.",
 		RecommendedNextAction:           "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.",
 	}
@@ -174,7 +177,7 @@ func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 		Id:             "jump",
 		Status:         pausePointStatusExpired,
 		TimeoutSeconds: 30,
-		IsPlaying:      true,
+		EditorState:    pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 		Message:        "Pause point expired before it was hit.",
 	}
 
@@ -191,10 +194,10 @@ func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 // Verifies wait errors derive Expired from Status when older Unity packages omit the bool field.
 func TestPausePointExpiredErrorDerivesExpiredFromStatus(t *testing.T) {
 	response := pausePointStatusResponse{
-		Id:        "jump",
-		Status:    pausePointStatusExpired,
-		IsPlaying: true,
-		Message:   "Pause point expired before it was hit.",
+		Id:          "jump",
+		Status:      pausePointStatusExpired,
+		EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		Message:     "Pause point expired before it was hit.",
 	}
 
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
@@ -231,11 +234,11 @@ func TestRunWaitForPausePointReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
 			}, nil
 		}
 		return pausePointStatusResponse{
-			Id:       id,
-			Status:   pausePointStatusHit,
-			IsHit:    true,
-			IsPaused: true,
-			HitCount: 1,
+			Id:          id,
+			Status:      pausePointStatusHit,
+			IsHit:       true,
+			HitCount:    1,
+			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
 		}, nil
 	}
 
@@ -287,7 +290,11 @@ func TestWaitForPausePointReturnsNotEnabledStateImmediately(t *testing.T) {
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{Id: id, Status: pausePointStatusNotEnabled, IsPlaying: true}, nil
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusNotEnabled,
+			EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		}, nil
 	}
 
 	response, state, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
@@ -319,11 +326,10 @@ func TestRunWaitForPausePointReportsNotEnabledError(t *testing.T) {
 		id string,
 	) (pausePointStatusResponse, error) {
 		return pausePointStatusResponse{
-			Id:        id,
-			Status:    pausePointStatusNotEnabled,
-			IsPlaying: true,
-			IsPaused:  false,
-			Message:   "Pause point is not enabled.",
+			Id:          id,
+			Status:      pausePointStatusNotEnabled,
+			EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+			Message:     "Pause point is not enabled.",
 		}, nil
 	}
 
@@ -345,8 +351,9 @@ func TestRunWaitForPausePointReportsNotEnabledError(t *testing.T) {
 	if envelope.Error.Details["status"] != pausePointStatusNotEnabled {
 		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
 	}
-	if envelope.Error.Details["isPlaying"] != true || envelope.Error.Details["isPaused"] != false {
-		t.Fatalf("play state details mismatch: %#v", envelope.Error.Details)
+	editorState, ok := envelope.Error.Details["editorState"].(map[string]any)
+	if !ok || editorState["IsPlaying"] != true || editorState["IsPaused"] != false || editorState["CapturedAt"] != "Current" {
+		t.Fatalf("editorState details mismatch: %#v", envelope.Error.Details)
 	}
 }
 
@@ -394,7 +401,18 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{Id: id, Status: pausePointStatusHit, IsHit: true, HitCount: 1}, nil
+		return pausePointStatusResponse{
+			Id:               id,
+			Status:           pausePointStatusHit,
+			IsHit:            true,
+			HitCount:         1,
+			Generation:       7,
+			FirstHitAtUtc:    "2026-06-03T00:00:00.1250000Z",
+			LastHitAtUtc:     "2026-06-03T00:00:00.1250000Z",
+			FirstHitSequence: 3,
+			LastHitSequence:  3,
+			EditorState:      pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
 	}
 
 	fetchedSearchText := ""
@@ -404,12 +422,18 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 		connection unityipc.Connection,
 		searchText string,
 		maxCount int,
-	) ([]pausePointMatchingLog, error) {
+	) (pausePointMatchingLogsResult, error) {
 		fetchedSearchText = searchText
 		fetchedMaxCount = maxCount
-		return []pausePointMatchingLog{
-			{Type: "Log", Message: "[jump] velocity=4.2"},
-			{Type: "Log", Message: "[jump] grounded=false"},
+		return pausePointMatchingLogsResult{
+			SearchText:     searchText,
+			TotalCount:     2,
+			DisplayedCount: 2,
+			MaxCount:       maxCount,
+			Logs: []pausePointMatchingLog{
+				{Type: "Log", Message: "[jump] velocity=4.2"},
+				{Type: "Log", Message: "[jump] grounded=false"},
+			},
 		}, nil
 	}
 
@@ -436,6 +460,20 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 	if len(result.MatchingLogs) != 2 || result.MatchingLogs[0].Message != "[jump] velocity=4.2" {
 		t.Fatalf("matching logs mismatch: %#v", result.MatchingLogs)
 	}
+	if result.EvidenceSummary.EditorState.CapturedAt != "PausePointHit" {
+		t.Fatalf("editor state summary mismatch: %#v", result.EvidenceSummary)
+	}
+	if result.EvidenceSummary.PausePoint.Generation != 7 || result.EvidenceSummary.PausePoint.FirstHitSequence != 3 {
+		t.Fatalf("pause point summary mismatch: %#v", result.EvidenceSummary)
+	}
+	if !result.EvidenceSummary.MatchingLogs.MultipleMatchingLogsObserved ||
+		result.EvidenceSummary.MatchingLogs.MatchingLogCount != 2 ||
+		result.EvidenceSummary.MatchingLogs.ReturnedLogCount != 2 {
+		t.Fatalf("matching log summary mismatch: %#v", result.EvidenceSummary)
+	}
+	if !strings.Contains(result.EvidenceSummary.Warning, "Multiple matching logs") {
+		t.Fatalf("warning mismatch: %#v", result.EvidenceSummary)
+	}
 }
 
 // Verifies a successful fetch with zero matches yields an explicit empty MatchingLogs array,
@@ -453,15 +491,25 @@ func TestRunWaitForPausePointEmbedsEmptyMatchingLogsWhenNoneMatch(t *testing.T) 
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{Id: id, Status: pausePointStatusHit, IsHit: true, HitCount: 1}, nil
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusHit,
+			IsHit:       true,
+			HitCount:    1,
+			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
 	}
 	fetchMatchingLogs = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		searchText string,
 		maxCount int,
-	) ([]pausePointMatchingLog, error) {
-		return []pausePointMatchingLog{}, nil
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{
+			SearchText: searchText,
+			MaxCount:   maxCount,
+			Logs:       []pausePointMatchingLog{},
+		}, nil
 	}
 
 	var stdout bytes.Buffer
@@ -479,6 +527,13 @@ func TestRunWaitForPausePointEmbedsEmptyMatchingLogsWhenNoneMatch(t *testing.T) 
 	if !strings.Contains(stdout.String(), "\"MatchingLogs\": []") {
 		t.Fatalf("MatchingLogs must be an explicit empty array: %s", stdout.String())
 	}
+	var result pausePointWaitResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout parse failed: %v from %s", err, stdout.String())
+	}
+	if result.EvidenceSummary.Warning != "" {
+		t.Fatalf("warning should be empty when there are no matching logs: %#v", result.EvidenceSummary)
+	}
 }
 
 // Verifies a log fetch failure never turns a successful hit into an error.
@@ -495,15 +550,21 @@ func TestRunWaitForPausePointIgnoresLogFetchFailure(t *testing.T) {
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{Id: id, Status: pausePointStatusHit, IsHit: true, HitCount: 1}, nil
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusHit,
+			IsHit:       true,
+			HitCount:    1,
+			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
 	}
 	fetchMatchingLogs = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		searchText string,
 		maxCount int,
-	) ([]pausePointMatchingLog, error) {
-		return nil, context.DeadlineExceeded
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{}, context.DeadlineExceeded
 	}
 
 	var stdout bytes.Buffer
@@ -520,6 +581,9 @@ func TestRunWaitForPausePointIgnoresLogFetchFailure(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "MatchingLogs") {
 		t.Fatalf("MatchingLogs must be omitted when the fetch fails: %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "EvidenceSummary") {
+		t.Fatalf("EvidenceSummary must be omitted when the fetch fails: %s", stdout.String())
 	}
 }
 
@@ -542,7 +606,12 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled, IsEnabled: true, IsPlaying: true}, nil
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusEnabled,
+			IsEnabled:   true,
+			EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		}, nil
 	}
 	clearPausePointStatus = func(
 		ctx context.Context,
@@ -556,8 +625,14 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 		connection unityipc.Connection,
 		searchText string,
 		maxCount int,
-	) ([]pausePointMatchingLog, error) {
-		return []pausePointMatchingLog{{Type: "Log", Message: "[jump] never reached"}}, nil
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{
+			SearchText:     searchText,
+			TotalCount:     3,
+			DisplayedCount: 1,
+			MaxCount:       maxCount,
+			Logs:           []pausePointMatchingLog{{Type: "Log", Message: "[jump] never reached"}},
+		}, nil
 	}
 
 	var stdout bytes.Buffer
@@ -578,6 +653,14 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 	if !ok || len(matchingLogs) != 1 {
 		t.Fatalf("MatchingLogs detail mismatch: %#v", envelope.Error.Details)
 	}
+	evidenceSummary, ok := envelope.Error.Details["EvidenceSummary"].(map[string]any)
+	if !ok {
+		t.Fatalf("EvidenceSummary detail missing: %#v", envelope.Error.Details)
+	}
+	evidenceLogs, ok := evidenceSummary["MatchingLogs"].(map[string]any)
+	if !ok || evidenceLogs["MayBeTruncated"] != true || evidenceLogs["MatchingLogCount"] != float64(3) {
+		t.Fatalf("EvidenceSummary matching logs mismatch: %#v", evidenceSummary)
+	}
 }
 
 // Verifies timeout errors include a deterministic diagnosis hint for common stuck states.
@@ -589,17 +672,26 @@ func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 	}{
 		{
 			name:     "play mode not running",
-			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled, IsPlaying: false},
+			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled},
 			wantHint: "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again.",
 		},
 		{
-			name:     "editor already paused",
-			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled, IsPlaying: true, IsPaused: true},
+			name: "editor already paused",
+			response: pausePointStatusResponse{
+				Id:          "jump",
+				Status:      pausePointStatusEnabled,
+				EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "Current"},
+			},
 			wantHint: "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again.",
 		},
 		{
-			name:     "marker never hit",
-			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled, IsPlaying: true, HitCount: 0},
+			name: "marker never hit",
+			response: pausePointStatusResponse{
+				Id:          "jump",
+				Status:      pausePointStatusEnabled,
+				EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+				HitCount:    0,
+			},
 			wantHint: "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed. In fast-progressing games the state may have already moved past the marker (for example back to Ready or GameOver), so re-trigger the code path and wait again.",
 		},
 	}
@@ -628,17 +720,26 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 	}{
 		{
 			name:     "play mode not running",
-			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired, IsPlaying: false},
+			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired},
 			wantHint: "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again.",
 		},
 		{
-			name:     "editor already paused",
-			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired, IsPlaying: true, IsPaused: true},
+			name: "editor already paused",
+			response: pausePointStatusResponse{
+				Id:          "jump",
+				Status:      pausePointStatusExpired,
+				EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "Current"},
+			},
 			wantHint: "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again.",
 		},
 		{
-			name:     "marker expired before hit",
-			response: pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired, IsPlaying: true, HitCount: 0},
+			name: "marker expired before hit",
+			response: pausePointStatusResponse{
+				Id:          "jump",
+				Status:      pausePointStatusExpired,
+				EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+				HitCount:    0,
+			},
 			wantHint: "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again.",
 		},
 	}
@@ -659,7 +760,12 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 
 // Verifies hints stay scoped to diagnosable response states.
 func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
-	hitResponse := pausePointStatusResponse{Id: "jump", Status: pausePointStatusHit, IsPlaying: true, HitCount: 1}
+	hitResponse := pausePointStatusResponse{
+		Id:          "jump",
+		Status:      pausePointStatusHit,
+		EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "PausePointHit"},
+		HitCount:    1,
+	}
 	timeoutErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
@@ -668,7 +774,11 @@ func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 		t.Fatalf("hint should be omitted when no diagnosis applies: %#v", timeoutErr.Details)
 	}
 
-	clearedResponse := pausePointStatusResponse{Id: "jump", Status: pausePointStatusCleared, IsPlaying: true}
+	clearedResponse := pausePointStatusResponse{
+		Id:          "jump",
+		Status:      pausePointStatusCleared,
+		EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+	}
 	clearedErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
@@ -685,7 +795,7 @@ func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
 		Status:                          pausePointStatusExpired,
 		TimeoutSeconds:                  1,
 		ElapsedSinceEnabledMilliseconds: 1200,
-		IsPlaying:                       true,
+		EditorState:                     pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 		Message:                         "Pause point expired before it was hit.",
 	}
 
@@ -759,6 +869,7 @@ func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 			EnabledAtUtc:          "2026-06-03T00:00:00.0000000Z",
 			RemainingMilliseconds: 30000,
 			Generation:            3,
+			EditorState:           pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 			RecommendedNextAction: "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.",
 		}, nil
 	}
@@ -790,6 +901,9 @@ func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 	}
 	if response.Generation != 3 {
 		t.Fatalf("generation mismatch: %#v", response)
+	}
+	if response.EditorState.CapturedAt != "Current" || !response.EditorState.IsPlaying {
+		t.Fatalf("editor state mismatch: %#v", response)
 	}
 	if response.RecommendedNextAction != "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values." {
 		t.Fatalf("recommendedNextAction mismatch: %#v", response)
