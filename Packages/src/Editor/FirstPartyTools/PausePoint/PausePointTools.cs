@@ -44,8 +44,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public long ElapsedSinceEnabledMilliseconds { get; set; }
         public long RemainingMilliseconds { get; set; }
         public int Generation { get; set; }
-        public bool IsPlaying { get; set; }
-        public bool IsPaused { get; set; }
+        public PausePointEditorState EditorState { get; set; } = new();
+        public string FirstHitAtUtc { get; set; } = string.Empty;
+        public string LastHitAtUtc { get; set; } = string.Empty;
+        public int FirstHitSequence { get; set; }
+        public int LastHitSequence { get; set; }
         public int ClearedCount { get; set; }
         public string Message { get; set; } = string.Empty;
         public string RecommendedNextAction { get; set; } = string.Empty;
@@ -71,8 +74,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ElapsedSinceEnabledMilliseconds = snapshot.ElapsedSinceEnabledMilliseconds,
                 RemainingMilliseconds = snapshot.RemainingMilliseconds,
                 Generation = snapshot.Generation,
-                IsPlaying = snapshot.IsPlaying,
-                IsPaused = snapshot.IsPaused,
+                EditorState = PausePointEditorState.FromSnapshot(snapshot.EditorState),
+                FirstHitAtUtc = snapshot.FirstHitAtUtc,
+                LastHitAtUtc = snapshot.LastHitAtUtc,
+                FirstHitSequence = snapshot.FirstHitSequence,
+                LastHitSequence = snapshot.LastHitSequence,
                 Message = snapshot.Message,
                 RecommendedNextAction = snapshot.RecommendedNextAction
             };
@@ -89,9 +95,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Status = UloopPausePointStatus.Cleared,
                 ClearedCount = result.ClearedCount,
+                EditorState = PausePointEditorState.FromSnapshot(result.EditorState),
                 Message = result.ClearedCount == 0
                     ? "No active pause points to clear."
                     : "Pause points cleared."
+            };
+        }
+    }
+
+    /// <summary>
+    /// Unity Editor play state attached to pause point tool evidence.
+    /// </summary>
+    public class PausePointEditorState
+    {
+        public bool IsPlaying { get; set; }
+        public bool IsPaused { get; set; }
+        public string CapturedAt { get; set; } = string.Empty;
+
+        internal static PausePointEditorState FromSnapshot(UloopPausePointEditorStateSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointEditorState
+            {
+                IsPlaying = snapshot.IsPlaying,
+                IsPaused = snapshot.IsPaused,
+                CapturedAt = snapshot.CapturedAt
             };
         }
     }

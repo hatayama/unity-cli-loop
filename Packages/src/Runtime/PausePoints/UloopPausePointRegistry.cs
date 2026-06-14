@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
         private static int _nextGeneration;
+        private static int _nextHitSequence;
         private static UloopPausePointSnapshot _latestHitSnapshot;
         // One input can hit several markers in the same frame; tools need the full list,
         // not just the latest hit, to report every marker that interrupted them.
@@ -76,7 +77,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
             ClearLatestHitSnapshot();
 
-            return new UloopPausePointClearAllResult(clearedCount, now);
+            UloopPausePointEditorStateSnapshot editorState = UloopPausePointEditorStateSnapshot.FromController(
+                _pauseController,
+                UloopPausePointEditorStateCapturedAt.ClearAll);
+            return new UloopPausePointClearAllResult(clearedCount, now, editorState);
         }
 
         public static UloopPausePointSnapshot GetStatus(string id)
@@ -116,7 +120,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             _pauseController.Pause();
-            entry.RecordHit(now, _pauseController.IsPlaying, _pauseController.IsPaused);
+            int hitSequence = ++_nextHitSequence;
+            entry.RecordHit(now, _pauseController.IsPlaying, _pauseController.IsPaused, hitSequence);
             UloopPausePointSnapshot snapshot = entry.ToSnapshot(now, _pauseController);
             _latestHitSnapshot = snapshot;
             _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
@@ -169,6 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             Entries.Clear();
             _nextGeneration = 0;
+            _nextHitSequence = 0;
             _latestHitSnapshot = null;
             _hitSnapshots.Clear();
             _pauseController = new UnityEditorPausePointPauseController();
@@ -179,6 +185,47 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             DateTime now = _nowProvider();
             return now.Kind == DateTimeKind.Utc ? now : now.ToUniversalTime();
+        }
+    }
+
+    /// <summary>
+    /// Names when a pause point editor-state snapshot was captured.
+    /// </summary>
+    internal static class UloopPausePointEditorStateCapturedAt
+    {
+        public const string Current = "Current";
+        public const string PausePointHit = "PausePointHit";
+        public const string ClearAll = "ClearAll";
+    }
+
+    /// <summary>
+    /// Immutable Unity Editor state attached to pause point evidence.
+    /// </summary>
+    internal sealed class UloopPausePointEditorStateSnapshot
+    {
+        public UloopPausePointEditorStateSnapshot(bool isPlaying, bool isPaused, string capturedAt)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(capturedAt), "capturedAt must not be null or empty");
+
+            IsPlaying = isPlaying;
+            IsPaused = isPaused;
+            CapturedAt = capturedAt ?? string.Empty;
+        }
+
+        public bool IsPlaying { get; }
+        public bool IsPaused { get; }
+        public string CapturedAt { get; }
+
+        public static UloopPausePointEditorStateSnapshot FromController(
+            IUloopPausePointPauseController pauseController,
+            string capturedAt)
+        {
+            Debug.Assert(pauseController != null, "pauseController must not be null");
+
+            return new UloopPausePointEditorStateSnapshot(
+                pauseController.IsPlaying,
+                pauseController.IsPaused,
+                capturedAt);
         }
     }
 
@@ -223,11 +270,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             long elapsedMilliseconds,
             long remainingMilliseconds,
             int generation,
-            bool isPlaying,
-            bool isPaused,
+            UloopPausePointEditorStateSnapshot editorState,
+            string firstHitAtUtc,
+            string lastHitAtUtc,
+            int firstHitSequence,
+            int lastHitSequence,
             string message,
             string recommendedNextAction)
         {
+            Debug.Assert(editorState != null, "editorState must not be null");
+
             Id = id ?? string.Empty;
             Status = status ?? UloopPausePointStatus.NotEnabled;
             IsEnabled = isEnabled;
@@ -239,8 +291,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             ElapsedSinceEnabledMilliseconds = elapsedMilliseconds;
             RemainingMilliseconds = remainingMilliseconds;
             Generation = generation;
-            IsPlaying = isPlaying;
-            IsPaused = isPaused;
+            EditorState = editorState;
+            FirstHitAtUtc = firstHitAtUtc ?? string.Empty;
+            LastHitAtUtc = lastHitAtUtc ?? string.Empty;
+            FirstHitSequence = firstHitSequence;
+            LastHitSequence = lastHitSequence;
             Message = message ?? string.Empty;
             RecommendedNextAction = recommendedNextAction ?? string.Empty;
         }
@@ -256,8 +311,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public long ElapsedSinceEnabledMilliseconds { get; }
         public long RemainingMilliseconds { get; }
         public int Generation { get; }
-        public bool IsPlaying { get; }
-        public bool IsPaused { get; }
+        public UloopPausePointEditorStateSnapshot EditorState { get; }
+        public string FirstHitAtUtc { get; }
+        public string LastHitAtUtc { get; }
+        public int FirstHitSequence { get; }
+        public int LastHitSequence { get; }
         public string Message { get; }
         public string RecommendedNextAction { get; }
 
@@ -277,8 +335,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 0,
                 0,
                 0,
-                pauseController.IsPlaying,
-                pauseController.IsPaused,
+                UloopPausePointEditorStateSnapshot.FromController(
+                    pauseController,
+                    UloopPausePointEditorStateCapturedAt.Current),
+                string.Empty,
+                string.Empty,
+                0,
+                0,
                 "Pause point is not enabled.",
                 string.Empty);
         }
@@ -289,14 +352,21 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     /// </summary>
     internal sealed class UloopPausePointClearAllResult
     {
-        public UloopPausePointClearAllResult(int clearedCount, DateTime clearedAtUtc)
+        public UloopPausePointClearAllResult(
+            int clearedCount,
+            DateTime clearedAtUtc,
+            UloopPausePointEditorStateSnapshot editorState)
         {
+            Debug.Assert(editorState != null, "editorState must not be null");
+
             ClearedCount = clearedCount;
             ClearedAtUtc = clearedAtUtc;
+            EditorState = editorState;
         }
 
         public int ClearedCount { get; }
         public DateTime ClearedAtUtc { get; }
+        public UloopPausePointEditorStateSnapshot EditorState { get; }
     }
 
     /// <summary>
@@ -324,7 +394,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string Status { get; private set; }
         public bool IsEnabled { get; private set; }
         public int HitCount { get; private set; }
+        public DateTime FirstHitAtUtc { get; private set; }
         public DateTime HitAtUtc { get; private set; }
+        public int FirstHitSequence { get; private set; }
+        public int LastHitSequence { get; private set; }
         public bool IsPlayingAtHit { get; private set; }
         public bool IsPausedAtHit { get; private set; }
         public string Message { get; private set; }
@@ -353,10 +426,19 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Message = message;
         }
 
-        public void RecordHit(DateTime nowUtc, bool isPlaying, bool isPaused)
+        public void RecordHit(DateTime nowUtc, bool isPlaying, bool isPaused, int hitSequence)
         {
+            Debug.Assert(hitSequence > 0, "hitSequence must be greater than zero");
+
+            if (HitCount == 0)
+            {
+                FirstHitAtUtc = nowUtc;
+                FirstHitSequence = hitSequence;
+            }
+
             HitCount++;
             HitAtUtc = nowUtc;
+            LastHitSequence = hitSequence;
             IsPlayingAtHit = isPlaying;
             IsPausedAtHit = isPaused;
             IsEnabled = false;
@@ -370,11 +452,19 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             bool isHit = Status == UloopPausePointStatus.Hit;
             bool expired = Status == UloopPausePointStatus.Expired;
-            bool isPlaying = isHit ? IsPlayingAtHit : pauseController.IsPlaying;
-            bool isPaused = isHit ? IsPausedAtHit : pauseController.IsPaused;
+            UloopPausePointEditorStateSnapshot editorState = isHit
+                ? new UloopPausePointEditorStateSnapshot(
+                    IsPlayingAtHit,
+                    IsPausedAtHit,
+                    UloopPausePointEditorStateCapturedAt.PausePointHit)
+                : UloopPausePointEditorStateSnapshot.FromController(
+                    pauseController,
+                    UloopPausePointEditorStateCapturedAt.Current);
             long elapsedMilliseconds = Math.Max(0, (long)(nowUtc - EnabledAtUtc).TotalMilliseconds);
             long remainingMilliseconds = CalculateRemainingMilliseconds(nowUtc);
             string recommendedNextAction = expired ? CreateExpiredRecommendedNextAction() : string.Empty;
+            string firstHitAtUtc = HitCount > 0 ? FormatUtc(FirstHitAtUtc) : string.Empty;
+            string lastHitAtUtc = HitCount > 0 ? FormatUtc(HitAtUtc) : string.Empty;
 
             return new UloopPausePointSnapshot(
                 Id,
@@ -388,8 +478,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 elapsedMilliseconds,
                 remainingMilliseconds,
                 Generation,
-                isPlaying,
-                isPaused,
+                editorState,
+                firstHitAtUtc,
+                lastHitAtUtc,
+                FirstHitSequence,
+                LastHitSequence,
                 Message,
                 recommendedNextAction);
         }

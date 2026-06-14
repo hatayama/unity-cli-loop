@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
@@ -21,15 +22,56 @@ type pausePointMatchingLog struct {
 	Message string `json:"Message"`
 }
 
-// pausePointWaitResult extends the hit response with marker-matching logs so
-// agents do not need a separate get-logs call while Unity is paused.
+type pausePointMatchingLogsResult struct {
+	SearchText     string                  `json:"SearchText"`
+	TotalCount     int                     `json:"TotalCount"`
+	DisplayedCount int                     `json:"DisplayedCount"`
+	MaxCount       int                     `json:"MaxCount"`
+	Logs           []pausePointMatchingLog `json:"Logs"`
+}
+
+type pausePointEvidenceSummary struct {
+	EditorState  pausePointEditorState        `json:"EditorState"`
+	PausePoint   pausePointEvidencePausePoint `json:"PausePoint"`
+	MatchingLogs pausePointEvidenceLogs       `json:"MatchingLogs"`
+	Warning      string                       `json:"Warning"`
+}
+
+type pausePointEvidencePausePoint struct {
+	Id                   string `json:"Id"`
+	Status               string `json:"Status"`
+	Generation           int    `json:"Generation"`
+	HitCount             int    `json:"HitCount"`
+	MultipleHitsObserved bool   `json:"MultipleHitsObserved"`
+	FirstHitAtUtc        string `json:"FirstHitAtUtc"`
+	LastHitAtUtc         string `json:"LastHitAtUtc"`
+	FirstHitSequence     int    `json:"FirstHitSequence"`
+	LastHitSequence      int    `json:"LastHitSequence"`
+}
+
+type pausePointEvidenceLogs struct {
+	SearchText                   string `json:"SearchText"`
+	MatchingLogCount             int    `json:"MatchingLogCount"`
+	ReturnedLogCount             int    `json:"ReturnedLogCount"`
+	MaxCount                     int    `json:"MaxCount"`
+	MayBeTruncated               bool   `json:"MayBeTruncated"`
+	MultipleMatchingLogsObserved bool   `json:"MultipleMatchingLogsObserved"`
+}
+
+// pausePointWaitResult extends the hit response with marker-matching logs and
+// evidence summary so agents do not need a separate get-logs call while Unity is paused.
 type pausePointWaitResult struct {
 	pausePointStatusResponse
-	MatchingLogs []pausePointMatchingLog `json:"MatchingLogs"`
+	MatchingLogs    []pausePointMatchingLog   `json:"MatchingLogs"`
+	EvidenceSummary pausePointEvidenceSummary `json:"EvidenceSummary"`
 }
 
 type pausePointGetLogsResponse struct {
-	Logs []pausePointMatchingLog `json:"Logs"`
+	TotalCount     int                     `json:"TotalCount"`
+	DisplayedCount int                     `json:"DisplayedCount"`
+	MaxCount       int                     `json:"MaxCount"`
+	SearchText     string                  `json:"SearchText"`
+	Logs           []pausePointMatchingLog `json:"Logs"`
 }
 
 func fetchMatchingLogsFromUnity(
@@ -37,7 +79,7 @@ func fetchMatchingLogsFromUnity(
 	connection unityipc.Connection,
 	searchText string,
 	maxCount int,
-) ([]pausePointMatchingLog, error) {
+) (pausePointMatchingLogsResult, error) {
 	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 
@@ -50,15 +92,93 @@ func fetchMatchingLogsFromUnity(
 		},
 	)
 	if err != nil {
-		return nil, err
+		return pausePointMatchingLogsResult{}, err
 	}
 
 	response := pausePointGetLogsResponse{}
 	if err := json.Unmarshal(result, &response); err != nil {
-		return nil, err
+		return pausePointMatchingLogsResult{}, err
 	}
 	if response.Logs == nil {
-		return []pausePointMatchingLog{}, nil
+		response.Logs = []pausePointMatchingLog{}
 	}
-	return response.Logs, nil
+	if response.SearchText == "" {
+		response.SearchText = searchText
+	}
+	if response.MaxCount == 0 {
+		response.MaxCount = maxCount
+	}
+	if response.DisplayedCount == 0 && len(response.Logs) > 0 {
+		response.DisplayedCount = len(response.Logs)
+	}
+	if response.TotalCount < len(response.Logs) {
+		response.TotalCount = len(response.Logs)
+	}
+
+	return pausePointMatchingLogsResult{
+		SearchText:     response.SearchText,
+		TotalCount:     response.TotalCount,
+		DisplayedCount: response.DisplayedCount,
+		MaxCount:       response.MaxCount,
+		Logs:           response.Logs,
+	}, nil
+}
+
+func buildPausePointEvidenceSummary(
+	response pausePointStatusResponse,
+	logs pausePointMatchingLogsResult,
+) pausePointEvidenceSummary {
+	return pausePointEvidenceSummary{
+		EditorState: response.EditorState,
+		PausePoint: pausePointEvidencePausePoint{
+			Id:                   response.Id,
+			Status:               response.Status,
+			Generation:           response.Generation,
+			HitCount:             response.HitCount,
+			MultipleHitsObserved: response.HitCount > 1,
+			FirstHitAtUtc:        response.FirstHitAtUtc,
+			LastHitAtUtc:         response.LastHitAtUtc,
+			FirstHitSequence:     response.FirstHitSequence,
+			LastHitSequence:      response.LastHitSequence,
+		},
+		MatchingLogs: buildPausePointEvidenceLogs(logs),
+		Warning:      buildPausePointEvidenceWarning(logs, response.HitCount),
+	}
+}
+
+func buildPausePointEvidenceLogs(logs pausePointMatchingLogsResult) pausePointEvidenceLogs {
+	matchingLogCount := logs.TotalCount
+	if matchingLogCount < len(logs.Logs) {
+		matchingLogCount = len(logs.Logs)
+	}
+	returnedLogCount := len(logs.Logs)
+	return pausePointEvidenceLogs{
+		SearchText:                   logs.SearchText,
+		MatchingLogCount:             matchingLogCount,
+		ReturnedLogCount:             returnedLogCount,
+		MaxCount:                     logs.MaxCount,
+		MayBeTruncated:               matchingLogCount > returnedLogCount,
+		MultipleMatchingLogsObserved: matchingLogCount > 1,
+	}
+}
+
+func buildPausePointEvidenceWarning(logs pausePointMatchingLogsResult, hitCount int) string {
+	evidenceLogs := buildPausePointEvidenceLogs(logs)
+	warnings := []string{}
+	if evidenceLogs.MayBeTruncated {
+		warnings = append(
+			warnings,
+			"Matching logs may be truncated by --matching-logs-max-count; increase the limit before treating this as complete evidence.")
+	}
+	if evidenceLogs.MultipleMatchingLogsObserved {
+		warnings = append(
+			warnings,
+			"Multiple matching logs were observed for this pause point id; inspect MatchingLogs before treating the scenario as single-fire evidence.")
+	}
+	if hitCount > 1 {
+		warnings = append(
+			warnings,
+			"The pause point reports multiple hits; inspect the paused state before treating the scenario as single-fire evidence.")
+	}
+	return strings.Join(warnings, " ")
 }

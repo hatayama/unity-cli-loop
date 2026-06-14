@@ -46,21 +46,30 @@ type pausePointStatusOptions struct {
 }
 
 type pausePointStatusResponse struct {
-	Id                              string `json:"Id"`
-	Status                          string `json:"Status"`
-	IsEnabled                       bool   `json:"IsEnabled"`
-	IsHit                           bool   `json:"IsHit"`
-	HitCount                        int    `json:"HitCount"`
-	TimeoutSeconds                  int    `json:"TimeoutSeconds"`
-	Expired                         bool   `json:"Expired"`
-	EnabledAtUtc                    string `json:"EnabledAtUtc"`
-	ElapsedSinceEnabledMilliseconds int64  `json:"ElapsedSinceEnabledMilliseconds"`
-	RemainingMilliseconds           int64  `json:"RemainingMilliseconds"`
-	Generation                      int    `json:"Generation"`
-	IsPlaying                       bool   `json:"IsPlaying"`
-	IsPaused                        bool   `json:"IsPaused"`
-	Message                         string `json:"Message"`
-	RecommendedNextAction           string `json:"RecommendedNextAction"`
+	Id                              string                `json:"Id"`
+	Status                          string                `json:"Status"`
+	IsEnabled                       bool                  `json:"IsEnabled"`
+	IsHit                           bool                  `json:"IsHit"`
+	HitCount                        int                   `json:"HitCount"`
+	TimeoutSeconds                  int                   `json:"TimeoutSeconds"`
+	Expired                         bool                  `json:"Expired"`
+	EnabledAtUtc                    string                `json:"EnabledAtUtc"`
+	ElapsedSinceEnabledMilliseconds int64                 `json:"ElapsedSinceEnabledMilliseconds"`
+	RemainingMilliseconds           int64                 `json:"RemainingMilliseconds"`
+	Generation                      int                   `json:"Generation"`
+	EditorState                     pausePointEditorState `json:"EditorState"`
+	FirstHitAtUtc                   string                `json:"FirstHitAtUtc"`
+	LastHitAtUtc                    string                `json:"LastHitAtUtc"`
+	FirstHitSequence                int                   `json:"FirstHitSequence"`
+	LastHitSequence                 int                   `json:"LastHitSequence"`
+	Message                         string                `json:"Message"`
+	RecommendedNextAction           string                `json:"RecommendedNextAction"`
+}
+
+type pausePointEditorState struct {
+	IsPlaying  bool   `json:"IsPlaying"`
+	IsPaused   bool   `json:"IsPaused"`
+	CapturedAt string `json:"CapturedAt"`
 }
 
 type pausePointWaitState string
@@ -182,7 +191,11 @@ func runWaitForPausePoint(
 		var payload any = response
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
 		if logsErr == nil {
-			payload = pausePointWaitResult{pausePointStatusResponse: response, MatchingLogs: logs}
+			payload = pausePointWaitResult{
+				pausePointStatusResponse: response,
+				MatchingLogs:             logs.Logs,
+				EvidenceSummary:          buildPausePointEvidenceSummary(response, logs),
+			}
 		}
 		result, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
@@ -206,7 +219,8 @@ func runWaitForPausePoint(
 		// Best-effort: the timeout diagnosis must not depend on a second Unity round trip succeeding.
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
 		if logsErr == nil {
-			waitErr.Details["MatchingLogs"] = logs
+			waitErr.Details["MatchingLogs"] = logs.Logs
+			waitErr.Details["EvidenceSummary"] = buildPausePointEvidenceSummary(response, logs)
 		}
 	}
 	writeErrorEnvelope(stderr, waitErr)

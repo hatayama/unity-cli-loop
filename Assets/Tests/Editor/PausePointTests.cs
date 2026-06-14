@@ -68,8 +68,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Hit));
             Assert.That(snapshot.IsHit, Is.True);
             Assert.That(snapshot.IsEnabled, Is.False);
-            Assert.That(snapshot.IsPaused, Is.True);
+            Assert.That(snapshot.EditorState.IsPaused, Is.True);
+            Assert.That(snapshot.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.PausePointHit));
             Assert.That(snapshot.HitCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Pause_WhenPausePointIsEnabled_RecordsHitEvidence()
+        {
+            // Verifies a hit snapshot includes stable timing and sequence evidence.
+            UloopPausePointRegistry.Enable("jump", 30);
+            _nowUtc = _nowUtc.AddMilliseconds(125);
+
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.FirstHitAtUtc, Is.EqualTo("2026-06-03T00:00:00.1250000Z"));
+            Assert.That(snapshot.LastHitAtUtc, Is.EqualTo("2026-06-03T00:00:00.1250000Z"));
+            Assert.That(snapshot.FirstHitSequence, Is.EqualTo(1));
+            Assert.That(snapshot.LastHitSequence, Is.EqualTo(1));
         }
 
         [Test]
@@ -162,6 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.RemainingMilliseconds, Is.EqualTo(29750));
             Assert.That(snapshot.Generation, Is.EqualTo(1));
             Assert.That(snapshot.Expired, Is.False);
+            Assert.That(snapshot.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.Current));
         }
 
         [Test]
@@ -238,6 +256,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.ClearedCount, Is.EqualTo(0));
+            Assert.That(response.EditorState.IsPlaying, Is.True);
+            Assert.That(response.EditorState.IsPaused, Is.False);
+            Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.ClearAll));
             Assert.That(response.Message, Is.EqualTo("No active pause points to clear."));
         }
 
@@ -251,6 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.RemainingMilliseconds, Is.EqualTo(30000));
             Assert.That(response.Generation, Is.EqualTo(1));
             Assert.That(response.Expired, Is.False);
+            Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.Current));
             Assert.That(response.RecommendedNextAction, Is.Empty);
         }
 
@@ -271,6 +293,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.EnabledAtUtc, Is.EqualTo("2026-06-03T00:00:00.0000000Z"));
             Assert.That(response.RemainingMilliseconds, Is.EqualTo(0));
             Assert.That(response.Generation, Is.EqualTo(1));
+            Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.Current));
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo("Clear this marker, then re-enable it with the same Id and TimeoutSeconds values."));

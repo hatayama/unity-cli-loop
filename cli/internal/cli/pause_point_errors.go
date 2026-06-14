@@ -67,10 +67,10 @@ const (
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,
 // because timeouts are where agents struggle to tell a missed code path from Editor state.
 func pausePointTimeoutHint(response pausePointStatusResponse) string {
-	if !response.IsPlaying {
+	if !response.EditorState.IsPlaying {
 		return pausePointHintPlayModeNotRunning
 	}
-	if response.IsPaused {
+	if response.EditorState.IsPaused {
 		return pausePointHintEditorAlreadyPaused
 	}
 	if response.HitCount == 0 && response.Status == pausePointStatusEnabled {
@@ -83,10 +83,10 @@ func pausePointTimeoutHint(response pausePointStatusResponse) string {
 // whose enable window ends before the wait deadline surfaces as PAUSE_POINT_EXPIRED instead
 // of a timeout and would otherwise carry no hint at all.
 func pausePointExpiredHint(response pausePointStatusResponse) string {
-	if !response.IsPlaying {
+	if !response.EditorState.IsPlaying {
 		return pausePointHintPlayModeNotRunning
 	}
-	if response.IsPaused {
+	if response.EditorState.IsPaused {
 		return pausePointHintEditorAlreadyPaused
 	}
 	if response.HitCount == 0 {
@@ -114,7 +114,7 @@ func pausePointStateError(
 		NextActions: []string{
 			"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
 			"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
-			"Check `details.status`, `details.isPlaying`, `details.isPaused`, `details.elapsedSinceEnabledMilliseconds`, and `details.remainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+			"Check `details.status`, `details.editorState`, `details.elapsedSinceEnabledMilliseconds`, and `details.remainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
 			"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
 		},
 		Details: map[string]any{
@@ -126,8 +126,7 @@ func pausePointStateError(
 			"enabledAtUtc":                    response.EnabledAtUtc,
 			"elapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
 			"generation":                      response.Generation,
-			"isPlaying":                       response.IsPlaying,
-			"isPaused":                        response.IsPaused,
+			"editorState":                     response.EditorState,
 			"remainingMilliseconds":           pausePointRemainingMilliseconds(options, response),
 			"markerMessage":                   response.Message,
 			"recommendedNextAction":           response.RecommendedNextAction,
