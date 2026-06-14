@@ -48,10 +48,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            if (Volatile.Read(ref _reloadSignalObserved))
+            {
+                return true;
+            }
+
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             if (ShouldRequestWait(
                     _parameters,
                     EditorApplication.isCompiling,
-                    Volatile.Read(ref _reloadSignalObserved)))
+                    reloadSignalObserved: Volatile.Read(ref _reloadSignalObserved)))
             {
                 return true;
             }

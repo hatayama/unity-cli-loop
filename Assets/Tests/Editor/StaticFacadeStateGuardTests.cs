@@ -164,6 +164,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ScreenshotUseCase_WhenWindowCaptureTimesOut_PreservesPartialScreenshots()
+        {
+            // Tests that window capture timeout results keep screenshots already written to disk.
+            string source = ReadSourceFile("Packages/src/Editor/FirstPartyTools/Screenshot/ScreenshotUseCase.cs");
+
+            Assert.That(source, Does.Contain("return CreateTimedOutResult(\"EditorWindow capture\", correlationId, screenshots);"));
+            Assert.That(source, Does.Contain("Screenshots = screenshots,"));
+        }
+
+        [Test]
+        public void DynamicCodeDomainReloadWaitSignal_WhenCheckingCompileState_SwitchesToMainThreadFirst()
+        {
+            // Tests that timeout continuations do not read UnityEditor compile state off the editor thread.
+            string source = ReadSourceFile(
+                "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeDomainReloadWaitSignal.cs");
+            int methodIndex = source.IndexOf(
+                "public async Task<bool> ShouldWaitAsync(CancellationToken ct)",
+                System.StringComparison.Ordinal);
+            int mainThreadSwitchIndex = source.IndexOf(
+                "await MainThreadSwitcher.SwitchToMainThread(ct);",
+                methodIndex,
+                System.StringComparison.Ordinal);
+            int editorCompilingIndex = source.IndexOf(
+                "EditorApplication.isCompiling",
+                methodIndex,
+                System.StringComparison.Ordinal);
+
+            Assert.That(methodIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(mainThreadSwitchIndex, Is.GreaterThan(methodIndex));
+            Assert.That(editorCompilingIndex, Is.GreaterThan(mainThreadSwitchIndex));
+        }
+
+        [Test]
         public void SimulateMouseUiUseCase_WhenReturningAfterTimeout_UsesCapturedUnityObjectState()
         {
             // Tests that timeout result branches use plain captured bools instead of UnityEngine.Object null checks.

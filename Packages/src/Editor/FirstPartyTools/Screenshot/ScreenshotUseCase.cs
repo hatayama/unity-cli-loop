@@ -99,7 +99,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ct).ConfigureAwait(false);
                     if (!overlayFramesReady)
                     {
-                        return CreateTimedOutResult("annotation overlay render", correlationId);
+                        return CreateTimedOutResult(
+                            "annotation overlay render",
+                            correlationId,
+                            new List<UnityCliLoopScreenshotInfo>());
                     }
 
                     await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -111,7 +114,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ct).ConfigureAwait(false);
                 if (timedOut)
                 {
-                    return CreateTimedOutResult("GameView rendering capture", correlationId);
+                    return CreateTimedOutResult(
+                        "GameView rendering capture",
+                        correlationId,
+                        new List<UnityCliLoopScreenshotInfo>());
                 }
 
                 await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -217,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ct).ConfigureAwait(false);
                 if (timedOut)
                 {
-                    return CreateTimedOutResult("EditorWindow capture", correlationId);
+                    return CreateTimedOutResult("EditorWindow capture", correlationId, screenshots);
                 }
 
                 await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -277,7 +283,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new UnityCliLoopScreenshotResult { Screenshots = screenshots };
         }
 
-        private static UnityCliLoopScreenshotResult CreateTimedOutResult(string waitName, string correlationId)
+        private static UnityCliLoopScreenshotResult CreateTimedOutResult(
+            string waitName,
+            string correlationId,
+            List<UnityCliLoopScreenshotInfo> screenshots)
         {
             string message =
                 $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for {waitName} frames.";
@@ -292,6 +301,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 TimedOut = true,
                 Message = message,
+                Screenshots = screenshots,
             };
         }
 
