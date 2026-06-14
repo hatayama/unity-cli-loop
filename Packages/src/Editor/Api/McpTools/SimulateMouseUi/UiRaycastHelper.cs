@@ -73,6 +73,7 @@ namespace io.github.hatayama.uLoopMCP
                     {
                         gameObject = graphic.gameObject,
                         module = raycaster,
+                        screenPosition = canvasPosition,
                         sortingLayer = canvas.sortingLayerID,
                         sortingOrder = canvas.sortingOrder,
                         depth = graphic.depth
@@ -110,11 +111,6 @@ namespace io.github.hatayama.uLoopMCP
             return graphic.Raycast(canvasPosition, null);
         }
 
-        private static bool IsGraphicRaycast(RaycastResult raycastResult)
-        {
-            return raycastResult.module is GraphicRaycaster;
-        }
-
         private static bool ShouldPreferCanvasSpaceHit(RaycastResult canvasSpaceHit, RaycastResult eventSystemHit)
         {
             if (!IsGraphicRaycast(canvasSpaceHit))
@@ -130,27 +126,26 @@ namespace io.github.hatayama.uLoopMCP
             return CompareRaycastPriority(canvasSpaceHit, eventSystemHit) > 0;
         }
 
+        private static bool IsGraphicRaycast(RaycastResult raycastResult)
+        {
+            return raycastResult.module is GraphicRaycaster;
+        }
+
         private static int CompareRaycastPriority(RaycastResult left, RaycastResult right)
         {
-            int sortOrderPriority = Compare(
-                GetSortOrderPriority(left),
-                GetSortOrderPriority(right));
+            int sortOrderPriority = Compare(GetSortOrderPriority(left), GetSortOrderPriority(right));
             if (sortOrderPriority != 0)
             {
                 return sortOrderPriority;
             }
 
-            int renderOrderPriority = Compare(
-                GetRenderOrderPriority(left),
-                GetRenderOrderPriority(right));
+            int renderOrderPriority = Compare(GetRenderOrderPriority(left), GetRenderOrderPriority(right));
             if (renderOrderPriority != 0)
             {
                 return renderOrderPriority;
             }
 
-            int sortingLayer = Compare(
-                GetSortingLayerValue(left),
-                GetSortingLayerValue(right));
+            int sortingLayer = Compare(GetSortingLayerValue(left), GetSortingLayerValue(right));
             if (sortingLayer != 0)
             {
                 return sortingLayer;
