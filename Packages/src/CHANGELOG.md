@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.9](https://github.com/hatayama/unity-cli-loop/compare/v2.1.8...v2.1.9) (2026-06-14)
+
+
+### Bug Fixes
+
+* Respect UI raycast priority in simulate-mouse-ui ([#1318](https://github.com/hatayama/unity-cli-loop/issues/1318)) ([acb40a6](https://github.com/hatayama/unity-cli-loop/commit/acb40a68a0e4723148892e961c3aeb95ddd32f90))
+
 ## [2.1.8](https://github.com/hatayama/unity-cli-loop/compare/v2.1.7...v2.1.8) (2026-06-12)
 
 
