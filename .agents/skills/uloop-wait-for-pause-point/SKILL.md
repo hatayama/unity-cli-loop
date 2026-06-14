@@ -32,8 +32,12 @@ uloop wait-for-pause-point --id state-transition-applied --timeout-seconds 30
 
 The hit response always embeds the log entries matching the marker id as `MatchingLogs` (`--matching-logs-max-count` adjusts the limit, default 10), so a separate `get-logs` call while paused is unnecessary. Log embedding is always on; there is no opt-in flag, and a `--include-matching-logs` option no longer exists. An empty `MatchingLogs` array means the fetch succeeded and no matching log exists; if the field is absent, the log fetch itself failed, so fall back to `uloop get-logs --search-text state-transition-applied --max-count 20` while paused.
 
+Read `EvidenceSummary` first when it is present. It groups `EditorState`, pause point hit metadata, matching-log counts, truncation status, and warnings so you can tell whether the evidence is a single clean hit or needs closer inspection. `EditorState.CapturedAt` names when the Unity Editor play/pause state was observed, such as `PausePointHit`, `Current`, or `ClearAll`.
+
+Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time.
+
 5. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
-6. Clear the marker with `uloop clear-pause-point --id state-transition-applied` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios.
+6. Clear the marker with `uloop clear-pause-point --id state-transition-applied` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios. The clear response's `EditorState` describes Unity Editor play/pause state, not marker state.
 
 ## When To Use
 
@@ -48,7 +52,7 @@ The hit response always embeds the log entries matching the marker id as `Matchi
 
 ## Timeout Checks
 
-If this command times out, the marker line was not reached while the command waited. Read `error.details.hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A `PAUSE_POINT_EXPIRED` error carries the same hint: it means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first, so re-enable the marker with a longer timeout. Then inspect `error.details.status`, `hitCount`, `isPlaying`, `isPaused`, `elapsedSinceEnabledMilliseconds`, and `remainingMilliseconds` to distinguish input not being consumed, runtime conditions not being met, an id mismatch, or Unity already being paused. `error.details.MatchingLogs` shows whether the marker's focused log ever appeared. `elapsedSinceEnabledMilliseconds` is measured from `enable-pause-point`, not from `wait-for-pause-point`.
+If this command times out, the marker line was not reached while the command waited. Read `error.details.hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A `PAUSE_POINT_EXPIRED` error carries the same hint and shell-neutral `error.details.recommendedNextAction`: it means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first, so clear and re-enable the marker using the returned `id` and `timeoutSeconds`. Then inspect `error.details.status`, `hitCount`, `generation`, `enabledAtUtc`, `editorState`, `elapsedSinceEnabledMilliseconds`, and `remainingMilliseconds` to distinguish input not being consumed, stale evidence from an older marker generation, runtime conditions not being met, an id mismatch, or Unity already being paused. On `PAUSE_POINT_WAIT_TIMEOUT`, `error.details.MatchingLogs` and `error.details.EvidenceSummary` show whether the marker's focused log ever appeared. `elapsedSinceEnabledMilliseconds` is measured from `enable-pause-point`, not from `wait-for-pause-point`.
 
 Use `uloop pause-point-status --id state-transition-applied` only when you need to confirm the marker is armed or inspect the current hit state. Add focused debug logs before the marker when local variables must be captured.
 
