@@ -10,60 +10,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class UnityCliLoopSettingsWindowCliActionTests
     {
-        [TestCase(null, "3.0.0", true, false)]
-        [TestCase("2.9.0", "3.0.0", true, false)]
-        [TestCase("3.1.0", "3.0.0", true, true)]
-        [TestCase("3.0.0", "3.0.0", true, true)]
-        [TestCase("3.0.0", "3.0.0", false, false)]
+        [TestCase(null, null, true, false)]
+        [TestCase("2.9.0", null, true, false)]
+        [TestCase("3.1.0", 1, true, true)]
+        [TestCase("3.1.0", 2, true, false)]
+        [TestCase("3.0.0", 1, true, true)]
+        [TestCase("3.0.0", 1, false, false)]
         public void ShouldUninstallCliFromPrimaryButton_ReturnsExpectedAction(
             string cliVersion,
-            string requiredCliVersion,
+            int? cliProtocolVersion,
             bool canUninstallCli,
             bool expected)
         {
-            // Verifies that package-owned installs route to uninstall when the CLI satisfies the package minimum.
+            // Verifies that package-owned installs route to uninstall only when the CLI protocol matches the package.
             bool result = UnityCliLoopSettingsWindow.ShouldUninstallCliFromPrimaryButton(
                 cliVersion,
-                requiredCliVersion,
+                cliProtocolVersion,
                 canUninstallCli);
 
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(false, false, false)]
-        [TestCase(true, false, true)]
-        [TestCase(true, true, false)]
+        [TestCase(false, false, false, false)]
+        [TestCase(true, false, false, true)]
+        [TestCase(true, true, false, false)]
+        [TestCase(true, false, true, false)]
         public void ShouldRepairCliPathFromPrimaryButton_ReturnsExpectedAction(
             bool needsCliPathSetup,
             bool needsUpdate,
+            bool needsDowngrade,
             bool expected)
         {
-            // Verifies that stale terminal PATH state routes to repair only when install/update is not needed.
+            // Verifies that stale terminal PATH state routes to repair only when CLI replacement is not needed.
             bool result = UnityCliLoopSettingsWindow.ShouldRepairCliPathFromPrimaryButton(
                 needsCliPathSetup,
-                needsUpdate);
+                needsUpdate,
+                needsDowngrade);
 
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(true, "3.0.0", "3.0.0", true, "RepairPath")]
-        [TestCase(true, "2.9.0", "3.0.0", true, "InstallOrUpdate")]
-        [TestCase(false, "3.0.0", "3.0.0", true, "Uninstall")]
-        [TestCase(false, "2.9.0", "3.0.0", true, "InstallOrUpdate")]
-        [TestCase(false, null, "3.0.0", true, "InstallOrUpdate")]
+        [TestCase(true, "3.0.0", 1, true, "RepairPath")]
+        [TestCase(true, "2.9.0", null, true, "InstallOrUpdate")]
+        [TestCase(true, "3.1.0", 1, true, "RepairPath")]
+        [TestCase(true, "3.1.0", 2, true, "InstallOrUpdate")]
+        [TestCase(false, "3.0.0", 1, true, "Uninstall")]
+        [TestCase(false, "2.9.0", null, true, "InstallOrUpdate")]
+        [TestCase(false, "3.1.0", 1, true, "Uninstall")]
+        [TestCase(false, "3.1.0", 2, true, "InstallOrUpdate")]
+        [TestCase(false, null, null, true, "InstallOrUpdate")]
         public void ResolveCliPrimaryButtonAction_ReturnsClickedPrimaryAction(
             bool needsCliPathSetup,
             string cliVersion,
-            string requiredCliVersion,
+            int? cliProtocolVersion,
             bool canUninstallCli,
             string expected)
         {
-            // Verifies that the Settings window preserves the primary action chosen before refresh.
+            // Verifies that the Settings window chooses repair only when protocol replacement is unnecessary.
             UnityCliLoopSettingsWindow.CliPrimaryButtonAction result =
                 UnityCliLoopSettingsWindow.ResolveCliPrimaryButtonAction(
                     needsCliPathSetup,
                     cliVersion,
-                    requiredCliVersion,
+                    cliProtocolVersion,
                     canUninstallCli);
 
             Assert.That(result.ToString(), Is.EqualTo(expected));
@@ -107,16 +115,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase("3.0.0-beta.0", "3.0.0-beta.1", true)]
-        [TestCase("3.0.0-beta.1", "3.0.0-beta.1", false)]
-        [TestCase("3.0.0", "3.0.0-beta.1", false)]
-        public void IsCliUpdateNeeded_UsesMinimumRequiredCliVersion(
+        [TestCase(null, null, false)]
+        [TestCase("3.0.0-beta.32", 1, false)]
+        [TestCase("3.0.0-beta.0", null, true)]
+        [TestCase("3.0.0-beta.0", 0, true)]
+        [TestCase("3.0.0-beta.0", 2, false)]
+        public void IsCliUpdateNeeded_UsesProtocolVersion(
             string cliVersion,
-            string requiredCliVersion,
+            int? cliProtocolVersion,
             bool expected)
         {
-            // Verifies that the settings UI ignores package version drift and only updates old CLIs.
-            bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, requiredCliVersion);
+            // Verifies that the settings UI updates missing or older CLI protocol generations.
+            bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, cliProtocolVersion);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
+        [TestCase(null, false)]
+        [TestCase(0, false)]
+        [TestCase(1, false)]
+        [TestCase(2, true)]
+        public void IsCliDowngradeNeeded_UsesProtocolVersion(
+            int? cliProtocolVersion,
+            bool expected)
+        {
+            // Verifies that the settings UI replaces CLIs newer than the package protocol generation.
+            bool result = UnityCliLoopSettingsWindow.IsCliDowngradeNeeded(cliProtocolVersion);
 
             Assert.That(result, Is.EqualTo(expected));
         }

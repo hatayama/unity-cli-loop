@@ -40,6 +40,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
+        [TestCase("3.0.0-beta.2", "3.0.0-beta.1", true)]
+        [TestCase("3.0.0-beta.1", "3.0.0-beta.1", false)]
+        [TestCase("3.0.0-beta.0", "3.0.0-beta.1", false)]
+        public void IsVersionGreaterThan_ReturnsExpectedResult(
+            string leftVersion,
+            string rightVersion,
+            bool expected)
+        {
+            // Verifies strict greater-than comparison for CLI setup downgrade detection.
+            bool result = CliVersionComparer.IsVersionGreaterThan(leftVersion, rightVersion);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
+        [TestCase("3.0.0-beta.1", "3.0.0-beta.1", true)]
+        [TestCase("v3.0.0-beta.1", "3.0.0-beta.1", true)]
+        [TestCase("3.0.0-beta.2", "3.0.0-beta.1", false)]
+        public void IsVersionEqual_ReturnsExpectedResult(
+            string leftVersion,
+            string rightVersion,
+            bool expected)
+        {
+            // Verifies semantic equality comparison for CLI setup exact-match detection.
+            bool result = CliVersionComparer.IsVersionEqual(leftVersion, rightVersion);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
         [Test]
         public void IsVersionGreaterThanOrEqual_WhenVersionIsInvalid_ReturnsFalse()
         {

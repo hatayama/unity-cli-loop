@@ -474,20 +474,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldShow, Is.True);
         }
 
-        [TestCase(false, false, false, false, false, null, "3.0.0", "Install CLI")]
-        [TestCase(false, false, false, false, true, null, "3.0.0", "Fix PATH")]
-        [TestCase(true, false, false, false, false, "3.0.0", "3.0.0", "Installed")]
-        [TestCase(true, false, false, false, true, "3.0.0", "3.0.0", "Fix PATH")]
-        [TestCase(true, false, false, true, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
-        [TestCase(true, false, false, true, true, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
-        [TestCase(true, true, false, false, false, "3.0.0", "3.0.0", "Installing...")]
-        [TestCase(true, true, false, false, true, "3.0.0", "3.0.0", "Fixing PATH...")]
-        [TestCase(false, false, true, false, false, null, "3.0.0", "Checking...")]
+        [TestCase(false, false, false, false, false, false, null, "3.0.0", "Install CLI")]
+        [TestCase(false, false, false, false, false, true, null, "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, false, false, false, "3.0.0", "3.0.0", "Installed")]
+        [TestCase(true, false, false, false, false, true, "3.0.0", "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, true, false, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, false, false, true, false, true, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, false, false, false, true, false, "3.1.0", "3.0.0", "Downgrade CLI (v3.1.0 \u2192 v3.0.0)")]
+        [TestCase(true, true, false, false, false, false, "3.0.0", "3.0.0", "Installing...")]
+        [TestCase(true, true, false, false, false, true, "3.0.0", "3.0.0", "Fixing PATH...")]
+        [TestCase(true, true, false, false, true, true, "3.1.0", "3.0.0", "Installing...")]
+        [TestCase(false, false, true, false, false, false, null, "3.0.0", "Checking...")]
         public void GetCliButtonTextForSetupWizard_ReturnsExpectedLabel(
             bool cliInstalled,
             bool isInstallingCli,
             bool isChecking,
             bool needsUpdate,
+            bool needsDowngrade,
             bool needsCliPathSetup,
             string cliVersion,
             string requiredCliVersion,
@@ -498,6 +501,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isInstallingCli,
                 isChecking,
                 needsUpdate,
+                needsDowngrade,
                 needsCliPathSetup,
                 cliVersion,
                 requiredCliVersion);
@@ -529,18 +533,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }
 
-        [TestCase(false, false, false)]
-        [TestCase(true, false, true)]
-        [TestCase(true, true, false)]
+        [TestCase(false, false, false, false)]
+        [TestCase(true, false, false, true)]
+        [TestCase(true, true, false, false)]
+        [TestCase(true, false, true, false)]
         public void ShouldRepairCliPathFromPrimaryButton_ReturnsExpectedAction(
             bool needsCliPathSetup,
             bool needsUpdate,
+            bool needsDowngrade,
             bool expected)
         {
             // Verifies that setup wizard chooses PATH repair only after the CLI version is already usable.
             bool result = SetupWizardWindow.ShouldRepairCliPathFromPrimaryButton(
                 needsCliPathSetup,
-                needsUpdate);
+                needsUpdate,
+                needsDowngrade);
 
             Assert.That(result, Is.EqualTo(expected));
         }

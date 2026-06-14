@@ -18,6 +18,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public string ClientCliVersion { get; set; }
 
+        /// <summary>
+        /// IPC protocol generation the client speaks. Null when the client predates the
+        /// protocol handshake or sent a malformed value; both must fail the compatibility gate.
+        /// </summary>
+        public int? ClientProtocolVersion { get; set; }
+
         public bool AcceptsDispatchAck { get; set; }
 
         public bool AcceptsHeartbeat { get; set; }

@@ -10,11 +10,36 @@ Comments in the code, commit messages, PR titles, and PR descriptions must all b
 
 Every test method must have a short comment that states what behavior the test verifies.
 
-## Commit-Time Version Checks
+## CLI / Unity Package Compatibility
 
-Before committing a C# package version bump, check whether `CliConstants.MINIMUM_REQUIRED_CLI_VERSION` must also change.
-If the package release depends on behavior from a newer native CLI contract, update the minimum required CLI version and add or update focused tests.
-If the minimum CLI version stays unchanged, make sure that decision is intentional before committing.
+Runtime compatibility between the Unity package and the native CLI is gated on an integer
+protocol version, not on release numbers. Two declarations must always stay equal:
+
+- Go side: `protocolVersion` in `cli/contract.json` (the generation the CLI advertises over IPC).
+- C# side: `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` (the exact generation the package accepts).
+
+`TestProtocolVersionMatchesUnityPackage` fails the build if they diverge, so never bump one alone.
+The runtime gate expects equality because the protocol version is a contract generation, not a
+minimum-compatible range.
+Pull request CI also runs a non-blocking IPC protocol reminder when IPC-facing files changed
+without protocol declaration changes; treat it as a review prompt, not as proof that a bump is
+required.
+
+Bump both, together, in the same PR only when the IPC contract changes in a way that makes
+CLI and package builds from different protocol generations unable to interoperate — for example renaming
+or removing a request field, changing the readiness/dispatch handshake, or altering a response
+shape the other side parses. Ordinary CLI features and bug fixes that keep the wire format
+compatible must not bump it.
+
+Do not touch the protocol version to "keep up with releases":
+
+- `cli/contract.json` `cliVersion` and `cli/internal/tools/default-tools.json` `version` are
+  stamped by release-please only. Never edit them by hand in a feature PR.
+- `CliConstants.MINIMUM_REQUIRED_CLI_VERSION` is the release that setup installs. It must always
+  point at a published CLI release, so it advances after a release, never inside a feature PR.
+- Runtime protocol mismatch guidance must not pin updates to `MINIMUM_REQUIRED_CLI_VERSION`; that
+  value may be older than the protocol the package now requires. Use the unpinned CLI update path
+  for older clients and tell newer clients to align the package and CLI releases.
 
 ## Generated Skill Files
 

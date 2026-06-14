@@ -10,7 +10,10 @@ import (
 	"github.com/hatayama/unity-cli-loop/cli/internal/tools"
 )
 
-var version = clicontract.Current.CliVersion
+var (
+	version         = clicontract.Current.CliVersion
+	protocolVersion = clicontract.Current.ProtocolVersion
+)
 
 const (
 	cacheDirectoryName                     = tools.CacheDirectoryName

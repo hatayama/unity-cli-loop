@@ -354,16 +354,27 @@ func cliUpdateRequiredError(rpcErr *unityipc.RPCError, details map[string]any, d
 
 func cliUpdateRequiredNextActions(data map[string]any) []string {
 	updateCommand, _ := data["updateCommand"].(string)
-	targetCommand, _ := data["targetUpdateCommand"].(string)
 	actions := []string{}
 	if updateCommand != "" {
 		actions = append(actions, "Run `"+updateCommand+"`.")
+	} else if cliProtocolMismatchIsNewer(data) {
+		actions = append(actions, "Update the Unity package to a version that supports this CLI protocol, or install the CLI from the same release as the package.")
+	} else {
+		actions = append(actions, "Install matching uloop CLI and Unity package versions.")
 	}
-	if targetCommand != "" && targetCommand != updateCommand {
-		actions = append(actions, "If your CLI supports exact updates, run `"+targetCommand+"` instead.")
-	}
-	actions = append(actions, "Retry the original command after the update completes.")
+	actions = append(actions, "Retry the original command after the versions match.")
 	return actions
+}
+
+func cliProtocolMismatchIsNewer(data map[string]any) bool {
+	currentProtocolVersion, currentOk := protocolVersionFromRPCData(data, "currentProtocolVersion")
+	requiredProtocolVersion, requiredOk := protocolVersionFromRPCData(data, "requiredProtocolVersion")
+	return currentOk && requiredOk && currentProtocolVersion > requiredProtocolVersion
+}
+
+func protocolVersionFromRPCData(data map[string]any, key string) (float64, bool) {
+	value, ok := data[key].(float64)
+	return value, ok
 }
 
 func disconnectedAfterAcceptError(err error, context errorContext) cliError {

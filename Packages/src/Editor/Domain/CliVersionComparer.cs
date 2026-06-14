@@ -13,9 +13,19 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return TryCompareCliVersions(leftVersion, rightVersion, out int comparison) && comparison < 0;
         }
 
+        public static bool IsVersionGreaterThan(string leftVersion, string rightVersion)
+        {
+            return TryCompareCliVersions(leftVersion, rightVersion, out int comparison) && comparison > 0;
+        }
+
         public static bool IsVersionGreaterThanOrEqual(string leftVersion, string rightVersion)
         {
             return TryCompareCliVersions(leftVersion, rightVersion, out int comparison) && comparison >= 0;
+        }
+
+        public static bool IsVersionEqual(string leftVersion, string rightVersion)
+        {
+            return TryCompareCliVersions(leftVersion, rightVersion, out int comparison) && comparison == 0;
         }
 
         internal static bool TryCompareCliVersions(
