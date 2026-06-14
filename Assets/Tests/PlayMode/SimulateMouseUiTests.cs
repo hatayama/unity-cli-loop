@@ -168,6 +168,70 @@ namespace Tests.PlayMode
             }
         }
 
+        // Verifies the real Physics2D raycaster path. Physics2DRaycaster cannot hit
+        // outside its camera pixelRect, so the test raises its priority instead of
+        // using the Screen-bounds clipping setup from the synthetic raycaster tests.
+        [UnityTest]
+        public IEnumerator Click_Should_PreferOverlayUiOverPhysics2DRaycastHit()
+        {
+            GameObject physicsRoot = new GameObject("Physics2DRaycasterRoot");
+
+            try
+            {
+                GameObject cameraGo = new GameObject("Physics2DCamera");
+                cameraGo.transform.SetParent(physicsRoot.transform, false);
+                cameraGo.transform.position = new Vector3(0f, 0f, -10f);
+                Camera physicsCamera = cameraGo.AddComponent<Camera>();
+                physicsCamera.orthographic = true;
+                physicsCamera.orthographicSize = 5f;
+                cameraGo.AddComponent<HighPriorityPhysics2DRaycaster>();
+
+                canvasGo.GetComponent<Canvas>().sortingOrder = 100;
+                ClickTracker overlayTracker = CreateClickableElement(
+                    "PhysicsOverlayTarget", Vector2.zero, new Vector2(200f, 100f));
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(overlayTracker.gameObject);
+                GameObject physicsTarget = new GameObject("Physics2DTarget");
+                physicsTarget.transform.SetParent(physicsRoot.transform, false);
+                physicsTarget.transform.position = GetWorldPointOnPhysicsPlane(physicsCamera, screenPos);
+                BoxCollider2D collider = physicsTarget.AddComponent<BoxCollider2D>();
+                collider.size = new Vector2(2f, 2f);
+                ClickTracker physicsTracker = physicsTarget.AddComponent<ClickTracker>();
+                yield return null;
+
+                PointerEventData pointerData = new PointerEventData(EventSystem.current)
+                {
+                    position = screenPos
+                };
+                List<RaycastResult> raycastResults = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(pointerData, raycastResults);
+
+                Assert.IsNotEmpty(raycastResults, "Setup: the Physics2D raycaster should hit.");
+                Assert.AreEqual(physicsTarget, raycastResults[0].gameObject,
+                    "Setup: EventSystem should expose the prioritized Physics2D hit first.");
+                Assert.IsTrue(
+                    raycastResults.Exists(result => result.gameObject == overlayTracker.gameObject),
+                    "Setup: overlay UI should also be a normal EventSystem hit.");
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(overlayTracker.PointerClickCalled, "Overlay UI should receive the click");
+                Assert.IsFalse(physicsTracker.PointerClickCalled, "Physics2D target behind overlay UI should not receive the click");
+                Assert.AreEqual("PhysicsOverlayTarget", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(physicsRoot);
+            }
+        }
+
         // Forces the remaining ordering shape from issue 1317: EventSystem reports a
         // lower-priority GraphicRaycaster hit while the front overlay is clipped from
         // EventSystem results, so the tool must compare the Canvas-space candidate.
@@ -737,6 +801,14 @@ namespace Tests.PlayMode
             return (Vector2)go.GetComponent<RectTransform>().position;
         }
 
+        private Vector3 GetWorldPointOnPhysicsPlane(Camera physicsCamera, Vector2 screenPos)
+        {
+            Vector3 screenPoint = new Vector3(screenPos.x, screenPos.y, -physicsCamera.transform.position.z);
+            Vector3 worldPoint = physicsCamera.ScreenToWorldPoint(screenPoint);
+            worldPoint.z = 0f;
+            return worldPoint;
+        }
+
         // simulate-mouse uses top-left origin; Unity screen space uses bottom-left origin
         private Vector2 ScreenToInput(Vector2 screenPos)
         {
@@ -818,6 +890,12 @@ namespace Tests.PlayMode
                 depth = 0
             });
         }
+    }
+
+    public class HighPriorityPhysics2DRaycaster : Physics2DRaycaster
+    {
+        public override int sortOrderPriority => int.MaxValue;
+        public override int renderOrderPriority => int.MaxValue;
     }
 
     public class ClickTracker : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler
