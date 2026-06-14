@@ -2,9 +2,58 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
+
+// Verifies shared readiness waits keep the shorter non-launch timeout.
+func TestWaitForToolReadinessUsesDefaultTimeout(t *testing.T) {
+	originalProbe := probeToolReadinessSequenceForReadiness
+	probeToolReadinessSequenceForReadiness = func(ctx context.Context, projectRoot string) error {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("readiness probe context should have a deadline")
+		}
+		remaining := time.Until(deadline)
+		if remaining < toolReadinessTimeout-time.Second || remaining > toolReadinessTimeout {
+			t.Fatalf("readiness timeout mismatch: %s", remaining)
+		}
+		return nil
+	}
+	t.Cleanup(func() {
+		probeToolReadinessSequenceForReadiness = originalProbe
+	})
+
+	if err := waitForToolReadiness(context.Background(), t.TempDir()); err != nil {
+		t.Fatalf("waitForToolReadiness failed: %v", err)
+	}
+}
+
+// Verifies protocol mismatch responses surface immediately instead of waiting for readiness timeout.
+func TestWaitForToolReadinessReturnsCliUpdateRequiredImmediately(t *testing.T) {
+	originalProbe := probeToolReadinessSequenceForReadiness
+	expectedErr := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "The installed uloop CLI uses an IPC protocol that does not match this Unity package.",
+		Data:    json.RawMessage(`{"type":"cli_update_required"}`),
+	}
+	probeToolReadinessSequenceForReadiness = func(context.Context, string) error {
+		return expectedErr
+	}
+	t.Cleanup(func() {
+		probeToolReadinessSequenceForReadiness = originalProbe
+	})
+
+	err := waitForToolReadinessWithTimeout(context.Background(), t.TempDir(), time.Hour)
+
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected cli update error, got %v", err)
+	}
+}
 
 // Verifies that parent cancellation is preserved instead of being reported as a timeout.
 func TestToolReadinessDoneErrorPropagatesParentCancellation(t *testing.T) {

@@ -17,13 +17,16 @@ import (
 )
 
 const (
-	launchCommandName       = "launch"
-	launchLockfilePoll      = 100 * time.Millisecond
-	launchLockfileTimeout   = 5 * time.Second
-	projectVersionFilePath  = "ProjectSettings/ProjectVersion.txt"
-	recoveryDirectoryPath   = "Assets/_Recovery"
-	launchTempDirectoryName = "Temp"
-	unityLockfileName       = "UnityLockfile"
+	launchCommandName        = "launch"
+	launchLockfilePoll       = 100 * time.Millisecond
+	launchLockfileTimeout    = 5 * time.Second
+	launchProcessExitPoll    = 100 * time.Millisecond
+	launchProcessExitTimeout = 20 * time.Second
+	launchReadinessTimeout   = 10 * time.Minute
+	projectVersionFilePath   = "ProjectSettings/ProjectVersion.txt"
+	recoveryDirectoryPath    = "Assets/_Recovery"
+	launchTempDirectoryName  = "Temp"
+	unityLockfileName        = "UnityLockfile"
 )
 
 var (
@@ -31,8 +34,9 @@ var (
 	focusUnityProcessForLaunch          = focusUnityProcess
 	killUnityProcessForLaunch           = killUnityProcess
 	resolveUnityExecutablePathForLaunch = resolveUnityExecutablePath
-	waitForUnityLockfileForLaunch       = waitForUnityLockfile
-	waitForToolReadinessForLaunch       = waitForToolReadiness
+	waitForUnityProcessExitForLaunch    = waitForUnityProcessExit
+	waitForUnityStartupMarkerForLaunch  = waitForUnityStartupMarkerOrTimeout
+	waitForToolReadinessForLaunch       = waitForToolReadinessWithTimeout
 	probeProjectIpcForLaunchFallback    = probeToolReadinessSequence
 )
 
@@ -214,7 +218,7 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 			spinner := newLaunchSpinner(stdout, stderr)
 			defer spinner.Stop()
 			writeLaunchReadinessWait(stdout, spinner)
-			if err := waitForToolReadinessForLaunch(ctx, projectRoot); err != nil {
+			if err := waitForLaunchReadiness(ctx, projectRoot); err != nil {
 				writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 				return 1
 			}
@@ -222,6 +226,10 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 			return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, runningProcess.pid)
 		}
 		if err := killUnityProcessForLaunch(runningProcess.pid); err != nil {
+			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+			return 1
+		}
+		if err := waitForUnityProcessExitForLaunch(ctx, projectRoot, runningProcess.pid, launchProcessExitPoll, launchProcessExitTimeout); err != nil {
 			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 			return 1
 		}
@@ -276,12 +284,12 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
-	if err := waitForUnityLockfileForLaunch(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
+	if err := waitForUnityStartupMarkerForLaunch(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForToolReadinessForLaunch(ctx, projectRoot); err != nil {
+	if err := waitForLaunchReadiness(ctx, projectRoot); err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
 	}
@@ -312,7 +320,44 @@ func cleanStaleUnityTemp(projectRoot string) (bool, error) {
 	return true, os.RemoveAll(filepath.Join(projectRoot, launchTempDirectoryName))
 }
 
-func waitForUnityLockfile(ctx context.Context, lockfilePath string, pollInterval time.Duration, timeout time.Duration) error {
+func waitForUnityProcessExit(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
+	timeoutContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	timeoutError := func() error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return launchProcessExitTimeoutError{
+			projectRoot: projectRoot,
+			pid:         pid,
+			timeout:     timeout,
+		}
+	}
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		runningProcess, err := findRunningUnityProcessForLaunch(timeoutContext, projectRoot)
+		if err != nil {
+			if timeoutContext.Err() != nil {
+				return timeoutError()
+			}
+			return err
+		}
+		if runningProcess == nil || runningProcess.pid != pid {
+			return nil
+		}
+
+		select {
+		case <-timeoutContext.Done():
+			return timeoutError()
+		case <-ticker.C:
+		}
+	}
+}
+
+func waitForUnityStartupMarkerOrTimeout(ctx context.Context, lockfilePath string, pollInterval time.Duration, timeout time.Duration) error {
 	timeoutContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
