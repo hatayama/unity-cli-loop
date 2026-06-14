@@ -8,6 +8,7 @@ using NUnit.Framework;
 using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -124,20 +125,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePoint.Pause("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(snapshot.Expired, Is.True);
+            Assert.That(snapshot.RemainingMilliseconds, Is.EqualTo(0));
+            Assert.That(
+                snapshot.RecommendedNextAction,
+                Is.EqualTo("Clear this marker, then re-enable it with the same Id and TimeoutSeconds values."));
             Assert.That(snapshot.IsEnabled, Is.False);
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
         }
 
         [Test]
-        public void GetStatus_WhenEnabled_ReportsElapsedSinceEnabledMilliseconds()
+        public void GetStatus_WhenExpiredIdContainsShellSyntax_ReturnsShellNeutralRecoveryAction()
         {
-            // Verifies elapsed time is named as time since the marker was enabled.
+            // Verifies recovery guidance does not embed shell syntax that differs between user environments.
+            UloopPausePointRegistry.Enable("jump && other-command", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump && other-command");
+
+            Assert.That(
+                snapshot.RecommendedNextAction,
+                Is.EqualTo("Clear this marker, then re-enable it with the same Id and TimeoutSeconds values."));
+        }
+
+        [Test]
+        public void GetStatus_WhenEnabled_ReportsTimingAndGenerationFields()
+        {
+            // Verifies status reports the marker lifetime and generation without making callers recompute it.
             UloopPausePointRegistry.Enable("jump", 30);
             _nowUtc = _nowUtc.AddMilliseconds(250);
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
+            Assert.That(snapshot.EnabledAtUtc, Is.EqualTo("2026-06-03T00:00:00.0000000Z"));
             Assert.That(snapshot.ElapsedSinceEnabledMilliseconds, Is.EqualTo(250));
+            Assert.That(snapshot.RemainingMilliseconds, Is.EqualTo(29750));
+            Assert.That(snapshot.Generation, Is.EqualTo(1));
+            Assert.That(snapshot.Expired, Is.False);
+        }
+
+        [Test]
+        public void Enable_WhenMarkerIsReenabled_IncrementsGeneration()
+        {
+            // Verifies callers can distinguish a fresh marker from stale status or log evidence with the same id.
+            UloopPausePointSnapshot firstSnapshot = UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointSnapshot secondSnapshot = UloopPausePointRegistry.Enable("jump", 30);
+
+            Assert.That(firstSnapshot.Generation, Is.EqualTo(1));
+            Assert.That(secondSnapshot.Generation, Is.EqualTo(2));
         }
 
         [Test]
@@ -204,6 +239,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.ClearedCount, Is.EqualTo(0));
             Assert.That(response.Message, Is.EqualTo("No active pause points to clear."));
+        }
+
+        [Test]
+        public async Task Enable_WhenMarkerCreated_ReturnsStateManagementFields()
+        {
+            // Verifies the public enable-pause-point tool exposes timing and generation fields from the registry.
+            PausePointResponse response = await EnablePausePointAsync("jump");
+
+            Assert.That(response.EnabledAtUtc, Is.EqualTo("2026-06-03T00:00:00.0000000Z"));
+            Assert.That(response.RemainingMilliseconds, Is.EqualTo(30000));
+            Assert.That(response.Generation, Is.EqualTo(1));
+            Assert.That(response.Expired, Is.False);
+            Assert.That(response.RecommendedNextAction, Is.Empty);
+        }
+
+        [Test]
+        public void PausePointStatusBridge_WhenMarkerExpired_ReturnsRecoveryAction()
+        {
+            // Verifies pause-point-status exposes enough data to re-arm an expired marker without guesswork.
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+            JObject parameters = new()
+            {
+                ["id"] = "jump"
+            };
+
+            PausePointStatusResponse response = PausePointStatusBridgeCommand.Execute(parameters);
+
+            Assert.That(response.Expired, Is.True);
+            Assert.That(response.EnabledAtUtc, Is.EqualTo("2026-06-03T00:00:00.0000000Z"));
+            Assert.That(response.RemainingMilliseconds, Is.EqualTo(0));
+            Assert.That(response.Generation, Is.EqualTo(1));
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo("Clear this marker, then re-enable it with the same Id and TimeoutSeconds values."));
         }
 
         [Test]
