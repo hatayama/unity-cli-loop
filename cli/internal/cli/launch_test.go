@@ -118,7 +118,7 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	// Verifies launch reports an explicit ready payload after Unity accepts tool requests.
 	originalFinder := findRunningUnityProcessForLaunch
 	originalResolver := resolveUnityExecutablePathForLaunch
-	originalLockfileWait := waitForUnityLockfileForLaunch
+	originalStartupMarkerWait := waitForUnityStartupMarkerForLaunch
 	originalReadinessWait := waitForToolReadinessForLaunch
 	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
 		return nil, nil
@@ -126,16 +126,16 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
 		return "/usr/bin/true", nil
 	}
-	waitForUnityLockfileForLaunch = func(context.Context, string, time.Duration, time.Duration) error {
+	waitForUnityStartupMarkerForLaunch = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string) error {
+	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
 		return nil
 	}
 	t.Cleanup(func() {
 		findRunningUnityProcessForLaunch = originalFinder
 		resolveUnityExecutablePathForLaunch = originalResolver
-		waitForUnityLockfileForLaunch = originalLockfileWait
+		waitForUnityStartupMarkerForLaunch = originalStartupMarkerWait
 		waitForToolReadinessForLaunch = originalReadinessWait
 	})
 
@@ -169,6 +169,44 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	}
 }
 
+func TestWaitForLaunchReadinessUsesLaunchTimeout(t *testing.T) {
+	// Verifies launch gets a longer startup window without changing shared readiness defaults.
+	originalReadinessWait := waitForToolReadinessForLaunch
+	var capturedTimeout time.Duration
+	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+		capturedTimeout = timeout
+		return nil
+	}
+	t.Cleanup(func() {
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+
+	if err := waitForLaunchReadiness(context.Background(), t.TempDir()); err != nil {
+		t.Fatalf("waitForLaunchReadiness failed: %v", err)
+	}
+	if capturedTimeout != launchReadinessTimeout {
+		t.Fatalf("launch readiness timeout mismatch: %s", capturedTimeout)
+	}
+}
+
+func TestWaitForLaunchReadinessWrapsStartupTimeout(t *testing.T) {
+	// Verifies launch timeout errors receive the launch-specific startup classification.
+	originalReadinessWait := waitForToolReadinessForLaunch
+	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+		return errors.New("timed out waiting for Unity tool readiness")
+	}
+	t.Cleanup(func() {
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+
+	err := waitForLaunchReadiness(context.Background(), t.TempDir())
+
+	var startupErr launchStartupTimeoutError
+	if !errors.As(err, &startupErr) {
+		t.Fatalf("expected launch startup timeout error, got %v", err)
+	}
+}
+
 func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) {
 	// Verifies launch reports machine-readable readiness when Unity was already running.
 	originalFinder := findRunningUnityProcessForLaunch
@@ -181,7 +219,7 @@ func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) 
 	focusUnityProcessForLaunch = func(context.Context, int) error {
 		return nil
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string) error {
+	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
 		readinessChecked = true
 		return nil
 	}
@@ -230,7 +268,7 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	originalKiller := killUnityProcessForLaunch
 	originalResolver := resolveUnityExecutablePathForLaunch
 	originalExitWait := waitForUnityProcessExitForLaunch
-	originalLockfileWait := waitForUnityLockfileForLaunch
+	originalStartupMarkerWait := waitForUnityStartupMarkerForLaunch
 	originalReadinessWait := waitForToolReadinessForLaunch
 	killedPid := 0
 	waitedPid := 0
@@ -248,10 +286,10 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
 		return "/usr/bin/true", nil
 	}
-	waitForUnityLockfileForLaunch = func(context.Context, string, time.Duration, time.Duration) error {
+	waitForUnityStartupMarkerForLaunch = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string) error {
+	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
 		return nil
 	}
 	t.Cleanup(func() {
@@ -259,7 +297,7 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 		killUnityProcessForLaunch = originalKiller
 		resolveUnityExecutablePathForLaunch = originalResolver
 		waitForUnityProcessExitForLaunch = originalExitWait
-		waitForUnityLockfileForLaunch = originalLockfileWait
+		waitForUnityStartupMarkerForLaunch = originalStartupMarkerWait
 		waitForToolReadinessForLaunch = originalReadinessWait
 	})
 
@@ -411,7 +449,7 @@ func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
 	focusUnityProcessForLaunch = func(context.Context, int) error {
 		return nil
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string) error {
+	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
 		return nil
 	}
 	t.Cleanup(func() {
@@ -461,7 +499,7 @@ func TestRunLaunchWritesExistingFocusFailureVibeLog(t *testing.T) {
 	focusUnityProcessForLaunch = func(context.Context, int) error {
 		return fmt.Errorf("activation denied")
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string) error {
+	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
 		return nil
 	}
 	t.Cleanup(func() {
@@ -541,13 +579,14 @@ func TestCleanStaleUnityTempDeletesTempWhenLockfileExists(t *testing.T) {
 	}
 }
 
-func TestWaitForUnityLockfileReturnsAfterLockfileAppears(t *testing.T) {
+func TestWaitForUnityStartupMarkerReturnsAfterLockfileAppears(t *testing.T) {
+	// Verifies the startup marker wait returns as soon as Unity creates the lockfile.
 	projectRoot := createLaunchTestProject(t)
 	lockfilePath := unityLockfilePath(projectRoot)
 	errChan := make(chan error, 1)
 
 	go func() {
-		errChan <- waitForUnityLockfile(context.Background(), lockfilePath, time.Millisecond, time.Second)
+		errChan <- waitForUnityStartupMarkerOrTimeout(context.Background(), lockfilePath, time.Millisecond, time.Second)
 	}()
 
 	if err := os.MkdirAll(filepath.Dir(lockfilePath), 0o755); err != nil {
@@ -560,10 +599,20 @@ func TestWaitForUnityLockfileReturnsAfterLockfileAppears(t *testing.T) {
 	select {
 	case err := <-errChan:
 		if err != nil {
-			t.Fatalf("waitForUnityLockfile failed: %v", err)
+			t.Fatalf("waitForUnityStartupMarkerOrTimeout failed: %v", err)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for waitForUnityLockfile")
+		t.Fatal("timed out waiting for waitForUnityStartupMarkerOrTimeout")
+	}
+}
+
+func TestWaitForUnityStartupMarkerReturnsNilWhenLockfileDoesNotAppear(t *testing.T) {
+	// Verifies the startup marker is only a short hint before the real readiness wait.
+	lockfilePath := filepath.Join(t.TempDir(), launchTempDirectoryName, unityLockfileName)
+
+	err := waitForUnityStartupMarkerOrTimeout(context.Background(), lockfilePath, time.Millisecond, time.Millisecond)
+	if err != nil {
+		t.Fatalf("missing startup marker should not fail launch: %v", err)
 	}
 }
 

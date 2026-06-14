@@ -15,6 +15,7 @@ const (
 	errorCodeUnknownCommand                  = "UNKNOWN_COMMAND"
 	errorCodeProjectNotFound                 = "PROJECT_NOT_FOUND"
 	errorCodeUnityNotReachable               = "UNITY_NOT_REACHABLE"
+	errorCodeUnityStartupTimeout             = "UNITY_STARTUP_TIMEOUT"
 	errorCodeUnityDisconnectedAfterDispatch  = "UNITY_DISCONNECTED_AFTER_DISPATCH"
 	errorCodeUnityDisconnectedAfterAccept    = "UNITY_DISCONNECTED_AFTER_ACCEPT"
 	errorCodeUnityResponseTimeoutAfterAccept = "UNITY_RESPONSE_TIMEOUT_AFTER_ACCEPT"
@@ -143,6 +144,11 @@ func classifyError(err error, context errorContext) cliError {
 	var argumentErr *argumentError
 	if errors.As(err, &argumentErr) {
 		return argumentErr.toCLIError(context)
+	}
+
+	var startupTimeoutErr launchStartupTimeoutError
+	if errors.As(err, &startupTimeoutErr) {
+		return unityStartupTimeoutCLIError(startupTimeoutErr, context)
 	}
 
 	var notRespondingErr unityServerNotRespondingError

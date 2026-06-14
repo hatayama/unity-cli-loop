@@ -140,6 +140,33 @@ func TestClassifyUnityServerNotRespondingError(t *testing.T) {
 	}
 }
 
+func TestClassifyLaunchStartupTimeoutError(t *testing.T) {
+	// Verifies launch startup timeouts do not look like generic reachability or package failures.
+	cliErr := classifyError(
+		launchStartupTimeoutError{
+			projectRoot: "/tmp/MyProject",
+			cause:       errors.New("timed out waiting for Unity tool readiness"),
+		},
+		errorContext{projectRoot: "/tmp/MyProject", command: launchCommandName},
+	)
+
+	if cliErr.ErrorCode != errorCodeUnityStartupTimeout {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if cliErr.Message != "Unity is running, but the Editor did not finish startup before the launch timeout." {
+		t.Fatalf("message mismatch: %#v", cliErr)
+	}
+	for _, action := range cliErr.NextActions {
+		lowerAction := strings.ToLower(action)
+		if strings.Contains(lowerAction, "package") || strings.Contains(lowerAction, "uloop launch") {
+			t.Fatalf("next action should avoid package guesses and launch retry guidance: %#v", cliErr.NextActions)
+		}
+	}
+	if cliErr.Details["timeoutSeconds"] != 600 {
+		t.Fatalf("timeout details mismatch: %#v", cliErr.Details)
+	}
+}
+
 func TestWriteToolFailureWhenServerStopsBeforeAcceptingDispatchedRequestIsNotSafeToRetry(t *testing.T) {
 	// Verifies pre-accept server silence does not advertise a dispatched state-changing command as safe to retry.
 	var stderr bytes.Buffer

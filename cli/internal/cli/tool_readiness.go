@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,21 +20,31 @@ const (
 
 const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`
 
-var findRunningUnityProcessForReadiness = findRunningUnityProcess
+var (
+	findRunningUnityProcessForReadiness    = findRunningUnityProcess
+	probeToolReadinessSequenceForReadiness = probeToolReadinessSequence
+)
 
 func waitForToolReadiness(ctx context.Context, projectRoot string) error {
+	return waitForToolReadinessWithTimeout(ctx, projectRoot, toolReadinessTimeout)
+}
+
+func waitForToolReadinessWithTimeout(ctx context.Context, projectRoot string, timeout time.Duration) error {
 	// Why: launch and compile can both recreate Unity's project IPC server; a real
 	// tool request proves the user-visible command will not be the cold transport probe.
-	timeoutContext, cancel := context.WithTimeout(ctx, toolReadinessTimeout)
+	timeoutContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var lastErr error
 	ticker := time.NewTicker(toolReadinessPoll)
 	defer ticker.Stop()
 	for {
-		if err := probeToolReadinessSequence(timeoutContext, projectRoot); err == nil {
+		if err := probeToolReadinessSequenceForReadiness(timeoutContext, projectRoot); err == nil {
 			return nil
 		} else {
+			if isReadinessCLIUpdateRequiredError(err) {
+				return err
+			}
 			lastErr = err
 		}
 
@@ -61,6 +72,23 @@ func toolReadinessDoneError(ctx context.Context, projectRoot string, cause error
 		return fmt.Errorf("timed out waiting for Unity tool readiness: %w", cause)
 	}
 	return fmt.Errorf("timed out waiting for Unity tool readiness")
+}
+
+func isReadinessCLIUpdateRequiredError(err error) bool {
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) || len(rpcErr.Data) == 0 {
+		return false
+	}
+
+	var data any
+	if json.Unmarshal(rpcErr.Data, &data) != nil {
+		return false
+	}
+	typedData, ok := data.(map[string]any)
+	if !ok {
+		return false
+	}
+	return rpcDataType(typedData) == "cli_update_required"
 }
 
 func probeToolReadinessSequence(ctx context.Context, projectRoot string) error {
