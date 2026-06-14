@@ -76,6 +76,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ProcessRequest_WhenClientNegotiatesHeartbeat_WritesAcceptedHandshakeShape()
+        {
+            // Verifies the request metadata drives the accepted response and heartbeat frame contract.
+            string acceptedResponse = null;
+            Func<string> createHeartbeatJson = null;
+
+            string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                BuildHeartbeatNegotiatedToolRequest(UnityCliLoopConstants.COMMAND_NAME_GET_VERSION, 1),
+                CancellationToken.None,
+                (earlyResponse, _, heartbeatFactory) =>
+                {
+                    acceptedResponse = earlyResponse;
+                    createHeartbeatJson = heartbeatFactory;
+                    return Task.CompletedTask;
+                });
+            JObject parsed = JObject.Parse(response);
+            JObject accepted = JObject.Parse(acceptedResponse);
+            JObject heartbeat = JObject.Parse(createHeartbeatJson());
+
+            Assert.That(parsed["error"], Is.Null);
+            Assert.That(accepted["uloop"]?["phase"]?.ToString(), Is.EqualTo(JsonRpcResponsePhases.Accepted));
+            Assert.That(
+                accepted["uloop"]?["heartbeatIntervalSeconds"]?.ToObject<int>(),
+                Is.EqualTo(UnityCliLoopServerConfig.HEARTBEAT_INTERVAL_SECONDS));
+            Assert.That(heartbeat["uloop"]?["phase"]?.ToString(), Is.EqualTo(JsonRpcResponsePhases.Heartbeat));
+            Assert.That(heartbeat["uloop"]?["mainThreadStallSeconds"]?.Type, Is.EqualTo(JTokenType.Float));
+        }
+
+        [Test]
         public async Task ProcessRequest_WhenCliMetadataIsMissing_ReturnsCliUpdateRequiredError()
         {
             // Verifies legacy clients without metadata are stopped with upgrade instructions.
@@ -586,6 +615,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ",\"uloop\":{\"protocolVersion\":" +
                 CliConstants.REQUIRED_CLI_PROTOCOL_VERSION +
                 ",\"acceptsDispatchAck\":true}}";
+        }
+
+        private static string BuildHeartbeatNegotiatedToolRequest(string toolName, int id)
+        {
+            return
+                "{\"jsonrpc\":\"2.0\",\"method\":\"" +
+                toolName +
+                "\",\"params\":{},\"id\":" +
+                id +
+                ",\"uloop\":{\"protocolVersion\":" +
+                CliConstants.REQUIRED_CLI_PROTOCOL_VERSION +
+                ",\"acceptsDispatchAck\":true,\"acceptsHeartbeat\":true}}";
         }
 
         private static JObject ParseErrorData(string response)

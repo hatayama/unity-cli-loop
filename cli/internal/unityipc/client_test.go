@@ -118,6 +118,9 @@ func TestSendIncludesCliVersionWithoutProjectIdentityMetadata(t *testing.T) {
 		if metadata["acceptsDispatchAck"] != true {
 			t.Fatalf("dispatch ack metadata mismatch: %#v", metadata)
 		}
+		if metadata["acceptsHeartbeat"] != true {
+			t.Fatalf("heartbeat metadata mismatch: %#v", metadata)
+		}
 	}
 }
 

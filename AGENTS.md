@@ -21,6 +21,9 @@ protocol version, not on release numbers. Two declarations must always stay equa
 `TestProtocolVersionMatchesUnityPackage` fails the build if they diverge, so never bump one alone.
 The runtime gate expects equality because the protocol version is a contract generation, not a
 minimum-compatible range.
+Pull request CI also runs a non-blocking IPC protocol reminder when IPC-facing files changed
+without protocol declaration changes; treat it as a review prompt, not as proof that a bump is
+required.
 
 Bump both, together, in the same PR only when the IPC contract changes in a way that makes
 CLI and package builds from different protocol generations unable to interoperate — for example renaming
