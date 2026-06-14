@@ -220,9 +220,10 @@ func TestNormalizeExplicitProjectPathForOS_WhenWindowsPathIsNotPosixDrive_Should
 		"/help",
 		"relative/Game",
 		`C:\Users\ExampleUser\Game`,
+		`\c\Game`,
 		`\\server\share\Game`,
 	} {
-		result := normalizeExplicitProjectPathForOS(input, "windows", existsOnly())
+		result := normalizeExplicitProjectPathForOS(input, "windows", existsOnly(`C:\Game`))
 		if result.path != input {
 			t.Fatalf("path %q should be unchanged, got %q", input, result.path)
 		}

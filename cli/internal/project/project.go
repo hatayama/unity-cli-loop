@@ -223,6 +223,9 @@ func windowsPosixProjectPathCandidate(projectPath string) (string, bool) {
 	if projectPath == "" {
 		return "", false
 	}
+	if projectPath[0] != '/' {
+		return "", false
+	}
 
 	slashPath := strings.ReplaceAll(projectPath, `\`, "/")
 	if len(slashPath) >= 2 && slashPath[0] == '/' && isASCIIAlpha(slashPath[1]) {
