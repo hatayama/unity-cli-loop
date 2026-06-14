@@ -343,14 +343,7 @@ func unityLockfilePath(projectRoot string) string {
 
 func resolveLaunchProjectRoot(startPath string, options launchOptions) (string, error) {
 	if options.projectPath != "" {
-		projectRoot, err := filepath.Abs(options.projectPath)
-		if err != nil {
-			return "", err
-		}
-		if !project.IsUnityProject(projectRoot) {
-			return "", fmt.Errorf("not a Unity project: %s", projectRoot)
-		}
-		return projectRoot, nil
+		return project.ResolveExplicitProjectRoot(options.projectPath)
 	}
 	return project.FindUnityProjectRootWithin(startPath, options.maxDepth)
 }

@@ -175,15 +175,109 @@ func resolveProjectRoot(startPath string, explicitProjectPath string) (string, e
 		return FindProjectRoot(startPath)
 	}
 
-	projectRoot, err := filepath.Abs(explicitProjectPath)
+	return ResolveExplicitProjectRoot(explicitProjectPath)
+}
+
+// ResolveExplicitProjectRoot resolves a user-supplied Unity project path for the current platform.
+func ResolveExplicitProjectRoot(explicitProjectPath string) (string, error) {
+	resolution := normalizeExplicitProjectPathForOS(explicitProjectPath, runtime.GOOS, exists)
+	projectRoot, err := filepath.Abs(resolution.path)
 	if err != nil {
 		return "", err
 	}
 	if !IsUnityProject(projectRoot) {
-		return "", fmt.Errorf("not a Unity project: %s", projectRoot)
+		return "", notUnityProjectError(projectRoot, resolution.suggestion)
 	}
 
 	return projectRoot, nil
+}
+
+type explicitProjectPathResolution struct {
+	path       string
+	suggestion string
+}
+
+func normalizeExplicitProjectPathForOS(
+	explicitProjectPath string,
+	goos string,
+	pathExists func(string) bool,
+) explicitProjectPathResolution {
+	if goos != "windows" {
+		return explicitProjectPathResolution{path: explicitProjectPath}
+	}
+
+	candidate, ok := windowsPosixProjectPathCandidate(explicitProjectPath)
+	if !ok {
+		return explicitProjectPathResolution{path: explicitProjectPath}
+	}
+	if pathExists(candidate) {
+		return explicitProjectPathResolution{path: candidate}
+	}
+	return explicitProjectPathResolution{
+		path:       explicitProjectPath,
+		suggestion: candidate,
+	}
+}
+
+func windowsPosixProjectPathCandidate(projectPath string) (string, bool) {
+	if projectPath == "" {
+		return "", false
+	}
+	if projectPath[0] != '/' {
+		return "", false
+	}
+
+	slashPath := strings.ReplaceAll(projectPath, `\`, "/")
+	if len(slashPath) >= 2 && slashPath[0] == '/' && isASCIIAlpha(slashPath[1]) {
+		if len(slashPath) == 2 {
+			return windowsDrivePath(slashPath[1], ""), true
+		}
+		if slashPath[2] == '/' {
+			return windowsDrivePath(slashPath[1], slashPath[3:]), true
+		}
+	}
+
+	if len(slashPath) >= 6 &&
+		strings.EqualFold(slashPath[:5], "/mnt/") &&
+		isASCIIAlpha(slashPath[5]) {
+		if len(slashPath) == 6 {
+			return windowsDrivePath(slashPath[5], ""), true
+		}
+		if slashPath[6] == '/' {
+			return windowsDrivePath(slashPath[5], slashPath[7:]), true
+		}
+	}
+
+	return "", false
+}
+
+func windowsDrivePath(driveLetter byte, rest string) string {
+	drive := string(toUpperASCIILetter(driveLetter)) + `:\`
+	if rest == "" {
+		return drive
+	}
+	return drive + strings.ReplaceAll(rest, "/", `\`)
+}
+
+func notUnityProjectError(projectRoot string, suggestion string) error {
+	if suggestion == "" {
+		return fmt.Errorf("not a Unity project: %s", projectRoot)
+	}
+	return fmt.Errorf(
+		"not a Unity project: %s. This looks like a WSL or Git Bash path. Did you mean: %s",
+		projectRoot,
+		suggestion)
+}
+
+func isASCIIAlpha(value byte) bool {
+	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
+}
+
+func toUpperASCIILetter(value byte) byte {
+	if value >= 'a' && value <= 'z' {
+		return value - ('a' - 'A')
+	}
+	return value
 }
 
 func createEndpointName(canonicalProjectRoot string) string {

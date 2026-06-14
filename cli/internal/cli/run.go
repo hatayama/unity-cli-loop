@@ -137,6 +137,17 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 			})
 			return 1
 		}
+		if nestedProjectPath != "" {
+			nestedConnection, err := project.ResolveConnection(startPath, nestedProjectPath)
+			if err != nil {
+				writeClassifiedError(stderr, err, errorContext{
+					projectRoot: connection.ProjectRoot,
+					command:     command,
+				})
+				return 1
+			}
+			nestedProjectPath = nestedConnection.ProjectRoot
+		}
 		if nestedProjectPath != "" && nestedProjectPath != connection.ProjectRoot {
 			writeErrorEnvelope(stderr, (&argumentError{
 				message:      "--project-path must target the same Unity project for this command",
