@@ -9,6 +9,8 @@ import (
 	"net"
 	"os"
 	"time"
+
+	clicontract "github.com/hatayama/unity-cli-loop/cli"
 )
 
 const (
@@ -64,6 +66,7 @@ type rpcRequest struct {
 
 type rpcClientMetadata struct {
 	CLIVersion         string `json:"cliVersion"`
+	ProtocolVersion    int    `json:"protocolVersion"`
 	AcceptsDispatchAck bool   `json:"acceptsDispatchAck"`
 	AcceptsHeartbeat   bool   `json:"acceptsHeartbeat"`
 }
@@ -181,6 +184,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 		Params:  params,
 		ULoop: rpcClientMetadata{
 			CLIVersion:         client.clientVersion,
+			ProtocolVersion:    clicontract.Current.ProtocolVersion,
 			AcceptsDispatchAck: true,
 			AcceptsHeartbeat:   true,
 		},

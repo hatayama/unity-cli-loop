@@ -25,6 +25,10 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		printHelpForResolvedProject(stdout, projectPath)
 		return 0
 	}
+	if isVersionJSONRequest(remainingArgs) {
+		writeVersionJSON(stdout)
+		return 0
+	}
 	if isVersionRequest(remainingArgs) {
 		writeLine(stdout, version)
 		return 0
@@ -145,6 +149,17 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		}
 		return runTool(ctx, connection, command, params, stdout, stderr)
 	}
+}
+
+func writeVersionJSON(stdout io.Writer) {
+	content, err := json.Marshal(map[string]any{
+		"cliVersion":      version,
+		"protocolVersion": protocolVersion,
+	})
+	if err != nil {
+		panic(err)
+	}
+	writeLine(stdout, string(content))
 }
 
 func isUnknownLeadingOption(command string) bool {

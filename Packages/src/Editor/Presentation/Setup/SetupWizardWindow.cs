@@ -195,13 +195,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             await CliSetupApplicationFacade.ForceRefreshCliVersionAsync(ct);
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            int? cliProtocolVersion = CliSetupApplicationFacade.GetCachedCliProtocolVersion();
             if (string.IsNullOrEmpty(cliVersion))
             {
                 return false;
             }
 
-            string requiredCliVersion = GetMinimumRequiredCliVersion();
-            return !IsCliVersionSatisfied(cliVersion, requiredCliVersion);
+            return !IsCliCompatibleForSetupWizard(cliVersion, cliProtocolVersion);
         }
 
         private static async Task<bool> HasSkillUpdateForSetupWizardAsync(CancellationToken ct)
@@ -636,13 +636,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             await CliSetupApplicationFacade.ForceRefreshCliVersionAsync(CancellationToken.None);
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            int? cliProtocolVersion = CliSetupApplicationFacade.GetCachedCliProtocolVersion();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             string requiredCliVersion = GetMinimumRequiredCliVersion();
             bool cliInstalled = IsCliInstalled(cliVersion);
-            bool cliVersionMatched = IsCliVersionSatisfied(cliVersion, requiredCliVersion) && cliInstalled;
+            bool cliVersionMatched = IsCliCompatibleForSetupWizard(cliVersion, cliProtocolVersion) && cliInstalled;
             _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(CancellationToken.None);
 
-            UpdateCliStep(cliInstalled, cliVersion, requiredCliVersion, cliVersionMatched);
+            UpdateCliStep(cliInstalled, cliVersion, cliProtocolVersion, requiredCliVersion, cliVersionMatched);
 
             if (!refreshSkillsSection)
             {
@@ -800,15 +801,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void UpdateCliStep(
             bool cliInstalled,
             string cliVersion,
+            int? cliProtocolVersion,
             string requiredCliVersion,
             bool cliVersionMatched)
         {
-            bool needsUpdate = cliInstalled && !cliVersionMatched;
+            bool needsUpdate = IsCliUpdateNeededForSetupWizard(cliVersion, cliProtocolVersion);
+            bool needsDowngrade = IsCliDowngradeNeededForSetupWizard(cliProtocolVersion);
             string buttonText = GetCliButtonTextForSetupWizard(
                 cliInstalled,
                 _isInstallingCli,
                 false,
                 needsUpdate,
+                needsDowngrade,
                 _needsCliPathSetup,
                 cliVersion,
                 requiredCliVersion);
@@ -849,6 +853,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isInstallingCli,
             bool isChecking,
             bool needsUpdate,
+            bool needsDowngrade,
             bool needsCliPathSetup,
             string cliVersion,
             string requiredCliVersion)
@@ -860,7 +865,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (isInstallingCli)
             {
-                if (needsCliPathSetup && !needsUpdate)
+                if (needsCliPathSetup && !needsUpdate && !needsDowngrade)
                 {
                     return "Fixing PATH...";
                 }
@@ -871,6 +876,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (needsUpdate)
             {
                 return $"Update CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+            }
+
+            if (needsDowngrade)
+            {
+                return $"Downgrade CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
             }
 
             if (needsCliPathSetup)
@@ -921,14 +931,40 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 && hasPackageOwnedCurrentUserInstall;
         }
 
-        private static bool IsCliVersionSatisfied(string cliVersion, string requiredCliVersion)
+        private static bool IsCliCompatibleForSetupWizard(string cliVersion, int? cliProtocolVersion)
         {
             if (string.IsNullOrEmpty(cliVersion))
             {
                 return false;
             }
 
-            return CliSetupApplicationFacade.IsCliVersionGreaterThanOrEqual(cliVersion, requiredCliVersion);
+            if (cliProtocolVersion == null)
+            {
+                return false;
+            }
+
+            return cliProtocolVersion.Value == CliConstants.REQUIRED_CLI_PROTOCOL_VERSION;
+        }
+
+        private static bool IsCliUpdateNeededForSetupWizard(string cliVersion, int? cliProtocolVersion)
+        {
+            if (string.IsNullOrEmpty(cliVersion))
+            {
+                return false;
+            }
+
+            if (cliProtocolVersion == null)
+            {
+                return true;
+            }
+
+            return cliProtocolVersion.Value < CliConstants.REQUIRED_CLI_PROTOCOL_VERSION;
+        }
+
+        private static bool IsCliDowngradeNeededForSetupWizard(int? cliProtocolVersion)
+        {
+            return cliProtocolVersion != null
+                && cliProtocolVersion.Value > CliConstants.REQUIRED_CLI_PROTOCOL_VERSION;
         }
 
         private static string GetMinimumRequiredCliVersion()
@@ -1136,11 +1172,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
 
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            int? cliProtocolVersion = CliSetupApplicationFacade.GetCachedCliProtocolVersion();
             string requiredCliVersion = GetMinimumRequiredCliVersion();
             bool cliInstalled = IsCliInstalled(cliVersion);
-            bool cliVersionMatched = IsCliVersionSatisfied(cliVersion, requiredCliVersion) && cliInstalled;
-            bool needsUpdate = cliInstalled && !cliVersionMatched;
-            if (ShouldRepairCliPathFromPrimaryButton(_needsCliPathSetup, needsUpdate))
+            bool cliVersionMatched = IsCliCompatibleForSetupWizard(cliVersion, cliProtocolVersion) && cliInstalled;
+            bool needsUpdate = IsCliUpdateNeededForSetupWizard(cliVersion, cliProtocolVersion);
+            bool needsDowngrade = IsCliDowngradeNeededForSetupWizard(cliProtocolVersion);
+            if (ShouldRepairCliPathFromPrimaryButton(_needsCliPathSetup, needsUpdate, needsDowngrade))
             {
                 await HandleRepairCliPathSetup();
                 return;
@@ -1149,7 +1187,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool wasCliInstalledBeforeInstall = CliSetupApplicationFacade.IsCliInstalled();
             _needsCliPathSetup = false;
             _isInstallingCli = true;
-            UpdateCliStep(false, null, GetMinimumRequiredCliVersion(), false);
+            UpdateCliStep(false, null, null, GetMinimumRequiredCliVersion(), false);
 
             try
             {
@@ -1202,17 +1240,19 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void RefreshCliStepFromCachedState()
         {
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
+            int? cliProtocolVersion = CliSetupApplicationFacade.GetCachedCliProtocolVersion();
             string requiredCliVersion = GetMinimumRequiredCliVersion();
             bool cliInstalled = IsCliInstalled(cliVersion);
-            bool cliVersionMatched = IsCliVersionSatisfied(cliVersion, requiredCliVersion) && cliInstalled;
-            UpdateCliStep(cliInstalled, cliVersion, requiredCliVersion, cliVersionMatched);
+            bool cliVersionMatched = IsCliCompatibleForSetupWizard(cliVersion, cliProtocolVersion) && cliInstalled;
+            UpdateCliStep(cliInstalled, cliVersion, cliProtocolVersion, requiredCliVersion, cliVersionMatched);
         }
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(
             bool needsCliPathSetup,
-            bool needsUpdate)
+            bool needsUpdate,
+            bool needsDowngrade)
         {
-            return needsCliPathSetup && !needsUpdate;
+            return needsCliPathSetup && !needsUpdate && !needsDowngrade;
         }
 
         private async Task HandleRepairCliPathSetup()
@@ -1221,6 +1261,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             UpdateCliStep(
                 cliInstalled: true,
                 cliVersion: CliSetupApplicationFacade.GetCachedCliVersion(),
+                cliProtocolVersion: CliSetupApplicationFacade.GetCachedCliProtocolVersion(),
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
                 cliVersionMatched: true);
 

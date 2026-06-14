@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	clicontract "github.com/hatayama/unity-cli-loop/cli"
 )
 
 func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t *testing.T) {
@@ -110,8 +112,14 @@ func TestSendIncludesCliVersionWithoutProjectIdentityMetadata(t *testing.T) {
 		if metadata["cliVersion"] != "3.0.0-beta.6" {
 			t.Fatalf("cli version metadata mismatch: %#v", metadata)
 		}
+		if metadata["protocolVersion"] != float64(clicontract.Current.ProtocolVersion) {
+			t.Fatalf("protocol version metadata mismatch: %#v", metadata)
+		}
 		if metadata["acceptsDispatchAck"] != true {
 			t.Fatalf("dispatch ack metadata mismatch: %#v", metadata)
+		}
+		if metadata["acceptsHeartbeat"] != true {
+			t.Fatalf("heartbeat metadata mismatch: %#v", metadata)
 		}
 	}
 }

@@ -17,6 +17,10 @@ func isVersionRequest(args []string) bool {
 	return len(args) == 1 && (args[0] == "--version" || args[0] == "-v")
 }
 
+func isVersionJSONRequest(args []string) bool {
+	return len(args) == 2 && (args[0] == "--version" || args[0] == "-v") && args[1] == "--json"
+}
+
 func isHelpRequest(args []string) bool {
 	return len(args) == 1 && (args[0] == "--help" || args[0] == "-h")
 }

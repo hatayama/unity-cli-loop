@@ -22,11 +22,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class JsonRpcProcessorCliVersionGateTests
     {
         [Test]
-        public async Task ProcessRequest_WhenCliVersionSatisfiesMinimum_AllowsRequest()
+        public async Task ProcessRequest_WhenProtocolVersionMatches_AllowsRequest()
         {
-            // Verifies compatible CLI clients can execute bridge commands.
+            // Verifies CLI clients that speak the required IPC protocol can execute bridge commands.
             string response = await JsonRpcProcessor.ProcessRequest(
-                BuildGetVersionRequest(CliConstants.MINIMUM_REQUIRED_CLI_VERSION),
+                BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION),
                 CancellationToken.None);
             JObject parsed = JObject.Parse(response);
 
@@ -35,24 +35,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ProcessRequest_WhenCliVersionIsTooOld_ReturnsCliUpdateRequiredError()
+        public async Task ProcessRequest_WhenProtocolVersionIsNewer_ReturnsCliProtocolMismatchError()
         {
-            // Verifies old CLI clients receive an exact update command before any tool runs.
+            // Verifies future protocol clients are rejected because IPC compatibility is exact-match.
             string response = await JsonRpcProcessor.ProcessRequest(
-                BuildGetVersionRequest("3.0.0-beta.5"),
+                BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION + 1),
+                CancellationToken.None);
+            JObject error = ParseError(response);
+            JObject data = ParseErrorData(response);
+
+            Assert.That(error["message"]?.ToString(), Does.Contain("does not match"));
+            Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
+            Assert.That(
+                data["currentProtocolVersion"]?.ToObject<int>(),
+                Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION + 1));
+            Assert.That(
+                data["requiredProtocolVersion"]?.ToObject<int>(),
+                Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION));
+            Assert.That(data["updateCommand"], Is.Null);
+        }
+
+        [Test]
+        public async Task ProcessRequest_WhenProtocolVersionIsTooOld_ReturnsCliUpdateRequiredError()
+        {
+            // Verifies CLIs on an older IPC protocol receive CLI update instructions before any tool runs.
+            string response = await JsonRpcProcessor.ProcessRequest(
+                BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION - 1),
                 CancellationToken.None);
             JObject data = ParseErrorData(response);
 
             Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
-            Assert.That(data["currentCliVersion"]?.ToString(), Is.EqualTo("3.0.0-beta.5"));
-            Assert.That(data["requiredCliVersion"]?.ToString(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_VERSION));
             Assert.That(
-                data["updateCommand"]?.ToString(),
-                Is.EqualTo("uloop update"));
+                data["currentProtocolVersion"]?.ToObject<int>(),
+                Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION - 1));
             Assert.That(
-                data["targetUpdateCommand"]?.ToString(),
-                Is.EqualTo($"uloop update --to-version {CliConstants.MINIMUM_REQUIRED_CLI_VERSION}"));
+                data["requiredProtocolVersion"]?.ToObject<int>(),
+                Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
             Assert.That(data["retryableAfterUpdate"]?.ToObject<bool>(), Is.True);
+        }
+
+        [Test]
+        public async Task ProcessRequest_WhenClientNegotiatesHeartbeat_WritesAcceptedHandshakeShape()
+        {
+            // Verifies the request metadata drives the accepted response and heartbeat frame contract.
+            string acceptedResponse = null;
+            Func<string> createHeartbeatJson = null;
+
+            string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                BuildHeartbeatNegotiatedToolRequest(UnityCliLoopConstants.COMMAND_NAME_GET_VERSION, 1),
+                CancellationToken.None,
+                (earlyResponse, _, heartbeatFactory) =>
+                {
+                    acceptedResponse = earlyResponse;
+                    createHeartbeatJson = heartbeatFactory;
+                    return Task.CompletedTask;
+                });
+            JObject parsed = JObject.Parse(response);
+            JObject accepted = JObject.Parse(acceptedResponse);
+            JObject heartbeat = JObject.Parse(createHeartbeatJson());
+
+            Assert.That(parsed["error"], Is.Null);
+            Assert.That(accepted["uloop"]?["phase"]?.ToString(), Is.EqualTo(JsonRpcResponsePhases.Accepted));
+            Assert.That(
+                accepted["uloop"]?["heartbeatIntervalSeconds"]?.ToObject<int>(),
+                Is.EqualTo(UnityCliLoopServerConfig.HEARTBEAT_INTERVAL_SECONDS));
+            Assert.That(heartbeat["uloop"]?["phase"]?.ToString(), Is.EqualTo(JsonRpcResponsePhases.Heartbeat));
+            Assert.That(heartbeat["uloop"]?["mainThreadStallSeconds"]?.Type, Is.EqualTo(JTokenType.Float));
         }
 
         [Test]
@@ -65,20 +114,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject data = ParseErrorData(response);
 
             Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
+            Assert.That(data["currentProtocolVersion"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(data["currentCliVersion"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
         }
 
         [Test]
-        public async Task ProcessRequest_WhenCliVersionIsInvalid_ReturnsCliUpdateRequiredError()
+        public async Task ProcessRequest_WhenClientSendsOnlySemverVersion_ReturnsCliUpdateRequiredError()
         {
-            // Verifies malformed CLI versions cannot bypass the compatibility gate.
+            // Verifies CLIs released before the protocol handshake are treated as outdated.
             string response = await JsonRpcProcessor.ProcessRequest(
-                BuildGetVersionRequest("not-a-version"),
+                "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1," +
+                "\"uloop\":{\"cliVersion\":\"3.0.0-beta.24\"}}",
                 CancellationToken.None);
             JObject data = ParseErrorData(response);
 
             Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
-            Assert.That(data["currentCliVersion"]?.ToString(), Is.EqualTo("not-a-version"));
+            Assert.That(data["currentProtocolVersion"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(data["currentCliVersion"]?.ToString(), Is.EqualTo("3.0.0-beta.24"));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
+        }
+
+        [Test]
+        public async Task ProcessRequest_WhenProtocolVersionIsNotAnInteger_ReturnsCliUpdateRequiredError()
+        {
+            // Verifies malformed protocol values cannot bypass the compatibility gate.
+            string response = await JsonRpcProcessor.ProcessRequest(
+                "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1," +
+                "\"uloop\":{\"protocolVersion\":\"not-a-number\"}}",
+                CancellationToken.None);
+            JObject data = ParseErrorData(response);
+
+            Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
+            Assert.That(data["currentProtocolVersion"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
+        }
+
+        [Test]
+        public async Task ProcessRequest_WhenProtocolVersionIsOutsideIntRange_ReturnsCliUpdateRequiredError()
+        {
+            // Verifies oversized protocol values are treated as missing metadata instead of parser failures.
+            string response = await JsonRpcProcessor.ProcessRequest(
+                "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1," +
+                "\"uloop\":{\"protocolVersion\":2147483648}}",
+                CancellationToken.None);
+            JObject data = ParseErrorData(response);
+
+            Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
+            Assert.That(data["currentProtocolVersion"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
         }
 
         [Test]
@@ -509,12 +593,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
-        private static string BuildGetVersionRequest(string cliVersion)
+        private static string BuildGetVersionRequest(int protocolVersion)
         {
             return
-                "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1,\"uloop\":{\"cliVersion\":\"" +
-                cliVersion +
-                "\"}}";
+                "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1,\"uloop\":{\"protocolVersion\":" +
+                protocolVersion +
+                "}}";
+        }
+
+        private static string ExpectedCliUpdateCommand()
+        {
+            return "uloop update";
         }
 
         private static string BuildToolRequest(string toolName, int id)
@@ -524,9 +613,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 toolName +
                 "\",\"params\":{},\"id\":" +
                 id +
-                ",\"uloop\":{\"cliVersion\":\"" +
-                CliConstants.MINIMUM_REQUIRED_CLI_VERSION +
-                "\",\"acceptsDispatchAck\":true}}";
+                ",\"uloop\":{\"protocolVersion\":" +
+                CliConstants.REQUIRED_CLI_PROTOCOL_VERSION +
+                ",\"acceptsDispatchAck\":true}}";
         }
 
         private static string BuildToolRequestWithParams(string toolName, string paramsJson, int id)
@@ -538,9 +627,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 paramsJson +
                 ",\"id\":" +
                 id +
-                ",\"uloop\":{\"cliVersion\":\"" +
-                CliConstants.MINIMUM_REQUIRED_CLI_VERSION +
-                "\",\"acceptsDispatchAck\":true}}";
+                ",\"uloop\":{\"protocolVersion\":" +
+                CliConstants.REQUIRED_CLI_PROTOCOL_VERSION +
+                ",\"acceptsDispatchAck\":true}}";
+        }
+
+        private static string BuildHeartbeatNegotiatedToolRequest(string toolName, int id)
+        {
+            return
+                "{\"jsonrpc\":\"2.0\",\"method\":\"" +
+                toolName +
+                "\",\"params\":{},\"id\":" +
+                id +
+                ",\"uloop\":{\"protocolVersion\":" +
+                CliConstants.REQUIRED_CLI_PROTOCOL_VERSION +
+                ",\"acceptsDispatchAck\":true,\"acceptsHeartbeat\":true}}";
         }
 
         private static JObject ParseErrorData(string response)

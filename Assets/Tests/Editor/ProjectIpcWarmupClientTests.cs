@@ -43,9 +43,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
                 () => client.ValidateJsonRpcSuccessResponse(
-                    "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32603,\"message\":\"The installed uloop CLI is too old for this Unity package.\"}}"));
+                    "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32603,\"message\":\"The installed uloop CLI uses an IPC protocol that does not match this Unity package.\"}}"));
 
-            Assert.That(exception.Message, Does.Contain("too old"));
+            Assert.That(exception.Message, Does.Contain("does not match"));
         }
 
         [Test]

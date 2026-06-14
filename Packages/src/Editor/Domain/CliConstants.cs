@@ -6,10 +6,17 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     public static class CliConstants
     {
         public const string EXECUTABLE_NAME = "uloop";
+        // Why: the runtime IPC gate compares this contract generation, not release numbers.
+        // Bump it together with cli/contract.json protocolVersion only when this package can
+        // no longer interoperate with a different CLI protocol generation.
+        public const int REQUIRED_CLI_PROTOCOL_VERSION = 1;
+        // Why: setup installs this pinned release; it must always point at a published CLI
+        // release, so it advances after releases, never inside feature PRs.
         public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.32";
         public const string MINIMUM_REQUIRED_CLI_RELEASE_TAG = CLI_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_CLI_VERSION;
         public const string VERSION_FLAG = "--version";
         public const string SHORT_VERSION_FLAG = "-v";
+        public const string JSON_FLAG = "--json";
         public const string RAW_CONTENT_BASE_URL = "https://raw.githubusercontent.com/hatayama/unity-cli-loop";
         public const string SCRIPTS_DIR_NAME = "scripts";
         public const string POSIX_INSTALL_SCRIPT_NAME = "install.sh";

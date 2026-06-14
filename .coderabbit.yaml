@@ -32,5 +32,13 @@ reviews:
     - "**/*.tsx"
     - "**/*.js"
     - "**/*.jsx"
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        For changes that touch the Unity package/native CLI IPC contract, explicitly check whether the integer protocol generation must be bumped. Relevant IPC surfaces include JSON-RPC method names, request/response shapes, request metadata under `uloop`, readiness/dispatch/heartbeat handshakes, tool catalog schema, `cli/internal/unityipc/**`, `Packages/src/Editor/Infrastructure/Api/**`, `cli/contract.json`, and `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`.
+
+        The compatibility gate is an exact protocol match, not a release-semver range. If a change makes a CLI/package from the previous protocol generation unable to interoperate, require both `cli/contract.json` `protocolVersion` and `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` to be incremented in the same PR.
+
+        Do not request a protocol bump for ordinary CLI features, bug fixes, UI changes, documentation, or additive wire-format changes that older counterparts can safely ignore. `cliVersion`, `default-tools.json` `version`, and `CliConstants.MINIMUM_REQUIRED_CLI_VERSION` are release/install concerns and must not be hand-edited to keep up with feature PRs.
 chat:
   auto_reply: true

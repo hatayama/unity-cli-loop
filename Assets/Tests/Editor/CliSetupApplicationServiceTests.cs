@@ -84,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             public bool IsCliInstalled() => GetCachedCliVersion() != null;
             public string GetCachedCliVersion() => _versions[_versionIndex];
+            public int? GetCachedCliProtocolVersion() => null;
             public string GetCachedCliExecutablePath() => "";
             public bool IsCheckCompleted() => true;
             public Task RefreshCliVersionAsync(CancellationToken ct) => Task.CompletedTask;

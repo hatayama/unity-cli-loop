@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -43,6 +44,28 @@ func TestPrintLauncherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T) {
 		if strings.Contains(output, unexpected) {
 			t.Fatalf("help output should not include baked-in Unity tool %q:\n%s", unexpected, output)
 		}
+	}
+}
+
+func TestRunProjectLocalVersionJSONIncludesProtocolVersion(t *testing.T) {
+	// Verifies Unity setup can inspect protocol compatibility without parsing human help text.
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"--version", "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("version json command failed with code %d: %s", code, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("version json output is not JSON: %v\n%s", err, stdout.String())
+	}
+	if payload["cliVersion"] != version {
+		t.Fatalf("cliVersion mismatch: %#v", payload)
+	}
+	if payload["protocolVersion"] != float64(protocolVersion) {
+		t.Fatalf("protocolVersion mismatch: %#v", payload)
 	}
 }
 

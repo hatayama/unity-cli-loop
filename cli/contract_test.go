@@ -11,6 +11,13 @@ func TestCliContractProvidesRuntimeVersion(t *testing.T) {
 	requireValidContractVersion(t, "cliVersion", Current.CliVersion)
 }
 
+func TestCliContractProvidesProtocolVersion(t *testing.T) {
+	// Verifies that the contract declares which C#-side IPC protocol the binary speaks.
+	if Current.ProtocolVersion < 1 {
+		t.Fatalf("protocolVersion must be at least 1, got %d", Current.ProtocolVersion)
+	}
+}
+
 func requireValidContractVersion(t *testing.T, label string, value string) {
 	t.Helper()
 
