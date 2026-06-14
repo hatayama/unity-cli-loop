@@ -151,6 +151,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ProcessRequest_WhenProtocolVersionIsOutsideIntRange_ReturnsCliUpdateRequiredError()
+        {
+            // Verifies oversized protocol values are treated as missing metadata instead of parser failures.
+            string response = await JsonRpcProcessor.ProcessRequest(
+                "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1," +
+                "\"uloop\":{\"protocolVersion\":2147483648}}",
+                CancellationToken.None);
+            JObject data = ParseErrorData(response);
+
+            Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
+            Assert.That(data["currentProtocolVersion"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
+        }
+
+        [Test]
         public async Task ProcessRequest_WhenFirstToolWaitsForMainThread_ReturnsServerBusyForSecondTool()
         {
             // Verifies the single-flight gate is checked before queuing on Unity's main-thread dispatcher.

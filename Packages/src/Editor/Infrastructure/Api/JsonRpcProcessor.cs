@@ -126,7 +126,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return null;
             }
 
-            return protocolVersionToken.Value<int>();
+            JValue protocolVersionValue = protocolVersionToken as JValue;
+            object rawProtocolVersion = protocolVersionValue?.Value;
+            if (rawProtocolVersion is int protocolVersion)
+            {
+                return protocolVersion;
+            }
+
+            if (!(rawProtocolVersion is long longProtocolVersion))
+            {
+                return null;
+            }
+
+            if (longProtocolVersion < int.MinValue || longProtocolVersion > int.MaxValue)
+            {
+                return null;
+            }
+
+            return (int)longProtocolVersion;
         }
 
         private static bool ReadAcceptsDispatchAck(JObject request)

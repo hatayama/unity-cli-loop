@@ -202,6 +202,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ParseShellCliInstallationOutput_WhenProtocolVersionIsOutsideIntRange_ReturnsVersionWithoutProtocol()
+        {
+            // Verifies oversized protocol metadata cannot break setup compatibility detection.
+            string output = "__ULOOP_PATH_START__\n"
+                            + "/tmp/uloop\n"
+                            + "__ULOOP_PATH_END__\n"
+                            + "__ULOOP_CONTRACT_START__\n"
+                            + "{\"cliVersion\":\"3.0.0-beta.31\",\"protocolVersion\":2147483648}\n"
+                            + "__ULOOP_CONTRACT_END__\n"
+                            + "__ULOOP_CONTRACT_STATUS_START__\n"
+                            + "0\n"
+                            + "__ULOOP_CONTRACT_STATUS_END__\n"
+                            + "__ULOOP_VERSION_START__\n"
+                            + "2.1.1\n"
+                            + "__ULOOP_VERSION_END__\n"
+                            + "__ULOOP_VERSION_STATUS_START__\n"
+                            + "0\n"
+                            + "__ULOOP_VERSION_STATUS_END__\n";
+
+            CliInstallationDetection detection =
+                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+
+            Assert.That(detection.Version, Is.EqualTo("3.0.0-beta.31"));
+            Assert.That(detection.ProtocolVersion, Is.Null);
+            Assert.That(detection.ExecutablePath, Is.EqualTo("/tmp/uloop"));
+        }
+
+        [Test]
         public void ParseShellCliInstallationOutput_WhenOnlyVersionExists_ReturnsInstalledDetection()
         {
             // Verifies that installation state depends on version output, not path availability.

@@ -364,15 +364,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 JObject parsed = JObject.Parse(jsonLine);
                 string version = parsed["cliVersion"]?.ToString();
                 JToken protocolVersionToken = parsed["protocolVersion"];
-                int? protocolVersion = protocolVersionToken != null && protocolVersionToken.Type == JTokenType.Integer
-                    ? protocolVersionToken.Value<int>()
-                    : null;
+                int? protocolVersion = ReadProtocolVersion(protocolVersionToken);
                 return new CliInstallationDetection(version, protocolVersion, executablePath);
             }
             catch (JsonException)
             {
                 return new CliInstallationDetection(null, null, executablePath);
             }
+        }
+
+        private static int? ReadProtocolVersion(JToken protocolVersionToken)
+        {
+            if (protocolVersionToken == null || protocolVersionToken.Type != JTokenType.Integer)
+            {
+                return null;
+            }
+
+            JValue protocolVersionValue = protocolVersionToken as JValue;
+            object rawProtocolVersion = protocolVersionValue?.Value;
+            if (rawProtocolVersion is int protocolVersion)
+            {
+                return protocolVersion;
+            }
+
+            if (!(rawProtocolVersion is long longProtocolVersion))
+            {
+                return null;
+            }
+
+            if (longProtocolVersion < int.MinValue || longProtocolVersion > int.MaxValue)
+            {
+                return null;
+            }
+
+            return (int)longProtocolVersion;
         }
 
         private static string ExecuteAndGetOutput(ProcessStartInfo startInfo, CancellationToken ct)
