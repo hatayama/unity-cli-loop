@@ -97,14 +97,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static UnityCliLoopCompileResult CreateForceCompileResult(CompileResult result)
         {
+            ForceCompileUnknownResult unknownResult = ForceCompileUnknownResult.Create(result.Success);
             return new UnityCliLoopCompileResult
             {
-                Success = result.Success,
-                ErrorCount = null,
-                WarningCount = null,
+                Success = unknownResult.Success,
+                ErrorCount = unknownResult.ErrorCount,
+                WarningCount = unknownResult.WarningCount,
                 Errors = null,
                 Warnings = null,
-                Message = null
+                Message = unknownResult.Message
             };
         }
 

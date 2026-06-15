@@ -143,6 +143,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(pendingRequest != null, "pendingRequest must not be null");
 
+            string message = RecoveredCompileResultMessage;
+            if (pendingRequest.ForceRecompile)
+            {
+                ForceCompileUnknownResult unknownForceCompileResult =
+                    ForceCompileUnknownResult.Create(null);
+                message = unknownForceCompileResult.Message;
+            }
+
             return new JObject
             {
                 ["Success"] = JValue.CreateNull(),
@@ -150,19 +158,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ["WarningCount"] = JValue.CreateNull(),
                 ["Errors"] = JValue.CreateNull(),
                 ["Warnings"] = JValue.CreateNull(),
-                ["Message"] = CreateRecoveredCompileMessage(pendingRequest.ForceRecompile),
+                ["Message"] = message,
                 ["ProjectRoot"] = UnityCliLoopPathResolver.GetProjectRoot()
             };
-        }
-
-        private static JToken CreateRecoveredCompileMessage(bool forceRecompile)
-        {
-            if (forceRecompile)
-            {
-                return JValue.CreateNull();
-            }
-
-            return new JValue(RecoveredCompileResultMessage);
         }
 
         private static string CreateMessage(bool ready, bool hasResult)
