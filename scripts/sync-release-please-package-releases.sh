@@ -349,6 +349,13 @@ wait_for_cli_release_ready() {
   done
 }
 
+verify_minimum_cli_release_protocol() {
+  (
+    cd "$ROOT_DIR/cli"
+    go run ./cmd/check-protocol-minimum-version --verify-release
+  )
+}
+
 release_tag_from_config() {
   package_path=$1
   version=$2
@@ -384,6 +391,7 @@ if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packa
     echo "CLI release $cli_release_tag is not published with complete assets; package release sync will wait."
     exit 0
   fi
+  verify_minimum_cli_release_protocol
 fi
 
 jq -r --arg skip "$CLI_PACKAGE_PATH" '

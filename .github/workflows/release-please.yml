@@ -71,6 +71,12 @@ jobs:
         run: |
           test -f Packages/src/package.json && echo "✅ Unity package.json OK"
 
+      - name: Setup Go for package release sync
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: cli/**/go.sum
+
       - name: 🏷️ Sync release-please package releases
         id: package_release_sync
         env:

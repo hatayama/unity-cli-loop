@@ -36,6 +36,7 @@ jobs:
           scripts/test-resolve-native-cli-release-target.sh
           scripts/test-is-release-please-release-commit.sh
           scripts/test-release-please-config.sh
+          scripts/test-protocol-minimum-version-workflow.sh
           scripts/test-mark-release-pr-tagged.sh
           scripts/test-sync-published-release-pr-labels.sh
           scripts/test-sync-release-please-package-releases.sh
@@ -47,6 +48,11 @@ jobs:
         if: github.event_name == 'pull_request'
         working-directory: cli
         run: go run ./cmd/check-ipc-protocol-reminder --base "origin/${{ github.base_ref }}" --head HEAD
+
+      - name: Check protocol minimum version bump
+        if: github.event_name == 'pull_request'
+        working-directory: cli
+        run: go run ./cmd/check-protocol-minimum-version --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Install golangci-lint
         run: |

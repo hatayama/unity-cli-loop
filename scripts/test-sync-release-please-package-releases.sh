@@ -111,6 +111,16 @@ MOCK_GH
 
   chmod +x "$mock_bin/gh"
 
+  cat > "$mock_bin/go" <<'MOCK_GO'
+#!/bin/sh
+set -eu
+
+printf '%s\n' "$*" >> "$GO_LOG"
+exit "${PROTOCOL_CHECK_STATUS:-0}"
+MOCK_GO
+
+  chmod +x "$mock_bin/go"
+
   cat > "$mock_bin/sleep" <<'MOCK_SLEEP'
 #!/bin/sh
 set -eu
@@ -268,12 +278,15 @@ run_sync() {
   cli_release_ready_after_attempts=${9:-}
 
   touch "$work_dir/gh.log"
+  touch "$work_dir/go.log"
   touch "$work_dir/github-output.txt"
   touch "$work_dir/sleep.log"
   write_mock_commands "$work_dir"
 
   PATH="$work_dir/bin:$ORIGINAL_PATH" \
     GH_LOG="$work_dir/gh.log" \
+    GO_LOG="$work_dir/go.log" \
+    PROTOCOL_CHECK_STATUS="${PROTOCOL_CHECK_STATUS:-0}" \
     SLEEP_LOG="$work_dir/sleep.log" \
     EXISTING_RELEASE_TAG="$existing_tag" \
     EXISTING_RELEASE_DRAFT="$existing_draft" \
@@ -302,6 +315,7 @@ test_creates_missing_root_release_from_release_commit() {
   assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
   assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
   assert_contains "$work_dir/gh.log" "release view cli-v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish,assets"
+  assert_contains "$work_dir/go.log" "run ./cmd/check-protocol-minimum-version --verify-release"
   assert_contains "$work_dir/github-output.txt" "ready=true"
 }
 
