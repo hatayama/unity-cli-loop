@@ -97,6 +97,21 @@ func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseProtocolDiffers_Fails(
 	assertProtocolMinimumVersionLogContains(t, result.stderr, "advertises protocol 1")
 }
 
+func TestRunProtocolMinimumVersionGuard_WhenOnlyMinimumReleaseProtocolDiffers_Fails(t *testing.T) {
+	// Verifies installer target changes are validated even without a protocol declaration bump.
+	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
+		baseContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.32"),
+		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
+		releaseContent: `{"schemaVersion":1,"protocolVersion":1,"cliVersion":"3.0.0-beta.33"}`,
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "`MINIMUM_REQUIRED_CLI_VERSION` changed")
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "advertises protocol 1")
+}
+
 func TestVerifyMinimumCliReleaseProtocol_WhenTagProtocolMatches_Passes(t *testing.T) {
 	// Verifies release validation accepts a CLI tag that advertises the required protocol.
 	err := VerifyMinimumCliReleaseProtocol(ProtocolMinimumVersionValues{

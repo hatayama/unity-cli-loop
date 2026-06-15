@@ -25,8 +25,8 @@ jobs:
           go-version-file: cli/.go-version
           cache: false
 
-      - name: Fetch pull request head
-        run: git fetch --no-tags origin "pull/${{ github.event.pull_request.number }}/head:protocol-minimum-version-pr-head"
+      - name: Fetch pull request merge
+        run: git fetch --no-tags origin "pull/${{ github.event.pull_request.number }}/merge:protocol-minimum-version-pr-merge"
 
       - name: Comment on protocol minimum version guard
         working-directory: cli
@@ -35,5 +35,5 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PROTOCOL_MINIMUM_VERSION_BASE_REF: origin/${{ github.base_ref }}
-          PROTOCOL_MINIMUM_VERSION_HEAD_REF: protocol-minimum-version-pr-head
+          PROTOCOL_MINIMUM_VERSION_HEAD_REF: protocol-minimum-version-pr-merge
         run: go run ./cmd/comment-protocol-minimum-version

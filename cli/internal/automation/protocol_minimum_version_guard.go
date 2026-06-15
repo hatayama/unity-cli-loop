@@ -133,7 +133,7 @@ func AnalyzeProtocolMinimumVersionGuardForRefs(
 	}
 
 	result := AnalyzeProtocolMinimumVersionGuard(baseValues, headValues)
-	if result.RequiredProtocolChanged && !result.NeedsMinimumVersionUpdate {
+	if protocolMinimumVersionGuardNeedsReleaseCheck(result) {
 		err = verifyMinimumCliReleaseProtocolAtRef(ctx, repoRoot, result.Head)
 		if err != nil {
 			result.MinimumCliReleaseProtocolError = err.Error()
@@ -227,8 +227,10 @@ func FormatProtocolMinimumVersionWarning(result ProtocolMinimumVersionGuardResul
 	builder.WriteString("\n")
 	if result.NeedsMinimumVersionUpdate {
 		builder.WriteString("Protocol version changed, but `MINIMUM_REQUIRED_CLI_VERSION` did not.\n\n")
-	} else {
+	} else if result.RequiredProtocolChanged {
 		builder.WriteString("Protocol version changed, but `MINIMUM_REQUIRED_CLI_VERSION` does not point to a published CLI release that advertises the required protocol.\n\n")
+	} else {
+		builder.WriteString("`MINIMUM_REQUIRED_CLI_VERSION` changed, but it does not point to a published CLI release that advertises the required protocol.\n\n")
 	}
 	builder.WriteString("- Base required protocol: ")
 	builder.WriteString(protocolMinimumVersionValueLabel(result.Base))
@@ -251,6 +253,13 @@ func FormatProtocolMinimumVersionWarning(result ProtocolMinimumVersionGuardResul
 
 func protocolMinimumVersionGuardNeedsAction(result ProtocolMinimumVersionGuardResult) bool {
 	return result.NeedsMinimumVersionUpdate || result.MinimumCliReleaseProtocolError != ""
+}
+
+func protocolMinimumVersionGuardNeedsReleaseCheck(result ProtocolMinimumVersionGuardResult) bool {
+	if result.NeedsMinimumVersionUpdate {
+		return false
+	}
+	return result.RequiredProtocolChanged || result.MinimumCliVersionChanged
 }
 
 func protocolMinimumVersionValueLabel(values ProtocolMinimumVersionValues) string {
