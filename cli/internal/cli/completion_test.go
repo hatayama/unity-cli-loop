@@ -122,6 +122,9 @@ func TestCompletionListOptionsUsesExecuteDynamicCodeWaitFlag(t *testing.T) {
 	if !strings.Contains(output, "--wait-for-domain-reload") {
 		t.Fatalf("execute-dynamic-code wait option was not listed: %s", output)
 	}
+	if !strings.Contains(output, "--code-file") {
+		t.Fatalf("execute-dynamic-code code-file option was not listed: %s", output)
+	}
 	if strings.Contains(output, "--no-wait-for-domain-reload") {
 		t.Fatalf("execute-dynamic-code no-wait option should not be listed: %s", output)
 	}

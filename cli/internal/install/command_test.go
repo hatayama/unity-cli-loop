@@ -36,6 +36,8 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 		"npm uninstall -g --prefix",
 		"npm uninstall -g uloop-cli",
 		"Report-PathShadowing",
+		"foreach ($ShimName in @('uloop.exe', 'uloop.cmd', 'uloop.ps1', 'uloop'))",
+		"Legacy npm shims can alter multiline PowerShell arguments before the native CLI receives them.",
 	} {
 		if !strings.Contains(setupScript, expected) {
 			t.Fatalf("expected %s in setup script: %s", expected, setupScript)

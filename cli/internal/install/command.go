@@ -122,6 +122,7 @@ function Test-LegacyNpmUloopPath {
 function Write-LegacyNpmManualRemoval {
     param([string]$LegacyUloopPath, [string]$LegacyPrefix)
     Write-Host 'Could not remove the legacy npm package automatically.'
+    Write-Host 'Legacy npm shims can alter multiline PowerShell arguments before the native CLI receives them.'
     if ($LegacyUloopPath) {
         Write-Host "Legacy uloop command: $LegacyUloopPath"
     }
@@ -324,6 +325,7 @@ function Report-PathShadowing {
     }
     Write-Host "Installed uloop to $ExpectedUloopPath, but PATH resolves uloop to:"
     Write-Host "  $($ResolvedCommand.Source)"
+    Write-Host 'Legacy npm shims can alter multiline PowerShell arguments before the native CLI receives them.'
     Write-Host "Move $InstallDir earlier in PATH, or remove the legacy installation if it owns that command."
 }
 Set-UserPathWithInstallDirectoryFirst -Directory $InstallDir
