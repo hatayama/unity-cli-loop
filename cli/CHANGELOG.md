@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.35](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.34...cli-v3.0.0-beta.35) (2026-06-15)
+
+
+### Bug Fixes
+
+* Windows dynamic code snippets are easier to pass safely ([#1346](https://github.com/hatayama/unity-cli-loop/issues/1346)) ([eb91151](https://github.com/hatayama/unity-cli-loop/commit/eb9115183f184bff5ea2fed0471882a42b709c31))
+
 ## [3.0.0-beta.34](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.33...cli-v3.0.0-beta.34) (2026-06-15)
 
 
