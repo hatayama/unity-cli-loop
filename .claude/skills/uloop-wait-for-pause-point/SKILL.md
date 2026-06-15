@@ -42,7 +42,7 @@ Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or st
 ## When To Use
 
 - Use this as the standard frame proof for state-changing PlayMode/E2E simulated input, physics, or UI transitions.
-- Pause at least one representative transition per E2E pass, even if durable state, logs, or screenshots can later confirm the final result.
+- Consider a pause point during E2E passes when transition-frame evidence would add confidence, even if durable state, logs, or screenshots can later confirm the final result.
 - Use this before reaching for `Time.timeScale`, sleeps, repeated polling, or after-the-fact `execute-dynamic-code`; those checks can supplement the paused-frame proof, but they are not substitutes.
 - If the value you need is a method local, an intermediate calculation, or a branch reason that `execute-dynamic-code` cannot reach, add a focused `Debug.Log` immediately before the marker and read it with `get-logs` while paused. Do not count the breakpoint check complete until the matching log has been read.
 - Good pause points include after input is consumed, a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
