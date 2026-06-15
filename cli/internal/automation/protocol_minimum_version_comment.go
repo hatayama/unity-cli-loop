@@ -48,7 +48,7 @@ func RunProtocolMinimumVersionComment(ctx context.Context, stdout io.Writer, std
 	}
 	config.repository = repository
 
-	if result.NeedsMinimumVersionUpdate {
+	if protocolMinimumVersionGuardNeedsAction(result) {
 		message, err := upsertProtocolMinimumVersionComment(ctx, config, FormatProtocolMinimumVersionWarning(result))
 		if err != nil {
 			writeProtocolMinimumVersionLine(stderr, err)

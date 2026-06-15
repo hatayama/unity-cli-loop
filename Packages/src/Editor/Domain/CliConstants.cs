@@ -10,8 +10,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         // Bump it together with cli/contract.json protocolVersion only when this package can
         // no longer interoperate with a different CLI protocol generation.
         public const int REQUIRED_CLI_PROTOCOL_VERSION = 2;
-        // Why: setup installs this pinned release; it must always point at a published CLI
-        // release, so it advances after releases, never inside feature PRs.
+        // Why: setup installs this pinned release; protocol bump PRs can advance it only after
+        // the matching CLI tag is published.
         public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.33";
         public const string MINIMUM_REQUIRED_CLI_RELEASE_TAG = CLI_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_CLI_VERSION;
         public const string VERSION_FLAG = "--version";

@@ -30,7 +30,7 @@ func TestAnalyzeProtocolMinimumVersionGuard_WhenProtocolChangesWithoutMinimumVer
 }
 
 func TestAnalyzeProtocolMinimumVersionGuard_WhenProtocolAndMinimumVersionChange_DoesNotWarn(t *testing.T) {
-	// Verifies paired protocol and installer target updates pass the PR guard.
+	// Verifies paired protocol and installer target updates clear the update-omission warning.
 	result := AnalyzeProtocolMinimumVersionGuard(
 		ProtocolMinimumVersionValues{
 			RequiredProtocolVersion: 1,
@@ -65,6 +65,36 @@ func TestAnalyzeProtocolMinimumVersionGuard_WhenProtocolDoesNotChange_DoesNotWar
 	if result.NeedsMinimumVersionUpdate {
 		t.Fatalf("unexpected warning: %#v", result)
 	}
+}
+
+func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseMatches_Passes(t *testing.T) {
+	// Verifies protocol bump PRs pass only after the selected CLI release advertises the new protocol.
+	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
+		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
+		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
+	assertProtocolMinimumVersionLogContains(t, result.gitLog, "cli-v3.0.0-beta.33:cli/contract.json")
+}
+
+func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseProtocolDiffers_Fails(t *testing.T) {
+	// Verifies changing the minimum version text is not enough when the release uses the old protocol.
+	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
+		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
+		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
+		releaseContent: `{"schemaVersion":1,"protocolVersion":1,"cliVersion":"3.0.0-beta.33"}`,
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "does not point to a published CLI release")
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "advertises protocol 1")
 }
 
 func TestVerifyMinimumCliReleaseProtocol_WhenTagProtocolMatches_Passes(t *testing.T) {
@@ -129,9 +159,10 @@ func TestRunProtocolMinimumVersionComment_WhenWarningExists_UpsertsComment(t *te
 func TestRunProtocolMinimumVersionComment_WhenWarningIsResolved_DeletesComment(t *testing.T) {
 	// Verifies stale protocol minimum comments are removed after the PR is fixed.
 	result := runProtocolMinimumVersionCommentCase(t, protocolMinimumVersionCommentCase{
-		baseContent: buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
-		headContent: buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
-		commentIDs:  "123",
+		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
+		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+		commentIDs:     "123",
 	})
 
 	if result.exitCode != 0 {
@@ -141,10 +172,77 @@ func TestRunProtocolMinimumVersionComment_WhenWarningIsResolved_DeletesComment(t
 	assertProtocolMinimumVersionLogContains(t, result.ghLog, "api --method DELETE repos/owner/repository/issues/comments/123")
 }
 
+func TestRunProtocolMinimumVersionComment_WhenMinimumReleaseProtocolDiffers_UpsertsComment(t *testing.T) {
+	// Verifies stale protocol minimum comments stay open until the selected release protocol matches.
+	result := runProtocolMinimumVersionCommentCase(t, protocolMinimumVersionCommentCase{
+		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
+		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
+		releaseContent: `{"schemaVersion":1,"protocolVersion":1,"cliVersion":"3.0.0-beta.33"}`,
+		commentIDs:     "123",
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stdout, "Updated protocol minimum version comment.")
+	assertProtocolMinimumVersionLogContains(t, result.ghLog, "api --method PATCH repos/owner/repository/issues/comments/123 --input")
+}
+
+type protocolMinimumVersionRefCase struct {
+	baseContent    string
+	headContent    string
+	releaseContent string
+}
+
+type protocolMinimumVersionGuardRunResult struct {
+	exitCode int
+	stdout   string
+	stderr   string
+	gitLog   string
+}
+
+func runProtocolMinimumVersionGuardCase(t *testing.T, testCase protocolMinimumVersionRefCase) protocolMinimumVersionGuardRunResult {
+	t.Helper()
+
+	workDir := t.TempDir()
+	mockBin := filepath.Join(workDir, "bin")
+	err := os.MkdirAll(mockBin, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create mock bin: %v", err)
+	}
+
+	gitLogPath := filepath.Join(workDir, "git.log")
+	writeProtocolMinimumVersionMockGit(t, filepath.Join(mockBin, "git"))
+	prepareProtocolMinimumVersionGitContents(t, workDir, testCase)
+
+	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
+	t.Setenv("GIT_LOG", gitLogPath)
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := RunProtocolMinimumVersionGuard(
+		context.Background(),
+		&stdout,
+		&stderr,
+		ProtocolMinimumVersionGuardConfig{
+			BaseRef: "origin/v3-beta",
+			HeadRef: "protocol-pr-head",
+		})
+
+	return protocolMinimumVersionGuardRunResult{
+		exitCode: exitCode,
+		stdout:   stdout.String(),
+		stderr:   stderr.String(),
+		gitLog:   readFile(t, gitLogPath),
+	}
+}
+
 type protocolMinimumVersionCommentCase struct {
-	baseContent string
-	headContent string
-	commentIDs  string
+	baseContent    string
+	headContent    string
+	releaseContent string
+	commentIDs     string
 }
 
 type protocolMinimumVersionCommentResult struct {
@@ -166,12 +264,13 @@ func runProtocolMinimumVersionCommentCase(t *testing.T, testCase protocolMinimum
 
 	gitLogPath := filepath.Join(workDir, "git.log")
 	ghLogPath := filepath.Join(workDir, "gh.log")
-	baseContentPath := filepath.Join(workDir, "base.cs")
-	headContentPath := filepath.Join(workDir, "head.cs")
 	writeProtocolMinimumVersionMockGit(t, filepath.Join(mockBin, "git"))
 	writeProtocolMinimumVersionMockGH(t, filepath.Join(mockBin, "gh"))
-	writeFile(t, baseContentPath, testCase.baseContent)
-	writeFile(t, headContentPath, testCase.headContent)
+	prepareProtocolMinimumVersionGitContents(t, workDir, protocolMinimumVersionRefCase{
+		baseContent:    testCase.baseContent,
+		headContent:    testCase.headContent,
+		releaseContent: testCase.releaseContent,
+	})
 
 	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
@@ -180,8 +279,6 @@ func runProtocolMinimumVersionCommentCase(t *testing.T, testCase protocolMinimum
 	t.Setenv("GITHUB_BASE_REF", "v3-beta")
 	t.Setenv("PROTOCOL_MINIMUM_VERSION_HEAD_REF", "protocol-pr-head")
 	t.Setenv("GIT_LOG", gitLogPath)
-	t.Setenv("GIT_BASE_CONTENT", baseContentPath)
-	t.Setenv("GIT_HEAD_CONTENT", headContentPath)
 	t.Setenv("GH_LOG", ghLogPath)
 	t.Setenv("GH_COMMENT_IDS", testCase.commentIDs)
 
@@ -196,6 +293,22 @@ func runProtocolMinimumVersionCommentCase(t *testing.T, testCase protocolMinimum
 		stderr:   stderr.String(),
 		ghLog:    ghLog,
 	}
+}
+
+func prepareProtocolMinimumVersionGitContents(t *testing.T, workDir string, testCase protocolMinimumVersionRefCase) {
+	t.Helper()
+
+	baseContentPath := filepath.Join(workDir, "base.cs")
+	headContentPath := filepath.Join(workDir, "head.cs")
+	releaseContentPath := filepath.Join(workDir, "release-contract.json")
+	writeFile(t, baseContentPath, testCase.baseContent)
+	writeFile(t, headContentPath, testCase.headContent)
+	if testCase.releaseContent != "" {
+		writeFile(t, releaseContentPath, testCase.releaseContent)
+		t.Setenv("GIT_RELEASE_CONTENT", releaseContentPath)
+	}
+	t.Setenv("GIT_BASE_CONTENT", baseContentPath)
+	t.Setenv("GIT_HEAD_CONTENT", headContentPath)
 }
 
 func buildProtocolMinimumVersionConstants(requiredProtocolVersion int, minimumCliVersion string) string {
@@ -230,6 +343,14 @@ if [ "$1" = "show" ]; then
   case "$2" in
     origin/v3-beta:*) cat "$GIT_BASE_CONTENT" ;;
     protocol-pr-head:*) cat "$GIT_HEAD_CONTENT" ;;
+    cli-v*:cli/contract.json)
+      if [ -n "${GIT_RELEASE_CONTENT:-}" ]; then
+        cat "$GIT_RELEASE_CONTENT"
+      else
+        echo "release not found" >&2
+        exit 1
+      fi
+      ;;
     *) echo "unexpected git show ref: $2" >&2; exit 1 ;;
   esac
   exit 0

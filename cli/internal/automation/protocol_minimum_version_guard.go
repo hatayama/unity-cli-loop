@@ -37,11 +37,12 @@ type ProtocolMinimumVersionValues struct {
 }
 
 type ProtocolMinimumVersionGuardResult struct {
-	Base                      ProtocolMinimumVersionValues
-	Head                      ProtocolMinimumVersionValues
-	RequiredProtocolChanged   bool
-	MinimumCliVersionChanged  bool
-	NeedsMinimumVersionUpdate bool
+	Base                           ProtocolMinimumVersionValues
+	Head                           ProtocolMinimumVersionValues
+	RequiredProtocolChanged        bool
+	MinimumCliVersionChanged       bool
+	NeedsMinimumVersionUpdate      bool
+	MinimumCliReleaseProtocolError string
 }
 
 type minimumCliReleaseContract struct {
@@ -60,7 +61,7 @@ func RunProtocolMinimumVersionGuard(
 		writeProtocolMinimumVersionLine(stderr, err)
 		return 1
 	}
-	if result.NeedsMinimumVersionUpdate {
+	if protocolMinimumVersionGuardNeedsAction(result) {
 		writeProtocolMinimumVersionLine(stderr, FormatProtocolMinimumVersionWarning(result))
 		return 1
 	}
@@ -91,16 +92,7 @@ func RunMinimumCliReleaseProtocolCheck(ctx context.Context, stdout io.Writer, st
 		return 1
 	}
 
-	releaseTag := cliReleaseTagPrefix + values.MinimumCliVersion
-	contractContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, releaseTag, "cli/contract.json")
-	if err != nil {
-		writeProtocolMinimumVersionLine(
-			stderr,
-			fmt.Sprintf("failed to read cli/contract.json from %s: %v", releaseTag, err))
-		return 1
-	}
-	err = VerifyMinimumCliReleaseProtocol(values, []byte(contractContent))
-	if err != nil {
+	if err := verifyMinimumCliReleaseProtocolAtRef(ctx, repoRoot, values); err != nil {
 		writeProtocolMinimumVersionLine(stderr, err)
 		return 1
 	}
@@ -108,8 +100,9 @@ func RunMinimumCliReleaseProtocolCheck(ctx context.Context, stdout io.Writer, st
 	writeProtocolMinimumVersionLine(
 		stdout,
 		fmt.Sprintf(
-			"Minimum CLI release %s advertises protocol %d.",
-			releaseTag,
+			"Minimum CLI release %s%s advertises protocol %d.",
+			cliReleaseTagPrefix,
+			values.MinimumCliVersion,
 			values.RequiredProtocolVersion))
 	return 0
 }
@@ -139,7 +132,14 @@ func AnalyzeProtocolMinimumVersionGuardForRefs(
 		return ProtocolMinimumVersionGuardResult{}, err
 	}
 
-	return AnalyzeProtocolMinimumVersionGuard(baseValues, headValues), nil
+	result := AnalyzeProtocolMinimumVersionGuard(baseValues, headValues)
+	if result.RequiredProtocolChanged && !result.NeedsMinimumVersionUpdate {
+		err = verifyMinimumCliReleaseProtocolAtRef(ctx, repoRoot, result.Head)
+		if err != nil {
+			result.MinimumCliReleaseProtocolError = err.Error()
+		}
+	}
+	return result, nil
 }
 
 func AnalyzeProtocolMinimumVersionGuard(
@@ -208,11 +208,28 @@ func VerifyMinimumCliReleaseProtocol(values ProtocolMinimumVersionValues, contra
 	return nil
 }
 
+func verifyMinimumCliReleaseProtocolAtRef(
+	ctx context.Context,
+	repoRoot string,
+	values ProtocolMinimumVersionValues,
+) error {
+	releaseTag := cliReleaseTagPrefix + values.MinimumCliVersion
+	contractContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, releaseTag, "cli/contract.json")
+	if err != nil {
+		return fmt.Errorf("CLI release %s does not provide cli/contract.json", releaseTag)
+	}
+	return VerifyMinimumCliReleaseProtocol(values, []byte(contractContent))
+}
+
 func FormatProtocolMinimumVersionWarning(result ProtocolMinimumVersionGuardResult) string {
 	builder := strings.Builder{}
 	builder.WriteString(protocolMinimumVersionMarker)
 	builder.WriteString("\n")
-	builder.WriteString("Protocol version changed, but `MINIMUM_REQUIRED_CLI_VERSION` did not.\n\n")
+	if result.NeedsMinimumVersionUpdate {
+		builder.WriteString("Protocol version changed, but `MINIMUM_REQUIRED_CLI_VERSION` did not.\n\n")
+	} else {
+		builder.WriteString("Protocol version changed, but `MINIMUM_REQUIRED_CLI_VERSION` does not point to a published CLI release that advertises the required protocol.\n\n")
+	}
 	builder.WriteString("- Base required protocol: ")
 	builder.WriteString(protocolMinimumVersionValueLabel(result.Base))
 	builder.WriteString("\n")
@@ -221,9 +238,19 @@ func FormatProtocolMinimumVersionWarning(result ProtocolMinimumVersionGuardResul
 	builder.WriteString("\n")
 	builder.WriteString("- Current minimum CLI: `")
 	builder.WriteString(result.Head.MinimumCliVersion)
-	builder.WriteString("`\n\n")
+	builder.WriteString("`\n")
+	if result.MinimumCliReleaseProtocolError != "" {
+		builder.WriteString("- Release check: ")
+		builder.WriteString(protocolMinimumVersionErrorLabel(result.MinimumCliReleaseProtocolError))
+		builder.WriteString("\n")
+	}
+	builder.WriteString("\n")
 	builder.WriteString("Update `MINIMUM_REQUIRED_CLI_VERSION` to a published CLI release that advertises the new protocol before releasing the Unity package.")
 	return builder.String()
+}
+
+func protocolMinimumVersionGuardNeedsAction(result ProtocolMinimumVersionGuardResult) bool {
+	return result.NeedsMinimumVersionUpdate || result.MinimumCliReleaseProtocolError != ""
 }
 
 func protocolMinimumVersionValueLabel(values ProtocolMinimumVersionValues) string {
@@ -231,6 +258,12 @@ func protocolMinimumVersionValueLabel(values ProtocolMinimumVersionValues) strin
 		return "`<missing>`"
 	}
 	return "`" + strconv.Itoa(values.RequiredProtocolVersion) + "`"
+}
+
+func protocolMinimumVersionErrorLabel(value string) string {
+	trimmedValue := strings.TrimSpace(value)
+	singleLineValue := strings.ReplaceAll(trimmedValue, "\n", " ")
+	return "`" + singleLineValue + "`"
 }
 
 func protocolMinimumVersionValuesAtRef(
