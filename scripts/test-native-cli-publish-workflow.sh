@@ -38,6 +38,12 @@ test_attestation_permissions() {
   assert_contains "$WORKFLOW" "  artifact-metadata: write"
 }
 
+test_go_is_available_for_package_release_sync() {
+  assert_contains "$WORKFLOW" "      - name: Setup Go"
+  assert_contains "$WORKFLOW" "        if: steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true'"
+  assert_before "$WORKFLOW" "      - name: Setup Go" "      - name: Sync release-please package releases"
+}
+
 test_release_assets_are_attested() {
   assert_contains "$WORKFLOW" "      - name: Attest native CLI release assets"
   assert_contains "$WORKFLOW" "        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'"
@@ -76,6 +82,7 @@ test_release_please_is_dispatched_after_publish() {
 }
 
 test_attestation_permissions
+test_go_is_available_for_package_release_sync
 test_release_assets_are_attested
 test_release_asset_attestations_are_verified
 test_release_tagged_installer_scripts_are_verified

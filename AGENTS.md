@@ -36,10 +36,13 @@ Do not touch the protocol version to "keep up with releases":
 - `cli/contract.json` `cliVersion` and `cli/internal/tools/default-tools.json` `version` are
   stamped by release-please only. Never edit them by hand in a feature PR.
 - `CliConstants.MINIMUM_REQUIRED_CLI_VERSION` is the release that setup installs. It must always
-  point at a published CLI release, so it advances after a release, never inside a feature PR.
-- Runtime protocol mismatch guidance must not pin updates to `MINIMUM_REQUIRED_CLI_VERSION`; that
-  value may be older than the protocol the package now requires. Use the unpinned CLI update path
-  for older clients and tell newer clients to align the package and CLI releases.
+  point at a published CLI release.
+- When a protocol bump changes `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`, prepare the matching
+  CLI release tag first, then update `CliConstants.MINIMUM_REQUIRED_CLI_VERSION` in the same PR.
+  PR CI fails, and the PR warning comment stays open, until the minimum CLI release advances to a
+  published CLI release that advertises the required protocol.
+- Runtime protocol mismatch guidance must use the unpinned CLI update path for older clients and
+  tell newer clients to align the package and CLI releases.
 
 ## Generated Skill Files
 
