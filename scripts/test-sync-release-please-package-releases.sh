@@ -316,7 +316,7 @@ test_creates_missing_root_release_from_release_commit() {
   assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
   assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
   assert_contains "$work_dir/gh.log" "release view cli-v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish,assets"
-  assert_contains "$work_dir/go.log" "run ./cmd/check-protocol-minimum-version --verify-release"
+  assert_contains "$work_dir/go.log" "run ./cmd/check-protocol-minimum-version --verify-release --ref $release_sha"
   assert_contains "$work_dir/github-output.txt" "ready=true"
 }
 

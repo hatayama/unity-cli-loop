@@ -358,9 +358,11 @@ wait_for_cli_release_ready() {
 }
 
 verify_minimum_cli_release_protocol() {
+  release_ref=$1
+
   (
     cd "$ROOT_DIR/cli"
-    go run ./cmd/check-protocol-minimum-version --verify-release
+    go run ./cmd/check-protocol-minimum-version --verify-release --ref "$release_ref"
   )
 }
 
@@ -400,7 +402,6 @@ if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packa
     exit 0
   fi
   fetch_cli_release_tag "$cli_release_tag"
-  verify_minimum_cli_release_protocol
 fi
 
 jq -r --arg skip "$CLI_PACKAGE_PATH" '
@@ -453,6 +454,9 @@ while IFS='	' read -r package_path changelog_config_path component include_compo
 
       is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
       if [ "$is_draft" != "false" ]; then
+        if [ -n "$release_commit_sha" ]; then
+          verify_minimum_cli_release_protocol "$release_commit_sha"
+        fi
         publish_existing_draft_release "$release_tag" "$version"
       else
         echo "Release $release_tag already exists."
@@ -465,6 +469,7 @@ while IFS='	' read -r package_path changelog_config_path component include_compo
         exit 1
       fi
 
+      verify_minimum_cli_release_protocol "$release_commit_sha"
       notes_file="$TMP_DIR/$release_tag.md"
       write_release_notes "$changelog_path" "$version" "$notes_file"
       create_package_release "$release_tag" "$version" "$release_commit_sha" "$notes_file"

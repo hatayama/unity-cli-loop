@@ -97,6 +97,38 @@ func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseProtocolDiffers_Fails(
 	assertProtocolMinimumVersionLogContains(t, result.stderr, "advertises protocol 1")
 }
 
+func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseIsDraft_Fails(t *testing.T) {
+	// Verifies protocol bump PRs wait for a published CLI release, not only a git tag.
+	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
+		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
+		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+		releaseView:    `{"isDraft":true,"assets":[]}`,
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "does not point to a published CLI release")
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "is still draft")
+}
+
+func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseAssetsAreMissing_Fails(t *testing.T) {
+	// Verifies protocol bump PRs wait for installable native CLI release assets.
+	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
+		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
+		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+		releaseView:    `{"isDraft":false,"assets":[]}`,
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "does not point to a published CLI release")
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "is missing release asset")
+}
+
 func TestRunProtocolMinimumVersionGuard_WhenOnlyMinimumReleaseProtocolDiffers_Fails(t *testing.T) {
 	// Verifies installer target changes are validated even without a protocol declaration bump.
 	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
@@ -156,6 +188,46 @@ func TestVerifyMinimumCliReleaseProtocol_WhenTagProtocolDiffers_Fails(t *testing
 	}
 }
 
+func TestRunMinimumCliReleaseProtocolCheck_WhenRefIsProvided_ReadsValuesAtRef(t *testing.T) {
+	// Verifies release backfill checks validate the release commit instead of the current checkout.
+	workDir := t.TempDir()
+	mockBin := filepath.Join(workDir, "bin")
+	err := os.MkdirAll(mockBin, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create mock bin: %v", err)
+	}
+
+	gitLogPath := filepath.Join(workDir, "git.log")
+	ghLogPath := filepath.Join(workDir, "gh.log")
+	writeProtocolMinimumVersionMockGit(t, filepath.Join(mockBin, "git"))
+	writeProtocolMinimumVersionMockGH(t, filepath.Join(mockBin, "gh"))
+	prepareProtocolMinimumVersionGitContents(t, workDir, protocolMinimumVersionRefCase{
+		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
+		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+	})
+
+	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
+	t.Setenv("GIT_LOG", gitLogPath)
+	t.Setenv("GH_LOG", ghLogPath)
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := RunMinimumCliReleaseProtocolCheck(
+		context.Background(),
+		&stdout,
+		&stderr,
+		"protocol-release")
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr.String())
+	}
+	assertProtocolMinimumVersionLogContains(t, stdout.String(), "Minimum CLI release cli-v3.0.0-beta.33 advertises protocol 2.")
+	assertProtocolMinimumVersionLogContains(t, readFile(t, gitLogPath), "protocol-release:"+protocolMinimumVersionFile)
+	assertProtocolMinimumVersionLogContains(t, readFile(t, ghLogPath), "release view cli-v3.0.0-beta.33")
+}
+
 func TestRunProtocolMinimumVersionComment_WhenWarningExists_UpsertsComment(t *testing.T) {
 	// Verifies PR comments explain protocol bump installer target omissions.
 	result := runProtocolMinimumVersionCommentCase(t, protocolMinimumVersionCommentCase{
@@ -207,6 +279,7 @@ type protocolMinimumVersionRefCase struct {
 	baseContent    string
 	headContent    string
 	releaseContent string
+	releaseView    string
 }
 
 type protocolMinimumVersionGuardRunResult struct {
@@ -227,12 +300,18 @@ func runProtocolMinimumVersionGuardCase(t *testing.T, testCase protocolMinimumVe
 	}
 
 	gitLogPath := filepath.Join(workDir, "git.log")
+	ghLogPath := filepath.Join(workDir, "gh.log")
 	writeProtocolMinimumVersionMockGit(t, filepath.Join(mockBin, "git"))
+	writeProtocolMinimumVersionMockGH(t, filepath.Join(mockBin, "gh"))
 	prepareProtocolMinimumVersionGitContents(t, workDir, testCase)
 
 	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
 	t.Setenv("GIT_LOG", gitLogPath)
+	t.Setenv("GH_LOG", ghLogPath)
+	if testCase.releaseView != "" {
+		t.Setenv("GH_RELEASE_VIEW", testCase.releaseView)
+	}
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
@@ -358,6 +437,7 @@ if [ "$1" = "show" ]; then
   case "$2" in
     origin/v3-beta:*) cat "$GIT_BASE_CONTENT" ;;
     protocol-pr-head:*) cat "$GIT_HEAD_CONTENT" ;;
+    protocol-release:*) cat "$GIT_HEAD_CONTENT" ;;
     cli-v*:cli/contract.json)
       if [ -n "${GIT_RELEASE_CONTENT:-}" ]; then
         cat "$GIT_RELEASE_CONTENT"
@@ -388,6 +468,15 @@ func writeProtocolMinimumVersionMockGH(t *testing.T, path string) {
 set -eu
 
 printf '%s\n' "$*" >> "$GH_LOG"
+
+if [ "$1" = "release" ] && [ "$2" = "view" ]; then
+  if [ -n "${GH_RELEASE_VIEW:-}" ]; then
+    printf '%s\n' "$GH_RELEASE_VIEW"
+  else
+    printf '%s\n' '{"isDraft":false,"assets":[{"name":"install.sh","size":1},{"name":"install.ps1","size":1},{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]}'
+  fi
+  exit 0
+fi
 
 if [ "$1" = "api" ] && [ "$2" = "--paginate" ]; then
   if [ -n "$GH_COMMENT_IDS" ]; then

@@ -21,8 +21,18 @@ const (
 )
 
 var (
-	requiredProtocolVersionPattern = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
-	minimumCliVersionPattern       = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
+	requiredProtocolVersionPattern  = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
+	minimumCliVersionPattern        = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
+	requiredMinimumCliReleaseAssets = []string{
+		"install.sh",
+		"install.ps1",
+		"uloop-darwin-amd64.tar.gz",
+		"uloop-darwin-amd64.tar.gz.sha256",
+		"uloop-darwin-arm64.tar.gz",
+		"uloop-darwin-arm64.tar.gz.sha256",
+		"uloop-windows-amd64.zip",
+		"uloop-windows-amd64.zip.sha256",
+	}
 )
 
 type ProtocolMinimumVersionGuardConfig struct {
@@ -50,6 +60,16 @@ type minimumCliReleaseContract struct {
 	CliVersion      string `json:"cliVersion"`
 }
 
+type minimumCliReleaseView struct {
+	IsDraft bool                     `json:"isDraft"`
+	Assets  []minimumCliReleaseAsset `json:"assets"`
+}
+
+type minimumCliReleaseAsset struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
 func RunProtocolMinimumVersionGuard(
 	ctx context.Context,
 	stdout io.Writer,
@@ -70,14 +90,14 @@ func RunProtocolMinimumVersionGuard(
 	return 0
 }
 
-func RunMinimumCliReleaseProtocolCheck(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
+func RunMinimumCliReleaseProtocolCheck(ctx context.Context, stdout io.Writer, stderr io.Writer, ref string) int {
 	repoRoot, err := gitRepoRoot(ctx)
 	if err != nil {
 		writeProtocolMinimumVersionLine(stderr, fmt.Sprintf("failed to resolve git repository root: %v", err))
 		return 1
 	}
 
-	content, err := os.ReadFile(filepath.Join(repoRoot, protocolMinimumVersionFile))
+	content, err := minimumCliReleaseProtocolFile(ctx, repoRoot, ref)
 	if err != nil {
 		writeProtocolMinimumVersionLine(stderr, fmt.Sprintf("failed to read %s: %v", protocolMinimumVersionFile, err))
 		return 1
@@ -218,7 +238,65 @@ func verifyMinimumCliReleaseProtocolAtRef(
 	if err != nil {
 		return fmt.Errorf("CLI release %s does not provide cli/contract.json", releaseTag)
 	}
-	return VerifyMinimumCliReleaseProtocol(values, []byte(contractContent))
+	if err := VerifyMinimumCliReleaseProtocol(values, []byte(contractContent)); err != nil {
+		return err
+	}
+	return verifyMinimumCliReleaseIsPublished(ctx, repoRoot, releaseTag)
+}
+
+func minimumCliReleaseProtocolFile(ctx context.Context, repoRoot string, ref string) ([]byte, error) {
+	if ref == "" {
+		return os.ReadFile(filepath.Join(repoRoot, protocolMinimumVersionFile))
+	}
+
+	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, protocolMinimumVersionFile)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(content), nil
+}
+
+func verifyMinimumCliReleaseIsPublished(ctx context.Context, repoRoot string, releaseTag string) error {
+	output, err := runProtocolMinimumVersionOutput(
+		ctx,
+		repoRoot,
+		"gh",
+		"release",
+		"view",
+		releaseTag,
+		"--json",
+		"isDraft,assets")
+	if err != nil {
+		return fmt.Errorf("CLI release %s is not published with complete native assets: %w", releaseTag, err)
+	}
+
+	releaseView := minimumCliReleaseView{}
+	if err := json.Unmarshal([]byte(output), &releaseView); err != nil {
+		return fmt.Errorf("CLI release %s metadata is invalid JSON: %w", releaseTag, err)
+	}
+	if releaseView.IsDraft {
+		return fmt.Errorf("CLI release %s is still draft", releaseTag)
+	}
+	if missingAsset := missingMinimumCliReleaseAsset(releaseView.Assets); missingAsset != "" {
+		return fmt.Errorf("CLI release %s is missing release asset %s", releaseTag, missingAsset)
+	}
+	return nil
+}
+
+func missingMinimumCliReleaseAsset(assets []minimumCliReleaseAsset) string {
+	availableAssets := map[string]bool{}
+	for _, asset := range assets {
+		if asset.Size > 0 {
+			availableAssets[asset.Name] = true
+		}
+	}
+
+	for _, assetName := range requiredMinimumCliReleaseAssets {
+		if !availableAssets[assetName] {
+			return assetName
+		}
+	}
+	return ""
 }
 
 func FormatProtocolMinimumVersionWarning(result ProtocolMinimumVersionGuardResult) string {
