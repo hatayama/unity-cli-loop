@@ -3,6 +3,7 @@ using NUnit.Framework;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -80,8 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
-            Assert.That(response.Message, Does.Contain("Unity does not return"));
-            Assert.That(response.Message, Does.Contain("get-logs"));
+            Assert.That(response.Message, Is.EqualTo(UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE));
         }
 
         [Test]
@@ -105,8 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
-            Assert.That(response.Message, Does.Contain("Unity does not return"));
-            Assert.That(response.Message, Does.Contain("intentionally null"));
+            Assert.That(response.Message, Is.EqualTo(UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE));
         }
 
         [Test]

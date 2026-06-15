@@ -91,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         
         public const string ERROR_MESSAGE_DUPLICATE_ASMDEF = "Duplicate asmdef assembly name detected. Unity may not start compilation until duplicates are removed.";
         public const string ERROR_MESSAGE_ASSEMBLY_DEFINITION_IMPORT_ERROR = "Assembly Definition or Assembly Reference import error detected. Unity may not start compilation until asmdef or asmref errors are removed.";
-        public const string FORCE_COMPILE_UNKNOWN_RESULT_EXPLANATION = "Unity does not return a definitive compile result for this forced full compile path, so fields that Unity did not provide are intentionally null; run get-logs to inspect the compiler output.";
+        public const string FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE = "Forced full compilation completed. Unity does not return a definitive compile result for this forced full compile path, so fields that Unity did not provide are intentionally null; run get-logs to inspect the compiler output.";
         
         public const string ERROR_MESSAGE_EXECUTION_IN_PROGRESS = "Another execution is already in progress";
         public const string ERROR_MESSAGE_EXECUTION_CANCELLED = "Execution was cancelled or timed out";

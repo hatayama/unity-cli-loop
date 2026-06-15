@@ -18,8 +18,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string RequestIdParamName = "RequestId";
         private const string RecoveredCompileResultMessage =
             "Compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. Use get-logs to inspect the compiler output.";
-        private const string RecoveredForceCompileResultMessage =
-            "Forced full compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. " + UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_EXPLANATION;
 
         public static GetCompileStatusResponse Execute(JToken paramsToken)
         {
@@ -161,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             if (forceRecompile)
             {
-                return new JValue(RecoveredForceCompileResultMessage);
+                return new JValue(UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE);
             }
 
             return new JValue(RecoveredCompileResultMessage);

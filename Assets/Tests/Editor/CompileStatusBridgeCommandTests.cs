@@ -3,6 +3,7 @@ using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -187,8 +188,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.HasResult, Is.True);
             Assert.That(response.Result["Success"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
-            Assert.That(response.Result["Message"]?.ToString(), Does.Contain("Unity does not return"));
-            Assert.That(response.Result["Message"]?.ToString(), Does.Contain("get-logs"));
+            Assert.That(
+                response.Result["Message"]?.ToString(),
+                Is.EqualTo(UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE));
         }
     }
 }
