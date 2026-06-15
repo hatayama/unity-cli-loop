@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-pause-point
-description: "Wait for a named UloopPausePoint marker to pause Unity, then inspect the frozen PlayMode frame. Use for PlayMode/E2E checks of simulated input, physics, or UI transitions."
+description: "An alternative to IDE breakpoints. Temporarily pauses Unity and then inspects a specific frozen frame. Use this during bug investigations or PlayMode/E2E testing to examine variable states at specific frames or verify whether particular code has been executed."
 ---
 
 ## Quick Check Template
