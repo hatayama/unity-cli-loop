@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string RecoveredCompileResultMessage =
             "Compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. Use get-logs to inspect the compiler output.";
         private const string RecoveredForceCompileResultMessage =
-            "Forced full compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. Unity does not return a definitive compile result for this forced full compile path, so fields that Unity did not provide are intentionally null; run get-logs to inspect the compiler output.";
+            "Forced full compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. " + UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_EXPLANATION;
 
         public static GetCompileStatusResponse Execute(JToken paramsToken)
         {

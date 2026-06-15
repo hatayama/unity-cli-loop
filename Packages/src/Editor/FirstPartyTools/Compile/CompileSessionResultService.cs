@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string MissingTestFrameworkReferenceHint =
             "Possible test asmdef issue: Unity test framework symbols are missing. Make sure com.unity.test-framework is installed and add optionalUnityReferences: [\"TestAssemblies\"] or enable testAssemblies on the test asmdef.";
         private const string ForceCompileResultMessage =
-            "Forced full compilation completed, but Unity does not return a definitive compile result for this forced full compile path. Fields that Unity did not provide are intentionally null; run get-logs to inspect the compiler output.";
+            "Forced full compilation completed. " + UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_EXPLANATION;
 
         internal static UnityCliLoopCompileResult CreateCompileResult(
             CompileResult result,
