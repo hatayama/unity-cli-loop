@@ -3,6 +3,7 @@ using NUnit.Framework;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -51,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CreateCompileResult_WhenForceCompileIsUnknown_DropsDetailedIssues()
+        public void CreateCompileResult_WhenForceCompileIsUnknown_ExplainsNullDetails()
         {
             // Verifies force compile results do not pretend Unity returned detailed issue content.
             CompilerMessage error = new CompilerMessage
@@ -80,11 +81,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
-            Assert.That(response.Message, Is.Null);
+            Assert.That(response.Message, Is.EqualTo(ForceCompileUnknownResult.MessageText));
         }
 
         [Test]
-        public void CreateCompileResult_WhenForceCompileHasOutcome_DropsCountsAndDetailedIssues()
+        public void CreateCompileResult_WhenForceCompileHasOutcome_ExplainsNullDetails()
         {
             // Verifies force compile does not report counts or issue lists even when a high-level outcome exists.
             CompileResult result = new CompileResult(
@@ -94,7 +95,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 completedAt: DateTime.Now,
                 messages: Array.Empty<CompilerMessage>(),
                 errors: Array.Empty<CompilerMessage>(),
-                warnings: Array.Empty<CompilerMessage>());
+                warnings: Array.Empty<CompilerMessage>(),
+                message: "Internal force compile status message.");
 
             UnityCliLoopCompileResult response =
                 CompileSessionResultService.CreateCompileResult(result, forceRecompile: true);
@@ -104,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
-            Assert.That(response.Message, Is.Null);
+            Assert.That(response.Message, Is.EqualTo(ForceCompileUnknownResult.MessageText));
         }
 
         [Test]
