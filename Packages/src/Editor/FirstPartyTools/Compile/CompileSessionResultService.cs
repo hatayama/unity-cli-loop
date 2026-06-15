@@ -104,9 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 WarningCount = null,
                 Errors = null,
                 Warnings = null,
-                Message = string.IsNullOrWhiteSpace(result.Message)
-                    ? UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE
-                    : $"{result.Message} {UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE}"
+                Message = UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE
             };
         }
 

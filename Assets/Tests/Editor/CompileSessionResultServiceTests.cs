@@ -95,7 +95,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 completedAt: DateTime.Now,
                 messages: Array.Empty<CompilerMessage>(),
                 errors: Array.Empty<CompilerMessage>(),
-                warnings: Array.Empty<CompilerMessage>());
+                warnings: Array.Empty<CompilerMessage>(),
+                message: "Internal force compile status message.");
 
             UnityCliLoopCompileResult response =
                 CompileSessionResultService.CreateCompileResult(result, forceRecompile: true);
