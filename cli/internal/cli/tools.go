@@ -334,6 +334,7 @@ func visibleOptionNamesForTool(tool toolDefinition) []string {
 		}
 		options = append(options, "--"+optionNameForProperty(tool.Name, propertyName, property))
 	}
+	options = appendDynamicCodeFileOptionName(tool, options)
 	sort.Strings(options)
 	return options
 }

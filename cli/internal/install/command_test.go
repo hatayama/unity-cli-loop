@@ -36,6 +36,10 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 		"npm uninstall -g --prefix",
 		"npm uninstall -g uloop-cli",
 		"Report-PathShadowing",
+		"function Write-LegacyNpmMultilineArgumentWarning",
+		"if (Test-LegacyNpmUloopPath -CommandPath $ResolvedCommand.Source) {\n        Write-LegacyNpmMultilineArgumentWarning\n    }",
+		"foreach ($ShimName in @('uloop.exe', 'uloop.cmd', 'uloop.ps1', 'uloop'))",
+		"Legacy npm shims can alter multiline PowerShell arguments before the native CLI receives them.",
 	} {
 		if !strings.Contains(setupScript, expected) {
 			t.Fatalf("expected %s in setup script: %s", expected, setupScript)
@@ -52,6 +56,12 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 	}
 	if strings.Contains(setupScript, "foreach ($ShimName in @('uloop', 'uloop.cmd', 'uloop.ps1', 'uloop.exe'))") {
 		t.Fatal("legacy npm shim detection should not content-scan native exe files")
+	}
+	if count := strings.Count(setupScript, "Legacy npm shims can alter multiline PowerShell arguments before the native CLI receives them."); count != 1 {
+		t.Fatalf("legacy npm multiline warning should have one message definition, got %d", count)
+	}
+	if count := strings.Count(setupScript, "Write-LegacyNpmMultilineArgumentWarning"); count != 3 {
+		t.Fatalf("legacy npm multiline warning should be centralized and called from two sites, got %d occurrences", count)
 	}
 }
 

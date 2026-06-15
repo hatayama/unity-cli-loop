@@ -118,6 +118,7 @@ func visibleOptionHelpEntriesForTool(tool toolDefinition) []optionHelpEntry {
 		})
 	}
 
+	entries = appendDynamicCodeFileOptionHelpEntry(tool, entries)
 	sort.Slice(entries, func(i int, j int) bool {
 		return entries[i].name < entries[j].name
 	})

@@ -26,12 +26,28 @@ Use `execute-dynamic-code` for direct automation and diagnostics, and switch to 
 
 Use these patterns when you need shell-safe inline code:
 
+### Native launcher check
+
+Multi-line `--code` expects PowerShell to call the native `uloop.exe` launcher directly.
+If `Get-Command uloop` resolves to an old npm `.cmd` shim, run `uloop install` and open a new terminal before relying on multi-line inline snippets.
+
+```powershell
+(Get-Command uloop).Source
+```
+
 ### Double quotes inside C# strings
 
-Single-quote the whole snippet and keep C# string literals unchanged.
+PowerShell 7 (`pwsh`) preserves C# double quotes inside single-quoted native command arguments.
 
 ```powershell
 uloop execute-dynamic-code --code 'return "Hello from PowerShell";'
+```
+
+Windows PowerShell 5.1 removes unescaped double quotes when invoking native commands.
+Escape C# double quotes as `\"` when using inline `--code` from Windows PowerShell 5.1.
+
+```powershell
+uloop execute-dynamic-code --code 'return \"Hello from Windows PowerShell\";'
 ```
 
 ### Single quotes inside inline C# code
@@ -52,7 +68,7 @@ uloop execute-dynamic-code --code 'return parameters["param0"];' --parameters '{
 
 ### Multi-line C# snippets
 
-Use a here-string when the snippet spans multiple lines.
+Use a here-string when the snippet spans multiple lines in PowerShell 7 (`pwsh`).
 
 ```powershell
 $code = @'
@@ -60,6 +76,21 @@ using UnityEngine;
 
 GameObject obj = GameObject.Find("Player");
 if (obj == null) return "Player not found";
+
+return obj.name;
+'@
+
+uloop execute-dynamic-code --code $code
+```
+
+When using Windows PowerShell 5.1, escape C# double quotes inside the here-string before passing it to native `uloop.exe`.
+
+```powershell
+$code = @'
+using UnityEngine;
+
+GameObject obj = GameObject.Find(\"Player\");
+if (obj == null) return \"Player not found\";
 
 return obj.name;
 '@
