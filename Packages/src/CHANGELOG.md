@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.0.0-beta.34](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.33...v3.0.0-beta.34) (2026-06-15)
+
+
+### Bug Fixes
+
+* Clarify pause point skill guidance ([#1345](https://github.com/hatayama/unity-cli-loop/issues/1345)) ([d93c28e](https://github.com/hatayama/unity-cli-loop/commit/d93c28e68596b5743586bf87841c9084f48c8d92))
+* Forced compilation now explains unknown result fields ([#1342](https://github.com/hatayama/unity-cli-loop/issues/1342)) ([7dd609d](https://github.com/hatayama/unity-cli-loop/commit/7dd609d49ff2f5911766c0cf9901120719ce6f24))
+* Setup now installs CLI releases that match the required protocol ([#1340](https://github.com/hatayama/unity-cli-loop/issues/1340)) ([91cca52](https://github.com/hatayama/unity-cli-loop/commit/91cca52cf51c0675da413294be7d39ab4ec143fe))
+
 ## [3.0.0-beta.33](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.32...v3.0.0-beta.33) (2026-06-14)
 
 
