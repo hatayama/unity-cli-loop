@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.34](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.33...cli-v3.0.0-beta.34) (2026-06-15)
+
+
+### Bug Fixes
+
+* Setup now installs CLI releases that match the required protocol ([#1340](https://github.com/hatayama/unity-cli-loop/issues/1340)) ([91cca52](https://github.com/hatayama/unity-cli-loop/commit/91cca52cf51c0675da413294be7d39ab4ec143fe))
+
 ## [3.0.0-beta.33](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.32...cli-v3.0.0-beta.33) (2026-06-14)
 
 
