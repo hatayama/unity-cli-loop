@@ -129,6 +129,14 @@ fetch_release_refs() {
   fi
 }
 
+fetch_cli_release_tag() {
+  release_tag=$1
+
+  if git remote get-url origin >/dev/null 2>&1; then
+    git fetch --force origin "refs/tags/$release_tag:refs/tags/$release_tag" >/dev/null
+  fi
+}
+
 resolve_release_target_commit() {
   release_target=$1
 
@@ -391,6 +399,7 @@ if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packa
     echo "CLI release $cli_release_tag is not published with complete assets; package release sync will wait."
     exit 0
   fi
+  fetch_cli_release_tag "$cli_release_tag"
   verify_minimum_cli_release_protocol
 fi
 

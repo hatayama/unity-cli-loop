@@ -220,6 +220,7 @@ create_release_repo() {
     write_release_files 3.0.0-beta.6
     git add .
     git commit -q -m "chore: release v3-beta"
+    git tag cli-v3.0.0-beta.6
     git rev-parse HEAD > "$work_dir/release-sha.txt"
 
     printf '%s\n' "follow-up" > follow-up.txt
@@ -240,7 +241,7 @@ prepare_origin_branch() {
   (
     cd "$work_dir"
     git remote add origin "$remote_dir"
-    git push -q origin "$commit_sha:refs/heads/$branch_name"
+    git push -q origin "$commit_sha:refs/heads/$branch_name" refs/tags/cli-v3.0.0-beta.6
   )
 }
 
@@ -402,6 +403,7 @@ test_concurrent_root_release_creation_is_reused() {
   assert_contains "$work_dir/github-output.txt" "ready=true"
 }
 
+assert_contains "$SCRIPT" 'fetch_cli_release_tag "$cli_release_tag"'
 test_creates_missing_root_release_from_release_commit
 test_existing_root_release_is_reused
 test_existing_root_release_target_branch_resolves_via_origin
