@@ -18,6 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly TestExecutionService _executionService;
         private readonly TestExecutionStateValidationService _validationService;
         private readonly RunTestsNoTestsDiagnosticService _noTestsDiagnosticService;
+        private readonly Func<CancellationToken, Task> _waitForTestRunnerCleanupAsync;
+        private const int TestRunnerCleanupFallbackDelayMilliseconds = 3000;
 
         public RunTestsUseCase()
             : this(
@@ -30,7 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public RunTestsUseCase(
             TestFilterCreationService filterService,
             TestExecutionService executionService,
-            TestExecutionStateValidationService validationService)
+            TestExecutionStateValidationService validationService,
+            Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null)
         {
             Debug.Assert(filterService != null, "filterService must not be null");
             Debug.Assert(executionService != null, "executionService must not be null");
@@ -39,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _executionService = executionService;
             _validationService = validationService;
             _noTestsDiagnosticService = new RunTestsNoTestsDiagnosticService();
+            _waitForTestRunnerCleanupAsync = waitForTestRunnerCleanupAsync ?? WaitForTestRunnerCleanupAsync;
         }
 
         /// <summary>
@@ -106,6 +110,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Create a minimal error result
                 throw new System.InvalidOperationException("Test execution failed. Please check the logs for details.", ex);
             }
+
+            await _waitForTestRunnerCleanupAsync(ct);
             
             // 3. Response creation
             UnityCliLoopTestExecutionResult response = new UnityCliLoopTestExecutionResult
@@ -166,6 +172,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SkippedCount = 0,
                 XmlPath = null
             };
+        }
+
+        private static async Task WaitForTestRunnerCleanupAsync(CancellationToken ct)
+        {
+            // Why: Unity Test Framework exposes the real active-run signal only through internal API,
+            // while the public RunFinished callback fires before cleanup tasks such as RestoreSceneSetupTask.
+            await TimerDelay.Wait(TestRunnerCleanupFallbackDelayMilliseconds, ct);
         }
     }
 }
