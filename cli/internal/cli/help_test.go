@@ -279,6 +279,35 @@ func TestRunProjectLocalCompileHelpDoesNotRequireUnityProject(t *testing.T) {
 	}
 }
 
+// Tests that execute-dynamic-code help includes CLI-side code-file support without resolving a Unity project.
+func TestRunProjectLocalExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{executeDynamicCodeCommandName, "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("execute-dynamic-code help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"Usage:",
+		"uloop execute-dynamic-code",
+		"--code <value>",
+		dynamicCodeFileOptionUsage,
+		"--wait-for-domain-reload",
+		"Read C# code from a file",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("execute-dynamic-code help missing %q:\n%s", expected, output)
+		}
+	}
+	if strings.Contains(output, "--compile-only") {
+		t.Fatalf("execute-dynamic-code help exposed internal compile-only flag:\n%s", output)
+	}
+}
+
 // Tests that command help wins even after other tool options.
 func TestRunProjectLocalCompileHelpWinsAfterOtherOptions(t *testing.T) {
 	t.Chdir(t.TempDir())

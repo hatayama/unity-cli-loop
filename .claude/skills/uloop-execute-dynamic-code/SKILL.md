@@ -17,15 +17,15 @@ This tool can inspect reachable Unity state, such as GameObjects, components, pu
 
 1. Read the relevant reference file(s) from the Code Examples section below
 2. Construct C# code based on the reference examples
-3. Execute via Bash: `uloop execute-dynamic-code --code '<code>'`
+3. Execute inline code: `uloop execute-dynamic-code --code '<code>'`
 4. If execution fails, adjust code and retry
 5. Report the execution result
 
 ## Parameters
 
 - `--code '<code>'`: Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
-- `--code-file <path>`: Read the C# statements from a file instead of `--code`. Prefer this for long or multi-line snippets because it removes shell quoting entirely. Exactly one of `--code` or `--code-file` is required; combining them is an error.
-- **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell doubles inner quotes (`'Debug.Log(""Hello!"");'`). With `--code-file` no quoting is needed.
+- `--code-file <path>`: Read the C# statements from a file instead of `--code`. Use this when the active shell or launcher cannot preserve inline code exactly. Exactly one of `--code` or `--code-file` is required; combining them is an error.
+- **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell 7 (`pwsh`) preserves C# double quotes inside single-quoted strings. Windows PowerShell 5.1 removes unescaped double quotes when invoking native commands; escape C# double quotes as `\"` there, or use `--code-file` when the snippet has many strings.
 - `--parameters {}` (advanced, optional): Pass an object when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets, and pass an object instead of a JSON string.
 - `--wait-for-domain-reload` (optional): Wait for Domain Reload recovery after snippets that intentionally trigger Unity script reload or import work. Omit this for normal inspection and editor-state workflows.
 
@@ -46,7 +46,7 @@ return x;
 Returns JSON:
 - `Success`: boolean — overall execution success
 - `Result`: string — value of the snippet's `return` statement (empty when omitted)
-- `Logs`: string[] — `Debug.Log` / `Debug.LogWarning` / `Debug.LogError` messages emitted during the run
+- `Logs`: string[] — execution messages from the dynamic-code tool; read Unity Console `Debug.Log` output with `get-logs`
 - `CompilationErrors`: object[] — Roslyn diagnostics with `Message`, `Line`, `Column`, `ErrorCode`, optional `Hint` and `Suggestions`
 - `ErrorMessage`: string — top-level failure summary (empty on success)
 - `Error`: string — alias of `ErrorMessage`

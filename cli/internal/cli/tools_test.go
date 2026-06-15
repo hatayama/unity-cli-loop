@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -82,6 +83,28 @@ func TestBuildToolParamsConvertsExecuteDynamicCodeWaitFlag(t *testing.T) {
 
 	if params[compileWaitParam] != true {
 		t.Fatalf("WaitForDomainReload mismatch: %#v", params[compileWaitParam])
+	}
+}
+
+// Tests that execute-dynamic-code preserves multiline inline code as one argument.
+func TestBuildToolParamsPreservesExecuteDynamicCodeMultilineCode(t *testing.T) {
+	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
+	if !ok {
+		t.Fatal("execute-dynamic-code was not found in default tools")
+	}
+	source := "using UnityEngine;\nGameObject obj = GameObject.Find(\"Player\");\nif (obj == null) return \"Player not found\";\nreturn obj.name;"
+
+	params, _, err := buildToolParams([]string{"--code", source}, tool)
+	if err != nil {
+		t.Fatalf("buildToolParams failed: %v", err)
+	}
+
+	code, ok := params[dynamicCodeCodePropertyName].(string)
+	if !ok {
+		t.Fatalf("Code param type mismatch: %#v", params[dynamicCodeCodePropertyName])
+	}
+	if code != source {
+		t.Fatalf("Code param was not preserved:\nexpected: %q\nactual:   %q", source, code)
 	}
 }
 
@@ -220,6 +243,53 @@ func TestBuildToolParamsAcceptsHiddenExecuteDynamicCodeCompileOnlyFlag(t *testin
 
 	if params[dynamicCodeCompileOnlyParam] != true {
 		t.Fatalf("CompileOnly mismatch: %#v", params[dynamicCodeCompileOnlyParam])
+	}
+}
+
+// Tests that execute-dynamic-code lists CLI-side file input without exposing internal flags.
+func TestVisibleOptionNamesIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
+	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
+	if !ok {
+		t.Fatal("execute-dynamic-code was not found in default tools")
+	}
+
+	options := visibleOptionNamesForTool(tool)
+
+	if !containsString(options, "--code") {
+		t.Fatalf("execute-dynamic-code code option was not listed: %#v", options)
+	}
+	if !containsString(options, dynamicCodeFileOptionName) {
+		t.Fatalf("execute-dynamic-code code-file option was not listed: %#v", options)
+	}
+	if containsString(options, "--compile-only") {
+		t.Fatalf("execute-dynamic-code internal compile-only option should stay hidden: %#v", options)
+	}
+}
+
+// Tests that execute-dynamic-code help describes CLI-side file input.
+func TestVisibleOptionHelpEntriesIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
+	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
+	if !ok {
+		t.Fatal("execute-dynamic-code was not found in default tools")
+	}
+
+	entries := visibleOptionHelpEntriesForTool(tool)
+
+	found := false
+	for _, entry := range entries {
+		if entry.name != dynamicCodeFileOptionName {
+			continue
+		}
+		found = true
+		if entry.usage != dynamicCodeFileOptionUsage {
+			t.Fatalf("code-file usage mismatch: %#v", entry)
+		}
+		if !strings.Contains(entry.description, "Read C# code from a file") {
+			t.Fatalf("code-file description mismatch: %#v", entry)
+		}
+	}
+	if !found {
+		t.Fatalf("execute-dynamic-code code-file help was not listed: %#v", entries)
 	}
 }
 
