@@ -167,9 +167,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildResponse_WhenForceCompilePendingRequestHasNoResult_ReturnsNullMessage()
+        public void BuildResponse_WhenForceCompilePendingRequestHasNoResult_ReturnsExplanationMessage()
         {
-            // Verifies forced compile recovery preserves the no-details response shape.
+            // Verifies forced compile recovery explains why detailed result fields are null.
             _sessionStateService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: true,
@@ -187,7 +187,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.HasResult, Is.True);
             Assert.That(response.Result["Success"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
-            Assert.That(response.Result["Message"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["Message"]?.ToString(), Does.Contain("Unity does not return"));
+            Assert.That(response.Result["Message"]?.ToString(), Does.Contain("get-logs"));
         }
     }
 }
