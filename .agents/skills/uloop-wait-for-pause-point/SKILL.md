@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-pause-point
-description: "Standard paused-frame proof for Unity PlayMode/E2E gameplay verification. Whenever you verify behavior driven by simulate-* input, physics, or UI events, pause at least one representative state transition with a pause point and inspect the frozen frame like an IDE breakpoint. simulate-* Success=true, action logs, screenshots, sleeps/retries, and final durable state supplement but do not replace this paused-frame proof."
+description: "Wait for a named UloopPausePoint marker to pause Unity, then inspect the frozen PlayMode frame. Use for PlayMode/E2E checks of simulated input, physics, or UI transitions."
 ---
 
 ## Quick Check Template
