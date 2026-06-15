@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsUseCase useCase = new(
                 new TestFilterCreationService(),
                 executionService,
-                validationService
+                validationService,
+                NoCleanupWait
             );
             UnityCliLoopTestExecutionRequest parameters = new()
             {
@@ -56,7 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsUseCase useCase = new(
                 new TestFilterCreationService(),
                 executionService,
-                validationService
+                validationService,
+                NoCleanupWait
             );
             UnityCliLoopTestExecutionRequest parameters = new()
             {
@@ -80,7 +82,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsUseCase useCase = new(
                 new TestFilterCreationService(),
                 executionService,
-                validationService
+                validationService,
+                NoCleanupWait
             );
             UnityCliLoopTestExecutionRequest parameters = new();
 
@@ -103,7 +106,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsUseCase useCase = new(
                 new TestFilterCreationService(),
                 executionService,
-                validationService
+                validationService,
+                NoCleanupWait
             );
             UnityCliLoopTestExecutionRequest parameters = new()
             {
@@ -150,7 +154,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsUseCase useCase = new(
                 new TestFilterCreationService(),
                 executionService,
-                validationService
+                validationService,
+                NoCleanupWait
             );
             UnityCliLoopTestExecutionRequest parameters = new()
             {
@@ -169,6 +174,94 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
             Assert.That(response.TestCount, Is.EqualTo(0));
             Assert.That(response.FailedCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_AfterTestExecution_ShouldWaitForCleanup()
+        {
+            // Verifies run-tests waits for Unity Test Runner cleanup before responding.
+            int cleanupWaitCount = 0;
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                ct =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    cleanupWaitCount++;
+                    return Task.CompletedTask;
+                }
+            );
+            UnityCliLoopTestExecutionRequest parameters = new();
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(cleanupWaitCount, Is.EqualTo(1));
+            Assert.That(executionService.WasCalled, Is.True);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenValidationFails_ShouldNotWaitForCleanup()
+        {
+            // Verifies fail-fast validation errors do not wait for cleanup that was never scheduled.
+            int cleanupWaitCount = 0;
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(
+                ValidationResult.Failure("EditMode tests cannot run during play mode"));
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                ct =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    cleanupWaitCount++;
+                    return Task.CompletedTask;
+                }
+            );
+            UnityCliLoopTestExecutionRequest parameters = new();
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(cleanupWaitCount, Is.EqualTo(0));
+            Assert.That(executionService.WasCalled, Is.False);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenTestFrameworkUnavailable_ShouldNotWaitForCleanup()
+        {
+            // Verifies missing Test Framework returns before any Test Runner cleanup wait.
+            int cleanupWaitCount = 0;
+            StubTestExecutionService executionService = new()
+            {
+                TestFrameworkAvailable = false
+            };
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                ct =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    cleanupWaitCount++;
+                    return Task.CompletedTask;
+                }
+            );
+            UnityCliLoopTestExecutionRequest parameters = new();
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(cleanupWaitCount, Is.EqualTo(0));
+            Assert.That(executionService.WasCalled, Is.False);
+        }
+
+        private static Task NoCleanupWait(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         }
 
         /// <summary>
