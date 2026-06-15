@@ -62,9 +62,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that extension-facing result values stay outside project implementation assemblies.
             string validationResultAssemblyName = typeof(ValidationResult).Assembly.GetName().Name;
+            string forceCompileUnknownResultAssemblyName = typeof(ForceCompileUnknownResult).Assembly.GetName().Name;
             string serviceResultAssemblyName = typeof(ServiceResult<int>).Assembly.GetName().Name;
 
             Assert.That(validationResultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
+            Assert.That(forceCompileUnknownResultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
             Assert.That(serviceResultAssemblyName, Is.EqualTo(DomainAssemblyName));
         }
 

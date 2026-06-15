@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
-            Assert.That(response.Message, Is.EqualTo(UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE));
+            Assert.That(response.Message, Is.EqualTo(ForceCompileUnknownResult.MessageText));
         }
 
         [Test]
@@ -106,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
-            Assert.That(response.Message, Is.EqualTo(UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE));
+            Assert.That(response.Message, Is.EqualTo(ForceCompileUnknownResult.MessageText));
         }
 
         [Test]

@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(
                 response.Result["Message"]?.ToString(),
-                Is.EqualTo(UnityCliLoopConstants.FORCE_COMPILE_UNKNOWN_RESULT_MESSAGE));
+                Is.EqualTo(ForceCompileUnknownResult.MessageText));
         }
     }
 }
