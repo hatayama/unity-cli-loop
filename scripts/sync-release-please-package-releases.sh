@@ -454,9 +454,11 @@ while IFS='	' read -r package_path changelog_config_path component include_compo
 
       is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
       if [ "$is_draft" != "false" ]; then
-        if [ -n "$release_commit_sha" ]; then
-          verify_minimum_cli_release_protocol "$release_commit_sha"
+        if [ -z "$release_commit_sha" ]; then
+          echo "Draft release $release_tag cannot be protocol-verified because no release-please commit for $package_path version $version was found." >&2
+          exit 1
         fi
+        verify_minimum_cli_release_protocol "$release_commit_sha"
         publish_existing_draft_release "$release_tag" "$version"
       else
         echo "Release $release_tag already exists."

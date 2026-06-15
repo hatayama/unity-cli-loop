@@ -56,8 +56,8 @@ type ProtocolMinimumVersionGuardResult struct {
 }
 
 type minimumCliReleaseContract struct {
-	ProtocolVersion *int   `json:"protocolVersion"`
-	CliVersion      string `json:"cliVersion"`
+	ProtocolVersion *json.RawMessage `json:"protocolVersion"`
+	CliVersion      string           `json:"cliVersion"`
 }
 
 type minimumCliReleaseView struct {
@@ -211,21 +211,34 @@ func VerifyMinimumCliReleaseProtocol(values ProtocolMinimumVersionValues, contra
 	if err != nil {
 		return fmt.Errorf("CLI release contract is invalid JSON: %w", err)
 	}
-	if contract.ProtocolVersion == nil {
+	protocolVersion, hasProtocolVersion := minimumCliReleaseProtocolVersion(contract.ProtocolVersion)
+	if !hasProtocolVersion {
 		return fmt.Errorf(
 			"CLI release %s%s does not define protocolVersion",
 			cliReleaseTagPrefix,
 			values.MinimumCliVersion)
 	}
-	if *contract.ProtocolVersion != values.RequiredProtocolVersion {
+	if protocolVersion != values.RequiredProtocolVersion {
 		return fmt.Errorf(
 			"unity package requires protocol %d, but CLI release %s%s advertises protocol %d",
 			values.RequiredProtocolVersion,
 			cliReleaseTagPrefix,
 			values.MinimumCliVersion,
-			*contract.ProtocolVersion)
+			protocolVersion)
 	}
 	return nil
+}
+
+func minimumCliReleaseProtocolVersion(value *json.RawMessage) (int, bool) {
+	if value == nil {
+		return 0, false
+	}
+
+	protocolVersion, err := strconv.Atoi(strings.TrimSpace(string(*value)))
+	if err != nil {
+		return 0, false
+	}
+	return protocolVersion, true
 }
 
 func verifyMinimumCliReleaseProtocolAtRef(

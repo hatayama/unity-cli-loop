@@ -9,12 +9,15 @@ import (
 	"strings"
 )
 
+const protocolMinimumVersionCommentAuthor = "github-actions[bot]"
+
 type protocolMinimumVersionCommentConfig struct {
 	repositoryRoot string
 	pullRequest    string
 	repository     string
 	baseRef        string
 	headRef        string
+	commentAuthor  string
 }
 
 func RunProtocolMinimumVersionComment(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
@@ -89,12 +92,18 @@ func protocolMinimumVersionCommentConfigFromEnvironment() (protocolMinimumVersio
 		headRef = "HEAD"
 	}
 
+	commentAuthor := os.Getenv("PROTOCOL_MINIMUM_VERSION_COMMENT_AUTHOR")
+	if commentAuthor == "" {
+		commentAuthor = protocolMinimumVersionCommentAuthor
+	}
+
 	return protocolMinimumVersionCommentConfig{
 		repositoryRoot: repositoryRoot,
 		pullRequest:    os.Getenv("PR_NUMBER"),
 		repository:     os.Getenv("GITHUB_REPOSITORY"),
 		baseRef:        baseRef,
 		headRef:        headRef,
+		commentAuthor:  commentAuthor,
 	}, nil
 }
 
@@ -191,6 +200,12 @@ func existingProtocolMinimumVersionComment(
 	ctx context.Context,
 	config protocolMinimumVersionCommentConfig,
 ) (string, error) {
+	jqFilter := ".[] | select(.user.login == " +
+		protocolMinimumVersionJQString(config.commentAuthor) +
+		" and (.body | contains(" +
+		protocolMinimumVersionJQString(protocolMinimumVersionMarker) +
+		"))) | .id"
+
 	output, err := runProtocolMinimumVersionOutput(
 		ctx,
 		config.repositoryRoot,
@@ -199,7 +214,7 @@ func existingProtocolMinimumVersionComment(
 		"--paginate",
 		"repos/"+config.repository+"/issues/"+config.pullRequest+"/comments",
 		"--jq",
-		".[] | select(.body | contains(\""+protocolMinimumVersionMarker+"\")) | .id")
+		jqFilter)
 	if err != nil {
 		return "", err
 	}
@@ -212,6 +227,11 @@ func existingProtocolMinimumVersionComment(
 		}
 	}
 	return "", nil
+}
+
+func protocolMinimumVersionJQString(value string) string {
+	encodedValue, _ := json.Marshal(value)
+	return string(encodedValue)
 }
 
 func writeProtocolMinimumVersionBodyFile(body string) (string, func(), error) {

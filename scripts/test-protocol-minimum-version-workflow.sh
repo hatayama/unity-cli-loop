@@ -37,6 +37,7 @@ test_pull_request_target_comment_workflow_is_trusted() {
   assert_contains "$COMMENT_WORKFLOW" "  issues: write"
   assert_contains "$COMMENT_WORKFLOW" "  pull-requests: read"
   assert_contains "$COMMENT_WORKFLOW" "      - name: Checkout base repository"
+  assert_contains "$COMMENT_WORKFLOW" "          persist-credentials: false"
   assert_contains "$COMMENT_WORKFLOW" "      - name: Fetch pull request merge"
   assert_contains "$COMMENT_WORKFLOW" '        run: git fetch --no-tags origin "pull/${{ github.event.pull_request.number }}/merge:protocol-minimum-version-pr-merge"'
   assert_contains "$COMMENT_WORKFLOW" "      - name: Comment on protocol minimum version guard"

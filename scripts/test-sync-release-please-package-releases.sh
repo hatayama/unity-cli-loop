@@ -39,7 +39,7 @@ asset_json() {
 
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
-  if [ "$tag" = "cli-v3.0.0-beta.6" ]; then
+  if [ "$tag" = "${CLI_RELEASE_TAG:-cli-v3.0.0-beta.6}" ]; then
     if [ -n "${CLI_RELEASE_READY_AFTER_ATTEMPTS:-}" ]; then
       attempt_file="$GH_LOG.cli-release-attempts"
       attempt=1
@@ -294,6 +294,7 @@ run_sync() {
     EXISTING_RELEASE_TARGET="$existing_target" \
     CLI_RELEASE_STATE="$cli_release_state" \
     CLI_RELEASE_ASSETS="$cli_release_assets" \
+    CLI_RELEASE_TAG="${CLI_RELEASE_TAG:-cli-v3.0.0-beta.6}" \
     CLI_RELEASE_WAIT_TIMEOUT_SECONDS="$cli_release_wait_timeout" \
     CLI_RELEASE_WAIT_INTERVAL_SECONDS="$cli_release_wait_interval" \
     CLI_RELEASE_READY_AFTER_ATTEMPTS="$cli_release_ready_after_attempts" \
@@ -353,6 +354,24 @@ test_existing_draft_root_release_is_published() {
   assert_contains "$work_dir/gh.log" "release edit v3.0.0-beta.6 --repo hatayama/unity-cli-loop --draft=false --prerelease"
 }
 
+# Verifies draft package releases are not published when their release commit cannot be checked.
+test_existing_draft_root_release_without_release_commit_fails() {
+  work_dir=$(create_release_repo draft-root-missing-release-commit)
+
+  (
+    cd "$work_dir"
+    write_release_files 3.0.0-beta.7
+  )
+
+  if CLI_RELEASE_TAG=cli-v3.0.0-beta.7 run_sync "$work_dir" v3.0.0-beta.7 true "manual-release-target"; then
+    echo "Expected draft release without a release commit to fail." >&2
+    exit 1
+  fi
+
+  assert_contains "$work_dir/stderr.txt" "Draft release v3.0.0-beta.7 cannot be protocol-verified"
+  assert_not_contains "$work_dir/gh.log" "release edit v3.0.0-beta.7"
+}
+
 # Verifies package releases wait until the matching CLI release is public.
 test_waits_for_cli_release_before_creating_root_release() {
   work_dir=$(create_release_repo waits-for-cli)
@@ -408,6 +427,7 @@ test_creates_missing_root_release_from_release_commit
 test_existing_root_release_is_reused
 test_existing_root_release_target_branch_resolves_via_origin
 test_existing_draft_root_release_is_published
+test_existing_draft_root_release_without_release_commit_fails
 test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release
 test_retries_until_cli_assets_are_ready

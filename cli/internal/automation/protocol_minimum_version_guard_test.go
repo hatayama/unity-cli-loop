@@ -172,6 +172,25 @@ func TestVerifyMinimumCliReleaseProtocol_WhenTagProtocolIsMissing_Fails(t *testi
 	}
 }
 
+func TestVerifyMinimumCliReleaseProtocol_WhenProtocolVersionIsOutOfRange_FailsAsMissingMetadata(t *testing.T) {
+	// Verifies malformed protocol metadata is reported consistently with missing metadata.
+	err := VerifyMinimumCliReleaseProtocol(ProtocolMinimumVersionValues{
+		RequiredProtocolVersion: 2,
+		HasRequiredProtocol:     true,
+		MinimumCliVersion:       "3.0.0-beta.33",
+	}, []byte(`{"schemaVersion":1,"protocolVersion":999999999999999999999999999999,"cliVersion":"3.0.0-beta.33"}`))
+
+	if err == nil {
+		t.Fatal("expected out-of-range protocolVersion to fail")
+	}
+	if !strings.Contains(err.Error(), "does not define protocolVersion") {
+		t.Fatalf("expected missing protocolVersion error, got %v", err)
+	}
+	if strings.Contains(err.Error(), "invalid JSON") {
+		t.Fatalf("expected metadata error instead of invalid JSON, got %v", err)
+	}
+}
+
 func TestVerifyMinimumCliReleaseProtocol_WhenTagProtocolDiffers_Fails(t *testing.T) {
 	// Verifies release validation rejects published CLIs from a different protocol generation.
 	err := VerifyMinimumCliReleaseProtocol(ProtocolMinimumVersionValues{
@@ -241,6 +260,7 @@ func TestRunProtocolMinimumVersionComment_WhenWarningExists_UpsertsComment(t *te
 	}
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Updated protocol minimum version comment.")
 	assertProtocolMinimumVersionLogContains(t, result.ghLog, "api --method PATCH repos/owner/repository/issues/comments/123 --input")
+	assertProtocolMinimumVersionLogContains(t, result.ghLog, ".user.login == \"github-actions[bot]\"")
 }
 
 func TestRunProtocolMinimumVersionComment_WhenWarningIsResolved_DeletesComment(t *testing.T) {
