@@ -173,7 +173,7 @@ func buildPausePointEvidenceWarning(logs pausePointMatchingLogsResult, hitCount 
 	if evidenceLogs.MultipleMatchingLogsObserved {
 		warnings = append(
 			warnings,
-			"Multiple matching logs were observed for this pause point id; inspect MatchingLogs before treating the scenario as single-fire evidence.")
+			"Multiple matching logs were observed for this pause point id; inspect matchingLogs before treating the scenario as single-fire evidence.")
 	}
 	if hitCount > 1 {
 		warnings = append(

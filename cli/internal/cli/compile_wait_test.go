@@ -109,6 +109,15 @@ func TestExecuteDynamicCodeDomainReloadWaitRequiredReadsResponseSignal(t *testin
 	}
 }
 
+// Verifies that legacy-cased dynamic-code reload signals remain parseable by the CLI.
+func TestExecuteDynamicCodeDomainReloadWaitRequiredReadsLegacyResponseSignal(t *testing.T) {
+	result := []byte(`{"Success":true,"DomainReloadWaitRequired":true}`)
+
+	if !executeDynamicCodeDomainReloadWaitRequired(result) {
+		t.Fatal("legacy dynamic-code response should request a reload wait")
+	}
+}
+
 // Verifies that dispatched dynamic-code disconnects still wait for reload recovery.
 func TestShouldWaitForExecuteDynamicCodeDisconnectWaitsAfterDispatchedTransportLoss(t *testing.T) {
 	outcome := unityipc.UnitySendOutcome{RequestDispatched: true}

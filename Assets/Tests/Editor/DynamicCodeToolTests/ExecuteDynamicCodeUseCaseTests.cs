@@ -45,6 +45,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(serializedResponse["emitTimingsInJsonResponse"], Is.Null);
             Assert.That(serializedResponse["emitsTimingsInJsonResponse"], Is.Null);
             Assert.That(serializedResponse["domainReloadWaitRequired"], Is.Null);
+            Assert.That(serializedResponse["DomainReloadWaitRequired"], Is.Null);
+        }
+
+        [Test]
+        public void ExecuteDynamicCodeResponse_WhenSerializedWithInternalSignals_KeepsLegacyControlFieldNames()
+        {
+            // Tests that protocol-2 CLIs can still strip internal wait and timing fields from stdout.
+            ExecuteDynamicCodeResponse response = new()
+            {
+                Success = true,
+                Result = "ok",
+                DomainReloadWaitRequired = true,
+                EmitTimingsInJsonResponse = true,
+                Timings = new List<string> { "[Perf] Build: 1.0ms" }
+            };
+
+            JObject serializedResponse = JObject.Parse(
+                JsonConvert.SerializeObject(response, JsonRpcResponseSerializer.Settings));
+
+            Assert.That(serializedResponse["success"], Is.Not.Null);
+            Assert.That(serializedResponse["result"], Is.Not.Null);
+            Assert.That(serializedResponse["DomainReloadWaitRequired"], Is.Not.Null);
+            Assert.That(serializedResponse["Timings"], Is.Not.Null);
+            Assert.That(serializedResponse["domainReloadWaitRequired"], Is.Null);
+            Assert.That(serializedResponse["timings"], Is.Null);
         }
 
         [Test]

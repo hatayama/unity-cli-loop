@@ -52,13 +52,13 @@ uloop get-logs --search-text "Missing.*Component" --use-regex
 ## Output
 
 Returns JSON with:
-- `TotalCount` (number): Total logs available before max-count clipping
-- `DisplayedCount` (number): Logs returned in this response (≤ `--max-count`)
-- `LogType` (string): The `--log-type` filter that was applied
-- `MaxCount` (number): The `--max-count` cap that was applied
-- `SearchText` (string): The `--search-text` filter that was applied (empty when omitted)
-- `IncludeStackTrace` (boolean): Whether stack traces are included in `Logs[]`
-- `Logs` (array): Each entry has:
-  - `Type` (string): `"Error"`, `"Warning"`, or `"Log"`
-  - `Message` (string): Log message body
-  - `StackTrace` (string): Stack trace text. Empty when `--include-stack-trace` is `false`.
+- `totalCount` (number): Total logs available before max-count clipping
+- `displayedCount` (number): Logs returned in this response (≤ `--max-count`)
+- `logType` (string): The `--log-type` filter that was applied
+- `maxCount` (number): The `--max-count` cap that was applied
+- `searchText` (string): The `--search-text` filter that was applied (empty when omitted)
+- `includeStackTrace` (boolean): Whether stack traces are included in `logs[]`
+- `logs` (array): Each entry has:
+  - `type` (string): `"Error"`, `"Warning"`, or `"Log"`
+  - `message` (string): Log message body
+  - `stackTrace` (string): Stack trace text. Empty when `--include-stack-trace` is `false`.

@@ -87,6 +87,34 @@ func TestNewListCatalogUsesSpecialOptionAliases(t *testing.T) {
 	assertListOptionMissing(t, compileTool, "--no-reload-external-scene-changes")
 }
 
+// Tests that list output renders numeric enum defaults as their public value names.
+func TestNewListCatalogUsesEnumNameForNumericDefault(t *testing.T) {
+	cache := toolsCache{
+		Tools: []toolDefinition{
+			{
+				Name: "screenshot",
+				InputSchema: inputSchema{
+					Properties: map[string]toolProperty{
+						"CaptureMode": {
+							Type:    "string",
+							Default: float64(0),
+							Enum:    []string{"window", "rendering"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	catalog := newListCatalog(cache)
+
+	tool := findListTool(t, catalog, "screenshot")
+	captureMode := findListOption(t, tool, "--capture-mode")
+	if captureMode.Default != "window" {
+		t.Fatalf("capture mode default mismatch: %#v", captureMode)
+	}
+}
+
 // Tests that list output includes CLI-side options that are not Unity schema properties.
 func TestNewListCatalogIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
 	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
