@@ -321,6 +321,42 @@ func TestConnectionRetryFocusReasonClassifiesEditorUnresponsive(t *testing.T) {
 	}
 }
 
+// Verifies a transient process discovery miss does not suppress a later focus attempt.
+func TestConnectionRetryFocusControllerRetriesAfterProcessDiscoveryMiss(t *testing.T) {
+	originalFinder := findRunningUnityProcessForConnectionRetry
+	originalFocus := focusUnityProcessForConnectionRetry
+	findCallCount := 0
+	focusCallCount := 0
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
+		findCallCount++
+		if findCallCount == 1 {
+			return nil, nil
+		}
+		return &unityProcess{pid: 123}, nil
+	}
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+		focusCallCount++
+		return nil, nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForConnectionRetry = originalFinder
+		focusUnityProcessForConnectionRetry = originalFocus
+	})
+
+	connection := unityipc.Connection{ProjectRoot: t.TempDir()}
+	controller := newConnectionRetryFocusController(connection, "get-logs")
+
+	controller.tryFocus(context.Background(), focusReasonMainThreadStall, errors.New("first probe missed"))
+	controller.tryFocus(context.Background(), focusReasonFinalResponseTimeout, errors.New("terminal timeout"))
+
+	if findCallCount != 2 {
+		t.Fatalf("expected process discovery to retry, got %d calls", findCallCount)
+	}
+	if focusCallCount != 1 {
+		t.Fatalf("expected later focus attempt to run once, got %d calls", focusCallCount)
+	}
+}
+
 // Verifies accepted RPCs can outlive the pre-dispatch connection retry timeout.
 func TestSendWithTransientConnectionRetryDoesNotCancelAcceptedRequestAtRetryTimeout(t *testing.T) {
 	if runtime.GOOS == "windows" {

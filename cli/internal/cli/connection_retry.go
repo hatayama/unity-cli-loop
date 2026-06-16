@@ -105,7 +105,6 @@ func (controller *connectionRetryFocusController) tryFocus(
 
 	runningProcess, err := findRunningUnityProcessForConnectionRetry(ctx, controller.connection.ProjectRoot)
 	if err != nil || runningProcess == nil {
-		controller.attempted = true
 		return
 	}
 	controller.tryFocusProcess(ctx, runningProcess.pid, reason, cause)
