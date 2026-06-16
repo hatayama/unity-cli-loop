@@ -17,7 +17,7 @@ func unityEditorUnresponsiveError(err *unityipc.EditorUnresponsiveError, context
 	return cliError{
 		ErrorCode:   errorCodeUnityEditorUnresponsive,
 		Phase:       errorPhaseResponseWaiting,
-		Message:     err.Error(),
+		Message:     "Unity accepted the request, but the Editor main thread stopped responding.",
 		Retryable:   true,
 		SafeToRetry: isSafeRetryCommand(context.command),
 		ProjectRoot: context.projectRoot,
@@ -29,7 +29,7 @@ func unityEditorUnresponsiveError(err *unityipc.EditorUnresponsiveError, context
 		},
 		Details: map[string]any{
 			"stallSeconds": err.StallSeconds,
-			"cause":        err.Error(),
+			"cause":        "Unity Editor main thread did not tick while the IPC heartbeat stayed alive.",
 		},
 	}
 }

@@ -151,11 +151,17 @@ func TestClassifyEditorUnresponsiveError(t *testing.T) {
 	if cliErr.Phase != errorPhaseResponseWaiting {
 		t.Fatalf("phase mismatch: %#v", cliErr)
 	}
+	if strings.Contains(cliErr.Message, "launch -r") || strings.Contains(strings.ToLower(cliErr.Message), "restart") {
+		t.Fatalf("message should not include stale restart advice: %s", cliErr.Message)
+	}
 	if !cliErr.Retryable || !cliErr.SafeToRetry {
 		t.Fatalf("retry flags mismatch: %#v", cliErr)
 	}
 	if cliErr.Details["stallSeconds"] != float64(321) {
 		t.Fatalf("stall seconds details mismatch: %#v", cliErr.Details)
+	}
+	if strings.Contains(cliErr.Details["cause"].(string), "launch -r") {
+		t.Fatalf("cause should not include stale restart advice: %#v", cliErr.Details)
 	}
 	joinedActions := strings.Join(cliErr.NextActions, "\n")
 	if !strings.Contains(joinedActions, "modal dialog") {

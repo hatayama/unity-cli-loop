@@ -271,7 +271,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 				}
 				if progress != nil {
 					progress(fmt.Sprintf(
-						"unity editor main thread has not ticked for %.0fs; check Unity for a modal dialog or long editor operation...",
+						"Unity main thread stuck %.0fs; check modal/long operation...",
 						stallSeconds))
 				}
 			}

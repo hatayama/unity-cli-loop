@@ -194,11 +194,11 @@ func TestSendReportsMainThreadStallProgressWithModalHint(t *testing.T) {
 	}
 
 	joinedMessages := strings.Join(progressMessages, "\n")
-	if !strings.Contains(joinedMessages, "modal dialog") {
-		t.Fatalf("progress should mention modal dialog: %#v", progressMessages)
+	if !strings.Contains(joinedMessages, "modal") {
+		t.Fatalf("progress should mention modal: %#v", progressMessages)
 	}
-	if !strings.Contains(joinedMessages, "long editor operation") {
-		t.Fatalf("progress should mention long editor operation: %#v", progressMessages)
+	if !strings.Contains(joinedMessages, "long operation") {
+		t.Fatalf("progress should mention long operation: %#v", progressMessages)
 	}
 }
 
