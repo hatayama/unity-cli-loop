@@ -41,6 +41,10 @@ using UnityEditor;
 
 string matPath = "Assets/Materials/MyMaterial.mat";
 Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+if (mat == null)
+{
+    return $"Material not found at {matPath}";
+}
 
 mat.SetFloat("_Metallic", 0.8f);
 mat.SetFloat("_Glossiness", 0.6f);
@@ -83,6 +87,10 @@ using UnityEditor;
 
 string matPath = "Assets/Materials/MyMaterial.mat";
 Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+if (mat == null)
+{
+    return $"Material not found at {matPath}";
+}
 
 GameObject selected = Selection.activeGameObject;
 if (selected == null)
@@ -108,6 +116,10 @@ using UnityEditor;
 
 string matPath = "Assets/Materials/MyMaterial.mat";
 Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+if (mat == null)
+{
+    return $"Material not found at {matPath}";
+}
 
 mat.EnableKeyword("_EMISSION");
 mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;

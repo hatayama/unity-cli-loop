@@ -34,10 +34,10 @@ The hit response always embeds the log entries matching the marker id as `matchi
 
 Read `evidenceSummary` first when it is present. It groups `editorState`, pause point hit metadata, matching-log counts, truncation status, and warnings so you can tell whether the evidence is a single clean hit or needs closer inspection. `editorState.capturedAt` names when the Unity Editor play/pause state was observed, such as `PausePointHit`, `Current`, or `ClearAll`.
 
-Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time.
+Use `generation`, `enabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `remainingMilliseconds` and `expired` are returned directly so you do not need to infer marker lifetime from elapsed time.
 
 5. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
-6. Clear the marker with `uloop clear-pause-point --id state-transition-applied` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios. The clear response's `EditorState` describes Unity Editor play/pause state, not marker state.
+6. Clear the marker with `uloop clear-pause-point --id state-transition-applied` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios. The clear response's `editorState` describes Unity Editor play/pause state, not marker state.
 
 ## When To Use
 

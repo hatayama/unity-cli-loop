@@ -524,12 +524,12 @@ func TestRunWaitForPausePointEmbedsEmptyMatchingLogsWhenNoneMatch(t *testing.T) 
 	if code != 0 {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "\"matchingLogs\": []") {
-		t.Fatalf("MatchingLogs must be an explicit empty array: %s", stdout.String())
-	}
 	var result pausePointWaitResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("stdout parse failed: %v from %s", err, stdout.String())
+	}
+	if result.MatchingLogs == nil || len(result.MatchingLogs) != 0 {
+		t.Fatalf("MatchingLogs must be an explicit empty array: %#v", result.MatchingLogs)
 	}
 	if result.EvidenceSummary.Warning != "" {
 		t.Fatalf("warning should be empty when there are no matching logs: %#v", result.EvidenceSummary)
