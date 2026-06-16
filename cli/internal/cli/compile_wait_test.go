@@ -98,14 +98,23 @@ func TestShouldWaitForExecuteDynamicCodeDomainReloadSkipsCompileOnly(t *testing.
 
 // Verifies that execute-dynamic-code waits only when Unity explicitly reports a reload signal.
 func TestExecuteDynamicCodeDomainReloadWaitRequiredReadsResponseSignal(t *testing.T) {
-	result := []byte(`{"Success":true,"DomainReloadWaitRequired":true}`)
+	result := []byte(`{"success":true,"domainReloadWaitRequired":true}`)
 
 	if !executeDynamicCodeDomainReloadWaitRequired(result) {
 		t.Fatal("dynamic-code response should request a reload wait")
 	}
 
-	if executeDynamicCodeDomainReloadWaitRequired([]byte(`{"Success":true}`)) {
+	if executeDynamicCodeDomainReloadWaitRequired([]byte(`{"success":true}`)) {
 		t.Fatal("dynamic-code response without a reload signal should not request a wait")
+	}
+}
+
+// Verifies that legacy-cased dynamic-code reload signals remain parseable by the CLI.
+func TestExecuteDynamicCodeDomainReloadWaitRequiredReadsLegacyResponseSignal(t *testing.T) {
+	result := []byte(`{"Success":true,"DomainReloadWaitRequired":true}`)
+
+	if !executeDynamicCodeDomainReloadWaitRequired(result) {
+		t.Fatal("legacy dynamic-code response should request a reload wait")
 	}
 }
 
@@ -124,10 +133,19 @@ func TestShouldWaitForExecuteDynamicCodeDisconnectWaitsAfterDispatchedTransportL
 
 // Verifies that the CLI does not expose its internal reload-wait response field to users.
 func TestStripExecuteDynamicCodeControlResultRemovesReloadSignal(t *testing.T) {
-	result := stripExecuteDynamicCodeControlResult([]byte(`{"Success":true,"DomainReloadWaitRequired":true}`))
+	result := stripExecuteDynamicCodeControlResult([]byte(`{"success":true,"domainReloadWaitRequired":true}`))
+
+	if strings.Contains(string(result), "domainReloadWaitRequired") {
+		t.Fatalf("control field leaked into user output: %s", result)
+	}
+}
+
+// Verifies that the CLI hides legacy-cased reload-wait response fields from users.
+func TestStripExecuteDynamicCodeControlResultRemovesLegacyReloadSignal(t *testing.T) {
+	result := stripExecuteDynamicCodeControlResult([]byte(`{"success":true,"DomainReloadWaitRequired":true}`))
 
 	if strings.Contains(string(result), "DomainReloadWaitRequired") {
-		t.Fatalf("control field leaked into user output: %s", result)
+		t.Fatalf("legacy control field leaked into user output: %s", result)
 	}
 }
 
@@ -156,9 +174,9 @@ func TestWaitForCompileCompletionReturnsReadyStatusResult(t *testing.T) {
 	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		callCount++
 		if callCount == 1 {
-			return compileStatusResponse{Ready: false, HasResult: true, Result: json.RawMessage(`{"Success":true}`)}, nil
+			return compileStatusResponse{Ready: false, HasResult: true, Result: json.RawMessage(`{"success":true}`)}, nil
 		}
-		return compileStatusResponse{Ready: true, HasResult: true, Result: json.RawMessage(`{"Success":true}`)}, nil
+		return compileStatusResponse{Ready: true, HasResult: true, Result: json.RawMessage(`{"success":true}`)}, nil
 	})
 
 	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
@@ -173,7 +191,7 @@ func TestWaitForCompileCompletionReturnsReadyStatusResult(t *testing.T) {
 	if !completed {
 		t.Fatal("compile wait did not complete")
 	}
-	if string(result) != "{\"Success\":true}" {
+	if string(result) != "{\"success\":true}" {
 		t.Fatalf("result mismatch: %s", result)
 	}
 }
@@ -197,7 +215,7 @@ func TestWaitForCompileCompletionWritesPollLifecycleVibeLogs(t *testing.T) {
 		return compileStatusResponse{
 			Ready:     true,
 			HasResult: true,
-			Result:    json.RawMessage(`{"Success":false,"ErrorCount":2,"WarningCount":1}`),
+			Result:    json.RawMessage(`{"success":false,"errorCount":2,"warningCount":1}`),
 			Message:   "Compile result is available.",
 		}, nil
 	})
@@ -214,7 +232,7 @@ func TestWaitForCompileCompletionWritesPollLifecycleVibeLogs(t *testing.T) {
 	if !completed {
 		t.Fatal("compile wait did not complete")
 	}
-	if string(result) != `{"Success":false,"ErrorCount":2,"WarningCount":1}` {
+	if string(result) != `{"success":false,"errorCount":2,"warningCount":1}` {
 		t.Fatalf("result mismatch: %s", result)
 	}
 
@@ -248,7 +266,7 @@ func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) 
 		return compileStatusResponse{
 			Ready:     true,
 			HasResult: true,
-			Result:    json.RawMessage(`{"Success":null,"ErrorCount":null,"Message":"Force compilation completed"}`),
+			Result:    json.RawMessage(`{"success":null,"errorCount":null,"message":"Force compilation completed"}`),
 		}, nil
 	})
 
@@ -273,15 +291,15 @@ func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) 
 	if err := json.Unmarshal(result, &payload); err != nil {
 		t.Fatalf("force compile result is not JSON: %v", err)
 	}
-	if payload["Success"] != nil {
-		t.Fatalf("force compile success should be unknown: %#v", payload["Success"])
+	if payload["success"] != nil {
+		t.Fatalf("force compile success should be unknown: %#v", payload["success"])
 	}
-	if payload["ErrorCount"] != nil || payload["WarningCount"] != nil {
+	if payload["errorCount"] != nil || payload["warningCount"] != nil {
 		t.Fatalf("force compile counts should be unknown: %#v", payload)
 	}
-	message, ok := payload["Message"].(string)
+	message, ok := payload["message"].(string)
 	if !ok || !strings.Contains(message, "Force compilation completed") {
-		t.Fatalf("force compile message mismatch: %#v", payload["Message"])
+		t.Fatalf("force compile message mismatch: %#v", payload["message"])
 	}
 }
 
@@ -430,7 +448,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 		return compileStatusResponse{
 			Ready:     true,
 			HasResult: true,
-			Result:    json.RawMessage(`{"Success":false,"ErrorCount":1,"WarningCount":0}`),
+			Result:    json.RawMessage(`{"success":false,"errorCount":1,"warningCount":0}`),
 		}, nil
 	})
 
@@ -505,10 +523,10 @@ func TestShouldWaitForCompileStatusAllowsAcceptedFinalResponseTimeout(t *testing
 // Verifies compile readiness warmup only runs after confirmed successful results.
 func TestCompileResultReadinessWaitMode(t *testing.T) {
 	cases := map[string]compileReadinessWaitMode{
-		`{"Success":true}`: compileReadinessWaitWarmup,
-		`{"Success":false,"Errors":[{"Message":"boom"}]}`: compileReadinessWaitNone,
-		`{"Success":null,"Message":"indeterminate"}`:      compileReadinessWaitNone,
-		`{"Message":"indeterminate"}`:                     compileReadinessWaitNone,
+		`{"success":true}`: compileReadinessWaitWarmup,
+		`{"success":false,"errors":[{"message":"boom"}]}`: compileReadinessWaitNone,
+		`{"success":null,"message":"indeterminate"}`:      compileReadinessWaitNone,
+		`{"message":"indeterminate"}`:                     compileReadinessWaitNone,
 	}
 
 	for result, expected := range cases {

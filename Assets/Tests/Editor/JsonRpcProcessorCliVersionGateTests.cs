@@ -32,6 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(parsed["error"], Is.Null);
             Assert.That(parsed["result"], Is.Not.Null);
+            Assert.That(parsed["result"]?["unityVersion"]?.ToString(), Is.Not.Null.And.Not.Empty);
+            Assert.That(parsed["result"]?["UnityVersion"], Is.Null);
         }
 
         [Test]
@@ -492,7 +494,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 JObject parsedLogs = JObject.Parse(logsResponse);
 
                 Assert.That(parsedLogs["error"], Is.Null);
-                Assert.That(parsedLogs["result"]?["DisplayedCount"]?.ToObject<int>(), Is.EqualTo(0));
+                Assert.That(parsedLogs["result"]?["displayedCount"]?.ToObject<int>(), Is.EqualTo(0));
             }
             finally
             {

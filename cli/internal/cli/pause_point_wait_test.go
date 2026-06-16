@@ -122,7 +122,7 @@ func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
 	editorState, ok := envelope.Error.Details["editorState"].(map[string]any)
-	if !ok || editorState["IsPlaying"] != true || editorState["IsPaused"] != false || editorState["CapturedAt"] != "Current" {
+	if !ok || editorState["isPlaying"] != true || editorState["isPaused"] != false || editorState["capturedAt"] != "Current" {
 		t.Fatalf("editorState detail mismatch: %#v", envelope.Error.Details)
 	}
 	if envelope.Error.Details["markerMessage"] != "Pause point enabled." {
@@ -352,7 +352,7 @@ func TestRunWaitForPausePointReportsNotEnabledError(t *testing.T) {
 		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
 	}
 	editorState, ok := envelope.Error.Details["editorState"].(map[string]any)
-	if !ok || editorState["IsPlaying"] != true || editorState["IsPaused"] != false || editorState["CapturedAt"] != "Current" {
+	if !ok || editorState["isPlaying"] != true || editorState["isPaused"] != false || editorState["capturedAt"] != "Current" {
 		t.Fatalf("editorState details mismatch: %#v", envelope.Error.Details)
 	}
 }
@@ -524,12 +524,12 @@ func TestRunWaitForPausePointEmbedsEmptyMatchingLogsWhenNoneMatch(t *testing.T) 
 	if code != 0 {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "\"MatchingLogs\": []") {
-		t.Fatalf("MatchingLogs must be an explicit empty array: %s", stdout.String())
-	}
 	var result pausePointWaitResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("stdout parse failed: %v from %s", err, stdout.String())
+	}
+	if result.MatchingLogs == nil || len(result.MatchingLogs) != 0 {
+		t.Fatalf("MatchingLogs must be an explicit empty array: %#v", result.MatchingLogs)
 	}
 	if result.EvidenceSummary.Warning != "" {
 		t.Fatalf("warning should be empty when there are no matching logs: %#v", result.EvidenceSummary)
@@ -579,10 +579,10 @@ func TestRunWaitForPausePointIgnoresLogFetchFailure(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected success despite log fetch failure, got %d with stderr %s", code, stderr.String())
 	}
-	if strings.Contains(stdout.String(), "MatchingLogs") {
+	if strings.Contains(stdout.String(), "matchingLogs") {
 		t.Fatalf("MatchingLogs must be omitted when the fetch fails: %s", stdout.String())
 	}
-	if strings.Contains(stdout.String(), "EvidenceSummary") {
+	if strings.Contains(stdout.String(), "evidenceSummary") {
 		t.Fatalf("EvidenceSummary must be omitted when the fetch fails: %s", stdout.String())
 	}
 }
@@ -649,16 +649,16 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
 	// The detail key mirrors the hit-response field name, so one spelling covers both surfaces.
-	matchingLogs, ok := envelope.Error.Details["MatchingLogs"].([]any)
+	matchingLogs, ok := envelope.Error.Details["matchingLogs"].([]any)
 	if !ok || len(matchingLogs) != 1 {
 		t.Fatalf("MatchingLogs detail mismatch: %#v", envelope.Error.Details)
 	}
-	evidenceSummary, ok := envelope.Error.Details["EvidenceSummary"].(map[string]any)
+	evidenceSummary, ok := envelope.Error.Details["evidenceSummary"].(map[string]any)
 	if !ok {
 		t.Fatalf("EvidenceSummary detail missing: %#v", envelope.Error.Details)
 	}
-	evidenceLogs, ok := evidenceSummary["MatchingLogs"].(map[string]any)
-	if !ok || evidenceLogs["MayBeTruncated"] != true || evidenceLogs["MatchingLogCount"] != float64(3) {
+	evidenceLogs, ok := evidenceSummary["matchingLogs"].(map[string]any)
+	if !ok || evidenceLogs["mayBeTruncated"] != true || evidenceLogs["matchingLogCount"] != float64(3) {
 		t.Fatalf("EvidenceSummary matching logs mismatch: %#v", evidenceSummary)
 	}
 }

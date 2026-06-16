@@ -10,6 +10,7 @@ using NUnit.Framework;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
@@ -37,12 +38,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 EmitTimingsInJsonResponse = false
             };
 
-            JObject serializedResponse = JObject.Parse(JsonConvert.SerializeObject(response));
+            JObject serializedResponse = JObject.Parse(
+                JsonConvert.SerializeObject(response, JsonRpcResponseSerializer.Settings));
 
-            Assert.That(serializedResponse["Timings"], Is.Null);
-            Assert.That(serializedResponse["EmitTimingsInJsonResponse"], Is.Null);
-            Assert.That(serializedResponse["EmitsTimingsInJsonResponse"], Is.Null);
+            Assert.That(serializedResponse["timings"], Is.Null);
+            Assert.That(serializedResponse["emitTimingsInJsonResponse"], Is.Null);
+            Assert.That(serializedResponse["emitsTimingsInJsonResponse"], Is.Null);
+            Assert.That(serializedResponse["domainReloadWaitRequired"], Is.Null);
             Assert.That(serializedResponse["DomainReloadWaitRequired"], Is.Null);
+        }
+
+        [Test]
+        public void ExecuteDynamicCodeResponse_WhenSerializedWithInternalSignals_KeepsLegacyControlFieldNames()
+        {
+            // Tests that protocol-2 CLIs can still strip internal wait and timing fields from stdout.
+            ExecuteDynamicCodeResponse response = new()
+            {
+                Success = true,
+                Result = "ok",
+                DomainReloadWaitRequired = true,
+                EmitTimingsInJsonResponse = true,
+                Timings = new List<string> { "[Perf] Build: 1.0ms" }
+            };
+
+            JObject serializedResponse = JObject.Parse(
+                JsonConvert.SerializeObject(response, JsonRpcResponseSerializer.Settings));
+
+            Assert.That(serializedResponse["success"], Is.Not.Null);
+            Assert.That(serializedResponse["result"], Is.Not.Null);
+            Assert.That(serializedResponse["DomainReloadWaitRequired"], Is.Not.Null);
+            Assert.That(serializedResponse["Timings"], Is.Not.Null);
+            Assert.That(serializedResponse["domainReloadWaitRequired"], Is.Null);
+            Assert.That(serializedResponse["timings"], Is.Null);
         }
 
         [Test]

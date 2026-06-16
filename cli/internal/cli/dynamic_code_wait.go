@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	domainReloadWaitParam                    = "WaitForDomainReload"
-	dynamicCodeCompileOnlyParam              = "CompileOnly"
-	dynamicCodeDomainReloadWaitRequiredField = "DomainReloadWaitRequired"
+	domainReloadWaitParam                          = "WaitForDomainReload"
+	dynamicCodeCompileOnlyParam                    = "CompileOnly"
+	dynamicCodeDomainReloadWaitRequiredField       = "domainReloadWaitRequired"
+	legacyDynamicCodeDomainReloadWaitRequiredField = "DomainReloadWaitRequired"
 )
 
 func shouldWaitForExecuteDynamicCodeDomainReload(command string, params map[string]any) bool {
@@ -33,7 +34,7 @@ func domainReloadWaitEnabled(params map[string]any, defaultValue bool) bool {
 
 func executeDynamicCodeDomainReloadWaitRequired(result []byte) bool {
 	var payload struct {
-		DomainReloadWaitRequired bool `json:"DomainReloadWaitRequired"`
+		DomainReloadWaitRequired bool `json:"domainReloadWaitRequired"`
 	}
 	if err := json.Unmarshal(result, &payload); err != nil {
 		return false
@@ -58,6 +59,7 @@ func stripExecuteDynamicCodeControlResult(result []byte) []byte {
 	}
 
 	delete(payload, dynamicCodeDomainReloadWaitRequiredField)
+	delete(payload, legacyDynamicCodeDomainReloadWaitRequiredField)
 	sanitized, err := json.Marshal(payload)
 	if err != nil {
 		return result

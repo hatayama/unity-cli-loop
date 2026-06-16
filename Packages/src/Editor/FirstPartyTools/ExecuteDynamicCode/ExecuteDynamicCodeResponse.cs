@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -56,11 +57,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Why: the native CLI needs an explicit Unity-side reload signal before it can safely wait.
         /// </summary>
+        [JsonProperty("DomainReloadWaitRequired")]
         public bool DomainReloadWaitRequired { get; set; } = false;
 
         /// <summary>
         /// Lightweight internal timings for benchmark comparison.
         /// </summary>
+        [JsonProperty("Timings")]
         public List<string> Timings { get; set; } = new();
 
         public bool EmitTimingsInJsonResponse { get; set; } = false;

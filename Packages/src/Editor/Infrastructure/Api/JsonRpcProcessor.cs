@@ -35,11 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         // Shared by every response path; JsonConvert only reads the settings, so a single
         // instance avoids allocating identical settings per response.
-        private static readonly JsonSerializerSettings ResponseSerializerSettings = new()
-        {
-            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-            MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
-        };
+        private static readonly JsonSerializerSettings ResponseSerializerSettings =
+            JsonRpcResponseSerializer.Settings;
 
         internal delegate Task JsonRpcEarlyResponseWriter(
             string responseJson,
@@ -467,7 +464,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     id,
                     fallbackResult
                 );
-                return JsonConvert.SerializeObject(fallbackResponse, Formatting.None);
+                return JsonConvert.SerializeObject(fallbackResponse, Formatting.None, ResponseSerializerSettings);
             }
         }
 

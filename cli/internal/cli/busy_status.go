@@ -9,12 +9,12 @@ import (
 const cliStatusBusy = "Busy"
 
 type cliStatusEnvelope struct {
-	Status            string `json:"Status"`
-	Message           string `json:"Message"`
-	RunningToolName   string `json:"RunningToolName,omitempty"`
-	RequestedToolName string `json:"RequestedToolName,omitempty"`
-	IsPlaying         *bool  `json:"IsPlaying,omitempty"`
-	IsPaused          *bool  `json:"IsPaused,omitempty"`
+	Status            string `json:"status"`
+	Message           string `json:"message"`
+	RunningToolName   string `json:"runningToolName,omitempty"`
+	RequestedToolName string `json:"requestedToolName,omitempty"`
+	IsPlaying         *bool  `json:"isPlaying,omitempty"`
+	IsPaused          *bool  `json:"isPaused,omitempty"`
 }
 
 type serverBusyStatusDetails struct {

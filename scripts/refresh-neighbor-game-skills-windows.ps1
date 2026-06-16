@@ -758,7 +758,7 @@ return SceneManager.GetActiveScene().path;
     }
 
     [pscustomobject]$json = $responseText | ConvertFrom-Json
-    if ($json.Success -eq $true -and $json.Result -eq $SampleScenePath) {
+    if ($json.success -eq $true -and $json.result -eq $SampleScenePath) {
         return
     }
 
