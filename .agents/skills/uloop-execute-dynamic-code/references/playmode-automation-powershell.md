@@ -24,12 +24,27 @@ Use `execute-dynamic-code` for direct automation and diagnostics, and switch to 
 
 ## PowerShell Quoting Notes
 
-Use these patterns when you need shell-safe inline code:
+Use these patterns when you need shell-safe inline code.
+PowerShell's equivalent to a bash heredoc is a single-quoted here-string.
+In PowerShell 7 (`pwsh`), it can be passed to `--code` directly without creating a temporary file:
+
+```powershell
+uloop execute-dynamic-code --code @'
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+Scene scene = SceneManager.GetActiveScene();
+GameObject[] objects = UnityEngine.Object.FindObjectsOfType<GameObject>(true);
+return $"{scene.name}: {objects.Length} objects";
+'@
+```
+
+Use `--code-file` when the active shell or launcher cannot preserve inline code exactly, especially for Windows PowerShell 5.1 snippets with many C# string literals.
 
 ### Native launcher check
 
-Multi-line `--code` expects PowerShell to call the native `uloop.exe` launcher directly.
-If `Get-Command uloop` resolves to an old npm `.cmd` shim, run `uloop install` and open a new terminal before relying on multi-line inline snippets.
+Multi-line `--code` expects PowerShell to call the native Go `uloop.exe` launcher directly.
+If `Get-Command uloop` resolves to an old `.cmd` shim from a previous installation, run `uloop install` and open a new terminal before relying on multi-line inline snippets.
 
 ```powershell
 (Get-Command uloop).Source
@@ -68,7 +83,7 @@ uloop execute-dynamic-code --code 'return parameters["param0"];' --parameters '{
 
 ### Multi-line C# snippets
 
-Use a here-string when the snippet spans multiple lines in PowerShell 7 (`pwsh`).
+Use a here-string variable when you want to prepare or reuse a snippet before executing it in PowerShell 7 (`pwsh`).
 
 ```powershell
 $code = @'
