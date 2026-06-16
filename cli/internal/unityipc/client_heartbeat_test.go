@@ -141,6 +141,33 @@ func TestSendKeepsWaitingWhileHeartbeatsArrive(t *testing.T) {
 	}
 }
 
+// Verifies heartbeat main-thread stall reports reach the typed handler before the final response.
+func TestSendReportsMainThreadStallToHandler(t *testing.T) {
+	stalledHeartbeat := `{"jsonrpc":"2.0","id":1,"result":{"alive":true},"uloop":{"phase":"heartbeat","mainThreadStallSeconds":31}}`
+	connection := startHeartbeatTestServer(t, func(conn net.Conn) {
+		writeFrame(t, conn, heartbeatAck)
+		writeFrame(t, conn, stalledHeartbeat)
+		writeFrame(t, conn, `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)
+	})
+
+	stallReports := []float64{}
+	client := NewClient(connection, "9.9.9").WithMainThreadStallHandler(func(stallSeconds float64) {
+		stallReports = append(stallReports, stallSeconds)
+	})
+	client.heartbeatSilenceOverride = 5 * time.Second
+
+	outcome, err := client.SendWithProgressOutcome(context.Background(), "run-tests", map[string]any{}, nil)
+	if err != nil {
+		t.Fatalf("expected success after stall heartbeat, got %v", err)
+	}
+	if len(outcome.Result) == 0 {
+		t.Fatal("expected final result")
+	}
+	if len(stallReports) != 1 || stallReports[0] != 31 {
+		t.Fatalf("stall reports mismatch: %#v", stallReports)
+	}
+}
+
 // Verifies that a negotiated connection fails with a heartbeat-silence diagnosis when
 // frames stop arriving, instead of waiting for the 30-minute absolute deadline.
 func TestSendFailsWithDiagnosisWhenHeartbeatsStop(t *testing.T) {

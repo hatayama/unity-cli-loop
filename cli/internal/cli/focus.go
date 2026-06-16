@@ -356,7 +356,7 @@ func buildFocusUnityProcessWindowsScript(pid int) string {
 	scriptLines := []string{
 		"$ErrorActionPreference = 'Stop'",
 	}
-	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(false)...)
+	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(false, false)...)
 	scriptLines = append(scriptLines, buildWindowsFocusTargetScriptLines(pid)...)
 	return strings.Join(scriptLines, "\n")
 }
@@ -365,7 +365,7 @@ func buildFocusUnityProcessWindowsWithRestoreScript(pid int) string {
 	scriptLines := []string{
 		"$ErrorActionPreference = 'Stop'",
 	}
-	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(true)...)
+	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(true, false)...)
 	scriptLines = append(scriptLines,
 		"$previous = [Win32Interop]::GetForegroundWindow()",
 	)
@@ -374,7 +374,7 @@ func buildFocusUnityProcessWindowsWithRestoreScript(pid int) string {
 	return strings.Join(scriptLines, "\n")
 }
 
-func buildWindowsFocusInteropTypeDefinition(includeGetForegroundWindow bool) []string {
+func buildWindowsFocusInteropTypeDefinition(includeGetForegroundWindow bool, includeThreadFocus bool) []string {
 	addTypeLines := []string{
 		"Add-Type -TypeDefinition @\"",
 		"using System;",
@@ -389,6 +389,17 @@ func buildWindowsFocusInteropTypeDefinition(includeGetForegroundWindow bool) []s
 	addTypeLines = append(addTypeLines,
 		"  [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd);",
 		"  [DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);",
+	)
+	if includeThreadFocus {
+		addTypeLines = append(addTypeLines,
+			"  [DllImport(\"user32.dll\")] public static extern bool BringWindowToTop(IntPtr hWnd);",
+			"  [DllImport(\"user32.dll\")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lpdwProcessId);",
+			"  [DllImport(\"kernel32.dll\")] public static extern uint GetCurrentThreadId();",
+			"  [DllImport(\"user32.dll\")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);",
+			"  [DllImport(\"user32.dll\")] public static extern bool IsIconic(IntPtr hWnd);",
+		)
+	}
+	addTypeLines = append(addTypeLines,
 		"}",
 		"\"@",
 	)
@@ -428,11 +439,35 @@ func buildRestoreWindowsForegroundWindowScript(handle int64) string {
 	scriptLines := []string{
 		"$ErrorActionPreference = 'Stop'",
 	}
-	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(false)...)
+	scriptLines = append(scriptLines, buildWindowsFocusInteropTypeDefinition(true, true)...)
 	scriptLines = append(scriptLines,
 		fmt.Sprintf("$handle = [IntPtr]::new(%d)", handle),
 		"if ($handle -eq [IntPtr]::Zero) { throw 'Saved foreground window handle is invalid' }",
-		"$restored = [Win32Interop]::SetForegroundWindow($handle)",
+		"$targetThreadId = [Win32Interop]::GetWindowThreadProcessId($handle, [IntPtr]::Zero)",
+		"if ($targetThreadId -eq 0) { throw 'Saved foreground window thread is invalid' }",
+		"$foreground = [Win32Interop]::GetForegroundWindow()",
+		"$foregroundThreadId = [Win32Interop]::GetWindowThreadProcessId($foreground, [IntPtr]::Zero)",
+		"$currentThreadId = [Win32Interop]::GetCurrentThreadId()",
+		"$attachedCurrent = $false",
+		"$attachedForeground = $false",
+		"try {",
+		"  if ($targetThreadId -ne $currentThreadId) {",
+		"    $attachedCurrent = [Win32Interop]::AttachThreadInput($currentThreadId, $targetThreadId, $true)",
+		"  }",
+		"  if ($foregroundThreadId -ne 0 -and $foregroundThreadId -ne $targetThreadId) {",
+		"    $attachedForeground = [Win32Interop]::AttachThreadInput($foregroundThreadId, $targetThreadId, $true)",
+		"  }",
+		"  $isMinimized = [Win32Interop]::IsIconic($handle)",
+		"  if ($isMinimized) {",
+		"    $shown = [Win32Interop]::ShowWindowAsync($handle, 9)",
+		"    if (-not $shown) { throw 'Failed to show previous foreground window' }",
+		"  }",
+		"  [void][Win32Interop]::BringWindowToTop($handle)",
+		"  $restored = [Win32Interop]::SetForegroundWindow($handle)",
+		"} finally {",
+		"  if ($attachedForeground) { [void][Win32Interop]::AttachThreadInput($foregroundThreadId, $targetThreadId, $false) }",
+		"  if ($attachedCurrent) { [void][Win32Interop]::AttachThreadInput($currentThreadId, $targetThreadId, $false) }",
+		"}",
 		"if (-not $restored) { throw 'Failed to restore previous foreground window' }",
 	)
 	return strings.Join(scriptLines, "\n")

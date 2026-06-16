@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/cli/internal/project"
@@ -19,6 +20,16 @@ var (
 )
 
 const focusRestoreTimeout = 2 * time.Second
+
+type connectionRetryFocusReason string
+
+const (
+	focusReasonUndispatchedConnectionFailure connectionRetryFocusReason = "undispatched_connection_failure"
+	focusReasonPreAcceptTimeout              connectionRetryFocusReason = "pre_accept_timeout"
+	focusReasonMainThreadStall               connectionRetryFocusReason = "main_thread_stall"
+	focusReasonHeartbeatSilenceTimeout       connectionRetryFocusReason = "heartbeat_silence_timeout"
+	focusReasonFinalResponseTimeout          connectionRetryFocusReason = "final_response_timeout"
+)
 
 // Why: domain reload on large projects can keep the IPC endpoint down well past the
 // base retry window, and an undispatched dial failure is always safe to retry. While
@@ -38,6 +49,13 @@ type unityServerNotRespondingError struct {
 	cause       error
 }
 
+type connectionRetryFocusController struct {
+	connection   unityipc.Connection
+	method       string
+	attempted    bool
+	restoreFocus restoreFocusFunc
+}
+
 func (err unityServerNotRespondingError) Error() string {
 	if err.cause != nil {
 		return fmt.Sprintf("Unity is running but the Unity CLI Loop server is not responding: %s", err.cause)
@@ -54,6 +72,72 @@ func (err unityServerNotRespondingError) causeText() string {
 		return ""
 	}
 	return err.cause.Error()
+}
+
+func newConnectionRetryFocusController(connection unityipc.Connection, method string) *connectionRetryFocusController {
+	return &connectionRetryFocusController{
+		connection: connection,
+		method:     method,
+	}
+}
+
+func (controller *connectionRetryFocusController) restore(ctx context.Context) {
+	if controller.restoreFocus == nil {
+		return
+	}
+	_ = controller.restoreFocus(ctx)
+}
+
+func (controller *connectionRetryFocusController) keepUnityFocusedAfterReturn() {
+	// Why: terminal timeout recovery has no in-flight request left, so immediate
+	// restore hides the auto-front signal that tells the user Unity needs attention.
+	controller.restoreFocus = nil
+}
+
+func (controller *connectionRetryFocusController) tryFocus(
+	ctx context.Context,
+	reason connectionRetryFocusReason,
+	cause error,
+) {
+	if controller.attempted {
+		return
+	}
+
+	runningProcess, err := findRunningUnityProcessForConnectionRetry(ctx, controller.connection.ProjectRoot)
+	if err != nil || runningProcess == nil {
+		return
+	}
+	controller.tryFocusProcess(ctx, runningProcess.pid, reason, cause)
+}
+
+func (controller *connectionRetryFocusController) tryFocusProcess(
+	ctx context.Context,
+	pid int,
+	reason connectionRetryFocusReason,
+	cause error,
+) {
+	if controller.attempted {
+		return
+	}
+	controller.attempted = true
+
+	correlationID := newCliVibeCorrelationID()
+	logConnectionRetryFocusAttempt(controller.connection, controller.method, pid, reason, cause, correlationID)
+	restorer, focusErr := focusUnityProcessForConnectionRetry(ctx, pid)
+	if focusErr == nil {
+		controller.restoreFocus = restorer
+		logConnectionRetryFocusSuccess(controller.connection, controller.method, pid, reason, cause, correlationID)
+		return
+	}
+	logConnectionRetryFocusFailure(controller.connection, controller.method, pid, reason, cause, focusErr, correlationID)
+}
+
+func (controller *connectionRetryFocusController) handleMainThreadStall(ctx context.Context, stallSeconds float64) {
+	controller.tryFocus(
+		ctx,
+		focusReasonMainThreadStall,
+		fmt.Errorf("unity editor main thread busy for %.0fs", stallSeconds),
+	)
 }
 
 func sendWithTransientConnectionRetry(
@@ -87,17 +171,13 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 
 	var lastOutcome unityipc.UnitySendOutcome
 	var lastErr error
-	var restoreFocus restoreFocusFunc
+	focusController := newConnectionRetryFocusController(connection, method)
 	defer func() {
-		if restoreFocus == nil {
-			return
-		}
 		restoreContext, cancel := context.WithTimeout(context.Background(), focusRestoreTimeout)
 		defer cancel()
-		_ = restoreFocus(restoreContext)
+		focusController.restore(restoreContext)
 	}()
 
-	focusAttempted := false
 	retryTicker := time.NewTicker(serverConnectionRetryPoll)
 	defer retryTicker.Stop()
 	for {
@@ -105,6 +185,9 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 		if responseTimeout > 0 {
 			client = client.WithResponseTimeout(responseTimeout)
 		}
+		client = client.WithMainThreadStallHandler(func(stallSeconds float64) {
+			focusController.handleMainThreadStall(ctx, stallSeconds)
+		})
 		// Each attempt keeps the base accept bound: a dispatched request that never gets
 		// acked must still fail at the base window. Only the dial-retry loop as a whole
 		// uses the extended unity-alive window.
@@ -145,6 +228,10 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 				}
 				return lastOutcome, lastErr
 			}
+			if reason, ok := connectionRetryFocusReasonForError(err, outcome, responseTimeout); ok {
+				focusController.tryFocus(ctx, reason, err)
+				focusController.keepUnityFocusedAfterReturn()
+			}
 			return outcome, err
 		}
 
@@ -176,18 +263,12 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			}
 			return outcome, err
 		}
-		if !focusAttempted {
-			correlationID := newCliVibeCorrelationID()
-			logConnectionRetryFocusAttempt(connection, method, runningProcess.pid, err, correlationID)
-			restorer, focusErr := focusUnityProcessForConnectionRetry(retryContext, runningProcess.pid)
-			if focusErr == nil {
-				restoreFocus = restorer
-				logConnectionRetryFocusSuccess(connection, method, runningProcess.pid, err, correlationID)
-			} else {
-				logConnectionRetryFocusFailure(connection, method, runningProcess.pid, err, focusErr, correlationID)
-			}
-			focusAttempted = true
-		}
+		focusController.tryFocusProcess(
+			retryContext,
+			runningProcess.pid,
+			focusReasonUndispatchedConnectionFailure,
+			err,
+		)
 
 		lastOutcome = outcome
 		lastErr = err
@@ -235,6 +316,39 @@ func isUnityServerBusyRPCError(err error) bool {
 	return rpcDataType(decodedData) == "server_busy"
 }
 
+func connectionRetryFocusReasonForError(
+	err error,
+	outcome unityipc.UnitySendOutcome,
+	responseTimeout time.Duration,
+) (connectionRetryFocusReason, bool) {
+	if err == nil || isUnityServerBusyRPCError(err) || isRPCError(err) {
+		return "", false
+	}
+
+	var unresponsiveErr *unityipc.EditorUnresponsiveError
+	if errors.As(err, &unresponsiveErr) {
+		return focusReasonMainThreadStall, true
+	}
+
+	if outcome.RequestDispatched && !outcome.RequestAccepted && isFinalResponseTimeoutError(err) {
+		return focusReasonPreAcceptTimeout, true
+	}
+
+	if !outcome.RequestAccepted {
+		return "", false
+	}
+	if responseTimeout > 0 {
+		return "", false
+	}
+	if !isFinalResponseTimeoutError(err) {
+		return "", false
+	}
+	if strings.Contains(err.Error(), "heartbeat") {
+		return focusReasonHeartbeatSilenceTimeout, true
+	}
+	return focusReasonFinalResponseTimeout, true
+}
+
 func shouldRetryUndispatchedConnection(err error, outcome unityipc.UnitySendOutcome) bool {
 	if err == nil || outcome.RequestDispatched {
 		return false
@@ -248,17 +362,19 @@ func logConnectionRetryFocusAttempt(
 	connection unityipc.Connection,
 	method string,
 	pid int,
+	reason connectionRetryFocusReason,
 	retryCause error,
 	correlationID string,
 ) {
 	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_connection_retry_focus_attempt",
-		Message:   "Attempting to focus Unity before retrying an undispatched request.",
+		Message:   "Attempting to focus Unity while recovering a slow or unreachable request.",
 		Context: map[string]any{
 			"command":  method,
 			"pid":      pid,
 			"endpoint": connection.Endpoint.Address,
+			"reason":   string(reason),
 			"cause":    errorMessage(retryCause),
 		},
 		CorrelationID: correlationID,
@@ -269,17 +385,19 @@ func logConnectionRetryFocusSuccess(
 	connection unityipc.Connection,
 	method string,
 	pid int,
+	reason connectionRetryFocusReason,
 	retryCause error,
 	correlationID string,
 ) {
 	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_connection_retry_focus_success",
-		Message:   "Focused Unity before retrying an undispatched request.",
+		Message:   "Focused Unity while recovering a slow or unreachable request.",
 		Context: map[string]any{
 			"command":  method,
 			"pid":      pid,
 			"endpoint": connection.Endpoint.Address,
+			"reason":   string(reason),
 			"cause":    errorMessage(retryCause),
 		},
 		CorrelationID: correlationID,
@@ -290,6 +408,7 @@ func logConnectionRetryFocusFailure(
 	connection unityipc.Connection,
 	method string,
 	pid int,
+	reason connectionRetryFocusReason,
 	retryCause error,
 	focusErr error,
 	correlationID string,
@@ -302,6 +421,7 @@ func logConnectionRetryFocusFailure(
 			"command":    method,
 			"pid":        pid,
 			"endpoint":   connection.Endpoint.Address,
+			"reason":     string(reason),
 			"cause":      errorMessage(retryCause),
 			"focusError": errorMessage(focusErr),
 		},
