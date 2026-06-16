@@ -103,12 +103,39 @@ func TestBuildRestoreWindowsForegroundWindowScriptThrowsOnRestoreFailure(t *test
 	for _, expected := range []string{
 		"$handle = [IntPtr]::new(123)",
 		"if ($handle -eq [IntPtr]::Zero) { throw 'Saved foreground window handle is invalid' }",
+		"GetWindowThreadProcessId",
+		"GetCurrentThreadId",
+		"AttachThreadInput",
+		"BringWindowToTop",
+		"try {",
+		"} finally {",
+		"AttachThreadInput($foregroundThreadId, $targetThreadId, $false)",
+		"AttachThreadInput($currentThreadId, $targetThreadId, $false)",
 		"$restored = [Win32Interop]::SetForegroundWindow($handle)",
 		"if (-not $restored) { throw 'Failed to restore previous foreground window' }",
 	} {
 		if !strings.Contains(script, expected) {
 			t.Fatalf("script missing %q: %s", expected, script)
 		}
+	}
+}
+
+// Verifies Windows restore avoids resizing a saved maximized foreground window.
+func TestBuildRestoreWindowsForegroundWindowScriptRestoresOnlyMinimizedWindow(t *testing.T) {
+	script := buildRestoreWindowsForegroundWindowScript(123)
+
+	for _, expected := range []string{
+		"IsIconic",
+		"$isMinimized = [Win32Interop]::IsIconic($handle)",
+		"if ($isMinimized) {",
+		"    $shown = [Win32Interop]::ShowWindowAsync($handle, 9)",
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("script missing %q: %s", expected, script)
+		}
+	}
+	if strings.Contains(script, "\n  $shown = [Win32Interop]::ShowWindowAsync($handle, 9)") {
+		t.Fatalf("restore script should not unconditionally restore the previous window: %s", script)
 	}
 }
 
