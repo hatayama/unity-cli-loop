@@ -360,7 +360,7 @@ func runList(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 		})
 		return 1
 	}
-	writeJSON(stdout, outcome.Result)
+	writeJSON(stdout, formatToolListResult(outcome.Result))
 	return 0
 }
 
