@@ -38,6 +38,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenStatusOnlyPlayBlockedByCompileErrors_ReturnsSavedDiagnostics()
+        {
+            // Verifies polling can report compiler diagnostics when PlayMode becomes blocked after the first request.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeCompileError[] compileErrors =
+            {
+                new ControlPlayModeCompileError
+                {
+                    Message = "CS1525: invalid expression",
+                    File = "Assets/Scripts/Sample.cs",
+                    Line = 3
+                }
+            };
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(compileErrors),
+                new StubCompilationFailureGate(true));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+                StatusOnly = true,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.BlockedByCompileErrors, Is.True);
+            Assert.That(response.CompileErrorCount, Is.EqualTo(1));
+            Assert.That(response.CompileErrors[0].Message, Is.EqualTo("CS1525: invalid expression"));
+            Assert.That(response.Message, Is.EqualTo("Play mode could not start because Unity has compiler errors."));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStatusOnlyStopAndCompileFailed_ReturnsCurrentPlayModeState()
+        {
+            // Verifies compiler errors are only treated as a status polling blocker for Play requests.
+            ControlPlayModeCompileError[] compileErrors =
+            {
+                new ControlPlayModeCompileError
+                {
+                    Message = "CS1525: invalid expression",
+                    File = "Assets/Scripts/Sample.cs",
+                    Line = 3
+                }
+            };
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(compileErrors),
+                new StubCompilationFailureGate(true));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Stop,
+                StatusOnly = true,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.BlockedByCompileErrors, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Play mode status"));
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenStepOutsidePlayMode_ReturnsNoOpWithGuidance()
         {
             // Verifies Step refuses to run outside PlayMode instead of silently queuing a frame step.

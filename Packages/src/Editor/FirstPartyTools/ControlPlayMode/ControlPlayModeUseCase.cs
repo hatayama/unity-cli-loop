@@ -36,6 +36,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (parameters.StatusOnly)
             {
+                if (parameters.Action == PlayModeAction.Play &&
+                    !EditorApplication.isPlaying &&
+                    _compilationFailureGate.HasScriptCompilationFailed())
+                {
+                    ControlPlayModeCompileError[] compileErrors =
+                        _compilationFailureProvider.GetLastFailedErrors();
+                    return Task.FromResult(CreateCompileErrorBlockedResponse(compileErrors));
+                }
+
                 return Task.FromResult(CreateResponse("Play mode status", false, false));
             }
 

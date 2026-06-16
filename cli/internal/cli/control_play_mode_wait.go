@@ -114,6 +114,12 @@ func runControlPlayModeWithStateWait(
 	}
 
 	if !completed {
+		if response.BlockedByCompileErrors {
+			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
+			writeErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, action, response))
+			return 1
+		}
+
 		writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
 		writeErrorEnvelope(stderr, controlPlayModeWaitTimeoutError(connection.ProjectRoot, action, timeoutSeconds, response))
 		return 1
@@ -152,10 +158,13 @@ func waitForControlPlayModeState(
 	ticker := time.NewTicker(controlPlayModeStatePoll)
 	defer ticker.Stop()
 	for {
-		response, err := requestControlPlayModeStatus(waitContext, connection)
+		response, err := requestControlPlayModeStatus(waitContext, connection, action)
 		if err == nil {
 			lastResponse = response
 			hasResponse = true
+			if strings.EqualFold(action, "Play") && response.BlockedByCompileErrors {
+				return response, false, nil
+			}
 			if controlPlayModeStateMatches(action, response) {
 				return response, true, nil
 			}
@@ -180,14 +189,21 @@ func waitForControlPlayModeState(
 	}
 }
 
-func requestControlPlayModeStatus(ctx context.Context, connection unityipc.Connection) (controlPlayModeResponse, error) {
+func requestControlPlayModeStatus(
+	ctx context.Context,
+	connection unityipc.Connection,
+	action string,
+) (controlPlayModeResponse, error) {
 	probeContext, cancel := context.WithTimeout(ctx, controlPlayModeStatusTimeout)
 	defer cancel()
 
 	result, err := unityipc.NewClient(connection, version).Send(
 		probeContext,
 		controlPlayModeCommandName,
-		map[string]any{controlPlayModeStatusOnlyParam: true},
+		map[string]any{
+			controlPlayModeActionParam:     action,
+			controlPlayModeStatusOnlyParam: true,
+		},
 	)
 	if err != nil {
 		return controlPlayModeResponse{}, err
