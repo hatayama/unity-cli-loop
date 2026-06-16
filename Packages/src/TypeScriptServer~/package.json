@@ -92,7 +92,8 @@
   },
   "overrides": {
     "@hono/node-server": "1.19.13",
-    "hono": "4.12.23",
+    "hono": "4.12.25",
+    "js-yaml": "4.2.0",
     "minimatch": "10.2.4"
   }
 }
