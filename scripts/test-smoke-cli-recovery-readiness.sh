@@ -51,15 +51,15 @@ func main() {
 			fmt.Fprintln(os.Stderr, "{\n  \"success\": false,\n  \"error\": {\n    \"errorCode\": \"UNITY_NOT_REACHABLE\",\n    \"message\": \"The Unity CLI Loop server is not reachable for this project.\",\n    \"nextActions\": [\n      \"If Unity is closed, run `uloop launch`.\"\n    ]\n  }\n}")
 			os.Exit(1)
 		}
-		fmt.Println(`{"DisplayedCount":0,"Logs":[],"MaxCount":1,"TotalCount":0}`)
+		fmt.Println(`{"displayedCount":0,"logs":[],"maxCount":1,"totalCount":0}`)
 	case "compile":
 		if os.Getenv("ULOOP_FAKE_COMPILE_WITHOUT_SUCCESS") == "1" {
-			fmt.Println(`{"ErrorCount":0,"WarningCount":0}`)
+			fmt.Println(`{"errorCount":0,"warningCount":0}`)
 			return
 		}
-		fmt.Println(`{"Success":true,"ErrorCount":0,"WarningCount":0}`)
+		fmt.Println(`{"success":true,"errorCount":0,"warningCount":0}`)
 	case "execute-dynamic-code":
-		fmt.Println(`{"Success":true,"Result":"cli-recovery-readiness-e2e"}`)
+		fmt.Println(`{"success":true,"result":"cli-recovery-readiness-e2e"}`)
 	default:
 		fmt.Fprintf(os.Stderr, "unexpected command: %s\n", commandName)
 		os.Exit(98)
@@ -115,7 +115,7 @@ if CALL_LOG="$CALL_LOG" ULOOP_FAKE_COMPILE_WITHOUT_SUCCESS=1 go run "$ROOT_DIR/s
     --timeout 2 \
     --launch-timeout 2 > "$TMP_DIR/missing-success-output.txt" 2>&1; then
     cat "$TMP_DIR/missing-success-output.txt"
-    echo "expected compile payload without Success to fail" >&2
+    echo "expected compile payload without success to fail" >&2
     exit 1
 fi
 grep -F "compile with domain reload wait returned invalid success payload" "$TMP_DIR/missing-success-output.txt" >/dev/null

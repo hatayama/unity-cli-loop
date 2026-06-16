@@ -23,20 +23,20 @@ const (
 var controlPlayModeStatePoll = 50 * time.Millisecond
 
 type controlPlayModeResponse struct {
-	IsPlaying              bool                          `json:"IsPlaying"`
-	IsPaused               bool                          `json:"IsPaused"`
-	Changed                bool                          `json:"Changed"`
-	WasAlreadyStopped      bool                          `json:"WasAlreadyStopped"`
-	BlockedByCompileErrors bool                          `json:"BlockedByCompileErrors"`
-	CompileErrorCount      int                           `json:"CompileErrorCount"`
-	CompileErrors          []controlPlayModeCompileError `json:"CompileErrors"`
-	Message                string                        `json:"Message"`
+	IsPlaying              bool                          `json:"isPlaying"`
+	IsPaused               bool                          `json:"isPaused"`
+	Changed                bool                          `json:"changed"`
+	WasAlreadyStopped      bool                          `json:"wasAlreadyStopped"`
+	BlockedByCompileErrors bool                          `json:"blockedByCompileErrors"`
+	CompileErrorCount      int                           `json:"compileErrorCount"`
+	CompileErrors          []controlPlayModeCompileError `json:"compileErrors"`
+	Message                string                        `json:"message"`
 }
 
 type controlPlayModeCompileError struct {
-	Message string `json:"Message"`
-	File    string `json:"File"`
-	Line    int    `json:"Line"`
+	Message string `json:"message"`
+	File    string `json:"file"`
+	Line    int    `json:"line"`
 }
 
 func shouldWaitForControlPlayModeState(command string, params map[string]any) bool {

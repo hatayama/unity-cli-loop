@@ -53,7 +53,7 @@ uloop simulate-mouse-input --action <action> [options]
 - Use `UloopPausePoint.Pause("<id>")` with `uloop-wait-for-pause-point` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
 - Place the pause point at a natural state transition after the app consumed the mouse input, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, or a dependent component is updated. Do not place it immediately after sending `simulate-mouse-input`.
 - If the mouse handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UloopPausePoint.Pause("<id>")` and read them with `uloop-get-logs` while Unity is paused. A pause point hit proves the line was reached, not the frame-local values.
-- If the response has `InterruptedByPausePoint: true`, Unity is paused for inspection and the tool released its held input bookkeeping. `PausePointId` and `PausePointHitCount` identify the pause point that paused Unity. Use `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, or `uloop execute-dynamic-code` before resuming.
+- If the response has `interruptedByPausePoint: true`, Unity is paused for inspection and the tool released its held input bookkeeping. `pausePointId` and `pausePointHitCount` identify the pause point that paused Unity. Use `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, or `uloop execute-dynamic-code` before resuming.
 - Use distinct ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.
 - Remove temporary pause-point/log instrumentation before final validation when it was added only for inspection.
 
@@ -110,15 +110,15 @@ uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --dura
 ## Output
 
 Returns JSON with:
-- `Success`: Whether the operation succeeded
-- `Message`: Status message
-- `Action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`)
-- `Button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
-- `PositionX`: Target X coordinate (nullable float; populated for `Click` / `LongPress`)
-- `PositionY`: Target Y coordinate (nullable float; populated for `Click` / `LongPress`)
-- `InterruptedByPausePoint`: True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
-- `PausePointId`: The id from `UloopPausePoint.Pause("<id>")` when it caused the interruption
-- `PausePointHitCount`: The hit count for that `UloopPausePoint.Pause("<id>")`
-- `PausePointHits` (array, nullable): Every marker hit during this input as `{Id, HitCount}` entries, in hit order. Read this when one input may trigger several markers; `PausePointId` only names the latest one
+- `success`: Whether the operation succeeded
+- `message`: Status message
+- `action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`)
+- `button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
+- `positionX`: Target X coordinate (nullable float; populated for `Click` / `LongPress`)
+- `positionY`: Target Y coordinate (nullable float; populated for `Click` / `LongPress`)
+- `interruptedByPausePoint`: True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
+- `pausePointId`: The id from `UloopPausePoint.Pause("<id>")` when it caused the interruption
+- `pausePointHitCount`: The hit count for that `UloopPausePoint.Pause("<id>")`
+- `pausePointHits` (array, nullable): Every marker hit during this input as `{id, hitCount}` entries, in hit order. Read this when one input may trigger several markers; `pausePointId` only names the latest one
 
-There is no `DeltaX`, `DeltaY`, `ScrollX`, `ScrollY`, `Duration`, or hit-element field in the response — only the issued action, button, target position, and Pause Point interruption state are echoed back. Verify visual outcome with a follow-up screenshot.
+There is no `deltaX`, `deltaY`, `scrollX`, `scrollY`, `duration`, or hit-element field in the response — only the issued action, button, target position, and Pause Point interruption state are echoed back. Verify visual outcome with a follow-up screenshot.

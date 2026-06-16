@@ -24,7 +24,7 @@ type ToolProperty struct {
 	Type         string   `json:"type"`
 	Description  string   `json:"description,omitempty"`
 	Default      any      `json:"default,omitempty"`
-	DefaultValue any      `json:"DefaultValue,omitempty"`
+	DefaultValue any      `json:"defaultValue,omitempty"`
 	Hidden       bool     `json:"hidden,omitempty"`
 	Enum         []string `json:"enum,omitempty"`
 	Items        *struct {

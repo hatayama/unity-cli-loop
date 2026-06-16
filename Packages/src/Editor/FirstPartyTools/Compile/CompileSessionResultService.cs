@@ -64,7 +64,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(result != null, "result must not be null");
 
             result.ProjectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            string resultJson = JsonConvert.SerializeObject(result, Formatting.None);
+            string resultJson = JsonConvert.SerializeObject(
+                result,
+                Formatting.None,
+                JsonRpcResponseSerializer.Settings);
             UnityCliLoopStoredCompileResult previousResult =
                 sessionStateService.GetCompileResult(requestId);
             UnityCliLoopPendingCompileRequest pendingRequest =

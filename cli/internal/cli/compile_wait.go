@@ -32,13 +32,13 @@ type compileCompletionOptions struct {
 }
 
 type compileStatusResponse struct {
-	Ready                    bool            `json:"Ready"`
-	HasResult                bool            `json:"HasResult"`
-	IsCompiling              bool            `json:"IsCompiling"`
-	IsUpdating               bool            `json:"IsUpdating"`
-	IsDomainReloadInProgress bool            `json:"IsDomainReloadInProgress"`
-	Result                   json.RawMessage `json:"Result"`
-	Message                  string          `json:"Message"`
+	Ready                    bool            `json:"ready"`
+	HasResult                bool            `json:"hasResult"`
+	IsCompiling              bool            `json:"isCompiling"`
+	IsUpdating               bool            `json:"isUpdating"`
+	IsDomainReloadInProgress bool            `json:"isDomainReloadInProgress"`
+	Result                   json.RawMessage `json:"result"`
+	Message                  string          `json:"message"`
 }
 
 var queryCompileStatus = queryCompileStatusFromUnity
@@ -469,9 +469,9 @@ func compileResultLogSummary(result json.RawMessage) compileResultSummary {
 		return compileResultSummary{}
 	}
 	return compileResultSummary{
-		success:      payload["Success"],
-		errorCount:   payload["ErrorCount"],
-		warningCount: payload["WarningCount"],
+		success:      payload["success"],
+		errorCount:   payload["errorCount"],
+		warningCount: payload["warningCount"],
 	}
 }
 

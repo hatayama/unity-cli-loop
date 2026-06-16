@@ -49,16 +49,16 @@ uloop control-play-mode --action Step
 ## Output
 
 Returns JSON with the current play mode state:
-- `IsPlaying`: Whether Unity is currently in play mode
-- `IsPaused`: Whether play mode is paused
-- `Changed`: Whether the requested action changed the current play mode state
-- `WasAlreadyStopped`: Whether `Stop` was requested while Play Mode was already stopped
-- `Message`: Description of the action performed
+- `isPlaying`: Whether Unity is currently in play mode
+- `isPaused`: Whether play mode is paused
+- `changed`: Whether the requested action changed the current play mode state
+- `wasAlreadyStopped`: Whether `Stop` was requested while Play Mode was already stopped
+- `message`: Description of the action performed
 
 ## Notes
 
 - Play action starts the game in the Unity Editor (also resumes from pause)
-- Stop action exits play mode and returns to edit mode. If Play Mode was already stopped, `Changed` is `false`, `WasAlreadyStopped` is `true`, and `Message` is `Play mode was already stopped`.
+- Stop action exits play mode and returns to edit mode. If Play Mode was already stopped, `changed` is `false`, `wasAlreadyStopped` is `true`, and `message` is `Play mode was already stopped`.
 - Pause action pauses the game while remaining in play mode
 - Step action advances exactly one frame and leaves play mode paused (the Editor's Next Frame button; independent of Time.timeScale). Requires PlayMode to be running; repeat to walk transitions frame by frame
 - Useful for automated testing workflows

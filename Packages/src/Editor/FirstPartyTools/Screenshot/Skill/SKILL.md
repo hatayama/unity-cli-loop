@@ -75,18 +75,18 @@ uloop screenshot --window-name Scene --resolution-scale 0.5 --output-directory /
 ## Output
 
 Returns JSON with:
-- `ScreenshotCount`: Number of windows captured
-- `Screenshots`: Array of screenshot info, each containing:
-  - `ImagePath`: Absolute path to the saved PNG file. Empty when `--elements-only` is used because no image file is written.
-  - `FileSizeBytes`: Size of the saved file in bytes
-  - `Width`: Captured image width in pixels
-  - `Height`: Captured image height in pixels
-  - `CoordinateSystem`: `"gameView"` or `"window"`
-  - `ResolutionScale`: Resolution scale used for capture
-  - `YOffset`: Y offset used for gameView coordinate conversion
-  - `AnnotatedElements`: Array of annotated UI element metadata. Empty unless `--annotate-elements` is used.
+- `screenshotCount`: Number of windows captured
+- `screenshots`: Array of screenshot info, each containing:
+  - `imagePath`: Absolute path to the saved PNG file. Empty when `--elements-only` is used because no image file is written.
+  - `fileSizeBytes`: Size of the saved file in bytes
+  - `width`: Captured image width in pixels
+  - `height`: Captured image height in pixels
+  - `coordinateSystem`: `"gameView"` or `"window"`
+  - `resolutionScale`: Resolution scale used for capture
+  - `yOffset`: Y offset used for gameView coordinate conversion
+  - `annotatedElements`: Array of annotated UI element metadata. Empty unless `--annotate-elements` is used.
 
-For `AnnotatedElements` fields and gameView coordinate conversion, read [references/annotated-elements.md](references/annotated-elements.md) before using screenshot coordinates with mouse simulation tools.
+For `annotatedElements` fields and gameView coordinate conversion, read [references/annotated-elements.md](references/annotated-elements.md) before using screenshot coordinates with mouse simulation tools.
 
 When multiple windows match (e.g., multiple Inspector windows or when using `contains` mode), all matching windows are captured with numbered filenames (e.g., `Inspector_1_*.png`, `Inspector_2_*.png`).
 

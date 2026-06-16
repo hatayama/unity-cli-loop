@@ -360,7 +360,7 @@ func runList(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 		})
 		return 1
 	}
-	writeJSON(stdout, outcome.Result)
+	writeJSON(stdout, formatToolListResult(outcome.Result))
 	return 0
 }
 
@@ -407,7 +407,7 @@ func writeJSON(stdout io.Writer, result json.RawMessage) {
 }
 
 type compileResultStatus struct {
-	Success *bool `json:"Success"`
+	Success *bool `json:"success"`
 }
 
 type compileReadinessWaitMode int

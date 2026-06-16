@@ -2,34 +2,34 @@
 
 Read this when using `uloop screenshot --capture-mode rendering --annotate-elements` to find coordinates for `simulate-mouse-ui` or `simulate-mouse-input`.
 
-## AnnotatedElements Fields
+## annotatedElements Fields
 
-`AnnotatedElements` is empty unless `--annotate-elements` is used. Entries are sorted by z-order, frontmost first. Each item contains:
+`annotatedElements` is empty unless `--annotate-elements` is used. Entries are sorted by z-order, frontmost first. Each item contains:
 
-- `Label`: Index label in JSON (`A` = frontmost, `B` = next, ...). Screenshot labels also include the interaction hint, such as `A / CLICK` or `B / DRAG`.
-- `Name`: Element name
-- `Path`: Hierarchy path from the scene root, for example `Canvas/Panel/Button`. Use this as `simulate-mouse-ui --target-path` when bypassing raycast blockers.
-- `Type`: Element type (`Button`, `Toggle`, `Slider`, `Dropdown`, `InputField`, `Scrollbar`, `Draggable`, `DropTarget`, `Selectable`)
-- `Interaction`: Derived interaction category (`Click`, `Drag`, `Drop`, `Text`). Use this to choose between `simulate-mouse-ui --action Click` and drag actions.
-- `SimX`, `SimY`: Center position in simulate-mouse coordinates. Use these directly with `--x` and `--y`.
-- `BoundsMinX`, `BoundsMinY`, `BoundsMaxX`, `BoundsMaxY`: Bounding box in simulate-mouse coordinates
-- `SortingOrder`: Canvas sorting order. Higher values are in front.
-- `SiblingIndex`: Transform sibling index under the element's direct parent. Do not use it as a reliable z-order signal across nested UI hierarchies.
+- `label`: Index label in JSON (`A` = frontmost, `B` = next, ...). Screenshot labels also include the interaction hint, such as `A / CLICK` or `B / DRAG`.
+- `name`: Element name
+- `path`: Hierarchy path from the scene root, for example `Canvas/Panel/Button`. Use this as `simulate-mouse-ui --target-path` when bypassing raycast blockers.
+- `type`: Element type (`Button`, `Toggle`, `Slider`, `Dropdown`, `InputField`, `Scrollbar`, `Draggable`, `DropTarget`, `Selectable`)
+- `interaction`: Derived interaction category (`Click`, `Drag`, `Drop`, `Text`). Use this to choose between `simulate-mouse-ui --action Click` and drag actions.
+- `simX`, `simY`: Center position in simulate-mouse coordinates. Use these directly with `--x` and `--y`.
+- `boundsMinX`, `boundsMinY`, `boundsMaxX`, `boundsMaxY`: Bounding box in simulate-mouse coordinates
+- `sortingOrder`: Canvas sorting order. Higher values are in front.
+- `siblingIndex`: Transform sibling index under the element's direct parent. Do not use it as a reliable z-order signal across nested UI hierarchies.
 
 ## Coordinate Conversion
 
-When `CoordinateSystem` is `"gameView"`, convert image pixel coordinates to simulate-mouse coordinates:
+When `coordinateSystem` is `"gameView"`, convert image pixel coordinates to simulate-mouse coordinates:
 
 ```text
-sim_x = image_x / ResolutionScale
-sim_y = image_y / ResolutionScale + YOffset
+sim_x = image_x / resolutionScale
+sim_y = image_y / resolutionScale + yOffset
 ```
 
-When `ResolutionScale` is `1.0`, this simplifies to:
+When `resolutionScale` is `1.0`, this simplifies to:
 
 ```text
 sim_x = image_x
-sim_y = image_y + YOffset
+sim_y = image_y + yOffset
 ```
 
 ## Annotation Readability

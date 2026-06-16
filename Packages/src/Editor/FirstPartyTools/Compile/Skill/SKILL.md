@@ -44,6 +44,7 @@ uloop compile --stop-on-external-scene-changes
 ## Output
 
 Returns JSON:
-- `Success`: boolean
-- `ErrorCount`: number
-- `WarningCount`: number
+- `success`: boolean or null
+- `errorCount`: number or null
+- `warningCount`: number or null
+- `message`: string

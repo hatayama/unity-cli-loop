@@ -31,8 +31,8 @@ type unityProcess struct {
 }
 
 type focusResponse struct {
-	Success bool   `json:"Success"`
-	Message string `json:"Message"`
+	Success bool   `json:"success"`
+	Message string `json:"message"`
 }
 
 type restoreFocusFunc func(context.Context) error
