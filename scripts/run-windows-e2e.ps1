@@ -108,8 +108,8 @@ function Invoke-UloopJsonChecked {
 
     [string]$text = Invoke-UloopChecked -CommandArguments $CommandArguments
     [pscustomobject]$json = $text | ConvertFrom-Json
-    if ($json.PSObject.Properties.Name -contains "Success" -and $json.Success -ne $true) {
-        throw "uloop $($CommandArguments -join " ") returned Success=false: $text"
+    if ($json.PSObject.Properties.Name -contains "success" -and $json.success -ne $true) {
+        throw "uloop $($CommandArguments -join " ") returned success=false: $text"
     }
 
     return $json
@@ -172,11 +172,11 @@ function Wait-PlayMode {
 
         [pscustomobject]$result = $probe.Text | ConvertFrom-Json
         [string]$isPlaying = ""
-        if ($null -ne $result.Result) {
-            $isPlaying = $result.Result.ToString()
+        if ($null -ne $result.result) {
+            $isPlaying = $result.result.ToString()
         }
 
-        if ($result.Success -eq $true -and $isPlaying -eq "True") {
+        if ($result.success -eq $true -and $isPlaying -eq "True") {
             return
         }
 
@@ -221,7 +221,7 @@ return SceneManager.GetActiveScene().path;
 "@
 
     [pscustomobject]$result = Invoke-DynamicCode -Code $code
-    if ($result.Result -ne $ScenePath) {
+    if ($result.result -ne $ScenePath) {
         throw "Failed to open scene: $ScenePath"
     }
 }
@@ -309,7 +309,7 @@ function Invoke-LaunchSmoke {
     Invoke-UloopChecked -CommandArguments @("launch") | Out-Host
     Wait-UnityReady
     [pscustomobject]$result = Invoke-DynamicCode -Code 'return "windows-launch-smoke";'
-    if ($result.Result -ne "windows-launch-smoke") {
+    if ($result.result -ne "windows-launch-smoke") {
         throw "launch smoke dynamic-code readiness check failed"
     }
 }
@@ -376,7 +376,7 @@ if (cube == null) return -9999f;
 return cube.transform.position.z;
 '@
 
-    return [double]$result.Result
+    return [double]$result.result
 }
 
 try {
@@ -423,8 +423,8 @@ try {
     Invoke-Step -Name "Final Console Check" -Body {
         [pscustomobject]$logs = Invoke-UloopJsonChecked -CommandArguments @("get-logs", "--log-type", "All", "--max-count", "200")
         [int]$badCount = 0
-        foreach ($log in $logs.Logs) {
-            if ($log.Type -eq "Error" -or $log.Type -eq "Warning") {
+        foreach ($log in $logs.logs) {
+            if ($log.type -eq "Error" -or $log.type -eq "Warning") {
                 $badCount++
             }
         }

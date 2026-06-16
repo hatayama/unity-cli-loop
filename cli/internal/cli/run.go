@@ -407,7 +407,7 @@ func writeJSON(stdout io.Writer, result json.RawMessage) {
 }
 
 type compileResultStatus struct {
-	Success *bool `json:"Success"`
+	Success *bool `json:"success"`
 }
 
 type compileReadinessWaitMode int

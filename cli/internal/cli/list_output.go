@@ -83,9 +83,16 @@ func newListOption(tool toolDefinition, propertyName string, property toolProper
 		Name:        "--" + optionNameForProperty(tool.Name, propertyName, property),
 		Type:        property.Type,
 		Description: optionSummary(tool.Name, propertyName, property),
-		Default:     property.EffectiveDefault(),
+		Default:     listOptionDefault(property),
 		Values:      property.Enum,
 	}
+}
+
+func listOptionDefault(property toolProperty) any {
+	if isNegatedBooleanProperty(property) {
+		return false
+	}
+	return property.EffectiveDefault()
 }
 
 func appendDynamicCodeFileListOption(tool toolDefinition, options []listOption) []listOption {

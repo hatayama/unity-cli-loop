@@ -504,29 +504,29 @@ internal: true
 func TestLoadToolsAcceptsEditorParameterSchemaCache(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeToolCache(t, projectRoot, `{
-  "Tools": [
+  "tools": [
     {
       "name": "get-logs",
       "description": "Retrieve logs from Unity Console",
       "parameterSchema": {
-        "Properties": {
+        "properties": {
           "LogType": {
-            "Type": "string",
-            "Description": "Log type to filter",
-            "DefaultValue": "All"
+            "type": "string",
+            "description": "Log type to filter",
+            "defaultValue": "All"
           },
           "IncludeStackTrace": {
-            "Type": "boolean",
-            "Description": "Whether to display stack trace",
-            "DefaultValue": false
+            "type": "boolean",
+            "description": "Whether to display stack trace",
+            "defaultValue": false
           },
           "IncludeInactive": {
-            "Type": "boolean",
-            "Description": "Whether to include inactive objects",
-            "DefaultValue": true
+            "type": "boolean",
+            "description": "Whether to include inactive objects",
+            "defaultValue": true
           }
         },
-        "Required": []
+        "required": []
       }
     }
   ]

@@ -2,7 +2,9 @@ using System;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -166,6 +168,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Message, Does.Contain("TestAssemblies"));
             Assert.That(response.Message, Does.Contain("com.unity.test-framework"));
+        }
+
+        [Test]
+        public void StoreCompileResult_WhenResultIsPersisted_UsesCamelCaseJson()
+        {
+            // Verifies delayed compile polling reads the same camelCase response contract as immediate tool responses.
+            UnityCliLoopEditorSessionStateService sessionStateService =
+                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(sessionStateService);
+            sessionStateService.ClearAll();
+
+            try
+            {
+                UnityCliLoopCompileResult response = new UnityCliLoopCompileResult
+                {
+                    Success = true,
+                    ErrorCount = 0,
+                    WarningCount = 0,
+                    Errors = Array.Empty<UnityCliLoopCompileIssue>(),
+                    Warnings = Array.Empty<UnityCliLoopCompileIssue>(),
+                    Message = "Compilation completed."
+                };
+
+                CompileSessionResultService.StoreCompileResult(
+                    sessionStateService,
+                    "compile_test_request",
+                    forceRecompile: false,
+                    response,
+                    "compile_test_request");
+
+                UnityCliLoopStoredCompileResult storedResult =
+                    sessionStateService.GetCompileResult("compile_test_request");
+
+                Assert.That(storedResult.ResultJson, Does.Contain("\"success\":true"));
+                Assert.That(storedResult.ResultJson, Does.Contain("\"errorCount\":0"));
+                Assert.That(storedResult.ResultJson, Does.Not.Contain("\"Success\""));
+            }
+            finally
+            {
+                originalSnapshot.Restore(sessionStateService);
+            }
         }
     }
 }

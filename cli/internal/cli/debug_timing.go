@@ -56,6 +56,7 @@ func stripDebugTimingResult(command string, result json.RawMessage) json.RawMess
 		return result
 	}
 
+	delete(payload, "timings")
 	delete(payload, "Timings")
 	sanitized, err := json.Marshal(payload)
 	if err != nil {
@@ -70,7 +71,7 @@ func extractUnityDebugTimings(command string, result json.RawMessage) []string {
 	}
 
 	var payload struct {
-		Timings []string `json:"Timings"`
+		Timings []string `json:"timings"`
 	}
 	if err := json.Unmarshal(result, &payload); err != nil {
 		return nil

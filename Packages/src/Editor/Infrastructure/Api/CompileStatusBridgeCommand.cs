@@ -153,13 +153,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return new JObject
             {
-                ["Success"] = JValue.CreateNull(),
-                ["ErrorCount"] = JValue.CreateNull(),
-                ["WarningCount"] = JValue.CreateNull(),
-                ["Errors"] = JValue.CreateNull(),
-                ["Warnings"] = JValue.CreateNull(),
-                ["Message"] = message,
-                ["ProjectRoot"] = UnityCliLoopPathResolver.GetProjectRoot()
+                ["success"] = JValue.CreateNull(),
+                ["errorCount"] = JValue.CreateNull(),
+                ["warningCount"] = JValue.CreateNull(),
+                ["errors"] = JValue.CreateNull(),
+                ["warnings"] = JValue.CreateNull(),
+                ["message"] = message,
+                ["projectRoot"] = UnityCliLoopPathResolver.GetProjectRoot()
             };
         }
 

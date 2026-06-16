@@ -118,8 +118,8 @@ function Invoke-UloopJsonChecked {
 
     [string]$text = Invoke-Uloop -CommandArguments $CommandArguments
     [pscustomobject]$json = $text | ConvertFrom-Json
-    if ($json.PSObject.Properties.Name -contains "Success" -and $json.Success -ne $true) {
-        throw "uloop $($CommandArguments -join " ") returned Success=false: $text"
+    if ($json.PSObject.Properties.Name -contains "success" -and $json.success -ne $true) {
+        throw "uloop $($CommandArguments -join " ") returned success=false: $text"
     }
 
     return $json
@@ -133,8 +133,8 @@ function Assert-DynamicCodeResult {
     )
 
     [string]$actualResult = ""
-    if ($null -ne $Result.Result) {
-        $actualResult = $Result.Result.ToString()
+    if ($null -ne $Result.result) {
+        $actualResult = $Result.result.ToString()
     }
 
     if ($actualResult -eq $ExpectedResult) {
@@ -185,7 +185,7 @@ return SceneManager.GetActiveScene().path;
 "@
 
     [pscustomobject]$result = Invoke-UloopJsonChecked -CommandArguments @("execute-dynamic-code", "--code", $code)
-    if ($result.Result -ne $ScenePath) {
+    if ($result.result -ne $ScenePath) {
         throw "Failed to load ${ScenePath}: $($result | ConvertTo-Json -Depth 10)"
     }
 }
@@ -305,7 +305,7 @@ function Start-ReplayInput {
     }
 
     [pscustomobject]$replayStartJson = $replayResult.Text | ConvertFrom-Json
-    return $replayStartJson.Success -eq $true
+    return $replayStartJson.success -eq $true
 }
 
 function Get-ReplayStatus {
@@ -319,7 +319,7 @@ function Get-ReplayStatus {
     }
 
     [pscustomobject]$status = $result.Text | ConvertFrom-Json
-    if ($status.PSObject.Properties.Name -contains "Success" -and $status.Success -ne $true) {
+    if ($status.PSObject.Properties.Name -contains "success" -and $status.success -ne $true) {
         return [pscustomobject]@{
             IsReplaying = $null
             Progress = $null
@@ -328,8 +328,8 @@ function Get-ReplayStatus {
     }
 
     return [pscustomobject]@{
-        IsReplaying = $status.IsReplaying
-        Progress = $status.Progress
+        IsReplaying = $status.isReplaying
+        Progress = $status.progress
         RawText = $result.Text
     }
 }
@@ -500,13 +500,13 @@ if ($recordStopResult.ExitCode -ne 0) {
 }
 
 [pscustomobject]$recordStopJson = $recordStopResult.Text | ConvertFrom-Json
-if ($recordStopJson.Success -ne $true) {
+if ($recordStopJson.success -ne $true) {
     throw "record-input Stop reported failure: $($recordStopResult.Text)"
 }
 
 [string]$recordingInputPath = ""
-if ($null -ne $recordStopJson.OutputPath) {
-    $recordingInputPath = $recordStopJson.OutputPath.ToString()
+if ($null -ne $recordStopJson.outputPath) {
+    $recordingInputPath = $recordStopJson.outputPath.ToString()
 }
 
 if ($AutomatedInput) {

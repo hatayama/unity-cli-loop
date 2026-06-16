@@ -8,21 +8,21 @@ import (
 // Tests that list output exposes the actual CLI option names instead of schema property names.
 func TestFormatToolListResultUsesCliOptionNames(t *testing.T) {
 	result := formatToolListResult([]byte(`{
-  "Tools": [
+  "tools": [
     {
       "name": "screenshot",
       "parameterSchema": {
-        "Properties": {
+        "properties": {
           "CaptureMode": {
-            "Type": "string",
-            "Description": "Capture mode",
-            "DefaultValue": "window",
-            "Enum": ["window", "rendering"]
+            "type": "string",
+            "description": "Capture mode",
+            "defaultValue": "window",
+            "enum": ["window", "rendering"]
           },
           "AnnotateElements": {
-            "Type": "boolean",
-            "Description": "Annotate elements",
-            "DefaultValue": false
+            "type": "boolean",
+            "description": "Annotate elements",
+            "defaultValue": false
           }
         }
       }
@@ -73,11 +73,17 @@ func TestNewListCatalogUsesSpecialOptionAliases(t *testing.T) {
 	catalog := newListCatalog(cache)
 
 	runTestsTool := findListTool(t, catalog, runTestsCommandName)
-	findListOption(t, runTestsTool, "--fail-on-unsaved-changes")
+	failOnUnsavedChanges := findListOption(t, runTestsTool, "--fail-on-unsaved-changes")
+	if failOnUnsavedChanges.Default != false {
+		t.Fatalf("fail-on-unsaved-changes default mismatch: %#v", failOnUnsavedChanges)
+	}
 	assertListOptionMissing(t, runTestsTool, "--no-save-before-run")
 
 	compileTool := findListTool(t, catalog, compileCommandName)
-	findListOption(t, compileTool, "--stop-on-external-scene-changes")
+	stopOnExternalSceneChanges := findListOption(t, compileTool, "--stop-on-external-scene-changes")
+	if stopOnExternalSceneChanges.Default != false {
+		t.Fatalf("stop-on-external-scene-changes default mismatch: %#v", stopOnExternalSceneChanges)
+	}
 	assertListOptionMissing(t, compileTool, "--no-reload-external-scene-changes")
 }
 
