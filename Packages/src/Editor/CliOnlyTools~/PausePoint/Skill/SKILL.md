@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-pause-point
-description: "An alternative to IDE breakpoints. Temporarily pauses Unity and then inspects a specific frozen frame. Use this during bug investigations or PlayMode/E2E testing to examine variable states at specific frames or verify whether particular code has been executed."
+description: "Pauses Unity's playback and allows you to inspect specific frames. Use this for bug investigation or PlayMode/E2E testing. It's the most convenient yet rigorous method for verifying variable states at specific frames or confirming whether particular code has been executed."
 ---
 
 ## Quick Check Template
