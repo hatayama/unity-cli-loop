@@ -2,7 +2,7 @@
 Development helper for refreshing generated uloop skill files in sibling Unity projects.
 This is not an installed agent skill or a runtime command. It exists to support local
 uloop development by resetting each target Git repository, quitting each target
-Unity Editor, regenerating Claude/Agents skill copies, committing those generated
+Unity Editor, regenerating Claude/Codex/Agents skill copies, committing those generated
 files locally, removing Library after Unity has stopped, relaunching each project,
 and opening the sample scene.
 #>
@@ -22,6 +22,7 @@ $Help = $false
 $ExpectedProjectCount = 3
 $DefaultProjectNames = @("cli-loop-block-kuzushi", "cli-loop-minecraft", "cli-loop-tetris")
 $SampleScenePath = "Assets/Scenes/SampleScene.unity"
+$GeneratedSkillDirectories = @(".claude/skills", ".codex/skills", ".agents/skills")
 $Projects = [System.Collections.Generic.List[string]]::new()
 $UloopBin = ""
 
@@ -34,7 +35,7 @@ Usage:
 Workflow for each target Unity project:
   0. Reset Git state to HEAD and remove untracked files
   1. Quit Unity if running
-  2. Install uloop skills for Claude and Agents
+  2. Install uloop skills for Claude, Codex, and Agents
   3. Commit generated skill changes without pushing
   4. Remove Library
   5. Launch Unity with the local uloop launch command
@@ -423,7 +424,7 @@ function Assert-CleanSkillDirectories {
         return
     }
 
-    [string]$existing = Get-GitText -RepositoryPath $ProjectRoot -Arguments @("status", "--porcelain", "--", ".claude/skills", ".agents/skills")
+    [string]$existing = Get-GitText -RepositoryPath $ProjectRoot -Arguments (@("status", "--porcelain", "--") + $GeneratedSkillDirectories)
     if (-not [string]::IsNullOrWhiteSpace($existing)) {
         Write-Host $existing
         Fail "skill directories already have uncommitted changes: $ProjectRoot"
@@ -462,7 +463,7 @@ function Install-Skills {
         [string]$ProjectRoot
     )
 
-    Invoke-UloopProjectChecked -ProjectRoot $ProjectRoot -CommandArguments @("skills", "install", "--claude", "--agents") | Out-Null
+    Invoke-UloopProjectChecked -ProjectRoot $ProjectRoot -CommandArguments @("skills", "install", "--claude", "--codex", "--agents") | Out-Null
 }
 
 function Get-CommitIdentityValue {
@@ -518,14 +519,14 @@ function Commit-GeneratedSkills {
     )
 
     if ($DryRun) {
-        Invoke-NativeChecked -FilePath "git" -Arguments @("-C", $ProjectRoot, "add", "-A", "--", ".claude/skills", ".agents/skills") | Out-Null
-        Invoke-NativeChecked -FilePath "git" -Arguments @("-C", $ProjectRoot, "diff", "--cached", "--quiet", "--", ".claude/skills", ".agents/skills") | Out-Null
+        Invoke-NativeChecked -FilePath "git" -Arguments (@("-C", $ProjectRoot, "add", "-A", "--") + $GeneratedSkillDirectories) | Out-Null
+        Invoke-NativeChecked -FilePath "git" -Arguments (@("-C", $ProjectRoot, "diff", "--cached", "--quiet", "--") + $GeneratedSkillDirectories) | Out-Null
         Write-Host "[dry-run] git -C $ProjectRoot commit -m 'Update generated uloop skills'"
         return
     }
 
-    Invoke-NativeChecked -FilePath "git" -Arguments @("-C", $ProjectRoot, "add", "-A", "--", ".claude/skills", ".agents/skills") | Out-Null
-    if (Test-GitDiffQuiet -RepositoryPath $ProjectRoot -Pathspec @(".claude/skills", ".agents/skills")) {
+    Invoke-NativeChecked -FilePath "git" -Arguments (@("-C", $ProjectRoot, "add", "-A", "--") + $GeneratedSkillDirectories) | Out-Null
+    if (Test-GitDiffQuiet -RepositoryPath $ProjectRoot -Pathspec $GeneratedSkillDirectories) {
         Write-Host "No generated skill changes to commit: $ProjectRoot"
         return
     }
