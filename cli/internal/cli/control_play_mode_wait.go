@@ -23,11 +23,20 @@ const (
 var controlPlayModeStatePoll = 50 * time.Millisecond
 
 type controlPlayModeResponse struct {
-	IsPlaying         bool   `json:"IsPlaying"`
-	IsPaused          bool   `json:"IsPaused"`
-	Changed           bool   `json:"Changed"`
-	WasAlreadyStopped bool   `json:"WasAlreadyStopped"`
-	Message           string `json:"Message"`
+	IsPlaying              bool                          `json:"IsPlaying"`
+	IsPaused               bool                          `json:"IsPaused"`
+	Changed                bool                          `json:"Changed"`
+	WasAlreadyStopped      bool                          `json:"WasAlreadyStopped"`
+	BlockedByCompileErrors bool                          `json:"BlockedByCompileErrors"`
+	CompileErrorCount      int                           `json:"CompileErrorCount"`
+	CompileErrors          []controlPlayModeCompileError `json:"CompileErrors"`
+	Message                string                        `json:"Message"`
+}
+
+type controlPlayModeCompileError struct {
+	Message string `json:"Message"`
+	File    string `json:"File"`
+	Line    int    `json:"Line"`
 }
 
 func shouldWaitForControlPlayModeState(command string, params map[string]any) bool {
@@ -70,6 +79,12 @@ func runControlPlayModeWithStateWait(
 			return 1
 		}
 		hasInitialResponse = true
+		if initialResponse.BlockedByCompileErrors {
+			spinner.Stop()
+			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
+			writeErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, action, initialResponse))
+			return 1
+		}
 		if controlPlayModeStateMatches(action, initialResponse) {
 			spinner.Stop()
 			writeJSON(stdout, outcome.Result)
@@ -304,6 +319,37 @@ func controlPlayModeWaitTimeoutError(
 			"isPlaying":       response.IsPlaying,
 			"isPaused":        response.IsPaused,
 			"timeoutSeconds":  timeoutSeconds,
+		},
+	}
+}
+
+func controlPlayModeCompileErrorsError(
+	projectRoot string,
+	action string,
+	response controlPlayModeResponse,
+) cliError {
+	compileErrorCount := response.CompileErrorCount
+	if compileErrorCount == 0 && len(response.CompileErrors) > 0 {
+		compileErrorCount = len(response.CompileErrors)
+	}
+
+	return cliError{
+		ErrorCode:   errorCodeControlPlayModeCompileErrors,
+		Phase:       errorPhaseExecution,
+		Message:     "Play mode start was blocked because Unity has compiler errors.",
+		Retryable:   false,
+		SafeToRetry: true,
+		ProjectRoot: projectRoot,
+		Command:     controlPlayModeCommandName,
+		NextActions: []string{
+			"Fix the compiler errors reported in the details.",
+			"Run `uloop compile` to verify the project compiles, then retry `uloop control-play-mode --action Play`.",
+		},
+		Details: map[string]any{
+			"requestedAction":   action,
+			"compileErrorCount": compileErrorCount,
+			"compileErrors":     response.CompileErrors,
+			"message":           response.Message,
 		},
 	}
 }

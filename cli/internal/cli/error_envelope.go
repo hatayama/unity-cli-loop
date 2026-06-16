@@ -26,6 +26,7 @@ const (
 	errorCodeToolDisabled                    = "TOOL_DISABLED"
 	errorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
 	errorCodeControlPlayModeWaitTimeout      = "CONTROL_PLAY_MODE_WAIT_TIMEOUT"
+	errorCodeControlPlayModeCompileErrors    = "CONTROL_PLAY_MODE_COMPILE_ERRORS"
 	errorCodePausePointNotEnabled            = "PAUSE_POINT_NOT_ENABLED"
 	errorCodePausePointWaitTimeout           = "PAUSE_POINT_WAIT_TIMEOUT"
 	errorCodePausePointExpired               = "PAUSE_POINT_EXPIRED"

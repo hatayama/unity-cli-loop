@@ -230,6 +230,87 @@ func TestRunControlPlayModeWithStateWaitFailsWhenStateNeverMatches(t *testing.T)
 	}
 }
 
+// Verifies that compiler-error PlayMode blocks fail immediately instead of waiting for state polling.
+func TestRunControlPlayModeWithStateWaitFailsImmediatelyWhenCompileErrorsBlockPlay(t *testing.T) {
+	originalPoll := controlPlayModeStatePoll
+	controlPlayModeStatePoll = time.Millisecond
+	t.Cleanup(func() {
+		controlPlayModeStatePoll = originalPoll
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	requests := make(chan map[string]any, 2)
+	serverErr := make(chan error, 1)
+	go serveControlPlayModeResponses(
+		listener,
+		requests,
+		serverErr,
+		[]string{
+			`{"IsPlaying":false,"IsPaused":false,"BlockedByCompileErrors":true,"CompileErrorCount":1,"CompileErrors":[{"Message":"CS1002: ; expected","File":"Assets/Scripts/Sample.cs","Line":12}],"Message":"Play mode could not start because Unity has compiler errors."}`,
+		})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runControlPlayModeWithStateWait(
+		context.Background(),
+		connection,
+		map[string]any{
+			controlPlayModeActionParam:  "Play",
+			controlPlayModeTimeoutParam: 1,
+		},
+		&stdout,
+		&stderr)
+
+	if code != 1 {
+		t.Fatalf("expected compile error failure, got %d with stdout %s stderr %s", code, stdout.String(), stderr.String())
+	}
+
+	var envelope cliErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
+	}
+	if envelope.Error.ErrorCode != errorCodeControlPlayModeCompileErrors {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if envelope.Error.Details["compileErrorCount"] != float64(1) {
+		t.Fatalf("compile error count mismatch: %#v", envelope.Error.Details)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("CS1002")) {
+		t.Fatalf("compiler diagnostic missing from stderr: %s", stderr.String())
+	}
+
+	firstRequest := readControlPlayModeRequest(t, requests)
+	if _, ok := firstRequest[controlPlayModeStatusOnlyParam]; ok {
+		t.Fatalf("initial request should not be status-only: %#v", firstRequest)
+	}
+	select {
+	case secondRequest := <-requests:
+		t.Fatalf("blocked compile errors should not trigger status polling: %#v", secondRequest)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
 // Verifies that live Unity tool caches using number schemas still drive integer wait budgets.
 func TestControlPlayModeTimeoutSecondsAcceptsFloatSchemaValue(t *testing.T) {
 	params := map[string]any{controlPlayModeTimeoutParam: 12.0}
