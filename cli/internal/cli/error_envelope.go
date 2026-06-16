@@ -20,6 +20,7 @@ const (
 	errorCodeUnityDisconnectedAfterDispatch  = "UNITY_DISCONNECTED_AFTER_DISPATCH"
 	errorCodeUnityDisconnectedAfterAccept    = "UNITY_DISCONNECTED_AFTER_ACCEPT"
 	errorCodeUnityResponseTimeoutAfterAccept = "UNITY_RESPONSE_TIMEOUT_AFTER_ACCEPT"
+	errorCodeUnityEditorUnresponsive         = "UNITY_EDITOR_UNRESPONSIVE"
 	errorCodeUnityRPCError                   = "UNITY_RPC_ERROR"
 	errorCodeUnityServerBusy                 = "UNITY_SERVER_BUSY"
 	errorCodeCLIUpdateRequired               = "CLI_UPDATE_REQUIRED"
@@ -180,6 +181,11 @@ func classifyError(err error, context errorContext) cliError {
 		}
 	}
 
+	var editorUnresponsiveErr *unityipc.EditorUnresponsiveError
+	if errors.As(err, &editorUnresponsiveErr) {
+		return unityEditorUnresponsiveError(editorUnresponsiveErr, context)
+	}
+
 	var connectionErr *unityipc.ConnectionAttemptError
 	if errors.As(err, &connectionErr) {
 		return cliError{
@@ -305,17 +311,6 @@ func classifyError(err error, context errorContext) cliError {
 	}
 
 	return internalCLIError(message, context)
-}
-
-func connectionAttemptCause(err *unityipc.ConnectionAttemptError) string {
-	if err == nil {
-		return ""
-	}
-	cause := err.Unwrap()
-	if cause == nil {
-		return ""
-	}
-	return cause.Error()
 }
 
 func rpcDataType(data map[string]any) string {

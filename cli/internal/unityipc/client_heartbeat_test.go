@@ -168,6 +168,40 @@ func TestSendReportsMainThreadStallToHandler(t *testing.T) {
 	}
 }
 
+// Verifies heartbeat stall progress points users at modal dialogs or long editor work.
+func TestSendReportsMainThreadStallProgressWithModalHint(t *testing.T) {
+	stalledHeartbeat := `{"jsonrpc":"2.0","id":1,"result":{"alive":true},"uloop":{"phase":"heartbeat","mainThreadStallSeconds":31}}`
+	connection := startHeartbeatTestServer(t, func(conn net.Conn) {
+		writeFrame(t, conn, heartbeatAck)
+		writeFrame(t, conn, stalledHeartbeat)
+		writeFrame(t, conn, `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)
+	})
+
+	progressMessages := []string{}
+	client := NewClient(connection, "9.9.9")
+	client.heartbeatSilenceOverride = 5 * time.Second
+
+	_, err := client.SendWithProgressOutcome(
+		context.Background(),
+		"run-tests",
+		map[string]any{},
+		func(message string) {
+			progressMessages = append(progressMessages, message)
+		},
+	)
+	if err != nil {
+		t.Fatalf("expected success after stall heartbeat, got %v", err)
+	}
+
+	joinedMessages := strings.Join(progressMessages, "\n")
+	if !strings.Contains(joinedMessages, "modal dialog") {
+		t.Fatalf("progress should mention modal dialog: %#v", progressMessages)
+	}
+	if !strings.Contains(joinedMessages, "long editor operation") {
+		t.Fatalf("progress should mention long editor operation: %#v", progressMessages)
+	}
+}
+
 // Verifies that a negotiated connection fails with a heartbeat-silence diagnosis when
 // frames stop arriving, instead of waiting for the 30-minute absolute deadline.
 func TestSendFailsWithDiagnosisWhenHeartbeatsStop(t *testing.T) {

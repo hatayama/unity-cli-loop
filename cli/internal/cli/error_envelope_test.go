@@ -140,6 +140,32 @@ func TestClassifyUnityServerNotRespondingError(t *testing.T) {
 	}
 }
 
+func TestClassifyEditorUnresponsiveError(t *testing.T) {
+	// Verifies main-thread stall diagnostics guide users toward modal dialogs instead of generic transport failures.
+	err := &unityipc.EditorUnresponsiveError{StallSeconds: 321}
+
+	cliErr := classifyError(err, errorContext{projectRoot: "/tmp/MyProject", command: "get-logs"})
+	if cliErr.ErrorCode != errorCodeUnityEditorUnresponsive {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if cliErr.Phase != errorPhaseResponseWaiting {
+		t.Fatalf("phase mismatch: %#v", cliErr)
+	}
+	if !cliErr.Retryable || !cliErr.SafeToRetry {
+		t.Fatalf("retry flags mismatch: %#v", cliErr)
+	}
+	if cliErr.Details["stallSeconds"] != float64(321) {
+		t.Fatalf("stall seconds details mismatch: %#v", cliErr.Details)
+	}
+	joinedActions := strings.Join(cliErr.NextActions, "\n")
+	if !strings.Contains(joinedActions, "modal dialog") {
+		t.Fatalf("next actions should mention modal dialog: %#v", cliErr.NextActions)
+	}
+	if !strings.Contains(joinedActions, "uloop focus-window") {
+		t.Fatalf("next actions should mention focus-window: %#v", cliErr.NextActions)
+	}
+}
+
 func TestClassifyLaunchStartupTimeoutError(t *testing.T) {
 	// Verifies launch startup timeouts do not look like generic reachability or package failures.
 	cliErr := classifyError(
