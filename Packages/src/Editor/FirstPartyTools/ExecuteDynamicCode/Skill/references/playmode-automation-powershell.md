@@ -34,7 +34,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 Scene scene = SceneManager.GetActiveScene();
-GameObject[] objects = UnityEngine.Object.FindObjectsOfType<GameObject>(true);
+GameObject[] objects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 return $"{scene.name}: {objects.Length} objects";
 '@
 ```
@@ -73,9 +73,9 @@ If the C# snippet itself contains a single quote, double it inside the PowerShel
 uloop execute-dynamic-code --code 'char initial = ''A''; return initial.ToString();'
 ```
 
-### JSON-like values passed via `--parameters`
+### JSON object values passed via `--parameters`
 
-Wrap the whole expression in single quotes so PowerShell passes the inner double quotes through unchanged.
+Pass a JSON object literal, not a JSON string value. Wrap the object literal in single quotes so PowerShell passes the inner double quotes through unchanged.
 
 ```powershell
 uloop execute-dynamic-code --code 'return parameters["param0"];' --parameters '{"param0":"Hello from PowerShell"}'
@@ -113,7 +113,7 @@ return obj.name;
 uloop execute-dynamic-code --code $code
 ```
 
-You can combine multi-line code with multi-line parameters the same way.
+You can combine multi-line code with a multi-line JSON object literal the same way.
 
 ```powershell
 $code = @'
