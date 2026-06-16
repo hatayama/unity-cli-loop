@@ -9,6 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void Initialize()
         {
             ExternalSceneChangeTracker.Initialize();
+            ControlPlayModeEditorStartup.Initialize();
             ExecuteDynamicCodeEditorStartup.Initialize();
             GetLogsEditorStartup.Initialize();
 #if ULOOP_HAS_TEST_FRAMEWORK
