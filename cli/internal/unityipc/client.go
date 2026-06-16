@@ -44,6 +44,7 @@ type Client struct {
 	// Test seams: zero means "use the derived/default values".
 	heartbeatSilenceOverride time.Duration
 	mainThreadStallLimit     time.Duration
+	mainThreadStallHandler   func(float64)
 }
 
 type ProgressFunc = func(message string)
@@ -133,6 +134,11 @@ func NewClient(connection Connection, clientVersion string) *Client {
 
 func (client *Client) WithResponseTimeout(timeout time.Duration) *Client {
 	client.responseTimeout = timeout
+	return client
+}
+
+func (client *Client) WithMainThreadStallHandler(handler func(float64)) *Client {
+	client.mainThreadStallHandler = handler
 	return client
 }
 
@@ -259,13 +265,18 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 			}
 
 			stallSeconds := response.ULoop.MainThreadStallSeconds
+			if stallSeconds >= mainThreadStallProgressThresholdSeconds {
+				if client.mainThreadStallHandler != nil {
+					client.mainThreadStallHandler(stallSeconds)
+				}
+				if progress != nil {
+					progress(fmt.Sprintf("unity editor main thread busy for %.0fs...", stallSeconds))
+				}
+			}
 			if stallSeconds >= client.getMainThreadStallLimit().Seconds() {
 				timing.Total = time.Since(startedAt)
 				outcome.Timing = timing
 				return outcome, &EditorUnresponsiveError{StallSeconds: stallSeconds}
-			}
-			if progress != nil && stallSeconds >= mainThreadStallProgressThresholdSeconds {
-				progress(fmt.Sprintf("unity editor main thread busy for %.0fs...", stallSeconds))
 			}
 			if heartbeatSilence > 0 {
 				if err := applyPostAcceptDeadline(conn, heartbeatSilence, absoluteDeadline); err != nil {

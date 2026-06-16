@@ -115,6 +115,7 @@ func TestSendWithTransientConnectionRetryWritesFocusSuccessVibeLog(t *testing.T)
 		`"operation":"cli_connection_retry_focus_success"`,
 		`"command":"get-logs"`,
 		`"pid":456`,
+		`"reason":"undispatched_connection_failure"`,
 	} {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
@@ -167,6 +168,7 @@ func TestSendWithTransientConnectionRetryWritesFocusFailureVibeLog(t *testing.T)
 		`"operation":"cli_connection_retry_focus_failed"`,
 		`"command":"compile"`,
 		`"pid":789`,
+		`"reason":"undispatched_connection_failure"`,
 		`"focusError":"focus denied"`,
 	} {
 		if !strings.Contains(logContent, expected) {
@@ -227,6 +229,96 @@ func readOnlyCliVibeLog(t *testing.T, projectRoot string) string {
 		t.Fatalf("failed to read CLI Vibe log: %v", err)
 	}
 	return string(content)
+}
+
+// Verifies dispatched pre-accept timeouts are treated as focus-worthy slow Unity responses.
+func TestConnectionRetryFocusReasonClassifiesPreAcceptTimeout(t *testing.T) {
+	reason, ok := connectionRetryFocusReasonForError(
+		timeoutOnlyError{},
+		unityipc.UnitySendOutcome{RequestDispatched: true},
+		0)
+
+	if !ok {
+		t.Fatal("expected pre-accept timeout to request focus")
+	}
+	if reason != focusReasonPreAcceptTimeout {
+		t.Fatalf("focus reason mismatch: %s", reason)
+	}
+}
+
+// Verifies heartbeat silence after acceptance is treated as an abnormal timeout.
+func TestConnectionRetryFocusReasonClassifiesHeartbeatSilenceTimeout(t *testing.T) {
+	err := fmt.Errorf("no response or heartbeat from Unity for 6s: %w", timeoutOnlyError{})
+	reason, ok := connectionRetryFocusReasonForError(
+		err,
+		unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+		0)
+
+	if !ok {
+		t.Fatal("expected heartbeat silence timeout to request focus")
+	}
+	if reason != focusReasonHeartbeatSilenceTimeout {
+		t.Fatalf("focus reason mismatch: %s", reason)
+	}
+}
+
+// Verifies abnormal final response timeouts after acceptance request focus.
+func TestConnectionRetryFocusReasonClassifiesFinalResponseTimeout(t *testing.T) {
+	reason, ok := connectionRetryFocusReasonForError(
+		timeoutOnlyError{},
+		unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+		0)
+
+	if !ok {
+		t.Fatal("expected final response timeout to request focus")
+	}
+	if reason != focusReasonFinalResponseTimeout {
+		t.Fatalf("focus reason mismatch: %s", reason)
+	}
+}
+
+// Verifies explicit response timeouts such as compile status polling do not request focus.
+func TestConnectionRetryFocusReasonSkipsIntentionalResponseTimeout(t *testing.T) {
+	_, ok := connectionRetryFocusReasonForError(
+		timeoutOnlyError{},
+		unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+		compileResponseTimeout)
+
+	if ok {
+		t.Fatal("intentional response timeout should not request focus")
+	}
+}
+
+// Verifies server_busy responses do not request focus because Unity is already answering.
+func TestConnectionRetryFocusReasonSkipsServerBusy(t *testing.T) {
+	err := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "Unity is busy running 'compile'.",
+		Data:    []byte(`{"type":"server_busy"}`),
+	}
+	_, ok := connectionRetryFocusReasonForError(
+		err,
+		unityipc.UnitySendOutcome{RequestDispatched: true},
+		0)
+
+	if ok {
+		t.Fatal("server_busy should not request focus")
+	}
+}
+
+// Verifies editor-unresponsive heartbeat failures are treated as main-thread stalls.
+func TestConnectionRetryFocusReasonClassifiesEditorUnresponsive(t *testing.T) {
+	reason, ok := connectionRetryFocusReasonForError(
+		&unityipc.EditorUnresponsiveError{StallSeconds: 300},
+		unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+		0)
+
+	if !ok {
+		t.Fatal("expected editor-unresponsive error to request focus")
+	}
+	if reason != focusReasonMainThreadStall {
+		t.Fatalf("focus reason mismatch: %s", reason)
+	}
 }
 
 // Verifies accepted RPCs can outlive the pre-dispatch connection retry timeout.
@@ -383,6 +475,86 @@ func TestSendWithTransientConnectionRetryKeepsRetryTimeoutBeforeAcceptedAck(t *t
 	case err := <-serverErr:
 		t.Fatalf("server failed: %v", err)
 	default:
+	}
+}
+
+// Verifies terminal timeout focus remains visible after the command returns.
+func TestSendWithTransientConnectionRetryKeepsUnityFocusedAfterPreAcceptTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	originalFinder := findRunningUnityProcessForConnectionRetry
+	originalFocus := focusUnityProcessForConnectionRetry
+	originalTimeout := serverConnectionRetryTimeout
+	focusCallCount := 0
+	restoreCallCount := 0
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 123}, nil
+	}
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+		focusCallCount++
+		return func(context.Context) error {
+			restoreCallCount++
+			return nil
+		}, nil
+	}
+	serverConnectionRetryTimeout = 100 * time.Millisecond
+	t.Cleanup(func() {
+		findRunningUnityProcessForConnectionRetry = originalFinder
+		focusUnityProcessForConnectionRetry = originalFocus
+		serverConnectionRetryTimeout = originalTimeout
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	releaseServer := make(chan struct{})
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+		if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+			return
+		}
+		<-releaseServer
+	}()
+	t.Cleanup(func() {
+		close(releaseServer)
+	})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	_, err = sendWithTransientConnectionRetry(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil)
+
+	if err == nil {
+		t.Fatal("expected pre-accept timeout")
+	}
+	if focusCallCount != 1 {
+		t.Fatalf("expected one focus attempt, got %d", focusCallCount)
+	}
+	if restoreCallCount != 0 {
+		t.Fatalf("terminal timeout focus should not be restored immediately, got %d restores", restoreCallCount)
 	}
 }
 
