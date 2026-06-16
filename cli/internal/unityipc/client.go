@@ -270,7 +270,9 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 					client.mainThreadStallHandler(stallSeconds)
 				}
 				if progress != nil {
-					progress(fmt.Sprintf("unity editor main thread busy for %.0fs...", stallSeconds))
+					progress(fmt.Sprintf(
+						"Unity main thread stuck %.0fs; check modal/long operation...",
+						stallSeconds))
 				}
 			}
 			if stallSeconds >= client.getMainThreadStallLimit().Seconds() {
