@@ -371,17 +371,6 @@ Unity Editor内で動的にC#コードを実行します。
 → 信頼できる自動化向けにUnity Editor APIへフルアクセス
 ```
 
-
-> [!IMPORTANT]
-> **ツールアクセス設定について**
->
-> カスタムツールは常に利用できます。AIエージェントから隠したいツールは、個別のツールトグルで無効化してください。
->
-> `execute-dynamic-code` には制限モードはありません。有効化されている場合はUnity Editorプロセスの権限で任意のC#コードを実行するため、信頼できるワークフローでのみ有効化してください。
->
-> 設定変更は即座に反映され、CLI の再インストールは不要です。
->
-
 ### PlayMode 自動テスト系ツール
 ### 11. simulate-mouse-ui - PlayMode UI要素のマウス操作シミュレーション
 PlayMode中のUI要素に対してマウスクリック・長押し・ドラッグをシミュレーションします。EventSystemとExecuteEventsを使ってポインタイベントを直接ディスパッチするため、旧Input System・新Input Systemの両方に依存せず動作します。ゲームロジックがInput Systemを直接読み取る場合（例：`Mouse.current.leftButton.wasPressedThisFrame`）は、`simulate-mouse-input` を使用してください。
@@ -468,11 +457,6 @@ Unity CLI Loopはコアパッケージへの変更を必要とせず、プロジ
 > [!TIP]
 > **AI支援開発向け**: 詳細な実装ガイドが [.claude/rules/cli.md](/.claude/rules/cli.md) に用意されています。このガイドは、Claude Codeが該当ディレクトリで作業する際に自動的に読み込まれます。
 
-> [!IMPORTANT]
-> **ツールアクセス設定について**
->
-> プロジェクト固有に開発したツールは、追加の権限を有効化しなくても利用できます。AIエージェントから隠したいツールは、Tool Settings のトグルで無効化してください。
-
 <details>
 <summary>実装ガイドを見る</summary>
 
@@ -553,10 +537,6 @@ public class MyCustomTool : UnityCliLoopTool<MyCustomSchema, MyCustomResponse>
     }
 }
 ```
-
-> [!IMPORTANT]
-> **重要事項**：
-> - **スレッドセーフティ**: ツールはUnityのメインスレッドで実行されるため、追加の同期なしにUnity APIを安全に呼び出せます。
 
 [カスタムツールのサンプル](/Assets/Editor/CustomToolSamples)も参考にして下さい。
 

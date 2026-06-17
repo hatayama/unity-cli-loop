@@ -370,17 +370,6 @@ When enabled, dynamic code execution runs with full Unity Editor process permiss
 → Full Unity Editor API access for trusted automation
 ```
 
-
-> [!IMPORTANT]
-> **Tool Access Settings**
->
-> Custom tools are always available. Use individual tool toggles to hide tools from AI agents when needed.
->
-> `execute-dynamic-code` has no restricted mode. When enabled, it runs arbitrary C# with the Unity Editor process permissions, so keep it enabled only for trusted workflows.
->
-> Setting changes take effect immediately without reinstalling the CLI.
->
-
 ### PlayMode Automated Testing Tools
 ### 11. simulate-mouse-ui - Simulate Mouse Input on PlayMode UI
 Simulate mouse click, long-press, and drag on PlayMode UI elements. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead.
@@ -467,11 +456,6 @@ You can publish your extension tools on GitHub and reuse them across other proje
 > [!TIP]
 > **For AI-assisted development**: Detailed implementation guides are available in [.claude/rules/cli.md](/.claude/rules/cli.md) for CLI and Skills development. These guides are automatically loaded by Claude Code when working in the relevant directories.
 
-> [!IMPORTANT]
-> **Tool Access Settings**
->
-> Project-specific tools are available without enabling an additional permission. Use Tool Settings toggles to hide tools from AI agents when needed.
-
 <details>
 <summary>View Implementation Guide</summary>
 
@@ -552,10 +536,6 @@ public class MyCustomTool : UnityCliLoopTool<MyCustomSchema, MyCustomResponse>
     }
 }
 ```
-
-> [!IMPORTANT]
-> **Important Notes**:
-> - **Thread Safety**: Tools execute on Unity's main thread, so Unity API calls are safe without additional synchronization.
 
 Please also refer to [Custom Tool Samples](/Assets/Editor/CustomToolSamples).
 
