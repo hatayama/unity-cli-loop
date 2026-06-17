@@ -22,14 +22,12 @@ Choose the tool based on what you are trying to validate:
 In short: do not default everything to mouse simulation.
 Use `execute-dynamic-code` for direct automation and diagnostics, and switch to `simulate-mouse-ui` or `simulate-mouse-input` when reproducing the real input path is the thing you need to test.
 
-## PowerShell Quoting Notes
+## PowerShell 7 Multiline Snippets
 
-Use these patterns when you need shell-safe inline code.
-PowerShell's equivalent to a bash heredoc is a single-quoted here-string.
-In PowerShell 7 (`pwsh`), it can be passed to `--code` directly without creating a temporary file:
+Default to a single-quoted here-string variable in PowerShell 7 (`pwsh`), then pass it to `--code`.
 
 ```powershell
-uloop execute-dynamic-code --code @'
+$code = @'
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -37,83 +35,13 @@ Scene scene = SceneManager.GetActiveScene();
 GameObject[] objects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 return $"{scene.name}: {objects.Length} objects";
 '@
-```
-
-Use `--code-file` when the active shell or launcher cannot preserve inline code exactly, especially for Windows PowerShell 5.1 snippets with many C# string literals.
-
-### Native launcher check
-
-Multi-line `--code` expects PowerShell to call the native Go `uloop.exe` launcher directly.
-If `Get-Command uloop` resolves to an old `.cmd` shim from a previous installation, run `uloop install` and open a new terminal before relying on multi-line inline snippets.
-
-```powershell
-(Get-Command uloop).Source
-```
-
-### Double quotes inside C# strings
-
-PowerShell 7 (`pwsh`) preserves C# double quotes inside single-quoted native command arguments.
-
-```powershell
-uloop execute-dynamic-code --code 'return "Hello from PowerShell";'
-```
-
-Windows PowerShell 5.1 removes unescaped double quotes when invoking native commands.
-Escape C# double quotes as `\"` when using inline `--code` from Windows PowerShell 5.1.
-
-```powershell
-uloop execute-dynamic-code --code 'return \"Hello from Windows PowerShell\";'
-```
-
-### Single quotes inside inline C# code
-
-If the C# snippet itself contains a single quote, double it inside the PowerShell single-quoted string.
-
-```powershell
-uloop execute-dynamic-code --code 'char initial = ''A''; return initial.ToString();'
-```
-
-### JSON object values passed via `--parameters`
-
-Pass a JSON object literal, not a JSON string value. Wrap the object literal in single quotes so PowerShell passes the inner double quotes through unchanged.
-
-```powershell
-uloop execute-dynamic-code --code 'return parameters["param0"];' --parameters '{"param0":"Hello from PowerShell"}'
-```
-
-### Multi-line C# snippets
-
-Use a here-string variable when you want to prepare or reuse a snippet before executing it in PowerShell 7 (`pwsh`).
-
-```powershell
-$code = @'
-using UnityEngine;
-
-GameObject obj = GameObject.Find("Player");
-if (obj == null) return "Player not found";
-
-return obj.name;
-'@
 
 uloop execute-dynamic-code --code $code
 ```
 
-When using Windows PowerShell 5.1, escape C# double quotes inside the here-string before passing it to native `uloop.exe`.
+### With parameters
 
-```powershell
-$code = @'
-using UnityEngine;
-
-GameObject obj = GameObject.Find(\"Player\");
-if (obj == null) return \"Player not found\";
-
-return obj.name;
-'@
-
-uloop execute-dynamic-code --code $code
-```
-
-You can combine multi-line code with a multi-line JSON object literal the same way.
+Pass a JSON object literal, not a JSON string value. Use a second here-string when the parameters are easier to read on separate lines.
 
 ```powershell
 $code = @'
@@ -125,6 +53,44 @@ $parameters = @'
 '@
 
 uloop execute-dynamic-code --code $code --parameters $parameters
+```
+
+## Short Inline Snippets
+
+PowerShell 7 (`pwsh`) preserves C# double quotes inside single-quoted native command arguments.
+
+```powershell
+uloop execute-dynamic-code --code 'return "Hello from PowerShell";'
+```
+
+If the C# snippet itself contains a single quote, double it inside the PowerShell single-quoted string.
+
+```powershell
+uloop execute-dynamic-code --code 'char initial = ''A''; return initial.ToString();'
+```
+
+Wrap JSON object literals for `--parameters` in single quotes so PowerShell passes inner double quotes unchanged.
+
+```powershell
+uloop execute-dynamic-code --code 'return parameters["param0"];' --parameters '{"param0":"Hello from PowerShell"}'
+```
+
+## Windows PowerShell 5.1
+
+Windows PowerShell 5.1 removes unescaped double quotes when invoking native commands. Escape C# double quotes as `\"` in short inline snippets.
+
+```powershell
+uloop execute-dynamic-code --code 'return \"Hello from Windows PowerShell\";'
+```
+
+For multiline or string-heavy snippets, prefer `--code-file`.
+
+## Native Launcher Check
+
+Multiline `--code` expects the native Go `uloop.exe`. If `Get-Command uloop` resolves to an old `.cmd` shim, run `uloop install` and open a new terminal.
+
+```powershell
+(Get-Command uloop).Source
 ```
 
 ## Click UI Button by Path
