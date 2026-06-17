@@ -1,5 +1,6 @@
 #nullable enable
 using System.Collections;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -119,6 +120,362 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(tracker.PointerUpCalled, "PointerUp should be fired");
             Assert.IsTrue(tracker.PointerClickCalled, "PointerClick should be fired");
             Assert.AreEqual("ClickTarget", lastResponse.HitGameObjectName);
+        }
+
+        // Verifies clipped overlay UI wins over a non-GraphicRaycaster hit behind it.
+        [UnityTest]
+        public IEnumerator Click_Should_PreferClippedOverlayUiOverNonUiRaycastHit()
+        {
+            GameObject nonUiRoot = new GameObject("NonUiRaycasterRoot");
+
+            try
+            {
+                GameObject nonUiTarget = new GameObject("NonUiTarget");
+                nonUiTarget.transform.SetParent(nonUiRoot.transform, false);
+                ClickTracker nonUiTracker = nonUiTarget.AddComponent<ClickTracker>();
+                AlwaysHitRaycaster nonUiRaycaster = nonUiRoot.AddComponent<AlwaysHitRaycaster>();
+                nonUiRaycaster.Target = nonUiTarget;
+
+                Vector2 offscreenOffset = new Vector2(Screen.width, 0f);
+                ClickTracker overlayTracker = CreateClickableElement(
+                    "OffscreenOverlayTarget", offscreenOffset, new Vector2(200f, 100f));
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(overlayTracker.gameObject);
+                PointerEventData pointerData = new PointerEventData(EventSystem.current)
+                {
+                    position = screenPos
+                };
+                List<RaycastResult> raycastResults = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(pointerData, raycastResults);
+
+                Assert.IsNotEmpty(raycastResults, "Setup: the non-UI raycaster should hit.");
+                Assert.IsFalse(raycastResults[0].module is GraphicRaycaster,
+                    "Setup: EventSystem's first hit should not come from a GraphicRaycaster.");
+                Assert.IsFalse(
+                    raycastResults.Exists(result => result.gameObject == overlayTracker.gameObject),
+                    "Setup: overlay UI must be clipped out of EventSystem results for this regression test.");
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(overlayTracker.PointerClickCalled, "Overlay UI should receive the click");
+                Assert.IsFalse(nonUiTracker.PointerClickCalled, "Non-UI target behind overlay UI should not receive the click");
+                Assert.AreEqual("OffscreenOverlayTarget", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(nonUiRoot);
+            }
+        }
+
+        // Verifies overlay UI wins over a prioritized Physics2D raycast hit.
+        [UnityTest]
+        public IEnumerator Click_Should_PreferOverlayUiOverPhysics2DRaycastHit()
+        {
+            GameObject physicsRoot = new GameObject("Physics2DRaycasterRoot");
+
+            try
+            {
+                GameObject cameraGo = new GameObject("Physics2DCamera");
+                cameraGo.transform.SetParent(physicsRoot.transform, false);
+                cameraGo.transform.position = new Vector3(0f, 0f, -10f);
+                Camera physicsCamera = cameraGo.AddComponent<Camera>();
+                physicsCamera.orthographic = true;
+                physicsCamera.orthographicSize = 5f;
+                cameraGo.AddComponent<HighPriorityPhysics2DRaycaster>();
+
+                canvasGo.GetComponent<Canvas>().sortingOrder = 100;
+                ClickTracker overlayTracker = CreateClickableElement(
+                    "PhysicsOverlayTarget", Vector2.zero, new Vector2(200f, 100f));
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(overlayTracker.gameObject);
+                GameObject physicsTarget = new GameObject("Physics2DTarget");
+                physicsTarget.transform.SetParent(physicsRoot.transform, false);
+                physicsTarget.transform.position = GetWorldPointOnPhysicsPlane(physicsCamera, screenPos);
+                BoxCollider2D collider = physicsTarget.AddComponent<BoxCollider2D>();
+                collider.size = new Vector2(2f, 2f);
+                ClickTracker physicsTracker = physicsTarget.AddComponent<ClickTracker>();
+                yield return null;
+
+                PointerEventData pointerData = new PointerEventData(EventSystem.current)
+                {
+                    position = screenPos
+                };
+                List<RaycastResult> raycastResults = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(pointerData, raycastResults);
+
+                Assert.IsNotEmpty(raycastResults, "Setup: the Physics2D raycaster should hit.");
+                Assert.AreEqual(physicsTarget, raycastResults[0].gameObject,
+                    "Setup: EventSystem should expose the prioritized Physics2D hit first.");
+                Assert.IsTrue(
+                    raycastResults.Exists(result => result.gameObject == overlayTracker.gameObject),
+                    "Setup: overlay UI should also be a normal EventSystem hit.");
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(overlayTracker.PointerClickCalled, "Overlay UI should receive the click");
+                Assert.IsFalse(physicsTracker.PointerClickCalled, "Physics2D target behind overlay UI should not receive the click");
+                Assert.AreEqual("PhysicsOverlayTarget", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(physicsRoot);
+            }
+        }
+
+        // Verifies higher-order clipped overlay UI wins over a lower GraphicRaycaster hit.
+        [UnityTest]
+        public IEnumerator Click_Should_PreferClippedHigherOrderOverlayUiOverLowerGraphicRaycasterHit()
+        {
+            GameObject lowerCameraGo = new GameObject("LowerGraphicCamera");
+            GameObject lowerCanvasGo = new GameObject("LowerGraphicCanvas");
+
+            try
+            {
+                lowerCameraGo.transform.position = new Vector3(0f, 0f, -10f);
+                Camera lowerCamera = lowerCameraGo.AddComponent<Camera>();
+                lowerCamera.orthographic = true;
+
+                Canvas lowerCanvas = lowerCanvasGo.AddComponent<Canvas>();
+                lowerCanvas.renderMode = RenderMode.ScreenSpaceCamera;
+                lowerCanvas.worldCamera = lowerCamera;
+                lowerCanvas.sortingOrder = 0;
+
+                GameObject lowerMask = CreateChildUIElement(
+                    "LowerGraphicMask", lowerCanvasGo.transform, Vector2.zero, new Vector2(2000f, 2000f));
+                lowerMask.AddComponent<Image>();
+                ClickTracker lowerTracker = lowerMask.AddComponent<ClickTracker>();
+                AlwaysHitGraphicRaycaster lowerRaycaster = lowerCanvasGo.AddComponent<AlwaysHitGraphicRaycaster>();
+                lowerRaycaster.Target = lowerMask;
+
+                canvasGo.GetComponent<Canvas>().sortingOrder = 100;
+                Vector2 clippedOverlayOffset = new Vector2(Screen.width, 0f);
+                ClickTracker overlayTracker = CreateClickableElement(
+                    "FrontOverlayButton", clippedOverlayOffset, new Vector2(200f, 100f));
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(overlayTracker.gameObject);
+                PointerEventData pointerData = new PointerEventData(EventSystem.current)
+                {
+                    position = screenPos
+                };
+                List<RaycastResult> raycastResults = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(pointerData, raycastResults);
+
+                Assert.IsNotEmpty(raycastResults, "Setup: the lower GraphicRaycaster should hit.");
+                Assert.AreEqual(lowerMask, raycastResults[0].gameObject,
+                    "Setup: EventSystem should expose the lower-priority GraphicRaycaster hit first.");
+                Assert.IsFalse(
+                    raycastResults.Exists(result => result.gameObject == overlayTracker.gameObject),
+                    "Setup: overlay UI must be clipped out of EventSystem results for this regression test.");
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(overlayTracker.PointerClickCalled, "Higher-order overlay UI should receive the click");
+                Assert.IsFalse(lowerTracker.PointerClickCalled, "Lower GraphicRaycaster target should not receive the click");
+                Assert.AreEqual("FrontOverlayButton", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(lowerCanvasGo);
+                Object.Destroy(lowerCameraGo);
+            }
+        }
+
+        // Verifies canvas-space fallback ignores graphics rejected by GraphicRaycaster's reversed-graphic filter.
+        [UnityTest]
+        public IEnumerator Click_Should_IgnoreReversedOverlayGraphicWhenFallbackRanksCanvasSpaceHit()
+        {
+            const int lowerSortingOrder = 32001;
+            const int reversedSortingOrder = 32002;
+
+            DestroyInputVisualizationCanvases();
+            yield return null;
+
+            ClickTracker lowerTracker = CreateClickableElement("LowerTarget", Vector2.zero, new Vector2(200f, 100f));
+            canvasGo.GetComponent<Canvas>().sortingOrder = lowerSortingOrder;
+            GameObject overlayCanvasGo = new GameObject("ReversedOverlayCanvas");
+
+            try
+            {
+                Canvas overlayCanvas = overlayCanvasGo.AddComponent<Canvas>();
+                overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                overlayCanvas.sortingOrder = reversedSortingOrder;
+                overlayCanvasGo.AddComponent<GraphicRaycaster>();
+
+                GameObject reversedOverlay = CreateChildUIElement(
+                    "ReversedOverlayTarget", overlayCanvasGo.transform, Vector2.zero, new Vector2(200f, 100f));
+                reversedOverlay.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                reversedOverlay.AddComponent<Image>();
+                ClickTracker reversedTracker = reversedOverlay.AddComponent<ClickTracker>();
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(lowerTracker.gameObject);
+                PointerEventData pointerData = new PointerEventData(EventSystem.current)
+                {
+                    position = screenPos
+                };
+                List<RaycastResult> raycastResults = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(pointerData, raycastResults);
+
+                Assert.IsNotEmpty(raycastResults, "Setup: the lower target should remain clickable.");
+                Assert.AreEqual(lowerTracker.gameObject, raycastResults[0].gameObject,
+                    "Setup: EventSystem should ignore the reversed overlay graphic.");
+                Assert.IsFalse(
+                    raycastResults.Exists(result => result.gameObject == reversedOverlay),
+                    "Setup: reversed overlay UI must be excluded by GraphicRaycaster.");
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(lowerTracker.PointerClickCalled, "Lower UI should receive the click");
+                Assert.IsFalse(reversedTracker.PointerClickCalled, "Reversed overlay UI should not receive the click");
+                Assert.AreEqual("LowerTarget", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(overlayCanvasGo);
+            }
+        }
+
+        // Verifies canvas-space fallback honors GraphicRaycaster's raycast padding filter.
+        [UnityTest]
+        public IEnumerator Click_Should_IgnoreOverlayGraphicOutsideRaycastPaddingWhenFallbackRanksCanvasSpaceHit()
+        {
+            const int lowerSortingOrder = 32001;
+            const int paddedSortingOrder = 32002;
+
+            DestroyInputVisualizationCanvases();
+            yield return null;
+
+            ClickTracker lowerTracker = CreateClickableElement("LowerPaddedTarget", Vector2.zero, new Vector2(300f, 120f));
+            canvasGo.GetComponent<Canvas>().sortingOrder = lowerSortingOrder;
+            GameObject overlayCanvasGo = new GameObject("PaddedOverlayCanvas");
+
+            try
+            {
+                Canvas overlayCanvas = overlayCanvasGo.AddComponent<Canvas>();
+                overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                overlayCanvas.sortingOrder = paddedSortingOrder;
+                overlayCanvasGo.AddComponent<GraphicRaycaster>();
+
+                GameObject paddedOverlay = CreateChildUIElement(
+                    "PaddedOverlayTarget", overlayCanvasGo.transform, Vector2.zero, new Vector2(200f, 100f));
+                Image paddedImage = paddedOverlay.AddComponent<Image>();
+                paddedImage.raycastPadding = new Vector4(80f, 40f, 80f, 40f);
+                ClickTracker paddedTracker = paddedOverlay.AddComponent<ClickTracker>();
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(lowerTracker.gameObject) + new Vector2(70f, 0f);
+                PointerEventData pointerData = new PointerEventData(EventSystem.current)
+                {
+                    position = screenPos
+                };
+                List<RaycastResult> raycastResults = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(pointerData, raycastResults);
+
+                Assert.IsNotEmpty(raycastResults, "Setup: the lower target should remain clickable.");
+                Assert.AreEqual(lowerTracker.gameObject, raycastResults[0].gameObject,
+                    "Setup: EventSystem should ignore the overlay outside its padded raycast rect.");
+                Assert.IsFalse(
+                    raycastResults.Exists(result => result.gameObject == paddedOverlay),
+                    "Setup: padded overlay UI must be excluded by GraphicRaycaster.");
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(lowerTracker.PointerClickCalled, "Lower UI should receive the click");
+                Assert.IsFalse(paddedTracker.PointerClickCalled, "Padded overlay UI should not receive the click");
+                Assert.AreEqual("LowerPaddedTarget", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(overlayCanvasGo);
+            }
+        }
+
+        // Verifies canvas-space fallback does not treat child Canvas graphics as parent-raycaster hits.
+        [UnityTest]
+        public IEnumerator Click_Should_IgnoreNestedCanvasGraphicWithoutRaycasterWhenFallbackRanksCanvasSpaceHit()
+        {
+            const int parentSortingOrder = 32001;
+
+            DestroyInputVisualizationCanvases();
+            yield return null;
+
+            ClickTracker parentTracker = CreateClickableElement("ParentCanvasTarget", Vector2.zero, new Vector2(300f, 120f));
+            canvasGo.GetComponent<Canvas>().sortingOrder = parentSortingOrder;
+            GameObject childCanvasGo = CreateUIElement("NestedCanvasWithoutRaycaster", Vector2.zero, new Vector2(240f, 120f));
+
+            try
+            {
+                childCanvasGo.AddComponent<Canvas>();
+                GameObject childTarget = CreateChildUIElement(
+                    "NestedCanvasTarget", childCanvasGo.transform, Vector2.zero, new Vector2(200f, 100f));
+                childTarget.AddComponent<Image>();
+                ClickTracker childTracker = childTarget.AddComponent<ClickTracker>();
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(parentTracker.gameObject);
+                PointerEventData pointerData = new PointerEventData(EventSystem.current)
+                {
+                    position = screenPos
+                };
+                List<RaycastResult> raycastResults = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(pointerData, raycastResults);
+
+                Assert.IsNotEmpty(raycastResults, "Setup: the parent target should remain clickable.");
+                Assert.AreEqual(parentTracker.gameObject, raycastResults[0].gameObject,
+                    "Setup: EventSystem should ignore nested Canvas graphics without a raycaster.");
+                Assert.IsFalse(
+                    raycastResults.Exists(result => result.gameObject == childTarget),
+                    "Setup: nested Canvas UI must be excluded by the parent GraphicRaycaster.");
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(parentTracker.PointerClickCalled, "Parent Canvas UI should receive the click");
+                Assert.IsFalse(childTracker.PointerClickCalled, "Nested Canvas UI without raycaster should not receive the click");
+                Assert.AreEqual("ParentCanvasTarget", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(childCanvasGo);
+            }
         }
 
         [UnityTest]
@@ -623,6 +980,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             return (Vector2)go.GetComponent<RectTransform>().position;
         }
 
+        private Vector3 GetWorldPointOnPhysicsPlane(Camera physicsCamera, Vector2 screenPos)
+        {
+            Vector3 screenPoint = new Vector3(screenPos.x, screenPos.y, -physicsCamera.transform.position.z);
+            Vector3 worldPoint = physicsCamera.ScreenToWorldPoint(screenPoint);
+            worldPoint.z = 0f;
+            return worldPoint;
+        }
+
+        private static void DestroyInputVisualizationCanvases()
+        {
+            InputVisualizationCanvas[] canvases =
+                Object.FindObjectsByType<InputVisualizationCanvas>(FindObjectsSortMode.None);
+            foreach (InputVisualizationCanvas canvas in canvases)
+            {
+                Object.Destroy(canvas.gameObject);
+            }
+        }
+
         // simulate-mouse uses top-left origin; Unity screen space uses bottom-left origin
         private Vector2 ScreenToInput(Vector2 screenPos)
         {
@@ -661,6 +1036,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Test raycaster that always reports a non-UI hit.
+    /// </summary>
+    public class AlwaysHitRaycaster : BaseRaycaster
+    {
+        public GameObject Target = null!;
+
+        public override Camera eventCamera => null!;
+
+        public override void Raycast(PointerEventData eventData, List<RaycastResult> resultAppendList)
+        {
+            resultAppendList.Add(new RaycastResult
+            {
+                gameObject = Target,
+                module = this,
+                distance = 0f,
+                screenPosition = eventData.position
+            });
+        }
+    }
+
+    /// <summary>
+    /// Test GraphicRaycaster that reports a deterministic lower-priority UI hit.
+    /// </summary>
+    public class AlwaysHitGraphicRaycaster : GraphicRaycaster
+    {
+        public GameObject Target = null!;
+
+        public override void Raycast(PointerEventData eventData, List<RaycastResult> resultAppendList)
+        {
+            Canvas canvas = GetComponent<Canvas>();
+            resultAppendList.Add(new RaycastResult
+            {
+                gameObject = Target,
+                module = this,
+                distance = 0f,
+                screenPosition = eventData.position,
+                sortingLayer = canvas.sortingLayerID,
+                sortingOrder = canvas.sortingOrder,
+                depth = 0
+            });
+        }
+    }
+
+    /// <summary>
+    /// Test Physics2D raycaster with priority high enough to expose UI priority handling.
+    /// </summary>
+    public class HighPriorityPhysics2DRaycaster : Physics2DRaycaster
+    {
+        public override int sortOrderPriority => int.MaxValue;
+        public override int renderOrderPriority => int.MaxValue;
     }
 
     // Tracks pointer click events for testing
