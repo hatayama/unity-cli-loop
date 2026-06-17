@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.0-beta.36](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.35...cli-v3.0.0-beta.36) (2026-06-17)
+
+
+### Bug Fixes
+
+* CLI JSON output now uses consistent field names ([#1360](https://github.com/hatayama/unity-cli-loop/issues/1360)) ([e20c8b3](https://github.com/hatayama/unity-cli-loop/commit/e20c8b330e9f3651554ed2a0184f7d1a49d585eb))
+* PlayMode start reports compiler errors instead of timing out ([#1354](https://github.com/hatayama/unity-cli-loop/issues/1354)) ([69804cd](https://github.com/hatayama/unity-cli-loop/commit/69804cdb5f4b811c0c3afafd2b0317bf4f725070))
+* Slow Unity responses now bring the Editor forward ([#1353](https://github.com/hatayama/unity-cli-loop/issues/1353)) ([0e5ee2c](https://github.com/hatayama/unity-cli-loop/commit/0e5ee2c0d0e66b4b484de7a317a770d5b08ab57e))
+* Unity stall diagnostics now point to modal dialogs ([#1361](https://github.com/hatayama/unity-cli-loop/issues/1361)) ([dc8ff2c](https://github.com/hatayama/unity-cli-loop/commit/dc8ff2c1432e2e1a377ee2aa910fa0f92c112c1a))
+
 ## [3.0.0-beta.35](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.34...cli-v3.0.0-beta.35) (2026-06-15)
 
 
