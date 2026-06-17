@@ -468,10 +468,9 @@ You can publish your extension tools on GitHub and reuse them across other proje
 > **For AI-assisted development**: Detailed implementation guides are available in [.claude/rules/cli.md](/.claude/rules/cli.md) for CLI and Skills development. These guides are automatically loaded by Claude Code when working in the relevant directories.
 
 > [!IMPORTANT]
-> **Security Settings**
+> **Tool Access Settings**
 >
-> Project-specific tools are available without enabling an additional permission.
-> When developing custom tools that involve dynamic code execution, consider the **Dynamic Code Security Level** setting.
+> Project-specific tools are available without enabling an additional permission. Use Tool Settings toggles to hide tools from AI agents when needed.
 
 <details>
 <summary>View Implementation Guide</summary>
