@@ -42,8 +42,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string SimulateMouseUiAssemblyName = "UnityCLILoop.FirstPartyTools.SimulateMouseUi.Editor";
         private const string InfrastructureAssemblyName = "UnityCLILoop.Infrastructure";
         private const string InternalApiBridgeAssemblyName = "Unity.InternalAPIEditorBridge.024";
-        private const string MetadataValidationAssemblyName =
-            "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.MetadataValidation.Editor";
         private const string PresentationAssemblyName = "UnityCLILoop.Presentation";
         private const string ToolContractsAssemblyName = "UnityCLILoop.ToolContracts";
         private const string RemovedSharedAssemblyGuidReference = "GUID:290394860909340b7835eb7cc215ee75";
@@ -208,31 +206,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void DynamicCodeSecurityValues_WhenLoaded_CompileUnderDomainAssembly()
-        {
-            // Tests that dynamic-code security levels stay with domain policy while scan results stay public.
-            string levelAssemblyName = typeof(DynamicCodeSecurityLevel).Assembly.GetName().Name;
-            string resultAssemblyName = typeof(SecurityValidationResult).Assembly.GetName().Name;
-            string violationAssemblyName = typeof(SecurityViolation).Assembly.GetName().Name;
-
-            Assert.That(levelAssemblyName, Is.EqualTo(DomainAssemblyName));
-            Assert.That(resultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
-            Assert.That(violationAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
-        }
-
-        [Test]
-        public void ULoopSettings_WhenLoaded_CompileUnderDomainAssembly()
+        public void ToolSettings_WhenLoaded_CompileUnderDomainAssembly()
         {
             // Tests that tool-specific settings concepts stay in the domain layer.
-            string settingsAssemblyName = typeof(ULoopSettings).Assembly.GetName().Name;
-            string settingsDataAssemblyName = typeof(ULoopSettingsData).Assembly.GetName().Name;
             string toolSettingsDataAssemblyName = typeof(ToolSettingsData).Assembly.GetName().Name;
             string editorSettingsDataAssemblyName = typeof(UnityCliLoopEditorSettingsData).Assembly.GetName().Name;
             string toolSettingsServiceAssemblyName = typeof(ToolSettingsService).Assembly.GetName().Name;
             string editorSettingsServiceAssemblyName = typeof(UnityCliLoopEditorSettingsService).Assembly.GetName().Name;
 
-            Assert.That(settingsAssemblyName, Is.EqualTo(DomainAssemblyName));
-            Assert.That(settingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(toolSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(editorSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(toolSettingsServiceAssemblyName, Is.EqualTo(DomainAssemblyName));
@@ -267,24 +248,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(serviceAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(targetAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(stateAssemblyName, Is.EqualTo(DomainAssemblyName));
-        }
-
-        [Test]
-        public void DangerousApiCatalog_WhenLoaded_CompilesUnderDomainAssembly()
-        {
-            // Tests that public dynamic-code dangerous API policy stays in the tool contract assembly.
-            string catalogAssemblyName = typeof(DangerousApiCatalog).Assembly.GetName().Name;
-
-            Assert.That(catalogAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
-        }
-
-        [Test]
-        public void SourceSecurityScanner_WhenLoaded_CompilesUnderDomainAssembly()
-        {
-            // Tests that public source-level dynamic-code scanning stays in the tool contract assembly.
-            string scannerAssemblyName = typeof(SourceSecurityScanner).Assembly.GetName().Name;
-
-            Assert.That(scannerAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
         }
 
         [Test]
@@ -517,29 +480,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void PreloadMetadataValidationPorts_WhenLoaded_CompileUnderMetadataValidationAssembly()
-        {
-            // Tests that preload metadata validation contracts are owned by the metadata validation module.
-            string validatorAssemblyName = typeof(IPreloadAssemblySecurityValidator).Assembly.GetName().Name;
-            string overrideAssemblyName = typeof(IOverrideDefaultPreloadAssemblySecurityValidation).Assembly.GetName().Name;
-            string registryAssemblyName = typeof(PreloadAssemblySecurityValidatorRegistry).Assembly.GetName().Name;
-
-            Assert.That(validatorAssemblyName, Is.EqualTo(MetadataValidationAssemblyName));
-            Assert.That(overrideAssemblyName, Is.EqualTo(MetadataValidationAssemblyName));
-            Assert.That(registryAssemblyName, Is.EqualTo(MetadataValidationAssemblyName));
-        }
-
-        [Test]
-        public void MetadataValidationAsmdef_WhenLoaded_DependsOnlyOnToolContracts()
-        {
-            // Tests that metadata validation depends on public contracts without reaching into implementation layers.
-            string[] references = ReadResolvedReferences(
-                "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/MetadataValidation/UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.MetadataValidation.Editor.asmdef");
-
-            Assert.That(references, Is.EquivalentTo(new[] { ToolContractsAssemblyName }));
-        }
-
-        [Test]
         public void SharedSupportTypes_WhenLoaded_CompileUnderOwningAssemblies()
         {
             // Tests that support constants and logging are extension-facing while domain reload state stays in application.
@@ -731,7 +671,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "DynamicReferenceSetBuilder.",
                 "ExternalCompilerMessageParser.",
                 "ExternalCompilerPaths ",
-                "new IlSecurityValidator(",
                 "SourceShaper.",
                 "TopLevelReturnDetector.",
                 "WrapperTemplate.",
@@ -985,7 +924,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "NativeCliInstaller",
                 "CliVersionComparer",
                 "ToolSkillSynchronizer",
-                "ULoopSettings.",
                 "ToolSettings.",
                 "UnityCliLoopToolRegistrar",
                 "UnityCliLoopToolRegistry",

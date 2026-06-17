@@ -1,6 +1,3 @@
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -8,11 +5,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class CompiledAssemblyLoadService : ICompiledAssemblyLoader
     {
-        public CompiledAssemblyLoadResult Load(
-            DynamicCodeSecurityLevel securityLevel,
-            byte[] assemblyBytes)
+        public CompiledAssemblyLoadResult Load(byte[] assemblyBytes)
         {
-            return CompiledAssemblyLoader.Load(securityLevel, assemblyBytes);
+            return CompiledAssemblyLoader.Load(assemblyBytes);
         }
     }
 }

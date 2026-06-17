@@ -2,7 +2,6 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -11,7 +10,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal static async Task<bool> RunForegroundSequenceAsync(
             IDynamicCodeExecutionRuntime runtime,
-            DynamicCodeSecurityLevel securityLevel,
             bool yieldToForegroundRequests,
             CancellationToken ct)
         {
@@ -23,7 +21,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 DynamicCodeExecutionRequest request = CreateRequest(
                     warmupCode,
-                    securityLevel,
                     yieldToForegroundRequests);
                 ExecutionResult result = await runtime.ExecuteAsync(request, ct);
                 if (!result.Success)
@@ -37,7 +34,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static async Task<bool> TryRunBackgroundSequenceAsync(
             IDynamicCodeExecutionRuntime runtime,
-            DynamicCodeSecurityLevel securityLevel,
             bool yieldToForegroundRequests,
             CancellationToken ct)
         {
@@ -49,7 +45,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 DynamicCodeExecutionRequest request = CreateRequest(
                     warmupCode,
-                    securityLevel,
                     yieldToForegroundRequests);
                 (bool entered, ExecutionResult result) = await runtime.TryExecuteIfIdleAsync(request, ct);
                 if (!entered || !result.Success)
@@ -63,7 +58,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static DynamicCodeExecutionRequest CreateRequest(
             string code,
-            DynamicCodeSecurityLevel securityLevel,
             bool yieldToForegroundRequests)
         {
             return new DynamicCodeExecutionRequest
@@ -71,7 +65,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Code = code,
                 ClassName = DynamicCodeConstants.DEFAULT_CLASS_NAME,
                 CompileOnly = false,
-                SecurityLevel = securityLevel,
                 YieldToForegroundRequests = yieldToForegroundRequests
             };
         }

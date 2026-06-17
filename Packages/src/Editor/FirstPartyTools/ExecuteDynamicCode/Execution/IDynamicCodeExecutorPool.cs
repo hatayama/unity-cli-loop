@@ -1,8 +1,5 @@
 using System;
 
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -10,6 +7,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal interface IDynamicCodeExecutorPool : IDisposable
     {
-        IDynamicCodeExecutor GetOrCreate(DynamicCodeSecurityLevel securityLevel);
+        IDynamicCodeExecutor GetOrCreate();
     }
 }

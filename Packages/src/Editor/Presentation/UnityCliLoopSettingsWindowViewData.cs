@@ -52,7 +52,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     public record ToolSettingsSectionData
     {
         public readonly bool ShowToolSettings;
-        public readonly DynamicCodeSecurityLevel DynamicCodeSecurityLevel;
         public readonly ToolToggleItem[] BuiltInTools;
         public readonly ToolToggleItem[] ThirdPartyTools;
         public readonly bool IsRegistryAvailable;
@@ -60,14 +59,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         public ToolSettingsSectionData(
             bool showToolSettings,
-            DynamicCodeSecurityLevel dynamicCodeSecurityLevel,
             ToolToggleItem[] builtInTools,
             ToolToggleItem[] thirdPartyTools,
             bool isRegistryAvailable,
             bool hasToolListData = true)
         {
             ShowToolSettings = showToolSettings;
-            DynamicCodeSecurityLevel = dynamicCodeSecurityLevel;
             BuiltInTools = builtInTools;
             ThirdPartyTools = thirdPartyTools;
             IsRegistryAvailable = isRegistryAvailable;

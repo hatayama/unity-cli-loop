@@ -6,8 +6,6 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
@@ -20,38 +18,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         private static readonly TimeSpan CancellationPropagationTimeout = TimeSpan.FromSeconds(1);
 
         [Test]
-        public async Task ExecuteAsync_WhenSameSecurityLevelUsedTwice_ShouldReuseExecutor()
+        public async Task ExecuteAsync_WhenCalledTwice_ShouldReuseExecutor()
         {
+            // Verifies dynamic code execution reuses the same cached executor.
             FakeDynamicCodeExecutorProvider provider = new();
             using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
             using DynamicCodeExecutionFacade facade = new DynamicCodeExecutionFacade(pool);
 
             await facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 1;"),
+                CreateRequest("return 1;"),
                 CancellationToken.None);
             await facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 2;"),
+                CreateRequest("return 2;"),
                 CancellationToken.None);
 
-            Assert.That(provider.CreateCallsBySecurityLevel[DynamicCodeSecurityLevel.Restricted], Is.EqualTo(1));
-        }
-
-        [Test]
-        public async Task ExecuteAsync_WhenSecurityLevelChanges_ShouldCreateSeparateExecutors()
-        {
-            FakeDynamicCodeExecutorProvider provider = new();
-            using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
-            using DynamicCodeExecutionFacade facade = new DynamicCodeExecutionFacade(pool);
-
-            await facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 1;"),
-                CancellationToken.None);
-            await facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.FullAccess, "return 2;"),
-                CancellationToken.None);
-
-            Assert.That(provider.CreateCallsBySecurityLevel[DynamicCodeSecurityLevel.Restricted], Is.EqualTo(1));
-            Assert.That(provider.CreateCallsBySecurityLevel[DynamicCodeSecurityLevel.FullAccess], Is.EqualTo(1));
+            Assert.That(provider.CreateCallCount, Is.EqualTo(1));
         }
 
         [Test]
@@ -64,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.DoesNotThrowAsync(async () =>
             {
                 await facade.ExecuteAsync(
-                    CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 1;"),
+                    CreateRequest("return 1;"),
                     CancellationToken.None);
             });
 
@@ -100,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
 
             Task<ExecutionResult> firstExecution = facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.Restricted, FakeDynamicCodeExecutor.BlockingCode),
+                CreateRequest(FakeDynamicCodeExecutor.BlockingCode),
                 cancellationTokenSource.Token);
             FakeDynamicCodeExecutor executor = await provider.CreatedExecutorTask;
             await executor.BlockingExecutionStartedTask;
@@ -110,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             await AssertCanceledWithinTimeoutAsync(firstExecution);
 
             ExecutionResult secondExecution = await facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 2;"),
+                CreateRequest("return 2;"),
                 CancellationToken.None);
 
             Assert.That(secondExecution.Success, Is.True);
@@ -134,13 +115,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(task.IsCanceled, Is.True);
         }
 
-        private static DynamicCodeExecutionRequest CreateRequest(
-            DynamicCodeSecurityLevel securityLevel,
-            string code)
+        private static DynamicCodeExecutionRequest CreateRequest(string code)
         {
             return new DynamicCodeExecutionRequest
             {
-                SecurityLevel = securityLevel,
                 Code = code,
                 ClassName = "FacadeTestCommand"
             };
@@ -151,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         /// </summary>
         private sealed class FakeDynamicCodeExecutorProvider : IDynamicCodeExecutorProvider
         {
-            public Dictionary<DynamicCodeSecurityLevel, int> CreateCallsBySecurityLevel { get; } = new();
+            public int CreateCallCount { get; private set; }
 
             public List<FakeDynamicCodeExecutor> CreatedExecutors { get; } = new();
 
@@ -160,14 +138,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             public Task<FakeDynamicCodeExecutor> CreatedExecutorTask => _createdExecutorCompletionSource.Task;
 
-            public IDynamicCodeExecutor Create(DynamicCodeSecurityLevel securityLevel)
+            public IDynamicCodeExecutor Create()
             {
-                if (!CreateCallsBySecurityLevel.ContainsKey(securityLevel))
-                {
-                    CreateCallsBySecurityLevel[securityLevel] = 0;
-                }
-
-                CreateCallsBySecurityLevel[securityLevel]++;
+                CreateCallCount++;
 
                 FakeDynamicCodeExecutor executor = new();
                 CreatedExecutors.Add(executor);

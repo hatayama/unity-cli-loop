@@ -35,16 +35,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             _toolRegistrarService = toolRegistrarService ?? throw new ArgumentNullException(nameof(toolRegistrarService));
         }
 
-        internal DynamicCodeSecurityLevel GetDynamicCodeSecurityLevel()
-        {
-            return ULoopSettings.GetDynamicCodeSecurityLevel();
-        }
-
-        internal void SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel level)
-        {
-            ULoopSettings.SetDynamicCodeSecurityLevel(level);
-        }
-
         internal bool IsToolEnabled(string toolName)
         {
             return _toolSettingsService.IsToolEnabled(toolName);

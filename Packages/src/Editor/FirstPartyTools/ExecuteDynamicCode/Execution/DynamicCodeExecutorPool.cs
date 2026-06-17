@@ -1,9 +1,5 @@
 using System;
-using System.Collections.Generic;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory;
-
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -13,7 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class DynamicCodeExecutorPool : IDynamicCodeExecutorPool
     {
         private readonly IDynamicCodeExecutorProvider _executorProvider;
-        private readonly Dictionary<DynamicCodeSecurityLevel, IDynamicCodeExecutor> _executorsBySecurityLevel = new();
+        private IDynamicCodeExecutor _executor;
         private readonly object _executorsLock = new();
         private bool _disposed;
 
@@ -22,25 +18,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _executorProvider = executorProvider ?? throw new ArgumentNullException(nameof(executorProvider));
         }
 
-        public IDynamicCodeExecutor GetOrCreate(DynamicCodeSecurityLevel securityLevel)
+        public IDynamicCodeExecutor GetOrCreate()
         {
             lock (_executorsLock)
             {
                 ThrowIfDisposed();
 
-                if (_executorsBySecurityLevel.TryGetValue(securityLevel, out IDynamicCodeExecutor executor))
+                if (_executor != null)
                 {
-                    return executor;
+                    return _executor;
                 }
 
-                IDynamicCodeExecutor createdExecutor = _executorProvider.Create(securityLevel);
+                IDynamicCodeExecutor createdExecutor = _executorProvider.Create();
                 if (createdExecutor is DynamicCodeExecutorStub)
                 {
                     return createdExecutor;
                 }
 
-                _executorsBySecurityLevel.Add(securityLevel, createdExecutor);
-                return createdExecutor;
+                _executor = createdExecutor;
+                return _executor;
             }
         }
 
@@ -55,12 +51,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 _disposed = true;
 
-                foreach (IDynamicCodeExecutor executor in _executorsBySecurityLevel.Values)
+                if (_executor != null)
                 {
-                    executor.Dispose();
+                    _executor.Dispose();
                 }
 
-                _executorsBySecurityLevel.Clear();
+                _executor = null;
             }
         }
 

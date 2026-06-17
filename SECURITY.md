@@ -34,8 +34,8 @@ When reporting a vulnerability, please provide:
 
 This project implements several security measures:
 
-- **Dynamic Code Execution Security Levels**: The `execute-dynamic-code` tool supports 3-tier security control (Disabled, Restricted, FullAccess)
-- **Security Settings UI**: Tools like `run-tests` and third-party tools are disabled by default
+- **Dynamic Code Execution Controls**: The `execute-dynamic-code` tool can be disabled from Tool Settings when arbitrary C# execution is not appropriate
+- **Tool Settings UI**: Individual tool toggles let users hide high-impact tools from AI agents
 - **Automated Security Scanning**: We use GitHub's security scanning features and custom security analysis tools
 
 ### Scope
@@ -58,7 +58,7 @@ The following are considered in scope for security reports:
 
 When using Unity CLI Loop, we recommend:
 
-1. **Use Restricted Mode**: Set Dynamic Code Security Level to "Restricted" (Level 1) unless you specifically need full access
-2. **Review Third-Party Tools**: Only enable "Allow Third-Party Tools" for trusted extensions
+1. **Limit Dynamic Code Access**: Keep `execute-dynamic-code` enabled only for trusted workflows
+2. **Review Tool Exposure**: Disable tools that should not be available to AI agents in the current project
 3. **Sandbox Environment**: For AI-driven development, consider running in sandbox environments or containers
 4. **Keep Updated**: Always use the latest version to benefit from security patches

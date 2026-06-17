@@ -193,11 +193,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     }
 
                     _cachedSettings = JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(json);
-
-                    // Migrate security fields before any potential SaveSettings call from this class.
-                    // If SaveSettings runs first, legacy security fields are stripped from JSON
-                    // because UnityCliLoopEditorSettingsData no longer defines them.
-                    ULoopSettings.GetSettings();
                 }
                 else
                 {

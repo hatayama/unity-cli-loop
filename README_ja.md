@@ -364,45 +364,20 @@ Unity Editor内で動的にC#コードを実行します。
 - スニペット内で await が利用可能です（Task / ValueTask / UniTask など awaitable 全般）
 - CancellationToken をツールに渡すと、キャンセルが末端まで伝播します
 
-**セキュリティレベル対応**: 2段階のセキュリティ制御を実装し、実行可能なコードを制限。ツール自体を無効化するには、Tool Settings UIのツールon/offトグルを使用してください。
-
-  - **Level 1 - Restricted（制限付き）**【推奨設定】
-    - 基本的に全てのUnity APIと.NET標準ライブラリが利用可能
-    - ユーザー定義アセンブリ（Assembly-CSharp等）も利用可能
-    - セキュリティ上危険な操作のみをピンポイントでブロック：
-      - **ファイル削除系**: `File.Delete`, `Directory.Delete`, `FileUtil.DeleteFileOrDirectory`
-      - **ファイル書き込み系**: `File.WriteAllText`, `File.WriteAllBytes`, `File.Replace`
-      - **ネットワーク通信**: `HttpClient`, `WebClient`, `WebRequest`, `Socket`, `TcpClient`全般
-      - **プロセス実行**: `Process.Start`, `Process.Kill`
-      - **動的コード実行**: `Assembly.Load*`, `Type.InvokeMember`, `Activator.CreateComInstanceFrom`
-      - **スレッド操作**: `Thread`, `Task`の直接操作
-      - **レジストリ操作**: `Microsoft.Win32`名前空間全般
-    - 安全な操作は許可：
-      - ファイル読み取り（`File.ReadAllText`, `File.Exists`等）
-      - パス操作（`Path.*`全般）
-      - 情報取得（`Assembly.GetExecutingAssembly`, `Type.GetType`等）
-    - 用途：通常のUnity開発、安全性を確保した自動化
-
-  - **Level 2 - FullAccess（フルアクセス）**
-    - **全てのアセンブリが利用可能（制限なし）**
-    - ⚠️ **警告**: セキュリティリスクがあるため、信頼できるコードのみで使用
+有効化されている場合、動的コード実行はUnity Editorプロセスの権限で実行され、Unity API、.NET API、プロジェクトのアセンブリを利用できます。AIエージェントに任意のC#コードを実行させたくない場合は、Tool Settingsのトグルでこのツールを無効化してください。
 ```
 → execute-dynamic-code (Code: "GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube); return \"Cube created\";")
 → プロトタイプの迅速な検証、バッチ処理の自動化
-→ セキュリティレベルに応じてUnity APIの利用を制限
+→ 信頼できる自動化向けにUnity Editor APIへフルアクセス
 ```
 
 
 > [!IMPORTANT]
-> **セキュリティ設定について**
+> **ツールアクセス設定について**
 >
 > カスタムツールは常に利用できます。AIエージェントから隠したいツールは、個別のツールトグルで無効化してください。
 >
-> **Dynamic Code Security Level** (`execute-dynamic-code`ツール):
-> - **Level 1 (Restricted)**: Unity APIのみ、危険な操作はブロック（推奨）
-> - **Level 2 (FullAccess)**: 全APIが利用可能（注意して使用）
->
-> `execute-dynamic-code`を完全に無効化するには、ツールon/offトグルでオフにしてください。
+> `execute-dynamic-code` には制限モードはありません。有効化されている場合はUnity Editorプロセスの権限で任意のC#コードを実行するため、信頼できるワークフローでのみ有効化してください。
 >
 > 設定変更は即座に反映され、CLI の再インストールは不要です。
 >
@@ -641,7 +616,6 @@ description: "ツールの説明と使用タイミング"
 
 | ファイル | 用途 | git管理 |
 |---------|------|---------|
-| `settings.permissions.json` | チーム共有のセキュリティポリシー（動的コード実行レベル） | 任意 |
 | `settings.tools.json` | ツールごとの有効・無効設定 | 任意 |
 | `tools.json` | 自動生成されるCLIツールレジストリ | No |
 | `outputs/` | ランタイム出力（テスト結果、スクリーンショット、ヒエラルキーダンプ） | No |
@@ -651,12 +625,11 @@ description: "ツールの説明と使用タイミング"
 >
 > ```gitignore
 > **/.uloop/*
-> !**/.uloop/settings.permissions.json
 > !**/.uloop/settings.tools.json
 > ```
 >
 > 自動生成ファイルやランタイム出力を無視しつつ、チーム共有の設定ファイルをgit管理できます。
-> `!` の行はチームの方針に合わせて調整してください — 共有不要なファイルの行は削除できます。
+> ツールの有効・無効設定を共有しない場合は、`!` の行を削除してください。
 
 ## ライセンス
 MIT License

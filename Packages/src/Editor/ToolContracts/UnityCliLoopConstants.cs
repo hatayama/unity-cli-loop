@@ -55,7 +55,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         
         // .uloop directory
         public const string ULOOP_DIR = ".uloop";
-        public const string ULOOP_SETTINGS_FILE_NAME = "settings.permissions.json";
         public const string ULOOP_TOOL_SETTINGS_FILE_NAME = "settings.tools.json";
 
         // Command name constants

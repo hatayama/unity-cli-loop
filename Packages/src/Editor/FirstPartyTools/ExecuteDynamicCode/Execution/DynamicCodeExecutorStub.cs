@@ -38,7 +38,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SuccessfulExecutions = _statistics.SuccessfulExecutions,
                 FailedExecutions = _statistics.FailedExecutions,
                 AverageExecutionTime = _statistics.AverageExecutionTime,
-                SecurityViolations = _statistics.SecurityViolations,
                 CompilationErrors = _statistics.CompilationErrors
             };
         }
