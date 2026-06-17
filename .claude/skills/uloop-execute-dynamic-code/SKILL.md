@@ -7,7 +7,7 @@ context: fork
 
 # Task
 
-Execute the following request using `uloop execute-dynamic-code`: $ARGUMENTS
+Run focused C# snippets in the active Unity Editor with `uloop execute-dynamic-code`.
 
 For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode Selected` before this tool. Use this tool after the built-in inspection tools are not enough or when you need to modify Unity state.
 
