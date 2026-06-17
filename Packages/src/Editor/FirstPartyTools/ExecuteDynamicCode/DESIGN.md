@@ -7,7 +7,7 @@ The public contract must stay stable even when the internal compiler strategy ch
 
 - The preferred compilation path is Unity-bundled Roslyn.
 - `SharedRoslynCompilerWorkerHost` keeps a warm compiler process so structural cache misses stay fast.
-- The shared worker is an optimization only. It must not own response shaping, security validation, or tool-specific policy.
+- The shared worker is an optimization only. It must not own response shaping or tool-specific policy.
 - `DynamicCodeStartupPrewarmer` requests one delayed idle execution at editor startup so the first visible user request does not pay the compiler startup cost.
 - Startup prewarm is best-effort. A foreground request may preempt it, and the foreground warmup fallback must remain correct.
 
@@ -19,8 +19,8 @@ The public contract must stay stable even when the internal compiler strategy ch
 
 ## Invariants
 
-- Security validation always runs in Unity after compilation and before execution.
-- In restricted mode, metadata validation and IL validation must both complete before `Assembly.Load`.
+- Compiled assemblies are loaded only after the selected backend reports a successful build.
+- `Assembly.Load` stays isolated behind the loader service so backend code does not own load mechanics.
 - Tool entry points and use cases depend on runtime-facing facades, not compiler backend details.
 - Worker state is disposable. Domain reload or worker protocol failure must be handled by rebuilding state, not by preserving it.
 - The compile backend may change, but `ExecuteDynamicCodeResponse` shape and user-facing behavior must remain stable.

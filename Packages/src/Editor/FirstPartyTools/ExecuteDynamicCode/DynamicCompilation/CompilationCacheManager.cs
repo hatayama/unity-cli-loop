@@ -5,8 +5,6 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -90,8 +88,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CloneCompilationErrors(result.Errors),
                 CloneStrings(result.Warnings),
                 result.UpdatedCode,
-                result.HasSecurityViolations,
-                CloneSecurityViolations(result.SecurityViolations),
                 result.FailureReason,
                 CloneAmbiguousTypeCandidates(result.AmbiguousTypeCandidates),
                 CloneStrings(result.AutoInjectedNamespaces),
@@ -109,8 +105,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Errors = CloneCompilationErrors(cachedResult.Errors),
                 Warnings = CloneStrings(cachedResult.Warnings),
                 UpdatedCode = cachedResult.UpdatedCode,
-                HasSecurityViolations = cachedResult.HasSecurityViolations,
-                SecurityViolations = CloneSecurityViolations(cachedResult.SecurityViolations),
                 FailureReason = cachedResult.FailureReason,
                 AmbiguousTypeCandidates = CloneAmbiguousTypeCandidates(cachedResult.AmbiguousTypeCandidates),
                 AutoInjectedNamespaces = CloneStrings(cachedResult.AutoInjectedNamespaces),
@@ -168,31 +162,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return clonedErrors;
         }
 
-        private static List<SecurityViolation> CloneSecurityViolations(List<SecurityViolation> securityViolations)
-        {
-            List<SecurityViolation> clonedViolations = new();
-            if (securityViolations == null)
-            {
-                return clonedViolations;
-            }
-
-            foreach (SecurityViolation violation in securityViolations)
-            {
-                clonedViolations.Add(new SecurityViolation
-                {
-                    Type = violation.Type,
-                    Description = violation.Description,
-                    LineNumber = violation.LineNumber,
-                    CodeSnippet = violation.CodeSnippet,
-                    Message = violation.Message,
-                    ApiName = violation.ApiName,
-                    Location = violation.Location
-                });
-            }
-
-            return clonedViolations;
-        }
-
         private static Dictionary<string, List<string>> CloneAmbiguousTypeCandidates(
             Dictionary<string, List<string>> ambiguousTypeCandidates)
         {
@@ -233,10 +202,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             public string UpdatedCode { get; }
 
-            public bool HasSecurityViolations { get; }
-
-            public List<SecurityViolation> SecurityViolations { get; }
-
             public CompilationFailureReason FailureReason { get; }
 
             public Dictionary<string, List<string>> AmbiguousTypeCandidates { get; }
@@ -254,8 +219,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 List<CompilationError> errors,
                 List<string> warnings,
                 string updatedCode,
-                bool hasSecurityViolations,
-                List<SecurityViolation> securityViolations,
                 CompilationFailureReason failureReason,
                 Dictionary<string, List<string>> ambiguousTypeCandidates,
                 List<string> autoInjectedNamespaces,
@@ -267,8 +230,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Errors = errors;
                 Warnings = warnings;
                 UpdatedCode = updatedCode;
-                HasSecurityViolations = hasSecurityViolations;
-                SecurityViolations = securityViolations;
                 FailureReason = failureReason;
                 AmbiguousTypeCandidates = ambiguousTypeCandidates;
                 AutoInjectedNamespaces = autoInjectedNamespaces;

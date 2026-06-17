@@ -40,7 +40,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public event Action<bool> OnConfigurationFoldoutChanged;
         public event Action<bool> OnToolSettingsFoldoutChanged;
         public event Action<string, bool> OnToolToggled;
-        public event Action<DynamicCodeSecurityLevel> OnSecurityLevelChanged;
 
         public UnityCliLoopSettingsWindowUI(VisualElement root)
         {
@@ -103,7 +102,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _toolSettingsSection = new ToolSettingsSection(_root);
             _toolSettingsSection.OnFoldoutChanged += value => OnToolSettingsFoldoutChanged?.Invoke(value);
             _toolSettingsSection.OnToolToggled += (toolName, enabled) => OnToolToggled?.Invoke(toolName, enabled);
-            _toolSettingsSection.OnSecurityLevelChanged += value => OnSecurityLevelChanged?.Invoke(value);
 
             _githubLinkRow = _root.Q<VisualElement>("github-link-row");
             _githubLinkLabel = _root.Q<Label>("github-link-label");

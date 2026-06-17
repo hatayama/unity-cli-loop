@@ -4,9 +4,8 @@ using System.Threading;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Interface for dynamic code execution integration functionality
-
-    /// Related classes: DynamicCodeExecutor, RoslynCompiler, SecurityValidator, CommandRunner
+    /// Interface for dynamic code execution integration functionality.
+    /// Related classes: DynamicCodeExecutor, DynamicCodeCompiler, CommandRunner
     /// </summary>
     public interface IDynamicCodeExecutor : IDisposable
     {
@@ -38,9 +37,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>Average execution time</summary>
         public TimeSpan AverageExecutionTime { get; set; }
-
-        /// <summary>Security violation count</summary>
-        public int SecurityViolations { get; set; }
 
         /// <summary>Compilation error count</summary>
         public int CompilationErrors { get; set; }

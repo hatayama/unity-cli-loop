@@ -6,7 +6,6 @@ using Debug = UnityEngine.Debug;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -16,7 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class DynamicCodeCompiler : IDynamicCompilationService, IDisposable
     {
-        private readonly DynamicCodeSecurityLevel _securityLevel;
         private readonly IDynamicCompilationPlanner _planner;
         private readonly ICompiledAssemblyBuilder _assemblyBuilder;
         private readonly ICompiledAssemblyLoader _assemblyLoader;
@@ -25,9 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal int LastBuildCount { get; private set; }
 
-        public DynamicCodeCompiler(DynamicCodeSecurityLevel securityLevel)
+        public DynamicCodeCompiler()
             : this(
-                securityLevel,
                 new DynamicCompilationPlanner(new DynamicCodeSourcePreparationService()),
                 new CompiledAssemblyBuilder(
                     new ExternalCompilerPathResolutionService(),
@@ -38,12 +35,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal DynamicCodeCompiler(
-            DynamicCodeSecurityLevel securityLevel,
             IDynamicCompilationPlanner planner,
             ICompiledAssemblyBuilder assemblyBuilder,
             ICompiledAssemblyLoader assemblyLoader)
         {
-            _securityLevel = securityLevel;
             _planner = planner ?? throw new ArgumentNullException(nameof(planner));
             _assemblyBuilder = assemblyBuilder ?? throw new ArgumentNullException(nameof(assemblyBuilder));
             _assemblyLoader = assemblyLoader ?? throw new ArgumentNullException(nameof(assemblyLoader));
@@ -85,20 +80,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0,
                     compilerTotalStopwatch.Elapsed.TotalMilliseconds);
                 return cachedResult;
-            }
-
-            Stopwatch sourceSecurityStopwatch = Stopwatch.StartNew();
-            CompilationResult sourceSecurityFailure = CreateSourceSecurityFailure(request.Code);
-            sourceSecurityStopwatch.Stop();
-            if (sourceSecurityFailure != null)
-            {
-                AppendCompilerStageTimings(
-                    sourceSecurityFailure.Timings,
-                    planStopwatch.Elapsed.TotalMilliseconds,
-                    cacheStopwatch.Elapsed.TotalMilliseconds,
-                    0,
-                    compilerTotalStopwatch.Elapsed.TotalMilliseconds);
-                return sourceSecurityFailure;
             }
 
             if (plan.PreparedCode.PreparedSource == null)
@@ -145,29 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return failureResult;
             }
 
-            CompiledAssemblyLoadResult assemblyLoadResult = _assemblyLoader.Load(
-                _securityLevel,
-                buildResult.AssemblyBytes);
-            if (!assemblyLoadResult.Success)
-            {
-                CompilationResult assemblySecurityFailure = CreateAssemblySecurityFailure(
-                    assemblyLoadResult.SecurityViolations,
-                    buildResult.Diagnostics.Warnings,
-                    buildResult.UpdatedSource,
-                    buildResult.AmbiguousTypeCandidates,
-                    buildResult.AutoInjectedNamespaces,
-                    buildResult.ReferenceResolutionMilliseconds,
-                    buildResult.BuildMilliseconds,
-                    assemblyLoadResult.AssemblyLoadMilliseconds,
-                    buildResult.CompilationBackendKind);
-                AppendCompilerStageTimings(
-                    assemblySecurityFailure.Timings,
-                    planStopwatch.Elapsed.TotalMilliseconds,
-                    cacheStopwatch.Elapsed.TotalMilliseconds,
-                    builderTotalStopwatch.Elapsed.TotalMilliseconds,
-                    compilerTotalStopwatch.Elapsed.TotalMilliseconds);
-                return assemblySecurityFailure;
-            }
+            CompiledAssemblyLoadResult assemblyLoadResult = _assemblyLoader.Load(buildResult.AssemblyBytes);
 
             CompilationResult result = new()            {
                 Success = true,
@@ -204,31 +163,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _cacheManager.CheckCache(plan.NormalizedRequest);
         }
 
-        private CompilationResult CreateSourceSecurityFailure(string originalCode)
-        {
-            if (_securityLevel != DynamicCodeSecurityLevel.Restricted)
-            {
-                return null;
-            }
-
-            SecurityValidationResult sourceSecurityResult = SourceSecurityScanner.Scan(originalCode);
-            if (sourceSecurityResult.IsValid)
-            {
-                return null;
-            }
-
-            return new CompilationResult
-            {
-                Success = false,
-                HasSecurityViolations = true,
-                SecurityViolations = sourceSecurityResult.Violations,
-                UpdatedCode = originalCode,
-                FailureReason = CompilationFailureReason.SecurityViolation,
-                CompilationBackendKind = DynamicCompilationBackendKind.Unknown,
-                Timings = DynamicCompilationTimingFormatter.CreateCompilationTimings(0, 0, 0)
-            };
-        }
-
         private static CompilationResult CreateMixedModeFailureResult(
             string originalCode,
             double referenceResolutionMilliseconds,
@@ -254,37 +188,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     referenceResolutionMilliseconds,
                     buildMilliseconds,
                     0)
-            };
-        }
-
-        private static CompilationResult CreateAssemblySecurityFailure(
-            List<SecurityViolation> securityViolations,
-            List<string> warnings,
-            string updatedCode,
-            Dictionary<string, List<string>> ambiguousTypeCandidates,
-            List<string> autoInjectedNamespaces,
-            double referenceResolutionMilliseconds,
-            double buildMilliseconds,
-            double assemblyLoadMilliseconds,
-            DynamicCompilationBackendKind compilationBackendKind)
-        {
-            return new CompilationResult
-            {
-                Success = false,
-                HasSecurityViolations = true,
-                SecurityViolations = securityViolations,
-                Warnings = warnings,
-                UpdatedCode = updatedCode,
-                FailureReason = CompilationFailureReason.SecurityViolation,
-                AmbiguousTypeCandidates = ambiguousTypeCandidates,
-                AutoInjectedNamespaces = autoInjectedNamespaces,
-                AdvisoryLogs = BuildAdvisoryLogs(compilationBackendKind),
-                CompilationBackendKind = compilationBackendKind,
-                Timings = DynamicCompilationTimingFormatter.CreateCompilationTimings(
-                    referenceResolutionMilliseconds,
-                    buildMilliseconds,
-                    assemblyLoadMilliseconds,
-                    compilationBackendKind)
             };
         }
 

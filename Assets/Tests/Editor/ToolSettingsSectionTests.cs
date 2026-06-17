@@ -3,8 +3,6 @@ using NUnit.Framework;
 using UnityEngine.UIElements;
 
 using io.github.hatayama.UnityCliLoop.Presentation;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -126,47 +124,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.AreEqual(DisplayStyle.None, listView.style.display.value);
         }
 
-        [Test]
-        public void Update_RestrictedLevel_MarksRestrictedButtonAsActive()
-        {
-            VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new(root);
-            ToolSettingsSectionData data = CreateData(
-                compileEnabled: true,
-                includeGetLogs: false,
-                dynamicCodeSecurityLevel: DynamicCodeSecurityLevel.Restricted);
-
-            section.Update(data);
-
-            Button restrictedButton = root.Q<Button>("security-level-restricted-button");
-            Button fullAccessButton = root.Q<Button>("security-level-full-access-button");
-
-            Assert.IsTrue(restrictedButton.ClassListContains("unity-cli-loop-segmented-control__button--active"));
-            Assert.IsFalse(fullAccessButton.ClassListContains("unity-cli-loop-segmented-control__button--active"));
-        }
-
-        [Test]
-        public void Update_FullAccessLevel_MarksFullAccessButtonAsWarningActive()
-        {
-            VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new(root);
-            ToolSettingsSectionData data = CreateData(
-                compileEnabled: true,
-                includeGetLogs: false,
-                dynamicCodeSecurityLevel: DynamicCodeSecurityLevel.FullAccess);
-
-            section.Update(data);
-
-            Button restrictedButton = root.Q<Button>("security-level-restricted-button");
-            Button fullAccessButton = root.Q<Button>("security-level-full-access-button");
-            Label description = root.Q<Label>("security-level-description");
-
-            Assert.IsFalse(restrictedButton.ClassListContains("unity-cli-loop-segmented-control__button--active"));
-            Assert.IsTrue(fullAccessButton.ClassListContains("unity-cli-loop-segmented-control__button--active"));
-            Assert.IsTrue(fullAccessButton.ClassListContains("unity-cli-loop-segmented-control__button--warning-active"));
-            Assert.IsTrue(description.ClassListContains("unity-cli-loop-security-level-description--warning"));
-        }
-
         private static VisualElement CreateRootElement()
         {
             VisualElement root = new();
@@ -180,22 +137,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Label cliReferenceLink = new()            {
                 name = "cli-reference-link"
             };
-            Button securityLevelRestrictedButton = new()            {
-                name = "security-level-restricted-button"
-            };
-            Button securityLevelFullAccessButton = new()            {
-                name = "security-level-full-access-button"
-            };
-            Label securityLevelDescription = new()            {
-                name = "security-level-description"
-            };
             VisualElement toolSettingsInfoContainer = new()            {
                 name = "tool-settings-info-container"
             };
 
-            foldout.Add(securityLevelRestrictedButton);
-            foldout.Add(securityLevelFullAccessButton);
-            foldout.Add(securityLevelDescription);
             foldout.Add(toolSettingsInfoContainer);
             foldout.Add(container);
             root.Add(foldout);
@@ -208,8 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool includeGetLogs,
             bool showToolSettings = true,
             bool includeThirdPartyTool = false,
-            bool hasToolListData = true,
-            DynamicCodeSecurityLevel dynamicCodeSecurityLevel = DynamicCodeSecurityLevel.Restricted)
+            bool hasToolListData = true)
         {
             ToolToggleItem compile = new(
                 toolName: "compile",
@@ -241,7 +185,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             return new ToolSettingsSectionData(
                 showToolSettings: showToolSettings,
-                dynamicCodeSecurityLevel: dynamicCodeSecurityLevel,
                 builtInTools: builtInTools,
                 thirdPartyTools: thirdPartyTools,
                 isRegistryAvailable: true,

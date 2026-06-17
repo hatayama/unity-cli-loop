@@ -8,7 +8,6 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
-using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -176,28 +175,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Result = "ok"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "int x = 1",
+                    CompileOnly = false
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "int x = 1",
-                        CompileOnly = false
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(2));
-                Assert.That(runtime.Requests[1].Code, Does.Contain("return null;"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.True);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(2));
+            Assert.That(runtime.Requests[1].Code, Does.Contain("return null;"));
         }
 
         [Test]
@@ -225,28 +213,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Result = "ok"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "if (condition) return \"x\";",
+                    CompileOnly = false
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "if (condition) return \"x\";",
-                        CompileOnly = false
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(2));
-                Assert.That(runtime.Requests[1].Code, Does.Contain("return null;"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.True);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(2));
+            Assert.That(runtime.Requests[1].Code, Does.Contain("return null;"));
         }
 
         [Test]
@@ -269,27 +246,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     }
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "public class Sample { public string Run(bool condition) { if (condition) return \"x\"; } }",
+                    CompileOnly = false
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "public class Sample { public string Run(bool condition) { if (condition) return \"x\"; } }",
-                        CompileOnly = false
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.False);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(1));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.False);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(1));
         }
 
         [Test]
@@ -315,29 +281,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Result = "ok"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "int x = 1",
+                    YieldToForegroundRequests = true
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "int x = 1",
-                        YieldToForegroundRequests = true
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.True);
-                Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(2));
-                Assert.That(runtime.TryExecuteRequests[0].YieldToForegroundRequests, Is.True);
-                Assert.That(runtime.TryExecuteRequests[1].YieldToForegroundRequests, Is.True);
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.True);
+            Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(2));
+            Assert.That(runtime.TryExecuteRequests[0].YieldToForegroundRequests, Is.True);
+            Assert.That(runtime.TryExecuteRequests[1].YieldToForegroundRequests, Is.True);
         }
 
         [Test]
@@ -356,36 +311,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Result = "user"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse probeResponse = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return \"probe\";",
+                    YieldToForegroundRequests = true
+                },
+                CancellationToken.None);
+            ExecuteDynamicCodeResponse userResponse = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return \"user\";"
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse probeResponse = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return \"probe\";",
-                        YieldToForegroundRequests = true
-                    },
-                    CancellationToken.None);
-                ExecuteDynamicCodeResponse userResponse = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return \"user\";"
-                    },
-                    CancellationToken.None);
-
-                Assert.That(probeResponse.Success, Is.True);
-                Assert.That(userResponse.Success, Is.True);
-                Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(1));
-                Assert.That(runtime.Requests, Has.Count.EqualTo(1));
-                Assert.That(runtime.Requests[0].Code, Is.EqualTo("return \"user\";"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(probeResponse.Success, Is.True);
+            Assert.That(userResponse.Success, Is.True);
+            Assert.That(runtime.TryExecuteRequests, Has.Count.EqualTo(1));
+            Assert.That(runtime.Requests, Has.Count.EqualTo(1));
+            Assert.That(runtime.Requests[0].Code, Is.EqualTo("return \"user\";"));
         }
 
         [Test]
@@ -399,27 +343,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Result = "ok"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;",
+                    CompileOnly = false
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return 1;",
-                        CompileOnly = false
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(1));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.True);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(1));
         }
 
         [Test]
@@ -442,33 +375,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Result = "ok"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;"
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return 1;"
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(3));
-                AssertPrewarmCodeMatchesLiteralReturnShape(
-                    runtime.Requests[0].Code,
-                    "return \"user value\";");
-                AssertPrewarmCodeMatchesLiteralReturnShape(
-                    runtime.Requests[1].Code,
-                    "return\n  \"user value\";");
-                Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 1;"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.True);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(3));
+            AssertPrewarmCodeMatchesLiteralReturnShape(
+                runtime.Requests[0].Code,
+                "return \"user value\";");
+            AssertPrewarmCodeMatchesLiteralReturnShape(
+                runtime.Requests[1].Code,
+                "return\n  \"user value\";");
+            Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 1;"));
         }
 
         [Test]
@@ -496,34 +418,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Result = "second"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse firstResponse = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;"
+                },
+                CancellationToken.None);
+            ExecuteDynamicCodeResponse secondResponse = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 2;"
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse firstResponse = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return 1;"
-                    },
-                    CancellationToken.None);
-                ExecuteDynamicCodeResponse secondResponse = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return 2;"
-                    },
-                    CancellationToken.None);
-
-                Assert.That(firstResponse.Success, Is.True);
-                Assert.That(secondResponse.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(4));
-                Assert.That(runtime.Requests[3].Code, Is.EqualTo("return 2;"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(firstResponse.Success, Is.True);
+            Assert.That(secondResponse.Success, Is.True);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(4));
+            Assert.That(runtime.Requests[3].Code, Is.EqualTo("return 2;"));
         }
 
         [Test]
@@ -546,38 +457,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Result = "second"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse firstResponse = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;"
+                },
+                CancellationToken.None);
+            ExecuteDynamicCodeResponse secondResponse = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 2;"
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse firstResponse = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return 1;"
-                    },
-                    CancellationToken.None);
-                ExecuteDynamicCodeResponse secondResponse = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return 2;"
-                    },
-                    CancellationToken.None);
-
-                Assert.That(firstResponse.Success, Is.True);
-                Assert.That(secondResponse.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(3));
-                AssertPrewarmCodeMatchesLiteralReturnShape(
-                    runtime.Requests[0].Code,
-                    "return \"user value\";");
-                Assert.That(runtime.Requests[1].Code, Is.EqualTo("return 1;"));
-                Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 2;"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(firstResponse.Success, Is.True);
+            Assert.That(secondResponse.Success, Is.True);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(3));
+            AssertPrewarmCodeMatchesLiteralReturnShape(
+                runtime.Requests[0].Code,
+                "return \"user value\";");
+            Assert.That(runtime.Requests[1].Code, Is.EqualTo("return 1;"));
+            Assert.That(runtime.Requests[2].Code, Is.EqualTo("return 2;"));
         }
 
         [Test]
@@ -590,28 +490,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Result = "ok"
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;",
+                    CompileOnly = true
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return 1;",
-                        CompileOnly = true
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.True);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(1));
-                Assert.That(runtime.Requests[0].Code, Is.EqualTo("return 1;"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.True);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(1));
+            Assert.That(runtime.Requests[0].Code, Is.EqualTo("return 1;"));
         }
 
         [Test]
@@ -653,30 +542,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Timings = new List<string> { "retry timing" }
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "int x = 1",
+                    CompileOnly = false
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "int x = 1",
-                        CompileOnly = false
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.False);
-                Assert.That(runtime.Requests, Has.Count.EqualTo(2));
-                Assert.That(response.Timings, Contains.Item("retry timing"));
-                Assert.That(response.Diagnostics, Has.Count.EqualTo(1));
-                Assert.That(response.Diagnostics[0].ErrorCode, Is.EqualTo("CS0029"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.False);
+            Assert.That(runtime.Requests, Has.Count.EqualTo(2));
+            Assert.That(response.Timings, Contains.Item("retry timing"));
+            Assert.That(response.Diagnostics, Has.Count.EqualTo(1));
+            Assert.That(response.Diagnostics[0].ErrorCode, Is.EqualTo("CS0029"));
         }
 
         [Test]
@@ -704,32 +582,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     }
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return x;"
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
+            Assert.That(response.Diagnostics, Has.Count.EqualTo(1));
 
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return x;"
-                    },
-                    CancellationToken.None);
+            string[] contextLines = response.Diagnostics[0].Context
+                .Split(new[] { '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
+            int targetLineIndex = System.Array.FindIndex(contextLines, line => line.StartsWith("L10:"));
 
-                Assert.That(response.Diagnostics, Has.Count.EqualTo(1));
-
-                string[] contextLines = response.Diagnostics[0].Context
-                    .Split(new[] { '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
-                int targetLineIndex = System.Array.FindIndex(contextLines, line => line.StartsWith("L10:"));
-
-                Assert.That(targetLineIndex, Is.GreaterThanOrEqualTo(0));
-                Assert.That(contextLines[targetLineIndex + 1].IndexOf('^'), Is.EqualTo("L10:".Length + 1));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(targetLineIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(contextLines[targetLineIndex + 1].IndexOf('^'), Is.EqualTo("L10:".Length + 1));
         }
 
         [Test]
@@ -740,27 +607,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             ExecuteDynamicCodeUseCase useCase = new(runtime);
             using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
             cancellationTokenSource.Cancel();
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;"
+                },
+                cancellationTokenSource.Token);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return 1;"
-                    },
-                    cancellationTokenSource.Token);
-
-                Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
-                Assert.That(response.Logs, Contains.Item("Execution cancelled"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
+            Assert.That(response.Logs, Contains.Item("Execution cancelled"));
         }
 
         [Test]
@@ -776,28 +632,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Timings = new List<string> { "compile_ms=1" }
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;"
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "return 1;"
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
-                Assert.That(response.Logs, Contains.Item("Execution cancelled"));
-                Assert.That(response.Timings, Contains.Item("compile_ms=1"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
+            Assert.That(response.Logs, Contains.Item("Execution cancelled"));
+            Assert.That(response.Timings, Contains.Item("compile_ms=1"));
         }
 
         [Test]
@@ -812,26 +657,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Logs = new List<string> { "partial log" }
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "Debug.Log(\"partial log\"); throw new NullReferenceException();"
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "Debug.Log(\"partial log\"); throw new NullReferenceException();"
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.False);
-                Assert.That(response.Logs, Contains.Item("partial log"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Logs, Contains.Item("partial log"));
         }
 
         [Test]
@@ -847,27 +681,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     Logs = new List<string> { "Top-level statements must precede namespace and type declarations." }
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "namespace Bad { class Wrapped {} }"
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "namespace Bad { class Wrapped {} }"
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorMessage, Is.EqualTo("There is an issue with the code structure"));
-                Assert.That(response.Logs, Contains.Item("Solutions:"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorMessage, Is.EqualTo("There is an issue with the code structure"));
+            Assert.That(response.Logs, Contains.Item("Solutions:"));
         }
 
         [Test]
@@ -890,27 +713,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     }
                 });
             ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "namespace Bad { class Wrapped {} }"
+                },
+                CancellationToken.None);
 
-            DynamicCodeSecurityLevel previous = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-
-            try
-            {
-                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
-                    new ExecuteDynamicCodeSchema
-                    {
-                        Code = "namespace Bad { class Wrapped {} }"
-                    },
-                    CancellationToken.None);
-
-                Assert.That(response.Success, Is.False);
-                Assert.That(response.ErrorMessage, Is.EqualTo("There is an issue with the code structure"));
-                Assert.That(response.Logs, Contains.Item("Solutions:"));
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(previous);
-            }
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorMessage, Is.EqualTo("There is an issue with the code structure"));
+            Assert.That(response.Logs, Contains.Item("Solutions:"));
         }
 
         /// <summary>
@@ -938,7 +750,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     ClassName = request.ClassName,
                     Parameters = request.Parameters,
                     CompileOnly = request.CompileOnly,
-                    SecurityLevel = request.SecurityLevel,
                     YieldToForegroundRequests = request.YieldToForegroundRequests
                 });
                 return Task.FromResult(_results.Dequeue());
@@ -954,7 +765,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     ClassName = request.ClassName,
                     Parameters = request.Parameters,
                     CompileOnly = request.CompileOnly,
-                    SecurityLevel = request.SecurityLevel,
                     YieldToForegroundRequests = request.YieldToForegroundRequests
                 });
                 return Task.FromResult<(bool, ExecutionResult)>((true, _results.Dequeue()));

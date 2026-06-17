@@ -58,8 +58,6 @@
 - Moved compilation diagnostic message parsing into `UnityCLILoop.Domain` because it is a pure diagnostic normalization rule with no Unity Editor, file-system, or protocol dependency.
 - Moved dynamic-code default namespace and class-name constants into `UnityCLILoop.Domain` because they are platform defaults shared by compilation and execution policies.
 - Moved script-changes-while-playing policy values into `UnityCLILoop.Domain` because they are compile safety policy values interpreted by Application services.
-- Moved dynamic-code security result values and the dangerous API catalog into `UnityCLILoop.Domain` because they are platform safety policy values shared by compilation and metadata validation.
-- Moved source-level dynamic-code security scanning into `UnityCLILoop.Domain` because it is a pure platform safety policy over source text.
 - Moved dynamic-code compilation service ports, runtime-service ports, and registries into `UnityCLILoop.Application` because Application owns the execution flow while Infrastructure supplies concrete compiler collaborators.
 - Moved dynamic-code compilation DTOs into `UnityCLILoop.Application` because they are the data contract between the application execution flow and the infrastructure compiler implementation.
 - Moved concrete dynamic-code compilation collaborators into `UnityCLILoop.Infrastructure`:
@@ -73,7 +71,6 @@
   - Roslyn and AssemblyBuilder compiler backends
   - source shaping, auto-using, pre-using, literal hoisting, and reference-set builders
 - Removed now-unused `uLoopMCP.Editor.Shared` references from `UnityCLILoop.Infrastructure` and `UnityCLILoop.CompositionRoot.Editor`.
-- Moved preload metadata validation contracts and registry into `uLoopMCP.Editor.MetadataValidation` so the metadata validation module exposes its own facade instead of depending on `uLoopMCP.Editor.Shared`.
 - Removed `uLoopMCP.Editor.Shared` as a production assembly after moving its remaining constants, logging, and domain-reload registry types into `UnityCLILoop.Application`.
 - Removed stale references to the deleted shared assembly GUID from dev and editor test asmdefs.
 - Added `UnityCliLoopServerApplicationFacade` so Presentation code observes and controls server lifecycle through Application instead of depending on server/controller internals.
@@ -139,16 +136,11 @@
   - compilation diagnostic message parsing compiles under `UnityCLILoop.Domain`.
   - dynamic-code platform defaults compile under `UnityCLILoop.Domain`.
   - script-changes-while-playing policy values compile under `UnityCLILoop.Domain`.
-  - dynamic-code security result values compile under `UnityCLILoop.Domain`.
-  - dynamic-code dangerous API policy compiles under `UnityCLILoop.Domain`.
-  - source-level dynamic-code security scanning compiles under `UnityCLILoop.Domain`.
   - dynamic-code compilation service ports, runtime-service ports, and registries compile under `UnityCLILoop.Application`.
   - dynamic-code compilation DTOs compile under `UnityCLILoop.Application`.
   - concrete dynamic-code compilation collaborators compile under `UnityCLILoop.Infrastructure`.
   - Application source files do not reference concrete dynamic-code compilation infrastructure directly.
   - `UnityCLILoop.Infrastructure` and `UnityCLILoop.CompositionRoot.Editor` no longer reference `uLoopMCP.Editor.Shared`.
-  - preload metadata validation contracts and registry compile under `uLoopMCP.Editor.MetadataValidation`.
-  - `uLoopMCP.Editor.MetadataValidation` no longer references `uLoopMCP.Editor.Shared`.
   - support constants, structured logging, and domain-reload registry types compile under `UnityCLILoop.Application`.
   - production asmdefs no longer reference `uLoopMCP.Editor.Shared`.
   - project asmdefs no longer reference the deleted shared assembly GUID.
@@ -157,7 +149,7 @@
   - `UnityCLILoop.FirstPartyTools.Editor` references only `UnityCLILoop.ToolContracts`.
   - settings/setup UI code no longer reaches CLI setup internals directly and goes through `CliSetupApplicationFacade`.
   - settings/setup UI code no longer reaches skill setup internals directly and goes through `SkillSetupApplicationFacade`.
-  - settings-window UI code no longer reaches tool settings, registry, or security settings internals directly and goes through `ToolSettingsApplicationFacade`.
+  - settings-window UI code no longer reaches tool settings or registry internals directly and goes through `ToolSettingsApplicationFacade`.
   - settings-window UI source uses `UnityCliLoopSettingsWindow` naming instead of the legacy MCP settings-window name.
   - settings, setup, and server editor UI files now compile under `UnityCLILoop.Presentation`.
   - recordings editor UI now compiles under `UnityCLILoop.Presentation` and reaches record/replay services through `RecordingsApplicationFacade`.
@@ -166,11 +158,11 @@
   - editor settings storage now uses `UnityCliLoopEditorSettings` naming instead of the legacy MCP name.
   - editor domain reload state provider now uses `UnityCliLoopEditorDomainReloadStateProvider` naming instead of the legacy MCP name.
   - project path resolution now uses `UnityCliLoopPathResolver` naming instead of the legacy MCP name.
-  - package version, tool security, console log filter, shared constants, and server config now use `UnityCliLoop*` naming instead of legacy MCP names.
+  - package version, tool availability, console log filter, shared constants, and server config now use `UnityCliLoop*` naming instead of legacy MCP names.
   - project IPC server lifecycle types now use `UnityCliLoop*` naming instead of legacy MCP names.
   - presentation USS, UXML, and C# style class names now use `unity-cli-loop-*` prefixes instead of the legacy `mcp-*` prefix.
   - public tool source files now live under `Packages/src/Editor/FirstPartyTools` instead of the legacy `Packages/src/Editor/Api/McpTools` folder.
-  - pure platform values `DynamicCodeSecurityLevel`, `ToolDisabledException`, `ValidationResult`, and `ServiceResult<T>` now compile under `UnityCLILoop.Domain`.
+  - pure platform values `ToolDisabledException`, `ValidationResult`, and `ServiceResult<T>` now compile under `UnityCLILoop.Domain`.
   - dynamic-code compiler factory registration now compiles under `UnityCLILoop.CompositionRoot.Editor`.
   - server lifecycle facade, server handle, server factory registry, and server lifecycle registry compile under `UnityCLILoop.Application`.
   - project IPC transport implementation compiles under `UnityCLILoop.Infrastructure`.

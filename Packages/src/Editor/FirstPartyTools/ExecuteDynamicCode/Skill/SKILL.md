@@ -39,7 +39,7 @@ float x = Mathf.PI;
 return x;
 ```
 
-**Forbidden** — these will be rejected at compile time: `System.IO.*`, `AssetDatabase.CreateFolder`, creating/editing `.cs`/`.asmdef` files. Use terminal commands for file operations instead.
+Prefer terminal commands for file operations and keep snippets focused on Unity Editor state that existing uloop tools cannot inspect or change.
 
 ## Output
 
@@ -50,12 +50,11 @@ Returns JSON:
 - `compilationErrors`: object[] — Roslyn diagnostics with `message`, `line`, `column`, `errorCode`, optional `hint` and `suggestions`
 - `errorMessage`: string — top-level failure summary (empty on success)
 - `error`: string — alias of `errorMessage`
-- `securityLevel`: string — dynamic-code security level active for the request
 - `updatedCode`: string|null — the wrapped form actually compiled (handy when debugging using-statement reordering)
 - `diagnosticsSummary`: string|null — compact summary when diagnostics are available
 - `diagnostics`: object[] — structured diagnostics; same shape as `compilationErrors`, usually populated together with it
 
-On `success: false`, inspect `compilationErrors` first. If empty, read `errorMessage` (and `logs` for extra context) — the failure may be a runtime exception, security violation, cancellation, or an "execution in progress" rejection, all of which return empty `compilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
+On `success: false`, inspect `compilationErrors` first. If empty, read `errorMessage` (and `logs` for extra context) — the failure may be a runtime exception, cancellation, or an "execution in progress" rejection, all of which return empty `compilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
 
 ## Code Examples by Category
 

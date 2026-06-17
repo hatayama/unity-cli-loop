@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.Reflection;
 
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -29,12 +27,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// (After extracting and moving using statements, applying class/method wrapping)
         /// </summary>
         public string UpdatedCode { get; set; }
-
-        /// <summary>Flag for Security Violations</summary>
-        public bool HasSecurityViolations { get; set; }
-
-        /// <summary>Security Violation Details</summary>
-        public List<SecurityViolation> SecurityViolations { get; set; } = new();
 
         /// <summary>Failure Reason Category</summary>
         public CompilationFailureReason FailureReason { get; set; } = CompilationFailureReason.None;
@@ -72,9 +64,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>Compilation Error</summary>
         CompilationError,
-
-        /// <summary>Security Violation</summary>
-        SecurityViolation,
 
         /// <summary>Dynamic Assembly Addition Failed</summary>
         DynamicAssemblyFailed,

@@ -147,7 +147,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view.OnConfigurationFoldoutChanged += UpdateShowConfiguration;
             _view.OnToolSettingsFoldoutChanged += UpdateShowToolSettings;
             _view.OnToolToggled += HandleToolToggled;
-            _view.OnSecurityLevelChanged += UpdateDynamicCodeSecurityLevel;
         }
 
         private void InitializeEventHandler()
@@ -426,7 +425,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             return new ToolSettingsSectionData(
                 _model.UI.ShowToolSettings,
-                _toolSettingsUseCase.GetDynamicCodeSecurityLevel(),
                 System.Array.Empty<ToolToggleItem>(),
                 System.Array.Empty<ToolToggleItem>(),
                 true,
@@ -442,7 +440,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 return new ToolSettingsSectionData(
                     _model.UI.ShowToolSettings,
-                    _toolSettingsUseCase.GetDynamicCodeSecurityLevel(),
                     System.Array.Empty<ToolToggleItem>(),
                     System.Array.Empty<ToolToggleItem>(),
                     false,
@@ -479,7 +476,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             return new ToolSettingsSectionData(
                 _model.UI.ShowToolSettings,
-                _toolSettingsUseCase.GetDynamicCodeSecurityLevel(),
                 builtIn.ToArray(),
                 thirdParty.ToArray(),
                 true,
@@ -596,11 +592,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void UpdateShowConfiguration(bool show)
         {
             _model.UpdateShowConfiguration(show);
-        }
-
-        private void UpdateDynamicCodeSecurityLevel(DynamicCodeSecurityLevel level)
-        {
-            _toolSettingsUseCase.SetDynamicCodeSecurityLevel(level);
         }
 
         private void RefreshCliSetupSection(bool includeSkillDirectoryChecks = true)

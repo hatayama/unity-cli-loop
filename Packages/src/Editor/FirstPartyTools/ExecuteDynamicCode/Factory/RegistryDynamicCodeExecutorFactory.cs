@@ -1,6 +1,5 @@
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory
 {
@@ -27,19 +26,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory
             _entryPointResolver = entryPointResolver;
         }
 
-        public IDynamicCodeExecutor Create(DynamicCodeSecurityLevel securityLevel)
+        public IDynamicCodeExecutor Create()
         {
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
-            IDynamicCompilationService compiler = _compilationServiceFactory.Create(securityLevel);
+            IDynamicCompilationService compiler = _compilationServiceFactory.Create();
             if (compiler == null)
             {
                 VibeLogger.LogWarning(
                     "dynamic_executor_stub_created",
                     "DynamicCodeExecutorStub created (compilation provider unavailable)",
-                    new
-                    {
-                        security_level = securityLevel.ToString()
-                    },
+                    new { },
                     correlationId,
                     "Dynamic code execution provider was not registered",
                     "Verify Roslyn assembly loading and define configuration");
@@ -55,10 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory
 
             VibeLogger.LogInfo(
                 "dynamic_executor_created",
-                $"DynamicCodeExecutor created with security level: {securityLevel}",
+                "DynamicCodeExecutor created",
                 new
                 {
-                    security_level = securityLevel.ToString(),
                     compiler_type = compiler.GetType().Name,
                     runner_type = invoker.GetType().Name
                 },

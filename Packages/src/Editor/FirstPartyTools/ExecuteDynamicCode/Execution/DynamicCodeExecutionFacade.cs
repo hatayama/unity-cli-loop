@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken cancellationToken)
         {
             Stopwatch executorAcquireStopwatch = Stopwatch.StartNew();
-            IDynamicCodeExecutor executor = _executorPool.GetOrCreate(request.SecurityLevel);
+            IDynamicCodeExecutor executor = _executorPool.GetOrCreate();
             executorAcquireStopwatch.Stop();
 
             Stopwatch executorTotalStopwatch = Stopwatch.StartNew();

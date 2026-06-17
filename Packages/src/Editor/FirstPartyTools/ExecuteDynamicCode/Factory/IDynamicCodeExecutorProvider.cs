@@ -1,6 +1,4 @@
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory
 {
@@ -9,6 +7,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory
     /// </summary>
     internal interface IDynamicCodeExecutorProvider
     {
-        IDynamicCodeExecutor Create(DynamicCodeSecurityLevel securityLevel);
+        IDynamicCodeExecutor Create();
     }
 }

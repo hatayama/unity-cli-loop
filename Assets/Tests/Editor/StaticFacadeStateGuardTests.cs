@@ -18,7 +18,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             "Packages/src/Editor/Application/CliSetupApplicationService.cs",
             "Packages/src/Editor/Application/UseCases/SkillSetupUseCaseRegistry.cs",
-            "Packages/src/Editor/Domain/ULoopSettings.cs",
             "Packages/src/Editor/Application/UnityCliLoopToolRegistrar.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeServices.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/DynamicCodeForegroundWarmupState.cs",
@@ -239,7 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string source = ReadSourceFile(
                 "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/ExecuteDynamicCodeUseCase.cs");
 
-            Assert.That(source, Does.Contain("await WarmForegroundExecutionPathIfNeededAsync(parameters, editorLevel, cancellationToken)\n                    .ConfigureAwait(false);"));
+            Assert.That(source, Does.Contain("await WarmForegroundExecutionPathIfNeededAsync(parameters, cancellationToken)\n                    .ConfigureAwait(false);"));
             Assert.That(source, Does.Contain("await ExecuteRequestAsync(request, cancellationToken).ConfigureAwait(false);"));
             Assert.That(source, Does.Contain("await RetryMissingReturnIfNeeded(\n                    executionResult,"));
             Assert.That(source, Does.Contain("cancellationToken).ConfigureAwait(false);"));
