@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.0.0-beta.36](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.35...v3.0.0-beta.36) (2026-06-17)
+
+
+### Features
+
+* Dynamic code execution uses full Unity access by default ([#1362](https://github.com/hatayama/unity-cli-loop/issues/1362)) ([5b64443](https://github.com/hatayama/unity-cli-loop/commit/5b64443b2593a44caba2f8d67127cb89b92997f4))
+
+
+### Bug Fixes
+
+* Clarify skill guidance for pause points and Windows code execution ([#1363](https://github.com/hatayama/unity-cli-loop/issues/1363)) ([7250f9d](https://github.com/hatayama/unity-cli-loop/commit/7250f9dd5b3d919da10525271573934fcd4e9e0a))
+* CLI JSON output now uses consistent field names ([#1360](https://github.com/hatayama/unity-cli-loop/issues/1360)) ([e20c8b3](https://github.com/hatayama/unity-cli-loop/commit/e20c8b330e9f3651554ed2a0184f7d1a49d585eb))
+* Make PowerShell multiline code guidance clearer ([#1355](https://github.com/hatayama/unity-cli-loop/issues/1355)) ([3571823](https://github.com/hatayama/unity-cli-loop/commit/3571823293db8d13f02d75c1acf2125405ebdece))
+* PlayMode start reports compiler errors instead of timing out ([#1354](https://github.com/hatayama/unity-cli-loop/issues/1354)) ([69804cd](https://github.com/hatayama/unity-cli-loop/commit/69804cdb5f4b811c0c3afafd2b0317bf4f725070))
+* Update pause point skill description ([#1351](https://github.com/hatayama/unity-cli-loop/issues/1351)) ([2ee34eb](https://github.com/hatayama/unity-cli-loop/commit/2ee34eb277ecd94fd06d1ee9096a98bbfd3bf3db))
+
 ## [3.0.0-beta.35](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.34...v3.0.0-beta.35) (2026-06-15)
 
 
