@@ -24,9 +24,7 @@ Use `execute-dynamic-code` for direct automation and diagnostics, and switch to 
 
 ## PowerShell 7 Multiline Snippets
 
-Use this as the default Windows pattern for multiline C# in PowerShell 7 (`pwsh`).
-Put the snippet in a single-quoted here-string variable, then pass the variable to `--code`.
-This keeps C# double quotes unchanged and avoids mixing shell syntax into the C# sample.
+Default to a single-quoted here-string variable in PowerShell 7 (`pwsh`), then pass it to `--code`.
 
 ```powershell
 $code = @'
@@ -43,8 +41,7 @@ uloop execute-dynamic-code --code $code
 
 ### With parameters
 
-Pass a JSON object literal, not a JSON string value.
-Use a second single-quoted here-string when the parameters are easier to read on separate lines.
+Pass a JSON object literal, not a JSON string value. Use a second here-string when the parameters are easier to read on separate lines.
 
 ```powershell
 $code = @'
@@ -80,19 +77,17 @@ uloop execute-dynamic-code --code 'return parameters["param0"];' --parameters '{
 
 ## Windows PowerShell 5.1
 
-Windows PowerShell 5.1 removes unescaped double quotes when invoking native commands.
-For short inline snippets, escape C# double quotes as `\"`.
+Windows PowerShell 5.1 removes unescaped double quotes when invoking native commands. Escape C# double quotes as `\"` in short inline snippets.
 
 ```powershell
 uloop execute-dynamic-code --code 'return \"Hello from Windows PowerShell\";'
 ```
 
-For multiline snippets or code with many string literals, prefer `--code-file` so the shell does not rewrite the code text.
+For multiline or string-heavy snippets, prefer `--code-file`.
 
 ## Native Launcher Check
 
-Multiline `--code` expects PowerShell to call the native Go `uloop.exe` launcher directly.
-If `Get-Command uloop` resolves to an old `.cmd` shim from a previous installation, run `uloop install` and open a new terminal before relying on multiline inline snippets.
+Multiline `--code` expects the native Go `uloop.exe`. If `Get-Command uloop` resolves to an old `.cmd` shim, run `uloop install` and open a new terminal.
 
 ```powershell
 (Get-Command uloop).Source

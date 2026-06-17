@@ -25,7 +25,7 @@ This tool can inspect reachable Unity state, such as GameObjects, components, pu
 
 - `--code '<code>'`: Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
 - `--code-file <path>`: Read the C# statements from a file instead of `--code`. Use this when the active shell or launcher cannot preserve inline code exactly. Exactly one of `--code` or `--code-file` is required; combining them is an error.
-- **Shell-specific quoting**: For Windows/PowerShell, read [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md) before writing multiline commands. Use [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md) for zsh/macOS examples.
+- **Shell-specific quoting**: Read [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md) for Windows/PowerShell multiline commands and [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md) for zsh/macOS examples.
 - `--parameters {}` (advanced, optional): Pass a shell-quoted JSON object literal when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets. Do not pass a JSON string value such as `"{\"param0\":\"value\"}"`.
 - `--wait-for-domain-reload` (optional): Wait for Domain Reload recovery after snippets that intentionally trigger Unity script reload or import work. Omit this for normal inspection and editor-state workflows.
 

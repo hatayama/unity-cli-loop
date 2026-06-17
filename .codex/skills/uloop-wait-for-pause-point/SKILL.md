@@ -7,7 +7,7 @@ description: "Pauses Unity's playback and allows you to inspect specific frames.
 
 Use this small loop for one representative frame you care about:
 
-If the target script is compiled by a custom asmdef, add an asmdef reference to `UnityCLILoop.PausePoints.Runtime` before using `UloopPausePoint.Pause`. Without that reference, Unity cannot resolve the pause point API. Scripts compiled into `Assembly-CSharp` generally do not need a manual reference because the pause point runtime assembly is auto-referenced.
+Custom asmdef scripts must reference `UnityCLILoop.PausePoints.Runtime` before calling `UloopPausePoint.Pause`. `Assembly-CSharp` scripts can usually use it without a manual reference.
 
 1. Put a focused log and marker at the natural transition point. Log only local/intermediate values that will be hard to inspect later:
 
