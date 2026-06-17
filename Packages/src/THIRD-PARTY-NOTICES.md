@@ -5,9 +5,9 @@ Editor-only dynamic code metadata validation pipeline:
 
 | Component | NuGet package | Package version | Assembly version | Package asset |
 | --- | --- | --- | --- | --- |
-| System.Collections.Immutable.dll | System.Collections.Immutable | 8.0.0 | 8.0.0.0 | lib/net462/System.Collections.Immutable.dll |
-| System.Reflection.Metadata.dll | System.Reflection.Metadata | 8.0.1 | 8.0.0.1 | lib/net462/System.Reflection.Metadata.dll |
-| System.Runtime.CompilerServices.Unsafe.dll | System.Runtime.CompilerServices.Unsafe | 6.1.1 | 6.0.2.0 | lib/net462/System.Runtime.CompilerServices.Unsafe.dll |
+| UnityCliLoop.System.Collections.Immutable.dll | System.Collections.Immutable | 8.0.0 | 8.0.0.0 | lib/net462/System.Collections.Immutable.dll |
+| UnityCliLoop.System.Reflection.Metadata.dll | System.Reflection.Metadata | 8.0.1 | 8.0.0.1 | lib/net462/System.Reflection.Metadata.dll |
+| UnityCliLoop.System.Runtime.CompilerServices.Unsafe.dll | System.Runtime.CompilerServices.Unsafe | 6.1.1 | 6.0.2.0 | lib/net462/System.Runtime.CompilerServices.Unsafe.dll |
 
 These assemblies are distributed under the MIT License.
 

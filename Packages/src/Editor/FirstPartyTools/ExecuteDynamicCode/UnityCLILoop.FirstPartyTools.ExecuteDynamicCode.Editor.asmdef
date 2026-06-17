@@ -11,8 +11,13 @@
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": false,
-    "precompiledReferences": [],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "UnityCliLoop.System.Collections.Immutable.dll",
+        "UnityCliLoop.System.Runtime.CompilerServices.Unsafe.dll",
+        "UnityCliLoop.System.Reflection.Metadata.dll",
+        "Newtonsoft.Json.dll"
+    ],
     "autoReferenced": false,
     "defineConstraints": [],
     "versionDefines": [],
