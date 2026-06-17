@@ -6,13 +6,12 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Coordinates the execute-dynamic-code workflow while keeping the tool itself thin.
-    /// Processing sequence: 1. Resolve security level and parameters, 2. Execute via runtime, 3. Retry missing-return cases, 4. Shape response
+    /// Processing sequence: 1. Resolve parameters, 2. Execute via runtime, 3. Retry missing-return cases, 4. Shape response
     /// </summary>
     internal sealed class ExecuteDynamicCodeUseCase : IExecuteDynamicCodeUseCase
     {
@@ -30,24 +29,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken cancellationToken)
         {
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
-            DynamicCodeSecurityLevel editorLevel = DynamicCodeSecurityLevel.Restricted;
             DynamicCodeDomainReloadWaitSignal domainReloadWaitSignal = DynamicCodeDomainReloadWaitSignal.Start(parameters);
 
             try
             {
-                editorLevel = FirstPartyDynamicCodeSettings.GetDynamicCodeSecurityLevel();
                 object[] parametersArray = ConvertParameters(parameters.Parameters);
                 string originalCode = parameters.Code ?? string.Empty;
 
-                LogExecutionStart(parameters, editorLevel, correlationId);
+                LogExecutionStart(parameters, correlationId);
 
                 DynamicCodeExecutionRequest request = CreateExecutionRequest(
                     originalCode,
                     parametersArray,
                     parameters.CompileOnly,
-                    editorLevel,
                     parameters.YieldToForegroundRequests);
-                await WarmForegroundExecutionPathIfNeededAsync(parameters, editorLevel, cancellationToken)
+                await WarmForegroundExecutionPathIfNeededAsync(parameters, cancellationToken)
                     .ConfigureAwait(false);
                 ExecutionResult executionResult = await ExecuteRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -56,7 +52,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     originalCode,
                     parametersArray,
                     parameters.CompileOnly,
-                    editorLevel,
                     parameters.YieldToForegroundRequests,
                     cancellationToken).ConfigureAwait(false);
 
@@ -67,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (IsCancelledResult(finalResult))
                 {
-                    ExecuteDynamicCodeResponse cancelledResponse = CreateCancelledResponse(editorLevel);
+                    ExecuteDynamicCodeResponse cancelledResponse = CreateCancelledResponse();
                     cancelledResponse.Logs = finalResult.Logs ?? cancelledResponse.Logs;
                     cancelledResponse.Timings = finalResult.Timings != null
                         ? new List<string>(finalResult.Timings)
@@ -79,7 +74,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ExecuteDynamicCodeResponse response = ConvertExecutionResultToResponse(
                     finalResult,
                     originalCode);
-                response.SecurityLevel = editorLevel.ToString();
                 response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
                 // Why: domain-reload timeouts can complete while Unity's synchronization context is stalled.
                 bool domainReloadWaitRequired =
@@ -89,14 +83,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (OperationCanceledException)
             {
-                ExecuteDynamicCodeResponse response = CreateCancelledResponse(editorLevel);
+                ExecuteDynamicCodeResponse response = CreateCancelledResponse();
                 response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
                 return response;
             }
             catch (Exception ex)
             {
                 LogExecutionException(ex, correlationId);
-                ExecuteDynamicCodeResponse response = CreateExceptionResponse(ex, editorLevel);
+                ExecuteDynamicCodeResponse response = CreateExceptionResponse(ex);
                 response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
                 return response;
             }
@@ -108,7 +102,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void LogExecutionStart(
             ExecuteDynamicCodeSchema parameters,
-            DynamicCodeSecurityLevel securityLevel,
             string correlationId)
         {
             VibeLogger.LogInfo(
@@ -119,8 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     correlationId,
                     codeLength = parameters.Code?.Length ?? 0,
                     compileOnly = parameters.CompileOnly,
-                    parametersCount = parameters.Parameters?.Count ?? 0,
-                    securityLevel = securityLevel.ToString()
+                    parametersCount = parameters.Parameters?.Count ?? 0
                 },
                 correlationId,
                 "Dynamic code execution request received (return is optional)",
@@ -141,7 +133,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string code,
             object[] parameters,
             bool compileOnly,
-            DynamicCodeSecurityLevel securityLevel,
             bool yieldToForegroundRequests = false)
         {
             return new DynamicCodeExecutionRequest
@@ -150,7 +141,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ClassName = "DynamicCommand",
                 Parameters = parameters,
                 CompileOnly = compileOnly,
-                SecurityLevel = securityLevel,
                 YieldToForegroundRequests = yieldToForegroundRequests
             };
         }
@@ -160,7 +150,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string originalCode,
             object[] parameters,
             bool compileOnly,
-            DynamicCodeSecurityLevel securityLevel,
             bool yieldToForegroundRequests,
             CancellationToken cancellationToken)
         {
@@ -180,7 +169,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 codeWithReturn,
                 parameters,
                 compileOnly,
-                securityLevel,
                 yieldToForegroundRequests);
             ExecutionResult retryResult = await ExecuteRequestAsync(retryRequest, cancellationToken)
                 .ConfigureAwait(false);
@@ -276,7 +264,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private async Task WarmForegroundExecutionPathIfNeededAsync(
             ExecuteDynamicCodeSchema parameters,
-            DynamicCodeSecurityLevel securityLevel,
             CancellationToken cancellationToken)
         {
             if (!ShouldWarmForegroundExecutionPath(parameters))
@@ -292,9 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool completed = false;
             try
             {
-                completed = await ExecuteForegroundWarmupSequenceAsync(
-                    securityLevel,
-                    cancellationToken).ConfigureAwait(false);
+                completed = await ExecuteForegroundWarmupSequenceAsync(cancellationToken).ConfigureAwait(false);
                 if (completed)
                 {
                     DynamicCodeForegroundWarmupState.MarkCompleted();
@@ -309,13 +294,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private async Task<bool> ExecuteForegroundWarmupSequenceAsync(
-            DynamicCodeSecurityLevel securityLevel,
-            CancellationToken ct)
+        private async Task<bool> ExecuteForegroundWarmupSequenceAsync(CancellationToken ct)
         {
             return await DynamicCodeForegroundWarmupRunner.RunForegroundSequenceAsync(
                 _runtime,
-                securityLevel,
                 yieldToForegroundRequests: false,
                 ct).ConfigureAwait(false);
         }
@@ -355,9 +337,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     StringComparison.Ordinal);
         }
 
-        private ExecuteDynamicCodeResponse CreateExceptionResponse(
-            Exception ex,
-            DynamicCodeSecurityLevel securityLevel)
+        private ExecuteDynamicCodeResponse CreateExceptionResponse(Exception ex)
         {
             return new ExecuteDynamicCodeResponse
             {
@@ -365,8 +345,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Result = string.Empty,
                 Logs = new List<string> { $"Original Error: {ex.Message}" },
                 CompilationErrors = new List<CompilationErrorDto>(),
-                ErrorMessage = CreateFriendlyExceptionMessage(ex),
-                SecurityLevel = securityLevel.ToString()
+                ErrorMessage = CreateFriendlyExceptionMessage(ex)
             };
         }
 
@@ -390,8 +369,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ex.Message ?? "Unknown error occurred";
         }
 
-        private static ExecuteDynamicCodeResponse CreateCancelledResponse(
-            DynamicCodeSecurityLevel securityLevel)
+        private static ExecuteDynamicCodeResponse CreateCancelledResponse()
         {
             return new ExecuteDynamicCodeResponse
             {
@@ -399,8 +377,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Result = string.Empty,
                 Logs = new List<string> { "Execution cancelled" },
                 CompilationErrors = new List<CompilationErrorDto>(),
-                ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
-                SecurityLevel = securityLevel.ToString()
+                ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED
             };
         }
 

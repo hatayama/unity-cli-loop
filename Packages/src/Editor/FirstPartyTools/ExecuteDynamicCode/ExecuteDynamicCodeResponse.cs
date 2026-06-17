@@ -27,9 +27,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Error message (on failure)</summary>
         public string ErrorMessage { get; set; }
         
-        /// <summary>Current security level</summary>
-        public string SecurityLevel { get; set; }
-        
         /// <summary>Error message (alias for ErrorMessage)</summary>
         public string Error 
         { 

@@ -363,48 +363,12 @@ Async support:
 - You can write await in your snippet (Task/ValueTask/UniTask and any awaitable type)
 - Cancellation is propagated when you pass a CancellationToken to the tool
 
-**Security Level Support**: Implements 2-tier security control to restrict executable code. To disable this tool entirely, use the tool on/off toggle in the Tool Settings UI.
-
-  - **Level 1 - Restricted** 【Recommended Setting】
-    - All Unity APIs and .NET standard libraries are generally available
-    - User-defined assemblies (Assembly-CSharp, etc.) are also accessible
-    - Only pinpoint blocking of security-critical operations:
-      - **File deletion**: `File.Delete`, `Directory.Delete`, `FileUtil.DeleteFileOrDirectory`
-      - **File writing**: `File.WriteAllText`, `File.WriteAllBytes`, `File.Replace`
-      - **Network communication**: All `HttpClient`, `WebClient`, `WebRequest`, `Socket`, `TcpClient` operations
-      - **Process execution**: `Process.Start`, `Process.Kill`
-      - **Dynamic code execution**: `Assembly.Load*`, `Type.InvokeMember`, `Activator.CreateComInstanceFrom`
-      - **Thread manipulation**: Direct `Thread`, `Task` manipulation
-      - **Registry operations**: All `Microsoft.Win32` namespace operations
-    - Safe operations are allowed:
-      - File reading (`File.ReadAllText`, `File.Exists`, etc.)
-      - Path operations (all `Path.*` operations)
-      - Information retrieval (`Assembly.GetExecutingAssembly`, `Type.GetType`, etc.)
-    - Use cases: Normal Unity development, automation with safety assurance
-
-  - **Level 2 - FullAccess**
-    - **All assemblies are accessible (no restrictions)**
-    - ⚠️ **Warning**: Security risks exist, use only with trusted code
+When enabled, dynamic code execution runs with full Unity Editor process permissions and can use Unity APIs, .NET APIs, and project assemblies. Disable this tool with the Tool Settings toggle when AI agents should not execute arbitrary C#.
 ```
 → execute-dynamic-code (Code: "GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube); return \"Cube created\";")
 → Rapid prototype verification, batch processing automation
-→ Unity API usage restricted according to security level
+→ Full Unity Editor API access for trusted automation
 ```
-
-
-> [!IMPORTANT]
-> **Security Settings**
->
-> Custom tools are always available. Use individual tool toggles to hide tools from AI agents when needed.
->
-> **Dynamic Code Security Level** (`execute-dynamic-code` tool):
-> - **Level 1 (Restricted)**: Unity API only, dangerous operations blocked (recommended)
-> - **Level 2 (FullAccess)**: All APIs available (use with caution)
->
-> To disable `execute-dynamic-code` entirely, turn it off using the tool on/off toggle.
->
-> Setting changes take effect immediately without reinstalling the CLI.
->
 
 ### PlayMode Automated Testing Tools
 ### 11. simulate-mouse-ui - Simulate Mouse Input on PlayMode UI
@@ -492,12 +456,6 @@ You can publish your extension tools on GitHub and reuse them across other proje
 > [!TIP]
 > **For AI-assisted development**: Detailed implementation guides are available in [.claude/rules/cli.md](/.claude/rules/cli.md) for CLI and Skills development. These guides are automatically loaded by Claude Code when working in the relevant directories.
 
-> [!IMPORTANT]
-> **Security Settings**
->
-> Project-specific tools are available without enabling an additional permission.
-> When developing custom tools that involve dynamic code execution, consider the **Dynamic Code Security Level** setting.
-
 <details>
 <summary>View Implementation Guide</summary>
 
@@ -579,10 +537,6 @@ public class MyCustomTool : UnityCliLoopTool<MyCustomSchema, MyCustomResponse>
 }
 ```
 
-> [!IMPORTANT]
-> **Important Notes**:
-> - **Thread Safety**: Tools execute on Unity's main thread, so Unity API calls are safe without additional synchronization.
-
 Please also refer to [Custom Tool Samples](/Assets/Editor/CustomToolSamples).
 
 </details>
@@ -656,7 +610,6 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 
 | File | Purpose | Git-track? |
 |------|---------|------------|
-| `settings.permissions.json` | Team-wide security policy (dynamic code security level) | Optional |
 | `settings.tools.json` | Per-tool enable/disable preferences | Optional |
 | `tools.json` | Auto-generated CLI tool registry | No |
 | `outputs/` | Runtime outputs (test results, screenshots, hierarchy dumps) | No |
@@ -666,12 +619,11 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 >
 > ```gitignore
 > **/.uloop/*
-> !**/.uloop/settings.permissions.json
 > !**/.uloop/settings.tools.json
 > ```
 >
 > This ignores auto-generated files and runtime outputs while allowing team-shared configuration to be tracked.
-> Adjust the `!` lines to match your team's needs — you can remove either line if you don't need to share that file.
+> Remove the `!` line if you don't need to share tool enable/disable preferences.
 
 ## License
 MIT License

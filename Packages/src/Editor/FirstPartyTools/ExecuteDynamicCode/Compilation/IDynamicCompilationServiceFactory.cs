@@ -1,6 +1,3 @@
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -8,6 +5,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public interface IDynamicCompilationServiceFactory
     {
-        IDynamicCompilationService Create(DynamicCodeSecurityLevel securityLevel);
+        IDynamicCompilationService Create();
     }
 }

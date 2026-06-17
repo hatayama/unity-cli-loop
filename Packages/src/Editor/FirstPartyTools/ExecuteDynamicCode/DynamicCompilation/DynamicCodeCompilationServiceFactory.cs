@@ -1,6 +1,4 @@
 using System.Runtime.CompilerServices;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor")]
 
@@ -11,9 +9,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public sealed class DynamicCodeCompilationServiceFactory : IDynamicCompilationServiceFactory
     {
-        public IDynamicCompilationService Create(DynamicCodeSecurityLevel securityLevel)
+        public IDynamicCompilationService Create()
         {
-            return new DynamicCodeCompiler(securityLevel);
+            return new DynamicCodeCompiler();
         }
     }
 }

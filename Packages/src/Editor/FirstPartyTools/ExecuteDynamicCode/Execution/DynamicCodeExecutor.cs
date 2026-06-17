@@ -131,7 +131,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SuccessfulExecutions = _statistics.SuccessfulExecutions,
                     FailedExecutions = _statistics.FailedExecutions,
                     AverageExecutionTime = _statistics.AverageExecutionTime,
-                    SecurityViolations = _statistics.SecurityViolations,
                     CompilationErrors = _statistics.CompilationErrors
                 };
             }
@@ -174,28 +173,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (!compilationResult.Success)
             {
-                if (compilationResult.HasSecurityViolations)
-                {
-                    return CreateSecurityFailureResult(
-                        "Security violations detected",
-                        totalStopwatch.Elapsed,
-                        compilationResult.SecurityViolations,
-                        compilationResult.Timings);
-                }
-
                 return CreateCompilationFailureResult(
                     "Compilation error occurred",
                     totalStopwatch.Elapsed,
                     compilationResult);
-            }
-
-            if (compilationResult.HasSecurityViolations)
-            {
-                return CreateSecurityFailureResult(
-                    "Security violations detected (Dangerous API call)",
-                    totalStopwatch.Elapsed,
-                    compilationResult.SecurityViolations,
-                    compilationResult.Timings);
             }
 
             return null;
@@ -227,28 +208,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Logs = new List<string> { "Execution cancelled" },
                 ExecutionTime = executionTime,
                 Timings = new List<string>()
-            };
-        }
-
-        private static ExecutionResult CreateSecurityFailureResult(
-            string message,
-            TimeSpan executionTime,
-            List<SecurityViolation> violations,
-            List<string> timings)
-        {
-            List<string> violationMessages = BuildViolationMessages(violations);
-            if (violationMessages.Count > 0)
-            {
-                message = $"{message} {string.Join(" ", violationMessages)}";
-            }
-
-            return new ExecutionResult
-            {
-                Success = false,
-                ErrorMessage = message,
-                Logs = violationMessages,
-                ExecutionTime = executionTime,
-                Timings = timings != null ? new List<string>(timings) : new List<string>()
             };
         }
 
@@ -284,32 +243,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ExecutionTime = executionTime,
                 Timings = new List<string>()
             };
-        }
-
-        private static List<string> BuildViolationMessages(List<SecurityViolation> violations)
-        {
-            List<string> violationMessages = new();
-            if (violations == null)
-            {
-                return violationMessages;
-            }
-
-            foreach (SecurityViolation violation in violations)
-            {
-                string violationMessage = !string.IsNullOrEmpty(violation.Message)
-                    ? violation.Message
-                    : violation.Description;
-
-                if (!string.IsNullOrEmpty(violation.ApiName))
-                {
-                    violationMessages.Add($"{violation.Type}: {violationMessage} (API: {violation.ApiName})");
-                    continue;
-                }
-
-                violationMessages.Add($"{violation.Type}: {violationMessage}");
-            }
-
-            return violationMessages;
         }
 
         private static List<string> MergeCompilationLogs(

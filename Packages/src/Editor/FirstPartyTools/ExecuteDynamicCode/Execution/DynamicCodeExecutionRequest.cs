@@ -1,6 +1,3 @@
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-using io.github.hatayama.UnityCliLoop.Domain;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -15,8 +12,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public object[] Parameters { get; set; }
 
         public bool CompileOnly { get; set; }
-
-        public DynamicCodeSecurityLevel SecurityLevel { get; set; }
 
         public bool YieldToForegroundRequests { get; set; }
     }

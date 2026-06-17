@@ -187,7 +187,7 @@ flowchart TD
 
 - `Runtime access module`
   - Exposes `IDynamicCodeExecutionRuntime` to the use-case layer.
-  - Reuses executors per security level through `IDynamicCodeExecutorPool`.
+  - Reuses a single executor through `IDynamicCodeExecutorPool`.
   - Queries warm-up capability through the build facade instead of reaching into path resolution directly.
 
 - `Planning module`
@@ -202,8 +202,8 @@ flowchart TD
 
 - `Safety + load module`
   - Loads DLL bytes only after build success.
-  - Keeps preload validation, `Assembly.Load`, and IL validation together.
-  - Prevents backend code from leaking security decisions.
+  - Keeps `Assembly.Load` isolated behind a focused loader service.
+  - Prevents backend code from depending on assembly-load mechanics.
 
 - `Invocation module`
   - Executes the compiled wrapper method through `ICompiledCommandInvoker`.
@@ -217,7 +217,6 @@ flowchart TD
   - Delegates the full workflow to `IExecuteDynamicCodeUseCase`.
 
 - `ExecuteDynamicCodeUseCase`
-  - Resolves the current security level.
   - Converts parameters into the runtime request.
   - Performs the missing-`return` retry.
   - Shapes `ExecutionResult` into `ExecuteDynamicCodeResponse`.
@@ -236,7 +235,7 @@ flowchart TD
   - Hides provider, pool, and build-capability wiring from use cases.
 
 - `DynamicCodeExecutorPool`
-  - Owns executor reuse and disposal per security level.
+  - Owns executor reuse and disposal for the runtime access path.
   - Keeps that caching concern out of the runtime facade itself.
 
 - `RegistryDynamicCodeExecutorFactory`

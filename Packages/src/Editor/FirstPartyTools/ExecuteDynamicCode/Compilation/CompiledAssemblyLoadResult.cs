@@ -1,7 +1,4 @@
-using System.Collections.Generic;
 using Assembly = System.Reflection.Assembly;
-
-using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -14,19 +11,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public Assembly CompiledAssembly { get; }
 
-        public List<SecurityViolation> SecurityViolations { get; }
-
         public double AssemblyLoadMilliseconds { get; }
 
         public CompiledAssemblyLoadResult(
             bool success,
             Assembly compiledAssembly,
-            List<SecurityViolation> securityViolations,
             double assemblyLoadMilliseconds)
         {
             Success = success;
             CompiledAssembly = compiledAssembly;
-            SecurityViolations = securityViolations;
             AssemblyLoadMilliseconds = assemblyLoadMilliseconds;
         }
     }

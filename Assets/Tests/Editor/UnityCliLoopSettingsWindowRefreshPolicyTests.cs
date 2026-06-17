@@ -223,7 +223,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             return new ToolSettingsSectionData(
                 showToolSettings,
-                DynamicCodeSecurityLevel.Restricted,
                 System.Array.Empty<ToolToggleItem>(),
                 System.Array.Empty<ToolToggleItem>(),
                 isRegistryAvailable);

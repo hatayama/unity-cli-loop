@@ -5,13 +5,11 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 using io.github.hatayama.UnityCliLoop.Application;
-using io.github.hatayama.UnityCliLoop.Domain;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
-    /// UI section for tool permissions and a virtualized per-tool enable list.
+    /// UI section for the virtualized per-tool enable list.
     /// The expensive list is allowed to stay unloaded while the foldout is collapsed.
     /// </summary>
     public class ToolSettingsSection
@@ -20,9 +18,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const int InlineToolRowLimit = 40;
 
         private readonly Foldout _foldout;
-        private readonly Button _securityLevelRestrictedButton;
-        private readonly Button _securityLevelFullAccessButton;
-        private readonly Label _securityLevelDescription;
         private readonly VisualElement _toolSettingsInfoContainer;
         private readonly VisualElement _toolListContainer;
         private readonly Label _toolListStatusLabel;
@@ -36,14 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         public event Action<bool> OnFoldoutChanged;
         public event Action<string, bool> OnToolToggled;
-        public event Action<DynamicCodeSecurityLevel> OnSecurityLevelChanged;
 
         public ToolSettingsSection(VisualElement root)
         {
             _foldout = root.Q<Foldout>("tool-settings-foldout");
-            _securityLevelRestrictedButton = root.Q<Button>("security-level-restricted-button");
-            _securityLevelFullAccessButton = root.Q<Button>("security-level-full-access-button");
-            _securityLevelDescription = root.Q<Label>("security-level-description");
             _toolSettingsInfoContainer = root.Q<VisualElement>("tool-settings-info-container");
             _toolListContainer = root.Q<VisualElement>("tool-list-container");
             Debug.Assert(_toolListContainer != null, "tool-list-container must not be null");
@@ -66,16 +57,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void SetupBindings()
         {
             _foldout.RegisterValueChangedCallback(evt => OnFoldoutChanged?.Invoke(evt.newValue));
-
-            _securityLevelRestrictedButton.clicked += () => UpdateSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-            _securityLevelFullAccessButton.clicked += () => UpdateSecurityLevel(DynamicCodeSecurityLevel.FullAccess);
         }
 
         public void Update(ToolSettingsSectionData data)
         {
             ViewDataBinder.UpdateFoldout(_foldout, data.ShowToolSettings);
-            UpdateSecurityLevelSelection(data.DynamicCodeSecurityLevel);
-            UpdateSecurityLevelDescription(data.DynamicCodeSecurityLevel);
 
             if (!data.ShowToolSettings)
             {
@@ -220,42 +206,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _isRegistryAvailable = true;
             _isUnavailableStateShown = false;
             _isLoadingStateShown = false;
-        }
-
-        private void UpdateSecurityLevelDescription(DynamicCodeSecurityLevel currentLevel)
-        {
-            string description = currentLevel switch
-            {
-                DynamicCodeSecurityLevel.Restricted => "Dangerous APIs blocked (recommended)",
-                DynamicCodeSecurityLevel.FullAccess => "All APIs available (use with caution)",
-                _ => "Unknown level"
-            };
-
-            _securityLevelDescription.text = description;
-            _securityLevelDescription.RemoveFromClassList("unity-cli-loop-security-level-description--warning");
-
-            if (currentLevel == DynamicCodeSecurityLevel.FullAccess)
-            {
-                _securityLevelDescription.AddToClassList("unity-cli-loop-security-level-description--warning");
-            }
-        }
-
-        private void UpdateSecurityLevel(DynamicCodeSecurityLevel newLevel)
-        {
-            UpdateSecurityLevelSelection(newLevel);
-            UpdateSecurityLevelDescription(newLevel);
-            OnSecurityLevelChanged?.Invoke(newLevel);
-        }
-
-        private void UpdateSecurityLevelSelection(DynamicCodeSecurityLevel currentLevel)
-        {
-            bool isRestricted = currentLevel == DynamicCodeSecurityLevel.Restricted;
-            bool isFullAccess = currentLevel == DynamicCodeSecurityLevel.FullAccess;
-
-            ViewDataBinder.ToggleClass(_securityLevelRestrictedButton, "unity-cli-loop-segmented-control__button--active", isRestricted);
-            ViewDataBinder.ToggleClass(_securityLevelRestrictedButton, "unity-cli-loop-segmented-control__button--warning-active", false);
-            ViewDataBinder.ToggleClass(_securityLevelFullAccessButton, "unity-cli-loop-segmented-control__button--active", isFullAccess);
-            ViewDataBinder.ToggleClass(_securityLevelFullAccessButton, "unity-cli-loop-segmented-control__button--warning-active", isFullAccess);
         }
 
         private void Rebuild(ToolSettingsSectionData data)

@@ -38,19 +38,6 @@
             <ui:VisualElement name="tool-settings-section" class="unity-cli-loop-section unity-cli-loop-section--box">
                 <ui:Foldout name="tool-settings-foldout" text="Tool Settings" class="unity-cli-loop-foldout">
                         <ui:VisualElement name="tool-settings-content" class="unity-cli-loop-tool-settings-content">
-                            <ui:VisualElement class="unity-cli-loop-tool-settings-card">
-                                <ui:Label text="Permissions" class="unity-cli-loop-section-header unity-cli-loop-tool-settings-card__header" />
-                                <ui:VisualElement class="unity-cli-loop-permission-item unity-cli-loop-permission-item--first">
-                                    <ui:Label text="execute-dynamic-code" class="unity-cli-loop-permission-item__title unity-cli-loop-permission-item__title--dynamic-code unity-cli-loop-section-header--danger" />
-                                    <ui:Label text="Security Level" class="unity-cli-loop-permission-item__control-label" />
-                                    <ui:VisualElement class="unity-cli-loop-segmented-control">
-                                        <ui:Button name="security-level-restricted-button" text="Restricted" class="unity-cli-loop-segmented-control__button" />
-                                        <ui:Button name="security-level-full-access-button" text="Full Access" class="unity-cli-loop-segmented-control__button" />
-                                    </ui:VisualElement>
-                                    <ui:Label name="security-level-description" class="unity-cli-loop-security-level-description" />
-                                </ui:VisualElement>
-                            </ui:VisualElement>
-
                         <ui:VisualElement name="tool-settings-info-container">
                             <ui:Label text="Enable or disable individual tools. Disabled tools are completely hidden from AI agents, eliminating unnecessary context window consumption." class="unity-cli-loop-tool-settings-info" />
                             <ui:Label name="cli-reference-link" text="See CLI Command Reference for uloop-cli usage." class="unity-cli-loop-tool-settings-link" />

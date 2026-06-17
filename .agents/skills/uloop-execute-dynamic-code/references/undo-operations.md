@@ -208,4 +208,3 @@ Undo.RecordObject(mat, "Change Material Color");
 mat.color = Color.red;
 return "Changed material color (Undo available)";
 ```
-
