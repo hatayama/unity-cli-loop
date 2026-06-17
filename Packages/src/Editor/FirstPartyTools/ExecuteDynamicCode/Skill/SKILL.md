@@ -17,7 +17,7 @@ This tool can inspect reachable Unity state, such as GameObjects, components, pu
 
 1. Read the relevant reference file(s) from the Code Examples section below
 2. Construct C# code based on the reference examples
-3. Execute inline code: `uloop execute-dynamic-code --code '<code>'`
+3. Execute with `--code` or `--code-file` using the active shell's quoting guidance
 4. If execution fails, adjust code and retry
 5. Report the execution result
 
@@ -25,7 +25,7 @@ This tool can inspect reachable Unity state, such as GameObjects, components, pu
 
 - `--code '<code>'`: Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
 - `--code-file <path>`: Read the C# statements from a file instead of `--code`. Use this when the active shell or launcher cannot preserve inline code exactly. Exactly one of `--code` or `--code-file` is required; combining them is an error.
-- **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell 7 (`pwsh`) can pass multiline snippets without `--code-file` by using a single-quoted here-string, for example `$code = @' ... '@; uloop execute-dynamic-code --code $code`. Windows PowerShell 5.1 removes unescaped double quotes when invoking native commands; escape C# double quotes as `\"` for short inline snippets, or use `--code-file` when the snippet has many strings.
+- **Shell-specific quoting**: For Windows/PowerShell, read [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md) before writing multiline commands. Use [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md) for zsh/macOS examples.
 - `--parameters {}` (advanced, optional): Pass a shell-quoted JSON object literal when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets. Do not pass a JSON string value such as `"{\"param0\":\"value\"}"`.
 - `--wait-for-domain-reload` (optional): Wait for Domain Reload recovery after snippets that intentionally trigger Unity script reload or import work. Omit this for normal inspection and editor-state workflows.
 
@@ -78,10 +78,10 @@ For detailed code examples, refer to these files:
   - Undo-aware operations: RecordObject, AddComponent, SetParent, grouping
 - **Selection operations**: See [references/selection-operations.md](references/selection-operations.md)
   - Get/set selection, multi-select, filter by type/editability
-- **PlayMode automation (zsh)**: See [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md)
-  - Click UI buttons, invoke methods, set fields, tool combination workflows for zsh users
-- **PlayMode automation (PowerShell)**: See [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md)
+- **PlayMode automation (PowerShell/Windows)**: See [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md)
   - Click UI buttons, invoke methods, set fields, tool combination workflows for PowerShell users
+- **PlayMode automation (zsh/macOS)**: See [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md)
+  - Click UI buttons, invoke methods, set fields, tool combination workflows for zsh users
 - **PlayMode UI controls**: See [references/playmode-ui-controls.md](references/playmode-ui-controls.md)
   - InputField, Slider, Toggle, Dropdown, drag & drop simulation, list all UI controls
 - **PlayMode inspection**: See [references/playmode-inspection.md](references/playmode-inspection.md)
