@@ -50,11 +50,9 @@ uloop simulate-mouse-input --action <action> [options]
 
 ### Pause Point Inspection (Standard for E2E)
 
-- Use `UloopPausePoint.Pause("<id>")` with `uloop-wait-for-pause-point` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
-- Place the pause point at a natural state transition after the app consumed the mouse input, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, or a dependent component is updated. Do not place it immediately after sending `simulate-mouse-input`.
-- If the mouse handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UloopPausePoint.Pause("<id>")` and read them with `uloop-get-logs` while Unity is paused. A pause point hit proves the line was reached, not the frame-local values.
-- If the response has `interruptedByPausePoint: true`, Unity is paused for inspection and the tool released its held input bookkeeping. `pausePointId` and `pausePointHitCount` identify the pause point that paused Unity. Use `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, or `uloop execute-dynamic-code` before resuming.
-- Use distinct ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.
+For standard frame proof when this input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Place markers after the app consumed the mouse input, not immediately after `simulate-mouse-input`.
+
+- If `interruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `pausePointId` and `pausePointHitCount` identify the marker.
 - Remove temporary pause-point/log instrumentation before final validation when it was added only for inspection.
 
 ### Global Options (optional)
@@ -66,14 +64,16 @@ uloop simulate-mouse-input --action <action> [options]
 
 ## When to use this vs simulate-mouse-ui
 
+All rows below assume the New Input System is installed.
+
 | Scenario | Tool |
 |----------|------|
 | Click a Unity UI Button (IPointerClickHandler) | `simulate-mouse-ui` |
-| Runtime logic reads `Mouse.current.leftButton` | `simulate-mouse-input` when the project uses the New Input System |
-| Runtime logic reads right-click | `simulate-mouse-input --button Right` when the project uses the New Input System |
+| Runtime logic reads `Mouse.current.leftButton` | `simulate-mouse-input` |
+| Runtime logic reads right-click | `simulate-mouse-input --button Right` |
 | Drag a UI slider | `simulate-mouse-ui --action Drag` |
-| Runtime logic reads `Mouse.current.delta` | `simulate-mouse-input --action MoveDelta` when the project uses the New Input System |
-| Runtime logic reads `Mouse.current.scroll` | `simulate-mouse-input --action Scroll` when the project uses the New Input System |
+| Runtime logic reads `Mouse.current.delta` | `simulate-mouse-input --action MoveDelta` |
+| Runtime logic reads `Mouse.current.scroll` | `simulate-mouse-input --action Scroll` |
 
 ## Examples
 
@@ -103,9 +103,8 @@ uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --dura
 ## Prerequisites
 
 - Unity must be in **PlayMode**
-- **Input System package** must be installed (`com.unity.inputsystem`)
+- **Input System package** (`com.unity.inputsystem`) must be installed; this tool only works with the New Input System.
 - Game code must read input via Input System API (e.g. `Mouse.current.leftButton.wasPressedThisFrame`)
-- Use this only when the project already uses the New Input System.
 
 ## Output
 
@@ -121,4 +120,4 @@ Returns JSON with:
 - `pausePointHitCount`: The hit count for that `UloopPausePoint.Pause("<id>")`
 - `pausePointHits` (array, nullable): Every marker hit during this input as `{id, hitCount}` entries, in hit order. Read this when one input may trigger several markers; `pausePointId` only names the latest one
 
-There is no `deltaX`, `deltaY`, `scrollX`, `scrollY`, `duration`, or hit-element field in the response — only the issued action, button, target position, and Pause Point interruption state are echoed back. Verify visual outcome with a follow-up screenshot.
+Verify visual outcome with a follow-up screenshot.

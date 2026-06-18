@@ -2,54 +2,25 @@
 
 Code examples for AssetDatabase operations using `execute-dynamic-code`.
 
-## Find Assets by Type
+## Find Assets
 
 ```csharp
 using UnityEditor;
 using System.Collections.Generic;
 
-string[] prefabGuids = AssetDatabase.FindAssets("t:Prefab");
+// By type
+string[] guids = AssetDatabase.FindAssets("t:Prefab");
+// By name
+// string[] guids = AssetDatabase.FindAssets("Player");
+// By type in folder
+// string[] guids = AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/Prefabs" });
+
 List<string> paths = new List<string>();
-
-foreach (string guid in prefabGuids)
-{
-    paths.Add(AssetDatabase.GUIDToAssetPath(guid));
-}
-return $"Found {paths.Count} prefabs";
-```
-
-## Find Assets by Name
-
-```csharp
-using UnityEditor;
-using System.Collections.Generic;
-
-string searchName = "Player";
-string[] guids = AssetDatabase.FindAssets(searchName);
-List<string> paths = new List<string>();
-
 foreach (string guid in guids)
 {
     paths.Add(AssetDatabase.GUIDToAssetPath(guid));
 }
-return $"Found {paths.Count} assets matching '{searchName}'";
-```
-
-## Find Assets in Folder
-
-```csharp
-using UnityEditor;
-using System.Collections.Generic;
-
-string folder = "Assets/Prefabs";
-string[] guids = AssetDatabase.FindAssets("t:Prefab", new[] { folder });
-List<string> paths = new List<string>();
-
-foreach (string guid in guids)
-{
-    paths.Add(AssetDatabase.GUIDToAssetPath(guid));
-}
-return $"Found {paths.Count} prefabs in {folder}";
+return $"Found {paths.Count} assets";
 ```
 
 ## Duplicate Asset
@@ -76,7 +47,7 @@ string error = AssetDatabase.MoveAsset(sourcePath, destPath);
 return string.IsNullOrEmpty(error) ? $"Moved to {destPath}" : $"Error: {error}";
 ```
 
-## Rename Asset
+## Rename Asset (no Undo)
 
 ```csharp
 using UnityEditor;

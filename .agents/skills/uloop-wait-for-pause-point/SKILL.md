@@ -47,7 +47,6 @@ Use `generation`, `enabledAtUtc`, and the hit sequence fields from the hit or st
 - Consider a pause point during E2E passes when transition-frame evidence would add confidence, even if durable state, logs, or screenshots can later confirm the final result.
 - Use this before reaching for `Time.timeScale`, sleeps, repeated polling, or after-the-fact `execute-dynamic-code`; those checks can supplement the paused-frame proof, but they are not substitutes.
 - If the value you need is a method local, an intermediate calculation, or a branch reason that `execute-dynamic-code` cannot reach, add a focused `Debug.Log` immediately before the marker and read it with `get-logs` while paused. Do not count the breakpoint check complete until the matching log has been read.
-- Good pause points include after input is consumed, a command is accepted, a state mutation is committed, an evaluation step resolves, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
 - Treat the pause like a lightweight breakpoint for one important transition: combine nearby debug logs with paused-frame inspection to confirm the variables and component state at that point.
 - Do not treat `simulate-* success=true`, generic action logs, sleeps/retries, testing-only counters, or `Time.timeScale` changes as paused-frame proof.
 - Skip this only for ordinary persistent-state checks when you are not validating simulated input delivery, event ordering, or transition-frame fidelity.
