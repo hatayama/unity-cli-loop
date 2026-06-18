@@ -43,8 +43,7 @@ Replay injects the exact same input frame-by-frame, but the game must also be de
 ## Prerequisites
 
 - Unity must be in **PlayMode**
-- **Input System package** must be installed (`com.unity.inputsystem`)
-- Use this only when the project already uses the New Input System.
+- **Input System package** (`com.unity.inputsystem`) must be installed; this tool only works with the New Input System.
 
 ## Output
 
@@ -58,4 +57,3 @@ Returns JSON with:
 - `progress`: Replay progress (nullable float in 0.0 – 1.0)
 - `isReplaying`: Whether replay is currently active (nullable bool)
 
-These are the only eight fields. There is no `loopCount`, `elapsedSeconds`, `overlayVisible`, or per-frame inspection data in the response.
