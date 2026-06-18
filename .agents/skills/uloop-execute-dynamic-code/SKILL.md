@@ -18,7 +18,8 @@ This tool can inspect reachable Unity state, such as GameObjects, components, pu
 1. Read the relevant reference file(s) from the Code Examples section below
 2. Construct C# code based on the reference examples
 3. Execute with `--code` or `--code-file` using the active shell's quoting guidance
-4. Report the execution result
+4. If execution fails, adjust code and retry
+5. Report the execution result
 
 ## Parameters
 
@@ -47,7 +48,8 @@ Returns JSON:
 - `result`: string — value of the snippet's `return` statement (empty when omitted)
 - `logs`: string[] — execution messages from the dynamic-code tool; read Unity Console `Debug.Log` output with `get-logs`
 - `compilationErrors`: object[] — Roslyn diagnostics with `message`, `line`, `column`, `errorCode`, optional `hint` and `suggestions`
-- `error` / `errorMessage`: string — top-level failure summary (empty on success)
+- `errorMessage`: string — top-level failure summary (empty on success)
+- `error`: string — alias of `errorMessage`
 - `updatedCode`: string|null — the wrapped form actually compiled (handy when debugging using-statement reordering)
 - `diagnosticsSummary`: string|null — compact summary when diagnostics are available
 - `diagnostics`: object[] — structured diagnostics; same shape as `compilationErrors`, usually populated together with it

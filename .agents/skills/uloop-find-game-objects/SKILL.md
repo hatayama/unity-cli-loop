@@ -77,7 +77,7 @@ Returns JSON with:
   - `tag` (string): GameObject tag
   - `layer` (number): Layer index
   - `components` (array): Each entry has `type` (short name, e.g., `Rigidbody`), `fullTypeName` (e.g., `UnityEngine.Rigidbody`), and `properties` (array of Inspector-visible `{name, type, value}` pairs)
-- `totalFound` (number): Results returned (after `--max-results` clipping). For multi-selection file export, this is the number exported.
+- `totalFound` (number): Number of results returned inline, or number exported for multi-selection file output. For search modes, this is after `--max-results` clipping and serialization.
 - `errorMessage` (string): Top-level failure summary (empty on success)
 - `processingErrors` (array): Selected-mode per-GameObject serialization failures, each `{gameObjectName, gameObjectPath, error}`. Omitted/null or empty on clean runs.
 
