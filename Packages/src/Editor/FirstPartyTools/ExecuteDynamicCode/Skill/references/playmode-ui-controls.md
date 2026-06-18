@@ -20,55 +20,31 @@ return $"Set InputField text to: {input.text}";
 
 ```csharp
 using UnityEngine.UI;
-
-Slider slider = GameObject.Find("Canvas/VolumeSlider")?.GetComponent<Slider>();
-if (slider == null) return "Slider not found";
-
-float oldValue = slider.value;
-slider.value = 0.75f;
-return $"Slider changed from {oldValue} to {slider.value}";
-```
-
-## Set Slider Value with Bounds Check
-
-```csharp
-using UnityEngine.UI;
 using System.Linq;
 
 Slider[] sliders = Object.FindObjectsByType<Slider>(FindObjectsSortMode.None);
-Slider target = sliders.FirstOrDefault(s => s.gameObject.name == "HealthBar");
-if (target == null) return $"HealthBar not found. Available: {string.Join(", ", sliders.Select(s => s.gameObject.name))}";
+Slider target = sliders.FirstOrDefault(s => s.gameObject.name == "VolumeSlider");
+if (target == null) return $"VolumeSlider not found. Available: {string.Join(", ", sliders.Select(s => s.gameObject.name))}";
 
-float targetValue = 0.5f;
+float targetValue = 0.75f;
 float clamped = Mathf.Clamp(targetValue, target.minValue, target.maxValue);
 target.value = clamped;
 return $"Set {target.gameObject.name} to {clamped} (range: {target.minValue}-{target.maxValue})";
 ```
 
-## Toggle On/Off
+## Set Toggle Value
 
-```csharp
-using UnityEngine.UI;
-
-Toggle toggle = GameObject.Find("Canvas/MuteToggle")?.GetComponent<Toggle>();
-if (toggle == null) return "Toggle not found";
-
-bool oldValue = toggle.isOn;
-toggle.isOn = !toggle.isOn;
-return $"Toggle changed from {oldValue} to {toggle.isOn}";
-```
-
-## Set Toggle to Specific Value
+Use `!toggle.isOn` to flip, or assign a specific value directly.
 
 ```csharp
 using UnityEngine.UI;
 using System.Linq;
 
 Toggle[] toggles = Object.FindObjectsByType<Toggle>(FindObjectsSortMode.None);
-Toggle target = toggles.FirstOrDefault(t => t.gameObject.name == "SoundToggle");
-if (target == null) return $"SoundToggle not found. Available: {string.Join(", ", toggles.Select(t => t.gameObject.name))}";
+Toggle target = toggles.FirstOrDefault(t => t.gameObject.name == "MuteToggle");
+if (target == null) return $"MuteToggle not found. Available: {string.Join(", ", toggles.Select(t => t.gameObject.name))}";
 
-target.isOn = true;
+target.isOn = !target.isOn;
 return $"Set {target.gameObject.name} to {target.isOn}";
 ```
 
