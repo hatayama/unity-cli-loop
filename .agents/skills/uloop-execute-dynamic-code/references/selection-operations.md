@@ -65,12 +65,15 @@ Selection.objects = enemies;
 return $"Selected {enemies.Length} enemies";
 ```
 
-## Get Top-Level Transforms Only
+## Get Transforms by Selection Mode
+
+`SelectionMode.TopLevel` excludes children, `Deep` includes children, `Editable` excludes locked/immutable objects.
 
 ```csharp
 using UnityEditor;
 using System.Collections.Generic;
 
+// TopLevel | Deep | Editable
 Transform[] transforms = Selection.GetTransforms(SelectionMode.TopLevel);
 if (transforms.Length == 0)
 {
@@ -82,44 +85,12 @@ foreach (Transform t in transforms)
 {
     names.Add(t.name);
 }
-return $"Top-level: {string.Join(", ", names)}";
-```
-
-## Get Deep Selection (Including Children)
-
-```csharp
-using UnityEditor;
-
-Transform[] transforms = Selection.GetTransforms(SelectionMode.Deep);
-if (transforms.Length == 0)
-{
-    return "No transforms selected";
-}
-
-return $"Deep selection count: {transforms.Length}";
-```
-
-## Get Editable Objects Only
-
-```csharp
-using UnityEditor;
-using System.Collections.Generic;
-
-Transform[] transforms = Selection.GetTransforms(SelectionMode.Editable);
-if (transforms.Length == 0)
-{
-    return "No editable transforms selected";
-}
-
-List<string> names = new List<string>();
-foreach (Transform t in transforms)
-{
-    names.Add(t.name);
-}
-return $"Editable: {string.Join(", ", names)}";
+return $"Selected ({transforms.Length}): {string.Join(", ", names)}";
 ```
 
 ## Get Selected Assets
+
+Use `Selection.GetFiltered<Object>` when you need the object reference, or `Selection.assetGUIDs` when you need GUIDs.
 
 ```csharp
 using UnityEditor;
@@ -137,26 +108,6 @@ foreach (Object asset in selectedAssets)
     paths.Add(AssetDatabase.GetAssetPath(asset));
 }
 return $"Assets: {string.Join(", ", paths)}";
-```
-
-## Get Selected Asset GUIDs
-
-```csharp
-using UnityEditor;
-using System.Collections.Generic;
-
-string[] guids = Selection.assetGUIDs;
-if (guids.Length == 0)
-{
-    return "No assets selected";
-}
-
-List<string> paths = new List<string>();
-foreach (string guid in guids)
-{
-    paths.Add(AssetDatabase.GUIDToAssetPath(guid));
-}
-return $"Selected assets: {string.Join(", ", paths)}";
 ```
 
 ## Select All Children of Selected Object

@@ -64,13 +64,6 @@ if (obj == null)
 return $"Found: {obj.name} at {obj.transform.position}";
 ```
 
-## Find GameObjects by Tag
-
-```csharp
-GameObject[] enemies = GameObject.FindGameObjectsWithTag("Enemy");
-return $"Found {enemies.Length} GameObjects with tag 'Enemy'";
-```
-
 ## Set Parent
 
 ```csharp

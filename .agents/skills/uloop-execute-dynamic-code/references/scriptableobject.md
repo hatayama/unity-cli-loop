@@ -33,32 +33,7 @@ return $"Created {so.GetType().Name} at {path}";
 
 ## Modify ScriptableObject with SerializedObject
 
-```csharp
-using UnityEditor;
-
-string path = "Assets/Data/MyData.asset";
-ScriptableObject so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-
-if (so == null)
-{
-    return $"Asset not found at {path}";
-}
-
-SerializedObject serializedObj = new SerializedObject(so);
-SerializedProperty prop = serializedObj.FindProperty("myField");
-
-if (prop != null)
-{
-    prop.stringValue = "New Value";
-    serializedObj.ApplyModifiedProperties();
-    EditorUtility.SetDirty(so);
-    AssetDatabase.SaveAssets();
-    return "Property updated";
-}
-return "Property 'myField' not found";
-```
-
-## Set Int/Float/Bool Properties
+Use `FindProperty` with the matching typed setter (`stringValue`, `intValue`, `floatValue`, `boolValue`, etc.).
 
 ```csharp
 using UnityEditor;
