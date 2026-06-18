@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.0-beta.37](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.36...v3.0.0-beta.37) (2026-06-18)
+
+
+### Bug Fixes
+
+* Dynamic code cancellation no longer leaves Unity busy ([#1369](https://github.com/hatayama/unity-cli-loop/issues/1369)) ([e7e58e9](https://github.com/hatayama/unity-cli-loop/commit/e7e58e9b0fda20d9cd77962acc3cbd05e4b278a9))
+* Prevent bundled dependency conflicts in consuming Unity projects ([#1364](https://github.com/hatayama/unity-cli-loop/issues/1364)) ([f195892](https://github.com/hatayama/unity-cli-loop/commit/f195892356db23dc9ffca9d5b59064c1130e3c78))
+* Simplify and deduplicate agent skill definitions and code references ([#1367](https://github.com/hatayama/unity-cli-loop/issues/1367)) ([83cfc25](https://github.com/hatayama/unity-cli-loop/commit/83cfc2525930e13f70828bc890cf750569e6b5ad))
+* Simulated UI clicks now reach clipped overlay controls ([#1366](https://github.com/hatayama/unity-cli-loop/issues/1366)) ([925543d](https://github.com/hatayama/unity-cli-loop/commit/925543d423970804d506c63f26ed7146af33ceaa))
+
 ## [3.0.0-beta.36](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.35...v3.0.0-beta.36) (2026-06-17)
 
 
