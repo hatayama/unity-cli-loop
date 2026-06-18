@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             {
                 Task<ExecutionResult> firstExecution = runner.ExecuteAsync(
                     CreateContext(cancellationTokenSource.Token));
-                await WrappedDynamicCommandState.StartedTask;
+                await AwaitStartSignalWithinTimeoutAsync(WrappedDynamicCommandState.StartedTask);
 
                 cancellationTokenSource.Cancel();
 
@@ -53,6 +53,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             }
         }
 
+        [Test]
+        public async Task ObserveAbandonedTaskFaultAsync_WhenTaskFaultsLater_ShouldObserveFault()
+        {
+            // Verifies abandoned user task faults are consumed after cancellation releases the runner.
+            TaskCompletionSource<object> completionSource = new(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            Task observationTask = AwaitableHelper.ObserveAbandonedTaskFaultAsync(completionSource.Task);
+
+            completionSource.SetException(new InvalidOperationException("late failure"));
+
+            await AwaitFaultObservationWithinTimeoutAsync(observationTask);
+            Assert.That(observationTask.IsCompletedSuccessfully, Is.True);
+        }
+
+        [Test]
+        public async Task AwaitIfNeeded_WhenTokenAlreadyCanceledButTaskCompleted_ShouldReturnTaskResult()
+        {
+            // Verifies completed user tasks win over cancellation that arrives after the task already finished.
+            using CancellationTokenSource cancellationTokenSource = new();
+            cancellationTokenSource.Cancel();
+
+            object result = await AwaitableHelper.AwaitIfNeeded(
+                Task.FromResult<object>("finished"),
+                cancellationTokenSource.Token);
+
+            Assert.That(result, Is.EqualTo("finished"));
+        }
+
+        [Test]
+        public void AwaitIfNeeded_WhenTokenAlreadyCanceledButTaskFaulted_ShouldSurfaceTaskFault()
+        {
+            // Verifies completed user task faults are not hidden by cancellation that arrives after completion.
+            using CancellationTokenSource cancellationTokenSource = new();
+            cancellationTokenSource.Cancel();
+            Task<object> faultedTask = Task.FromException<object>(
+                new InvalidOperationException("finished failure"));
+
+            InvalidOperationException exception = Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await AwaitableHelper.AwaitIfNeeded(
+                    faultedTask,
+                    cancellationTokenSource.Token));
+
+            Assert.That(exception.Message, Is.EqualTo("finished failure"));
+        }
+
         private static DynamicExecutionContext CreateContext(CancellationToken cancellationToken)
         {
             return new DynamicExecutionContext
@@ -74,6 +119,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             ExecutionResult result = await executionTask;
             return result;
+        }
+
+        private static async Task AwaitStartSignalWithinTimeoutAsync(Task startedTask)
+        {
+            Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
+            Task completedTask = await Task.WhenAny(startedTask, timeoutTask);
+            if (completedTask == timeoutTask)
+            {
+                Assert.Fail("CommandRunner did not invoke the dynamic command before the timeout.");
+            }
+
+            await startedTask;
+        }
+
+        private static async Task AwaitFaultObservationWithinTimeoutAsync(Task observationTask)
+        {
+            Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
+            Task completedTask = await Task.WhenAny(observationTask, timeoutTask);
+            if (completedTask == timeoutTask)
+            {
+                Assert.Fail("Abandoned task fault observation did not complete before the timeout.");
+            }
+
+            await observationTask;
         }
     }
 

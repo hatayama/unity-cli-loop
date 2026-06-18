@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (typeof(Task).IsAssignableFrom(valueType))
             {
                 Task task = (Task)value;
-                await AwaitTaskWithCancellationAsync(task, cancellationToken);
+                await AwaitTaskWithCancellationAsync(task, cancellationToken).ConfigureAwait(false);
 
                 if (valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(Task<>))
                 {
@@ -44,13 +44,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (IsValueTask(valueType))
             {
                 Task asTask = ConvertValueTaskToTask(value);
-                await AwaitTaskWithCancellationAsync(asTask, cancellationToken);
+                await AwaitTaskWithCancellationAsync(asTask, cancellationToken).ConfigureAwait(false);
                 return null;
             }
             if (IsGenericValueTask(valueType))
             {
                 Task asTask = ConvertGenericValueTaskToTask(value);
-                await AwaitTaskWithCancellationAsync(asTask, cancellationToken);
+                await AwaitTaskWithCancellationAsync(asTask, cancellationToken).ConfigureAwait(false);
 
                 Type[] genericArgs = valueType.GetGenericArguments();
                 if (genericArgs != null && genericArgs.Length == 1)
@@ -127,7 +127,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return immediateResult;
                 }
 
-                object awaited = await AwaitObjectTaskWithCancellationAsync(tcs.Task, cancellationToken);
+                object awaited = await AwaitObjectTaskWithCancellationAsync(tcs.Task, cancellationToken)
+                    .ConfigureAwait(false);
                 return awaited;
             }
 
@@ -143,7 +144,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken cancellationToken)
         {
             System.Diagnostics.Debug.Assert(task != null, "Task must not be null.");
-            cancellationToken.ThrowIfCancellationRequested();
+            if (task.IsCompleted)
+            {
+                await task.ConfigureAwait(false);
+                return;
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                _ = ObserveAbandonedTaskFaultAsync(task);
+                throw new OperationCanceledException(cancellationToken);
+            }
+
             if (!cancellationToken.CanBeCanceled)
             {
                 await task.ConfigureAwait(false);
@@ -159,10 +171,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             if (completedTask == cancellationCompletionSource.Task && !task.IsCompleted)
             {
+                _ = ObserveAbandonedTaskFaultAsync(task);
                 throw new OperationCanceledException(cancellationToken);
             }
 
             await task.ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Observes a task fault after cancellation stops awaiting it.
+        /// </summary>
+        internal static Task ObserveAbandonedTaskFaultAsync(Task task)
+        {
+            System.Diagnostics.Debug.Assert(task != null, "Task must not be null.");
+            // Why: cancellation releases CommandRunner before user code finishes, so late faults must stay observed.
+            return task.ContinueWith(
+                static observedTask => _ = observedTask.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
 
         /// <summary>
@@ -172,7 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Task<object> task,
             CancellationToken cancellationToken)
         {
-            await AwaitTaskWithCancellationAsync(task, cancellationToken);
+            await AwaitTaskWithCancellationAsync(task, cancellationToken).ConfigureAwait(false);
             object result = await task.ConfigureAwait(false);
             return result;
         }
