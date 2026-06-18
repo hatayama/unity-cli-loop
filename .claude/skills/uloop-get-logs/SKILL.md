@@ -8,8 +8,6 @@ description: "Read current Unity Console entries from a running Editor. Use duri
 
 Retrieve logs from Unity Console.
 
-After a pause-point hit, use `--search-text <marker-id>` to read the focused log alongside the marker.
-
 ## Usage
 
 ```bash
