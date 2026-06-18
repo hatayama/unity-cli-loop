@@ -80,15 +80,20 @@ return $"Removed {totalRemoved} missing scripts from scene";
 
 ## Scan for Missing References
 
-Scans the selected GameObject or the entire scene for null ObjectReference fields.
+Scans the entire scene by default. Set `scanSelectionOnly` to `true` only when the task asks for the selected GameObject.
 
 ```csharp
 using UnityEditor;
 
-// Single object: use Selection.activeGameObject
-// Whole scene: use Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None)
-GameObject[] targets = Selection.activeGameObject != null
-    ? new[] { Selection.activeGameObject }
+bool scanSelectionOnly = false;
+GameObject selected = Selection.activeGameObject;
+if (scanSelectionOnly && selected == null)
+{
+    return "No GameObject selected";
+}
+
+GameObject[] targets = scanSelectionOnly
+    ? new[] { selected }
     : Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
 
 List<string> results = new List<string>();
@@ -252,19 +257,13 @@ if (negativeScale.Count == 0)
 return $"Negative scale objects: {string.Join(", ", negativeScale.Take(10))}";
 ```
 
-## Find or Remove Empty Leaf GameObjects
-
-To list only, replace `Undo.DestroyObjectImmediate(obj)` with collecting names into a list.
+## Find Empty Leaf GameObjects
 
 ```csharp
 using UnityEditor;
 
 GameObject[] allObjects = Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
-
-int undoGroup = Undo.GetCurrentGroup();
-Undo.SetCurrentGroupName("Remove Empty Leaves");
-
-int removedCount = 0;
+List<string> emptyObjects = new List<string>();
 foreach (GameObject obj in allObjects)
 {
     if (obj == null) continue;
@@ -272,13 +271,16 @@ foreach (GameObject obj in allObjects)
     Component[] components = obj.GetComponents<Component>();
     if (components.Length == 1 && obj.transform.childCount == 0)
     {
-        Undo.DestroyObjectImmediate(obj);
-        removedCount++;
+        emptyObjects.Add(obj.name);
     }
 }
 
-Undo.CollapseUndoOperations(undoGroup);
-return $"Removed {removedCount} empty leaf GameObjects";
+if (emptyObjects.Count == 0)
+{
+    return "No empty leaf GameObjects found";
+}
+
+return $"Empty leaf GameObjects ({emptyObjects.Count}): {string.Join(", ", emptyObjects.Take(20))}";
 ```
 
 ## Find Large Meshes

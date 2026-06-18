@@ -34,7 +34,7 @@ return $"Set {target.gameObject.name} to {clamped} (range: {target.minValue}-{ta
 
 ## Set Toggle Value
 
-Use `!toggle.isOn` to flip, or assign a specific value directly.
+Assign a specific value for deterministic setup. Use `!toggle.isOn` only when the task explicitly asks to flip the current value.
 
 ```csharp
 using UnityEngine.UI;
@@ -44,7 +44,8 @@ Toggle[] toggles = Object.FindObjectsByType<Toggle>(FindObjectsSortMode.None);
 Toggle target = toggles.FirstOrDefault(t => t.gameObject.name == "MuteToggle");
 if (target == null) return $"MuteToggle not found. Available: {string.Join(", ", toggles.Select(t => t.gameObject.name))}";
 
-target.isOn = !target.isOn;
+bool targetValue = true;
+target.isOn = targetValue;
 return $"Set {target.gameObject.name} to {target.isOn}";
 ```
 

@@ -56,4 +56,3 @@ Returns JSON with:
 - `totalFrames`: Total frames in the recording (nullable int)
 - `progress`: Replay progress (nullable float in 0.0 – 1.0)
 - `isReplaying`: Whether replay is currently active (nullable bool)
-

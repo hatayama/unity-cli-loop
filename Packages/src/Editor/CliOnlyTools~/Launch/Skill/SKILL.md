@@ -47,7 +47,9 @@ uloop launch --quit
 
 ## Output
 
-Returns JSON with:
+May print status/progress lines before the final JSON payload, such as project path, detected Unity version, or readiness wait messages.
+
+The final JSON payload includes:
 - `success`: whether the command completed
 - `ready`: whether Unity CLI Loop is ready for commands
 - `serverReady`: whether the Unity CLI Loop server accepted requests
