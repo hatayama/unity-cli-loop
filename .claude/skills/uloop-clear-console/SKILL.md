@@ -45,4 +45,5 @@ Returns JSON with:
   - `errorCount` (number): Errors cleared
   - `warningCount` (number): Warnings cleared
   - `logCount` (number): Info logs cleared
-- `message` (string): Description of the result. On failure, this field carries the error summary.
+- `message` (string): Description of the result; carries the failure summary when the operation fails (e.g. `"Failed to clear console: ..."`)
+- `errorMessage` (string): Currently always empty for this tool — read `message` for failure details

@@ -44,3 +44,10 @@ Returns JSON with:
 - `language`: Language used for greeting
 - `timestamp`: Current timestamp (if enabled)
 
+## Notes
+
+This is a sample custom tool demonstrating:
+- Type-safe parameter handling with Schema
+- Enum parameters for language selection
+- Value-less flag parameters
+- Multi-language support

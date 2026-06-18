@@ -57,6 +57,9 @@ Returns JSON with the current play mode state:
 
 ## Notes
 
-- Stop on an already-stopped Editor sets `changed: false`, `wasAlreadyStopped: true`
-- Step is independent of `Time.timeScale`; requires PlayMode to be running
+- Play action starts the game in the Unity Editor (also resumes from pause)
+- Stop action exits play mode and returns to edit mode. If Play Mode was already stopped, `changed` is `false`, `wasAlreadyStopped` is `true`, and `message` is `Play mode was already stopped`.
+- Pause action pauses the game while remaining in play mode
+- Step action advances exactly one frame and leaves play mode paused (the Editor's Next Frame button; independent of Time.timeScale). Requires PlayMode to be running; repeat to walk transitions frame by frame
+- Useful for automated testing workflows
 - The command waits for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.

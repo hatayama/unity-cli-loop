@@ -42,11 +42,16 @@ uloop simulate-keyboard --action <action> --key <key> [options]
 Use `Press` for edge-triggered keyboard code such as `Keyboard.current.spaceKey.wasPressedThisFrame`.
 `KeyDown` emits one initial press edge, then only keeps the key held. It does not keep `wasPressedThisFrame` true while the key remains held.
 If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` true but runtime state does not change, do not immediately rewrite the user's runtime code to `isPressed`. First verify that the target component is active during the command, that it polls input in the configured Input System update phase, and that a missed `KeyDown` edge is followed by `KeyUp` before retrying.
+Use `KeyDown` / `KeyUp` when the scenario intentionally needs a held key.
+
 ### Pause Point Inspection (Standard for E2E)
 
-For standard frame proof when this input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Place markers after the app consumed the key, not immediately after `simulate-keyboard`.
-
-- If `interruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `pausePointId` and `pausePointHitCount` identify the marker. `pressEdgeObserved` is still reported on pause-point interruptions.
+- Use `UloopPausePoint.Pause("<id>")` with `uloop-wait-for-pause-point` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
+- Put the marker at a natural state transition after the app consumed the key, such as after a command is accepted, a state mutation is committed, an evaluation step resolves, or a dependent component is updated. Do not place it immediately after sending `simulate-keyboard`.
+- If the key handler has local variables, intermediate calculations, or branch reasons that `execute-dynamic-code` cannot inspect after the fact, log just those values near `UloopPausePoint.Pause("<id>")` and read them with `uloop-get-logs` while Unity is paused. A pause point hit proves the line was reached, not the frame-local values.
+- Treat `simulate-keyboard success=true`, generic action logs, and final durable counters as useful evidence, but not as paused-frame proof.
+- If the response has `interruptedByPausePoint: true`, Unity is paused for inspection and the tool released its held input bookkeeping. If a `UloopPausePoint.Pause` marker caused the pause, `pausePointId` and `pausePointHitCount` identify it. Use `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, or `uloop execute-dynamic-code` before resuming.
+- Use distinct marker ids for strict phases, for example `input-read`, `state-updated`, and `result-committed`.
 
 ### KeyDown/KeyUp Rules
 
@@ -98,5 +103,6 @@ Returns JSON with:
 ## Prerequisites
 
 - Unity must be in **PlayMode**
-- **Input System package** (`com.unity.inputsystem`) must be installed; this tool only works with the New Input System.
+- **Input System package** must be installed (`com.unity.inputsystem`)
+- Use this only when the project already uses the New Input System.
 - Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`

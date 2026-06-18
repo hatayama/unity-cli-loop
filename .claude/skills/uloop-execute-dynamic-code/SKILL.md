@@ -7,7 +7,7 @@ context: fork
 
 # Task
 
-Run focused C# snippets in the active Unity Editor with `uloop execute-dynamic-code`.
+Execute the following request using `uloop execute-dynamic-code`: $ARGUMENTS
 
 For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode Selected` before this tool. Use this tool after the built-in inspection tools are not enough or when you need to modify Unity state.
 
@@ -17,14 +17,15 @@ This tool can inspect reachable Unity state, such as GameObjects, components, pu
 
 1. Read the relevant reference file(s) from the Code Examples section below
 2. Construct C# code based on the reference examples
-3. Execute with `--code` or `--code-file` using the active shell's quoting guidance
-4. Report the execution result
+3. Execute inline code: `uloop execute-dynamic-code --code '<code>'`
+4. If execution fails, adjust code and retry
+5. Report the execution result
 
 ## Parameters
 
 - `--code '<code>'`: Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
 - `--code-file <path>`: Read the C# statements from a file instead of `--code`. Use this when the active shell or launcher cannot preserve inline code exactly. Exactly one of `--code` or `--code-file` is required; combining them is an error.
-- **Shell-specific quoting**: Read [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md) for Windows/PowerShell multiline commands and [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md) for zsh/macOS examples.
+- **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell 7 (`pwsh`) can pass multiline snippets without `--code-file` by using a single-quoted here-string, for example `$code = @' ... '@; uloop execute-dynamic-code --code $code`. Windows PowerShell 5.1 removes unescaped double quotes when invoking native commands; escape C# double quotes as `\"` for short inline snippets, or use `--code-file` when the snippet has many strings.
 - `--parameters {}` (advanced, optional): Pass a shell-quoted JSON object literal when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets. Do not pass a JSON string value such as `"{\"param0\":\"value\"}"`.
 - `--wait-for-domain-reload` (optional): Wait for Domain Reload recovery after snippets that intentionally trigger Unity script reload or import work. Omit this for normal inspection and editor-state workflows.
 
@@ -38,7 +39,7 @@ float x = Mathf.PI;
 return x;
 ```
 
-Prefer terminal commands for file operations and keep snippets focused on Unity Editor state that existing uloop tools cannot inspect or change.
+**Forbidden** — these will be rejected at compile time: `System.IO.*`, `AssetDatabase.CreateFolder`, creating/editing `.cs`/`.asmdef` files. Use terminal commands for file operations instead.
 
 ## Output
 
@@ -47,12 +48,14 @@ Returns JSON:
 - `result`: string — value of the snippet's `return` statement (empty when omitted)
 - `logs`: string[] — execution messages from the dynamic-code tool; read Unity Console `Debug.Log` output with `get-logs`
 - `compilationErrors`: object[] — Roslyn diagnostics with `message`, `line`, `column`, `errorCode`, optional `hint` and `suggestions`
-- `error` / `errorMessage`: string — top-level failure summary (empty on success)
+- `errorMessage`: string — top-level failure summary (empty on success)
+- `error`: string — alias of `errorMessage`
+- `securityLevel`: string — dynamic-code security level active for the request
 - `updatedCode`: string|null — the wrapped form actually compiled (handy when debugging using-statement reordering)
 - `diagnosticsSummary`: string|null — compact summary when diagnostics are available
 - `diagnostics`: object[] — structured diagnostics; same shape as `compilationErrors`, usually populated together with it
 
-On `success: false`, inspect `compilationErrors` first. If empty, read `errorMessage` (and `logs` for extra context) — the failure may be a runtime exception, cancellation, or an "execution in progress" rejection, all of which return empty `compilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
+On `success: false`, inspect `compilationErrors` first. If empty, read `errorMessage` (and `logs` for extra context) — the failure may be a runtime exception, security violation, cancellation, or an "execution in progress" rejection, all of which return empty `compilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
 
 ## Code Examples by Category
 
@@ -76,10 +79,10 @@ For detailed code examples, refer to these files:
   - Undo-aware operations: RecordObject, AddComponent, SetParent, grouping
 - **Selection operations**: See [references/selection-operations.md](references/selection-operations.md)
   - Get/set selection, multi-select, filter by type/editability
-- **PlayMode automation (PowerShell/Windows)**: See [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md)
-  - Click UI buttons, invoke methods, set fields, tool combination workflows for PowerShell users
-- **PlayMode automation (zsh/macOS)**: See [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md)
+- **PlayMode automation (zsh)**: See [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md)
   - Click UI buttons, invoke methods, set fields, tool combination workflows for zsh users
+- **PlayMode automation (PowerShell)**: See [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md)
+  - Click UI buttons, invoke methods, set fields, tool combination workflows for PowerShell users
 - **PlayMode UI controls**: See [references/playmode-ui-controls.md](references/playmode-ui-controls.md)
   - InputField, Slider, Toggle, Dropdown, drag & drop simulation, list all UI controls
 - **PlayMode inspection**: See [references/playmode-inspection.md](references/playmode-inspection.md)

@@ -57,6 +57,7 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 - `DragStart` must be called before `DragMove` or `DragEnd`
 - `DragEnd` must be called to release an active drag — failing to call it leaves drag state stuck
 - Calling `DragMove` or `DragEnd` without an active drag returns an error
+- `Drag`, `DragStart`, `DragMove`, and `DragEnd` only support `--button Left`
 
 ### Global Options (all optional, mutually exclusive)
 
@@ -77,8 +78,11 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 
 ## Pause Point Inspection (Standard for E2E)
 
-For standard frame proof when this UI input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Place markers after the app consumed the UI event, not immediately after `simulate-mouse-ui`.
-
+- Use `UloopPausePoint.Pause("<id>")` with `uloop wait-for-pause-point` as the standard frame proof when this input drives a state transition you are verifying. Final logs, screenshots, and durable state supplement the paused-frame check but do not replace it.
+- Place the pause point at a natural transition after the app consumed the UI event, such as after a command is accepted, a state mutation is committed, a tracked value changes, a UI/domain state syncs, or a success/failure/end condition is entered.
+- If the UI handler has local variables, intermediate calculations, or branch reasons that `uloop execute-dynamic-code` cannot inspect after the fact, log just those values near `UloopPausePoint.Pause("<id>")` and read them with `uloop get-logs` while Unity is paused. A pause point hit proves the line was reached, not the frame-local values.
+- Treat `uloop simulate-mouse-ui` `success=true`, generic action logs, and final durable counters as useful evidence, not paused-frame proof.
+- If a `UloopPausePoint.Pause` pauses Unity, inspect with `uloop get-logs`, `uloop get-hierarchy`, `uloop find-game-objects`, or `uloop execute-dynamic-code` before resuming.
 - Remove temporary pause-point/log instrumentation before final validation when it was added only for inspection.
 
 ## Examples
@@ -134,6 +138,6 @@ Returns JSON with:
 - `endPositionX`: Drag end X coordinate (nullable float; populated for drag actions only)
 - `endPositionY`: Drag end Y coordinate (nullable float; populated for drag actions only)
 
-Verify the visual outcome with a follow-up `uloop screenshot --capture-mode rendering --annotate-elements`.
+These are the only eight fields. There is no `button`, `duration`, `dragSpeed`, raycast list, or pointer-event log in the response — verify the visual outcome with a follow-up `uloop screenshot --capture-mode rendering --annotate-elements`.
 
 Note: Click and LongPress on empty space (no UI element) still return `success = true` with `hitGameObjectName = null`. Drag actions on empty space return `success = false`.
