@@ -47,22 +47,24 @@ uloop launch --quit
 
 ## Output
 
-- Prints detected Unity version
-- Prints project path
+May print status/progress lines before the final JSON payload, such as project path, detected Unity version, or readiness wait messages.
+
+The final JSON payload includes:
+- `success`: whether the command completed
+- `ready`: whether Unity CLI Loop is ready for commands
+- `serverReady`: whether the Unity CLI Loop server accepted requests
+- `projectIpcReady`: whether the project IPC path accepted tool requests
+- `alreadyRunning`: whether an existing Unity process was reused
+- `launched`: whether this command launched a Unity process
+- `restarted`: whether this command stopped an existing process and launched a new one
+- `quit`: whether this command stopped Unity without launching a new process
+- `previousProcessId`: process ID stopped by restart or quit, when available
+- `currentProcessId`: current Unity process ID, when available
+- `projectRoot`: resolved project root
+- `message`: readiness summary
+
+## Notes
+
 - If Unity is already running, focuses the existing window and verifies tool readiness
-- If the process scan is blocked by the environment (e.g. sandboxed `ps`), plain launch falls back to probing the project IPC; when Unity responds it reports `alreadyRunning: true` without focusing the window instead of failing. `--restart` and `--quit` still fail because they need the process id
-- If launching or restarting, prints when it is waiting for Unity CLI Loop server readiness
-- If launching or restarting, waits until Unity finishes startup and the CLI can connect to the project
-- Successful launch, restart, existing-process, and quit paths return JSON with:
-  - `success`: whether the command completed
-  - `ready`: whether Unity CLI Loop is ready for commands
-  - `serverReady`: whether the Unity CLI Loop server accepted requests
-  - `projectIpcReady`: whether the project IPC path accepted tool requests
-  - `alreadyRunning`: whether an existing Unity process was reused
-  - `launched`: whether this command launched a Unity process
-  - `restarted`: whether this command stopped an existing process and launched a new one
-  - `quit`: whether this command stopped Unity without launching a new process
-  - `previousProcessId`: process ID stopped by restart or quit, when available
-  - `currentProcessId`: current Unity process ID, when available
-  - `projectRoot`: resolved project root
-  - `message`: readiness summary
+- If process scan is blocked (e.g. sandboxed `ps`), plain launch falls back to IPC probing; `--restart` and `--quit` still fail because they need the process id
+- The command waits until Unity finishes startup and the CLI can connect before returning
