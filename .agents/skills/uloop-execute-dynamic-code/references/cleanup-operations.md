@@ -78,56 +78,27 @@ Undo.CollapseUndoOperations(undoGroup);
 return $"Removed {totalRemoved} missing scripts from scene";
 ```
 
-## Detect Missing References in Component
+## Scan for Missing References
+
+Scans the entire scene by default. Set `scanSelectionOnly` to `true` only when the task asks for the selected GameObject.
 
 ```csharp
 using UnityEditor;
 
+bool scanSelectionOnly = false;
 GameObject selected = Selection.activeGameObject;
-if (selected == null)
+if (scanSelectionOnly && selected == null)
 {
     return "No GameObject selected";
 }
 
-List<string> missingRefs = new List<string>();
+GameObject[] targets = scanSelectionOnly
+    ? new[] { selected }
+    : Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
 
-Component[] components = selected.GetComponents<Component>();
-foreach (Component comp in components)
-{
-    if (comp == null) continue;
-
-    SerializedObject so = new SerializedObject(comp);
-    SerializedProperty prop = so.GetIterator();
-
-    while (prop.NextVisible(true))
-    {
-        if (prop.propertyType == SerializedPropertyType.ObjectReference)
-        {
-            if (prop.objectReferenceValue == null && prop.objectReferenceInstanceIDValue != 0)
-            {
-                missingRefs.Add($"{comp.GetType().Name}.{prop.name}");
-            }
-        }
-    }
-}
-
-if (missingRefs.Count == 0)
-{
-    return "No missing references found";
-}
-
-return $"Missing references: {string.Join(", ", missingRefs)}";
-```
-
-## Scan Scene for Missing References
-
-```csharp
-using UnityEditor;
-
-GameObject[] allObjects = Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
 List<string> results = new List<string>();
 
-foreach (GameObject obj in allObjects)
+foreach (GameObject obj in targets)
 {
     Component[] components = obj.GetComponents<Component>();
     foreach (Component comp in components)
@@ -152,10 +123,10 @@ foreach (GameObject obj in allObjects)
 
 if (results.Count == 0)
 {
-    return "No missing references found in scene";
+    return "No missing references found";
 }
 
-return $"Missing references ({results.Count}): {string.Join(", ", results.Take(10))}...";
+return $"Missing references ({results.Count}): {string.Join(", ", results.Take(10))}";
 ```
 
 ## Find Unused Materials in Project
@@ -194,31 +165,6 @@ foreach (string guid in materialGuids)
 }
 
 return $"Found {unusedMaterials.Count} materials not referenced by prefabs. Verify scene and other asset references manually before deleting.";
-```
-
-## Find Empty GameObjects
-
-```csharp
-using UnityEditor;
-
-GameObject[] allObjects = Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
-List<string> emptyObjects = new List<string>();
-
-foreach (GameObject obj in allObjects)
-{
-    Component[] components = obj.GetComponents<Component>();
-    if (components.Length == 1 && obj.transform.childCount == 0)
-    {
-        emptyObjects.Add(obj.name);
-    }
-}
-
-if (emptyObjects.Count == 0)
-{
-    return "No empty GameObjects found";
-}
-
-return $"Empty objects ({emptyObjects.Count}): {string.Join(", ", emptyObjects.Take(20))}";
 ```
 
 ## Find Duplicate Names in Hierarchy
@@ -311,17 +257,13 @@ if (negativeScale.Count == 0)
 return $"Negative scale objects: {string.Join(", ", negativeScale.Take(10))}";
 ```
 
-## Remove Empty Leaf GameObjects
+## Find Empty Leaf GameObjects
 
 ```csharp
 using UnityEditor;
 
 GameObject[] allObjects = Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
-
-int undoGroup = Undo.GetCurrentGroup();
-Undo.SetCurrentGroupName("Remove Empty Leaves");
-
-int removedCount = 0;
+List<string> emptyObjects = new List<string>();
 foreach (GameObject obj in allObjects)
 {
     if (obj == null) continue;
@@ -329,13 +271,16 @@ foreach (GameObject obj in allObjects)
     Component[] components = obj.GetComponents<Component>();
     if (components.Length == 1 && obj.transform.childCount == 0)
     {
-        Undo.DestroyObjectImmediate(obj);
-        removedCount++;
+        emptyObjects.Add(obj.name);
     }
 }
 
-Undo.CollapseUndoOperations(undoGroup);
-return $"Removed {removedCount} empty leaf GameObjects";
+if (emptyObjects.Count == 0)
+{
+    return "No empty leaf GameObjects found";
+}
+
+return $"Empty leaf GameObjects ({emptyObjects.Count}): {string.Join(", ", emptyObjects.Take(20))}";
 ```
 
 ## Find Large Meshes
