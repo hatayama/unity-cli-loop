@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -11,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class AwaitableHelper
     {
-        public static async Task<object> AwaitIfNeeded(object value)
+        public static async Task<object> AwaitIfNeeded(object value, CancellationToken cancellationToken)
         {
             if (value == null)
             {
@@ -24,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (typeof(Task).IsAssignableFrom(valueType))
             {
                 Task task = (Task)value;
-                await task.ConfigureAwait(false);
+                await AwaitTaskWithCancellationAsync(task, cancellationToken);
 
                 if (valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(Task<>))
                 {
@@ -43,13 +44,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (IsValueTask(valueType))
             {
                 Task asTask = ConvertValueTaskToTask(value);
-                await asTask.ConfigureAwait(false);
+                await AwaitTaskWithCancellationAsync(asTask, cancellationToken);
                 return null;
             }
             if (IsGenericValueTask(valueType))
             {
                 Task asTask = ConvertGenericValueTaskToTask(value);
-                await asTask.ConfigureAwait(false);
+                await AwaitTaskWithCancellationAsync(asTask, cancellationToken);
 
                 Type[] genericArgs = valueType.GetGenericArguments();
                 if (genericArgs != null && genericArgs.Length == 1)
@@ -126,12 +127,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return immediateResult;
                 }
 
-                object awaited = await tcs.Task.ConfigureAwait(false);
+                object awaited = await AwaitObjectTaskWithCancellationAsync(tcs.Task, cancellationToken);
                 return awaited;
             }
 
             // Not awaitable; return as-is
             return value;
+        }
+
+        /// <summary>
+        /// Awaits a Task while allowing request cancellation to release CommandRunner.
+        /// </summary>
+        private static async Task AwaitTaskWithCancellationAsync(
+            Task task,
+            CancellationToken cancellationToken)
+        {
+            System.Diagnostics.Debug.Assert(task != null, "Task must not be null.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!cancellationToken.CanBeCanceled)
+            {
+                await task.ConfigureAwait(false);
+                return;
+            }
+
+            TaskCompletionSource<bool> cancellationCompletionSource =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            using CancellationTokenRegistration cancellationRegistration =
+                cancellationToken.Register(() => cancellationCompletionSource.TrySetResult(true));
+
+            Task completedTask = await Task.WhenAny(task, cancellationCompletionSource.Task)
+                .ConfigureAwait(false);
+            if (completedTask == cancellationCompletionSource.Task && !task.IsCompleted)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
+
+            await task.ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Awaits an object Task with the same cancellation boundary as non-generic Task values.
+        /// </summary>
+        private static async Task<object> AwaitObjectTaskWithCancellationAsync(
+            Task<object> task,
+            CancellationToken cancellationToken)
+        {
+            await AwaitTaskWithCancellationAsync(task, cancellationToken);
+            object result = await task.ConfigureAwait(false);
+            return result;
         }
 
         private static bool IsValueTask(Type type)
@@ -363,5 +406,3 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
     }
 }
-
-
