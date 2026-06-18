@@ -8,7 +8,7 @@ description: "Run Unity Test Runner and report detailed results. Use for EditMod
 
 Execute Unity Test Runner. When tests fail, NUnit XML results with error messages and stack traces are automatically saved. Read the XML file at `xmlPath` for detailed failure diagnosis.
 
-Before running tests, run `uloop compile` first if you edited C# files, test files, `.asmdef`/`.asmref`, or package manifests since the last successful compile. This refreshes the AssetDatabase and surfaces compile errors before test execution.
+Before running tests, run `uloop compile` first if you created, deleted, renamed, moved, or edited C# files, test files, `.asmdef`/`.asmref`, or package manifests since the last successful compile. This refreshes the AssetDatabase and surfaces compile errors before test execution.
 
 Before executing tests, `uloop run-tests` saves unsaved loaded Scene changes and unsaved current Prefab Stage changes by default. If saving fails, it returns `success: false`, keeps `testCount` at `0`, lists the unsaved items in `message`, and does not start the Unity Test Runner.
 
