@@ -8,7 +8,7 @@ description: "Read current Unity Console entries from a running Editor. Use duri
 
 Retrieve logs from Unity Console.
 
-When a pause-point marker pauses Unity and the value you need is a method local, intermediate calculation, or branch reason, read the focused `Debug.Log` entry added immediately before the marker before resuming PlayMode. Use `--search-text <marker-or-id>` so the marker and its log are checked as one breakpoint-style proof.
+After a pause-point hit, use `--search-text <marker-id>` to read the focused log alongside the marker.
 
 ## Usage
 
@@ -54,10 +54,7 @@ uloop get-logs --search-text "Missing.*Component" --use-regex
 Returns JSON with:
 - `totalCount` (number): Total logs available before max-count clipping
 - `displayedCount` (number): Logs returned in this response (≤ `--max-count`)
-- `logType` (string): The `--log-type` filter that was applied
-- `maxCount` (number): The `--max-count` cap that was applied
-- `searchText` (string): The `--search-text` filter that was applied (empty when omitted)
-- `includeStackTrace` (boolean): Whether stack traces are included in `logs[]`
+- Input filters (`logType`, `maxCount`, `searchText`, `includeStackTrace`) are echoed back in the response
 - `logs` (array): Each entry has:
   - `type` (string): `"Error"`, `"Warning"`, or `"Log"`
   - `message` (string): Log message body
