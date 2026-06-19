@@ -2447,11 +2447,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     openParenthesisIndex + 1,
                     closingParenthesisIndex - openParenthesisIndex - 1);
                 string[] migratedArguments = GetMigratedEditorWindowCaptureUtilityArguments(
-                    SplitAttributeArguments(argumentsSource));
+                    SplitAttributeArguments(argumentsSource),
+                    GetMigratedEditorFrameWaitTimeoutExpression(match));
                 if (migratedArguments.Length == 0)
                 {
                     continue;
                 }
+
+                (string configureAwaitSuffix, int replacementEndIndex) =
+                    ReadOptionalConfigureAwaitSuffix(source, codeTextMask, closingParenthesisIndex + 1);
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
                 builder.Append("(await ");
@@ -2462,8 +2466,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 builder.Append(EditorWindowCaptureUtilityCaptureWindowMethodName);
                 builder.Append('(');
                 builder.Append(string.Join(", ", migratedArguments));
-                builder.Append(")).texture");
-                sourceCopyIndex = closingParenthesisIndex + 1;
+                builder.Append(')');
+                builder.Append(configureAwaitSuffix);
+                builder.Append(").texture");
+                sourceCopyIndex = replacementEndIndex;
                 replacementCount++;
             }
 
@@ -2516,7 +2522,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     openParenthesisIndex + 1,
                     closingParenthesisIndex - openParenthesisIndex - 1);
                 string[] migratedArguments = GetMigratedEditorWindowCaptureUtilityGameRenderingArguments(
-                    SplitAttributeArguments(argumentsSource));
+                    SplitAttributeArguments(argumentsSource),
+                    GetMigratedEditorFrameWaitTimeoutExpression(match));
                 if (migratedArguments.Length == 0)
                 {
                     continue;
@@ -2612,9 +2619,69 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 canMigrateBareLegacyEditorWindowCaptureUtility;
         }
 
-        private static string[] GetMigratedEditorWindowCaptureUtilityArguments(string[] arguments)
+        private static (string ConfigureAwaitSuffix, int EndIndex) ReadOptionalConfigureAwaitSuffix(
+            string source,
+            CodeTextMask codeTextMask,
+            int startIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+            int dotIndex = startIndex;
+            while (dotIndex < source.Length && char.IsWhiteSpace(source[dotIndex]))
+            {
+                dotIndex++;
+            }
+
+            if (dotIndex >= source.Length || source[dotIndex] != '.' || !codeTextMask.IsCodeAt(dotIndex))
+            {
+                return (string.Empty, startIndex);
+            }
+
+            const string configureAwaitMemberName = "ConfigureAwait";
+            int memberNameIndex = dotIndex + 1;
+            if (memberNameIndex + configureAwaitMemberName.Length > source.Length)
+            {
+                return (string.Empty, startIndex);
+            }
+
+            string memberName = source.Substring(memberNameIndex, configureAwaitMemberName.Length);
+            if (!string.Equals(memberName, configureAwaitMemberName, StringComparison.Ordinal))
+            {
+                return (string.Empty, startIndex);
+            }
+
+            int openParenthesisIndex = memberNameIndex + configureAwaitMemberName.Length;
+            while (openParenthesisIndex < source.Length && char.IsWhiteSpace(source[openParenthesisIndex]))
+            {
+                openParenthesisIndex++;
+            }
+
+            if (openParenthesisIndex >= source.Length || source[openParenthesisIndex] != '(')
+            {
+                return (string.Empty, startIndex);
+            }
+
+            int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                source,
+                codeTextMask,
+                openParenthesisIndex);
+            if (closingParenthesisIndex < 0)
+            {
+                return (string.Empty, startIndex);
+            }
+
+            return (
+                source.Substring(startIndex, closingParenthesisIndex - startIndex + 1),
+                closingParenthesisIndex + 1);
+        }
+
+        private static string[] GetMigratedEditorWindowCaptureUtilityArguments(
+            string[] arguments,
+            string timeoutExpression)
         {
             Debug.Assert(arguments != null, "arguments must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(timeoutExpression), "timeoutExpression must not be null or empty");
 
             string[] trimmedArguments = arguments
                 .Select(argument => argument.Trim())
@@ -2629,14 +2696,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 trimmedArguments[0],
                 trimmedArguments[1],
-                $"{CurrentConstantsTypeName}.{CurrentEditorFrameWaitTimeoutMemberName}",
-                trimmedArguments[2]
+                timeoutExpression,
+                GetArgumentWithMigratedCancellationTokenName(trimmedArguments[2])
             };
         }
 
-        private static string[] GetMigratedEditorWindowCaptureUtilityGameRenderingArguments(string[] arguments)
+        private static string[] GetMigratedEditorWindowCaptureUtilityGameRenderingArguments(
+            string[] arguments,
+            string timeoutExpression)
         {
             Debug.Assert(arguments != null, "arguments must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(timeoutExpression), "timeoutExpression must not be null or empty");
 
             string[] trimmedArguments = arguments
                 .Select(argument => argument.Trim())
@@ -2644,7 +2714,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 .ToArray();
             if (trimmedArguments.Length == 3)
             {
-                return trimmedArguments;
+                return new[]
+                {
+                    trimmedArguments[0],
+                    trimmedArguments[1],
+                    GetArgumentWithMigratedCancellationTokenName(trimmedArguments[2])
+                };
             }
 
             if (trimmedArguments.Length != 2)
@@ -2655,9 +2730,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new[]
             {
                 trimmedArguments[0],
-                $"{CurrentConstantsTypeName}.{CurrentEditorFrameWaitTimeoutMemberName}",
-                trimmedArguments[1]
+                timeoutExpression,
+                GetArgumentWithMigratedCancellationTokenName(trimmedArguments[1])
             };
+        }
+
+        private static string GetArgumentWithMigratedCancellationTokenName(string argument)
+        {
+            Debug.Assert(argument != null, "argument must not be null");
+
+            string cancellationTokenValue = GetNamedArgumentValueOrNull(argument, LegacyCancellationTokenArgumentName);
+            if (cancellationTokenValue == null)
+            {
+                return argument;
+            }
+
+            return $"{CurrentCancellationTokenArgumentName}: {cancellationTokenValue}";
         }
 
         private static bool ShouldMigrateLegacyToolInfoConstructorArguments(

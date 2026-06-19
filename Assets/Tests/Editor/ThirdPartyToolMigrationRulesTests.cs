@@ -419,6 +419,103 @@ public sealed class ScreenshotTool : UnityCliLoopTool<ScreenshotSchema, Screensh
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyCaptureUsesNamedCancellationToken_RewritesArgumentName()
+        {
+            // Verifies that migrated screenshot capture calls use the V3 cancellation token argument name.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class ScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, cancellationToken: ct);
+    }
+
+    public async Task CaptureRenderingAsync(CancellationToken ct)
+    {
+        Texture2D texture = null;
+        int yOffset = 0;
+        (texture, yOffset) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(1.0f, cancellationToken: ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct: ct)"));
+            Assert.That(result.Content, Does.Contain(
+                "CaptureGameRenderingAsync(1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct: ct)"));
+            Assert.That(result.Content, Does.Not.Contain("cancellationToken:"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenQualifiedLegacyCaptureIsUsed_QualifiesTimeoutConstant()
+        {
+            // Verifies that capture rewrites keep timeout constants resolvable without a ToolContracts using directive.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using Legacy = io.github.hatayama.uLoopMCP;
+
+public sealed class ScreenshotTool
+{
+    public async Task<Texture2D> CaptureQualifiedAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await io.github.hatayama.uLoopMCP.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+
+    public async Task<Texture2D> CaptureAliasAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await Legacy.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
+            Assert.That(result.Content, Does.Contain("Legacy.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
+            Assert.That(result.Content, Does.Contain(
+                "using Legacy = io.github.hatayama.UnityCliLoop.ToolContracts;"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenCaptureWindowUsesConfigureAwait_PreservesConfigureAwaitOnTask()
+        {
+            // Verifies that texture extraction happens after awaiting the configured capture task.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class ScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct).ConfigureAwait(false);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "return (await io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct).ConfigureAwait(false)).texture;"));
+            Assert.That(result.Content, Does.Not.Contain(".texture.ConfigureAwait"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyScreenshotHelpersAreUsed_RewritesFirstPartyReferences()
         {
             // Verifies that screenshot helper types moved out of the public tool contract namespace are fully qualified.
