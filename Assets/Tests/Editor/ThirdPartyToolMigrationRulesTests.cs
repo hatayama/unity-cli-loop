@@ -335,6 +335,90 @@ public sealed class ScreenshotTool
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyEditorWindowCaptureUtilityIsUsed_RewritesCaptureCall()
+        {
+            // Verifies that legacy window capture calls migrate to the V3 screenshot utility signature.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class ScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "return (await io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
+            Assert.That(result.Content, Does.Not.Contain("return await EditorWindowCaptureUtility.CaptureWindowAsync"));
+        }
+
+        [Test]
+        public void MigrateCSharpSourceForLegacyAssembly_WhenFileReliesOnGlobalUsing_RewritesEditorWindowCaptureUtility()
+        {
+            // Verifies that split files relying on a legacy global using migrate window capture calls.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+
+public sealed class ScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
+                    source,
+                    hasLegacyAssemblySource: true,
+                    legacyAssemblyAliases: System.Array.Empty<string>(),
+                    legacyAssemblyToolInfoAliases: System.Array.Empty<string>());
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "return (await io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
+            Assert.That(result.Content, Does.Not.Contain("return await EditorWindowCaptureUtility.CaptureWindowAsync"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenCurrentToolContractsFileHasLegacyEditorWindowCaptureUtility_RewritesCaptureCall()
+        {
+            // Verifies that partially migrated files still finish the window capture helper migration.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class ScreenshotTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "return (await io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
+            Assert.That(result.Content, Does.Not.Contain("return await EditorWindowCaptureUtility.CaptureWindowAsync"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyRegistrarMetadataIsUsed_RewritesDomainMetadataType()
         {
             // Verifies that explicit registrar metadata declarations keep compiling after namespace migration.
@@ -1208,6 +1292,20 @@ public sealed class OtherTool
         {
             // Verifies that split files using old frame waits are migrated with their legacy assembly.
             string source = "public sealed class Tool { public async Task Run() { await EditorDelay.DelayFrame(1); } }";
+
+            bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(
+                source,
+                System.Array.Empty<string>());
+
+            Assert.That(containsLegacyApi, Is.True);
+        }
+
+        [Test]
+        public void ContainsLegacyAssemblyScopedApi_WhenLegacyEditorWindowCaptureUtilityIsUsed_ReturnsTrue()
+        {
+            // Verifies that split files using old window capture helpers are migrated with their legacy assembly.
+            string source =
+                "public sealed class Tool { public async Task Run() { await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct); } }";
 
             bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(
                 source,

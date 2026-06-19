@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal const string CurrentNamespace = "io.github.hatayama.UnityCliLoop.ToolContracts";
         internal const string CurrentApplicationNamespace = "io.github.hatayama.UnityCliLoop.Application";
         internal const string CurrentDomainNamespace = "io.github.hatayama.UnityCliLoop.Domain";
+        internal const string CurrentFirstPartyToolsNamespace = "io.github.hatayama.UnityCliLoop.FirstPartyTools";
         internal const string LegacyEditorAssemblyName = "uLoopMCP.Editor";
         internal const string LegacyRuntimeAssemblyName = "uLoopMCP.Runtime";
         private const string CurrentApplicationAssemblyName = "UnityCLILoop.Application";
@@ -40,6 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string LegacyEditorDelayMethodName = "DelayFrame";
         private const string CurrentEditorFrameWaiterTypeName = "EditorFrameWaiter";
         private const string CurrentEditorFrameWaiterMethodName = "WaitFramesOrTimeoutAsync";
+        private const string LegacyEditorWindowCaptureUtilityTypeName = "EditorWindowCaptureUtility";
+        private const string EditorWindowCaptureUtilityCaptureWindowMethodName = "CaptureWindowAsync";
         private const string CurrentConstantsTypeName = "UnityCliLoopConstants";
         private const string CurrentEditorFrameWaitTimeoutMemberName = "EDITOR_FRAME_WAIT_TIMEOUT_MS";
         private const int MinimumRawStringDelimiterQuoteCount = 3;
@@ -169,6 +172,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorDelayTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorDelayTypeName}|(?<editorDelay>{LegacyEditorDelayTypeName}))\s*\.\s*{LegacyEditorDelayMethodName}\s*\(",
                 RegexOptions.Compiled);
 
+        private static readonly Regex LegacyEditorWindowCaptureUtilityCaptureWindowRegex =
+            new(
+                $@"await\s+(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureWindowMethodName}\s*\(",
+                RegexOptions.Compiled);
+
         private static readonly TypeReplacementRule[] ToolContractTypeReplacementRules =
         {
             new("ToolParameterSchemaGenerator", "UnityCliLoopToolParameterSchemaGenerator"),
@@ -229,10 +237,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
             bool hasLegacyNamespaceUsage = RegexMatchesCode(source, LegacyNamespaceRegex);
             bool hasCurrentDomainNamespaceUsage = RegexMatchesCode(source, CurrentDomainNamespaceRegex);
+            bool hasCurrentToolContractsNamespaceUsage = RegexMatchesCode(source, CurrentToolContractsNamespaceRegex);
             bool canMigrateBareLegacyToolAttribute =
                 hasLegacyAssemblySource ||
                 hasLegacyNamespaceUsage ||
                 legacyNamespaceAliases.Length > 0;
+            bool canMigrateBareLegacyEditorWindowCaptureUtility =
+                canMigrateBareLegacyToolAttribute ||
+                hasCurrentToolContractsNamespaceUsage;
             bool canMigrateBareLegacyToolInfoConstructor =
                 canMigrateBareLegacyToolAttribute;
             bool canMigrateAmbiguousBareLegacyToolInfoConstructor =
@@ -269,6 +281,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     canMigrateBareLegacyToolAttribute);
             migratedContent = editorDelayMigratedContent;
             replacementCount += editorDelayReplacementCount;
+            (string editorWindowCaptureMigratedContent, int editorWindowCaptureReplacementCount) =
+                ReplaceLegacyEditorWindowCaptureUtilityCallsInCode(
+                    migratedContent,
+                    legacyNamespaceAliases,
+                    canMigrateBareLegacyEditorWindowCaptureUtility);
+            migratedContent = editorWindowCaptureMigratedContent;
+            replacementCount += editorWindowCaptureReplacementCount;
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
@@ -409,6 +428,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ContainsTextFragment(source, "McpTool") ||
                 ContainsTextFragment(source, "CustomToolManager") ||
                 ContainsTextFragment(source, LegacyEditorDelayTypeName) ||
+                ContainsTextFragment(source, LegacyEditorWindowCaptureUtilityTypeName) ||
                 ContainsTextFragment(source, "UnityCliLoopToolRegistrar") ||
                 ContainsTextFragment(source, "ToolInfo"))
             {
@@ -612,6 +632,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     source,
                     legacyAssemblyAliases,
                     canMigrateBareLegacyEditorDelay: true) ||
+                ContainsLegacyEditorWindowCaptureUtilityCall(
+                    source,
+                    legacyAssemblyAliases,
+                    canMigrateBareLegacyEditorWindowCaptureUtility: true) ||
                 ContainsLegacyToolAttributeList(
                     source,
                     legacyAssemblyAliases,
@@ -1738,6 +1762,118 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return value.Length == 0 ? null : value;
         }
 
+        private static (string Content, int ReplacementCount) ReplaceLegacyEditorWindowCaptureUtilityCallsInCode(
+            string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyEditorWindowCaptureUtility)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyEditorWindowCaptureUtilityCaptureWindowRegex.Matches(source);
+            StringBuilder builder = new(source.Length);
+            int sourceCopyIndex = 0;
+            int replacementCount = 0;
+            foreach (Match match in matches)
+            {
+                if (match.Index < sourceCopyIndex ||
+                    !codeTextMask.IsCodeAt(match.Index) ||
+                    !IsLegacyEditorWindowCaptureUtilityCallMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyEditorWindowCaptureUtility))
+                {
+                    continue;
+                }
+
+                int openParenthesisIndex = match.Index + match.Length - 1;
+                int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                    source,
+                    codeTextMask,
+                    openParenthesisIndex);
+                if (closingParenthesisIndex < 0)
+                {
+                    continue;
+                }
+
+                string argumentsSource = source.Substring(
+                    openParenthesisIndex + 1,
+                    closingParenthesisIndex - openParenthesisIndex - 1);
+                string[] migratedArguments = GetMigratedEditorWindowCaptureUtilityArguments(
+                    SplitAttributeArguments(argumentsSource));
+                if (migratedArguments.Length == 0)
+                {
+                    continue;
+                }
+
+                builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
+                builder.Append("(await ");
+                builder.Append(CurrentFirstPartyToolsNamespace);
+                builder.Append('.');
+                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                builder.Append('.');
+                builder.Append(EditorWindowCaptureUtilityCaptureWindowMethodName);
+                builder.Append('(');
+                builder.Append(string.Join(", ", migratedArguments));
+                builder.Append(")).texture");
+                sourceCopyIndex = closingParenthesisIndex + 1;
+                replacementCount++;
+            }
+
+            if (replacementCount == 0)
+            {
+                return (source, 0);
+            }
+
+            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
+            return (builder.ToString(), replacementCount);
+        }
+
+        private static bool IsLegacyEditorWindowCaptureUtilityCallMatch(
+            Match match,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyEditorWindowCaptureUtility)
+        {
+            Debug.Assert(match != null, "match must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            if (match.Groups["qualifier"].Success)
+            {
+                return true;
+            }
+
+            if (match.Groups["alias"].Success)
+            {
+                return legacyNamespaceAliases.Contains(match.Groups["alias"].Value);
+            }
+
+            return match.Groups["editorWindowCaptureUtility"].Success &&
+                canMigrateBareLegacyEditorWindowCaptureUtility;
+        }
+
+        private static string[] GetMigratedEditorWindowCaptureUtilityArguments(string[] arguments)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+
+            string[] trimmedArguments = arguments
+                .Select(argument => argument.Trim())
+                .Where(argument => argument.Length > 0)
+                .ToArray();
+            if (trimmedArguments.Length != 3)
+            {
+                return Array.Empty<string>();
+            }
+
+            return new[]
+            {
+                trimmedArguments[0],
+                trimmedArguments[1],
+                $"{CurrentConstantsTypeName}.{CurrentEditorFrameWaitTimeoutMemberName}",
+                trimmedArguments[2]
+            };
+        }
+
         private static bool ShouldMigrateLegacyToolInfoConstructorArguments(
             Match match,
             string[] arguments,
@@ -2226,6 +2362,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         match,
                         legacyNamespaceAliases,
                         canMigrateBareLegacyEditorDelay))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsLegacyEditorWindowCaptureUtilityCall(
+            string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyEditorWindowCaptureUtility)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyEditorWindowCaptureUtilityCaptureWindowRegex.Matches(source);
+            foreach (Match match in matches)
+            {
+                if (codeTextMask.IsCodeAt(match.Index) &&
+                    IsLegacyEditorWindowCaptureUtilityCallMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyEditorWindowCaptureUtility))
                 {
                     return true;
                 }
