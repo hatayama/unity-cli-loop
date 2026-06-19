@@ -73,7 +73,7 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/jest": "30.0.0",
-    "@types/node": "25.9.3",
+    "@types/node": "26.0.0",
     "cross-env": "10.1.0",
     "esbuild": "0.28.1",
     "eslint": "10.5.0",
