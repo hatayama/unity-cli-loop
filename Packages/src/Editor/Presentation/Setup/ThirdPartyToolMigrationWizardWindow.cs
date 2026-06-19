@@ -335,13 +335,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void HandleMigrateThirdPartyTools()
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            ThirdPartyToolMigrationResult result = default;
             _isMigrating = true;
             ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
 
             try
             {
-                ThirdPartyToolMigrationResult result =
-                    _thirdPartyToolMigrationUseCase.ApplyMigration(projectRoot);
+                result = _thirdPartyToolMigrationUseCase.ApplyMigration(projectRoot);
                 if (result.Changed)
                 {
                     AssetDatabase.Refresh();
@@ -350,8 +350,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             finally
             {
                 _isMigrating = false;
-                RefreshUI();
             }
+
+            if (ShouldRefreshAfterMigration(result))
+            {
+                RefreshUI();
+                return;
+            }
+
+            ShowNoMigrationTargetsState();
         }
 
         private void ShowNotCheckedState()
@@ -583,6 +590,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool hasActivePreview)
         {
             return !isCancellationRequested && hasActivePreview;
+        }
+
+        internal static bool ShouldRefreshAfterMigration(ThirdPartyToolMigrationResult result)
+        {
+            return !result.Changed;
         }
 
         private void CompleteMigrationPreview(CancellationToken ct)

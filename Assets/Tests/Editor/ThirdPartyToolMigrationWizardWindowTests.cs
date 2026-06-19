@@ -124,6 +124,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldApply, Is.EqualTo(expected));
         }
 
+        [TestCase(1, false)]
+        [TestCase(0, true)]
+        public void ShouldRefreshAfterMigration_ReturnsExpectedValue(
+            int migratedFileCount,
+            bool expected)
+        {
+            // Verifies that a completed migration does not immediately start another scan.
+            ThirdPartyToolMigrationResult result =
+                new(migratedFileCount, migratedFileCount, System.Array.Empty<string>());
+
+            bool shouldRefresh = ThirdPartyToolMigrationWizardWindow.ShouldRefreshAfterMigration(result);
+
+            Assert.That(shouldRefresh, Is.EqualTo(expected));
+        }
+
         [Test]
         public void PrepareForOpen_PopulatesWindowStateBeforeShowing()
         {
