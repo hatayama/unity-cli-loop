@@ -50,16 +50,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetMigrationProgressText_WhenProgressExists_ReturnsCheckCount()
+        public void GetMigrationProgressText_WhenPreviewProgressExists_ReturnsCheckCount()
         {
             // Verifies that the migration wizard reports scan progress while migration targets are unknown.
             ThirdPartyToolMigrationProgress progress = new(3, 12);
 
-            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationProgressText(progress);
+            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationProgressText(
+                progress,
+                isMigrating: false);
 
             Assert.That(
                 text,
-                Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 checks complete."));
+                Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 steps complete."));
+        }
+
+        [Test]
+        public void GetMigrationProgressText_WhenApplyProgressExists_ReturnsMigrationCount()
+        {
+            // Verifies that the migration wizard distinguishes apply progress from preview scans.
+            ThirdPartyToolMigrationProgress progress = new(4, 12);
+
+            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationProgressText(
+                progress,
+                isMigrating: true);
+
+            Assert.That(
+                text,
+                Is.EqualTo("Migrating project files for V3 custom tools...\n4/12 steps complete."));
         }
 
         [TestCase(false, false, false, "Check required")]
@@ -113,13 +130,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(false, false, false)]
         public void ShouldApplyMigrationProgress_ReturnsExpectedValue(
             bool isCancellationRequested,
-            bool hasActivePreview,
+            bool hasActiveOperation,
             bool expected)
         {
             // Verifies that stale migration progress cannot overwrite a rendered preview result.
             bool shouldApply = ThirdPartyToolMigrationWizardWindow.ShouldApplyMigrationProgress(
                 isCancellationRequested,
-                hasActivePreview);
+                hasActiveOperation);
 
             Assert.That(shouldApply, Is.EqualTo(expected));
         }

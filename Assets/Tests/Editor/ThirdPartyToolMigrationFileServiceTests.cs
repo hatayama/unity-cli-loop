@@ -2588,6 +2588,71 @@ public sealed class HelloResponse : BaseToolResponse
             }
         }
 
+        [Test]
+        public async Task ApplyMigrationAsync_WhenProjectContainsManyFiles_ReportsProgressAndWritesChanges()
+        {
+            // Verifies that setup wizard migration applies file writes after reporting incremental progress.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                for (int i = 0; i < 48; i++)
+                {
+                    File.WriteAllText(
+                        Path.Combine(toolDirectory, $"Plain{i}.cs"),
+                        $"public sealed class Plain{i} {{}}");
+                }
+
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                List<ThirdPartyToolMigrationProgress> reports = new();
+                RecordingMigrationProgress progress = new(reports);
+                ThirdPartyToolMigrationFileService service = new();
+
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(toolPath), Does.Contain("UnityCliLoopTool<HelloSchema, HelloResponse>"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(reports.Count, Is.GreaterThan(1));
+                Assert.That(
+                    reports.Any(report =>
+                        report.TotalItemCount > 0 &&
+                        report.ProcessedItemCount > 0 &&
+                        report.ProcessedItemCount < report.TotalItemCount),
+                    Is.True);
+                ThirdPartyToolMigrationProgress lastReport = reports[reports.Count - 1];
+                Assert.That(lastReport.ProcessedItemCount, Is.EqualTo(lastReport.TotalItemCount));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
         private static string CreateProjectRoot()
         {
             string projectRoot = Path.Combine(

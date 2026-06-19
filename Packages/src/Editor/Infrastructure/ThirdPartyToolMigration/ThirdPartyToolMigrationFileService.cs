@@ -144,6 +144,43 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 plan.ChangedFilePaths.ToArray());
         }
 
+        public async Task<ThirdPartyToolMigrationResult> ApplyMigrationAsync(
+            string projectRoot,
+            IProgress<ThirdPartyToolMigrationProgress> progress,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(progress != null, "progress must not be null");
+
+            string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
+            InvalidatePreviewCache();
+            MigrationPlan plan = await CreateMigrationPlanAsync(normalizedProjectRoot, progress, ct);
+            if (ct.IsCancellationRequested)
+            {
+                return new ThirdPartyToolMigrationResult(0, 0, Array.Empty<string>());
+            }
+
+            for (int index = 0; index < plan.Changes.Count; index++)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return new ThirdPartyToolMigrationResult(0, 0, Array.Empty<string>());
+                }
+
+                MigrationFileChange change = plan.Changes[index];
+                WriteMigrationFile(change.FilePath, change.Content);
+                if ((index + 1) % PreviewYieldBatchSize == 0)
+                {
+                    await Task.Yield();
+                }
+            }
+
+            return new ThirdPartyToolMigrationResult(
+                plan.ChangedFilePaths.Count,
+                plan.ReplacementCount,
+                plan.ChangedFilePaths.ToArray());
+        }
+
         internal void InvalidatePreviewCache()
         {
             lock (_previewCacheLock)
