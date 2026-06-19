@@ -205,6 +205,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"await\s+(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureWindowMethodName}\s*\(",
                 RegexOptions.Compiled);
 
+        private static readonly Regex LegacyEditorWindowCaptureUtilityCaptureWindowInvocationRegex =
+            new(
+                $@"(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureWindowMethodName}\s*\(",
+                RegexOptions.Compiled);
+
         private static readonly Regex LegacyEditorWindowCaptureUtilityCaptureGameRenderingRegex =
             new(
                 $@"await\s+(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureGameRenderingMethodName}\s*\(",
@@ -2393,9 +2398,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     source,
                     legacyNamespaceAliases,
                     canMigrateBareLegacyEditorWindowCaptureUtility);
+            (string captureWindowTaskContent, int captureWindowTaskReplacementCount) =
+                ReplaceLegacyEditorWindowCaptureUtilityCaptureWindowTaskCallsInCode(
+                    captureWindowContent,
+                    legacyNamespaceAliases,
+                    canMigrateBareLegacyEditorWindowCaptureUtility);
             (string captureGameRenderingContent, int captureGameRenderingReplacementCount) =
                 ReplaceLegacyEditorWindowCaptureUtilityCaptureGameRenderingCallsInCode(
-                    captureWindowContent,
+                    captureWindowTaskContent,
                     legacyNamespaceAliases,
                     canMigrateBareLegacyEditorWindowCaptureUtility);
             int deconstructionReplacementCount = 0;
@@ -2404,7 +2414,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ref deconstructionReplacementCount);
             return (
                 migratedContent,
-                captureWindowReplacementCount + captureGameRenderingReplacementCount + deconstructionReplacementCount);
+                captureWindowReplacementCount +
+                captureWindowTaskReplacementCount +
+                captureGameRenderingReplacementCount +
+                deconstructionReplacementCount);
         }
 
         private static (string Content, int ReplacementCount)
@@ -2456,9 +2469,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 (string configureAwaitSuffix, int replacementEndIndex) =
                     ReadOptionalConfigureAwaitSuffix(source, codeTextMask, closingParenthesisIndex + 1);
+                bool shouldExtractTexture = ShouldExtractCaptureWindowTexture(
+                    source,
+                    codeTextMask,
+                    match.Index,
+                    replacementEndIndex);
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                builder.Append("(await ");
+                builder.Append(shouldExtractTexture ? "(await " : "await ");
                 builder.Append(CurrentFirstPartyToolsNamespace);
                 builder.Append('.');
                 builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
@@ -2468,8 +2486,83 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 builder.Append(string.Join(", ", migratedArguments));
                 builder.Append(')');
                 builder.Append(configureAwaitSuffix);
-                builder.Append(").texture");
+                if (shouldExtractTexture)
+                {
+                    builder.Append(").texture");
+                }
+
                 sourceCopyIndex = replacementEndIndex;
+                replacementCount++;
+            }
+
+            if (replacementCount == 0)
+            {
+                return (source, 0);
+            }
+
+            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
+            return (builder.ToString(), replacementCount);
+        }
+
+        private static (string Content, int ReplacementCount)
+            ReplaceLegacyEditorWindowCaptureUtilityCaptureWindowTaskCallsInCode(
+                string source,
+                string[] legacyNamespaceAliases,
+                bool canMigrateBareLegacyEditorWindowCaptureUtility)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyEditorWindowCaptureUtilityCaptureWindowInvocationRegex.Matches(source);
+            StringBuilder builder = new(source.Length);
+            int sourceCopyIndex = 0;
+            int replacementCount = 0;
+            foreach (Match match in matches)
+            {
+                if (match.Index < sourceCopyIndex ||
+                    !codeTextMask.IsCodeAt(match.Index) ||
+                    PreviousCodeTokenEquals(source, match.Index, "await") ||
+                    !IsLegacyEditorWindowCaptureUtilityCallMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyEditorWindowCaptureUtility))
+                {
+                    continue;
+                }
+
+                int openParenthesisIndex = match.Index + match.Length - 1;
+                int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                    source,
+                    codeTextMask,
+                    openParenthesisIndex);
+                if (closingParenthesisIndex < 0)
+                {
+                    continue;
+                }
+
+                string argumentsSource = source.Substring(
+                    openParenthesisIndex + 1,
+                    closingParenthesisIndex - openParenthesisIndex - 1);
+                string[] migratedArguments = GetMigratedEditorWindowCaptureUtilityArguments(
+                    SplitAttributeArguments(argumentsSource),
+                    GetMigratedEditorFrameWaitTimeoutExpression(match));
+                if (migratedArguments.Length == 0)
+                {
+                    continue;
+                }
+
+                builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
+                builder.Append(CurrentFirstPartyToolsNamespace);
+                builder.Append('.');
+                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                builder.Append('.');
+                builder.Append(EditorWindowCaptureUtilityCaptureWindowMethodName);
+                builder.Append('(');
+                builder.Append(string.Join(", ", migratedArguments));
+                builder.Append(").ContinueWith(__unityCliLoopCaptureTask => ");
+                builder.Append("__unityCliLoopCaptureTask.GetAwaiter().GetResult().texture)");
+                sourceCopyIndex = closingParenthesisIndex + 1;
                 replacementCount++;
             }
 
@@ -2617,6 +2710,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return match.Groups["editorWindowCaptureUtility"].Success &&
                 canMigrateBareLegacyEditorWindowCaptureUtility;
+        }
+
+        private static bool ShouldExtractCaptureWindowTexture(
+            string source,
+            CodeTextMask codeTextMask,
+            int awaitIndex,
+            int expressionEndIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(awaitIndex >= 0, "awaitIndex must not be negative");
+            Debug.Assert(expressionEndIndex >= 0, "expressionEndIndex must not be negative");
+
+            int nextCodeIndex = ReadNextNonWhitespaceIndex(source, expressionEndIndex);
+            if (nextCodeIndex >= source.Length || source[nextCodeIndex] != ';' || !codeTextMask.IsCodeAt(nextCodeIndex))
+            {
+                return true;
+            }
+
+            if (PreviousCodeTokenEquals(source, awaitIndex, "return"))
+            {
+                return true;
+            }
+
+            char previousCharacter = ReadPreviousNonWhitespaceCharacter(source, awaitIndex);
+            return previousCharacter == '=';
         }
 
         private static (string ConfigureAwaitSuffix, int EndIndex) ReadOptionalConfigureAwaitSuffix(
@@ -3739,6 +3857,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return source.Substring(index + 1, identifierEndIndex - index - 1);
+        }
+
+        private static int ReadNextNonWhitespaceIndex(string source, int startIndex)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(startIndex >= 0, "startIndex must not be negative");
+
+            for (int index = startIndex; index < source.Length; index++)
+            {
+                if (char.IsWhiteSpace(source[index]))
+                {
+                    continue;
+                }
+
+                return index;
+            }
+
+            return source.Length;
         }
 
         private static char ReadNextNonWhitespaceCharacter(string source, int startIndex)

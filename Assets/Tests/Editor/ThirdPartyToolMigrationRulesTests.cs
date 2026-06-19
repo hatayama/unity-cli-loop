@@ -516,6 +516,63 @@ public sealed class ScreenshotTool
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCaptureWindowAwaitIgnoresResult_KeepsStatementValid()
+        {
+            // Verifies that ignored capture results do not become invalid property-access statements.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class ScreenshotTool
+{
+    public async Task CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+        await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct).ConfigureAwait(false);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "await io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct);"));
+            Assert.That(result.Content, Does.Contain(
+                "await io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct).ConfigureAwait(false);"));
+            Assert.That(result.Content, Does.Not.Contain(".texture;"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenCaptureWindowTaskIsReturned_MapsTaskTextureResult()
+        {
+            // Verifies that non-awaited legacy capture tasks keep their old Task<Texture2D> shape.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class ScreenshotTool
+{
+    public Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct).ContinueWith(__unityCliLoopCaptureTask => __unityCliLoopCaptureTask.GetAwaiter().GetResult().texture)"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "return io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyScreenshotHelpersAreUsed_RewritesFirstPartyReferences()
         {
             // Verifies that screenshot helper types moved out of the public tool contract namespace are fully qualified.
