@@ -454,6 +454,64 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
+        public void ApplyMigration_WhenLocalUIElementInfoWasAlreadyQualified_RepairsSource()
+        {
+            // Verifies that project-wide migration repairs local DTO references qualified by an older migration pass.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CurrentElementTool.cs");
+                File.WriteAllText(toolPath, @"using System.Collections.Generic;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class CurrentElementTool : UnityCliLoopTool<ElementSchema, ElementResponse>
+{
+    private List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> Classify()
+    {
+        List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> elements = new();
+        elements.Add(CreateElementInfo());
+        return elements;
+    }
+
+    private io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo CreateElementInfo()
+    {
+        return new UIElementInfo();
+    }
+}
+
+public sealed class ElementSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class ElementResponse : UnityCliLoopToolResponse
+{
+}
+
+public sealed class UIElementInfo
+{
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationPreview preview = service.PreviewMigration(projectRoot);
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+
+                Assert.That(preview.FileCount, Is.EqualTo(1));
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(migratedSource, Does.Contain("private List<UIElementInfo> Classify()"));
+                Assert.That(migratedSource, Does.Contain("private UIElementInfo CreateElementInfo()"));
+                Assert.That(migratedSource, Does.Not.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenCurrentRegistrarExistsWithToolContractsAsmdefReference_AddsApplicationReference()
         {
             // Verifies that already-replaced asmdef refs still receive missing current assembly dependencies.

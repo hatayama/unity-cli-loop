@@ -458,6 +458,108 @@ public sealed class ScreenshotHelper
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenFileDeclaresLocalUIElementInfo_KeepsLocalReferences()
+        {
+            // Verifies that project DTOs sharing first-party screenshot names are not rewritten.
+            string source = @"using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class LocalTool : UnityCliLoopTool<LocalSchema, LocalResponse>
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+
+    private (List<UIElementInfo> clickableElements, List<UIElementInfo> draggableElements) Classify()
+    {
+        List<UIElementInfo> clickableElements = new();
+        List<UIElementInfo> draggableElements = new();
+        UIElementInfo elementInfo = CreateElementInfo();
+        clickableElements.Add(elementInfo);
+        return (clickableElements, draggableElements);
+    }
+
+    private UIElementInfo CreateElementInfo()
+    {
+        return new UIElementInfo();
+    }
+}
+
+public sealed class LocalSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class LocalResponse : UnityCliLoopToolResponse
+{
+}
+
+public sealed class UIElementInfo
+{
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+            Assert.That(result.Content, Does.Contain("private UIElementInfo CreateElementInfo()"));
+            Assert.That(result.Content, Does.Contain("List<UIElementInfo> clickableElements"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLocalUIElementInfoWasAlreadyQualified_RepairsLocalReferences()
+        {
+            // Verifies that rerunning migration repairs local DTO references qualified by an older migration pass.
+            string source = @"using System.Collections.Generic;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class LocalTool : UnityCliLoopTool<LocalSchema, LocalResponse>
+{
+    private List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> Classify()
+    {
+        List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> elements = new();
+        elements.Add(CreateElementInfo());
+        return elements;
+    }
+
+    private io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo CreateElementInfo()
+    {
+        return new UIElementInfo();
+    }
+}
+
+public sealed class LocalSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class LocalResponse : UnityCliLoopToolResponse
+{
+}
+
+public sealed class UIElementInfo
+{
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("private List<UIElementInfo> Classify()"));
+            Assert.That(result.Content, Does.Contain("List<UIElementInfo> elements = new();"));
+            Assert.That(result.Content, Does.Contain("private UIElementInfo CreateElementInfo()"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyGameRenderingCaptureIsUsed_RewritesSignatureAndDiscard()
         {
             // Verifies that old rendering capture deconstruction keeps compiling after the V3 timeout result.

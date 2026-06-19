@@ -1635,6 +1635,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string migratedContent = source;
             foreach (TypeReplacementRule rule in FirstPartyScreenshotTypeReplacementRules)
             {
+                bool hasLocalTypeDeclaration = DeclaresLocalType(migratedContent, rule.LegacyName);
+                if (hasLocalTypeDeclaration)
+                {
+                    Regex currentFullyQualifiedRegex = new(
+                        $@"(?:(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.){Regex.Escape(rule.CurrentName)}\b",
+                        RegexOptions.Compiled);
+                    migratedContent = ReplaceRegexInCode(
+                        migratedContent,
+                        currentFullyQualifiedRegex,
+                        _ => rule.CurrentName,
+                        ref replacementCount);
+                }
+
                 Regex fullyQualifiedRegex = new(
                     $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
                     RegexOptions.Compiled);
@@ -1663,6 +1676,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     migratedContent,
                     unqualifiedRegex,
                     match => canMigrateBareLegacyFirstPartyScreenshotApi &&
+                        !hasLocalTypeDeclaration &&
                         ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
                             ? $"{CurrentFirstPartyToolsNamespace}.{rule.CurrentName}"
                             : match.Value,
@@ -3329,6 +3343,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
             foreach (TypeReplacementRule rule in FirstPartyScreenshotTypeReplacementRules)
             {
+                bool hasLocalTypeDeclaration = DeclaresLocalType(source, rule.LegacyName);
                 Regex fullyQualifiedRegex = new(
                     $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
                     RegexOptions.Compiled);
@@ -3346,6 +3361,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 if (canMigrateBareLegacyFirstPartyScreenshotApi &&
+                    !hasLocalTypeDeclaration &&
                     ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.LegacyName))
                 {
                     return true;
@@ -3364,15 +3380,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
             foreach (TypeReplacementRule rule in FirstPartyScreenshotTypeReplacementRules)
             {
+                bool hasLocalTypeDeclaration = DeclaresLocalType(source, rule.CurrentName);
                 Regex fullyQualifiedRegex = new(
                     $@"(?:(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.){Regex.Escape(rule.CurrentName)}\b",
                     RegexOptions.Compiled);
-                if (RegexMatchesCode(source, fullyQualifiedRegex))
+                if (!hasLocalTypeDeclaration && RegexMatchesCode(source, fullyQualifiedRegex))
                 {
                     return true;
                 }
 
                 if (canUseBareCurrentFirstPartyScreenshotType &&
+                    !hasLocalTypeDeclaration &&
                     ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.CurrentName))
                 {
                     return true;
@@ -3589,6 +3607,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return false;
+        }
+
+        private static bool DeclaresLocalType(string source, string typeName)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(typeName), "typeName must not be null or empty");
+
+            Regex localTypeDeclarationRegex = new(
+                $@"\b(?:class|struct|interface|enum|record(?:\s+(?:class|struct))?)\s+{Regex.Escape(typeName)}\b",
+                RegexOptions.Compiled);
+            return RegexMatchesCode(source, localTypeDeclarationRegex);
         }
 
         private static bool IsLegacyAssemblyScopedTypeDeclaration(string source, int typeNameIndex)
