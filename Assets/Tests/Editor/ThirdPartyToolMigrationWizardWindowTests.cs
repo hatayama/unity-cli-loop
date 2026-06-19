@@ -124,11 +124,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldApply, Is.EqualTo(expected));
         }
 
-        [TestCase(1, false)]
-        [TestCase(0, true)]
-        public void ShouldRefreshAfterMigration_ReturnsExpectedValue(
-            int migratedFileCount,
-            bool expected)
+        [TestCase(1)]
+        [TestCase(0)]
+        public void ShouldRefreshAfterMigration_WhenMigrationCompletes_ReturnsFalse(int migratedFileCount)
         {
             // Verifies that a completed migration does not immediately start another scan.
             ThirdPartyToolMigrationResult result =
@@ -136,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             bool shouldRefresh = ThirdPartyToolMigrationWizardWindow.ShouldRefreshAfterMigration(result);
 
-            Assert.That(shouldRefresh, Is.EqualTo(expected));
+            Assert.That(shouldRefresh, Is.False);
         }
 
         [Test]

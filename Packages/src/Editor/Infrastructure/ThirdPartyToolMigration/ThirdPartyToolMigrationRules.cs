@@ -25,11 +25,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal const string LegacyRuntimeAssemblyName = "uLoopMCP.Runtime";
         private const string CurrentApplicationAssemblyName = "UnityCLILoop.Application";
         private const string CurrentDomainAssemblyName = "UnityCLILoop.Domain";
+        private const string CurrentFirstPartyToolsScreenshotAssemblyName =
+            "UnityCLILoop.FirstPartyTools.Screenshot.Editor";
         private const string CurrentRuntimeAssemblyName = "UnityCLILoop.Runtime";
         private const string CurrentToolContractsAssemblyName = "UnityCLILoop.ToolContracts";
         internal const string LegacyEditorAssemblyGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
         internal const string CurrentApplicationGuidReference = "GUID:214998e563c124e8a88199b2dd1f522d";
         internal const string CurrentDomainGuidReference = "GUID:5c4588558a3624eacbce0f50007cf1eb";
+        internal const string CurrentFirstPartyToolsScreenshotGuidReference =
+            "GUID:a0bdbd2c5705643fbb9aef9fac8fd46a";
         internal const string CurrentRuntimeGuidReference = "GUID:c956a21f824994ef087b6de566690b3d";
         internal const string CurrentToolContractsGuidReference = "GUID:fc3fd32eddbee40e39c2d76dc184957b";
         private const string DescriptionAttributeArgumentName = "Description";
@@ -39,10 +43,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string CurrentSecuritySettingTypeName = "UnityCliLoopSecuritySetting";
         private const string LegacyEditorDelayTypeName = "EditorDelay";
         private const string LegacyEditorDelayMethodName = "DelayFrame";
+        private const string LegacyTimerDelayTypeName = "TimerDelay";
+        private const string LegacyCancellationTokenArgumentName = "cancellationToken";
+        private const string CurrentCancellationTokenArgumentName = "ct";
+        private const string LegacyPlayerLoopTimingTypeName = "PlayerLoopTiming";
+        private const string LegacyTimingArgumentName = "timing";
+        private const string LegacyMainThreadSwitcherTypeName = "MainThreadSwitcher";
+        private const string LegacyMainThreadSwitcherSwitchMethodName = "SwitchToMainThread";
         private const string CurrentEditorFrameWaiterTypeName = "EditorFrameWaiter";
         private const string CurrentEditorFrameWaiterMethodName = "WaitFramesOrTimeoutAsync";
         private const string LegacyEditorWindowCaptureUtilityTypeName = "EditorWindowCaptureUtility";
         private const string EditorWindowCaptureUtilityCaptureWindowMethodName = "CaptureWindowAsync";
+        private const string EditorWindowCaptureUtilityCaptureGameRenderingMethodName =
+            "CaptureGameRenderingAsync";
         private const string CurrentConstantsTypeName = "UnityCliLoopConstants";
         private const string CurrentEditorFrameWaitTimeoutMemberName = "EDITOR_FRAME_WAIT_TIMEOUT_MS";
         private const int MinimumRawStringDelimiterQuoteCount = 3;
@@ -76,6 +89,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentNamespace)}(?=\.|;|\s|$)",
                 RegexOptions.Compiled);
 
+        private static readonly Regex CurrentApplicationNamespaceRegex =
+            new(
+                $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentApplicationNamespace)}(?=\.|;|\s|$)",
+                RegexOptions.Compiled);
+
+        private static readonly Regex CurrentFirstPartyToolsNamespaceRegex =
+            new(
+                $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}(?=\.|;|\s|$)",
+                RegexOptions.Compiled);
+
         private static readonly Regex CurrentDomainMetadataRegex =
             new(
                 $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\.ToolInfo\b",
@@ -89,6 +112,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly Regex CurrentDomainGlobalUsingRegex =
             new(
                 $@"\bglobal\s+using\s+(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\s*;",
+                RegexOptions.Compiled);
+
+        private static readonly Regex CurrentFirstPartyToolsGlobalUsingRegex =
+            new(
+                $@"\bglobal\s+using\s+(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\s*;",
                 RegexOptions.Compiled);
 
         private static readonly Regex LegacyGlobalNamespaceAliasRegex =
@@ -177,6 +205,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"await\s+(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureWindowMethodName}\s*\(",
                 RegexOptions.Compiled);
 
+        private static readonly Regex LegacyEditorWindowCaptureUtilityCaptureGameRenderingRegex =
+            new(
+                $@"await\s+(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureGameRenderingMethodName}\s*\(",
+                RegexOptions.Compiled);
+
+        private static readonly Regex LegacyTimerDelayInvocationRegex =
+            new(
+                $@"(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyTimerDelayTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyTimerDelayTypeName}|(?<timerDelay>{LegacyTimerDelayTypeName}))\s*\.\s*(?<method>Wait|WaitThenExecuteOnMainThread)\s*\(",
+                RegexOptions.Compiled);
+
+        private static readonly Regex LegacyMainThreadSwitcherSwitchRegex =
+            new(
+                $@"(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyMainThreadSwitcherTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyMainThreadSwitcherTypeName}|(?<mainThreadSwitcher>{LegacyMainThreadSwitcherTypeName}))\s*\.\s*{LegacyMainThreadSwitcherSwitchMethodName}\s*\(",
+                RegexOptions.Compiled);
+
+        private static readonly Regex CurrentCaptureGameRenderingDeconstructionRegex =
+            new(
+                $@"\((?<items>[^()]*)\)\s*=\s*await\s+{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.{LegacyEditorWindowCaptureUtilityTypeName}\.{EditorWindowCaptureUtilityCaptureGameRenderingMethodName}\s*\(",
+                RegexOptions.Compiled);
+
         private static readonly TypeReplacementRule[] ToolContractTypeReplacementRules =
         {
             new("ToolParameterSchemaGenerator", "UnityCliLoopToolParameterSchemaGenerator"),
@@ -194,6 +242,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             new("ServiceResult", "ServiceResult"),
             new("ToolSettingsCatalogItem", "ToolSettingsCatalogItem")
+        };
+
+        private static readonly TypeReplacementRule[] ApplicationTypeReplacementRules =
+        {
+            new("MainThreadSwitcher", "MainThreadSwitcher"),
+            new("SwitchToMainThreadAwaitable", "SwitchToMainThreadAwaitable")
+        };
+
+        private static readonly TypeReplacementRule[] FirstPartyScreenshotTypeReplacementRules =
+        {
+            new("EditorWindowCaptureUtility", "EditorWindowCaptureUtility"),
+            new("WindowMatchMode", "WindowMatchMode"),
+            new("CaptureMode", "CaptureMode"),
+            new("ScreenshotSchema", "ScreenshotSchema"),
+            new("ScreenshotResponse", "ScreenshotResponse"),
+            new("ScreenshotInfo", "ScreenshotInfo"),
+            new("UIElementInfo", "UIElementInfo")
         };
 
         private static readonly ReplacementRule[] CSharpReplacementRules =
@@ -236,8 +301,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string migratedContent = source;
             string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
             bool hasLegacyNamespaceUsage = RegexMatchesCode(source, LegacyNamespaceRegex);
+            bool hasCurrentApplicationNamespaceUsage = RegexMatchesCode(source, CurrentApplicationNamespaceRegex);
             bool hasCurrentDomainNamespaceUsage = RegexMatchesCode(source, CurrentDomainNamespaceRegex);
             bool hasCurrentToolContractsNamespaceUsage = RegexMatchesCode(source, CurrentToolContractsNamespaceRegex);
+            bool hasCurrentFirstPartyToolsNamespaceUsage =
+                RegexMatchesCode(source, CurrentFirstPartyToolsNamespaceRegex);
             bool canMigrateBareLegacyToolAttribute =
                 hasLegacyAssemblySource ||
                 hasLegacyNamespaceUsage ||
@@ -245,6 +313,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool canMigrateBareLegacyEditorWindowCaptureUtility =
                 canMigrateBareLegacyToolAttribute ||
                 hasCurrentToolContractsNamespaceUsage;
+            bool canMigrateBareLegacyFirstPartyScreenshotApi =
+                canMigrateBareLegacyToolAttribute ||
+                hasCurrentToolContractsNamespaceUsage ||
+                hasCurrentFirstPartyToolsNamespaceUsage;
+            bool canMigrateBareLegacyApplicationApi =
+                canMigrateBareLegacyToolAttribute ||
+                hasCurrentToolContractsNamespaceUsage ||
+                hasCurrentApplicationNamespaceUsage;
             bool canMigrateBareLegacyToolInfoConstructor =
                 canMigrateBareLegacyToolAttribute;
             bool canMigrateAmbiguousBareLegacyToolInfoConstructor =
@@ -281,6 +357,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     canMigrateBareLegacyToolAttribute);
             migratedContent = editorDelayMigratedContent;
             replacementCount += editorDelayReplacementCount;
+            (string timerDelayMigratedContent, int timerDelayReplacementCount) =
+                ReplaceLegacyTimerDelayNamedArgumentsInCode(
+                    migratedContent,
+                    legacyNamespaceAliases,
+                    canMigrateBareLegacyToolAttribute || hasCurrentToolContractsNamespaceUsage);
+            migratedContent = timerDelayMigratedContent;
+            replacementCount += timerDelayReplacementCount;
+            (string mainThreadSwitcherMigratedContent, int mainThreadSwitcherReplacementCount) =
+                ReplaceLegacyMainThreadSwitcherCallsInCode(
+                    migratedContent,
+                    legacyNamespaceAliases,
+                    canMigrateBareLegacyApplicationApi);
+            migratedContent = mainThreadSwitcherMigratedContent;
+            replacementCount += mainThreadSwitcherReplacementCount;
             (string editorWindowCaptureMigratedContent, int editorWindowCaptureReplacementCount) =
                 ReplaceLegacyEditorWindowCaptureUtilityCallsInCode(
                     migratedContent,
@@ -288,6 +378,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     canMigrateBareLegacyEditorWindowCaptureUtility);
             migratedContent = editorWindowCaptureMigratedContent;
             replacementCount += editorWindowCaptureReplacementCount;
+            migratedContent = ReplaceLegacyFirstPartyScreenshotTypeNamesInCode(
+                migratedContent,
+                legacyNamespaceAliases,
+                canMigrateBareLegacyFirstPartyScreenshotApi,
+                ref replacementCount);
+            migratedContent = ReplaceLegacyApplicationTypeNamesInCode(
+                migratedContent,
+                legacyNamespaceAliases,
+                canMigrateBareLegacyApplicationApi,
+                ref replacementCount);
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
@@ -348,7 +448,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool hasLegacyCSharpSource,
             bool requiresToolContractsReference,
             bool requiresApplicationReference,
-            bool requiresDomainReference)
+            bool requiresDomainReference,
+            bool requiresFirstPartyScreenshotReference)
         {
             Debug.Assert(source != null, "source must not be null");
 
@@ -371,7 +472,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     hasLegacyCSharpSource,
                     requiresToolContractsReference,
                     requiresApplicationReference,
-                    requiresDomainReference);
+                    requiresDomainReference,
+                    requiresFirstPartyScreenshotReference);
                 bool referenceChanged = migratedReferenceItems.Length != 1 ||
                     !string.Equals(migratedReferenceItems[0], reference, StringComparison.Ordinal);
                 if (referenceChanged)
@@ -397,6 +499,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 hasLegacyCSharpSource || requiresToolContractsReference,
                 requiresApplicationReference,
                 requiresDomainReference,
+                requiresFirstPartyScreenshotReference,
                 ref replacementCount);
 
             if (replacementCount == 0)
@@ -425,9 +528,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ContainsTextFragment(source, CurrentNamespace) ||
                 ContainsTextFragment(source, CurrentApplicationNamespace) ||
                 ContainsTextFragment(source, CurrentDomainNamespace) ||
+                ContainsTextFragment(source, CurrentFirstPartyToolsNamespace) ||
                 ContainsTextFragment(source, "McpTool") ||
                 ContainsTextFragment(source, "CustomToolManager") ||
                 ContainsTextFragment(source, LegacyEditorDelayTypeName) ||
+                ContainsTextFragment(source, LegacyTimerDelayTypeName) ||
+                ContainsTextFragment(source, LegacyMainThreadSwitcherTypeName) ||
+                ContainsTextFragment(source, LegacyPlayerLoopTimingTypeName) ||
                 ContainsTextFragment(source, LegacyEditorWindowCaptureUtilityTypeName) ||
                 ContainsTextFragment(source, "UnityCliLoopToolRegistrar") ||
                 ContainsTextFragment(source, "ToolInfo"))
@@ -445,6 +552,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
+            {
+                if (ContainsTextFragment(source, rule.LegacyName) ||
+                    ContainsTextFragment(source, rule.CurrentName))
+                {
+                    return true;
+                }
+            }
+
+            foreach (TypeReplacementRule rule in ApplicationTypeReplacementRules)
+            {
+                if (ContainsTextFragment(source, rule.LegacyName) ||
+                    ContainsTextFragment(source, rule.CurrentName))
+                {
+                    return true;
+                }
+            }
+
+            foreach (TypeReplacementRule rule in FirstPartyScreenshotTypeReplacementRules)
             {
                 if (ContainsTextFragment(source, rule.LegacyName) ||
                     ContainsTextFragment(source, rule.CurrentName))
@@ -528,6 +653,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, CurrentRegistrarRegex);
+        }
+
+        internal static bool ContainsLegacyApplicationApiForAssembly(
+            string source,
+            bool hasLegacyAssemblySource,
+            string[] legacyAssemblyAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
+
+            string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
+            return ContainsLegacyApplicationReference(
+                source,
+                hasLegacyAssemblySource,
+                legacyNamespaceAliases);
+        }
+
+        internal static bool ContainsCurrentApplicationApi(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            bool hasCurrentApplicationNamespaceUsage = RegexMatchesCode(source, CurrentApplicationNamespaceRegex);
+            return ContainsCurrentApplicationReference(source, hasCurrentApplicationNamespaceUsage);
         }
 
         internal static bool ContainsRegistrarDomainReturnApi(string source)
@@ -619,6 +767,48 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 (canUseBareCurrentDomainType && RegexMatchesCode(source, LegacyDomainMetadataRegex));
         }
 
+        internal static bool ContainsLegacyFirstPartyScreenshotApiForAssembly(
+            string source,
+            bool hasLegacyAssemblySource,
+            string[] legacyAssemblyAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
+
+            string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
+            return ContainsLegacyFirstPartyScreenshotReference(
+                source,
+                hasLegacyAssemblySource,
+                legacyNamespaceAliases);
+        }
+
+        internal static bool ContainsCurrentFirstPartyScreenshotApi(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            bool hasCurrentFirstPartyToolsNamespaceUsage =
+                RegexMatchesCode(source, CurrentFirstPartyToolsNamespaceRegex);
+            return ContainsCurrentFirstPartyScreenshotApiForAssembly(
+                source,
+                hasCurrentFirstPartyToolsNamespaceUsage);
+        }
+
+        internal static bool ContainsCurrentFirstPartyScreenshotApiForAssembly(
+            string source,
+            bool hasAssemblyScopedCurrentFirstPartyToolsUsing)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            bool hasCurrentFirstPartyToolsNamespaceUsage =
+                RegexMatchesCode(source, CurrentFirstPartyToolsNamespaceRegex);
+            bool canUseBareCurrentFirstPartyScreenshotType =
+                hasAssemblyScopedCurrentFirstPartyToolsUsing ||
+                hasCurrentFirstPartyToolsNamespaceUsage;
+            return ContainsCurrentFirstPartyScreenshotReference(
+                source,
+                canUseBareCurrentFirstPartyScreenshotType);
+        }
+
         internal static bool ContainsLegacyAssemblyScopedApi(string source, string[] legacyAssemblyAliases)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -636,6 +826,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     source,
                     legacyAssemblyAliases,
                     canMigrateBareLegacyEditorWindowCaptureUtility: true) ||
+                ContainsLegacyTimerDelayInvocation(
+                    source,
+                    legacyAssemblyAliases,
+                    canMigrateBareLegacyTimerDelay: true) ||
+                ContainsLegacyApplicationReference(
+                    source,
+                    true,
+                    legacyAssemblyAliases) ||
+                ContainsLegacyFirstPartyScreenshotReference(
+                    source,
+                    true,
+                    legacyAssemblyAliases) ||
                 ContainsLegacyToolAttributeList(
                     source,
                     legacyAssemblyAliases,
@@ -654,6 +856,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return RegexMatchesCode(source, CurrentDomainGlobalUsingRegex);
+        }
+
+        internal static bool ContainsCurrentFirstPartyToolsGlobalUsing(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, CurrentFirstPartyToolsGlobalUsingRegex);
         }
 
         internal static string[] GetLegacyGlobalNamespaceAliases(string source)
@@ -722,11 +931,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool hasLegacyCSharpSource,
             bool requiresToolContractsReference,
             bool requiresApplicationReference,
-            bool requiresDomainReference)
+            bool requiresDomainReference,
+            bool requiresFirstPartyScreenshotReference)
         {
             if (string.Equals(reference, LegacyEditorAssemblyName, StringComparison.Ordinal))
             {
-                return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
+                return GetMigratedLegacyEditorReferences(
+                    requiresApplicationReference,
+                    requiresDomainReference,
+                    requiresFirstPartyScreenshotReference);
             }
 
             if (string.Equals(reference, LegacyRuntimeAssemblyName, StringComparison.Ordinal))
@@ -737,7 +950,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (hasLegacyCSharpSource &&
                 string.Equals(reference, LegacyEditorAssemblyGuidReference, StringComparison.Ordinal))
             {
-                return GetMigratedLegacyEditorReferences(requiresApplicationReference, requiresDomainReference);
+                return GetMigratedLegacyEditorReferences(
+                    requiresApplicationReference,
+                    requiresDomainReference,
+                    requiresFirstPartyScreenshotReference);
             }
 
             return new[] { reference };
@@ -745,7 +961,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static string[] GetMigratedLegacyEditorReferences(
             bool requiresApplicationReference,
-            bool requiresDomainReference)
+            bool requiresDomainReference,
+            bool requiresFirstPartyScreenshotReference)
         {
             List<string> references = new()
             {
@@ -762,6 +979,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 references.Add(CurrentDomainGuidReference);
             }
 
+            if (requiresFirstPartyScreenshotReference)
+            {
+                references.Add(CurrentFirstPartyToolsScreenshotGuidReference);
+            }
+
             return references.ToArray();
         }
 
@@ -771,6 +993,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool requiresToolContractsReference,
             bool requiresApplicationReference,
             bool requiresDomainReference,
+            bool requiresFirstPartyScreenshotReference,
             ref int replacementCount)
         {
             Debug.Assert(references != null, "references must not be null");
@@ -800,6 +1023,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     references,
                     addedReferences,
                     CurrentDomainGuidReference,
+                    ref replacementCount);
+            }
+
+            if (requiresFirstPartyScreenshotReference)
+            {
+                AddRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentFirstPartyToolsScreenshotGuidReference,
                     ref replacementCount);
             }
         }
@@ -858,6 +1090,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     CurrentDomainGuidReference))
             {
                 return CurrentDomainAssemblyName;
+            }
+
+            if (IsCurrentAsmdefReference(
+                    reference,
+                    CurrentFirstPartyToolsScreenshotAssemblyName,
+                    CurrentFirstPartyToolsScreenshotGuidReference))
+            {
+                return CurrentFirstPartyToolsScreenshotAssemblyName;
             }
 
             return reference;
@@ -1334,6 +1574,104 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return migratedContent;
         }
 
+        private static string ReplaceLegacyApplicationTypeNamesInCode(
+            string source,
+            string[] aliases,
+            bool canMigrateBareLegacyApplicationApi,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            string migratedContent = source;
+            foreach (TypeReplacementRule rule in ApplicationTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    fullyQualifiedRegex,
+                    _ => $"{CurrentApplicationNamespace}.{rule.CurrentName}",
+                    ref replacementCount);
+
+                foreach (string alias in aliases)
+                {
+                    Regex aliasRegex = new(
+                        $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(rule.LegacyName)}\b",
+                        RegexOptions.Compiled);
+                    migratedContent = ReplaceRegexInCode(
+                        migratedContent,
+                        aliasRegex,
+                        _ => $"{CurrentApplicationNamespace}.{rule.CurrentName}",
+                        ref replacementCount);
+                }
+
+                Regex unqualifiedRegex = new(
+                    $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b(?!\s*=)",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    unqualifiedRegex,
+                    match => canMigrateBareLegacyApplicationApi &&
+                        ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
+                            ? $"{CurrentApplicationNamespace}.{rule.CurrentName}"
+                            : match.Value,
+                    ref replacementCount);
+            }
+
+            return migratedContent;
+        }
+
+        private static string ReplaceLegacyFirstPartyScreenshotTypeNamesInCode(
+            string source,
+            string[] aliases,
+            bool canMigrateBareLegacyFirstPartyScreenshotApi,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            string migratedContent = source;
+            foreach (TypeReplacementRule rule in FirstPartyScreenshotTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    fullyQualifiedRegex,
+                    _ => $"{CurrentFirstPartyToolsNamespace}.{rule.CurrentName}",
+                    ref replacementCount);
+
+                foreach (string alias in aliases)
+                {
+                    Regex aliasRegex = new(
+                        $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(rule.LegacyName)}\b",
+                        RegexOptions.Compiled);
+                    migratedContent = ReplaceRegexInCode(
+                        migratedContent,
+                        aliasRegex,
+                        _ => $"{CurrentFirstPartyToolsNamespace}.{rule.CurrentName}",
+                        ref replacementCount);
+                }
+
+                Regex unqualifiedRegex = new(
+                    $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b(?!\s*=)",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    unqualifiedRegex,
+                    match => canMigrateBareLegacyFirstPartyScreenshotApi &&
+                        ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
+                            ? $"{CurrentFirstPartyToolsNamespace}.{rule.CurrentName}"
+                            : match.Value,
+                    ref replacementCount);
+            }
+
+            return migratedContent;
+        }
+
         private static string ReplaceLegacyToolInfoTypeReferencesInCode(string source, ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -1762,10 +2100,304 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return value.Length == 0 ? null : value;
         }
 
+        private static (string Content, int ReplacementCount) ReplaceLegacyTimerDelayNamedArgumentsInCode(
+            string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyTimerDelay)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyTimerDelayInvocationRegex.Matches(source);
+            StringBuilder builder = new(source.Length);
+            int sourceCopyIndex = 0;
+            int replacementCount = 0;
+            foreach (Match match in matches)
+            {
+                if (match.Index < sourceCopyIndex ||
+                    !codeTextMask.IsCodeAt(match.Index) ||
+                    !IsLegacyTimerDelayInvocationMatch(match, legacyNamespaceAliases, canMigrateBareLegacyTimerDelay))
+                {
+                    continue;
+                }
+
+                int openParenthesisIndex = match.Index + match.Length - 1;
+                int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                    source,
+                    codeTextMask,
+                    openParenthesisIndex);
+                if (closingParenthesisIndex < 0)
+                {
+                    continue;
+                }
+
+                string argumentsSource = source.Substring(
+                    openParenthesisIndex + 1,
+                    closingParenthesisIndex - openParenthesisIndex - 1);
+                (string[] migratedArguments, bool changed) =
+                    GetTimerDelayArgumentsWithMigratedCancellationTokenName(SplitAttributeArguments(argumentsSource));
+                if (!changed)
+                {
+                    continue;
+                }
+
+                builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
+                builder.Append(match.Value);
+                builder.Append(string.Join(", ", migratedArguments));
+                builder.Append(')');
+                sourceCopyIndex = closingParenthesisIndex + 1;
+                replacementCount++;
+            }
+
+            if (replacementCount == 0)
+            {
+                return (source, 0);
+            }
+
+            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
+            return (builder.ToString(), replacementCount);
+        }
+
+        private static bool IsLegacyTimerDelayInvocationMatch(
+            Match match,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyTimerDelay)
+        {
+            Debug.Assert(match != null, "match must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            if (match.Groups["qualifier"].Success)
+            {
+                return true;
+            }
+
+            if (match.Groups["alias"].Success)
+            {
+                return legacyNamespaceAliases.Contains(match.Groups["alias"].Value);
+            }
+
+            return match.Groups["timerDelay"].Success && canMigrateBareLegacyTimerDelay;
+        }
+
+        private static (string[] Arguments, bool Changed)
+            GetTimerDelayArgumentsWithMigratedCancellationTokenName(string[] arguments)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+
+            string[] migratedArguments = new string[arguments.Length];
+            bool changed = false;
+            for (int i = 0; i < arguments.Length; i++)
+            {
+                string argument = arguments[i].Trim();
+                string cancellationTokenValue =
+                    GetNamedArgumentValueOrNull(argument, LegacyCancellationTokenArgumentName);
+                if (cancellationTokenValue == null)
+                {
+                    migratedArguments[i] = argument;
+                    continue;
+                }
+
+                migratedArguments[i] = $"{CurrentCancellationTokenArgumentName}: {cancellationTokenValue}";
+                changed = true;
+            }
+
+            return (migratedArguments, changed);
+        }
+
+        private static (string Content, int ReplacementCount) ReplaceLegacyMainThreadSwitcherCallsInCode(
+            string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyMainThreadSwitcher)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyMainThreadSwitcherSwitchRegex.Matches(source);
+            StringBuilder builder = new(source.Length);
+            int sourceCopyIndex = 0;
+            int replacementCount = 0;
+            foreach (Match match in matches)
+            {
+                if (match.Index < sourceCopyIndex ||
+                    !codeTextMask.IsCodeAt(match.Index) ||
+                    !IsLegacyMainThreadSwitcherCallMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyMainThreadSwitcher))
+                {
+                    continue;
+                }
+
+                int openParenthesisIndex = match.Index + match.Length - 1;
+                int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                    source,
+                    codeTextMask,
+                    openParenthesisIndex);
+                if (closingParenthesisIndex < 0)
+                {
+                    continue;
+                }
+
+                string argumentsSource = source.Substring(
+                    openParenthesisIndex + 1,
+                    closingParenthesisIndex - openParenthesisIndex - 1);
+                (string[] migratedArguments, bool changed) =
+                    GetMigratedMainThreadSwitcherArguments(
+                        SplitAttributeArguments(argumentsSource),
+                        legacyNamespaceAliases);
+                if (!changed)
+                {
+                    continue;
+                }
+
+                builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
+                builder.Append(match.Value);
+                builder.Append(string.Join(", ", migratedArguments));
+                builder.Append(')');
+                sourceCopyIndex = closingParenthesisIndex + 1;
+                replacementCount++;
+            }
+
+            if (replacementCount == 0)
+            {
+                return (source, 0);
+            }
+
+            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
+            return (builder.ToString(), replacementCount);
+        }
+
+        private static bool IsLegacyMainThreadSwitcherCallMatch(
+            Match match,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyMainThreadSwitcher)
+        {
+            Debug.Assert(match != null, "match must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            if (match.Groups["qualifier"].Success)
+            {
+                return true;
+            }
+
+            if (match.Groups["alias"].Success)
+            {
+                return legacyNamespaceAliases.Contains(match.Groups["alias"].Value);
+            }
+
+            return match.Groups["mainThreadSwitcher"].Success && canMigrateBareLegacyMainThreadSwitcher;
+        }
+
+        private static (string[] Arguments, bool Changed) GetMigratedMainThreadSwitcherArguments(
+            string[] arguments,
+            string[] legacyNamespaceAliases)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            string[] trimmedArguments = arguments
+                .Select(argument => argument.Trim())
+                .Where(argument => argument.Length > 0)
+                .ToArray();
+            List<string> migratedArguments = new();
+            bool changed = false;
+            foreach (string argument in trimmedArguments)
+            {
+                string timingValue = GetNamedArgumentValueOrNull(argument, LegacyTimingArgumentName);
+                if (timingValue != null)
+                {
+                    if (IsLegacyPlayerLoopTimingArgument(timingValue, legacyNamespaceAliases))
+                    {
+                        changed = true;
+                        continue;
+                    }
+                }
+
+                if (IsLegacyPlayerLoopTimingArgument(argument, legacyNamespaceAliases))
+                {
+                    changed = true;
+                    continue;
+                }
+
+                string cancellationTokenValue =
+                    GetNamedArgumentValueOrNull(argument, LegacyCancellationTokenArgumentName);
+                if (cancellationTokenValue != null)
+                {
+                    migratedArguments.Add($"{CurrentCancellationTokenArgumentName}: {cancellationTokenValue}");
+                    changed = true;
+                    continue;
+                }
+
+                migratedArguments.Add(argument);
+            }
+
+            return (migratedArguments.ToArray(), changed);
+        }
+
+        private static bool IsLegacyPlayerLoopTimingArgument(string argument, string[] legacyNamespaceAliases)
+        {
+            Debug.Assert(argument != null, "argument must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            string trimmedArgument = argument.Trim();
+            if (trimmedArgument.StartsWith($"{LegacyPlayerLoopTimingTypeName}.", StringComparison.Ordinal) ||
+                trimmedArgument.StartsWith(
+                    $"global::{LegacyNamespace}.{LegacyPlayerLoopTimingTypeName}.",
+                    StringComparison.Ordinal) ||
+                trimmedArgument.StartsWith(
+                    $"{LegacyNamespace}.{LegacyPlayerLoopTimingTypeName}.",
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            foreach (string alias in legacyNamespaceAliases)
+            {
+                if (trimmedArgument.StartsWith(
+                        $"{alias}.{LegacyPlayerLoopTimingTypeName}.",
+                        StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static (string Content, int ReplacementCount) ReplaceLegacyEditorWindowCaptureUtilityCallsInCode(
             string source,
             string[] legacyNamespaceAliases,
             bool canMigrateBareLegacyEditorWindowCaptureUtility)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            (string captureWindowContent, int captureWindowReplacementCount) =
+                ReplaceLegacyEditorWindowCaptureUtilityCaptureWindowCallsInCode(
+                    source,
+                    legacyNamespaceAliases,
+                    canMigrateBareLegacyEditorWindowCaptureUtility);
+            (string captureGameRenderingContent, int captureGameRenderingReplacementCount) =
+                ReplaceLegacyEditorWindowCaptureUtilityCaptureGameRenderingCallsInCode(
+                    captureWindowContent,
+                    legacyNamespaceAliases,
+                    canMigrateBareLegacyEditorWindowCaptureUtility);
+            int deconstructionReplacementCount = 0;
+            string migratedContent = AddDiscardToCaptureGameRenderingDeconstructionsInCode(
+                captureGameRenderingContent,
+                ref deconstructionReplacementCount);
+            return (
+                migratedContent,
+                captureWindowReplacementCount + captureGameRenderingReplacementCount + deconstructionReplacementCount);
+        }
+
+        private static (string Content, int ReplacementCount)
+            ReplaceLegacyEditorWindowCaptureUtilityCaptureWindowCallsInCode(
+                string source,
+                string[] legacyNamespaceAliases,
+                bool canMigrateBareLegacyEditorWindowCaptureUtility)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
@@ -1830,6 +2462,120 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return (builder.ToString(), replacementCount);
         }
 
+        private static (string Content, int ReplacementCount)
+            ReplaceLegacyEditorWindowCaptureUtilityCaptureGameRenderingCallsInCode(
+                string source,
+                string[] legacyNamespaceAliases,
+                bool canMigrateBareLegacyEditorWindowCaptureUtility)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyEditorWindowCaptureUtilityCaptureGameRenderingRegex.Matches(source);
+            StringBuilder builder = new(source.Length);
+            int sourceCopyIndex = 0;
+            int replacementCount = 0;
+            foreach (Match match in matches)
+            {
+                if (match.Index < sourceCopyIndex ||
+                    !codeTextMask.IsCodeAt(match.Index) ||
+                    !IsLegacyEditorWindowCaptureUtilityCallMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyEditorWindowCaptureUtility))
+                {
+                    continue;
+                }
+
+                int openParenthesisIndex = match.Index + match.Length - 1;
+                int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                    source,
+                    codeTextMask,
+                    openParenthesisIndex);
+                if (closingParenthesisIndex < 0)
+                {
+                    continue;
+                }
+
+                string argumentsSource = source.Substring(
+                    openParenthesisIndex + 1,
+                    closingParenthesisIndex - openParenthesisIndex - 1);
+                string[] migratedArguments = GetMigratedEditorWindowCaptureUtilityGameRenderingArguments(
+                    SplitAttributeArguments(argumentsSource));
+                if (migratedArguments.Length == 0)
+                {
+                    continue;
+                }
+
+                builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
+                builder.Append("await ");
+                builder.Append(CurrentFirstPartyToolsNamespace);
+                builder.Append('.');
+                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                builder.Append('.');
+                builder.Append(EditorWindowCaptureUtilityCaptureGameRenderingMethodName);
+                builder.Append('(');
+                builder.Append(string.Join(", ", migratedArguments));
+                builder.Append(')');
+                sourceCopyIndex = closingParenthesisIndex + 1;
+                replacementCount++;
+            }
+
+            if (replacementCount == 0)
+            {
+                return (source, 0);
+            }
+
+            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
+            return (builder.ToString(), replacementCount);
+        }
+
+        private static string AddDiscardToCaptureGameRenderingDeconstructionsInCode(
+            string source,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = CurrentCaptureGameRenderingDeconstructionRegex.Matches(source);
+            StringBuilder builder = new(source.Length);
+            int sourceCopyIndex = 0;
+            int localReplacementCount = 0;
+            foreach (Match match in matches)
+            {
+                if (match.Index < sourceCopyIndex || !codeTextMask.IsCodeAt(match.Index))
+                {
+                    continue;
+                }
+
+                Group itemsGroup = match.Groups["items"];
+                string[] items = SplitAttributeArguments(itemsGroup.Value)
+                    .Select(item => item.Trim())
+                    .Where(item => item.Length > 0)
+                    .ToArray();
+                if (items.Length != 2)
+                {
+                    continue;
+                }
+
+                builder.Append(source, sourceCopyIndex, itemsGroup.Index - sourceCopyIndex);
+                builder.Append(itemsGroup.Value);
+                builder.Append(", _");
+                sourceCopyIndex = itemsGroup.Index + itemsGroup.Length;
+                localReplacementCount++;
+            }
+
+            if (localReplacementCount == 0)
+            {
+                return source;
+            }
+
+            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
+            replacementCount += localReplacementCount;
+            return builder.ToString();
+        }
+
         private static bool IsLegacyEditorWindowCaptureUtilityCallMatch(
             Match match,
             string[] legacyNamespaceAliases,
@@ -1871,6 +2617,32 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 trimmedArguments[1],
                 $"{CurrentConstantsTypeName}.{CurrentEditorFrameWaitTimeoutMemberName}",
                 trimmedArguments[2]
+            };
+        }
+
+        private static string[] GetMigratedEditorWindowCaptureUtilityGameRenderingArguments(string[] arguments)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+
+            string[] trimmedArguments = arguments
+                .Select(argument => argument.Trim())
+                .Where(argument => argument.Length > 0)
+                .ToArray();
+            if (trimmedArguments.Length == 3)
+            {
+                return trimmedArguments;
+            }
+
+            if (trimmedArguments.Length != 2)
+            {
+                return Array.Empty<string>();
+            }
+
+            return new[]
+            {
+                trimmedArguments[0],
+                $"{CurrentConstantsTypeName}.{CurrentEditorFrameWaitTimeoutMemberName}",
+                trimmedArguments[1]
             };
         }
 
@@ -2379,7 +3151,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
 
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
-            MatchCollection matches = LegacyEditorWindowCaptureUtilityCaptureWindowRegex.Matches(source);
+            if (ContainsLegacyEditorWindowCaptureUtilityCall(
+                    source,
+                    codeTextMask,
+                    LegacyEditorWindowCaptureUtilityCaptureWindowRegex,
+                    legacyNamespaceAliases,
+                    canMigrateBareLegacyEditorWindowCaptureUtility))
+            {
+                return true;
+            }
+
+            return ContainsLegacyEditorWindowCaptureUtilityCall(
+                source,
+                codeTextMask,
+                LegacyEditorWindowCaptureUtilityCaptureGameRenderingRegex,
+                legacyNamespaceAliases,
+                canMigrateBareLegacyEditorWindowCaptureUtility);
+        }
+
+        private static bool ContainsLegacyEditorWindowCaptureUtilityCall(
+            string source,
+            CodeTextMask codeTextMask,
+            Regex regex,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyEditorWindowCaptureUtility)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(regex != null, "regex must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            MatchCollection matches = regex.Matches(source);
             foreach (Match match in matches)
             {
                 if (codeTextMask.IsCodeAt(match.Index) &&
@@ -2387,6 +3188,192 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         match,
                         legacyNamespaceAliases,
                         canMigrateBareLegacyEditorWindowCaptureUtility))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsLegacyTimerDelayInvocation(
+            string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyTimerDelay)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyTimerDelayInvocationRegex.Matches(source);
+            foreach (Match match in matches)
+            {
+                if (codeTextMask.IsCodeAt(match.Index) &&
+                    IsLegacyTimerDelayInvocationMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyTimerDelay))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsLegacyApplicationReference(
+            string source,
+            bool canMigrateBareLegacyApplicationApi,
+            string[] aliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            foreach (TypeReplacementRule rule in ApplicationTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
+                    RegexOptions.Compiled);
+                if (RegexMatchesCode(source, fullyQualifiedRegex))
+                {
+                    return true;
+                }
+
+                foreach (string alias in aliases)
+                {
+                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
+                    {
+                        return true;
+                    }
+                }
+
+                if (canMigrateBareLegacyApplicationApi &&
+                    ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.LegacyName))
+                {
+                    return true;
+                }
+            }
+
+            if (ContainsLegacyMainThreadSwitcherSwitchCall(
+                    source,
+                    aliases,
+                    canMigrateBareLegacyApplicationApi))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool ContainsLegacyMainThreadSwitcherSwitchCall(
+            string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyMainThreadSwitcher)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyMainThreadSwitcherSwitchRegex.Matches(source);
+            foreach (Match match in matches)
+            {
+                if (codeTextMask.IsCodeAt(match.Index) &&
+                    IsLegacyMainThreadSwitcherCallMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyMainThreadSwitcher))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsCurrentApplicationReference(
+            string source,
+            bool canUseBareCurrentApplicationType)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            foreach (TypeReplacementRule rule in ApplicationTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(CurrentApplicationNamespace)}\.){Regex.Escape(rule.CurrentName)}\b",
+                    RegexOptions.Compiled);
+                if (RegexMatchesCode(source, fullyQualifiedRegex))
+                {
+                    return true;
+                }
+
+                if (canUseBareCurrentApplicationType &&
+                    ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.CurrentName))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsLegacyFirstPartyScreenshotReference(
+            string source,
+            bool canMigrateBareLegacyFirstPartyScreenshotApi,
+            string[] aliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(aliases != null, "aliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            foreach (TypeReplacementRule rule in FirstPartyScreenshotTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
+                    RegexOptions.Compiled);
+                if (RegexMatchesCode(source, fullyQualifiedRegex))
+                {
+                    return true;
+                }
+
+                foreach (string alias in aliases)
+                {
+                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
+                    {
+                        return true;
+                    }
+                }
+
+                if (canMigrateBareLegacyFirstPartyScreenshotApi &&
+                    ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.LegacyName))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsCurrentFirstPartyScreenshotReference(
+            string source,
+            bool canUseBareCurrentFirstPartyScreenshotType)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            foreach (TypeReplacementRule rule in FirstPartyScreenshotTypeReplacementRules)
+            {
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.){Regex.Escape(rule.CurrentName)}\b",
+                    RegexOptions.Compiled);
+                if (RegexMatchesCode(source, fullyQualifiedRegex))
+                {
+                    return true;
+                }
+
+                if (canUseBareCurrentFirstPartyScreenshotType &&
+                    ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.CurrentName))
                 {
                     return true;
                 }

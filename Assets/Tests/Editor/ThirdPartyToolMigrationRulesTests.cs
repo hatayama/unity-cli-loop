@@ -419,6 +419,136 @@ public sealed class ScreenshotTool : UnityCliLoopTool<ScreenshotSchema, Screensh
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyScreenshotHelpersAreUsed_RewritesFirstPartyReferences()
+        {
+            // Verifies that screenshot helper types moved out of the public tool contract namespace are fully qualified.
+            string source = @"using UnityEditor;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class ScreenshotHelper
+{
+    public WindowMatchMode MatchMode => WindowMatchMode.contains;
+    public CaptureMode CaptureMode => CaptureMode.rendering;
+    public ScreenshotInfo CreateInfo() => new ScreenshotInfo();
+    public UIElementInfo CreateElement() => new UIElementInfo();
+    public EditorWindow[] FindWindows() => EditorWindowCaptureUtility.FindWindowsByName(""Game"", WindowMatchMode.exact);
+    public string[] GetNames() => EditorWindowCaptureUtility.GetOpenWindowNames();
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.WindowMatchMode MatchMode"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.WindowMatchMode.contains"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.CaptureMode CaptureMode"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.CaptureMode.rendering"));
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.FirstPartyTools.ScreenshotInfo()"));
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo()"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.FindWindowsByName"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.GetOpenWindowNames"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyGameRenderingCaptureIsUsed_RewritesSignatureAndDiscard()
+        {
+            // Verifies that old rendering capture deconstruction keeps compiling after the V3 timeout result.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEngine;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class RenderingCapture
+{
+    public async Task CaptureAsync(CancellationToken ct)
+    {
+        Texture2D texture = null;
+        int yOffset = 0;
+        (texture, yOffset) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(1.0f, ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("(texture, yOffset, _) = await"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureGameRenderingAsync(1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)"));
+            Assert.That(result.Content, Does.Not.Contain("CaptureGameRenderingAsync(1.0f, ct)"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyTimerDelayNamedCancellationTokenIsUsed_RewritesArgumentName()
+        {
+            // Verifies that TimerDelay named arguments keep compiling after the V3 cancellation token rename.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class DelayTool
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await TimerDelay.Wait(10, cancellationToken: ct);
+        await TimerDelay.WaitThenExecuteOnMainThread(10, () => {}, cancellationToken: ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("await TimerDelay.Wait(10, ct: ct);"));
+            Assert.That(result.Content, Does.Contain(
+                "await TimerDelay.WaitThenExecuteOnMainThread(10, () => {}, ct: ct);"));
+            Assert.That(result.Content, Does.Not.Contain("cancellationToken:"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenLegacyMainThreadSwitcherIsUsed_RewritesApplicationReferences()
+        {
+            // Verifies that main-thread switch helpers moved to Application keep compiling after timing arguments were removed.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadTool
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+        await MainThreadSwitcher.SwitchToMainThread(timing: PlayerLoopTiming.PostLateUpdate, cancellationToken: ct);
+        SwitchToMainThreadAwaitable awaitable = MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update);
+        bool isMainThread = MainThreadSwitcher.IsMainThread;
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "await io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct);"));
+            Assert.That(result.Content, Does.Contain(
+                "await io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct: ct);"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.Application.SwitchToMainThreadAwaitable awaitable = io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread();"));
+            Assert.That(result.Content, Does.Contain(
+                "bool isMainThread = io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.IsMainThread;"));
+            Assert.That(result.Content, Does.Not.Contain("PlayerLoopTiming"));
+            Assert.That(result.Content, Does.Not.Contain("cancellationToken:"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyRegistrarMetadataIsUsed_RewritesDomainMetadataType()
         {
             // Verifies that explicit registrar metadata declarations keep compiling after namespace migration.
@@ -1344,7 +1474,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: false,
                     requiresToolContractsReference: false,
                     requiresApplicationReference: false,
-                    requiresDomainReference: false);
+                    requiresDomainReference: false,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
@@ -1369,7 +1500,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: false,
                     requiresToolContractsReference: false,
                     requiresApplicationReference: false,
-                    requiresDomainReference: false);
+                    requiresDomainReference: false,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:c956a21f824994ef087b6de566690b3d"));
@@ -1394,7 +1526,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: false,
                     requiresToolContractsReference: false,
                     requiresApplicationReference: false,
-                    requiresDomainReference: false);
+                    requiresDomainReference: false,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.False);
             Assert.That(result.Content, Is.EqualTo(source));
@@ -1417,7 +1550,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: true,
                     requiresToolContractsReference: false,
                     requiresApplicationReference: false,
-                    requiresDomainReference: false);
+                    requiresDomainReference: false,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
@@ -1438,7 +1572,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: true,
                     requiresToolContractsReference: false,
                     requiresApplicationReference: false,
-                    requiresDomainReference: false);
+                    requiresDomainReference: false,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(@"""references"": ["));
@@ -1462,7 +1597,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: false,
                     requiresToolContractsReference: true,
                     requiresApplicationReference: false,
-                    requiresDomainReference: false);
+                    requiresDomainReference: false,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
@@ -1487,7 +1623,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: false,
                     requiresToolContractsReference: true,
                     requiresApplicationReference: true,
-                    requiresDomainReference: false);
+                    requiresDomainReference: false,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.False);
             Assert.That(result.Content, Is.EqualTo(source));
@@ -1511,7 +1648,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: true,
                     requiresToolContractsReference: false,
                     requiresApplicationReference: true,
-                    requiresDomainReference: false);
+                    requiresDomainReference: false,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
@@ -1536,7 +1674,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: true,
                     requiresToolContractsReference: false,
                     requiresApplicationReference: false,
-                    requiresDomainReference: true);
+                    requiresDomainReference: true,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
@@ -1559,7 +1698,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: false,
                     requiresToolContractsReference: false,
                     requiresApplicationReference: false,
-                    requiresDomainReference: true);
+                    requiresDomainReference: true,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
@@ -1586,7 +1726,8 @@ public sealed class OtherTool
                     hasLegacyCSharpSource: false,
                     requiresToolContractsReference: true,
                     requiresApplicationReference: true,
-                    requiresDomainReference: true);
+                    requiresDomainReference: true,
+                    requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.False);
             Assert.That(result.Content, Is.EqualTo(source));

@@ -8,6 +8,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public static void Initialize()
         {
+            DomainReloadDisableScopeRecovery.RestoreForEditorStartup();
             ExternalSceneChangeTracker.Initialize();
             ControlPlayModeEditorStartup.Initialize();
             ExecuteDynamicCodeEditorStartup.Initialize();

@@ -1205,7 +1205,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static bool IsPublicAutoReferencedAssembly(string assemblyName)
         {
-            return string.Equals(assemblyName, ToolContractsAssemblyName, StringComparison.Ordinal) ||
+            return string.Equals(assemblyName, ApplicationAssemblyName, StringComparison.Ordinal) ||
+                   string.Equals(assemblyName, DomainAssemblyName, StringComparison.Ordinal) ||
+                   string.Equals(assemblyName, ScreenshotAssemblyName, StringComparison.Ordinal) ||
+                   string.Equals(assemblyName, ToolContractsAssemblyName, StringComparison.Ordinal) ||
                    string.Equals(assemblyName, PausePointsRuntimeAssemblyName, StringComparison.Ordinal);
         }
 

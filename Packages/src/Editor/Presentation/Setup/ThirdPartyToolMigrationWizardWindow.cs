@@ -594,7 +594,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static bool ShouldRefreshAfterMigration(ThirdPartyToolMigrationResult result)
         {
-            return !result.Changed;
+            Debug.Assert(result.FileCount >= 0, "result file count must not be negative");
+
+            return false;
         }
 
         private void CompleteMigrationPreview(CancellationToken ct)

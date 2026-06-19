@@ -907,6 +907,161 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
+        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsing_RewritesSplitScreenshotHelpersAndAsmdef()
+        {
+            // Verifies that split files using old screenshot helpers receive the required V3 first-party assembly reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string helperPath = Path.Combine(toolDirectory, "ScreenshotHelper.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(helperPath, @"using UnityEditor;
+
+public sealed class ScreenshotHelper
+{
+    public EditorWindow[] FindWindows() => EditorWindowCaptureUtility.FindWindowsByName(""Game"", WindowMatchMode.exact);
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(3));
+                Assert.That(File.ReadAllText(helperPath), Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.FindWindowsByName"));
+                Assert.That(File.ReadAllText(helperPath), Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.WindowMatchMode.exact"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenCurrentToolContractsFileUsesLegacyScreenshotCapture_AddsScreenshotAsmdefReference()
+        {
+            // Verifies that partially migrated files finish screenshot helper migration and add the missing assembly reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CaptureTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class CaptureTool : UnityCliLoopTool<CaptureSchema, CaptureResponse>
+{
+    public override string ToolName => ""capture"";
+
+    protected override async Task<CaptureResponse> ExecuteAsync(CaptureSchema parameters, CancellationToken ct)
+    {
+        Texture2D texture = await EditorWindowCaptureUtility.CaptureWindowAsync(parameters.Window, 1.0f, ct);
+        return new CaptureResponse(texture != null);
+    }
+}
+
+public sealed class CaptureSchema : UnityCliLoopToolSchema
+{
+    public EditorWindow Window { get; set; }
+}
+
+public sealed class CaptureResponse : UnityCliLoopToolResponse
+{
+    public bool Success { get; }
+    public CaptureResponse(bool success) { Success = success; }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(toolPath), Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenCurrentToolContractsFileUsesLegacyMainThreadSwitcher_AddsApplicationReference()
+        {
+            // Verifies that partially migrated files finish main-thread switcher migration and add the Application asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "MainThreadTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class MainThreadTool : UnityCliLoopTool<MainThreadSchema, MainThreadResponse>
+{
+    protected override async Task<MainThreadResponse> ExecuteAsync(MainThreadSchema parameters, CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+        return new MainThreadResponse();
+    }
+}
+
+public sealed class MainThreadSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class MainThreadResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(toolPath), Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct)"));
+                Assert.That(File.ReadAllText(toolPath), Does.Not.Contain("PlayerLoopTiming"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsing_KeepsUnrelatedFiles()
         {
             // Verifies that assembly-level migration does not rename unrelated project types.
@@ -1415,6 +1570,48 @@ public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
                 Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(File.ReadAllText(globalUsingPath), Does.Contain("io.github.hatayama.UnityCliLoop.ToolContracts"));
                 Assert.That(File.ReadAllText(schemaPath), Does.Contain("UnityCliLoopToolSchema"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenNoAsmdefCurrentToolContractsFileUsesLegacyScreenshotCapture_RewritesSource()
+        {
+            // Verifies that predefined editor assemblies finish partially migrated screenshot helpers.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "Editor", "CustomTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CaptureTool.cs");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class CaptureTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        Texture2D texture = await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+        return texture;
+    }
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(migratedSource, Does.Contain(
+                    "UnityCliLoopTool<io.github.hatayama.UnityCliLoop.FirstPartyTools.ScreenshotSchema, io.github.hatayama.UnityCliLoop.FirstPartyTools.ScreenshotResponse>"));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                Assert.That(migratedSource, Does.Not.Contain("await EditorWindowCaptureUtility.CaptureWindowAsync"));
             }
             finally
             {
