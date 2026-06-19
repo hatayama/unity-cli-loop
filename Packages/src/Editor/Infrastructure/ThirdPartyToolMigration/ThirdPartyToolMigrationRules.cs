@@ -36,6 +36,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string RequiredSecuritySettingAttributeArgumentName = "RequiredSecuritySetting";
         private const string LegacySecuritySettingsTypeName = "SecuritySettings";
         private const string CurrentSecuritySettingTypeName = "UnityCliLoopSecuritySetting";
+        private const string LegacyEditorDelayTypeName = "EditorDelay";
+        private const string LegacyEditorDelayMethodName = "DelayFrame";
+        private const string CurrentEditorFrameWaiterTypeName = "EditorFrameWaiter";
+        private const string CurrentEditorFrameWaiterMethodName = "WaitFramesOrTimeoutAsync";
+        private const string CurrentConstantsTypeName = "UnityCliLoopConstants";
+        private const string CurrentEditorFrameWaitTimeoutMemberName = "EDITOR_FRAME_WAIT_TIMEOUT_MS";
         private const int MinimumRawStringDelimiterQuoteCount = 3;
         private static readonly ConditionalWeakTable<string, CodeTextMaskHolder> CodeTextMaskCache = new();
 
@@ -158,11 +164,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"new\s+(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.)ToolSettingsCatalogItem|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.ToolSettingsCatalogItem|(?<toolSettingsCatalogItem>ToolSettingsCatalogItem))\s*\(",
                 RegexOptions.Compiled);
 
+        private static readonly Regex LegacyEditorDelayFrameRegex =
+            new(
+                $@"(?:(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorDelayTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorDelayTypeName}|(?<editorDelay>{LegacyEditorDelayTypeName}))\s*\.\s*{LegacyEditorDelayMethodName}\s*\(",
+                RegexOptions.Compiled);
+
         private static readonly TypeReplacementRule[] ToolContractTypeReplacementRules =
         {
             new("ToolParameterSchemaGenerator", "UnityCliLoopToolParameterSchemaGenerator"),
             new("ParameterValidationException", "UnityCliLoopToolParameterValidationException"),
-            new("Mcp" + "Constants", "UnityCliLoopConstants"),
+            new("Mcp" + "Constants", CurrentConstantsTypeName),
             new("McpToolAttribute", "UnityCliLoopToolAttribute"),
             new("IUnityTool", "IUnityCliLoopTool"),
             new("AbstractUnityTool", "UnityCliLoopTool"),
@@ -251,6 +262,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 legacyNamespaceAliases,
                 canMigrateBareLegacyToolAttribute,
                 ref replacementCount);
+            (string editorDelayMigratedContent, int editorDelayReplacementCount) =
+                ReplaceLegacyEditorDelayFrameCallsInCode(
+                    migratedContent,
+                    legacyNamespaceAliases,
+                    canMigrateBareLegacyToolAttribute);
+            migratedContent = editorDelayMigratedContent;
+            replacementCount += editorDelayReplacementCount;
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
@@ -390,6 +408,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ContainsTextFragment(source, CurrentDomainNamespace) ||
                 ContainsTextFragment(source, "McpTool") ||
                 ContainsTextFragment(source, "CustomToolManager") ||
+                ContainsTextFragment(source, LegacyEditorDelayTypeName) ||
                 ContainsTextFragment(source, "UnityCliLoopToolRegistrar") ||
                 ContainsTextFragment(source, "ToolInfo"))
             {
@@ -589,6 +608,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 RegexMatchesCode(source, LegacyAssemblyScopedApiUsageRegex) ||
                 ContainsLegacyAssemblyScopedTypeReference(source) ||
                 ContainsLegacyAliasQualifiedAssemblyScopedApi(source, legacyAssemblyAliases) ||
+                ContainsLegacyEditorDelayFrameCall(
+                    source,
+                    legacyAssemblyAliases,
+                    canMigrateBareLegacyEditorDelay: true) ||
                 ContainsLegacyToolAttributeList(
                     source,
                     legacyAssemblyAliases,
@@ -1493,6 +1516,228 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return match.Groups["toolSettingsCatalogItem"].Success && canMigrateBareLegacyConstructor;
         }
 
+        private static (string Content, int ReplacementCount) ReplaceLegacyEditorDelayFrameCallsInCode(
+            string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyEditorDelay)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyEditorDelayFrameRegex.Matches(source);
+            StringBuilder builder = new(source.Length);
+            int sourceCopyIndex = 0;
+            int replacementCount = 0;
+            foreach (Match match in matches)
+            {
+                if (match.Index < sourceCopyIndex ||
+                    !codeTextMask.IsCodeAt(match.Index) ||
+                    !IsLegacyEditorDelayFrameCallMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyEditorDelay))
+                {
+                    continue;
+                }
+
+                int openParenthesisIndex = match.Index + match.Length - 1;
+                int closingParenthesisIndex = FindInvocationClosingParenthesisIndex(
+                    source,
+                    codeTextMask,
+                    openParenthesisIndex);
+                if (closingParenthesisIndex < 0)
+                {
+                    continue;
+                }
+
+                string argumentsSource = source.Substring(
+                    openParenthesisIndex + 1,
+                    closingParenthesisIndex - openParenthesisIndex - 1);
+                string[] arguments = SplitAttributeArguments(argumentsSource);
+                string[] migratedArguments = GetMigratedEditorDelayFrameArguments(
+                    arguments,
+                    GetMigratedEditorFrameWaitTimeoutExpression(match));
+                if (migratedArguments.Length == 0)
+                {
+                    continue;
+                }
+
+                builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
+                builder.Append(GetMigratedEditorFrameWaiterInvocationTarget(match));
+                builder.Append('.');
+                builder.Append(CurrentEditorFrameWaiterMethodName);
+                builder.Append('(');
+                builder.Append(string.Join(", ", migratedArguments));
+                builder.Append(')');
+                sourceCopyIndex = closingParenthesisIndex + 1;
+                replacementCount++;
+            }
+
+            if (replacementCount == 0)
+            {
+                return (source, 0);
+            }
+
+            builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
+            return (builder.ToString(), replacementCount);
+        }
+
+        private static bool IsLegacyEditorDelayFrameCallMatch(
+            Match match,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyEditorDelay)
+        {
+            Debug.Assert(match != null, "match must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            if (match.Groups["qualifier"].Success)
+            {
+                return true;
+            }
+
+            if (match.Groups["alias"].Success)
+            {
+                return legacyNamespaceAliases.Contains(match.Groups["alias"].Value);
+            }
+
+            return match.Groups["editorDelay"].Success && canMigrateBareLegacyEditorDelay;
+        }
+
+        private static string GetMigratedEditorFrameWaiterInvocationTarget(Match match)
+        {
+            Debug.Assert(match != null, "match must not be null");
+
+            if (match.Groups["qualifier"].Success)
+            {
+                return $"{CurrentNamespace}.{CurrentEditorFrameWaiterTypeName}";
+            }
+
+            if (match.Groups["alias"].Success)
+            {
+                return $"{match.Groups["alias"].Value}.{CurrentEditorFrameWaiterTypeName}";
+            }
+
+            return CurrentEditorFrameWaiterTypeName;
+        }
+
+        private static string GetMigratedEditorFrameWaitTimeoutExpression(Match match)
+        {
+            Debug.Assert(match != null, "match must not be null");
+
+            if (match.Groups["qualifier"].Success)
+            {
+                return $"{CurrentNamespace}.{CurrentConstantsTypeName}.{CurrentEditorFrameWaitTimeoutMemberName}";
+            }
+
+            if (match.Groups["alias"].Success)
+            {
+                return $"{match.Groups["alias"].Value}.{CurrentConstantsTypeName}.{CurrentEditorFrameWaitTimeoutMemberName}";
+            }
+
+            return $"{CurrentConstantsTypeName}.{CurrentEditorFrameWaitTimeoutMemberName}";
+        }
+
+        private static string[] GetMigratedEditorDelayFrameArguments(
+            string[] arguments,
+            string timeoutExpression)
+        {
+            Debug.Assert(arguments != null, "arguments must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(timeoutExpression), "timeoutExpression must not be null or empty");
+
+            string[] trimmedArguments = arguments
+                .Select(argument => argument.Trim())
+                .Where(argument => argument.Length > 0)
+                .ToArray();
+            if (trimmedArguments.Length > 2)
+            {
+                return Array.Empty<string>();
+            }
+
+            string frameCountArgument = "1";
+            string cancellationTokenArgument = null;
+            bool hasFrameCountArgument = false;
+            bool hasCancellationTokenArgument = false;
+            for (int i = 0; i < trimmedArguments.Length; i++)
+            {
+                string argument = trimmedArguments[i];
+                string namedFrameCountValue = GetNamedArgumentValueOrNull(argument, "frameCount");
+                if (namedFrameCountValue != null)
+                {
+                    if (hasFrameCountArgument)
+                    {
+                        return Array.Empty<string>();
+                    }
+
+                    frameCountArgument = namedFrameCountValue;
+                    hasFrameCountArgument = true;
+                    continue;
+                }
+
+                string namedCancellationTokenValue = GetNamedArgumentValueOrNull(argument, "cancellationToken");
+                if (namedCancellationTokenValue != null)
+                {
+                    if (hasCancellationTokenArgument)
+                    {
+                        return Array.Empty<string>();
+                    }
+
+                    cancellationTokenArgument = namedCancellationTokenValue;
+                    hasCancellationTokenArgument = true;
+                    continue;
+                }
+
+                if (!hasFrameCountArgument)
+                {
+                    frameCountArgument = argument;
+                    hasFrameCountArgument = true;
+                    continue;
+                }
+
+                if (!hasCancellationTokenArgument)
+                {
+                    cancellationTokenArgument = argument;
+                    hasCancellationTokenArgument = true;
+                    continue;
+                }
+
+                return Array.Empty<string>();
+            }
+
+            List<string> migratedArguments = new()
+            {
+                frameCountArgument,
+                timeoutExpression
+            };
+            if (cancellationTokenArgument != null)
+            {
+                migratedArguments.Add(cancellationTokenArgument);
+            }
+
+            return migratedArguments.ToArray();
+        }
+
+        private static string GetNamedArgumentValueOrNull(string argument, string argumentName)
+        {
+            Debug.Assert(argument != null, "argument must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(argumentName), "argumentName must not be null or empty");
+
+            int colonIndex = argument.IndexOf(':');
+            if (colonIndex <= 0)
+            {
+                return null;
+            }
+
+            string possibleArgumentName = argument.Substring(0, colonIndex).Trim();
+            if (!string.Equals(possibleArgumentName, argumentName, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            string value = argument.Substring(colonIndex + 1).Trim();
+            return value.Length == 0 ? null : value;
+        }
+
         private static bool ShouldMigrateLegacyToolInfoConstructorArguments(
             Match match,
             string[] arguments,
@@ -1956,6 +2201,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (ContainsLegacyAliasQualifiedName(source, alias, "ToolInfo") ||
                     ContainsLegacyAliasQualifiedName(source, alias, "CustomToolManager"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsLegacyEditorDelayFrameCall(
+            string source,
+            string[] legacyNamespaceAliases,
+            bool canMigrateBareLegacyEditorDelay)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            MatchCollection matches = LegacyEditorDelayFrameRegex.Matches(source);
+            foreach (Match match in matches)
+            {
+                if (codeTextMask.IsCodeAt(match.Index) &&
+                    IsLegacyEditorDelayFrameCallMatch(
+                        match,
+                        legacyNamespaceAliases,
+                        canMigrateBareLegacyEditorDelay))
                 {
                     return true;
                 }

@@ -279,6 +279,62 @@ public sealed class HelloTool
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyEditorDelayIsUsed_RewritesFrameWait()
+        {
+            // Verifies that legacy frame waits migrate to the V3 frame waiter API.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class ScreenshotTool
+{
+    public async Task CaptureAsync(CancellationToken ct)
+    {
+        await EditorDelay.DelayFrame(1, ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("using io.github.hatayama.UnityCliLoop.ToolContracts;"));
+            Assert.That(result.Content, Does.Contain(
+                "await EditorFrameWaiter.WaitFramesOrTimeoutAsync(1, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct);"));
+            Assert.That(result.Content, Does.Not.Contain("EditorDelay"));
+            Assert.That(result.Content, Does.Not.Contain("DelayFrame"));
+        }
+
+        [Test]
+        public void MigrateCSharpSourceForLegacyAssembly_WhenFileReliesOnGlobalUsing_RewritesEditorDelay()
+        {
+            // Verifies that split files relying on a legacy global using migrate frame waits.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class ScreenshotTool
+{
+    public async Task CaptureAsync(CancellationToken ct)
+    {
+        await EditorDelay.DelayFrame(cancellationToken: ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
+                    source,
+                    hasLegacyAssemblySource: true,
+                    legacyAssemblyAliases: System.Array.Empty<string>(),
+                    legacyAssemblyToolInfoAliases: System.Array.Empty<string>());
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "await EditorFrameWaiter.WaitFramesOrTimeoutAsync(1, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct);"));
+            Assert.That(result.Content, Does.Not.Contain("EditorDelay"));
+            Assert.That(result.Content, Does.Not.Contain("DelayFrame"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyRegistrarMetadataIsUsed_RewritesDomainMetadataType()
         {
             // Verifies that explicit registrar metadata declarations keep compiling after namespace migration.
@@ -1139,6 +1195,19 @@ public sealed class OtherTool
         {
             // Verifies that split files using Domain helpers are migrated with their legacy assembly.
             string source = "public static class ToolHelper { public static ServiceResult<int> Create() => null; }";
+
+            bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(
+                source,
+                System.Array.Empty<string>());
+
+            Assert.That(containsLegacyApi, Is.True);
+        }
+
+        [Test]
+        public void ContainsLegacyAssemblyScopedApi_WhenLegacyEditorDelayIsUsed_ReturnsTrue()
+        {
+            // Verifies that split files using old frame waits are migrated with their legacy assembly.
+            string source = "public sealed class Tool { public async Task Run() { await EditorDelay.DelayFrame(1); } }";
 
             bool containsLegacyApi = ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(
                 source,
