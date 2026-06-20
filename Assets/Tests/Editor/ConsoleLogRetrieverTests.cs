@@ -410,5 +410,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.AreEqual(mixedMessage, testLog.Message.Trim(),
                 $"Mixed message should match exactly. Expected: '{mixedMessage}', Actual: '{testLog.Message.Trim()}'");
         }
+
+        /// <summary>
+        /// Unit tests for temporarily clearing Unity Console text filtering.
+        /// </summary>
+        public class ConsoleFilteringTextScopeTests
+        {
+            private string filteringText;
+            private List<string> assignedFilteringTexts;
+
+            [SetUp]
+            public void SetUp()
+            {
+                filteringText = "active-filter";
+                assignedFilteringTexts = new List<string>();
+            }
+
+            [Test]
+            public void Dispose_RestoresOriginalFilteringText()
+            {
+                // This test verifies that the scope restores Console state after retrieval.
+                using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText))
+                {
+                    Assert.AreEqual(string.Empty, filteringText);
+                }
+
+                Assert.AreEqual("active-filter", filteringText);
+                CollectionAssert.AreEqual(new[] { string.Empty, "active-filter" }, assignedFilteringTexts);
+            }
+
+            [Test]
+            public void Constructor_WhenFilteringTextIsEmpty_DoesNotAssignEmptyText()
+            {
+                // This test verifies that an inactive text filter does not trigger redundant Console writes.
+                filteringText = string.Empty;
+
+                using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText))
+                {
+                    Assert.AreEqual(string.Empty, filteringText);
+                }
+
+                CollectionAssert.IsEmpty(assignedFilteringTexts);
+            }
+
+            [Test]
+            public void Dispose_WhenFilteringTextChangedInsideScope_RestoresOriginalFilteringText()
+            {
+                // This test verifies that cleanup restores the original filter even after internal changes.
+                using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText))
+                {
+                    filteringText = "changed-during-retrieval";
+                }
+
+                Assert.AreEqual("active-filter", filteringText);
+            }
+
+            private string GetFilteringText()
+            {
+                return filteringText;
+            }
+
+            private void SetFilteringText(string value)
+            {
+                filteringText = value;
+                assignedFilteringTexts.Add(value);
+            }
+        }
     }
 }

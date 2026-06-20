@@ -12,11 +12,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ConsoleLogRetriever
     {
+        private const string GetFilteringTextMethodName = "GetFilteringText";
+        private const string SetFilteringTextMethodName = "SetFilteringText";
+
         private readonly Type _logEntriesType;
         private readonly Type _logEntryType;
         private readonly PropertyInfo _consoleFlagsProperty;
         private readonly MethodInfo _getCountMethod;
         private readonly MethodInfo _getEntryInternalMethod;
+        private readonly MethodInfo _getFilteringTextMethod;
+        private readonly MethodInfo _setFilteringTextMethod;
         private readonly FieldInfo _messageField;
         private readonly FieldInfo _modeField;
         private readonly FieldInfo _callstackTextStartField;
@@ -46,6 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _consoleFlagsProperty = _logEntriesType.GetProperty("consoleFlags", BindingFlags.Public | BindingFlags.Static);
             _getCountMethod = _logEntriesType.GetMethod("GetCount", BindingFlags.Public | BindingFlags.Static);
             _getEntryInternalMethod = _logEntriesType.GetMethod("GetEntryInternal", BindingFlags.Public | BindingFlags.Static);
+            _getFilteringTextMethod = _logEntriesType.GetMethod(GetFilteringTextMethodName, BindingFlags.Public | BindingFlags.Static);
+            _setFilteringTextMethod = _logEntriesType.GetMethod(SetFilteringTextMethodName, BindingFlags.Public | BindingFlags.Static);
             _messageField = _logEntryType.GetField("message", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             _modeField = _logEntryType.GetField("mode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             _callstackTextStartField = _logEntryType.GetField("callstackTextStartUTF8", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
@@ -68,33 +75,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Save original mask to restore later
             int originalMask = GetCurrentMask();
 
-            try
+            using (CreateFilteringTextScope())
             {
-                // Temporarily set mask to show all log types (0x387 = Error + Warning + Log + Base)
-                SetMask(7); // This will convert to Unity's 0x387
-
-                List<LogEntryDto> logs = new();
-                int logCount = GetLogCount();
-
-                for (int i = 0; i < logCount; i++)
+                try
                 {
-                    LogEntryDto entry = GetLogEntryAt(i);
-                    if (entry != null)
-                    {
-                        logs.Add(entry);
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"GetAllLogs: Failed to get log at index {i}");
-                    }
-                }
+                    // Temporarily set mask to show all log types (0x387 = Error + Warning + Log + Base)
+                    SetMask(7); // This will convert to Unity's 0x387
 
-                return logs;
-            }
-            finally
-            {
-                // Always restore original mask, even if an exception occurred
-                RestoreOriginalMask(originalMask);
+                    List<LogEntryDto> logs = new();
+                    int logCount = GetLogCount();
+
+                    for (int i = 0; i < logCount; i++)
+                    {
+                        LogEntryDto entry = GetLogEntryAt(i);
+                        if (entry != null)
+                        {
+                            logs.Add(entry);
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"GetAllLogs: Failed to get log at index {i}");
+                        }
+                    }
+
+                    return logs;
+                }
+                finally
+                {
+                    // Always restore original mask, even if an exception occurred
+                    RestoreOriginalMask(originalMask);
+                }
             }
         }
 
@@ -131,40 +141,78 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Save original mask to restore later
             int originalMask = GetCurrentMask();
 
-            try
+            using (CreateFilteringTextScope())
             {
-                // Temporarily enable the specific log type we want
-                int targetMask = GetMaskForLogType(logType);
-                if (targetMask > 0)
+                try
                 {
-                    SetMask(targetMask);
-                }
-                else
-                {
-                    // If unknown type, show all types
-                    SetMask(7);
-                }
-
-                List<LogEntryDto> logs = new();
-                int logCount = GetLogCount();
-                string targetUnityCliLoopLogType = ConvertLogTypeToUnityCliLoopLogType(logType);
-
-                for (int i = 0; i < logCount; i++)
-                {
-                    LogEntryDto entry = GetLogEntryAt(i);
-                    if (entry != null && entry.LogType == targetUnityCliLoopLogType)
+                    // Temporarily enable the specific log type we want
+                    int targetMask = GetMaskForLogType(logType);
+                    if (targetMask > 0)
                     {
-                        logs.Add(entry);
+                        SetMask(targetMask);
                     }
-                }
+                    else
+                    {
+                        // If unknown type, show all types
+                        SetMask(7);
+                    }
 
-                return logs;
+                    List<LogEntryDto> logs = new();
+                    int logCount = GetLogCount();
+                    string targetUnityCliLoopLogType = ConvertLogTypeToUnityCliLoopLogType(logType);
+
+                    for (int i = 0; i < logCount; i++)
+                    {
+                        LogEntryDto entry = GetLogEntryAt(i);
+                        if (entry != null && entry.LogType == targetUnityCliLoopLogType)
+                        {
+                            logs.Add(entry);
+                        }
+                    }
+
+                    return logs;
+                }
+                finally
+                {
+                    // Always restore original mask
+                    RestoreOriginalMask(originalMask);
+                }
             }
-            finally
+        }
+
+        /// <summary>
+        /// Creates a scope that temporarily disables Console text filtering during log retrieval.
+        /// </summary>
+        private ConsoleFilteringTextScope CreateFilteringTextScope()
+        {
+            if (_getFilteringTextMethod == null || _setFilteringTextMethod == null)
             {
-                // Always restore original mask
-                RestoreOriginalMask(originalMask);
+                return null;
             }
+
+            return new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText);
+        }
+
+        /// <summary>
+        /// Gets the current Unity Console text filter through Unity's internal API.
+        /// </summary>
+        private string GetFilteringText()
+        {
+            Debug.Assert(_getFilteringTextMethod != null, "Filtering text getter must be available before use.");
+
+            object result = _getFilteringTextMethod.Invoke(null, null);
+            return result?.ToString() ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Sets the current Unity Console text filter through Unity's internal API.
+        /// </summary>
+        private void SetFilteringText(string filteringText)
+        {
+            Debug.Assert(_setFilteringTextMethod != null, "Filtering text setter must be available before use.");
+            Debug.Assert(filteringText != null, "Filtering text must not be null.");
+
+            _setFilteringTextMethod.Invoke(null, new object[] { filteringText });
         }
 
         /// <summary>
@@ -364,5 +412,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
+    }
+
+    /// <summary>
+    /// Temporarily clears Unity Console text filtering and restores the original filter on dispose.
+    /// </summary>
+    internal sealed class ConsoleFilteringTextScope : IDisposable
+    {
+        private readonly Action<string> _setFilteringText;
+        private readonly string _originalFilteringText;
+        private readonly bool _shouldRestoreFilteringText;
+        private bool _disposed;
+
+        public ConsoleFilteringTextScope(Func<string> getFilteringText, Action<string> setFilteringText)
+        {
+            Debug.Assert(getFilteringText != null, "Filtering text getter must not be null.");
+            Debug.Assert(setFilteringText != null, "Filtering text setter must not be null.");
+
+            _setFilteringText = setFilteringText;
+            _originalFilteringText = getFilteringText() ?? string.Empty;
+            _shouldRestoreFilteringText = !string.IsNullOrEmpty(_originalFilteringText);
+
+            if (!_shouldRestoreFilteringText)
+            {
+                return;
+            }
+
+            // Unity applies this text filter to LogEntries.GetCount/GetEntryInternal, so clear it for raw retrieval.
+            _setFilteringText(string.Empty);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+
+            if (!_shouldRestoreFilteringText)
+            {
+                return;
+            }
+
+            _setFilteringText(_originalFilteringText);
+        }
     }
 }
