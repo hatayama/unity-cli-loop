@@ -5,6 +5,8 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Newtonsoft.Json.Linq;
+
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
@@ -12,6 +14,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class ThirdPartyToolMigrationPreflightScanner
     {
+        private const string SourceTextPath = "<preflight-source>";
+
         private static readonly string[] DirectCSharpCandidateMarkers =
         {
             ThirdPartyToolMigrationRuleCatalog.LegacyNamespace,
@@ -100,6 +104,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(!string.IsNullOrEmpty(extension), "extension must not be null or empty");
 
+            return InspectFileSourceText(source, extension, SourceTextPath);
+        }
+
+        private static MigrationTargetPreflightResult InspectFileSourceText(
+            string source,
+            string extension,
+            string filePath)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(extension), "extension must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
             if (string.Equals(extension, ".cs", StringComparison.OrdinalIgnoreCase))
             {
                 return InspectCSharpSourceText(source);
@@ -107,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (string.Equals(extension, ".asmdef", StringComparison.OrdinalIgnoreCase))
             {
-                return InspectAsmdefSourceText(source);
+                return InspectAsmdefFileSourceText(source, filePath);
             }
 
             return MigrationTargetPreflightResult.NoTargets;
@@ -135,7 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string source = File.ReadAllText(filePath);
-                MigrationTargetPreflightResult result = InspectSourceText(source, extension);
+                MigrationTargetPreflightResult result = InspectFileSourceText(source, extension, filePath);
                 if (result == MigrationTargetPreflightResult.HasTargets)
                 {
                     return result;
@@ -181,21 +197,60 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return MigrationTargetPreflightResult.NeedsFullScan;
         }
 
-        private static MigrationTargetPreflightResult InspectAsmdefSourceText(string source)
+        private static MigrationTargetPreflightResult InspectAsmdefFileSourceText(
+            string source,
+            string filePath)
         {
             Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
 
             if (!ContainsLegacyAsmdefName(source))
             {
                 return MigrationTargetPreflightResult.NoTargets;
             }
 
-            if (ThirdPartyToolMigrationFastSourceTargetDetector.ContainsFastAsmdefMigrationTarget(source))
+            if (!ThirdPartyToolMigrationAssemblyReferenceResolver.TryReadJsonObjectForMigration(
+                    filePath,
+                    _ => source,
+                    out JObject asmdef))
+            {
+                return MigrationTargetPreflightResult.NeedsFullScan;
+            }
+
+            if (ContainsLegacyAsmdefReference(asmdef))
             {
                 return MigrationTargetPreflightResult.HasTargets;
             }
 
             return MigrationTargetPreflightResult.NeedsFullScan;
+        }
+
+        private static bool ContainsLegacyAsmdefReference(JObject asmdef)
+        {
+            Debug.Assert(asmdef != null, "asmdef must not be null");
+
+            if (asmdef["references"] is not JArray references)
+            {
+                return false;
+            }
+
+            foreach (JToken referenceToken in references)
+            {
+                string reference = referenceToken.Value<string>() ?? string.Empty;
+                if (string.Equals(
+                        reference,
+                        ThirdPartyToolMigrationRuleCatalog.LegacyEditorAssemblyName,
+                        StringComparison.Ordinal) ||
+                    string.Equals(
+                        reference,
+                        ThirdPartyToolMigrationRuleCatalog.LegacyRuntimeAssemblyName,
+                        StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool ContainsLegacyAsmdefName(string source)

@@ -205,6 +205,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void PreflightScanner_WhenLegacyAsmdefReferenceIsMalformed_ReturnsNeedsFullScan()
+        {
+            // Verifies that startup preflight defers malformed legacy asmdefs to the full scanner.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationPreflightScanner.InspectSourceText(
+                    @"{ ""references"": [ ""uLoopMCP.Editor"" ",
+                    ".asmdef");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NeedsFullScan));
+        }
+
+        [Test]
         public async Task PreflightScanner_WhenAmbiguousFileExistsWithDirectTarget_ReturnsHasTargets()
         {
             // Verifies that an ambiguous marker does not force full scan before later direct targets are checked.
