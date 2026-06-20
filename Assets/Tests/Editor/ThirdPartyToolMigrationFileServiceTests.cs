@@ -71,6 +71,274 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void MigrationProjectFingerprint_WhenCandidateFileChanges_DoesNotMatch()
+        {
+            // Verifies that cached migration plans are rejected after candidate source changes.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                File.WriteAllText(toolPath, "public sealed class HelloTool {}");
+                ProjectFileInventory firstInventory = ProjectFileInventory.Create(projectRoot);
+                MigrationProjectFingerprint fingerprint =
+                    MigrationProjectFingerprint.CaptureFromInventory(firstInventory);
+
+                File.WriteAllText(toolPath, "public sealed class ChangedHelloTool { public int Value; }");
+                ProjectFileInventory changedInventory = ProjectFileInventory.Create(projectRoot);
+
+                Assert.That(fingerprint.Matches(changedInventory), Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void MigrationProjectFingerprint_WhenCandidateFileContentChangesWithoutMetadataChange_DoesNotMatch()
+        {
+            // Verifies that cached migration plans are rejected after same-size same-timestamp source changes.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string originalSource = "public sealed class AlphaTool {}";
+                string changedSource = "public sealed class BravoTool {}";
+                DateTime originalLastWriteTimeUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                File.WriteAllText(toolPath, originalSource);
+                File.SetLastWriteTimeUtc(toolPath, originalLastWriteTimeUtc);
+                ProjectFileInventory firstInventory = ProjectFileInventory.Create(projectRoot);
+                MigrationProjectFingerprint fingerprint =
+                    MigrationProjectFingerprint.CaptureFromInventory(firstInventory);
+
+                File.WriteAllText(toolPath, changedSource);
+                File.SetLastWriteTimeUtc(toolPath, originalLastWriteTimeUtc);
+                ProjectFileInventory changedInventory = ProjectFileInventory.Create(projectRoot);
+
+                Assert.That(changedSource.Length, Is.EqualTo(originalSource.Length));
+                Assert.That(fingerprint.Matches(changedInventory), Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void MigrationProjectFingerprint_WhenCandidateFileIsAdded_DoesNotMatch()
+        {
+            // Verifies that cached migration plans are rejected after candidate files are added.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "HelloTool.cs"),
+                    "public sealed class HelloTool {}");
+                ProjectFileInventory firstInventory = ProjectFileInventory.Create(projectRoot);
+                MigrationProjectFingerprint fingerprint =
+                    MigrationProjectFingerprint.CaptureFromInventory(firstInventory);
+
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "AddedTool.cs"),
+                    "public sealed class AddedTool {}");
+                ProjectFileInventory changedInventory = ProjectFileInventory.Create(projectRoot);
+
+                Assert.That(fingerprint.Matches(changedInventory), Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void MigrationProjectFingerprint_WhenAsmdefMetaChanges_DoesNotMatch()
+        {
+            // Verifies that cached migration plans are rejected after asmref GUID resolution changes.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string metaPath = asmdefPath + ".meta";
+                File.WriteAllText(
+                    asmdefPath,
+                    @"{ ""name"": ""VendorTools.Editor"", ""references"": [] }");
+                File.WriteAllText(metaPath, "guid: 11111111111111111111111111111111");
+                ProjectFileInventory firstInventory = ProjectFileInventory.Create(projectRoot);
+                MigrationProjectFingerprint fingerprint =
+                    MigrationProjectFingerprint.CaptureFromInventory(firstInventory);
+
+                File.WriteAllText(metaPath, "guid: 22222222222222222222222222222222");
+                File.SetLastWriteTimeUtc(metaPath, DateTime.UtcNow.AddMinutes(1));
+                ProjectFileInventory changedInventory = ProjectFileInventory.Create(projectRoot);
+
+                Assert.That(fingerprint.Matches(changedInventory), Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void MigrationProjectFingerprint_WhenAssemblySidecarFileIsLocked_CaptureDoesNotThrow()
+        {
+            // Verifies that locked assembly sidecar files do not abort migration preview caching.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string metaPath = asmdefPath + ".meta";
+                string asmrefPath = Path.Combine(toolDirectory, "VendorTools.asmref");
+                File.WriteAllText(
+                    asmdefPath,
+                    @"{ ""name"": ""VendorTools.Editor"", ""references"": [] }");
+                File.WriteAllText(metaPath, "guid: 11111111111111111111111111111111");
+                File.WriteAllText(
+                    asmrefPath,
+                    @"{ ""reference"": ""VendorTools.Editor"" }");
+                ProjectFileInventory inventory = ProjectFileInventory.Create(projectRoot);
+
+                using FileStream lockedMeta = new(metaPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                using FileStream lockedAsmref = new(asmrefPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+                Assert.DoesNotThrow(() => MigrationProjectFingerprint.CaptureFromInventory(inventory));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void PreflightScanner_WhenSourceHasNoMigrationMarkers_ReturnsNoTargets()
+        {
+            // Verifies that startup preflight can skip full scans when no migration marker text exists.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationPreflightScanner.InspectSourceText(
+                    "public sealed class PlainTool {}",
+                    ".cs");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NoTargets));
+        }
+
+        [Test]
+        public void PreflightScanner_WhenLegacyToolSourceExists_ReturnsHasTargets()
+        {
+            // Verifies that startup preflight detects direct legacy custom tool source immediately.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationPreflightScanner.InspectSourceText(
+                    "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class HelloTool {}",
+                    ".cs");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.HasTargets));
+        }
+
+        [Test]
+        public void PreflightScanner_WhenLegacyNamespaceIsOnlyComment_ReturnsNeedsFullScan()
+        {
+            // Verifies that startup preflight does not report targets from marker text inside comments.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationPreflightScanner.InspectSourceText(
+                    "// using io.github.hatayama.uLoopMCP;",
+                    ".cs");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NeedsFullScan));
+        }
+
+        [Test]
+        public void PreflightScanner_WhenLegacyAsmdefReferenceExists_ReturnsHasTargets()
+        {
+            // Verifies that startup preflight detects legacy asmdef references without building an inventory.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationPreflightScanner.InspectSourceText(
+                    @"{ ""references"": [ ""uLoopMCP.Editor"" ] }",
+                    ".asmdef");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.HasTargets));
+        }
+
+        [Test]
+        public void PreflightScanner_WhenLegacyAsmdefReferenceIsMalformed_ReturnsNeedsFullScan()
+        {
+            // Verifies that startup preflight defers malformed legacy asmdefs to the full scanner.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationPreflightScanner.InspectSourceText(
+                    @"{ ""references"": [ ""uLoopMCP.Editor"" ",
+                    ".asmdef");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NeedsFullScan));
+        }
+
+        [Test]
+        public async Task PreflightScanner_WhenAmbiguousFileExistsWithDirectTarget_ReturnsHasTargets()
+        {
+            // Verifies that an ambiguous marker does not force full scan before later direct targets are checked.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "0_Ambiguous.cs"),
+                    "// using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "1_HelloTool.cs"),
+                    "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class HelloTool {}");
+
+                MigrationTargetPreflightResult result =
+                    await ThirdPartyToolMigrationPreflightScanner.FindMigrationTargetAsync(
+                        projectRoot,
+                        CancellationToken.None);
+
+                Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.HasTargets));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task PreflightScanner_WhenInspectableFileIsLocked_ReturnsNeedsFullScan()
+        {
+            // Verifies that startup preflight defers unreadable candidate files to the full scanner.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string lockedToolPath = Path.Combine(toolDirectory, "LockedTool.cs");
+                File.WriteAllText(
+                    lockedToolPath,
+                    "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class LockedTool {}");
+
+                using FileStream lockedFile =
+                    new(lockedToolPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                MigrationTargetPreflightResult result =
+                    await ThirdPartyToolMigrationPreflightScanner.FindMigrationTargetAsync(
+                        projectRoot,
+                        CancellationToken.None);
+
+                Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NeedsFullScan));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void TryReadJsonObjectForMigration_WhenReadThrowsIOException_ReturnsFalse()
         {
             // Verifies that migration scans skip unreadable assembly JSON files.
@@ -4008,6 +4276,117 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
+        public async Task ApplyMigrationAsync_WhenProjectChangesAfterPreview_RebuildsPlan()
+        {
+            // Verifies that cached preview plans are not applied after project files change.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                Progress<ThirdPartyToolMigrationProgress> progress = new();
+                ThirdPartyToolMigrationPreview preview =
+                    await service.PreviewMigrationAsync(projectRoot, progress, CancellationToken.None);
+                File.WriteAllText(toolPath, "public sealed class HelloTool {}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(result.FileCount, Is.EqualTo(0));
+                Assert.That(File.ReadAllText(toolPath), Is.EqualTo("public sealed class HelloTool {}"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenProjectChangesDuringPreview_RebuildsPlan()
+        {
+            // Verifies that cached preview plans are not applied after files change during plan creation.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string editedToolSource = "public sealed class EditedTool {}";
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                FileChangingProgress progress = new(() =>
+                {
+                    File.WriteAllText(toolPath, editedToolSource);
+                    File.SetLastWriteTimeUtc(toolPath, DateTime.UtcNow.AddMinutes(1));
+                });
+                ThirdPartyToolMigrationPreview preview =
+                    await service.PreviewMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(result.FilePaths, Does.Not.Contain(toolPath));
+                Assert.That(File.ReadAllText(toolPath), Is.EqualTo(editedToolSource));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task PreviewMigrationAsync_WhenUnrelatedAsmdefJsonIsMalformedAndNoAsmrefs_PreviewsAsmdefRepair()
         {
             // Verifies that unrelated malformed asmdefs do not block previewing repairable asmdef changes.
@@ -4677,5 +5056,32 @@ public sealed class ScreenshotResponse : UnityCliLoopToolResponse
                 _cts.Cancel();
             }
         }
+
+        private sealed class FileChangingProgress : IProgress<ThirdPartyToolMigrationProgress>
+        {
+            private readonly Action _changeProject;
+            private bool _hasChangedProject;
+
+            public FileChangingProgress(Action changeProject)
+            {
+                Assert.That(changeProject, Is.Not.Null);
+
+                _changeProject = changeProject;
+            }
+
+            public void Report(ThirdPartyToolMigrationProgress value)
+            {
+                if (_hasChangedProject ||
+                    value.TotalItemCount == 0 ||
+                    value.ProcessedItemCount < 1)
+                {
+                    return;
+                }
+
+                _hasChangedProject = true;
+                _changeProject();
+            }
+        }
+
     }
 }

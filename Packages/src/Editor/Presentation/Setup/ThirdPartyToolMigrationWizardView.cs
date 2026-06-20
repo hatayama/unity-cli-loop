@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private readonly Label _migrationStatusLabel;
         private readonly ProgressBar _migrationProgressBar;
+        private readonly VisualElement _migrationButtonRow;
         private readonly Button _migrateButton;
         private readonly Button _refreshButton;
         private readonly Button _closeButton;
@@ -26,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ScrollView mainScrollView,
             Label migrationStatusLabel,
             ProgressBar migrationProgressBar,
+            VisualElement migrationButtonRow,
             Button migrateButton,
             Button refreshButton,
             Button closeButton)
@@ -33,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(mainScrollView != null, "mainScrollView must not be null");
             Debug.Assert(migrationStatusLabel != null, "migrationStatusLabel must not be null");
             Debug.Assert(migrationProgressBar != null, "migrationProgressBar must not be null");
+            Debug.Assert(migrationButtonRow != null, "migrationButtonRow must not be null");
             Debug.Assert(migrateButton != null, "migrateButton must not be null");
             Debug.Assert(refreshButton != null, "refreshButton must not be null");
             Debug.Assert(closeButton != null, "closeButton must not be null");
@@ -40,6 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             MainScrollView = mainScrollView;
             _migrationStatusLabel = migrationStatusLabel;
             _migrationProgressBar = migrationProgressBar;
+            _migrationButtonRow = migrationButtonRow;
             _migrateButton = migrateButton;
             _refreshButton = refreshButton;
             _closeButton = closeButton;
@@ -67,13 +71,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement content = CreateMigrationSection(mainScrollView);
             Label migrationStatusLabel = CreateStatusLabel(content);
             ProgressBar migrationProgressBar = CreateProgressBar(content);
-            Button migrateButton = CreateMigrateButton(content);
+            VisualElement migrationButtonRow = CreateMigrationButtonRow(content);
+            Button migrateButton = CreateMigrateButton(migrationButtonRow);
             (Button refreshButton, Button closeButton) = CreateFooter(mainScrollView);
 
             ThirdPartyToolMigrationWizardView view = new ThirdPartyToolMigrationWizardView(
                 mainScrollView,
                 migrationStatusLabel,
                 migrationProgressBar,
+                migrationButtonRow,
                 migrateButton,
                 refreshButton,
                 closeButton);
@@ -85,38 +91,44 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.MigrationNotCheckedText;
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
+            ViewDataBinder.SetVisible(_migrationButtonRow, false);
             _migrateButton.SetEnabled(false);
             _migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(
                 isMigrating,
                 false,
                 false);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
             _refreshButton.SetEnabled(true);
-            _closeButton.SetEnabled(true);
         }
 
         internal void ShowMigrationTargetsState(int fileCount, bool isMigrating)
         {
             _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.GetMigrationStatusText(fileCount);
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
+            ViewDataBinder.SetVisible(_migrationButtonRow, true);
             _migrateButton.SetEnabled(!isMigrating);
             _migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(
                 isMigrating,
                 true,
                 true);
-            _refreshButton.SetEnabled(true);
-            _closeButton.SetEnabled(true);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
+            _refreshButton.SetEnabled(false);
         }
 
         internal void ShowNoMigrationTargetsState(bool isMigrating)
         {
             _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.NoMigrationTargetsText;
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
+            ViewDataBinder.SetVisible(_migrationButtonRow, true);
             _migrateButton.SetEnabled(false);
             _migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(
                 isMigrating,
                 false,
                 true);
-            _refreshButton.SetEnabled(true);
+            ViewDataBinder.SetVisible(_refreshButton, false);
+            ViewDataBinder.SetVisible(_closeButton, true);
             _closeButton.SetEnabled(true);
         }
 
@@ -126,14 +138,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 progress,
                 isMigrating);
             ViewDataBinder.SetVisible(_migrationProgressBar, true);
+            ViewDataBinder.SetVisible(_migrationButtonRow, true);
             UpdateMigrationProgressBar(progress);
             _migrateButton.SetEnabled(false);
             _migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(
                 isMigrating,
                 true,
                 true);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
             _refreshButton.SetEnabled(false);
-            _closeButton.SetEnabled(!isMigrating);
         }
 
         private static ScrollView CreateMainScrollView(VisualElement root)
@@ -178,15 +192,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return migrationProgressBar;
         }
 
-        private static Button CreateMigrateButton(VisualElement content)
+        private static VisualElement CreateMigrationButtonRow(VisualElement content)
         {
             VisualElement migrationButtonRow = new VisualElement();
             migrationButtonRow.AddToClassList("setup-step__button-row");
             content.Add(migrationButtonRow);
+            return migrationButtonRow;
+        }
+
+        private static Button CreateMigrateButton(VisualElement migrationButtonRow)
+        {
+            Debug.Assert(migrationButtonRow != null, "migrationButtonRow must not be null");
 
             Button migrateButton = new Button();
             migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(false, false, false);
             migrateButton.AddToClassList("setup-button");
+            migrateButton.AddToClassList("setup-button--migration-action");
             migrationButtonRow.Add(migrateButton);
             return migrateButton;
         }

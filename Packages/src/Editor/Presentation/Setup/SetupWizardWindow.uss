@@ -242,6 +242,10 @@
     background-color: #388e3c;
 }
 
+.setup-button--migration-action {
+    height: 66px;
+}
+
 /* ===========================================
    Element: Hint Label
    =========================================== */

@@ -25,6 +25,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
+            MigrationTargetPreflightResult preflightResult =
+                await ThirdPartyToolMigrationPreflightScanner.FindMigrationTargetAsync(projectRoot, ct);
+            if (preflightResult == MigrationTargetPreflightResult.NoTargets)
+            {
+                return false;
+            }
+
+            if (preflightResult == MigrationTargetPreflightResult.HasTargets)
+            {
+                return true;
+            }
+
             ProjectFileInventory inventory = await ProjectFileInventory.CreateAsync(
                 projectRoot,
                 new Progress<ThirdPartyToolMigrationProgress>(),
@@ -71,6 +83,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string source = File.ReadAllText(csharpFilePath);
+                if (ContainsFastCSharpMigrationTarget(source))
+                {
+                    return true;
+                }
+
+                if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
+                {
+                    inspectedEntryCount++;
+                    if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
+                    {
+                        await Task.Yield();
+                    }
+
+                    continue;
+                }
+
                 string assemblyDirectory = FindNearestAssemblyDirectory(
                     csharpFilePath,
                     asmdefDirectories,
@@ -81,75 +109,67 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyDeclaredTypeNamesByDirectory,
                     assemblyDirectory,
                     declaredTypeNames);
-                if (ContainsFastCSharpMigrationTarget(source))
+                if (ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
                 {
-                    return true;
+                    legacyAssemblyDirectories.Add(assemblyDirectory);
                 }
 
-                if (ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
+                if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalUsing(source))
                 {
-                    if (ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
-                    {
-                        legacyAssemblyDirectories.Add(assemblyDirectory);
-                    }
+                    legacyAssemblyDirectories.Add(assemblyDirectory);
+                    assemblyScopedLegacyDirectories.Add(assemblyDirectory);
+                    AddAssemblyScopedLegacyAliases(
+                        assemblyScopedLegacyAliasesByDirectory,
+                        assemblyDirectory,
+                        ThirdPartyToolMigrationRules.GetLegacyGlobalNamespaceAliases(source));
+                }
 
-                    if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalUsing(source))
-                    {
-                        legacyAssemblyDirectories.Add(assemblyDirectory);
-                        assemblyScopedLegacyDirectories.Add(assemblyDirectory);
-                        AddAssemblyScopedLegacyAliases(
-                            assemblyScopedLegacyAliasesByDirectory,
-                            assemblyDirectory,
-                            ThirdPartyToolMigrationRules.GetLegacyGlobalNamespaceAliases(source));
-                    }
+                if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalToolInfoTypeAlias(source))
+                {
+                    AddAssemblyScopedLegacyAliases(
+                        assemblyScopedLegacyToolInfoAliasesByDirectory,
+                        assemblyDirectory,
+                        ThirdPartyToolMigrationRules.GetLegacyGlobalToolInfoTypeAliases(source));
+                }
 
-                    if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalToolInfoTypeAlias(source))
-                    {
-                        AddAssemblyScopedLegacyAliases(
-                            assemblyScopedLegacyToolInfoAliasesByDirectory,
-                            assemblyDirectory,
-                            ThirdPartyToolMigrationRules.GetLegacyGlobalToolInfoTypeAliases(source));
-                    }
+                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainGlobalUsing(source))
+                {
+                    assemblyScopedCurrentDomainDirectories.Add(assemblyDirectory);
+                }
 
-                    if (ThirdPartyToolMigrationRules.ContainsCurrentDomainGlobalUsing(source))
-                    {
-                        assemblyScopedCurrentDomainDirectories.Add(assemblyDirectory);
-                    }
+                if (ThirdPartyToolMigrationRules.ContainsCurrentToolContractsGlobalUsing(source))
+                {
+                    assemblyScopedCurrentToolContractsDirectories.Add(assemblyDirectory);
+                }
 
-                    if (ThirdPartyToolMigrationRules.ContainsCurrentToolContractsGlobalUsing(source))
-                    {
-                        assemblyScopedCurrentToolContractsDirectories.Add(assemblyDirectory);
-                    }
+                if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationGlobalUsing(source))
+                {
+                    assemblyScopedCurrentApplicationDirectories.Add(assemblyDirectory);
+                    applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
 
-                    if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationGlobalUsing(source))
-                    {
-                        assemblyScopedCurrentApplicationDirectories.Add(assemblyDirectory);
-                        applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
-                    }
+                if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationNamespaceAlias(source))
+                {
+                    applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
+                    AddAssemblyScopedNames(
+                        assemblyScopedCurrentApplicationAliasesByDirectory,
+                        assemblyDirectory,
+                        ThirdPartyToolMigrationRules.GetCurrentApplicationGlobalNamespaceAliases(source));
+                }
 
-                    if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationNamespaceAlias(source))
-                    {
-                        applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
-                        AddAssemblyScopedNames(
-                            assemblyScopedCurrentApplicationAliasesByDirectory,
-                            assemblyDirectory,
-                            ThirdPartyToolMigrationRules.GetCurrentApplicationGlobalNamespaceAliases(source));
-                    }
+                if (ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyToolsGlobalUsing(source))
+                {
+                    assemblyScopedCurrentFirstPartyToolsDirectories.Add(assemblyDirectory);
+                    firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
 
-                    if (ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyToolsGlobalUsing(source))
-                    {
-                        assemblyScopedCurrentFirstPartyToolsDirectories.Add(assemblyDirectory);
-                        firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
-                    }
-
-                    if (ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyToolsNamespaceAlias(source))
-                    {
-                        firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
-                        AddAssemblyScopedNames(
-                            assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
-                            assemblyDirectory,
-                            ThirdPartyToolMigrationRules.GetCurrentFirstPartyToolsGlobalNamespaceAliases(source));
-                    }
+                if (ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyToolsNamespaceAlias(source))
+                {
+                    firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
+                    AddAssemblyScopedNames(
+                        assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
+                        assemblyDirectory,
+                        ThirdPartyToolMigrationRules.GetCurrentFirstPartyToolsGlobalNamespaceAliases(source));
                 }
 
                 inspectedEntryCount++;
