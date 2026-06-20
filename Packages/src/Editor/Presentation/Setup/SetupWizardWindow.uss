@@ -111,6 +111,12 @@
     white-space: normal;
 }
 
+.setup-step__description-label {
+    color: var(--setup-color-muted);
+    white-space: normal;
+    margin-bottom: 6px;
+}
+
 .setup-progress-bar {
     height: 14px;
     margin-top: 6px;
@@ -331,6 +337,12 @@
 .setup-step__button-row .setup-button {
     flex-grow: 1;
     flex-basis: 0;
+}
+
+.setup-step__button-row .setup-dropdown {
+    flex-grow: 1;
+    flex-basis: 0;
+    margin-right: 6px;
 }
 
 /* ===========================================

@@ -80,13 +80,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             root.styleSheets.Add(styleSheet);
 
             ScrollView mainScrollView = CreateMainScrollView(root);
-            VisualElement content = CreateMigrationSection(mainScrollView);
+            VisualElement content = CreateCSharpMigrationSection(mainScrollView);
             Label migrationStatusLabel = CreateStatusLabel(content);
             ProgressBar migrationProgressBar = CreateProgressBar(content);
             VisualElement migrationButtonRow = CreateMigrationButtonRow(content);
             Button migrateButton = CreateMigrateButton(migrationButtonRow);
-            (EnumField migrationSkillTargetField, Button migrationSkillButton, Button refreshButton, Button closeButton) =
-                CreateFooter(mainScrollView);
+            (EnumField migrationSkillTargetField, Button migrationSkillButton) =
+                CreateAiMigrationSkillSection(mainScrollView);
+            (Button refreshButton, Button closeButton) = CreateFooter(mainScrollView);
 
             ThirdPartyToolMigrationWizardView view = new ThirdPartyToolMigrationWizardView(
                 mainScrollView,
@@ -186,14 +187,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return mainScrollView;
         }
 
-        private static VisualElement CreateMigrationSection(ScrollView mainScrollView)
+        private static VisualElement CreateCSharpMigrationSection(ScrollView mainScrollView)
         {
             VisualElement migrationSection = new VisualElement();
             migrationSection.AddToClassList("setup-step");
             migrationSection.AddToClassList("setup-step--migration-alert");
             mainScrollView.Add(migrationSection);
 
-            Label titleLabel = new Label("Custom Tool Migration");
+            Label titleLabel = new Label(ThirdPartyToolMigrationWizardText.CSharpMigrationSectionTitle);
             titleLabel.AddToClassList("setup-step__title");
             migrationSection.Add(titleLabel);
 
@@ -240,18 +241,31 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return migrateButton;
         }
 
-        private static (EnumField migrationSkillTargetField, Button migrationSkillButton, Button refreshButton, Button closeButton)
-            CreateFooter(ScrollView mainScrollView)
+        private static (EnumField migrationSkillTargetField, Button migrationSkillButton)
+            CreateAiMigrationSkillSection(ScrollView mainScrollView)
         {
-            VisualElement footer = new VisualElement();
-            footer.AddToClassList("setup-footer");
-            mainScrollView.Add(footer);
+            VisualElement migrationSkillSection = new VisualElement();
+            migrationSkillSection.AddToClassList("setup-step");
+            mainScrollView.Add(migrationSkillSection);
+
+            Label titleLabel = new Label(ThirdPartyToolMigrationWizardText.AiMigrationSkillSectionTitle);
+            titleLabel.AddToClassList("setup-step__title");
+            migrationSkillSection.Add(titleLabel);
+
+            VisualElement content = new VisualElement();
+            content.AddToClassList("setup-step__content");
+            migrationSkillSection.Add(content);
+
+            Label descriptionLabel = new Label(ThirdPartyToolMigrationWizardText.AiMigrationSkillDescriptionText);
+            descriptionLabel.AddToClassList("setup-step__description-label");
+            content.Add(descriptionLabel);
 
             VisualElement migrationSkillRow = new VisualElement();
-            migrationSkillRow.AddToClassList("setup-footer__button-row");
-            footer.Add(migrationSkillRow);
+            migrationSkillRow.AddToClassList("setup-step__button-row");
+            content.Add(migrationSkillRow);
 
             EnumField migrationSkillTargetField = new EnumField(SkillsTarget.Claude);
+            migrationSkillTargetField.label = "Install target";
             migrationSkillTargetField.AddToClassList("setup-dropdown");
             migrationSkillRow.Add(migrationSkillTargetField);
 
@@ -261,6 +275,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 SkillInstallState.Missing);
             migrationSkillButton.AddToClassList("setup-button");
             migrationSkillRow.Add(migrationSkillButton);
+            return (migrationSkillTargetField, migrationSkillButton);
+        }
+
+        private static (Button refreshButton, Button closeButton) CreateFooter(ScrollView mainScrollView)
+        {
+            VisualElement footer = new VisualElement();
+            footer.AddToClassList("setup-footer");
+            mainScrollView.Add(footer);
 
             VisualElement footerButtonRow = new VisualElement();
             footerButtonRow.AddToClassList("setup-footer__button-row");
@@ -282,7 +304,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 "Window > Unity CLI Loop > Custom Tool Migration.");
             reopenHintLabel.AddToClassList("setup-footer__hint-label");
             footer.Add(reopenHintLabel);
-            return (migrationSkillTargetField, migrationSkillButton, refreshButton, closeButton);
+            return (refreshButton, closeButton);
         }
 
         private void BindEvents(

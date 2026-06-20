@@ -95,12 +95,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         [TestCase(
             1,
-            "1 file needs V3 custom tool migration.\n" +
+            "1 file needs V3 C# source structure migration.\n" +
             "The Unity Console is showing errors because this file still uses the old custom tool API.\n\n" +
             "Click Migrate to update it automatically. The errors should disappear after migration.")]
         [TestCase(
             3,
-            "3 files need V3 custom tool migration.\n" +
+            "3 files need V3 C# source structure migration.\n" +
             "The Unity Console is showing errors because these files still use the old custom tool API.\n\n" +
             "Click Migrate to update them automatically. The errors should disappear after migration.")]
         public void GetMigrationStatusText_WhenTargetsExist_ReturnsFileCount(
@@ -125,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 text,
-                Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 steps complete."));
+                Is.EqualTo("Scanning C# source files for V3 custom tool API migration...\n3/12 steps complete."));
         }
 
         [Test]
@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 text,
-                Is.EqualTo("Migrating project files for V3 custom tools...\n4/12 steps complete."));
+                Is.EqualTo("Migrating C# source files to V3 custom tool APIs...\n4/12 steps complete."));
         }
 
         [TestCase(false, false, false, "Check required")]

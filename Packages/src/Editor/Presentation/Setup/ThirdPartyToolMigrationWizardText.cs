@@ -9,10 +9,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     internal static class ThirdPartyToolMigrationWizardText
     {
-        internal const string MigrationNotCheckedText = "Migration status has not been checked.";
-        internal const string NoMigrationTargetsText = "No V3 custom tool migration is needed.";
-        private const string MigrationCheckingText = "Scanning project for V3 custom tool migration...";
-        private const string MigrationApplyingText = "Migrating project files for V3 custom tools...";
+        internal const string CSharpMigrationSectionTitle = "C# Source Structure Migration";
+        internal const string AiMigrationSkillSectionTitle = "AI Skill and Script Migration";
+        internal const string AiMigrationSkillDescriptionText =
+            "Install a temporary AI skill for updating SKILL.md, Markdown, shell scripts, and PowerShell scripts " +
+            "that call uloop.\nThe skill gives your AI agent a checklist and detection scripts; this window only " +
+            "installs or removes it.";
+        internal const string MigrationNotCheckedText = "C# source migration status has not been checked.";
+        internal const string NoMigrationTargetsText = "No C# source structure migration is needed.";
+        private const string MigrationCheckingText = "Scanning C# source files for V3 custom tool API migration...";
+        private const string MigrationApplyingText = "Migrating C# source files to V3 custom tool APIs...";
         private const string MigrationButtonReadyText = "Migrate";
         private const string MigrationButtonMigratingText = "Migrating...";
         private const string MigrationButtonNoTargetsText = "Nothing to migrate";
@@ -30,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string subject = fileCount == 1 ? "this file still uses" : "these files still use";
             string objectPronoun = fileCount == 1 ? "it" : "them";
 
-            return $"{fileCount} {noun} {verb} V3 custom tool migration.\n" +
+            return $"{fileCount} {noun} {verb} V3 C# source structure migration.\n" +
                 $"The Unity Console is showing errors because {subject} the old custom tool API.\n\n" +
                 $"Click Migrate to update {objectPronoun} automatically. " +
                 "The errors should disappear after migration.";
