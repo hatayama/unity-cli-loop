@@ -341,6 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             CancellationToken ct = BeginMigrationOperation();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             ThirdPartyToolMigrationResult result = default;
+            bool isMigrationCompletionPending = true;
             _isMigrating = true;
             ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
             await Task.Yield();
@@ -351,13 +352,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     new ThirdPartyToolMigrationProgressReporter(this, ct);
                 result = await Task.Run(async () =>
                     await _thirdPartyToolMigrationUseCase.ApplyMigrationAsync(projectRoot, progress, ct));
-                if (ct.IsCancellationRequested)
+                if (!ShouldFinishMigrationOnMainThread(ct.IsCancellationRequested, result))
                 {
                     return;
                 }
 
                 await MainThreadSwitcher.SwitchToMainThread();
-                if (ct.IsCancellationRequested)
+                if (!ShouldFinishMigrationOnMainThread(ct.IsCancellationRequested, result))
                 {
                     return;
                 }
@@ -365,15 +366,28 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 CompleteMigrationOperation(ct);
                 if (result.Changed)
                 {
-                    ShowCheckingState(new ThirdPartyToolMigrationProgress(1, 1));
-                    await Task.Yield();
+                    if (!ct.IsCancellationRequested)
+                    {
+                        ShowCheckingState(new ThirdPartyToolMigrationProgress(1, 1));
+                        await Task.Yield();
+                    }
+
                     AssetDatabase.Refresh();
                 }
+
+                isMigrationCompletionPending = false;
             }
             finally
             {
                 _isMigrating = false;
+                bool shouldRefreshAfterInterruptedMigration = ShouldRefreshAfterInterruptedMigration(
+                    isMigrationCompletionPending,
+                    ct.IsCancellationRequested);
                 CompleteMigrationOperation(ct);
+                if (shouldRefreshAfterInterruptedMigration)
+                {
+                    RefreshUI();
+                }
             }
 
             if (ct.IsCancellationRequested)
@@ -634,6 +648,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(result.FileCount >= 0, "result file count must not be negative");
 
             return false;
+        }
+
+        internal static bool ShouldFinishMigrationOnMainThread(
+            bool isCancellationRequested,
+            ThirdPartyToolMigrationResult result)
+        {
+            Debug.Assert(result.FileCount >= 0, "result file count must not be negative");
+
+            return !isCancellationRequested || result.Changed;
+        }
+
+        internal static bool ShouldRefreshAfterInterruptedMigration(
+            bool isMigrationCompletionPending,
+            bool isCancellationRequested)
+        {
+            return isMigrationCompletionPending && !isCancellationRequested;
         }
 
         private void CompleteMigrationOperation(CancellationToken ct)

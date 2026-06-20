@@ -154,6 +154,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldRefresh, Is.False);
         }
 
+        [TestCase(false, 0, true)]
+        [TestCase(true, 0, false)]
+        [TestCase(false, 1, true)]
+        [TestCase(true, 1, true)]
+        public void ShouldFinishMigrationOnMainThread_ReturnsExpectedValue(
+            bool isCancellationRequested,
+            int migratedFileCount,
+            bool expected)
+        {
+            // Verifies that completed file writes still reach the main-thread asset refresh even after late cancellation.
+            ThirdPartyToolMigrationResult result =
+                new(migratedFileCount, migratedFileCount, System.Array.Empty<string>());
+
+            bool shouldFinish = ThirdPartyToolMigrationWizardWindow.ShouldFinishMigrationOnMainThread(
+                isCancellationRequested,
+                result);
+
+            Assert.That(shouldFinish, Is.EqualTo(expected));
+        }
+
+        [TestCase(true, false, true)]
+        [TestCase(true, true, false)]
+        [TestCase(false, false, false)]
+        public void ShouldRefreshAfterInterruptedMigration_ReturnsExpectedValue(
+            bool isMigrationCompletionPending,
+            bool isCancellationRequested,
+            bool expected)
+        {
+            // Verifies that failed async migrations restore the wizard while user cancellations stay quiet.
+            bool shouldRefresh = ThirdPartyToolMigrationWizardWindow.ShouldRefreshAfterInterruptedMigration(
+                isMigrationCompletionPending,
+                isCancellationRequested);
+
+            Assert.That(shouldRefresh, Is.EqualTo(expected));
+        }
+
         [Test]
         public void PrepareForOpen_PopulatesWindowStateBeforeShowing()
         {

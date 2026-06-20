@@ -454,9 +454,9 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
-        public void ApplyMigration_WhenLocalUIElementInfoWasAlreadyQualified_RepairsSource()
+        public void ApplyMigration_WhenLocalUIElementInfoWasAlreadyQualified_PreservesExplicitFirstPartyReference()
         {
-            // Verifies that project-wide migration repairs local DTO references qualified by an older migration pass.
+            // Verifies that project-wide migration keeps explicit first-party DTO references.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -464,18 +464,32 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
                 Directory.CreateDirectory(toolDirectory);
                 string toolPath = Path.Combine(toolDirectory, "CurrentElementTool.cs");
                 File.WriteAllText(toolPath, @"using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 public sealed class CurrentElementTool : UnityCliLoopTool<ElementSchema, ElementResponse>
 {
-    private List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> Classify()
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+
+    private List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> BuildFirstPartyElements()
     {
         List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> elements = new();
-        elements.Add(CreateElementInfo());
+        elements.Add(CreateFirstPartyElement());
         return elements;
     }
 
-    private io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo CreateElementInfo()
+    private io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo CreateFirstPartyElement()
+    {
+        return new io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo();
+    }
+
+    private UIElementInfo CreateProjectElement()
     {
         return new UIElementInfo();
     }
@@ -500,10 +514,59 @@ public sealed class UIElementInfo
 
                 Assert.That(preview.FileCount, Is.EqualTo(1));
                 Assert.That(result.FileCount, Is.EqualTo(1));
-                Assert.That(migratedSource, Does.Contain("private List<UIElementInfo> Classify()"));
-                Assert.That(migratedSource, Does.Contain("private UIElementInfo CreateElementInfo()"));
-                Assert.That(migratedSource, Does.Not.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo"));
+                Assert.That(migratedSource, Does.Contain(
+                    "private List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> BuildFirstPartyElements()"));
+                Assert.That(migratedSource, Does.Contain(
+                    "private io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo CreateFirstPartyElement()"));
+                Assert.That(migratedSource, Does.Contain(
+                    "new io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo()"));
+                Assert.That(migratedSource, Does.Contain("private UIElementInfo CreateProjectElement()"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenQualifiedFirstPartyDtoSharesLocalName_AddsScreenshotReference()
+        {
+            // Verifies that unambiguous first-party DTO references still add their asmdef dependency.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CurrentElementTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string toolSource = @"public sealed class CurrentElementTool
+{
+    private io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo CreateFirstPartyElement()
+    {
+        return new io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo();
+    }
+
+    private UIElementInfo CreateProjectElement()
+    {
+        return new UIElementInfo();
+    }
+}
+
+public sealed class UIElementInfo
+{
+}";
+                File.WriteAllText(toolPath, toolSource);
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(toolPath), Is.EqualTo(toolSource));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -1120,6 +1183,791 @@ public sealed class MainThreadResponse : UnityCliLoopToolResponse
         }
 
         [Test]
+        public void ApplyMigration_WhenFileScopedLegacyUsingUsesMainThreadSwitcher_AddsApplicationReference()
+        {
+            // Verifies that regular legacy usings add the Application asmdef reference for migrated main-thread calls.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "MainThreadTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadTool
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct)"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenLegacyUsingUsesBareFirstPartyScreenshotDto_AddsScreenshotReference()
+        {
+            // Verifies that regular legacy usings that migrate screenshot DTOs also repair asmdef references.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "ElementTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+public sealed class ElementTool
+{
+    public UIElementInfo CreateElement()
+    {
+        return new UIElementInfo();
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenAssemblyUsesCurrentApplicationGlobalUsing_AddsApplicationReference()
+        {
+            // Verifies that split files relying on a current Application global using get the required asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string mainThreadPath = Path.Combine(toolDirectory, "MainThreadUsage.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.UnityCliLoop.Application;");
+                File.WriteAllText(mainThreadPath, @"using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class MainThreadUsage
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(mainThreadPath), Does.Contain(
+                    "await MainThreadSwitcher.SwitchToMainThread(ct);"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenAssemblyUsesCurrentApplicationGlobalUsing_RewritesBareMainThreadSwitcherTiming()
+        {
+            // Verifies that split files relying on a current Application global using drop removed timing arguments.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string mainThreadPath = Path.Combine(toolDirectory, "MainThreadUsage.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.UnityCliLoop.Application;");
+                File.WriteAllText(mainThreadPath, @"using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class MainThreadUsage
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(mainThreadPath);
+
+                Assert.That(result.FilePaths.Contains(mainThreadPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "await MainThreadSwitcher.SwitchToMainThread(ct);"));
+                Assert.That(migratedSource, Does.Not.Contain("PlayerLoopTiming"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenAssemblyUsesCurrentApplicationGlobalAlias_RewritesQualifiedMainThreadSwitcherTiming()
+        {
+            // Verifies that split files relying on a current Application global alias drop removed timing arguments.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string mainThreadPath = Path.Combine(toolDirectory, "MainThreadUsage.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using App = io.github.hatayama.UnityCliLoop.Application;");
+                File.WriteAllText(mainThreadPath, @"using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class MainThreadUsage
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await App.MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(mainThreadPath);
+
+                Assert.That(result.FilePaths.Contains(mainThreadPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "await App.MainThreadSwitcher.SwitchToMainThread(ct);"));
+                Assert.That(migratedSource, Does.Not.Contain("PlayerLoopTiming"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenLegacyTimingWrapperCallerIsSplit_RewritesCallerArguments()
+        {
+            // Verifies that timing wrapper signature changes update callers in other source files.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string wrapperPath = Path.Combine(toolDirectory, "MainThreadWrapper.cs");
+                string callerPath = Path.Combine(toolDirectory, "MainThreadCaller.cs");
+                File.WriteAllText(wrapperPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadWrapper
+{
+    public async Task RunAsync(PlayerLoopTiming loop, CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(loop, ct);
+    }
+}");
+                File.WriteAllText(callerPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadCaller
+{
+    public Task CallAsync(MainThreadWrapper wrapper, CancellationToken ct)
+    {
+        return wrapper.RunAsync(PlayerLoopTiming.Update, ct);
+    }
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedWrapperSource = File.ReadAllText(wrapperPath);
+                string migratedCallerSource = File.ReadAllText(callerPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(migratedWrapperSource, Does.Contain("public async Task RunAsync(CancellationToken ct)"));
+                Assert.That(migratedCallerSource, Does.Contain("return wrapper.RunAsync(ct);"));
+                Assert.That(migratedWrapperSource, Does.Not.Contain("PlayerLoopTiming"));
+                Assert.That(migratedCallerSource, Does.Not.Contain("PlayerLoopTiming"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenLegacyTimingWrapperCallerIsInAnotherAssembly_RewritesCallerArguments()
+        {
+            // Verifies that public timing wrapper signature changes update callers in other asmdef assemblies.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string helperDirectory = Path.Combine(projectRoot, "Assets", "VendorHelpers");
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(helperDirectory);
+                Directory.CreateDirectory(toolDirectory);
+                string wrapperPath = Path.Combine(helperDirectory, "MainThreadWrapper.cs");
+                string callerPath = Path.Combine(toolDirectory, "MainThreadCaller.cs");
+                string helperAsmdefPath = Path.Combine(helperDirectory, "VendorHelpers.Editor.asmdef");
+                string toolAsmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(wrapperPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadWrapper
+{
+    public async Task RunAsync(PlayerLoopTiming loop, CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(loop, ct);
+    }
+}");
+                File.WriteAllText(callerPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadCaller
+{
+    public Task CallAsync(MainThreadWrapper wrapper, CancellationToken ct)
+    {
+        return wrapper.RunAsync(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(helperAsmdefPath, @"{
+    ""name"": ""VendorHelpers.Editor"",
+    ""references"": []
+}");
+                File.WriteAllText(toolAsmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""VendorHelpers.Editor""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedWrapperSource = File.ReadAllText(wrapperPath);
+                string migratedCallerSource = File.ReadAllText(callerPath);
+
+                Assert.That(result.FilePaths.Contains(wrapperPath), Is.True);
+                Assert.That(result.FilePaths.Contains(callerPath), Is.True);
+                Assert.That(migratedWrapperSource, Does.Contain("public async Task RunAsync(CancellationToken ct)"));
+                Assert.That(migratedCallerSource, Does.Contain("return wrapper.RunAsync(ct);"));
+                Assert.That(migratedCallerSource, Does.Not.Contain("PlayerLoopTiming"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenUnrelatedAssemblyHasSameTimingWrapper_KeepsUnreachableCallerArguments()
+        {
+            // Verifies that cross-file timing rewrites do not cross asmdef boundaries without a reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string helperDirectory = Path.Combine(projectRoot, "Assets", "VendorHelpers");
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                string unrelatedDirectory = Path.Combine(projectRoot, "Assets", "UnrelatedTools");
+                Directory.CreateDirectory(helperDirectory);
+                Directory.CreateDirectory(toolDirectory);
+                Directory.CreateDirectory(unrelatedDirectory);
+                string helperWrapperPath = Path.Combine(helperDirectory, "MainThreadWrapper.cs");
+                string toolCallerPath = Path.Combine(toolDirectory, "MainThreadCaller.cs");
+                string unrelatedWrapperPath = Path.Combine(unrelatedDirectory, "MainThreadWrapper.cs");
+                string unrelatedCallerPath = Path.Combine(unrelatedDirectory, "MainThreadCaller.cs");
+                string helperAsmdefPath = Path.Combine(helperDirectory, "VendorHelpers.Editor.asmdef");
+                string toolAsmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string unrelatedAsmdefPath = Path.Combine(unrelatedDirectory, "UnrelatedTools.Editor.asmdef");
+                File.WriteAllText(helperWrapperPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadWrapper
+{
+    public async Task RunAsync(PlayerLoopTiming loop, CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(loop, ct);
+    }
+}");
+                File.WriteAllText(toolCallerPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadCaller
+{
+    public Task CallAsync(MainThreadWrapper wrapper, CancellationToken ct)
+    {
+        return wrapper.RunAsync(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(unrelatedWrapperPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadWrapper
+{
+    public Task RunAsync(PlayerLoopTiming loop, CancellationToken ct)
+    {
+        return Task.CompletedTask;
+    }
+}");
+                File.WriteAllText(unrelatedCallerPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadCaller
+{
+    public Task CallAsync(MainThreadWrapper wrapper, CancellationToken ct)
+    {
+        return wrapper.RunAsync(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(helperAsmdefPath, @"{
+    ""name"": ""VendorHelpers.Editor"",
+    ""references"": []
+}");
+                File.WriteAllText(toolAsmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""VendorHelpers.Editor""
+    ]
+}");
+                File.WriteAllText(unrelatedAsmdefPath, @"{
+    ""name"": ""UnrelatedTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedToolCallerSource = File.ReadAllText(toolCallerPath);
+                string migratedUnrelatedWrapperSource = File.ReadAllText(unrelatedWrapperPath);
+                string migratedUnrelatedCallerSource = File.ReadAllText(unrelatedCallerPath);
+
+                Assert.That(result.FilePaths.Contains(toolCallerPath), Is.True);
+                Assert.That(migratedToolCallerSource, Does.Contain("return wrapper.RunAsync(ct);"));
+                Assert.That(migratedUnrelatedWrapperSource, Does.Contain(
+                    "public Task RunAsync(PlayerLoopTiming loop, CancellationToken ct)"));
+                Assert.That(migratedUnrelatedCallerSource, Does.Contain(
+                    "return wrapper.RunAsync(PlayerLoopTiming.Update, ct);"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenCrossFileTimingWrapperCallChain_RevisitsStaleOuterParameter()
+        {
+            // Verifies that cross-file wrapper rewrites also remove newly stale timing parameters.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string innerPath = Path.Combine(toolDirectory, "InnerWrapper.cs");
+                string outerPath = Path.Combine(toolDirectory, "OuterWrapper.cs");
+                string callerPath = Path.Combine(toolDirectory, "MainThreadCaller.cs");
+                File.WriteAllText(innerPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class InnerWrapper
+{
+    public async Task InnerAsync(PlayerLoopTiming loop, CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(loop, ct);
+    }
+}");
+                File.WriteAllText(outerPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class OuterWrapper
+{
+    public Task OuterAsync(InnerWrapper inner, PlayerLoopTiming loop, CancellationToken ct)
+    {
+        return inner.InnerAsync(loop, ct);
+    }
+}");
+                File.WriteAllText(callerPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadCaller
+{
+    public Task CallAsync(OuterWrapper outer, InnerWrapper inner, CancellationToken ct)
+    {
+        return outer.OuterAsync(inner, PlayerLoopTiming.Update, ct);
+    }
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedInnerSource = File.ReadAllText(innerPath);
+                string migratedOuterSource = File.ReadAllText(outerPath);
+                string migratedCallerSource = File.ReadAllText(callerPath);
+
+                Assert.That(result.FilePaths.Contains(innerPath), Is.True);
+                Assert.That(result.FilePaths.Contains(outerPath), Is.True);
+                Assert.That(result.FilePaths.Contains(callerPath), Is.True);
+                Assert.That(migratedInnerSource, Does.Contain("public async Task InnerAsync(CancellationToken ct)"));
+                Assert.That(migratedOuterSource, Does.Contain(
+                    "public Task OuterAsync(InnerWrapper inner, CancellationToken ct)"));
+                Assert.That(migratedOuterSource, Does.Contain("return inner.InnerAsync(ct);"));
+                Assert.That(migratedCallerSource, Does.Contain("return outer.OuterAsync(inner, ct);"));
+                Assert.That(migratedOuterSource, Does.Not.Contain("PlayerLoopTiming"));
+                Assert.That(migratedCallerSource, Does.Not.Contain("PlayerLoopTiming"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenAssemblyUsesCurrentToolContractsGlobalUsing_RewritesSplitPartialHelpers()
+        {
+            // Verifies that split files relying on a current ToolContracts global using finish partial migration.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string toolPath = Path.Combine(toolDirectory, "PartialTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.UnityCliLoop.ToolContracts;");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+
+public sealed class PartialTool : UnityCliLoopTool<PartialSchema, PartialResponse>
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        await EditorDelay.DelayFrame(2, ct);
+        await TimerDelay.Wait(10, cancellationToken: ct);
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+        Texture2D texture = await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+        return texture;
+    }
+}
+
+public sealed class PartialSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class PartialResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(migratedSource, Does.Contain(
+                    "EditorFrameWaiter.WaitFramesOrTimeoutAsync(2, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)"));
+                Assert.That(migratedSource, Does.Contain("TimerDelay.Wait(10, ct: ct)"));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct)"));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                Assert.That(migratedSource, Does.Not.Contain("EditorDelay"));
+                Assert.That(migratedSource, Does.Not.Contain("PlayerLoopTiming"));
+                Assert.That(migratedSource, Does.Not.Contain("cancellationToken:"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenCurrentFirstPartyToolsCaptureNeedsTimeout_AddsToolContractsReference()
+        {
+            // Verifies that migrated capture timeout constants have a direct ToolContracts asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CurrentScreenshotTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+public sealed class CurrentScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenAssemblyUsesCurrentFirstPartyToolsGlobalUsing_RewritesSplitCapture()
+        {
+            // Verifies that split files relying on a current FirstPartyTools global using finish capture migration.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string toolPath = Path.Combine(toolDirectory, "CurrentScreenshotTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+
+public sealed class CurrentScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
+                Assert.That(migratedSource, Does.Not.Contain("return await EditorWindowCaptureUtility.CaptureWindowAsync"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenAssemblyUsesCurrentFirstPartyToolsGlobalAlias_RewritesQualifiedSplitCapture()
+        {
+            // Verifies that split files relying on a current FirstPartyTools global alias finish capture migration.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string toolPath = Path.Combine(toolDirectory, "CurrentScreenshotTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+
+public sealed class CurrentScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await Fpt.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b"",
+        ""GUID:a0bdbd2c5705643fbb9aef9fac8fd46a""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
+                Assert.That(migratedSource, Does.Not.Contain(
+                    "return await Fpt.EditorWindowCaptureUtility.CaptureWindowAsync"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenCurrentFirstPartyToolsGlobalUsingOnlyNeedsReference_AddsScreenshotReference()
+        {
+            // Verifies that a current FirstPartyTools global using by itself still gets the defining asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenCurrentFirstPartyToolsAliasOnlyNeedsReference_AddsScreenshotReference()
+        {
+            // Verifies that a current FirstPartyTools namespace alias by itself still gets the defining asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string aliasUsingPath = Path.Combine(toolDirectory, "AliasUsing.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(aliasUsingPath, "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(File.ReadAllText(aliasUsingPath), Does.Contain(
+                    "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsing_KeepsUnrelatedFiles()
         {
             // Verifies that assembly-level migration does not rename unrelated project types.
@@ -1601,6 +2449,84 @@ public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
                 Assert.That(File.ReadAllText(toolPath), Does.Contain("UnityCliLoopTool<HelloSchema, HelloResponse>"));
                 Assert.That(File.ReadAllText(targetAsmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(ancestorAsmdefPath), Does.Not.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenSplitProjectScreenshotDtosExist_KeepsProjectDtoReferences()
+        {
+            // Verifies that assembly-level DTO declarations protect split custom tool references from first-party rewrites.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CaptureTool.cs");
+                string dtoPath = Path.Combine(toolDirectory, "CaptureDtos.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class CaptureTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>
+{
+    public async Task<ScreenshotResponse> ExecuteAsync(ScreenshotSchema parameters, CancellationToken ct)
+    {
+        Texture2D texture = await EditorWindowCaptureUtility.CaptureWindowAsync(parameters.Window, 1.0f, ct);
+        List<UIElementInfo> elements = new();
+        return new ScreenshotResponse { Elements = elements };
+    }
+}");
+                File.WriteAllText(dtoPath, @"using System.Collections.Generic;
+using UnityEditor;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class ScreenshotSchema : UnityCliLoopToolSchema
+{
+    public EditorWindow Window { get; set; }
+}
+
+public sealed class ScreenshotResponse : UnityCliLoopToolResponse
+{
+    public List<UIElementInfo> Elements { get; set; } = new List<UIElementInfo>();
+}
+
+public sealed class UIElementInfo
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedToolSource = File.ReadAllText(toolPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(migratedToolSource, Does.Contain("UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>"));
+                Assert.That(migratedToolSource, Does.Contain("Task<ScreenshotResponse> ExecuteAsync"));
+                Assert.That(migratedToolSource, Does.Contain("List<UIElementInfo> elements"));
+                Assert.That(migratedToolSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                Assert.That(migratedToolSource, Does.Not.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.ScreenshotSchema"));
+                Assert.That(migratedToolSource, Does.Not.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.ScreenshotResponse"));
+                Assert.That(migratedToolSource, Does.Not.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo"));
+                Assert.That(File.ReadAllText(dtoPath), Does.Not.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -2221,6 +3147,517 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentFirstPartyToolsGlobalUsingOnlyNeedsReference_ReturnsTrue()
+        {
+            // Verifies that preview detection reports a missing screenshot reference for current FirstPartyTools global using.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "GlobalUsings.cs"),
+                    "global using io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentFirstPartyToolsAliasOnlyNeedsReference_ReturnsTrue()
+        {
+            // Verifies that preview detection reports a missing screenshot reference for current FirstPartyTools alias using.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "AliasUsing.cs"),
+                    "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenAssemblyUsesCurrentApplicationGlobalAlias_ReturnsTrue()
+        {
+            // Verifies that preview detection treats current Application global aliases as assembly-scoped.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "GlobalUsings.cs"),
+                    "global using App = io.github.hatayama.UnityCliLoop.Application;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "MainThreadUsage.cs"),
+                    @"using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class MainThreadUsage
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await App.MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenAssemblyUsesCurrentFirstPartyToolsGlobalAlias_ReturnsTrue()
+        {
+            // Verifies that preview detection treats current FirstPartyTools global aliases as assembly-scoped.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "GlobalUsings.cs"),
+                    "global using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "CurrentScreenshotTool.cs"),
+                    @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+
+public sealed class CurrentScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await Fpt.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b"",
+        ""GUID:a0bdbd2c5705643fbb9aef9fac8fd46a""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenAssemblyUsesCurrentToolContractsGlobalUsingAndSplitPartialHelpers_ReturnsTrue()
+        {
+            // Verifies that startup detection treats current ToolContracts global usings as assembly-scoped.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "GlobalUsings.cs"),
+                    "global using io.github.hatayama.UnityCliLoop.ToolContracts;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "PartialTool.cs"),
+                    @"using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class PartialTool : UnityCliLoopTool<PartialSchema, PartialResponse>
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await EditorDelay.DelayFrame(2, ct);
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}
+
+public sealed class PartialSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class PartialResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentToolContractsGlobalUsingOnlyNeedsHelperRewrite_ReturnsTrue()
+        {
+            // Verifies that startup detection reports source-only helper migrations after asmdef refs are already fixed.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "GlobalUsings.cs"),
+                    "global using io.github.hatayama.UnityCliLoop.ToolContracts;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "PartialTool.cs"),
+                    @"using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class PartialTool
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d"",
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenAssemblyDeclaresMainThreadSwitcherForCurrentToolContractsFile_ReturnsFalse()
+        {
+            // Verifies that startup detection uses assembly-scoped type declarations before adding V3 references.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "AUsage.cs"),
+                    @"using System.Threading.Tasks;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class MainThreadUsage
+{
+    public Task RunAsync()
+    {
+        return MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update);
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "ZMainThreadSwitcher.cs"),
+                    @"using System.Threading.Tasks;
+
+public enum PlayerLoopTiming
+{
+    Update
+}
+
+public static class MainThreadSwitcher
+{
+    public static Task SwitchToMainThread(PlayerLoopTiming timing)
+    {
+        return Task.CompletedTask;
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentSplitScreenshotDtosDoNotUseScreenshotApis_ReturnsFalse()
+        {
+            // Verifies that startup detection protects split local DTOs before screenshot reference checks.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "ATool.cs"),
+                    @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class CurrentScreenshotTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>
+{
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "ZDtos.cs"),
+                    @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class ScreenshotSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class ScreenshotResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentRenderingCaptureNeedsDiscard_ReturnsTrue()
+        {
+            // Verifies that startup detection reports current rendering capture deconstruction rewrites.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "RenderingCapture.cs"),
+                    @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEngine;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class RenderingCapture
+{
+    public async Task CaptureAsync(CancellationToken ct)
+    {
+        Texture2D texture = null;
+        int yOffset = 0;
+        (texture, yOffset) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
+            1.0f,
+            UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+            ct);
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b"",
+        ""GUID:a0bdbd2c5705643fbb9aef9fac8fd46a""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentToolContractsFileUsesLegacyScreenshotCaptureWithoutAsmdef_ReturnsTrue()
+        {
+            // Verifies that startup detection reports source-only screenshot signature migrations.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "ScreenshotTool.cs"),
+                    @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class ScreenshotTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}
+
+public sealed class ScreenshotSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class ScreenshotResponse : UnityCliLoopToolResponse
+{
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentToolContractsFileUsesLegacyScreenshotCaptureAndReferencesExist_ReturnsTrue()
+        {
+            // Verifies that startup detection is not hidden by already-correct asmdef references.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "ScreenshotTool.cs"),
+                    @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class ScreenshotTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}
+
+public sealed class ScreenshotSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class ScreenshotResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b"",
+        ""GUID:a0bdbd2c5705643fbb9aef9fac8fd46a""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task HasMigrationTargetsAsync_WhenCurrentApplicationGuidReferenceExists_ReturnsFalse()
         {
             // Verifies that current V3 Application references do not trigger the startup migration prompt.
@@ -2711,6 +4148,331 @@ public sealed class HelloResponse : BaseToolResponse
             }
         }
 
+        [Test]
+        public async Task ApplyMigrationAsync_WhenFileScopedLegacyUsingUsesMainThreadSwitcher_AddsApplicationReference()
+        {
+            // Verifies that async migration also adds Application asmdef references for regular legacy usings.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "MainThreadTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.uLoopMCP;
+
+public sealed class MainThreadTool
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(
+                        projectRoot,
+                        new Progress<ThirdPartyToolMigrationProgress>(),
+                        CancellationToken.None);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct)"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenAssemblyUsesCurrentApplicationGlobalAlias_RewritesQualifiedMainThreadSwitcherTiming()
+        {
+            // Verifies that async migration uses current Application global aliases from sibling files.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string mainThreadPath = Path.Combine(toolDirectory, "MainThreadUsage.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using App = io.github.hatayama.UnityCliLoop.Application;");
+                File.WriteAllText(mainThreadPath, @"using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class MainThreadUsage
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await App.MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(
+                        projectRoot,
+                        new Progress<ThirdPartyToolMigrationProgress>(),
+                        CancellationToken.None);
+                string migratedSource = File.ReadAllText(mainThreadPath);
+
+                Assert.That(result.FilePaths.Contains(mainThreadPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "await App.MainThreadSwitcher.SwitchToMainThread(ct);"));
+                Assert.That(migratedSource, Does.Not.Contain("PlayerLoopTiming"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenCurrentFirstPartyToolsGlobalUsingOnlyNeedsReference_AddsScreenshotReference()
+        {
+            // Verifies that async migration adds the screenshot asmdef reference for current FirstPartyTools global using.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(
+                        projectRoot,
+                        new Progress<ThirdPartyToolMigrationProgress>(),
+                        CancellationToken.None);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenAssemblyUsesCurrentFirstPartyToolsGlobalAlias_RewritesQualifiedSplitCapture()
+        {
+            // Verifies that async migration uses current FirstPartyTools global aliases from sibling files.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string toolPath = Path.Combine(toolDirectory, "CurrentScreenshotTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+
+public sealed class CurrentScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await Fpt.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b"",
+        ""GUID:a0bdbd2c5705643fbb9aef9fac8fd46a""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(
+                        projectRoot,
+                        new Progress<ThirdPartyToolMigrationProgress>(),
+                        CancellationToken.None);
+                string migratedSource = File.ReadAllText(toolPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
+                Assert.That(migratedSource, Does.Not.Contain(
+                    "return await Fpt.EditorWindowCaptureUtility.CaptureWindowAsync"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenCurrentFirstPartyToolsAliasOnlyNeedsReference_AddsScreenshotReference()
+        {
+            // Verifies that async migration adds the screenshot asmdef reference for current FirstPartyTools alias using.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string aliasUsingPath = Path.Combine(toolDirectory, "AliasUsing.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(aliasUsingPath, "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(
+                        projectRoot,
+                        new Progress<ThirdPartyToolMigrationProgress>(),
+                        CancellationToken.None);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(File.ReadAllText(aliasUsingPath), Does.Contain(
+                    "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenCanceledAfterPlanCompletes_SkipsWritesBeforeApply()
+        {
+            // Verifies that cancellation before the first file write leaves project files untouched.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                using CancellationTokenSource cts = new();
+                CancelOnCompleteMigrationProgress progress = new(cts);
+                ThirdPartyToolMigrationFileService service = new();
+
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(projectRoot, progress, cts.Token);
+
+                Assert.That(result.FileCount, Is.EqualTo(0));
+                Assert.That(cts.IsCancellationRequested, Is.True);
+                Assert.That(File.ReadAllText(toolPath), Does.Contain("AbstractUnityTool<HelloSchema, HelloResponse>"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenCurrentSplitScreenshotDtosDoNotUseScreenshotApis_KeepsAsmdef()
+        {
+            // Verifies that async migration waits for assembly-level DTO discovery before screenshot reference checks.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "ATool.cs");
+                string dtoPath = Path.Combine(toolDirectory, "ZDtos.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string asmdefSource = @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}";
+                File.WriteAllText(toolPath, @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class CurrentScreenshotTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>
+{
+}");
+                File.WriteAllText(dtoPath, @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class ScreenshotSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class ScreenshotResponse : UnityCliLoopToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, asmdefSource);
+
+                ThirdPartyToolMigrationFileService service = new();
+                Progress<ThirdPartyToolMigrationProgress> progress = new();
+
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(result.FileCount, Is.EqualTo(0));
+                Assert.That(File.ReadAllText(asmdefPath), Is.EqualTo(asmdefSource));
+                Assert.That(File.ReadAllText(toolPath), Does.Contain("UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
         private static string CreateProjectRoot()
         {
             string projectRoot = Path.Combine(
@@ -2738,6 +4500,28 @@ public sealed class HelloResponse : BaseToolResponse
             public void Report(ThirdPartyToolMigrationProgress value)
             {
                 _reports.Add(value);
+            }
+        }
+
+        private sealed class CancelOnCompleteMigrationProgress : IProgress<ThirdPartyToolMigrationProgress>
+        {
+            private readonly CancellationTokenSource _cts;
+
+            public CancelOnCompleteMigrationProgress(CancellationTokenSource cts)
+            {
+                Assert.That(cts, Is.Not.Null);
+
+                _cts = cts;
+            }
+
+            public void Report(ThirdPartyToolMigrationProgress value)
+            {
+                if (value.TotalItemCount <= 0 || value.ProcessedItemCount < value.TotalItemCount)
+                {
+                    return;
+                }
+
+                _cts.Cancel();
             }
         }
     }
