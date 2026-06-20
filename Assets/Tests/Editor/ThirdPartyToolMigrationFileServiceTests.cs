@@ -126,6 +126,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void StreamingPreflightScanner_WhenSourceHasNoMigrationMarkers_ReturnsNoTargets()
+        {
+            // Verifies that startup preflight can skip full scans when no migration marker text exists.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationStreamingPreflightScanner.InspectSourceText(
+                    "public sealed class PlainTool {}",
+                    ".cs");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NoTargets));
+        }
+
+        [Test]
+        public void StreamingPreflightScanner_WhenLegacyToolSourceExists_ReturnsHasTargets()
+        {
+            // Verifies that startup preflight detects direct legacy custom tool source immediately.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationStreamingPreflightScanner.InspectSourceText(
+                    "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class HelloTool {}",
+                    ".cs");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.HasTargets));
+        }
+
+        [Test]
+        public void StreamingPreflightScanner_WhenLegacyNamespaceIsOnlyComment_ReturnsNeedsFullScan()
+        {
+            // Verifies that startup preflight does not report targets from marker text inside comments.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationStreamingPreflightScanner.InspectSourceText(
+                    "// using io.github.hatayama.uLoopMCP;",
+                    ".cs");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NeedsFullScan));
+        }
+
+        [Test]
+        public void StreamingPreflightScanner_WhenLegacyAsmdefReferenceExists_ReturnsHasTargets()
+        {
+            // Verifies that startup preflight detects legacy asmdef references without building an inventory.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationStreamingPreflightScanner.InspectSourceText(
+                    @"{ ""references"": [ ""uLoopMCP.Editor"" ] }",
+                    ".asmdef");
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.HasTargets));
+        }
+
+        [Test]
         public void TryReadJsonObjectForMigration_WhenReadThrowsIOException_ReturnsFalse()
         {
             // Verifies that migration scans skip unreadable assembly JSON files.

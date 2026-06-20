@@ -217,7 +217,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static bool ShouldExcludeDirectory(string projectRoot, string directoryPath)
+        internal static bool ShouldExcludeDirectory(string projectRoot, string directoryPath)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(directoryPath), "directoryPath must not be null or empty");
