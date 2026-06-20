@@ -15,10 +15,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class ThirdPartyToolMigrationFileService : IThirdPartyToolMigrationPort
     {
-        private readonly object _previewCacheLock = new();
+        private readonly object _migrationCacheLock = new();
         private bool _hasCachedPreview;
         private string _cachedPreviewProjectRoot = string.Empty;
         private ThirdPartyToolMigrationPreview _cachedPreview;
+        private bool _hasCachedPlan;
+        private string _cachedPlanProjectRoot = string.Empty;
+        private MigrationPlan _cachedPlan;
 
         public ThirdPartyToolMigrationPreview PreviewMigration(string projectRoot)
         {
@@ -35,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 plan.ChangedFilePaths.Count,
                 plan.ReplacementCount,
                 plan.ChangedFilePaths.ToArray());
+            StoreCachedPlan(normalizedProjectRoot, plan);
             StoreCachedPreview(normalizedProjectRoot, preview);
             return preview;
         }
@@ -58,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 plan.ChangedFilePaths.Count,
                 plan.ReplacementCount,
                 plan.ChangedFilePaths.ToArray());
+            StoreCachedPlan(normalizedProjectRoot, plan);
             StoreCachedPreview(normalizedProjectRoot, preview);
             return preview;
         }
@@ -85,8 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
             string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
+            MigrationPlan plan = GetCurrentMigrationPlan(normalizedProjectRoot);
             InvalidatePreviewCache();
-            MigrationPlan plan = ThirdPartyToolMigrationPlanBuilder.Create(normalizedProjectRoot);
             foreach (MigrationFileChange change in plan.Changes)
             {
                 ThirdPartyToolMigrationFileWriter.Write(change.FilePath, change.Content);
@@ -107,14 +112,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(progress != null, "progress must not be null");
 
             string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
-            InvalidatePreviewCache();
-            MigrationPlan plan = await ThirdPartyToolMigrationPlanBuilder.CreateAsync(normalizedProjectRoot, progress, ct);
+            MigrationPlan plan = await GetCurrentMigrationPlanAsync(normalizedProjectRoot, progress, ct);
             // A canceled operation must not start mutating files, but an active write batch must finish as one plan.
             if (ct.IsCancellationRequested)
             {
                 return new ThirdPartyToolMigrationResult(0, 0, Array.Empty<string>());
             }
 
+            InvalidatePreviewCache();
             for (int index = 0; index < plan.Changes.Count; index++)
             {
                 MigrationFileChange change = plan.Changes[index];
@@ -133,11 +138,75 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal void InvalidatePreviewCache()
         {
-            lock (_previewCacheLock)
+            InvalidateMigrationCaches();
+        }
+
+        private MigrationPlan GetCurrentMigrationPlan(string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            CachedMigrationPlanLookup cachedPlan = GetCurrentCachedPlan(projectRoot);
+            if (cachedPlan.Found)
+            {
+                return cachedPlan.Plan;
+            }
+
+            return ThirdPartyToolMigrationPlanBuilder.Create(projectRoot);
+        }
+
+        private async Task<MigrationPlan> GetCurrentMigrationPlanAsync(
+            string projectRoot,
+            IProgress<ThirdPartyToolMigrationProgress> progress,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(progress != null, "progress must not be null");
+
+            CachedMigrationPlanLookup cachedPlan = GetCurrentCachedPlan(projectRoot);
+            if (cachedPlan.Found)
+            {
+                return cachedPlan.Plan;
+            }
+
+            return await ThirdPartyToolMigrationPlanBuilder.CreateAsync(projectRoot, progress, ct);
+        }
+
+        private CachedMigrationPlanLookup GetCurrentCachedPlan(string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            MigrationPlan cachedPlan;
+            lock (_migrationCacheLock)
+            {
+                if (!_hasCachedPlan ||
+                    !string.Equals(_cachedPlanProjectRoot, projectRoot, StringComparison.Ordinal))
+                {
+                    return CachedMigrationPlanLookup.NotFound;
+                }
+
+                cachedPlan = _cachedPlan;
+            }
+
+            ProjectFileInventory inventory = ProjectFileInventory.Create(projectRoot);
+            if (!cachedPlan.ProjectFingerprint.Matches(inventory))
+            {
+                InvalidateMigrationCaches();
+                return CachedMigrationPlanLookup.NotFound;
+            }
+
+            return CachedMigrationPlanLookup.FoundPlan(cachedPlan);
+        }
+
+        private void InvalidateMigrationCaches()
+        {
+            lock (_migrationCacheLock)
             {
                 _hasCachedPreview = false;
                 _cachedPreviewProjectRoot = string.Empty;
                 _cachedPreview = default;
+                _hasCachedPlan = false;
+                _cachedPlanProjectRoot = string.Empty;
+                _cachedPlan = default;
             }
         }
 
@@ -158,7 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            lock (_previewCacheLock)
+            lock (_migrationCacheLock)
             {
                 if (_hasCachedPreview &&
                     string.Equals(_cachedPreviewProjectRoot, projectRoot, StringComparison.Ordinal))
@@ -176,12 +245,43 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            lock (_previewCacheLock)
+            lock (_migrationCacheLock)
             {
                 _cachedPreviewProjectRoot = projectRoot;
                 _cachedPreview = preview;
                 _hasCachedPreview = true;
             }
+        }
+
+        private void StoreCachedPlan(string projectRoot, MigrationPlan plan)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            lock (_migrationCacheLock)
+            {
+                _cachedPlanProjectRoot = projectRoot;
+                _cachedPlan = plan;
+                _hasCachedPlan = true;
+            }
+        }
+
+        private readonly struct CachedMigrationPlanLookup
+        {
+            public static CachedMigrationPlanLookup NotFound => new(false, default);
+
+            public static CachedMigrationPlanLookup FoundPlan(MigrationPlan plan)
+            {
+                return new CachedMigrationPlanLookup(true, plan);
+            }
+
+            private CachedMigrationPlanLookup(bool found, MigrationPlan plan)
+            {
+                Found = found;
+                Plan = plan;
+            }
+
+            public bool Found { get; }
+            public MigrationPlan Plan { get; }
         }
 
         internal static string NormalizeProjectRoot(string projectRoot)

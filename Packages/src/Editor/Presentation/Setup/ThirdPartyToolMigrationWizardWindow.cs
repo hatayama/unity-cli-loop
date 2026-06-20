@@ -45,8 +45,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ShowWindowInternal(false);
         }
 
-        internal static void ShowWindowForAutoScan()
+        internal static async void ShowWindowForAutoScan()
         {
+            CancellationToken ct = CancellationToken.None;
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            ThirdPartyToolMigrationUseCase migrationUseCase =
+                ThirdPartyToolMigrationUseCaseRegistry.GetRegisteredUseCase();
+            bool hasMigrationTargets = await Task.Run(async () =>
+                await migrationUseCase.HasMigrationTargetsAsync(projectRoot, ct));
+            await MainThreadSwitcher.SwitchToMainThread();
+            if (!ShouldOpenWindowAfterAutoScan(hasMigrationTargets, ct.IsCancellationRequested))
+            {
+                GetSessionStateService().ConsumeShouldAutoScanThirdPartyToolMigration();
+                return;
+            }
+
             ShowWindowInternal(true);
         }
 
@@ -57,6 +70,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return ThirdPartyToolMigrationWizardStateRules.ShouldStartInitialRefresh(
                 shouldRefreshAfterCreateGui,
                 shouldAutoScanThirdPartyToolMigration);
+        }
+
+        internal static bool ShouldOpenWindowAfterAutoScan(
+            bool hasMigrationTargets,
+            bool isCancellationRequested)
+        {
+            return hasMigrationTargets && !isCancellationRequested;
         }
 
         internal static void PrepareForOpen(

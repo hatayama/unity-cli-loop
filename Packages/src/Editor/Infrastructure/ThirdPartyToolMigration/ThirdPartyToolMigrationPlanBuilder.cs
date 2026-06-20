@@ -169,7 +169,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 changes.Add(new MigrationFileChange(asmdefFilePath, result.Content));
             }
 
-            return new MigrationPlan(changes, replacementCount);
+            return new MigrationPlan(
+                changes,
+                replacementCount,
+                MigrationProjectFingerprint.CaptureFromInventory(inventory));
         }
 
         internal static async Task<MigrationPlan> CreateAsync(
@@ -361,7 +364,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             progressCounter.ReportComplete();
-            return new MigrationPlan(changes, replacementCount);
+            return new MigrationPlan(
+                changes,
+                replacementCount,
+                MigrationProjectFingerprint.CaptureFromInventory(inventory));
         }
 
 

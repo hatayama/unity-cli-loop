@@ -71,6 +71,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void MigrationProjectFingerprint_WhenCandidateFileChanges_DoesNotMatch()
+        {
+            // Verifies that cached migration plans are rejected after candidate source changes.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                File.WriteAllText(toolPath, "public sealed class HelloTool {}");
+                ProjectFileInventory firstInventory = ProjectFileInventory.Create(projectRoot);
+                MigrationProjectFingerprint fingerprint =
+                    MigrationProjectFingerprint.CaptureFromInventory(firstInventory);
+
+                File.WriteAllText(toolPath, "public sealed class ChangedHelloTool { public int Value; }");
+                ProjectFileInventory changedInventory = ProjectFileInventory.Create(projectRoot);
+
+                Assert.That(fingerprint.Matches(changedInventory), Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void MigrationProjectFingerprint_WhenCandidateFileIsAdded_DoesNotMatch()
+        {
+            // Verifies that cached migration plans are rejected after candidate files are added.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "HelloTool.cs"),
+                    "public sealed class HelloTool {}");
+                ProjectFileInventory firstInventory = ProjectFileInventory.Create(projectRoot);
+                MigrationProjectFingerprint fingerprint =
+                    MigrationProjectFingerprint.CaptureFromInventory(firstInventory);
+
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "AddedTool.cs"),
+                    "public sealed class AddedTool {}");
+                ProjectFileInventory changedInventory = ProjectFileInventory.Create(projectRoot);
+
+                Assert.That(fingerprint.Matches(changedInventory), Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void TryReadJsonObjectForMigration_WhenReadThrowsIOException_ReturnsFalse()
         {
             // Verifies that migration scans skip unreadable assembly JSON files.
@@ -4000,6 +4055,62 @@ public sealed class HelloResponse : BaseToolResponse
 
                 Assert.That(firstPreview.HasTargets, Is.True);
                 Assert.That(refreshedPreview.HasTargets, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenProjectChangesAfterPreview_RebuildsPlan()
+        {
+            // Verifies that cached preview plans are not applied after project files change.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                Progress<ThirdPartyToolMigrationProgress> progress = new();
+                ThirdPartyToolMigrationPreview preview =
+                    await service.PreviewMigrationAsync(projectRoot, progress, CancellationToken.None);
+                File.WriteAllText(toolPath, "public sealed class HelloTool {}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(result.FileCount, Is.EqualTo(0));
+                Assert.That(File.ReadAllText(toolPath), Is.EqualTo("public sealed class HelloTool {}"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             }
             finally
             {

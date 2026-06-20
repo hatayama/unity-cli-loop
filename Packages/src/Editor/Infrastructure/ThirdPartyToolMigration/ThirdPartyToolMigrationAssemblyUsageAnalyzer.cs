@@ -60,6 +60,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 string source = File.ReadAllText(csharpFilePath);
                 sourceByCSharpFilePath.Add(csharpFilePath, source);
+                if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
+                {
+                    continue;
+                }
+
                 string assemblyDirectory = FindNearestAssemblyDirectory(
                     csharpFilePath,
                     asmdefDirectories,
@@ -69,11 +74,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyDeclaredTypeNamesByDirectory,
                     assemblyDirectory,
                     ThirdPartyToolMigrationRules.GetDeclaredTypeNames(source));
-                if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
-                {
-                    continue;
-                }
-
                 if (ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
                 {
                     legacyAssemblyDirectories.Add(assemblyDirectory);

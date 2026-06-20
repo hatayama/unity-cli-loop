@@ -29,6 +29,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldStartInitialRefresh, Is.EqualTo(expected));
         }
 
+        [TestCase(false, false, false)]
+        [TestCase(true, false, true)]
+        [TestCase(true, true, false)]
+        public void ShouldOpenWindowAfterAutoScan_ReturnsExpectedValue(
+            bool hasMigrationTargets,
+            bool isCancellationRequested,
+            bool expected)
+        {
+            // Verifies that auto-scan opens the migration window only when preflight finds work.
+            bool shouldOpenWindow = ThirdPartyToolMigrationWizardWindow.ShouldOpenWindowAfterAutoScan(
+                hasMigrationTargets,
+                isCancellationRequested);
+
+            Assert.That(shouldOpenWindow, Is.EqualTo(expected));
+        }
+
         [TestCase(
             1,
             "1 file needs V3 custom tool migration.\n" +
