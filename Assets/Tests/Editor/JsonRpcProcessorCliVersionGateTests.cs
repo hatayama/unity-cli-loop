@@ -13,6 +13,7 @@ using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using ApplicationRegistrar = io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -175,13 +176,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             MainThreadSwitcher.RegisterService(dispatcher);
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
-            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
                 new UnityCliLoopToolExecutionService());
-            UnityCliLoopToolRegistrar.RegisterService(service);
+            ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new SingleFlightTestTool());
 
             Task<string> firstResponseTask = null;
@@ -218,7 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await DrainTaskIfNeeded(firstResponseTask);
                 await DrainTaskIfNeeded(secondResponseTask);
                 UnityCliLoopEditorStateSnapshot.ClearForTesting();
-                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                ApplicationRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
         }
@@ -231,13 +232,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             MainThreadSwitcher.RegisterService(dispatcher);
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
-            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
                 new UnityCliLoopToolExecutionService());
-            UnityCliLoopToolRegistrar.RegisterService(service);
+            ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new ExecuteDynamicCodeTestTool());
             service.RegisterCustomTool(new SingleFlightTestTool());
 
@@ -286,7 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await DrainTaskIfNeeded(secondDynamicCodeTask);
                 await DrainTaskIfNeeded(otherToolTask);
                 UnityCliLoopEditorStateSnapshot.ClearForTesting();
-                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                ApplicationRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
         }
@@ -295,13 +296,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCompileWaitsForDomainReload_KeepsAcceptedRequestAliveAfterDisconnect()
         {
             // Verifies long compile waits are allowed to persist their result after the CLI response deadline closes.
-            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
                 new UnityCliLoopToolExecutionService());
-            UnityCliLoopToolRegistrar.RegisterService(service);
+            ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
 
             bool cancelOnClientDisconnect = true;
@@ -326,7 +327,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                ApplicationRegistrar.RegisterService(previousService);
             }
         }
 
@@ -334,13 +335,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCompileOmitsReloadWait_KeepsAcceptedRequestAliveAfterDisconnect()
         {
             // Verifies missing compile reload-wait params preserve the default wait contract.
-            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
                 new UnityCliLoopToolExecutionService());
-            UnityCliLoopToolRegistrar.RegisterService(service);
+            ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
 
             bool cancelOnClientDisconnect = true;
@@ -362,7 +363,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                ApplicationRegistrar.RegisterService(previousService);
             }
         }
 
@@ -370,13 +371,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCompileDoesNotWaitForDomainReload_CancelsOnClientDisconnect()
         {
             // Verifies fire-and-forget compile requests still cancel when the CLI connection goes away.
-            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
                 new UnityCliLoopToolExecutionService());
-            UnityCliLoopToolRegistrar.RegisterService(service);
+            ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
 
             bool cancelOnClientDisconnect = false;
@@ -401,7 +402,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                ApplicationRegistrar.RegisterService(previousService);
             }
         }
 
@@ -409,13 +410,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCompileUsesCamelCaseNoReloadWait_CancelsOnClientDisconnect()
         {
             // Verifies JSON-RPC compile dispatch policy matches the camelCase tool deserializer contract.
-            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
                 new UnityCliLoopToolExecutionService());
-            UnityCliLoopToolRegistrar.RegisterService(service);
+            ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
 
             bool cancelOnClientDisconnect = false;
@@ -440,7 +441,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                ApplicationRegistrar.RegisterService(previousService);
             }
         }
 
@@ -451,13 +452,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CapturingMainThreadDispatcher dispatcher = new();
             MainThreadSwitcher.RegisterService(dispatcher);
 
-            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
                 new UnityCliLoopToolExecutionService());
-            UnityCliLoopToolRegistrar.RegisterService(service);
+            ApplicationRegistrar.RegisterService(service);
 
             string hierarchyResponse = null;
             Task<string> hierarchyResponseTask = null;
@@ -502,7 +503,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await DrainTaskIfNeeded(hierarchyResponseTask);
                 await DrainTaskIfNeeded(logsResponseTask);
                 DeleteHierarchyFileFromResponse(hierarchyResponse);
-                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                ApplicationRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
         }
@@ -547,13 +548,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CapturingMainThreadDispatcher dispatcher = new();
             MainThreadSwitcher.RegisterService(dispatcher);
 
-            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
                 new UnityCliLoopToolExecutionService());
-            UnityCliLoopToolRegistrar.RegisterService(service);
+            ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new SingleFlightTestTool());
 
             using CancellationTokenSource cancellationSource = new CancellationTokenSource();
@@ -590,7 +591,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 dispatcher.RunContinuations();
                 await DrainTaskIfNeeded(canceledResponseTask);
                 await DrainTaskIfNeeded(secondResponseTask);
-                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                ApplicationRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
         }

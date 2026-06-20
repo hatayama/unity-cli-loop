@@ -431,8 +431,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     {
         private static readonly VibeLoggerService ServiceValue = new VibeLoggerService();
 
-        [InitializeOnLoadMethod]
-        private static void InitializeForEditorLoad()
+        public static void InitializeForEditorStartup()
         {
             ServiceValue.InitializeForEditorLoad();
         }

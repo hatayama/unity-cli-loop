@@ -3,6 +3,8 @@ using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+using ApplicationRegistrar = io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -18,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             bool includeDevelopmentOnly = ReadIncludeDevelopmentOnly(paramsToken);
 
-            UnityCliLoopToolRegistry registry = UnityCliLoopToolRegistrar.GetRegistry();
+            UnityCliLoopToolRegistry registry = ApplicationRegistrar.GetRegistry();
             ToolInfo[] allTools = registry.GetRegisteredTools();
 
             ToolInfo[] filteredTools = allTools;

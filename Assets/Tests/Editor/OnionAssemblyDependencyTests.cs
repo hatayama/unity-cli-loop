@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(validationResultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
             Assert.That(forceCompileUnknownResultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
-            Assert.That(serviceResultAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(serviceResultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
         }
 
         [Test]
@@ -233,7 +233,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(registryAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(internalToolNameProviderAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(classifierAssemblyName, Is.EqualTo(DomainAssemblyName));
-            Assert.That(catalogItemAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(catalogItemAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
             Assert.That(domainReloadServiceAssemblyName, Is.EqualTo(DomainAssemblyName));
         }
 
@@ -384,18 +384,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ScreenshotTypes_WhenLoaded_CompileUnderFirstPartyToolsAssembly()
+        public void ScreenshotContracts_WhenLoaded_CompileUnderToolContractsAssembly()
         {
-            // Tests that bundled screenshot implementation types stay inside the first-party tool assembly.
+            // Tests that screenshot public contracts are exposed from the shared ToolContracts assembly.
             string serviceAssemblyName = typeof(IUnityCliLoopScreenshotService).Assembly.GetName().Name;
             string requestAssemblyName = typeof(UnityCliLoopScreenshotRequest).Assembly.GetName().Name;
             string resultAssemblyName = typeof(UnityCliLoopScreenshotResult).Assembly.GetName().Name;
             string elementAssemblyName = typeof(UIElementInfo).Assembly.GetName().Name;
 
-            Assert.That(serviceAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(requestAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(resultAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(elementAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(serviceAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
+            Assert.That(requestAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
+            Assert.That(resultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
+            Assert.That(elementAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
         }
 
         [Test]
@@ -1205,7 +1205,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static bool IsPublicAutoReferencedAssembly(string assemblyName)
         {
-            return string.Equals(assemblyName, ToolContractsAssemblyName, StringComparison.Ordinal) ||
+            return string.Equals(assemblyName, ApplicationAssemblyName, StringComparison.Ordinal) ||
+                   string.Equals(assemblyName, DomainAssemblyName, StringComparison.Ordinal) ||
+                   string.Equals(assemblyName, ScreenshotAssemblyName, StringComparison.Ordinal) ||
+                   string.Equals(assemblyName, ToolContractsAssemblyName, StringComparison.Ordinal) ||
                    string.Equals(assemblyName, PausePointsRuntimeAssemblyName, StringComparison.Ordinal);
         }
 
