@@ -97,6 +97,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void MigrationProjectFingerprint_WhenCandidateFileContentChangesWithoutMetadataChange_DoesNotMatch()
+        {
+            // Verifies that cached migration plans are rejected after same-size same-timestamp source changes.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string originalSource = "public sealed class AlphaTool {}";
+                string changedSource = "public sealed class BravoTool {}";
+                DateTime originalLastWriteTimeUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                File.WriteAllText(toolPath, originalSource);
+                File.SetLastWriteTimeUtc(toolPath, originalLastWriteTimeUtc);
+                ProjectFileInventory firstInventory = ProjectFileInventory.Create(projectRoot);
+                MigrationProjectFingerprint fingerprint =
+                    MigrationProjectFingerprint.CaptureFromInventory(firstInventory);
+
+                File.WriteAllText(toolPath, changedSource);
+                File.SetLastWriteTimeUtc(toolPath, originalLastWriteTimeUtc);
+                ProjectFileInventory changedInventory = ProjectFileInventory.Create(projectRoot);
+
+                Assert.That(changedSource.Length, Is.EqualTo(originalSource.Length));
+                Assert.That(fingerprint.Matches(changedInventory), Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void MigrationProjectFingerprint_WhenCandidateFileIsAdded_DoesNotMatch()
         {
             // Verifies that cached migration plans are rejected after candidate files are added.

@@ -130,11 +130,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal readonly struct MigrationFileFingerprint
     {
+        private const int ContentHashBufferSize = 8192;
+        private const ulong ContentHashOffsetBasis = 14695981039346656037UL;
+        private const ulong ContentHashPrime = 1099511628211UL;
+
         private MigrationFileFingerprint(
             string filePath,
             bool exists,
             long length,
-            long lastWriteTimeUtcTicks)
+            long lastWriteTimeUtcTicks,
+            ulong contentHash)
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
             Debug.Assert(length >= 0, "length must not be negative");
@@ -144,12 +149,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Exists = exists;
             Length = length;
             LastWriteTimeUtcTicks = lastWriteTimeUtcTicks;
+            ContentHash = contentHash;
         }
 
         public string FilePath { get; }
         public bool Exists { get; }
         public long Length { get; }
         public long LastWriteTimeUtcTicks { get; }
+        public ulong ContentHash { get; }
 
         public static MigrationFileFingerprint Capture(string filePath)
         {
@@ -162,6 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     filePath,
                     false,
                     0,
+                    0,
                     0);
             }
 
@@ -169,7 +177,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 filePath,
                 true,
                 fileInfo.Length,
-                fileInfo.LastWriteTimeUtc.Ticks);
+                fileInfo.LastWriteTimeUtc.Ticks,
+                CaptureContentHash(filePath));
         }
 
         public bool HasSameValuesAs(MigrationFileFingerprint other)
@@ -177,7 +186,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return string.Equals(FilePath, other.FilePath, StringComparison.Ordinal) &&
                 Exists == other.Exists &&
                 Length == other.Length &&
-                LastWriteTimeUtcTicks == other.LastWriteTimeUtcTicks;
+                LastWriteTimeUtcTicks == other.LastWriteTimeUtcTicks &&
+                ContentHash == other.ContentHash;
+        }
+
+        private static ulong CaptureContentHash(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            byte[] buffer = new byte[ContentHashBufferSize];
+            ulong contentHash = ContentHashOffsetBasis;
+            using FileStream stream = File.OpenRead(filePath);
+            while (true)
+            {
+                int readByteCount = stream.Read(buffer, 0, buffer.Length);
+                if (readByteCount == 0)
+                {
+                    return contentHash;
+                }
+
+                for (int index = 0; index < readByteCount; index++)
+                {
+                    unchecked
+                    {
+                        contentHash ^= buffer[index];
+                        contentHash *= ContentHashPrime;
+                    }
+                }
+            }
         }
     }
 
