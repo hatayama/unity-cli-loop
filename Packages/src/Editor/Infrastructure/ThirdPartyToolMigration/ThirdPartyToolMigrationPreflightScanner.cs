@@ -14,7 +14,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             new ThirdPartyToolMigrationPreflightSearchPipeline(
                 new IThirdPartyToolMigrationPreflightSearchStrategy[]
                 {
-                    new ThirdPartyToolMigrationRipgrepPreflightSearchStrategy(),
                     new ThirdPartyToolMigrationManagedPreflightSearchStrategy()
                 });
 
@@ -29,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     }
 
     /// <summary>
-    /// Defines one migration preflight search approach, such as ripgrep or managed file IO.
+    /// Defines one migration preflight search approach.
     /// </summary>
     internal interface IThirdPartyToolMigrationPreflightSearchStrategy
     {

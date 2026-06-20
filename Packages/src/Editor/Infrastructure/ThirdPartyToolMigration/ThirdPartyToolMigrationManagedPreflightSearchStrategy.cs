@@ -27,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             DirectorySearchState searchState = new DirectorySearchState(assetsDirectory);
             int inspectedEntryCount = 0;
+            bool needsFullScan = false;
             while (searchState.HasPendingDirectories)
             {
                 if (ct.IsCancellationRequested)
@@ -37,9 +38,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string directoryPath = searchState.PopDirectory();
                 MigrationTargetPreflightResult fileResult =
                     await InspectFilesInDirectoryAsync(directoryPath, ct);
-                if (fileResult != MigrationTargetPreflightResult.NoTargets)
+                if (fileResult == MigrationTargetPreflightResult.HasTargets)
                 {
                     return fileResult;
+                }
+
+                if (fileResult == MigrationTargetPreflightResult.NeedsFullScan)
+                {
+                    needsFullScan = true;
                 }
 
                 foreach (string childDirectoryPath in Directory.EnumerateDirectories(directoryPath))
@@ -58,7 +64,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
-            return MigrationTargetPreflightResult.NoTargets;
+            return needsFullScan
+                ? MigrationTargetPreflightResult.NeedsFullScan
+                : MigrationTargetPreflightResult.NoTargets;
         }
 
         internal static MigrationTargetPreflightResult InspectSourceText(
@@ -88,6 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(directoryPath), "directoryPath must not be null or empty");
 
             int inspectedEntryCount = 0;
+            bool needsFullScan = false;
             foreach (string filePath in Directory.EnumerateFiles(directoryPath))
             {
                 if (ct.IsCancellationRequested)
@@ -103,9 +112,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 string source = File.ReadAllText(filePath);
                 MigrationTargetPreflightResult result = InspectSourceText(source, extension);
-                if (result != MigrationTargetPreflightResult.NoTargets)
+                if (result == MigrationTargetPreflightResult.HasTargets)
                 {
                     return result;
+                }
+
+                if (result == MigrationTargetPreflightResult.NeedsFullScan)
+                {
+                    needsFullScan = true;
                 }
 
                 inspectedEntryCount++;
@@ -115,7 +129,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
-            return MigrationTargetPreflightResult.NoTargets;
+            return needsFullScan
+                ? MigrationTargetPreflightResult.NeedsFullScan
+                : MigrationTargetPreflightResult.NoTargets;
         }
 
         private static bool ShouldInspectExtension(string extension)

@@ -174,6 +174,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ManagedPreflightSearchStrategy_WhenAmbiguousFileExistsWithDirectTarget_ReturnsHasTargets()
+        {
+            // Verifies that an ambiguous marker does not force full scan before later direct targets are checked.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "0_Ambiguous.cs"),
+                    "// using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "1_HelloTool.cs"),
+                    "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class HelloTool {}");
+                ThirdPartyToolMigrationManagedPreflightSearchStrategy strategy =
+                    new ThirdPartyToolMigrationManagedPreflightSearchStrategy();
+
+                MigrationTargetPreflightResult result =
+                    await strategy.FindMigrationTargetAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.HasTargets));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task PreflightSearchPipeline_WhenFirstStrategyIsDecisive_DoesNotRunNextStrategy()
         {
             // Verifies that rg and managed preflight strategies share one decisive-result pipeline.
@@ -200,7 +229,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public async Task PreflightSearchPipeline_WhenFirstStrategyNeedsFullScan_RunsNextStrategy()
         {
-            // Verifies that inconclusive rg results fall through to the managed preflight strategy.
+            // Verifies that inconclusive preflight results fall through to the next strategy.
             FakePreflightSearchStrategy firstStrategy =
                 new FakePreflightSearchStrategy(MigrationTargetPreflightResult.NeedsFullScan);
             FakePreflightSearchStrategy secondStrategy =
@@ -219,42 +248,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.HasTargets));
             Assert.That(firstStrategy.CallCount, Is.EqualTo(1));
             Assert.That(secondStrategy.CallCount, Is.EqualTo(1));
-        }
-
-        [Test]
-        public void RipgrepPreflightSearchStrategy_WhenNoMatchExitCode_ReturnsNoTargets()
-        {
-            // Verifies that rg's no-match exit code can skip the managed file scan.
-            MigrationTargetPreflightResult result =
-                ThirdPartyToolMigrationRipgrepPreflightSearchStrategy.MapExitCodeToResult(1);
-
-            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NoTargets));
-        }
-
-        [Test]
-        public void RipgrepPreflightSearchStrategy_WhenMatchExitCode_ReturnsNeedsFullScan()
-        {
-            // Verifies that rg matches remain candidates for managed or full migration checks.
-            MigrationTargetPreflightResult result =
-                ThirdPartyToolMigrationRipgrepPreflightSearchStrategy.MapExitCodeToResult(0);
-
-            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NeedsFullScan));
-        }
-
-        [Test]
-        public void RipgrepPreflightSearchStrategy_BuildArguments_UsesSharedMarkersAndUnityGlobs()
-        {
-            // Verifies that rg searches the same marker set as the managed preflight strategy.
-            string arguments = ThirdPartyToolMigrationRipgrepPreflightSearchStrategy.BuildArguments("Assets");
-
-            Assert.That(arguments, Does.Contain("--fixed-strings"));
-            Assert.That(arguments, Does.Contain("--no-ignore"));
-            Assert.That(arguments, Does.Contain("--hidden"));
-            Assert.That(arguments, Does.Contain("--glob \"*.cs\""));
-            Assert.That(arguments, Does.Contain("--glob \"*.asmdef\""));
-            Assert.That(arguments, Does.Contain("\"io.github.hatayama.uLoopMCP\""));
-            Assert.That(arguments, Does.Contain("\"uLoopMCP.Editor\""));
-            Assert.That(arguments, Does.Contain("--glob \"!**/Library/**\""));
         }
 
         [Test]
