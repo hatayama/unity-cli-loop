@@ -85,6 +85,32 @@
     padding-left: 4px;
 }
 
+.setup-selectable-text {
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    padding-top: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+}
+
+.setup-selectable-text .unity-base-text-field__input,
+.setup-selectable-text .unity-text-field__input {
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    padding-top: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+    white-space: normal;
+}
+
 .setup-step__status-row {
     flex-direction: row;
     align-items: center;

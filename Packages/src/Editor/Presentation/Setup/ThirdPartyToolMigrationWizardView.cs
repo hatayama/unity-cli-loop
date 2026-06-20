@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
 
-        private readonly Label _migrationStatusLabel;
+        private readonly TextField _migrationStatusTextField;
         private readonly ProgressBar _migrationProgressBar;
         private readonly VisualElement _migrationButtonRow;
         private readonly Button _migrateButton;
@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private ThirdPartyToolMigrationWizardView(
             ScrollView mainScrollView,
-            Label migrationStatusLabel,
+            TextField migrationStatusTextField,
             ProgressBar migrationProgressBar,
             VisualElement migrationButtonRow,
             Button migrateButton,
@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Button closeButton)
         {
             Debug.Assert(mainScrollView != null, "mainScrollView must not be null");
-            Debug.Assert(migrationStatusLabel != null, "migrationStatusLabel must not be null");
+            Debug.Assert(migrationStatusTextField != null, "migrationStatusTextField must not be null");
             Debug.Assert(migrationProgressBar != null, "migrationProgressBar must not be null");
             Debug.Assert(migrationButtonRow != null, "migrationButtonRow must not be null");
             Debug.Assert(migrateButton != null, "migrateButton must not be null");
@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(closeButton != null, "closeButton must not be null");
 
             MainScrollView = mainScrollView;
-            _migrationStatusLabel = migrationStatusLabel;
+            _migrationStatusTextField = migrationStatusTextField;
             _migrationProgressBar = migrationProgressBar;
             _migrationButtonRow = migrationButtonRow;
             _migrateButton = migrateButton;
@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             ScrollView mainScrollView = CreateMainScrollView(root);
             VisualElement content = CreateCSharpMigrationSection(mainScrollView);
-            Label migrationStatusLabel = CreateStatusLabel(content);
+            TextField migrationStatusTextField = CreateStatusTextField(content);
             ProgressBar migrationProgressBar = CreateProgressBar(content);
             VisualElement migrationButtonRow = CreateMigrationButtonRow(content);
             Button migrateButton = CreateMigrateButton(migrationButtonRow);
@@ -93,7 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             ThirdPartyToolMigrationWizardView view = new ThirdPartyToolMigrationWizardView(
                 mainScrollView,
-                migrationStatusLabel,
+                migrationStatusTextField,
                 migrationProgressBar,
                 migrationButtonRow,
                 migrateButton,
@@ -120,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void ShowNotCheckedState(bool isMigrating)
         {
-            _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.MigrationNotCheckedText;
+            _migrationStatusTextField.SetValueWithoutNotify(ThirdPartyToolMigrationWizardText.MigrationNotCheckedText);
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             ViewDataBinder.SetVisible(_migrationButtonRow, false);
             _migrateButton.SetEnabled(false);
@@ -135,7 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void ShowMigrationTargetsState(int fileCount, bool isMigrating)
         {
-            _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.GetMigrationStatusText(fileCount);
+            _migrationStatusTextField.SetValueWithoutNotify(
+                ThirdPartyToolMigrationWizardText.GetMigrationStatusText(fileCount));
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             ViewDataBinder.SetVisible(_migrationButtonRow, true);
             _migrateButton.SetEnabled(!isMigrating);
@@ -150,7 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void ShowNoMigrationTargetsState(bool isMigrating)
         {
-            _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.NoMigrationTargetsText;
+            _migrationStatusTextField.SetValueWithoutNotify(ThirdPartyToolMigrationWizardText.NoMigrationTargetsText);
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             ViewDataBinder.SetVisible(_migrationButtonRow, true);
             _migrateButton.SetEnabled(false);
@@ -165,9 +166,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void ShowCheckingState(ThirdPartyToolMigrationProgress progress, bool isMigrating)
         {
-            _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.GetMigrationProgressText(
-                progress,
-                isMigrating);
+            _migrationStatusTextField.SetValueWithoutNotify(
+                ThirdPartyToolMigrationWizardText.GetMigrationProgressText(progress, isMigrating));
             ViewDataBinder.SetVisible(_migrationProgressBar, true);
             ViewDataBinder.SetVisible(_migrationButtonRow, true);
             UpdateMigrationProgressBar(progress);
@@ -195,27 +195,30 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             migrationSection.AddToClassList("setup-step");
             mainScrollView.Add(migrationSection);
 
-            Label titleLabel = new Label(ThirdPartyToolMigrationWizardText.CSharpMigrationSectionTitle);
-            titleLabel.AddToClassList("setup-step__title");
-            migrationSection.Add(titleLabel);
+            TextField titleTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.CSharpMigrationSectionTitle,
+                "setup-step__title");
+            migrationSection.Add(titleTextField);
 
             VisualElement content = new VisualElement();
             content.AddToClassList("setup-step__content");
             migrationSection.Add(content);
 
-            Label descriptionLabel = new Label(ThirdPartyToolMigrationWizardText.CSharpMigrationDescriptionText);
-            descriptionLabel.AddToClassList("setup-step__description-label");
-            content.Add(descriptionLabel);
+            TextField descriptionTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.CSharpMigrationDescriptionText,
+                "setup-step__description-label");
+            content.Add(descriptionTextField);
             return content;
         }
 
-        private static Label CreateStatusLabel(VisualElement content)
+        private static TextField CreateStatusTextField(VisualElement content)
         {
-            Label migrationStatusLabel = new Label();
-            migrationStatusLabel.AddToClassList("setup-step__status-label");
-            migrationStatusLabel.AddToClassList("setup-step__status-label--standalone");
-            content.Add(migrationStatusLabel);
-            return migrationStatusLabel;
+            TextField migrationStatusTextField = CreateSelectableText(
+                string.Empty,
+                "setup-step__status-label");
+            migrationStatusTextField.AddToClassList("setup-step__status-label--standalone");
+            content.Add(migrationStatusTextField);
+            return migrationStatusTextField;
         }
 
         private static ProgressBar CreateProgressBar(VisualElement content)
@@ -284,17 +287,19 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             migrationSkillSection.AddToClassList("setup-step");
             mainScrollView.Add(migrationSkillSection);
 
-            Label titleLabel = new Label(ThirdPartyToolMigrationWizardText.AiMigrationSkillSectionTitle);
-            titleLabel.AddToClassList("setup-step__title");
-            migrationSkillSection.Add(titleLabel);
+            TextField titleTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.AiMigrationSkillSectionTitle,
+                "setup-step__title");
+            migrationSkillSection.Add(titleTextField);
 
             VisualElement content = new VisualElement();
             content.AddToClassList("setup-step__content");
             migrationSkillSection.Add(content);
 
-            Label descriptionLabel = new Label(ThirdPartyToolMigrationWizardText.AiMigrationSkillDescriptionText);
-            descriptionLabel.AddToClassList("setup-step__description-label");
-            content.Add(descriptionLabel);
+            TextField descriptionTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.AiMigrationSkillDescriptionText,
+                "setup-step__description-label");
+            content.Add(descriptionTextField);
 
             VisualElement actionSection = new VisualElement();
             actionSection.AddToClassList("setup-section-actions");
@@ -304,9 +309,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             targetRow.AddToClassList("setup-section-actions__field-row");
             actionSection.Add(targetRow);
 
-            Label targetLabel = new Label("Install target");
-            targetLabel.AddToClassList("setup-section-actions__field-label");
-            targetRow.Add(targetLabel);
+            TextField targetLabelTextField = CreateSelectableText(
+                "Install target",
+                "setup-section-actions__field-label");
+            targetRow.Add(targetLabelTextField);
 
             EnumField migrationSkillTargetField = new EnumField(SkillsTarget.Claude);
             migrationSkillTargetField.AddToClassList("setup-dropdown");
@@ -333,11 +339,24 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             footer.AddToClassList("setup-footer");
             mainScrollView.Add(footer);
 
-            Label reopenHintLabel = new Label(
+            TextField reopenHintTextField = CreateSelectableText(
                 "You can close this wizard and reopen it later from\n" +
-                "Window > Unity CLI Loop > Custom Tool Migration.");
-            reopenHintLabel.AddToClassList("setup-footer__hint-label");
-            footer.Add(reopenHintLabel);
+                "Window > Unity CLI Loop > Custom Tool Migration.",
+                "setup-footer__hint-label");
+            footer.Add(reopenHintTextField);
+        }
+
+        private static TextField CreateSelectableText(string text, string className)
+        {
+            TextField textField = new TextField();
+            textField.multiline = true;
+            textField.isReadOnly = true;
+            textField.selectAllOnFocus = false;
+            textField.selectAllOnMouseUp = false;
+            textField.SetValueWithoutNotify(text);
+            textField.AddToClassList("setup-selectable-text");
+            textField.AddToClassList(className);
+            return textField;
         }
 
         private void BindEvents(
