@@ -189,6 +189,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void MigrationProjectFingerprint_WhenAssemblySidecarFileIsLocked_CaptureDoesNotThrow()
+        {
+            // Verifies that locked assembly sidecar files do not abort migration preview caching.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string metaPath = asmdefPath + ".meta";
+                string asmrefPath = Path.Combine(toolDirectory, "VendorTools.asmref");
+                File.WriteAllText(
+                    asmdefPath,
+                    @"{ ""name"": ""VendorTools.Editor"", ""references"": [] }");
+                File.WriteAllText(metaPath, "guid: 11111111111111111111111111111111");
+                File.WriteAllText(
+                    asmrefPath,
+                    @"{ ""reference"": ""VendorTools.Editor"" }");
+                ProjectFileInventory inventory = ProjectFileInventory.Create(projectRoot);
+
+                using FileStream lockedMeta = new(metaPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                using FileStream lockedAsmref = new(asmrefPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+                Assert.DoesNotThrow(() => MigrationProjectFingerprint.CaptureFromInventory(inventory));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void PreflightScanner_WhenSourceHasNoMigrationMarkers_ReturnsNoTargets()
         {
             // Verifies that startup preflight can skip full scans when no migration marker text exists.

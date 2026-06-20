@@ -194,6 +194,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
 
+            try
+            {
+                return CaptureReadableContentHash(filePath);
+            }
+            catch (Exception ex) when (IsSkippableContentHashException(ex))
+            {
+                return 0;
+            }
+        }
+
+        private static ulong CaptureReadableContentHash(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
             byte[] buffer = new byte[ContentHashBufferSize];
             ulong contentHash = ContentHashOffsetBasis;
             using FileStream stream = File.OpenRead(filePath);
@@ -214,6 +228,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     }
                 }
             }
+        }
+
+        private static bool IsSkippableContentHashException(Exception ex)
+        {
+            Debug.Assert(ex != null, "ex must not be null");
+
+            return ex is IOException ||
+                   ex is UnauthorizedAccessException;
         }
     }
 
