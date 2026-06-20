@@ -93,18 +93,24 @@ func uninstallV3MigrationSkillForTarget(projectRoot string, target skillTarget, 
 	if err != nil {
 		return removed, notFound, err
 	}
-	destinationDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, grouped)
-	if _, err := os.Stat(destinationDir); err != nil {
-		if !os.IsNotExist(err) {
+	removedAny := false
+	for _, layoutGrouped := range []bool{grouped, !grouped} {
+		destinationDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, layoutGrouped)
+		exists, err := removeDirIfExists(destinationDir)
+		if err != nil {
 			return removed, notFound, err
 		}
+		if !exists {
+			continue
+		}
+		removeEmptyMigrationSkillParent(baseDir, layoutGrouped)
+		removedAny = true
+	}
+
+	if !removedAny {
 		notFound++
 		return removed, notFound, nil
 	}
-	if err := os.RemoveAll(destinationDir); err != nil {
-		return removed, notFound, err
-	}
-	removeEmptyMigrationSkillParent(baseDir, grouped)
 	removed++
 	return removed, notFound, nil
 }

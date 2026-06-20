@@ -1022,6 +1022,38 @@ func TestTryHandleSkillsRequestUninstallV3MigrationWithoutPackageSource(t *testi
 	}
 }
 
+// Tests that uninstalling the temporary migration skill removes both supported layouts.
+func TestRunV3MigrationSkillUninstallRemovesAlternateLayout(t *testing.T) {
+	projectRoot := t.TempDir()
+	target := targetConfigs["codex"]
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	flatDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, false)
+	groupedDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, true)
+	writeSkillFile(t, flatDir, "---\nname: v3-cli-invocation-migration\n---\n")
+	writeSkillFile(t, groupedDir, "---\nname: v3-cli-invocation-migration\n---\n")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	options := skillCommandOptions{targets: []skillTarget{target}}
+
+	code := runV3MigrationSkillUninstall(projectRoot, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("uninstall should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(flatDir); !os.IsNotExist(err) {
+		t.Fatalf("flat migration skill should be removed: %v", err)
+	}
+	if _, err := os.Stat(groupedDir); !os.IsNotExist(err) {
+		t.Fatalf("grouped migration skill should be removed: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Removed: 1") {
+		t.Fatalf("removed count should report one migration skill: %s", stdout.String())
+	}
+}
+
 // Tests that the POSIX detector reports boolean, first-party, and output-field candidates.
 func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 	fixtureRoot := t.TempDir()
