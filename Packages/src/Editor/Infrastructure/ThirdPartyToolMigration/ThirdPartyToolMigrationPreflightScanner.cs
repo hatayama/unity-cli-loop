@@ -150,7 +150,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     continue;
                 }
 
-                string source = File.ReadAllText(filePath);
+                (bool wasRead, string source) = TryReadSourceText(filePath);
+                if (!wasRead)
+                {
+                    needsFullScan = true;
+                    continue;
+                }
+
                 MigrationTargetPreflightResult result = InspectFileSourceText(source, extension, filePath);
                 if (result == MigrationTargetPreflightResult.HasTargets)
                 {
@@ -172,6 +178,30 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return needsFullScan
                 ? MigrationTargetPreflightResult.NeedsFullScan
                 : MigrationTargetPreflightResult.NoTargets;
+        }
+
+        private static (bool WasRead, string Source) TryReadSourceText(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            try
+            {
+                return (true, File.ReadAllText(filePath));
+            }
+            catch (Exception ex) when (IsSkippablePreflightReadException(ex))
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[UnityCliLoop] Deferring migration preflight after unreadable file at {filePath}: {ex.Message}");
+                return (false, string.Empty);
+            }
+        }
+
+        private static bool IsSkippablePreflightReadException(Exception ex)
+        {
+            Debug.Assert(ex != null, "ex must not be null");
+
+            return ex is IOException ||
+                   ex is UnauthorizedAccessException;
         }
 
         private static bool ShouldInspectExtension(string extension)

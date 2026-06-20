@@ -310,6 +310,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task PreflightScanner_WhenInspectableFileIsLocked_ReturnsNeedsFullScan()
+        {
+            // Verifies that startup preflight defers unreadable candidate files to the full scanner.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string lockedToolPath = Path.Combine(toolDirectory, "LockedTool.cs");
+                File.WriteAllText(
+                    lockedToolPath,
+                    "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class LockedTool {}");
+
+                using FileStream lockedFile =
+                    new(lockedToolPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                MigrationTargetPreflightResult result =
+                    await ThirdPartyToolMigrationPreflightScanner.FindMigrationTargetAsync(
+                        projectRoot,
+                        CancellationToken.None);
+
+                Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NeedsFullScan));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void TryReadJsonObjectForMigration_WhenReadThrowsIOException_ReturnsFalse()
         {
             // Verifies that migration scans skip unreadable assembly JSON files.
