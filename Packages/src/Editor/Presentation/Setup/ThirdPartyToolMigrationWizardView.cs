@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isMigrating,
                 true,
                 true);
-            _refreshButton.SetEnabled(true);
+            _refreshButton.SetEnabled(false);
         }
 
         internal void ShowNoMigrationTargetsState(bool isMigrating)
