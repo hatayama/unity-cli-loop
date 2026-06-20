@@ -54,13 +54,21 @@ func enumerateDirectProjectPackageRoots(projectRoot string) []string {
 }
 
 func resolveManifestLocalPackageRoots(projectRoot string) []string {
+	return resolveManifestLocalPackageRootsMatching(projectRoot, nil)
+}
+
+func resolveTargetManifestLocalPackageRoots(projectRoot string) []string {
+	return resolveManifestLocalPackageRootsMatching(projectRoot, isTargetManifestPackageName)
+}
+
+func resolveManifestLocalPackageRootsMatching(projectRoot string, includeDependency func(string) bool) []string {
 	dependencies := readManifestDependencies(projectRoot)
 	if len(dependencies) == 0 {
 		return []string{}
 	}
 	packageRoots := []string{}
 	for dependencyName, dependencyValue := range dependencies {
-		if !isTargetManifestPackageName(dependencyName) {
+		if includeDependency != nil && !includeDependency(dependencyName) {
 			continue
 		}
 		localPath := resolveLocalDependencyPath(dependencyValue, projectRoot)
@@ -116,7 +124,7 @@ func resolvePackageRoot(projectRoot string) string {
 			return resolvedRoot
 		}
 	}
-	for _, candidate := range resolveManifestLocalPackageRoots(projectRoot) {
+	for _, candidate := range resolveTargetManifestLocalPackageRoots(projectRoot) {
 		if resolvedRoot := resolvePackageRootCandidate(candidate); resolvedRoot != "" {
 			return resolvedRoot
 		}

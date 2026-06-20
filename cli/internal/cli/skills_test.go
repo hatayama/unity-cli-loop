@@ -94,7 +94,17 @@ name: uloop-local-package
 
 # local package
 `)
-	writeManifest(t, projectRoot, `{"dependencies":{"com.example.cached":"1.0.0"}}`)
+	manifestLocalPackageRoot := filepath.Join(t.TempDir(), "manifest-local-package")
+	writeSkillFile(t, filepath.Join(manifestLocalPackageRoot, "Editor", "ManifestLocalTool", "Skill"), `---
+name: uloop-manifest-local-package
+---
+
+# manifest local package
+`)
+	writeManifest(
+		t,
+		projectRoot,
+		`{"dependencies":{"com.example.cached":"1.0.0","com.example.manifest-local":"file:`+filepath.ToSlash(manifestLocalPackageRoot)+`"}}`)
 	writeTestSkill(t, projectRoot, "Library/PackageCache/com.example.cached@1.0.0/Editor/CachedTool/Skill", `---
 name: uloop-cached-package
 ---
@@ -115,6 +125,7 @@ name: uloop-cached-package
 		"uloop-hello",
 		"uloop-launch",
 		"uloop-local-package",
+		"uloop-manifest-local-package",
 	}
 	if !reflect.DeepEqual(actualNames, expectedNames) {
 		t.Fatalf("skill names mismatch:\nactual:   %#v\nexpected: %#v", actualNames, expectedNames)
