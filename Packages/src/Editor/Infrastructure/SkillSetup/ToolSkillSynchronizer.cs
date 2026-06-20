@@ -563,11 +563,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool groupSkillsUnderUnityCliLoop)
         {
             SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
-            return GetSkillInstallStateAtProjectRoot(
+            SkillInstallState preferredLayoutState = GetSkillInstallStateAtProjectRoot(
                 projectRoot,
                 target,
                 skill,
                 groupSkillsUnderUnityCliLoop);
+            if (preferredLayoutState != SkillInstallState.Missing)
+            {
+                return preferredLayoutState;
+            }
+
+            return GetSkillInstallStateAtProjectRoot(
+                projectRoot,
+                target,
+                skill,
+                !groupSkillsUnderUnityCliLoop);
         }
 
         internal static async Task<SkillInstallResult> InstallV3MigrationSkillFilesAtProjectRoot(
@@ -588,12 +598,30 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             IEnumerable<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop)
         {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(targets != null, "targets must not be null");
+
             SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
-            return await RemoveSpecificSkillFilesAtProjectRoot(
-                projectRoot,
-                targets,
-                skill.Name,
-                groupSkillsUnderUnityCliLoop);
+            SkillTargetInfo[] targetArray = targets.ToArray();
+            return await Task.Run(() =>
+            {
+                int succeeded = 0;
+                foreach (SkillTargetInfo target in targetArray)
+                {
+                    string targetRoot = Path.Combine(projectRoot, target.DirName);
+                    DeleteSkillDirectoryIfExists(
+                        targetRoot,
+                        skill.Name,
+                        groupSkillsUnderUnityCliLoop);
+                    DeleteSkillDirectoryIfExists(
+                        targetRoot,
+                        skill.Name,
+                        !groupSkillsUnderUnityCliLoop);
+                    succeeded++;
+                }
+
+                return new SkillInstallResult(targetArray.Length, succeeded);
+            });
         }
 
         internal static SkillInstallState GetSkillInstallStateAtProjectRoot(

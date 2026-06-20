@@ -180,6 +180,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
+        [TestCase(SkillInstallState.Installed, true)]
+        [TestCase(SkillInstallState.Outdated, true)]
+        [TestCase(SkillInstallState.Missing, false)]
+        [TestCase(SkillInstallState.Checking, false)]
+        public void ShouldRemoveMigrationSkill_ReturnsExpectedValue(
+            SkillInstallState installState,
+            bool expected)
+        {
+            // Verifies that the migration skill action removes only when files are detected.
+            bool shouldRemove = ThirdPartyToolMigrationWizardWindow.ShouldRemoveMigrationSkill(installState);
+
+            Assert.That(shouldRemove, Is.EqualTo(expected));
+        }
+
         [TestCase(0, 1, 1, 4, 1000, 100, true)]
         [TestCase(10, 50, 1, 4, 1000, 100, false)]
         [TestCase(10, 110, 1, 4, 1000, 100, true)]

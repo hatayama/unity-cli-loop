@@ -209,6 +209,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return ThirdPartyToolMigrationWizardText.GetMigrationSkillButtonText(isUpdating, installState);
         }
 
+        internal static bool ShouldRemoveMigrationSkill(SkillInstallState installState)
+        {
+            return installState == SkillInstallState.Installed
+                || installState == SkillInstallState.Outdated;
+        }
+
         internal static bool HasFiniteSize(Vector2 size)
         {
             return ThirdPartyToolMigrationWizardWindowResizer.HasFiniteSize(size);
@@ -525,14 +531,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             SkillSetupTargetInfo target = CreateMigrationSkillTargetInfo(_migrationSkillTarget);
-            List<SkillSetupTargetInfo> targets = new() { target };
+            SkillInstallState currentInstallState =
+                _skillSetupUseCase.GetV3MigrationSkillInstallStateAtProjectRoot(
+                    projectRoot,
+                    target,
+                    GroupMigrationSkillUnderUnityCliLoop);
+            bool shouldRemoveMigrationSkill = ShouldRemoveMigrationSkill(currentInstallState);
+            List<SkillSetupTargetInfo> targets = new List<SkillSetupTargetInfo> { target };
+            _migrationSkillInstallState = currentInstallState;
             _isUpdatingMigrationSkill = true;
             UpdateMigrationSkillState();
 
             try
             {
-                if (_migrationSkillInstallState == SkillInstallState.Installed
-                    || _migrationSkillInstallState == SkillInstallState.Outdated)
+                if (shouldRemoveMigrationSkill)
                 {
                     await _skillSetupUseCase.RemoveV3MigrationSkillFilesAsync(
                         projectRoot,
