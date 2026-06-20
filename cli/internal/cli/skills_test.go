@@ -164,6 +164,38 @@ name: v3-cli-invocation-migration
 	}
 }
 
+// Tests that the dedicated V3 migration skill can be read from a manifest file dependency.
+func TestCollectV3MigrationSkillDefinitionReadsManifestFilePackage(t *testing.T) {
+	projectRoot := t.TempDir()
+	packageRoot := filepath.Join(t.TempDir(), "Packages", "src")
+	markerPath := filepath.Join(packageRoot, "Editor", "FirstPartyTools")
+	if err := os.MkdirAll(markerPath, 0o755); err != nil {
+		t.Fatalf("failed to create marker path: %v", err)
+	}
+	writeManifest(t, projectRoot, `{"dependencies":{"io.github.hatayama.uloopmcp":"file:`+filepath.ToSlash(packageRoot)+`"}}`)
+	writeSkillFile(t, filepath.Join(
+		packageRoot,
+		"TemporarySkills",
+		"v3-cli-invocation-migration",
+		"Skill"), `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration
+`)
+
+	skills, err := collectV3MigrationSkillDefinition(projectRoot)
+	if err != nil {
+		t.Fatalf("collectV3MigrationSkillDefinition failed: %v", err)
+	}
+
+	actualNames := skillNames(skills)
+	expectedNames := []string{"v3-cli-invocation-migration"}
+	if !reflect.DeepEqual(actualNames, expectedNames) {
+		t.Fatalf("skill names mismatch:\nactual:   %#v\nexpected: %#v", actualNames, expectedNames)
+	}
+}
+
 // Tests that CLI-only and project-local skills win over package-root duplicates.
 func TestCollectSkillDefinitionsUsesUnitySideSourcePrecedence(t *testing.T) {
 	projectRoot := t.TempDir()

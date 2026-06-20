@@ -113,6 +113,11 @@ func resolvePackageRoot(projectRoot string) string {
 			return resolvedRoot
 		}
 	}
+	for _, candidate := range resolveManifestLocalPackageRoots(projectRoot) {
+		if resolvedRoot := resolvePackageRootCandidate(candidate); resolvedRoot != "" {
+			return resolvedRoot
+		}
+	}
 
 	return resolvePackageCacheRoot(projectRoot)
 }
