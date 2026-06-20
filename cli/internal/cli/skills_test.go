@@ -1005,6 +1005,24 @@ func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
 	}
+	bundledReferenceFile := filepath.Join(
+		fixtureRoot,
+		"Packages",
+		"src",
+		"TemporarySkills",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"references",
+		"first-party-v2-to-v3.md")
+	if err := os.MkdirAll(filepath.Dir(bundledReferenceFile), 0o755); err != nil {
+		t.Fatalf("failed to create bundled reference dir: %v", err)
+	}
+	if err := os.WriteFile(
+		bundledReferenceFile,
+		[]byte("uloop bundled-tool --self-noise false\n"),
+		0o644); err != nil {
+		t.Fatalf("failed to write bundled reference: %v", err)
+	}
 	scriptPath := filepath.Join(
 		findRepositoryRootForSkillsTest(t),
 		"Packages",
@@ -1026,6 +1044,9 @@ func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 			t.Fatalf("detector output missing %s:\n%s", expected, text)
 		}
 	}
+	if strings.Contains(text, "self-noise") {
+		t.Fatalf("detector should skip bundled migration skill sources:\n%s", text)
+	}
 }
 
 // Tests that the PowerShell detector reports candidates when PowerShell is available.
@@ -1043,6 +1064,7 @@ func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 		"uloop run-tests --save-before-run false",
 		"uloop some-tool --enabled true",
 		"$result.Success",
+		"$result.success",
 	}, "\n")
 	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
@@ -1067,6 +1089,9 @@ func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("detector output missing %s:\n%s", expected, text)
 		}
+	}
+	if strings.Contains(text, "$result.success") {
+		t.Fatalf("detector should not report already migrated camelCase fields:\n%s", text)
 	}
 }
 

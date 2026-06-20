@@ -18,6 +18,12 @@ $excludedDirectories = @(
 
 $targetExtensions = @(".md", ".sh", ".bash", ".zsh", ".ps1", ".psm1")
 $outputFields = "Success|Message|ErrorMessage|ErrorCount|WarningCount|TotalCount|DisplayedCount|LogType|StackTrace|XmlPath|TestCount|PassedCount|FailedCount|SkippedCount|CompletedAt|ScreenshotCount|Screenshots|CompilationErrors|ErrorCode|UpdatedCode|DiagnosticsSummary|OutputPath|InputPath|TotalFrames|DurationSeconds|CurrentFrame|IsReplaying|KeyName|PositionX|PositionY|EndPositionX|EndPositionY|HitGameObjectName|IsPlaying|IsPaused|ClearedLogCount|ClearedCounts"
+$bundledMigrationSkillPath = [System.IO.Path]::Combine(
+    "Packages",
+    "src",
+    "TemporarySkills",
+    "v3-cli-invocation-migration"
+)
 
 function Test-IsExcludedDirectoryName {
     param([string] $Name)
@@ -31,11 +37,25 @@ function Test-IsTargetFile {
     return $File.Name -eq "SKILL.md" -or $targetExtensions -contains $File.Extension
 }
 
+function Test-IsBundledMigrationSkillPath {
+    param([string] $Path)
+
+    $normalizedPath = $Path.Replace(
+        [string] [System.IO.Path]::AltDirectorySeparatorChar,
+        [string] [System.IO.Path]::DirectorySeparatorChar
+    )
+    return $normalizedPath.IndexOf(
+        $bundledMigrationSkillPath,
+        [System.StringComparison]::OrdinalIgnoreCase
+    ) -ge 0
+}
+
 function Get-CandidateFile {
     param([string] $Directory)
 
     $directoryName = Split-Path -Leaf $Directory
-    if (Test-IsExcludedDirectoryName -Name $directoryName) {
+    if ((Test-IsExcludedDirectoryName -Name $directoryName) -or
+        (Test-IsBundledMigrationSkillPath -Path $Directory)) {
         return
     }
 
@@ -43,7 +63,10 @@ function Get-CandidateFile {
         Where-Object { Test-IsTargetFile -File $_ }
 
     Get-ChildItem -LiteralPath $Directory -Directory |
-        Where-Object { -not (Test-IsExcludedDirectoryName -Name $_.Name) } |
+        Where-Object {
+            -not (Test-IsExcludedDirectoryName -Name $_.Name) -and
+            -not (Test-IsBundledMigrationSkillPath -Path $_.FullName)
+        } |
         ForEach-Object {
             Get-CandidateFile -Directory $_.FullName
         }
@@ -85,7 +108,7 @@ Get-CandidateFile -Directory $Root |
             if ($line -match "uloop\s+execute-dynamic-code\s+[^#|;&]*--compile-only(\s|=|$)") {
                 Write-Candidate -Kind "FIRST_PARTY_OPTION" -Path $path -LineNumber $lineNumber -Line $line
             }
-            if ($line -match "\.($outputFields)([^A-Za-z0-9_]|$)") {
+            if ($line -cmatch "\.($outputFields)([^A-Za-z0-9_]|$)") {
                 Write-Candidate -Kind "OUTPUT_FIELD" -Path $path -LineNumber $lineNumber -Line $line
             }
         }
