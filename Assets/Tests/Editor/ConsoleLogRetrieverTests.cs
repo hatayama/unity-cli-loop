@@ -411,4 +411,70 @@ namespace io.github.hatayama.uLoopMCP
                 $"Mixed message should match exactly. Expected: '{mixedMessage}', Actual: '{testLog.Message.Trim()}'");
         }
     }
+
+    /// <summary>
+    /// Unit tests for temporarily clearing Unity Console text filtering.
+    /// </summary>
+    public class ConsoleFilteringTextScopeTests
+    {
+        private string filteringText;
+        private List<string> assignedFilteringTexts;
+
+        [SetUp]
+        public void SetUp()
+        {
+            filteringText = "active-filter";
+            assignedFilteringTexts = new List<string>();
+        }
+
+        [Test]
+        public void Dispose_RestoresOriginalFilteringText()
+        {
+            // The scope must restore user-visible Console state because get-logs is a read-only command.
+            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText))
+            {
+                Assert.AreEqual(string.Empty, filteringText);
+            }
+
+            Assert.AreEqual("active-filter", filteringText);
+            CollectionAssert.AreEqual(new[] { string.Empty, "active-filter" }, assignedFilteringTexts);
+        }
+
+        [Test]
+        public void Constructor_WhenFilteringTextIsEmpty_DoesNotAssignEmptyText()
+        {
+            // Avoiding a redundant write keeps the Console UI untouched when there is no active text filter.
+            filteringText = string.Empty;
+
+            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText))
+            {
+                Assert.AreEqual(string.Empty, filteringText);
+            }
+
+            CollectionAssert.IsEmpty(assignedFilteringTexts);
+        }
+
+        [Test]
+        public void Dispose_WhenFilteringTextChangedInsideScope_RestoresOriginalFilteringText()
+        {
+            // The original text must win even if retrieval code changes the filter before cleanup runs.
+            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText))
+            {
+                filteringText = "changed-during-retrieval";
+            }
+
+            Assert.AreEqual("active-filter", filteringText);
+        }
+
+        private string GetFilteringText()
+        {
+            return filteringText;
+        }
+
+        private void SetFilteringText(string value)
+        {
+            filteringText = value;
+            assignedFilteringTexts.Add(value);
+        }
+    }
 }
