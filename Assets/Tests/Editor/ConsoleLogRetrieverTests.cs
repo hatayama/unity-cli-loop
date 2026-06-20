@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
@@ -217,7 +218,7 @@ namespace io.github.hatayama.uLoopMCP
                 "Message should not contain stack trace content");
             
             // Cleanup
-            Object.DestroyImmediate(testObject);
+            UnityEngine.Object.DestroyImmediate(testObject);
         }
 
         [Test]
@@ -418,20 +419,24 @@ namespace io.github.hatayama.uLoopMCP
     public class ConsoleFilteringTextScopeTests
     {
         private string filteringText;
+        private string consoleState;
         private List<string> assignedFilteringTexts;
+        private List<string> consoleStateEvents;
 
         [SetUp]
         public void SetUp()
         {
             filteringText = "active-filter";
+            consoleState = "selected-row";
             assignedFilteringTexts = new List<string>();
+            consoleStateEvents = new List<string>();
         }
 
         [Test]
         public void Dispose_RestoresOriginalFilteringText()
         {
             // The scope must restore user-visible Console state because get-logs is a read-only command.
-            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText))
+            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText, CreateConsoleStateScope))
             {
                 Assert.AreEqual(string.Empty, filteringText);
             }
@@ -446,24 +451,40 @@ namespace io.github.hatayama.uLoopMCP
             // Avoiding a redundant write keeps the Console UI untouched when there is no active text filter.
             filteringText = string.Empty;
 
-            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText))
+            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText, CreateConsoleStateScope))
             {
                 Assert.AreEqual(string.Empty, filteringText);
             }
 
             CollectionAssert.IsEmpty(assignedFilteringTexts);
+            CollectionAssert.IsEmpty(consoleStateEvents);
         }
 
         [Test]
         public void Dispose_WhenFilteringTextChangedInsideScope_RestoresOriginalFilteringText()
         {
             // The original text must win even if retrieval code changes the filter before cleanup runs.
-            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText))
+            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText, CreateConsoleStateScope))
             {
                 filteringText = "changed-during-retrieval";
             }
 
             Assert.AreEqual("active-filter", filteringText);
+        }
+
+        [Test]
+        public void Dispose_RestoresConsoleStateAfterFilteringText()
+        {
+            // Console selection restoration must run after text restoration because SetFilteringText can alter selection.
+            using (new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText, CreateConsoleStateScope))
+            {
+                consoleState = "changed-during-retrieval";
+            }
+
+            Assert.AreEqual("selected-row", consoleState);
+            CollectionAssert.AreEqual(
+                new[] { "capture:selected-row", "restore:selected-row:filter=active-filter" },
+                consoleStateEvents);
         }
 
         private string GetFilteringText()
@@ -475,6 +496,38 @@ namespace io.github.hatayama.uLoopMCP
         {
             filteringText = value;
             assignedFilteringTexts.Add(value);
+        }
+
+        private IDisposable CreateConsoleStateScope()
+        {
+            return new FakeConsoleStateScope(
+                consoleState,
+                value =>
+                {
+                    consoleState = value;
+                    consoleStateEvents.Add($"restore:{value}:filter={filteringText}");
+                },
+                consoleStateEvents);
+        }
+
+        private sealed class FakeConsoleStateScope : IDisposable
+        {
+            private readonly string capturedState;
+            private readonly Action<string> restoreState;
+            private readonly List<string> events;
+
+            public FakeConsoleStateScope(string capturedState, Action<string> restoreState, List<string> events)
+            {
+                this.capturedState = capturedState;
+                this.restoreState = restoreState;
+                this.events = events;
+                this.events.Add($"capture:{capturedState}");
+            }
+
+            public void Dispose()
+            {
+                restoreState(capturedState);
+            }
         }
     }
 }

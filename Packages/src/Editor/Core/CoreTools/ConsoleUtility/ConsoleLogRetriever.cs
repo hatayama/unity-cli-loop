@@ -14,8 +14,10 @@ namespace io.github.hatayama.uLoopMCP
     {
         private const string GetFilteringTextMethodName = "GetFilteringText";
         private const string SetFilteringTextMethodName = "SetFilteringText";
+        private const string ConsoleWindowTypeName = "UnityEditor.ConsoleWindow";
 
         private readonly Type _logEntriesType;
+        private readonly Type _consoleWindowType;
         private readonly MethodInfo _getFilteringTextMethod;
         private readonly MethodInfo _setFilteringTextMethod;
 
@@ -26,7 +28,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             Assembly editorAssembly = Assembly.GetAssembly(typeof(EditorWindow));
             _logEntriesType = editorAssembly.GetType("UnityEditor.LogEntries");
-            editorAssembly.GetType("UnityEditor.ConsoleWindow");
+            _consoleWindowType = editorAssembly.GetType(ConsoleWindowTypeName);
 
             if (_logEntriesType == null)
             {
@@ -164,7 +166,15 @@ namespace io.github.hatayama.uLoopMCP
                 return null;
             }
 
-            return new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText);
+            return new ConsoleFilteringTextScope(GetFilteringText, SetFilteringText, CreateConsoleWindowStateScope);
+        }
+
+        /// <summary>
+        /// Captures the visible Console window state that can be affected by filtering changes.
+        /// </summary>
+        private IDisposable CreateConsoleWindowStateScope()
+        {
+            return ConsoleWindowStateScope.Create(_consoleWindowType);
         }
 
         /// <summary>
@@ -451,13 +461,18 @@ namespace io.github.hatayama.uLoopMCP
     {
         private readonly Action<string> _setFilteringText;
         private readonly string _originalFilteringText;
+        private readonly IDisposable _consoleWindowStateScope;
         private readonly bool _shouldRestoreFilteringText;
         private bool _disposed;
 
-        public ConsoleFilteringTextScope(Func<string> getFilteringText, Action<string> setFilteringText)
+        public ConsoleFilteringTextScope(
+            Func<string> getFilteringText,
+            Action<string> setFilteringText,
+            Func<IDisposable> createConsoleWindowStateScope)
         {
             Debug.Assert(getFilteringText != null, "Filtering text getter must not be null.");
             Debug.Assert(setFilteringText != null, "Filtering text setter must not be null.");
+            Debug.Assert(createConsoleWindowStateScope != null, "Console window state scope factory must not be null.");
 
             _setFilteringText = setFilteringText;
             _originalFilteringText = getFilteringText() ?? string.Empty;
@@ -467,6 +482,8 @@ namespace io.github.hatayama.uLoopMCP
             {
                 return;
             }
+
+            _consoleWindowStateScope = createConsoleWindowStateScope();
 
             // Unity applies this text filter to LogEntries.GetCount/GetEntryInternal, so clear it for raw retrieval.
             _setFilteringText(string.Empty);
@@ -487,6 +504,167 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             _setFilteringText(_originalFilteringText);
+            _consoleWindowStateScope?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Restores visible Unity Console selection state after temporary internal filtering changes.
+    /// </summary>
+    internal sealed class ConsoleWindowStateScope : IDisposable
+    {
+        private const string ConsoleWindowInstanceFieldName = "ms_ConsoleWindow";
+        private const string ListViewFieldName = "m_ListView";
+        private const string ActiveTextFieldName = "m_ActiveText";
+        private const string ActiveModeFieldName = "m_ActiveMode";
+        private const string CallstackTextStartFieldName = "m_CallstackTextStart";
+        private const string RowFieldName = "row";
+        private const string SelectedItemsFieldName = "selectedItems";
+        private const string ScrollPositionFieldName = "scrollPos";
+
+        private readonly EditorWindow _consoleWindow;
+        private readonly object _listView;
+        private readonly FieldInfo _activeTextField;
+        private readonly FieldInfo _activeModeField;
+        private readonly FieldInfo _callstackTextStartField;
+        private readonly FieldInfo _rowField;
+        private readonly FieldInfo _selectedItemsField;
+        private readonly FieldInfo _scrollPositionField;
+        private readonly string _activeText;
+        private readonly object _activeMode;
+        private readonly int _callstackTextStart;
+        private readonly int _row;
+        private readonly bool[] _selectedItems;
+        private readonly Vector2 _scrollPosition;
+        private bool _disposed;
+
+        private ConsoleWindowStateScope(
+            EditorWindow consoleWindow,
+            object listView,
+            FieldInfo activeTextField,
+            FieldInfo activeModeField,
+            FieldInfo callstackTextStartField,
+            FieldInfo rowField,
+            FieldInfo selectedItemsField,
+            FieldInfo scrollPositionField)
+        {
+            Debug.Assert(consoleWindow != null, "Console window must not be null.");
+            Debug.Assert(listView != null, "Console ListView state must not be null.");
+            Debug.Assert(activeTextField != null, "Active text field must not be null.");
+            Debug.Assert(activeModeField != null, "Active mode field must not be null.");
+            Debug.Assert(callstackTextStartField != null, "Callstack start field must not be null.");
+            Debug.Assert(rowField != null, "ListView row field must not be null.");
+            Debug.Assert(selectedItemsField != null, "ListView selected items field must not be null.");
+            Debug.Assert(scrollPositionField != null, "ListView scroll position field must not be null.");
+
+            _consoleWindow = consoleWindow;
+            _listView = listView;
+            _activeTextField = activeTextField;
+            _activeModeField = activeModeField;
+            _callstackTextStartField = callstackTextStartField;
+            _rowField = rowField;
+            _selectedItemsField = selectedItemsField;
+            _scrollPositionField = scrollPositionField;
+
+            _activeText = _activeTextField.GetValue(_consoleWindow)?.ToString() ?? string.Empty;
+            _activeMode = _activeModeField.GetValue(_consoleWindow);
+            _callstackTextStart = (int)(_callstackTextStartField.GetValue(_consoleWindow) ?? 0);
+            _row = (int)(_rowField.GetValue(_listView) ?? -1);
+
+            bool[] selectedItems = _selectedItemsField.GetValue(_listView) as bool[];
+            _selectedItems = selectedItems != null ? (bool[])selectedItems.Clone() : null;
+
+            object scrollPosition = _scrollPositionField.GetValue(_listView);
+            _scrollPosition = scrollPosition is Vector2 vector ? vector : Vector2.zero;
+        }
+
+        public static ConsoleWindowStateScope Create(Type consoleWindowType)
+        {
+            if (consoleWindowType == null)
+            {
+                return null;
+            }
+
+            FieldInfo consoleWindowField = consoleWindowType.GetField(
+                ConsoleWindowInstanceFieldName,
+                BindingFlags.NonPublic | BindingFlags.Static);
+            if (consoleWindowField == null)
+            {
+                return null;
+            }
+
+            EditorWindow consoleWindow = consoleWindowField.GetValue(null) as EditorWindow;
+            if (consoleWindow == null)
+            {
+                return null;
+            }
+
+            FieldInfo listViewField = consoleWindowType.GetField(
+                ListViewFieldName,
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo activeTextField = consoleWindowType.GetField(
+                ActiveTextFieldName,
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo activeModeField = consoleWindowType.GetField(
+                ActiveModeFieldName,
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo callstackTextStartField = consoleWindowType.GetField(
+                CallstackTextStartFieldName,
+                BindingFlags.NonPublic | BindingFlags.Instance);
+
+            if (listViewField == null ||
+                activeTextField == null ||
+                activeModeField == null ||
+                callstackTextStartField == null)
+            {
+                return null;
+            }
+
+            object listView = listViewField.GetValue(consoleWindow);
+            if (listView == null)
+            {
+                return null;
+            }
+
+            Type listViewType = listView.GetType();
+            FieldInfo rowField = listViewType.GetField(RowFieldName, BindingFlags.Public | BindingFlags.Instance);
+            FieldInfo selectedItemsField = listViewType.GetField(SelectedItemsFieldName, BindingFlags.Public | BindingFlags.Instance);
+            FieldInfo scrollPositionField = listViewType.GetField(ScrollPositionFieldName, BindingFlags.Public | BindingFlags.Instance);
+
+            if (rowField == null || selectedItemsField == null || scrollPositionField == null)
+            {
+                return null;
+            }
+
+            return new ConsoleWindowStateScope(
+                consoleWindow,
+                listView,
+                activeTextField,
+                activeModeField,
+                callstackTextStartField,
+                rowField,
+                selectedItemsField,
+                scrollPositionField);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+
+            _activeTextField.SetValue(_consoleWindow, _activeText);
+            _activeModeField.SetValue(_consoleWindow, _activeMode);
+            _callstackTextStartField.SetValue(_consoleWindow, _callstackTextStart);
+            _rowField.SetValue(_listView, _row);
+            _selectedItemsField.SetValue(_listView, _selectedItems != null ? (bool[])_selectedItems.Clone() : null);
+            _scrollPositionField.SetValue(_listView, _scrollPosition);
+
+            // Repaint because the restored selection/details are visible EditorWindow state.
+            _consoleWindow.Repaint();
         }
     }
 }
