@@ -59,7 +59,10 @@ func resolveManifestLocalPackageRoots(projectRoot string) []string {
 		return []string{}
 	}
 	packageRoots := []string{}
-	for _, dependencyValue := range dependencies {
+	for dependencyName, dependencyValue := range dependencies {
+		if !isTargetManifestPackageName(dependencyName) {
+			continue
+		}
 		localPath := resolveLocalDependencyPath(dependencyValue, projectRoot)
 		if localPath == "" {
 			continue
@@ -204,4 +207,10 @@ func isTargetPackageCacheDir(dirName string) bool {
 	normalizedName := strings.ToLower(dirName)
 	return strings.HasPrefix(normalizedName, strings.ToLower(packageName)+"@") ||
 		strings.HasPrefix(normalizedName, strings.ToLower(packageNameAlias)+"@")
+}
+
+func isTargetManifestPackageName(dependencyName string) bool {
+	normalizedName := strings.ToLower(dependencyName)
+	return normalizedName == strings.ToLower(packageName) ||
+		normalizedName == strings.ToLower(packageNameAlias)
 }

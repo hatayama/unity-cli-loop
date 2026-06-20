@@ -19,17 +19,34 @@ $excludedDirectories = @(
 $targetExtensions = @(".md", ".sh", ".bash", ".zsh", ".ps1", ".psm1")
 $outputFields = "Success|Message|ErrorMessage|ErrorCount|WarningCount|TotalCount|DisplayedCount|LogType|StackTrace|XmlPath|TestCount|PassedCount|FailedCount|SkippedCount|CompletedAt|ScreenshotCount|Screenshots|CompilationErrors|ErrorCode|UpdatedCode|DiagnosticsSummary|OutputPath|InputPath|TotalFrames|DurationSeconds|CurrentFrame|IsReplaying|KeyName|PositionX|PositionY|EndPositionX|EndPositionY|HitGameObjectName|IsPlaying|IsPaused|ClearedLogCount|ClearedCounts"
 
-function Test-IsExcludedPath {
-    param([string] $Path)
+function Test-IsExcludedDirectoryName {
+    param([string] $Name)
 
-    $parts = $Path -split [System.IO.Path]::DirectorySeparatorChar
-    foreach ($part in $parts) {
-        if ($excludedDirectories -contains $part) {
-            return $true
-        }
+    return $excludedDirectories -contains $Name
+}
+
+function Test-IsTargetFile {
+    param([System.IO.FileInfo] $File)
+
+    return $File.Name -eq "SKILL.md" -or $targetExtensions -contains $File.Extension
+}
+
+function Get-CandidateFile {
+    param([string] $Directory)
+
+    $directoryName = Split-Path -Leaf $Directory
+    if (Test-IsExcludedDirectoryName -Name $directoryName) {
+        return
     }
 
-    return $false
+    Get-ChildItem -LiteralPath $Directory -File |
+        Where-Object { Test-IsTargetFile -File $_ }
+
+    Get-ChildItem -LiteralPath $Directory -Directory |
+        Where-Object { -not (Test-IsExcludedDirectoryName -Name $_.Name) } |
+        ForEach-Object {
+            Get-CandidateFile -Directory $_.FullName
+        }
 }
 
 function Write-Candidate {
@@ -43,14 +60,10 @@ function Write-Candidate {
     Write-Output "$Kind ${Path}:${LineNumber}: $Line"
 }
 
-Get-ChildItem -LiteralPath $Root -Recurse -File |
-    Where-Object {
-        -not (Test-IsExcludedPath -Path $_.FullName) -and
-        ($_.Name -eq "SKILL.md" -or $targetExtensions -contains $_.Extension)
-    } |
+Get-CandidateFile -Directory $Root |
     ForEach-Object {
         $path = $_.FullName
-        $lines = Get-Content -LiteralPath $path
+        $lines = @(Get-Content -LiteralPath $path)
         for ($index = 0; $index -lt $lines.Count; $index++) {
             $line = $lines[$index]
             $lineNumber = $index + 1
