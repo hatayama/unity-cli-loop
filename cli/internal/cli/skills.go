@@ -130,16 +130,16 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 			printSkillsTargetGuidance(subcommand, stdout)
 			return true, 0
 		}
-		skills, err := collectV3MigrationSkillDefinition(projectRoot)
-		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
-			return true, 1
-		}
 		switch subcommand {
 		case "install-v3-migration":
+			skills, err := collectV3MigrationSkillDefinition(projectRoot)
+			if err != nil {
+				writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+				return true, 1
+			}
 			return true, runV3MigrationSkillInstall(projectRoot, skills, options, stdout, stderr)
 		case "uninstall-v3-migration":
-			return true, runV3MigrationSkillUninstall(projectRoot, skills, options, stdout, stderr)
+			return true, runV3MigrationSkillUninstall(projectRoot, options, stdout, stderr)
 		}
 	}
 

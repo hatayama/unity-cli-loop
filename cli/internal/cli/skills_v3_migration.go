@@ -30,13 +30,13 @@ func runV3MigrationSkillInstall(projectRoot string, skills []skillDefinition, op
 	return 0
 }
 
-func runV3MigrationSkillUninstall(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
+func runV3MigrationSkillUninstall(projectRoot string, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
 	writeLine(stdout, "")
 	writeFormat(stdout, "Uninstalling V3 CLI invocation migration skill (%s)...\n", skillLocationName(options.global))
 	writeLine(stdout, "")
 	for _, target := range options.targets {
 		grouped := groupManagedSkillsForOptions(options)
-		removed, notFound, err := uninstallV3MigrationSkillForTarget(projectRoot, target, skills, options.global, grouped)
+		removed, notFound, err := uninstallV3MigrationSkillForTarget(projectRoot, target, options.global, grouped)
 		if err != nil {
 			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
 			return 1
@@ -86,28 +86,26 @@ func installV3MigrationSkillForTarget(projectRoot string, target skillTarget, sk
 	return result, nil
 }
 
-func uninstallV3MigrationSkillForTarget(projectRoot string, target skillTarget, skills []skillDefinition, global bool, grouped bool) (int, int, error) {
+func uninstallV3MigrationSkillForTarget(projectRoot string, target skillTarget, global bool, grouped bool) (int, int, error) {
 	removed := 0
 	notFound := 0
 	baseDir, err := getSkillsBaseDir(projectRoot, target, global)
 	if err != nil {
 		return removed, notFound, err
 	}
-	for _, skill := range skills {
-		destinationDir := getPreferredSkillDir(baseDir, skill.name, grouped)
-		if _, err := os.Stat(destinationDir); err != nil {
-			if !os.IsNotExist(err) {
-				return removed, notFound, err
-			}
-			notFound++
-			continue
-		}
-		if err := os.RemoveAll(destinationDir); err != nil {
+	destinationDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, grouped)
+	if _, err := os.Stat(destinationDir); err != nil {
+		if !os.IsNotExist(err) {
 			return removed, notFound, err
 		}
-		removeEmptyMigrationSkillParent(baseDir, grouped)
-		removed++
+		notFound++
+		return removed, notFound, nil
 	}
+	if err := os.RemoveAll(destinationDir); err != nil {
+		return removed, notFound, err
+	}
+	removeEmptyMigrationSkillParent(baseDir, grouped)
+	removed++
 	return removed, notFound, nil
 }
 

@@ -977,7 +977,7 @@ name: v3-cli-invocation-migration
 	unrelatedSkillDir := filepath.Join(projectRoot, ".codex", "skills", "uloop-compile")
 	writeSkillFile(t, unrelatedSkillDir, "---\nname: uloop-compile\n---\n")
 
-	uninstallCode := runV3MigrationSkillUninstall(projectRoot, skills, options, stdout, stderr)
+	uninstallCode := runV3MigrationSkillUninstall(projectRoot, options, stdout, stderr)
 
 	if uninstallCode != 0 {
 		t.Fatalf("uninstall should succeed: code=%d stderr=%s", uninstallCode, stderr.String())
@@ -987,6 +987,38 @@ name: v3-cli-invocation-migration
 	}
 	if _, err := os.Stat(unrelatedSkillDir); err != nil {
 		t.Fatalf("unrelated skill should remain: %v", err)
+	}
+}
+
+// Tests that uninstalling the temporary migration skill does not require package source discovery.
+func TestTryHandleSkillsRequestUninstallV3MigrationWithoutPackageSource(t *testing.T) {
+	originalUserHomeDir := userHomeDir
+	homeDir := t.TempDir()
+	userHomeDir = func() (string, error) {
+		return homeDir, nil
+	}
+	t.Cleanup(func() {
+		userHomeDir = originalUserHomeDir
+	})
+
+	installedDir := filepath.Join(homeDir, ".codex", "skills", v3MigrationSkillName)
+	writeSkillFile(t, installedDir, "---\nname: v3-cli-invocation-migration\n---\n")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	handled, code := tryHandleSkillsRequest(
+		[]string{"skills", "uninstall-v3-migration", "--global", "--codex"},
+		t.TempDir(),
+		"",
+		stdout,
+		stderr,
+	)
+
+	if !handled || code != 0 {
+		t.Fatalf("uninstall should succeed without package source: handled=%v code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if _, err := os.Stat(installedDir); !os.IsNotExist(err) {
+		t.Fatalf("migration skill should be removed: %v", err)
 	}
 }
 
