@@ -244,6 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Button migrateButton = new Button();
             migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(false, false, false);
             migrateButton.AddToClassList("setup-button");
+            migrateButton.AddToClassList("setup-button--primary");
             migrateButton.AddToClassList("setup-button--migration-action");
             migrationButtonRow.Add(migrateButton);
             return migrateButton;
