@@ -27,8 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static bool IsSameOrChildPath(string childPath, string parentPath)
         {
-            Debug.Assert(childPath != null, "childPath must not be null");
-            Debug.Assert(parentPath != null, "parentPath must not be null");
+            ThrowIfPathArgumentEmpty(childPath, nameof(childPath));
+            ThrowIfPathArgumentEmpty(parentPath, nameof(parentPath));
 
             string normalizedChildPath = NormalizeFullPath(childPath);
             string normalizedParentPath = NormalizeFullPath(parentPath);
@@ -46,11 +46,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static string NormalizeFullPath(string path)
         {
-            Debug.Assert(path != null, "path must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(path), "path must not be null or empty");
 
             string fullPath = Path.GetFullPath(path);
             string trimmedPath = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             return trimmedPath.Length == 0 ? fullPath : trimmedPath;
+        }
+
+        private static void ThrowIfPathArgumentEmpty(string path, string argumentName)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(path), $"{argumentName} must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(argumentName), "argumentName must not be null or empty");
+
+            if (string.IsNullOrEmpty(path))
+            {
+                throw new ArgumentException($"{argumentName} must not be null or empty", argumentName);
+            }
         }
 
         private static StringComparison GetPathComparison()

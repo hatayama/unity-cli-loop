@@ -138,6 +138,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void IsSameOrChildPath_WhenEitherPathIsEmpty_ThrowsArgumentException()
+        {
+            // Verifies that empty paths fail fast instead of normalizing to the process directory.
+            string nonEmptyPath = Path.GetTempPath();
+
+            ArgumentException childException = Assert.Throws<ArgumentException>(
+                () => ThirdPartyToolMigrationAssemblyReferenceResolver.IsSameOrChildPath(string.Empty, nonEmptyPath));
+            ArgumentException parentException = Assert.Throws<ArgumentException>(
+                () => ThirdPartyToolMigrationAssemblyReferenceResolver.IsSameOrChildPath(nonEmptyPath, string.Empty));
+
+            Assert.That(childException.ParamName, Is.EqualTo("childPath"));
+            Assert.That(parentException.ParamName, Is.EqualTo("parentPath"));
+        }
+
+        [Test]
         public void ReadAsmdefGuidReferenceFromMetaFile_WhenMetaReadThrowsIOException_ReturnsEmpty()
         {
             // Verifies that unreadable .meta files do not abort assembly reference discovery.

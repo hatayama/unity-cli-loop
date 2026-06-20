@@ -127,6 +127,20 @@ namespace Samples
         }
 
         [Test]
+        public void FindRegularInterpolatedStringEndIndex_WhenHoleContainsInterpolatedRawStringWithRawStringHole_FindsOuterStringEnd()
+        {
+            // Verifies that raw-string delimiters inside nested interpolation holes do not close the outer string.
+            string source = "$\"{Format($$\"\"\"outer {{ \"\"\" } , still text \"\"\" }} final\"\"\")}\", next";
+            int expectedEndIndex = source.IndexOf(", next") - 1;
+
+            int endIndex = ThirdPartyToolMigrationInterpolatedStringRules.FindRegularInterpolatedStringEndIndex(
+                source,
+                0);
+
+            Assert.That(endIndex, Is.EqualTo(expectedEndIndex));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolAttributeHasSecurityArgument_RewritesSecurityArgument()
         {
             // Verifies that supported security metadata keeps compiling after the enum rename.
