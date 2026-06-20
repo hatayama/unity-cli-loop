@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly VisualElement _migrationButtonRow;
         private readonly Button _migrateButton;
         private readonly Button _refreshButton;
+        private readonly Button _closeButton;
 
         private ThirdPartyToolMigrationWizardView(
             ScrollView mainScrollView,
@@ -28,7 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ProgressBar migrationProgressBar,
             VisualElement migrationButtonRow,
             Button migrateButton,
-            Button refreshButton)
+            Button refreshButton,
+            Button closeButton)
         {
             Debug.Assert(mainScrollView != null, "mainScrollView must not be null");
             Debug.Assert(migrationStatusLabel != null, "migrationStatusLabel must not be null");
@@ -36,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(migrationButtonRow != null, "migrationButtonRow must not be null");
             Debug.Assert(migrateButton != null, "migrateButton must not be null");
             Debug.Assert(refreshButton != null, "refreshButton must not be null");
+            Debug.Assert(closeButton != null, "closeButton must not be null");
 
             MainScrollView = mainScrollView;
             _migrationStatusLabel = migrationStatusLabel;
@@ -43,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationButtonRow = migrationButtonRow;
             _migrateButton = migrateButton;
             _refreshButton = refreshButton;
+            _closeButton = closeButton;
         }
 
         internal ScrollView MainScrollView { get; }
@@ -50,11 +54,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static ThirdPartyToolMigrationWizardView Create(
             VisualElement root,
             Action refresh,
-            Action migrate)
+            Action migrate,
+            Action close)
         {
             Debug.Assert(root != null, "root must not be null");
             Debug.Assert(refresh != null, "refresh must not be null");
             Debug.Assert(migrate != null, "migrate must not be null");
+            Debug.Assert(close != null, "close must not be null");
 
             string ussPath = $"{UnityCliLoopConstants.PackageAssetPath}/{USS_RELATIVE_PATH}";
             StyleSheet styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(ussPath);
@@ -67,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ProgressBar migrationProgressBar = CreateProgressBar(content);
             VisualElement migrationButtonRow = CreateMigrationButtonRow(content);
             Button migrateButton = CreateMigrateButton(migrationButtonRow);
-            Button refreshButton = CreateFooter(mainScrollView);
+            (Button refreshButton, Button closeButton) = CreateFooter(mainScrollView);
 
             ThirdPartyToolMigrationWizardView view = new ThirdPartyToolMigrationWizardView(
                 mainScrollView,
@@ -75,8 +81,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 migrationProgressBar,
                 migrationButtonRow,
                 migrateButton,
-                refreshButton);
-            view.BindEvents(refresh, migrate);
+                refreshButton,
+                closeButton);
+            view.BindEvents(refresh, migrate, close);
             return view;
         }
 
@@ -90,6 +97,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isMigrating,
                 false,
                 false);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
             _refreshButton.SetEnabled(true);
         }
 
@@ -103,6 +112,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isMigrating,
                 true,
                 true);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
             _refreshButton.SetEnabled(false);
         }
 
@@ -116,7 +127,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isMigrating,
                 false,
                 true);
-            _refreshButton.SetEnabled(true);
+            ViewDataBinder.SetVisible(_refreshButton, false);
+            ViewDataBinder.SetVisible(_closeButton, true);
+            _closeButton.SetEnabled(true);
         }
 
         internal void ShowCheckingState(ThirdPartyToolMigrationProgress progress, bool isMigrating)
@@ -132,6 +145,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isMigrating,
                 true,
                 true);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
             _refreshButton.SetEnabled(false);
         }
 
@@ -197,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return migrateButton;
         }
 
-        private static Button CreateFooter(ScrollView mainScrollView)
+        private static (Button refreshButton, Button closeButton) CreateFooter(ScrollView mainScrollView)
         {
             VisualElement footer = new VisualElement();
             footer.AddToClassList("setup-footer");
@@ -213,18 +228,24 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             refreshButton.AddToClassList("setup-button--primary");
             footerButtonRow.Add(refreshButton);
 
+            Button closeButton = new Button();
+            closeButton.text = "Close";
+            closeButton.AddToClassList("setup-button");
+            footerButtonRow.Add(closeButton);
+
             Label reopenHintLabel = new Label(
                 "You can close this wizard and reopen it later from\n" +
                 "Window > Unity CLI Loop > Custom Tool Migration.");
             reopenHintLabel.AddToClassList("setup-footer__hint-label");
             footer.Add(reopenHintLabel);
-            return refreshButton;
+            return (refreshButton, closeButton);
         }
 
-        private void BindEvents(Action refresh, Action migrate)
+        private void BindEvents(Action refresh, Action migrate, Action close)
         {
             _refreshButton.clicked += refresh;
             _migrateButton.clicked += migrate;
+            _closeButton.clicked += close;
         }
 
         private void UpdateMigrationProgressBar(ThirdPartyToolMigrationProgress progress)

@@ -237,7 +237,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view = ThirdPartyToolMigrationWizardView.Create(
                 rootVisualElement,
                 RefreshUI,
-                HandleMigrateThirdPartyTools);
+                HandleMigrateThirdPartyTools,
+                Close);
             _resizer = new ThirdPartyToolMigrationWizardWindowResizer(this, _view.MainScrollView);
             _resizer.BindSizeUpdates();
 
