@@ -13,6 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ControlPlayModeEditorStartup.Initialize();
             ExecuteDynamicCodeEditorStartup.Initialize();
             GetLogsEditorStartup.Initialize();
+            ScreenshotEditorStartup.Initialize();
 #if ULOOP_HAS_TEST_FRAMEWORK
             RunTestsTestFrameworkStartup.Initialize();
 #endif

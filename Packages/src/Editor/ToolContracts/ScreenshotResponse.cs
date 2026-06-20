@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
-namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
     /// Describes Screenshot information collected by the owning workflow.

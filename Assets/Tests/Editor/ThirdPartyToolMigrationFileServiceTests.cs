@@ -189,9 +189,9 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
-        public void ApplyMigration_WhenManualRegistrationExists_AddsApplicationReference()
+        public void ApplyMigration_WhenManualRegistrationExists_RewritesToToolContractsReference()
         {
-            // Verifies that migrated manual registration source keeps access to the V3 registrar assembly.
+            // Verifies that migrated manual registration source uses the public ToolContracts registrar assembly.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -220,9 +220,9 @@ public static class ManualToolRegistration
 
                 Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(File.ReadAllText(toolPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.RegisterCustomTool"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopToolRegistrar.RegisterCustomTool"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
@@ -232,9 +232,9 @@ public static class ManualToolRegistration
         }
 
         [Test]
-        public void ApplyMigration_WhenCurrentManualRegistrationExists_PreservesApplicationReference()
+        public void ApplyMigration_WhenCurrentManualRegistrationExists_RewritesApplicationNamespace()
         {
-            // Verifies that mixed assemblies keep current registrar dependencies while legacy tools migrate.
+            // Verifies that mixed assemblies move current registrar dependencies to ToolContracts while legacy tools migrate.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -276,11 +276,12 @@ public static class CurrentManualToolRegistration
                 ThirdPartyToolMigrationFileService service = new();
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
 
-                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FileCount, Is.EqualTo(3));
                 Assert.That(File.ReadAllText(toolPath), Does.Contain("UnityCliLoopTool<HelloSchema, HelloResponse>"));
-                Assert.That(File.ReadAllText(registrationPath), Does.Contain("UnityCliLoopToolRegistrar"));
+                Assert.That(File.ReadAllText(registrationPath), Does.Contain(
+                    "using io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
@@ -290,9 +291,9 @@ public static class CurrentManualToolRegistration
         }
 
         [Test]
-        public void ApplyMigration_WhenCurrentManualRegistrationExistsWithLegacyAsmdefName_AddsApplicationReference()
+        public void ApplyMigration_WhenCurrentManualRegistrationExistsWithLegacyAsmdefName_RewritesApplicationNamespace()
         {
-            // Verifies that partially migrated registrar code receives the asmdef refs it already requires.
+            // Verifies that partially migrated registrar code moves to ToolContracts and receives its asmdef ref.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -320,10 +321,11 @@ public static class CurrentManualToolRegistration
                 ThirdPartyToolMigrationFileService service = new();
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
-                Assert.That(File.ReadAllText(registrationPath), Is.EqualTo(registrationSource));
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(registrationPath), Does.Contain(
+                    "using io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
@@ -365,7 +367,7 @@ public static class CurrentManualToolRegistration
         [Test]
         public void ApplyMigration_WhenCurrentManualRegistrationExistsWithLegacyAsmdefGuid_AddsContractReferences()
         {
-            // Verifies that partially migrated GUID refs are expanded to the assemblies current registrar APIs expose.
+            // Verifies that partially migrated GUID refs add ToolContracts while source moves off Application.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -394,8 +396,11 @@ public static class CurrentManualToolRegistration
                 ThirdPartyToolMigrationFileService service = new();
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
-                Assert.That(File.ReadAllText(registrationPath), Is.EqualTo(registrationSource));
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(registrationPath), Does.Contain(
+                    "using io.github.hatayama.UnityCliLoop.ToolContracts;"));
+                Assert.That(File.ReadAllText(registrationPath), Does.Not.Contain(
+                    "using io.github.hatayama.UnityCliLoop.Application;"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
@@ -477,16 +482,16 @@ public sealed class CurrentElementTool : UnityCliLoopTool<ElementSchema, Element
         return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
     }
 
-    private List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> BuildFirstPartyElements()
+    private List<io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo> BuildFirstPartyElements()
     {
-        List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> elements = new();
+        List<io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo> elements = new();
         elements.Add(CreateFirstPartyElement());
         return elements;
     }
 
-    private io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo CreateFirstPartyElement()
+    private io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo CreateFirstPartyElement()
     {
-        return new io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo();
+        return new io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo();
     }
 
     private UIElementInfo CreateProjectElement()
@@ -515,11 +520,11 @@ public sealed class UIElementInfo
                 Assert.That(preview.FileCount, Is.EqualTo(1));
                 Assert.That(result.FileCount, Is.EqualTo(1));
                 Assert.That(migratedSource, Does.Contain(
-                    "private List<io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo> BuildFirstPartyElements()"));
+                    "private List<io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo> BuildFirstPartyElements()"));
                 Assert.That(migratedSource, Does.Contain(
-                    "private io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo CreateFirstPartyElement()"));
+                    "private io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo CreateFirstPartyElement()"));
                 Assert.That(migratedSource, Does.Contain(
-                    "new io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo()"));
+                    "new io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo()"));
                 Assert.That(migratedSource, Does.Contain("private UIElementInfo CreateProjectElement()"));
             }
             finally
@@ -529,9 +534,9 @@ public sealed class UIElementInfo
         }
 
         [Test]
-        public void ApplyMigration_WhenQualifiedFirstPartyDtoSharesLocalName_AddsScreenshotReference()
+        public void ApplyMigration_WhenQualifiedFirstPartyDtoSharesLocalName_UsesToolContractsReference()
         {
-            // Verifies that unambiguous first-party DTO references still add their asmdef dependency.
+            // Verifies that unambiguous first-party DTO references add the public ToolContracts asmdef dependency.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -541,9 +546,9 @@ public sealed class UIElementInfo
                 string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
                 string toolSource = @"public sealed class CurrentElementTool
 {
-    private io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo CreateFirstPartyElement()
+    private io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo CreateFirstPartyElement()
     {
-        return new io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo();
+        return new io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo();
     }
 
     private UIElementInfo CreateProjectElement()
@@ -566,7 +571,8 @@ public sealed class UIElementInfo
 
                 Assert.That(result.FileCount, Is.EqualTo(1));
                 Assert.That(File.ReadAllText(toolPath), Is.EqualTo(toolSource));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -575,9 +581,9 @@ public sealed class UIElementInfo
         }
 
         [Test]
-        public void ApplyMigration_WhenCurrentRegistrarExistsWithToolContractsAsmdefReference_AddsApplicationReference()
+        public void ApplyMigration_WhenCurrentRegistrarExistsWithToolContractsAsmdefReference_RewritesApplicationNamespace()
         {
-            // Verifies that already-replaced asmdef refs still receive missing current assembly dependencies.
+            // Verifies that already-replaced asmdef refs keep using the public ToolContracts assembly.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -607,9 +613,12 @@ public static class CurrentManualToolRegistration
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
 
                 Assert.That(result.FileCount, Is.EqualTo(1));
-                Assert.That(File.ReadAllText(registrationPath), Is.EqualTo(registrationSource));
+                Assert.That(File.ReadAllText(registrationPath), Does.Contain(
+                    "using io.github.hatayama.UnityCliLoop.ToolContracts;"));
+                Assert.That(File.ReadAllText(registrationPath), Does.Not.Contain(
+                    "using io.github.hatayama.UnityCliLoop.Application;"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
@@ -619,9 +628,9 @@ public static class CurrentManualToolRegistration
         }
 
         [Test]
-        public void ApplyMigration_WhenLegacyRegistrarReturnIsUsedWithoutExplicitToolInfo_AddsDomainReference()
+        public void ApplyMigration_WhenLegacyRegistrarReturnIsUsedWithoutExplicitToolInfo_UsesToolContractsReference()
         {
-            // Verifies that registrar return types add the Domain dependency even without explicit ToolInfo usage.
+            // Verifies that registrar return types use ToolContracts without explicit ToolInfo usage.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -650,10 +659,10 @@ public static class ToolCountLabel
 
                 Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(File.ReadAllText(registrationPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.GetRegisteredCustomTools"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopToolRegistrar.GetRegisteredCustomTools"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
             {
@@ -662,7 +671,7 @@ public static class ToolCountLabel
         }
 
         [Test]
-        public void ApplyMigration_WhenDomainMetadataExistsWithoutManualRegistration_AddsDomainReference()
+        public void ApplyMigration_WhenDomainMetadataExistsWithoutManualRegistration_UsesToolContractsReference()
         {
             // Verifies that ToolInfo-only metadata helpers migrate their asmdef dependency.
             string projectRoot = CreateProjectRoot();
@@ -693,9 +702,9 @@ public static class ToolMetadataProvider
 
                 Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(File.ReadAllText(metadataPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Domain.ToolInfo[]"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo[]"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
@@ -705,9 +714,9 @@ public static class ToolMetadataProvider
         }
 
         [Test]
-        public void ApplyMigration_WhenLegacyDomainHelperExists_AddsDomainReference()
+        public void ApplyMigration_WhenLegacyDomainHelperExists_UsesToolContractsReference()
         {
-            // Verifies that helpers moved to Domain migrate their source and asmdef dependency together.
+            // Verifies that helpers moved to ToolContracts migrate their source and asmdef dependency together.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -741,11 +750,11 @@ public static class ToolHelper
 
                 Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(File.ReadAllText(helperPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Domain.ServiceResult<int> CreateResult"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ServiceResult<int> CreateResult"));
                 Assert.That(File.ReadAllText(helperPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Domain.ToolSettingsCatalogItem[] GetCatalog"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ToolSettingsCatalogItem[] GetCatalog"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
@@ -755,9 +764,9 @@ public static class ToolHelper
         }
 
         [Test]
-        public void ApplyMigration_WhenCurrentDomainMetadataExistsWithLegacyAsmdefGuid_AddsDomainReference()
+        public void ApplyMigration_WhenCurrentDomainMetadataExistsWithLegacyAsmdefGuid_RewritesDomainNamespace()
         {
-            // Verifies that partially migrated metadata helpers receive the asmdef refs they already require.
+            // Verifies that partially migrated metadata helpers move to ToolContracts and receive its asmdef ref.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -785,10 +794,11 @@ public static class ToolMetadataProvider
                 ThirdPartyToolMigrationFileService service = new();
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
-                Assert.That(File.ReadAllText(metadataPath), Is.EqualTo(metadataSource));
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(metadataPath), Does.Contain(
+                    "using io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
@@ -798,9 +808,9 @@ public static class ToolMetadataProvider
         }
 
         [Test]
-        public void ApplyMigration_WhenAssemblyUsesCurrentDomainGlobalUsingAndSplitMetadata_AddsDomainReference()
+        public void ApplyMigration_WhenAssemblyUsesCurrentDomainGlobalUsingAndSplitMetadata_RewritesDomainNamespace()
         {
-            // Verifies that split V3 Domain metadata files receive their required asmdef references.
+            // Verifies that split V3 Domain metadata files move to ToolContracts and receive their asmdef reference.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -829,11 +839,12 @@ public static class ToolMetadataProvider
                 ThirdPartyToolMigrationFileService service = new();
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
-                Assert.That(File.ReadAllText(globalUsingPath), Is.EqualTo(globalUsingSource));
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(File.ReadAllText(metadataPath), Is.EqualTo(metadataSource));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
@@ -1030,7 +1041,7 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         [Test]
         public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsing_RewritesSplitScreenshotHelpersAndAsmdef()
         {
-            // Verifies that split files using old screenshot helpers receive the required V3 first-party assembly reference.
+            // Verifies that split files using old screenshot helpers receive the required ToolContracts assembly reference.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -1058,11 +1069,11 @@ public sealed class ScreenshotHelper
 
                 Assert.That(result.FileCount, Is.EqualTo(3));
                 Assert.That(File.ReadAllText(helperPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.FindWindowsByName"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.FindWindowsByName"));
                 Assert.That(File.ReadAllText(helperPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.WindowMatchMode.exact"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.WindowMatchMode.exact"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -1071,9 +1082,9 @@ public sealed class ScreenshotHelper
         }
 
         [Test]
-        public void ApplyMigration_WhenCurrentToolContractsFileUsesLegacyScreenshotCapture_AddsScreenshotAsmdefReference()
+        public void ApplyMigration_WhenCurrentToolContractsFileUsesLegacyScreenshotCapture_KeepsToolContractsReference()
         {
-            // Verifies that partially migrated files finish screenshot helper migration and add the missing assembly reference.
+            // Verifies that partially migrated files finish screenshot helper migration using ToolContracts only.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -1118,10 +1129,11 @@ public sealed class CaptureResponse : UnityCliLoopToolResponse
                 ThirdPartyToolMigrationFileService service = new();
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
 
-                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FileCount, Is.EqualTo(1));
                 Assert.That(File.ReadAllText(toolPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -1130,9 +1142,9 @@ public sealed class CaptureResponse : UnityCliLoopToolResponse
         }
 
         [Test]
-        public void ApplyMigration_WhenCurrentToolContractsFileUsesLegacyMainThreadSwitcher_AddsApplicationReference()
+        public void ApplyMigration_WhenCurrentToolContractsFileUsesLegacyMainThreadSwitcher_KeepsToolContractsReference()
         {
-            // Verifies that partially migrated files finish main-thread switcher migration and add the Application asmdef reference.
+            // Verifies that partially migrated files finish main-thread switcher migration using ToolContracts only.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -1170,11 +1182,12 @@ public sealed class MainThreadResponse : UnityCliLoopToolResponse
                 ThirdPartyToolMigrationFileService service = new();
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
 
-                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FileCount, Is.EqualTo(1));
                 Assert.That(File.ReadAllText(toolPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct)"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.MainThreadSwitcher.SwitchToMainThread(ct)"));
                 Assert.That(File.ReadAllText(toolPath), Does.Not.Contain("PlayerLoopTiming"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
             {
@@ -1183,9 +1196,9 @@ public sealed class MainThreadResponse : UnityCliLoopToolResponse
         }
 
         [Test]
-        public void ApplyMigration_WhenFileScopedLegacyUsingUsesMainThreadSwitcher_AddsApplicationReference()
+        public void ApplyMigration_WhenFileScopedLegacyUsingUsesMainThreadSwitcher_AddsToolContractsReference()
         {
-            // Verifies that regular legacy usings add the Application asmdef reference for migrated main-thread calls.
+            // Verifies that regular legacy usings add the ToolContracts asmdef reference for migrated main-thread calls.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -1217,8 +1230,9 @@ public sealed class MainThreadTool
                 Assert.That(result.FilePaths.Contains(toolPath), Is.True);
                 Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
                 Assert.That(migratedSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct)"));
-                Assert.That(migratedAsmdef, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.MainThreadSwitcher.SwitchToMainThread(ct)"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
             {
@@ -1227,9 +1241,9 @@ public sealed class MainThreadTool
         }
 
         [Test]
-        public void ApplyMigration_WhenLegacyUsingUsesBareFirstPartyScreenshotDto_AddsScreenshotReference()
+        public void ApplyMigration_WhenLegacyUsingUsesBareFirstPartyScreenshotDto_AddsToolContractsReference()
         {
-            // Verifies that regular legacy usings that migrate screenshot DTOs also repair asmdef references.
+            // Verifies that regular legacy usings that migrate screenshot DTOs repair asmdef references.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -1259,8 +1273,9 @@ public sealed class ElementTool
                 Assert.That(result.FilePaths.Contains(toolPath), Is.True);
                 Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
                 Assert.That(migratedSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo"));
-                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -1269,9 +1284,9 @@ public sealed class ElementTool
         }
 
         [Test]
-        public void ApplyMigration_WhenAssemblyUsesCurrentApplicationGlobalUsing_AddsApplicationReference()
+        public void ApplyMigration_WhenAssemblyUsesCurrentApplicationGlobalUsing_RewritesApplicationNamespace()
         {
-            // Verifies that split files relying on a current Application global using get the required asmdef reference.
+            // Verifies that split files relying on a current Application global using move to ToolContracts.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -1302,9 +1317,12 @@ public sealed class MainThreadUsage
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
 
                 Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(File.ReadAllText(mainThreadPath), Does.Contain(
                     "await MainThreadSwitcher.SwitchToMainThread(ct);"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
             {
@@ -1391,7 +1409,10 @@ public sealed class MainThreadUsage
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
                 string migratedSource = File.ReadAllText(mainThreadPath);
 
+                Assert.That(result.FilePaths.Contains(globalUsingPath), Is.True);
                 Assert.That(result.FilePaths.Contains(mainThreadPath), Is.True);
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using App = io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(migratedSource, Does.Contain(
                     "await App.MainThreadSwitcher.SwitchToMainThread(ct);"));
                 Assert.That(migratedSource, Does.Not.Contain("PlayerLoopTiming"));
@@ -1733,19 +1754,20 @@ public sealed class PartialResponse : UnityCliLoopToolResponse
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
                 string migratedSource = File.ReadAllText(toolPath);
 
-                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FileCount, Is.EqualTo(1));
                 Assert.That(migratedSource, Does.Contain(
                     "EditorFrameWaiter.WaitFramesOrTimeoutAsync(2, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)"));
                 Assert.That(migratedSource, Does.Contain("TimerDelay.Wait(10, ct: ct)"));
                 Assert.That(migratedSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct)"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.MainThreadSwitcher.SwitchToMainThread(ct)"));
                 Assert.That(migratedSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync"));
                 Assert.That(migratedSource, Does.Not.Contain("EditorDelay"));
                 Assert.That(migratedSource, Does.Not.Contain("PlayerLoopTiming"));
                 Assert.That(migratedSource, Does.Not.Contain("cancellationToken:"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -1791,7 +1813,7 @@ public sealed class CurrentScreenshotTool
                 Assert.That(migratedSource, Does.Contain(
                     "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
                 Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -1834,14 +1856,16 @@ public sealed class CurrentScreenshotTool
                 string migratedSource = File.ReadAllText(toolPath);
                 string migratedAsmdef = File.ReadAllText(asmdefPath);
 
-                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FileCount, Is.EqualTo(3));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(migratedSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync"));
                 Assert.That(migratedSource, Does.Contain(
                     "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
                 Assert.That(migratedSource, Does.Not.Contain("return await EditorWindowCaptureUtility.CaptureWindowAsync"));
                 Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -1886,10 +1910,13 @@ public sealed class CurrentScreenshotTool
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
                 string migratedSource = File.ReadAllText(toolPath);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(globalUsingPath), Is.True);
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using Fpt = io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(migratedSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync"));
                 Assert.That(migratedSource, Does.Contain(
                     "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
                 Assert.That(migratedSource, Does.Not.Contain(
@@ -1902,9 +1929,9 @@ public sealed class CurrentScreenshotTool
         }
 
         [Test]
-        public void ApplyMigration_WhenCurrentFirstPartyToolsGlobalUsingOnlyNeedsReference_AddsScreenshotReference()
+        public void ApplyMigration_WhenCurrentFirstPartyToolsGlobalUsingOnlyNeedsReference_RewritesFirstPartyNamespace()
         {
-            // Verifies that a current FirstPartyTools global using by itself still gets the defining asmdef reference.
+            // Verifies that a current FirstPartyTools global using by itself moves to ToolContracts.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -1922,11 +1949,13 @@ public sealed class CurrentScreenshotTool
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
                 string migratedAsmdef = File.ReadAllText(asmdefPath);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
-                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(result.FilePaths.Contains(globalUsingPath), Is.True);
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
                 Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
-                    "global using io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
+                    "global using io.github.hatayama.UnityCliLoop.ToolContracts;"));
             }
             finally
             {
@@ -1935,9 +1964,9 @@ public sealed class CurrentScreenshotTool
         }
 
         [Test]
-        public void ApplyMigration_WhenCurrentFirstPartyToolsAliasOnlyNeedsReference_AddsScreenshotReference()
+        public void ApplyMigration_WhenCurrentFirstPartyToolsAliasOnlyNeedsReference_RewritesFirstPartyNamespace()
         {
-            // Verifies that a current FirstPartyTools namespace alias by itself still gets the defining asmdef reference.
+            // Verifies that a current FirstPartyTools namespace alias by itself moves to ToolContracts.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -1955,11 +1984,13 @@ public sealed class CurrentScreenshotTool
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
                 string migratedAsmdef = File.ReadAllText(asmdefPath);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
-                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(result.FilePaths.Contains(aliasUsingPath), Is.True);
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
                 Assert.That(File.ReadAllText(aliasUsingPath), Does.Contain(
-                    "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
+                    "using Fpt = io.github.hatayama.UnityCliLoop.ToolContracts;"));
             }
             finally
             {
@@ -2117,9 +2148,9 @@ public sealed class HelloResponse : BaseToolResponse
 
                 Assert.That(result.FileCount, Is.EqualTo(3));
                 Assert.That(File.ReadAllText(helperPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Domain.ServiceResult<int> Create"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ServiceResult<int> Create"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
             {
@@ -2313,9 +2344,9 @@ public static class ToolMetadataProvider
 
                 Assert.That(result.FileCount, Is.EqualTo(3));
                 Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
-                    "global using LegacyToolInfo = io.github.hatayama.UnityCliLoop.Domain.ToolInfo;"));
+                    "global using LegacyToolInfo = io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo;"));
                 Assert.That(File.ReadAllText(metadataPath), Does.Contain(
-                    "new io.github.hatayama.UnityCliLoop.Domain.ToolInfo(\"hello\", schema)"));
+                    "new io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo(\"hello\", schema)"));
                 Assert.That(File.ReadAllText(metadataPath), Does.Not.Contain("\"description\", schema"));
             }
             finally
@@ -2353,7 +2384,7 @@ public static class ToolMetadataProvider
 
                 Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
-                    "global using LegacyToolInfo = io.github.hatayama.UnityCliLoop.Domain.ToolInfo;"));
+                    "global using LegacyToolInfo = io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo;"));
                 Assert.That(File.ReadAllText(unrelatedPath), Is.EqualTo(unrelatedSource));
             }
             finally
@@ -2512,21 +2543,22 @@ public sealed class UIElementInfo
                 ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
                 string migratedToolSource = File.ReadAllText(toolPath);
 
-                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FileCount, Is.EqualTo(1));
                 Assert.That(migratedToolSource, Does.Contain("UnityCliLoopTool<ScreenshotSchema, ScreenshotResponse>"));
                 Assert.That(migratedToolSource, Does.Contain("Task<ScreenshotResponse> ExecuteAsync"));
                 Assert.That(migratedToolSource, Does.Contain("List<UIElementInfo> elements"));
                 Assert.That(migratedToolSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync"));
                 Assert.That(migratedToolSource, Does.Not.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.ScreenshotSchema"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ScreenshotSchema"));
                 Assert.That(migratedToolSource, Does.Not.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.ScreenshotResponse"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ScreenshotResponse"));
                 Assert.That(migratedToolSource, Does.Not.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.UIElementInfo"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo"));
                 Assert.That(File.ReadAllText(dtoPath), Does.Not.Contain(
                     "io.github.hatayama.UnityCliLoop.FirstPartyTools"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
             }
             finally
             {
@@ -2592,9 +2624,9 @@ public sealed class CaptureTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotR
 
                 Assert.That(result.FileCount, Is.EqualTo(1));
                 Assert.That(migratedSource, Does.Contain(
-                    "UnityCliLoopTool<io.github.hatayama.UnityCliLoop.FirstPartyTools.ScreenshotSchema, io.github.hatayama.UnityCliLoop.FirstPartyTools.ScreenshotResponse>"));
+                    "UnityCliLoopTool<io.github.hatayama.UnityCliLoop.ToolContracts.ScreenshotSchema, io.github.hatayama.UnityCliLoop.ToolContracts.ScreenshotResponse>"));
                 Assert.That(migratedSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync"));
                 Assert.That(migratedSource, Does.Not.Contain("await EditorWindowCaptureUtility.CaptureWindowAsync"));
             }
             finally
@@ -2696,9 +2728,9 @@ public sealed class CaptureTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotR
         }
 
         [Test]
-        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsingAndSplitManualRegistration_AddsApplicationReference()
+        public void ApplyMigration_WhenAssemblyUsesGlobalLegacyUsingAndSplitManualRegistration_AddsToolContractsReference()
         {
-            // Verifies that manual registration files relying on assembly-level legacy detection get required refs.
+            // Verifies that manual registration files relying on assembly-level legacy detection get ToolContracts refs.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -2727,9 +2759,9 @@ public sealed class CaptureTool : UnityCliLoopTool<ScreenshotSchema, ScreenshotR
 
                 Assert.That(result.FileCount, Is.EqualTo(3));
                 Assert.That(File.ReadAllText(registrationPath), Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar.RegisterCustomTool"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopToolRegistrar.RegisterCustomTool"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
                 Assert.That(File.ReadAllText(asmdefPath), Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             }
             finally
@@ -3658,9 +3690,9 @@ public sealed class ScreenshotResponse : UnityCliLoopToolResponse
         }
 
         [Test]
-        public async Task HasMigrationTargetsAsync_WhenCurrentApplicationGuidReferenceExists_ReturnsFalse()
+        public async Task HasMigrationTargetsAsync_WhenCurrentApplicationGuidReferenceExists_ReturnsTrue()
         {
-            // Verifies that current V3 Application references do not trigger the startup migration prompt.
+            // Verifies that current V3 Application namespace usage still triggers source migration.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -3692,7 +3724,7 @@ public static class CurrentManualToolRegistration
 
                 bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
 
-                Assert.That(hasTargets, Is.False);
+                Assert.That(hasTargets, Is.True);
             }
             finally
             {
@@ -3977,9 +4009,9 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
-        public void PreviewMigration_WhenCurrentApplicationGuidReferenceExists_KeepsAsmdef()
+        public void PreviewMigration_WhenCurrentApplicationGuidReferenceExists_ReportsSourceMigration()
         {
-            // Verifies that V3 Application references are not reported as legacy asmdef migration.
+            // Verifies that V3 Application namespace usage is reported as source migration.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -4010,7 +4042,10 @@ public static class CurrentManualToolRegistration
                 ThirdPartyToolMigrationFileService service = new();
                 ThirdPartyToolMigrationPreview preview = service.PreviewMigration(projectRoot);
 
-                Assert.That(preview.HasTargets, Is.False);
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(preview.FileCount, Is.EqualTo(1));
+                Assert.That(preview.FilePaths.Contains(registrationPath), Is.True);
+                Assert.That(preview.FilePaths.Contains(asmdefPath), Is.False);
                 Assert.That(File.ReadAllText(registrationPath), Is.EqualTo(registrationSource));
                 Assert.That(File.ReadAllText(asmdefPath), Is.EqualTo(asmdefSource));
             }
@@ -4149,9 +4184,9 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
-        public async Task ApplyMigrationAsync_WhenFileScopedLegacyUsingUsesMainThreadSwitcher_AddsApplicationReference()
+        public async Task ApplyMigrationAsync_WhenFileScopedLegacyUsingUsesMainThreadSwitcher_AddsToolContractsReference()
         {
-            // Verifies that async migration also adds Application asmdef references for regular legacy usings.
+            // Verifies that async migration also adds ToolContracts asmdef references for regular legacy usings.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -4187,8 +4222,9 @@ public sealed class MainThreadTool
                 Assert.That(result.FilePaths.Contains(toolPath), Is.True);
                 Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
                 Assert.That(migratedSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.Application.MainThreadSwitcher.SwitchToMainThread(ct)"));
-                Assert.That(migratedAsmdef, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.MainThreadSwitcher.SwitchToMainThread(ct)"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             }
             finally
             {
@@ -4234,7 +4270,10 @@ public sealed class MainThreadUsage
                         CancellationToken.None);
                 string migratedSource = File.ReadAllText(mainThreadPath);
 
+                Assert.That(result.FilePaths.Contains(globalUsingPath), Is.True);
                 Assert.That(result.FilePaths.Contains(mainThreadPath), Is.True);
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using App = io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(migratedSource, Does.Contain(
                     "await App.MainThreadSwitcher.SwitchToMainThread(ct);"));
                 Assert.That(migratedSource, Does.Not.Contain("PlayerLoopTiming"));
@@ -4246,9 +4285,9 @@ public sealed class MainThreadUsage
         }
 
         [Test]
-        public async Task ApplyMigrationAsync_WhenCurrentFirstPartyToolsGlobalUsingOnlyNeedsReference_AddsScreenshotReference()
+        public async Task ApplyMigrationAsync_WhenCurrentFirstPartyToolsGlobalUsingOnlyNeedsReference_RewritesFirstPartyNamespace()
         {
-            // Verifies that async migration adds the screenshot asmdef reference for current FirstPartyTools global using.
+            // Verifies that async migration rewrites current FirstPartyTools global using to ToolContracts.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -4270,9 +4309,13 @@ public sealed class MainThreadUsage
                         CancellationToken.None);
                 string migratedAsmdef = File.ReadAllText(asmdefPath);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
-                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(result.FilePaths.Contains(globalUsingPath), Is.True);
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using io.github.hatayama.UnityCliLoop.ToolContracts;"));
             }
             finally
             {
@@ -4321,10 +4364,13 @@ public sealed class CurrentScreenshotTool
                         CancellationToken.None);
                 string migratedSource = File.ReadAllText(toolPath);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(globalUsingPath), Is.True);
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using Fpt = io.github.hatayama.UnityCliLoop.ToolContracts;"));
                 Assert.That(migratedSource, Does.Contain(
-                    "io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync"));
                 Assert.That(migratedSource, Does.Contain(
                     "io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS"));
                 Assert.That(migratedSource, Does.Not.Contain(
@@ -4337,9 +4383,9 @@ public sealed class CurrentScreenshotTool
         }
 
         [Test]
-        public async Task ApplyMigrationAsync_WhenCurrentFirstPartyToolsAliasOnlyNeedsReference_AddsScreenshotReference()
+        public async Task ApplyMigrationAsync_WhenCurrentFirstPartyToolsAliasOnlyNeedsReference_RewritesFirstPartyNamespace()
         {
-            // Verifies that async migration adds the screenshot asmdef reference for current FirstPartyTools alias using.
+            // Verifies that async migration rewrites current FirstPartyTools alias using to ToolContracts.
             string projectRoot = CreateProjectRoot();
             try
             {
@@ -4361,11 +4407,13 @@ public sealed class CurrentScreenshotTool
                         CancellationToken.None);
                 string migratedAsmdef = File.ReadAllText(asmdefPath);
 
-                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FileCount, Is.EqualTo(2));
                 Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
-                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(result.FilePaths.Contains(aliasUsingPath), Is.True);
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
                 Assert.That(File.ReadAllText(aliasUsingPath), Does.Contain(
-                    "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
+                    "using Fpt = io.github.hatayama.UnityCliLoop.ToolContracts;"));
             }
             finally
             {

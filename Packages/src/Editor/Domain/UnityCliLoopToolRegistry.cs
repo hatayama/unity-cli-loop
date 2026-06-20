@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using Newtonsoft.Json;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -183,24 +182,4 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         }
 
     }
-
-    /// <summary>
-    /// Catalog DTO returned by the CLI tool-details command.
-    /// </summary>
-    public class ToolInfo
-    {
-        [JsonProperty("name")] public string Name { get; }
-
-        [JsonProperty("parameterSchema")] public ToolParameterSchema ParameterSchema { get; }
-
-        [JsonProperty("displayDevelopmentOnly")] public bool DisplayDevelopmentOnly { get; }
-
-        public ToolInfo(string name, ToolParameterSchema parameterSchema, bool displayDevelopmentOnly = false)
-        {
-            Name = name;
-            ParameterSchema = parameterSchema;
-            DisplayDevelopmentOnly = displayDevelopmentOnly;
-        }
-    }
-
 }

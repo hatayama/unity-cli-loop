@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
     /// Defines the Unity CLI Loop Screenshot operations required by the owning workflow.

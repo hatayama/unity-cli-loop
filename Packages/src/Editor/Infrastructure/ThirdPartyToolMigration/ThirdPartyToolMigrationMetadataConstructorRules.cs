@@ -114,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                builder.Append($"new {CurrentDomainNamespace}.ToolInfo(");
+                builder.Append($"new {CurrentNamespace}.ToolInfo(");
                 builder.Append(string.Join(", ", migratedArguments));
                 builder.Append(')');
                 sourceCopyIndex = closingParenthesisIndex + 1;
@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                builder.Append($"new {CurrentDomainNamespace}.ToolSettingsCatalogItem(");
+                builder.Append($"new {CurrentNamespace}.ToolSettingsCatalogItem(");
                 builder.Append(string.Join(", ", migratedArguments));
                 builder.Append(')');
                 sourceCopyIndex = closingParenthesisIndex + 1;

@@ -1,5 +1,8 @@
-namespace io.github.hatayama.UnityCliLoop.Domain
+namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
+    /// <summary>
+    /// Describes a tool entry that can appear in tool settings.
+    /// </summary>
     public class ToolSettingsCatalogItem
     {
         public readonly string Name;

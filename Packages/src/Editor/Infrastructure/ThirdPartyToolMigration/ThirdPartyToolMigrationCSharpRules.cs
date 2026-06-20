@@ -315,6 +315,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     ref replacementCount);
             }
 
+            migratedContent = ReplaceCurrentPublicContractNamespacesInCode(
+                migratedContent,
+                ref replacementCount);
+
             return new ThirdPartyToolMigrationContentResult(
                 migratedContent,
                 replacementCount,

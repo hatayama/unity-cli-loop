@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
-namespace io.github.hatayama.UnityCliLoop.Application
+namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     // Port for dispatching continuations onto Unity's main thread.
     /// <summary>

@@ -1,5 +1,5 @@
 
-namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
     /// Describes UI Element information collected by the owning workflow.

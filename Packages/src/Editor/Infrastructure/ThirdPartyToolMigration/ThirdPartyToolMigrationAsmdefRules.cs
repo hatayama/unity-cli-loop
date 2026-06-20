@@ -96,21 +96,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CurrentToolContractsGuidReference
             };
 
-            if (requiresApplicationReference)
-            {
-                references.Add(CurrentApplicationGuidReference);
-            }
-
-            if (requiresDomainReference)
-            {
-                references.Add(CurrentDomainGuidReference);
-            }
-
-            if (requiresFirstPartyScreenshotReference)
-            {
-                references.Add(CurrentFirstPartyToolsScreenshotGuidReference);
-            }
-
             return references.ToArray();
         }
 
@@ -126,39 +111,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(references != null, "references must not be null");
             Debug.Assert(addedReferences != null, "addedReferences must not be null");
 
-            if (requiresToolContractsReference || requiresApplicationReference || requiresDomainReference)
+            if (requiresToolContractsReference ||
+                requiresApplicationReference ||
+                requiresDomainReference ||
+                requiresFirstPartyScreenshotReference)
             {
                 AddRequiredCurrentAsmdefReference(
                     references,
                     addedReferences,
                     CurrentToolContractsGuidReference,
-                    ref replacementCount);
-            }
-
-            if (requiresApplicationReference)
-            {
-                AddRequiredCurrentAsmdefReference(
-                    references,
-                    addedReferences,
-                    CurrentApplicationGuidReference,
-                    ref replacementCount);
-            }
-
-            if (requiresDomainReference)
-            {
-                AddRequiredCurrentAsmdefReference(
-                    references,
-                    addedReferences,
-                    CurrentDomainGuidReference,
-                    ref replacementCount);
-            }
-
-            if (requiresFirstPartyScreenshotReference)
-            {
-                AddRequiredCurrentAsmdefReference(
-                    references,
-                    addedReferences,
-                    CurrentFirstPartyToolsScreenshotGuidReference,
                     ref replacementCount);
             }
         }

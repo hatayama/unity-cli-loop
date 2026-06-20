@@ -189,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
                 builder.Append(shouldExtractTexture ? "(await " : "await ");
-                builder.Append(CurrentFirstPartyToolsNamespace);
+                builder.Append(CurrentNamespace);
                 builder.Append('.');
                 builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
                 builder.Append('.');
@@ -276,7 +276,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                builder.Append(CurrentFirstPartyToolsNamespace);
+                builder.Append(CurrentNamespace);
                 builder.Append('.');
                 builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
                 builder.Append('.');
@@ -358,7 +358,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
                 builder.Append("await ");
-                builder.Append(CurrentFirstPartyToolsNamespace);
+                builder.Append(CurrentNamespace);
                 builder.Append('.');
                 builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
                 builder.Append('.');
@@ -440,7 +440,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                builder.Append(CurrentFirstPartyToolsNamespace);
+                builder.Append(CurrentNamespace);
                 builder.Append('.');
                 builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
                 builder.Append('.');

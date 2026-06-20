@@ -96,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static readonly Regex CurrentDomainMetadataRegex =
             new(
-                $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\.ToolInfo\b",
+                $@"(?<![\w.])(?:global::)?{Regex.Escape(CurrentNamespace)}\.ToolInfo\b",
                 RegexOptions.Compiled);
 
         internal static readonly Regex LegacyGlobalUsingRegex =
@@ -237,22 +237,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static readonly Regex LegacyEditorWindowCaptureUtilityCaptureWindowRegex =
             new(
-                $@"(?<![\w.])await\s+(?:(?<currentQualifier>(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureWindowMethodName}\s*\(",
+                $@"(?<![\w.])await\s+(?:(?<currentQualifier>(?:global::)?(?:{Regex.Escape(CurrentFirstPartyToolsNamespace)}|{Regex.Escape(CurrentNamespace)})\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureWindowMethodName}\s*\(",
                 RegexOptions.Compiled);
 
         internal static readonly Regex LegacyEditorWindowCaptureUtilityCaptureWindowInvocationRegex =
             new(
-                $@"(?<![\w.])(?:(?<currentQualifier>(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureWindowMethodName}\s*\(",
+                $@"(?<![\w.])(?:(?<currentQualifier>(?:global::)?(?:{Regex.Escape(CurrentFirstPartyToolsNamespace)}|{Regex.Escape(CurrentNamespace)})\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureWindowMethodName}\s*\(",
                 RegexOptions.Compiled);
 
         internal static readonly Regex LegacyEditorWindowCaptureUtilityCaptureGameRenderingRegex =
             new(
-                $@"(?<![\w.])await\s+(?:(?<currentQualifier>(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureGameRenderingMethodName}\s*\(",
+                $@"(?<![\w.])await\s+(?:(?<currentQualifier>(?:global::)?(?:{Regex.Escape(CurrentFirstPartyToolsNamespace)}|{Regex.Escape(CurrentNamespace)})\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureGameRenderingMethodName}\s*\(",
                 RegexOptions.Compiled);
 
         internal static readonly Regex LegacyEditorWindowCaptureUtilityCaptureGameRenderingInvocationRegex =
             new(
-                $@"(?<![\w.])(?:(?<currentQualifier>(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureGameRenderingMethodName}\s*\(",
+                $@"(?<![\w.])(?:(?<currentQualifier>(?:global::)?(?:{Regex.Escape(CurrentFirstPartyToolsNamespace)}|{Regex.Escape(CurrentNamespace)})\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyEditorWindowCaptureUtilityTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyEditorWindowCaptureUtilityTypeName}|(?<editorWindowCaptureUtility>{LegacyEditorWindowCaptureUtilityTypeName}))\s*\.\s*{EditorWindowCaptureUtilityCaptureGameRenderingMethodName}\s*\(",
                 RegexOptions.Compiled);
 
         internal static readonly Regex LegacyTimerDelayInvocationRegex =
@@ -262,17 +262,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static readonly Regex LegacyMainThreadSwitcherSwitchRegex =
             new(
-                $@"(?<![A-Za-z0-9_])(?:(?<currentQualifier>(?:global::)?{Regex.Escape(CurrentApplicationNamespace)}\.){LegacyMainThreadSwitcherTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyMainThreadSwitcherTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyMainThreadSwitcherTypeName}|(?<mainThreadSwitcher>{LegacyMainThreadSwitcherTypeName}))\s*\.\s*{LegacyMainThreadSwitcherSwitchMethodName}\s*\(",
+                $@"(?<![A-Za-z0-9_])(?:(?<currentQualifier>(?:global::)?(?:{Regex.Escape(CurrentApplicationNamespace)}|{Regex.Escape(CurrentNamespace)})\.){LegacyMainThreadSwitcherTypeName}|(?<qualifier>(?:global::)?{Regex.Escape(LegacyNamespace)}\.){LegacyMainThreadSwitcherTypeName}|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.{LegacyMainThreadSwitcherTypeName}|(?<mainThreadSwitcher>{LegacyMainThreadSwitcherTypeName}))\s*\.\s*{LegacyMainThreadSwitcherSwitchMethodName}\s*\(",
                 RegexOptions.Compiled);
 
         internal static readonly Regex MigratedMainThreadSwitcherSwitchRegex =
             new(
-                $@"(?<![\w.])(?:(?:global::)?{Regex.Escape(CurrentApplicationNamespace)}\.)?{LegacyMainThreadSwitcherTypeName}\s*\.\s*{LegacyMainThreadSwitcherSwitchMethodName}\s*\(",
+                $@"(?<![\w.])(?:(?:global::)?{Regex.Escape(CurrentNamespace)}\.)?{LegacyMainThreadSwitcherTypeName}\s*\.\s*{LegacyMainThreadSwitcherSwitchMethodName}\s*\(",
                 RegexOptions.Compiled);
 
         internal static readonly Regex CurrentCaptureGameRenderingDeconstructionRegex =
             new(
-                $@"\((?<items>[^()]*)\)\s*=\s*await\s+(?:(?<qualifier>(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.)|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.)?{LegacyEditorWindowCaptureUtilityTypeName}\.{EditorWindowCaptureUtilityCaptureGameRenderingMethodName}\s*\(",
+                $@"\((?<items>[^()]*)\)\s*=\s*await\s+(?:(?<qualifier>(?:global::)?(?:{Regex.Escape(CurrentFirstPartyToolsNamespace)}|{Regex.Escape(CurrentNamespace)})\.)|(?<alias>[A-Za-z_][A-Za-z0-9_]*)\.)?{LegacyEditorWindowCaptureUtilityTypeName}\.{EditorWindowCaptureUtilityCaptureGameRenderingMethodName}\s*\(",
                 RegexOptions.Compiled);
 
         internal static readonly Regex TypeDeclarationNameRegex =
@@ -335,13 +335,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             new(
                 $@"(?<![\w.])(?:global::)?{Regex.Escape(LegacyNamespace)}\.CustomToolManager\b",
-                $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"),
+                $"{CurrentNamespace}.UnityCliLoopToolRegistrar"),
             new(LegacyNamespacePattern, CurrentNamespace)
         };
 
         internal static readonly ReplacementRule[] RegistrarReplacementRules =
         {
-            new(Regex.Escape($"{CurrentNamespace}.ToolInfo"), $"{CurrentDomainNamespace}.ToolInfo")
+            new(Regex.Escape($"{CurrentDomainNamespace}.ToolInfo"), $"{CurrentNamespace}.ToolInfo"),
+            new(
+                Regex.Escape($"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"),
+                $"{CurrentNamespace}.UnityCliLoopToolRegistrar")
         };
 
         internal static readonly Regex UnqualifiedToolInfoRegex =

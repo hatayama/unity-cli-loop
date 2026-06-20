@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     // Creates a temporary Screen Space Overlay Canvas that draws bounding boxes and labels

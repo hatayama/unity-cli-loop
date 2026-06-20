@@ -2,6 +2,8 @@ using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using ApplicationRegistrar = io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar;
+using ToolContractsRegistrar = io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopToolRegistrar;
 
 namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 {
@@ -27,7 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 new SkillInstallLayoutInternalToolNameProvider(),
                 toolSettingsService,
                 new UnityCliLoopToolExecutionService());
-            UnityCliLoopToolRegistrar.RegisterService(toolRegistrarService);
+            ApplicationRegistrar.RegisterService(toolRegistrarService);
+            ToolContractsRegistrar.RegisterService(toolRegistrarService);
             ToolSettingsUseCaseRegistry.Register(new ToolSettingsUseCase(
                 toolSettingsService,
                 toolRegistrarService));

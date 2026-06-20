@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     aliasRegistrarRegex,
-                    _ => $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar",
+                    _ => $"{CurrentNamespace}.UnityCliLoopToolRegistrar",
                     ref replacementCount);
 
                 Regex aliasToolInfoRegex = new(
@@ -79,9 +79,32 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     aliasToolInfoRegex,
-                    _ => $"{CurrentDomainNamespace}.ToolInfo",
+                    _ => $"{CurrentNamespace}.ToolInfo",
                     ref replacementCount);
             }
+
+            return migratedContent;
+        }
+
+        internal static string ReplaceCurrentPublicContractNamespacesInCode(string source, ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            string migratedContent = ReplaceRegexInCode(
+                source,
+                CurrentApplicationNamespaceRegex,
+                _ => CurrentNamespace,
+                ref replacementCount);
+            migratedContent = ReplaceRegexInCode(
+                migratedContent,
+                CurrentDomainNamespaceRegex,
+                _ => CurrentNamespace,
+                ref replacementCount);
+            migratedContent = ReplaceRegexInCode(
+                migratedContent,
+                CurrentFirstPartyToolsNamespaceRegex,
+                _ => CurrentNamespace,
+                ref replacementCount);
 
             return migratedContent;
         }
@@ -98,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 source,
                 unqualifiedRegistrarRegex,
                 match => ShouldMigrateLegacyTypeReference(source, "CustomToolManager", match.Index)
-                    ? $"{CurrentApplicationNamespace}.UnityCliLoopToolRegistrar"
+                    ? $"{CurrentNamespace}.UnityCliLoopToolRegistrar"
                     : match.Value,
                 ref replacementCount);
         }
@@ -167,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     fullyQualifiedRegex,
-                    _ => $"{CurrentDomainNamespace}.{rule.CurrentName}",
+                    _ => $"{CurrentNamespace}.{rule.CurrentName}",
                     ref replacementCount);
 
                 foreach (string alias in aliases)
@@ -178,7 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     migratedContent = ReplaceRegexInCode(
                         migratedContent,
                         aliasRegex,
-                        _ => $"{CurrentDomainNamespace}.{rule.CurrentName}",
+                        _ => $"{CurrentNamespace}.{rule.CurrentName}",
                         ref replacementCount);
                 }
 
@@ -189,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     migratedContent,
                     unqualifiedRegex,
                     match => ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
-                        ? $"{CurrentDomainNamespace}.{rule.CurrentName}"
+                        ? $"{CurrentNamespace}.{rule.CurrentName}"
                         : match.Value,
                     ref replacementCount);
             }
@@ -220,7 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     fullyQualifiedRegex,
-                    _ => $"{CurrentApplicationNamespace}.{rule.CurrentName}",
+                    _ => $"{CurrentNamespace}.{rule.CurrentName}",
                     ref replacementCount);
 
                 foreach (string alias in aliases)
@@ -231,7 +254,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     migratedContent = ReplaceRegexInCode(
                         migratedContent,
                         aliasRegex,
-                        _ => $"{CurrentApplicationNamespace}.{rule.CurrentName}",
+                        _ => $"{CurrentNamespace}.{rule.CurrentName}",
                         ref replacementCount);
                 }
 
@@ -244,7 +267,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     match => canMigrateBareLegacyApplicationApi &&
                         !hasProtectedTypeDeclaration &&
                         ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
-                            ? $"{CurrentApplicationNamespace}.{rule.CurrentName}"
+                            ? $"{CurrentNamespace}.{rule.CurrentName}"
                             : match.Value,
                     ref replacementCount);
             }
@@ -275,7 +298,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     fullyQualifiedRegex,
-                    _ => $"{CurrentFirstPartyToolsNamespace}.{rule.CurrentName}",
+                    _ => $"{CurrentNamespace}.{rule.CurrentName}",
                     ref replacementCount);
 
                 foreach (string alias in aliases)
@@ -286,7 +309,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     migratedContent = ReplaceRegexInCode(
                         migratedContent,
                         aliasRegex,
-                        _ => $"{CurrentFirstPartyToolsNamespace}.{rule.CurrentName}",
+                        _ => $"{CurrentNamespace}.{rule.CurrentName}",
                         ref replacementCount);
                 }
 
@@ -299,7 +322,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     match => canMigrateBareLegacyFirstPartyScreenshotApi &&
                         !hasProtectedTypeDeclaration &&
                         ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
-                            ? $"{CurrentFirstPartyToolsNamespace}.{rule.CurrentName}"
+                            ? $"{CurrentNamespace}.{rule.CurrentName}"
                             : match.Value,
                     ref replacementCount);
             }
@@ -315,7 +338,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 source,
                 UnqualifiedToolInfoRegex,
                 match => ShouldMigrateLegacyToolInfoTypeReference(source, match.Index)
-                    ? $"{CurrentDomainNamespace}.ToolInfo"
+                    ? $"{CurrentNamespace}.ToolInfo"
                     : match.Value,
                 ref replacementCount);
         }
