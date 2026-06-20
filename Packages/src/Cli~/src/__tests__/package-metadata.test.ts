@@ -28,6 +28,7 @@ const METADATA_VALIDATION_DEPENDENCY_META_PATHS = [
   'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Reflection.Metadata.dll.meta',
   'Editor/MetadataValidation/Dependencies/uLoopMCP.System.Runtime.CompilerServices.Unsafe.dll.meta',
 ] as const;
+const METADATA_VALIDATION_DEPENDENCY_DEFINE_CONSTRAINT = '!UNITY_6000_5_OR_NEWER';
 const METADATA_VALIDATION_PRIVATE_ASSEMBLIES = [
   {
     relativePath:
@@ -153,6 +154,14 @@ describe('package metadata', () => {
       const metaText = loadUnityPackageText(metaPath);
 
       expect(metaText).toContain('isExplicitlyReferenced: 1');
+    }
+  });
+
+  it('excludes bundled metadata validation dependencies from Unity 6000.5 and newer', () => {
+    for (const metaPath of METADATA_VALIDATION_DEPENDENCY_META_PATHS) {
+      const metaText = loadUnityPackageText(metaPath);
+
+      expect(metaText).toContain(`- '${METADATA_VALIDATION_DEPENDENCY_DEFINE_CONSTRAINT}'`);
     }
   });
 
