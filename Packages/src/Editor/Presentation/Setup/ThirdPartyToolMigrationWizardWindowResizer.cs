@@ -23,9 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(window != null, "window must not be null");
             Debug.Assert(mainScrollView != null, "mainScrollView must not be null");
 
-            _window = window;
+            _window = window ?? throw new System.ArgumentNullException(nameof(window));
             _root = window.rootVisualElement;
-            _mainScrollView = mainScrollView;
+            _mainScrollView = mainScrollView ?? throw new System.ArgumentNullException(nameof(mainScrollView));
         }
 
         internal static Rect CreateCenteredRect(Rect bounds, Vector2 size)
@@ -130,11 +130,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void ResizeToContent()
         {
-            if (_mainScrollView == null)
-            {
-                return;
-            }
-
             if (_root.layout.width <= 0f || _root.layout.height <= 0f)
             {
                 return;

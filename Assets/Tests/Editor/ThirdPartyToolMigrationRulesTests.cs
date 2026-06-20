@@ -110,6 +110,23 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolDescriptionInterpolatesCommaExpression_DropsDescriptionArgument()
+        {
+            // Verifies that commas inside interpolated-string expressions do not split legacy attribute arguments.
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
+                "[McpTool(Description = $\"{string.Join(\",\", values)}\", DisplayDevelopmentOnly = true)] " +
+                "public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("[UnityCliLoopTool(DisplayDevelopmentOnly = true)]"));
+            Assert.That(result.Content, Does.Not.Contain("Description"));
+            Assert.That(result.Content, Does.Not.Contain("string.Join"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolAttributeHasSecurityArgument_RewritesSecurityArgument()
         {
             // Verifies that supported security metadata keeps compiling after the enum rename.

@@ -149,6 +149,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (StartsWith(argumentsSource, i, "$\""))
                 {
+                    int interpolatedStringEndIndex =
+                        ThirdPartyToolMigrationInterpolatedStringRules.FindRegularInterpolatedStringEndIndex(
+                            argumentsSource,
+                            i);
+                    if (interpolatedStringEndIndex >= 0)
+                    {
+                        i = interpolatedStringEndIndex;
+                        continue;
+                    }
+
                     isInRegularString = true;
                     i++;
                     continue;
@@ -190,6 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             arguments.Add(argumentsSource.Substring(argumentStartIndex));
             return arguments.ToArray();
         }
+
         internal static string GetNamedArgumentValueOrNull(string argument, string argumentName)
         {
             Debug.Assert(argument != null, "argument must not be null");

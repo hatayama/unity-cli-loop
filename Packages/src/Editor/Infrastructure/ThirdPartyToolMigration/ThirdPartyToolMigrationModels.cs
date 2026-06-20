@@ -16,8 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
             Debug.Assert(content != null, "content must not be null");
 
-            FilePath = filePath;
-            Content = content ?? string.Empty;
+            FilePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
+            Content = content ?? throw new ArgumentNullException(nameof(content));
         }
 
         public string FilePath { get; }
@@ -33,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(changes != null, "changes must not be null");
             Debug.Assert(replacementCount >= 0, "replacementCount must not be negative");
 
-            Changes = changes ?? new List<MigrationFileChange>();
+            Changes = changes ?? throw new ArgumentNullException(nameof(changes));
             ReplacementCount = replacementCount;
             ChangedFilePaths = Changes
                 .Select(change => change.FilePath)
@@ -161,37 +161,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 firstPartyScreenshotReferenceAssemblyDirectories != null,
                 "firstPartyScreenshotReferenceAssemblyDirectories must not be null");
 
-            AsmdefDirectories = asmdefDirectories ?? new List<string>();
-            AssemblyReferenceDirectories = assemblyReferenceDirectories ?? new List<AssemblyReferenceDirectory>();
-            LegacyAssemblyDirectories = legacyAssemblyDirectories ?? new HashSet<string>(StringComparer.Ordinal);
+            AsmdefDirectories = asmdefDirectories ??
+                throw new ArgumentNullException(nameof(asmdefDirectories));
+            AssemblyReferenceDirectories = assemblyReferenceDirectories ??
+                throw new ArgumentNullException(nameof(assemblyReferenceDirectories));
+            LegacyAssemblyDirectories = legacyAssemblyDirectories ??
+                throw new ArgumentNullException(nameof(legacyAssemblyDirectories));
             AssemblyScopedLegacyDirectories = assemblyScopedLegacyDirectories ??
-                new HashSet<string>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(assemblyScopedLegacyDirectories));
             AssemblyScopedCurrentToolContractsDirectories = assemblyScopedCurrentToolContractsDirectories ??
-                new HashSet<string>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(assemblyScopedCurrentToolContractsDirectories));
             AssemblyScopedCurrentApplicationDirectories = assemblyScopedCurrentApplicationDirectories ??
-                new HashSet<string>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(assemblyScopedCurrentApplicationDirectories));
             AssemblyScopedCurrentFirstPartyToolsDirectories = assemblyScopedCurrentFirstPartyToolsDirectories ??
-                new HashSet<string>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(assemblyScopedCurrentFirstPartyToolsDirectories));
             AssemblyScopedLegacyAliasesByDirectory = assemblyScopedLegacyAliasesByDirectory ??
-                new Dictionary<string, string[]>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(assemblyScopedLegacyAliasesByDirectory));
             AssemblyScopedLegacyToolInfoAliasesByDirectory = assemblyScopedLegacyToolInfoAliasesByDirectory ??
-                new Dictionary<string, string[]>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(assemblyScopedLegacyToolInfoAliasesByDirectory));
             AssemblyScopedCurrentApplicationAliasesByDirectory =
                 assemblyScopedCurrentApplicationAliasesByDirectory ??
-                new Dictionary<string, string[]>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(assemblyScopedCurrentApplicationAliasesByDirectory));
             AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory =
                 assemblyScopedCurrentFirstPartyToolsAliasesByDirectory ??
-                new Dictionary<string, string[]>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(assemblyScopedCurrentFirstPartyToolsAliasesByDirectory));
             AssemblyDeclaredTypeNamesByDirectory = assemblyDeclaredTypeNamesByDirectory ??
-                new Dictionary<string, string[]>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(assemblyDeclaredTypeNamesByDirectory));
             ToolContractsReferenceAssemblyDirectories = toolContractsReferenceAssemblyDirectories ??
-                new HashSet<string>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(toolContractsReferenceAssemblyDirectories));
             ApplicationReferenceAssemblyDirectories = applicationReferenceAssemblyDirectories ??
-                new HashSet<string>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(applicationReferenceAssemblyDirectories));
             DomainReferenceAssemblyDirectories = domainReferenceAssemblyDirectories ??
-                new HashSet<string>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(domainReferenceAssemblyDirectories));
             FirstPartyScreenshotReferenceAssemblyDirectories = firstPartyScreenshotReferenceAssemblyDirectories ??
-                new HashSet<string>(StringComparer.Ordinal);
+                throw new ArgumentNullException(nameof(firstPartyScreenshotReferenceAssemblyDirectories));
         }
 
         public List<string> AsmdefDirectories { get; }

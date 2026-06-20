@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string assemblyDirectory,
             bool hasAssemblyScopedCurrentToolContractsNamespaceUsage,
             bool hasAssemblyScopedCurrentDomainNamespaceUsage,
+            bool hasAssemblyScopedCurrentApplicationNamespaceUsage,
             string[] currentApplicationAssemblyAliases,
             string[] assemblyDeclaredTypeNames,
             HashSet<string> legacyAssemblyDirectories,
@@ -64,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyDeclaredTypeNames) ||
                 ThirdPartyToolMigrationRules.ContainsCurrentApplicationApiForAssembly(
                     source,
-                    hasAssemblyScopedCurrentApplicationUsing: false,
+                    hasAssemblyScopedCurrentApplicationNamespaceUsage,
                     currentApplicationAssemblyAliases,
                     assemblyDeclaredTypeNames))
             {
@@ -92,6 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string projectRoot,
             HashSet<string> assemblyScopedCurrentToolContractsDirectories,
             HashSet<string> assemblyScopedCurrentDomainDirectories,
+            HashSet<string> assemblyScopedCurrentApplicationDirectories,
             Dictionary<string, HashSet<string>> assemblyScopedCurrentApplicationAliasesByDirectory,
             Dictionary<string, HashSet<string>> assemblyDeclaredTypeNamesByDirectory,
             HashSet<string> legacyAssemblyDirectories,
@@ -112,6 +114,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(
                 assemblyScopedCurrentDomainDirectories != null,
                 "assemblyScopedCurrentDomainDirectories must not be null");
+            Debug.Assert(
+                assemblyScopedCurrentApplicationDirectories != null,
+                "assemblyScopedCurrentApplicationDirectories must not be null");
             Debug.Assert(
                 assemblyScopedCurrentApplicationAliasesByDirectory != null,
                 "assemblyScopedCurrentApplicationAliasesByDirectory must not be null");
@@ -136,6 +141,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string source = File.ReadAllText(csharpFilePath);
+                inspectedEntryCount++;
+                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
+                {
+                    await Task.Yield();
+                }
+
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
                 {
                     continue;
@@ -151,6 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyDirectory,
                     assemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory),
                     assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory),
+                    assemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
                     GetAssemblyScopedNames(assemblyScopedCurrentApplicationAliasesByDirectory, assemblyDirectory),
                     GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory),
                     legacyAssemblyDirectories,
@@ -158,11 +170,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     applicationReferenceAssemblyDirectories,
                     domainReferenceAssemblyDirectories);
 
-                inspectedEntryCount++;
-                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
-                {
-                    await Task.Yield();
-                }
             }
         }
 
@@ -173,6 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string projectRoot,
             HashSet<string> assemblyScopedCurrentToolContractsDirectories,
             HashSet<string> assemblyScopedCurrentDomainDirectories,
+            HashSet<string> assemblyScopedCurrentApplicationDirectories,
             Dictionary<string, HashSet<string>> assemblyScopedCurrentApplicationAliasesByDirectory,
             Dictionary<string, HashSet<string>> assemblyDeclaredTypeNamesByDirectory,
             HashSet<string> legacyAssemblyDirectories,
@@ -194,6 +202,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 assemblyScopedCurrentDomainDirectories != null,
                 "assemblyScopedCurrentDomainDirectories must not be null");
             Debug.Assert(
+                assemblyScopedCurrentApplicationDirectories != null,
+                "assemblyScopedCurrentApplicationDirectories must not be null");
+            Debug.Assert(
                 assemblyScopedCurrentApplicationAliasesByDirectory != null,
                 "assemblyScopedCurrentApplicationAliasesByDirectory must not be null");
             Debug.Assert(
@@ -209,6 +220,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string source = File.ReadAllText(csharpFilePath);
+                inspectedEntryCount++;
+                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
+                {
+                    await Task.Yield();
+                }
+
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
                 {
                     continue;
@@ -229,6 +246,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyDirectory,
                     true,
                     assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory),
+                    assemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
                     GetAssemblyScopedNames(assemblyScopedCurrentApplicationAliasesByDirectory, assemblyDirectory),
                     GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory),
                     legacyAssemblyDirectories,
@@ -236,11 +254,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     applicationReferenceAssemblyDirectories,
                     domainReferenceAssemblyDirectories);
 
-                inspectedEntryCount++;
-                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
-                {
-                    await Task.Yield();
-                }
             }
         }
 
@@ -273,6 +286,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string source = File.ReadAllText(csharpFilePath);
+                inspectedEntryCount++;
+                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
+                {
+                    await Task.Yield();
+                }
+
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
                 {
                     continue;
@@ -289,11 +308,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     domainReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
-                inspectedEntryCount++;
-                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
-                {
-                    await Task.Yield();
-                }
             }
         }
 
@@ -346,6 +360,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string source = File.ReadAllText(csharpFilePath);
+                inspectedEntryCount++;
+                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
+                {
+                    await Task.Yield();
+                }
+
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
                 {
                     continue;
@@ -416,11 +436,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return true;
                 }
 
-                inspectedEntryCount++;
-                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
-                {
-                    await Task.Yield();
-                }
             }
 
             return false;

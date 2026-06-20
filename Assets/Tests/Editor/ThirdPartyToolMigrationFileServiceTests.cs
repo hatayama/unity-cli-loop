@@ -97,6 +97,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetRelativePathSegments_WhenPathContainsParentSegments_NormalizesBeforeSplitting()
+        {
+            // Verifies that path ancestry checks use canonical paths before deriving Unity-relative segments.
+            string projectRoot = Path.Combine(Path.GetTempPath(), "UnityCliLoopPathRoot");
+            string filePath = Path.Combine(
+                projectRoot,
+                "..",
+                "UnityCliLoopPathRoot",
+                "Assets",
+                "VendorTools",
+                "HelloTool.cs");
+
+            string[] segments = ThirdPartyToolMigrationAssemblyReferenceResolver.GetRelativePathSegments(
+                filePath,
+                projectRoot);
+
+            Assert.That(segments, Is.EqualTo(new[] { "Assets", "VendorTools", "HelloTool.cs" }));
+        }
+
+        [Test]
+        public void IsSameOrChildPath_WhenChildContainsParentSegments_NormalizesBeforeComparison()
+        {
+            // Verifies that assembly-directory ancestry checks are based on canonical paths.
+            string projectRoot = Path.Combine(Path.GetTempPath(), "UnityCliLoopPathRoot");
+            string parentPath = Path.Combine(projectRoot, "Assets", "VendorTools");
+            string childPath = Path.Combine(
+                projectRoot,
+                "Assets",
+                "Other",
+                "..",
+                "VendorTools",
+                "Nested");
+
+            bool isSameOrChild = ThirdPartyToolMigrationAssemblyReferenceResolver.IsSameOrChildPath(
+                childPath,
+                parentPath);
+
+            Assert.That(isSameOrChild, Is.True);
+        }
+
+        [Test]
+        public void ReadAsmdefGuidReferenceFromMetaFile_WhenMetaReadThrowsIOException_ReturnsEmpty()
+        {
+            // Verifies that unreadable .meta files do not abort assembly reference discovery.
+            string guidReference =
+                ThirdPartyToolMigrationAssemblyReferenceResolver.ReadAsmdefGuidReferenceFromMetaFile(
+                    "Assets/VendorTools/VendorTools.Editor.asmdef.meta",
+                    _ => throw new IOException("locked"));
+
+            Assert.That(guidReference, Is.Empty);
+        }
+
+        [Test]
         public void ApplyMigration_WhenLegacyToolAssemblyExists_RewritesSourceAndAsmdef()
         {
             // Verifies that project-wide migration rewrites both custom tool source and its asmdef reference.
@@ -3072,6 +3125,43 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
     ""references"": [
         ""GUID:214998e563c124e8a88199b2dd1f522d""
     ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenLegacyGlobalUsingAndBareToolAttributeAreSplit_ReturnsTrue()
+        {
+            // Verifies that startup detection treats legacy global usings as assembly-scoped.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "GlobalUsings.cs"),
+                    "global using io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "BareAttributeTool.cs"),
+                    @"[McpTool]
+public sealed class BareAttributeTool
+{
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
 }");
 
                 ThirdPartyToolMigrationFileService service = new();

@@ -416,41 +416,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return _codeCharacters[index];
             }
 
-            internal static int CountRepeatedCharacter(string source, int startIndex, char character)
-            {
-                Debug.Assert(source != null, "source must not be null");
-                Debug.Assert(startIndex >= 0, "startIndex must not be negative");
-
-                int index = startIndex;
-                while (index < source.Length && source[index] == character)
-                {
-                    index++;
-                }
-
-                return index - startIndex;
-            }
-
-            internal static bool HasRepeatedCharacterAt(string source, int startIndex, char character, int count)
-            {
-                Debug.Assert(source != null, "source must not be null");
-                Debug.Assert(startIndex >= 0, "startIndex must not be negative");
-                Debug.Assert(count > 0, "count must be positive");
-
-                if (startIndex + count > source.Length)
-                {
-                    return false;
-                }
-
-                for (int i = 0; i < count; i++)
-                {
-                    if (source[startIndex + i] != character)
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-            }
         }
 
         internal sealed class CodeTextMaskHolder

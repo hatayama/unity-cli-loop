@@ -54,10 +54,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             HashSet<string> applicationReferenceAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> domainReferenceAssemblyDirectories = new(StringComparer.Ordinal);
             HashSet<string> firstPartyScreenshotReferenceAssemblyDirectories = new(StringComparer.Ordinal);
+            Dictionary<string, string> sourceByCSharpFilePath = new(StringComparer.Ordinal);
 
             foreach (string csharpFilePath in csharpFilePaths)
             {
                 string source = File.ReadAllText(csharpFilePath);
+                sourceByCSharpFilePath.Add(csharpFilePath, source);
                 string assemblyDirectory = FindNearestAssemblyDirectory(
                     csharpFilePath,
                     asmdefDirectories,
@@ -163,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             foreach (string csharpFilePath in csharpFilePaths)
             {
-                string source = File.ReadAllText(csharpFilePath);
+                string source = sourceByCSharpFilePath[csharpFilePath];
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
                 {
                     continue;

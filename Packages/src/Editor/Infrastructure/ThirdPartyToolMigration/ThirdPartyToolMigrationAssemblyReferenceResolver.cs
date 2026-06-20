@@ -217,7 +217,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 AddAsmdefDirectoryReference(asmdefDirectoriesByReference, assemblyName, asmdefDirectory);
                 AddAsmdefDirectoryReference(
                     asmdefDirectoriesByReference,
-                    ReadAsmdefGuidReference(asmdefFilePath),
+                    ReadAsmdefGuidReferenceFromAsmdefPath(asmdefFilePath),
                     asmdefDirectory);
             }
 
@@ -260,7 +260,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 AddAsmdefDirectoryReference(asmdefDirectoriesByReference, assemblyName, asmdefDirectory);
                 AddAsmdefDirectoryReference(
                     asmdefDirectoriesByReference,
-                    ReadAsmdefGuidReference(asmdefFilePath),
+                    ReadAsmdefGuidReferenceFromAsmdefPath(asmdefFilePath),
                     asmdefDirectory);
             }
 
@@ -330,29 +330,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             asmdefDirectoriesByReference.Add(reference, asmdefDirectory);
         }
 
-        internal static string ReadAsmdefGuidReference(string asmdefFilePath)
+        internal static string ReadAsmdefGuidReferenceFromAsmdefPath(string asmdefFilePath)
         {
-            Debug.Assert(!string.IsNullOrEmpty(asmdefFilePath), "asmdefFilePath must not be null or empty");
+            return ThirdPartyToolMigrationAsmdefMetaGuidReader.ReadAsmdefGuidReferenceFromAsmdefPath(
+                asmdefFilePath);
+        }
 
-            string metaPath = asmdefFilePath + ".meta";
-            if (!File.Exists(metaPath))
-            {
-                return string.Empty;
-            }
-
-            foreach (string line in File.ReadLines(metaPath))
-            {
-                string trimmedLine = line.Trim();
-                if (!trimmedLine.StartsWith("guid:", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                string guid = trimmedLine.Substring("guid:".Length).Trim();
-                return guid.Length == 0 ? string.Empty : $"GUID:{guid}";
-            }
-
-            return string.Empty;
+        internal static string ReadAsmdefGuidReferenceFromMetaFile(
+            string metaPath,
+            Func<string, IEnumerable<string>> readLines)
+        {
+            return ThirdPartyToolMigrationAsmdefMetaGuidReader.ReadAsmdefGuidReferenceFromMetaFile(
+                metaPath,
+                readLines);
         }
 
         internal static string FindNearestAssemblyDirectory(
@@ -465,33 +455,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static string[] GetRelativePathSegments(string filePath, string projectRoot)
         {
-            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            string relativePath = filePath.StartsWith(projectRoot, StringComparison.Ordinal)
-                ? filePath.Substring(projectRoot.Length)
-                : filePath;
-            char[] separators =
-            {
-                Path.DirectorySeparatorChar,
-                Path.AltDirectorySeparatorChar
-            };
-            return relativePath.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            return ThirdPartyToolMigrationPathRules.GetRelativePathSegments(filePath, projectRoot);
         }
 
         internal static bool IsSameOrChildPath(string childPath, string parentPath)
         {
-            Debug.Assert(childPath != null, "childPath must not be null");
-            Debug.Assert(parentPath != null, "parentPath must not be null");
-
-            if (string.Equals(childPath, parentPath, StringComparison.Ordinal))
-            {
-                return true;
-            }
-
-            string parentWithSeparator = parentPath.TrimEnd(Path.DirectorySeparatorChar)
-                + Path.DirectorySeparatorChar;
-            return childPath.StartsWith(parentWithSeparator, StringComparison.Ordinal);
+            return ThirdPartyToolMigrationPathRules.IsSameOrChildPath(childPath, parentPath);
         }
     }
 }
