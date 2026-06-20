@@ -156,7 +156,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         [TestCase("2.1.1", "3.0.0-beta.7", true)]
         [TestCase("1.9.0", "3.0.0", true)]
-        [TestCase("", "3.0.0-beta.7", false)]
+        [TestCase("", "3.0.0-beta.7", true)]
+        [TestCase("", "4.0.0", false)]
         [TestCase("3.0.0-beta.6", "3.0.0-beta.7", false)]
         [TestCase("3.0.0-beta.7", "4.0.0", false)]
         [TestCase("not-a-version", "3.0.0-beta.7", false)]
@@ -165,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string currentVersion,
             bool expected)
         {
-            // Verifies that only V2-or-older to V3 package upgrades request the migration scan.
+            // Verifies that V3 startup scans run for V2 upgrades or missing prior setup state.
             bool shouldAutoScan =
                 SetupWizardWindow.ShouldAutoScanThirdPartyToolMigration(currentVersion, lastSeenVersion);
 
