@@ -19,8 +19,6 @@ $excludedDirectories = @(
 $targetExtensions = @(".md", ".sh", ".bash", ".zsh", ".ps1", ".psm1")
 $outputFields = "Success|Message|ErrorMessage|ErrorCount|WarningCount|TotalCount|DisplayedCount|LogType|StackTrace|XmlPath|TestCount|PassedCount|FailedCount|SkippedCount|CompletedAt|ScreenshotCount|Screenshots|CompilationErrors|ErrorCode|UpdatedCode|DiagnosticsSummary|OutputPath|InputPath|TotalFrames|DurationSeconds|CurrentFrame|IsReplaying|KeyName|PositionX|PositionY|EndPositionX|EndPositionY|HitGameObjectName|IsPlaying|IsPaused|ClearedLogCount|ClearedCounts"
 $bundledMigrationSkillPath = [System.IO.Path]::Combine(
-    "Packages",
-    "src",
     "TemporarySkills",
     "v3-cli-invocation-migration"
 )
@@ -44,8 +42,11 @@ function Test-IsBundledMigrationSkillPath {
         [string] [System.IO.Path]::AltDirectorySeparatorChar,
         [string] [System.IO.Path]::DirectorySeparatorChar
     )
-    return $normalizedPath.IndexOf(
-        $bundledMigrationSkillPath,
+    $separator = [string] [System.IO.Path]::DirectorySeparatorChar
+    $wrappedPath = "${separator}${normalizedPath}${separator}"
+    $wrappedBundledPath = "${separator}${bundledMigrationSkillPath}${separator}"
+    return $wrappedPath.IndexOf(
+        $wrappedBundledPath,
         [System.StringComparison]::OrdinalIgnoreCase
     ) -ge 0
 }

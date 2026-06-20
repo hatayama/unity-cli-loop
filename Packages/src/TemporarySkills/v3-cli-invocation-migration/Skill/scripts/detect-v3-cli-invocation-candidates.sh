@@ -4,7 +4,7 @@ set -eu
 root=${1:-.}
 
 find "$root" \
-  \( -name .git -o -name Library -o -name Temp -o -name node_modules -o -name .agents -o -name .claude -o -name .codex -o -name .cursor -o -name .gemini -o -name .windsurf -o -name .agent -o -path '*/Packages/src/TemporarySkills/v3-cli-invocation-migration' -o -path 'Packages/src/TemporarySkills/v3-cli-invocation-migration' \) -prune -o \
+  \( -name .git -o -name Library -o -name Temp -o -name node_modules -o -name .agents -o -name .claude -o -name .codex -o -name .cursor -o -name .gemini -o -name .windsurf -o -name .agent -o -path '*/TemporarySkills/v3-cli-invocation-migration' -o -path 'TemporarySkills/v3-cli-invocation-migration' \) -prune -o \
   -type f \( -name SKILL.md -o -name '*.md' -o -name '*.sh' -o -name '*.bash' -o -name '*.zsh' -o -name '*.ps1' -o -name '*.psm1' \) -print |
 while IFS= read -r file
 do
