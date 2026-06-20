@@ -300,6 +300,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ThirdPartyToolMigrationWizardText.AiMigrationSkillDescriptionText,
                 "setup-step__description-label");
             content.Add(descriptionTextField);
+            CreateMigrationSkillUsageFoldout(content);
 
             VisualElement actionSection = new VisualElement();
             actionSection.AddToClassList("setup-section-actions");
@@ -331,6 +332,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             migrationSkillButton.AddToClassList("setup-button--primary");
             buttonRow.Add(migrationSkillButton);
             return (migrationSkillTargetField, migrationSkillButton);
+        }
+
+        private static void CreateMigrationSkillUsageFoldout(VisualElement content)
+        {
+            Foldout usageFoldout = new Foldout();
+            usageFoldout.text = ThirdPartyToolMigrationWizardText.AiMigrationSkillUsageFoldoutTitle;
+            usageFoldout.AddToClassList("setup-skill-usage-foldout");
+            content.Add(usageFoldout);
+
+            TextField usageTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.AiMigrationSkillUsageExampleText,
+                "setup-skill-usage-text");
+            usageFoldout.Add(usageTextField);
+            usageFoldout.SetValueWithoutNotify(false);
         }
 
         private static void CreateFooter(ScrollView mainScrollView)

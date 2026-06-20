@@ -347,6 +347,16 @@
     margin-bottom: 14px;
 }
 
+.setup-skill-usage-foldout {
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.setup-skill-usage-text {
+    margin-top: 6px;
+    margin-left: 14px;
+}
+
 .setup-footer__github-link {
     flex-direction: row;
     justify-content: flex-end;

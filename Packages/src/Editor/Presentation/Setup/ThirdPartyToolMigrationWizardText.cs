@@ -18,6 +18,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             "Install a temporary AI skill for updating SKILL.md, Markdown, shell scripts, and PowerShell scripts " +
             "that call uloop.\nThe skill gives your AI agent a checklist and detection scripts; this window only " +
             "installs or removes it.";
+        internal const string AiMigrationSkillUsageFoldoutTitle = "How to use this skill";
+        internal const string AiMigrationSkillUsageExampleText =
+            "After installing the skill, open your AI agent in this project and ask it to use the installed " +
+            "migration skill.\n\nExample prompt:\nUse the v3-cli-invocation-migration skill to scan this project " +
+            "for Unity CLI Loop V2 CLI invocation patterns in SKILL.md, Markdown, shell scripts, and PowerShell " +
+            "scripts. Update them for V3 CLI usage, then summarize the changed files and any commands I should " +
+            "verify manually.";
         internal const string MigrationNotCheckedText = "C# source migration status has not been checked.";
         internal const string NoMigrationTargetsText = "No C# source structure migration is needed.";
         private const string MigrationCheckingText = "Scanning C# source files for V3 custom tool API migration...";
