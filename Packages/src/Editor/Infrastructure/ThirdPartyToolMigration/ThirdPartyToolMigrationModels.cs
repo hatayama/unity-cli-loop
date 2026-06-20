@@ -79,6 +79,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             filePaths.AddRange(inventory.CSharpFilePaths);
             filePaths.AddRange(inventory.AsmdefFilePaths);
             filePaths.AddRange(inventory.AsmrefFilePaths);
+            foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
+            {
+                filePaths.Add(asmdefFilePath + ".meta");
+            }
+
             filePaths.Sort(StringComparer.Ordinal);
 
             MigrationFileFingerprint[] fileFingerprints = new MigrationFileFingerprint[filePaths.Count];
@@ -125,18 +130,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal readonly struct MigrationFileFingerprint
     {
-        private MigrationFileFingerprint(string filePath, long length, long lastWriteTimeUtcTicks)
+        private MigrationFileFingerprint(
+            string filePath,
+            bool exists,
+            long length,
+            long lastWriteTimeUtcTicks)
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
             Debug.Assert(length >= 0, "length must not be negative");
             Debug.Assert(lastWriteTimeUtcTicks >= 0, "lastWriteTimeUtcTicks must not be negative");
 
             FilePath = filePath;
+            Exists = exists;
             Length = length;
             LastWriteTimeUtcTicks = lastWriteTimeUtcTicks;
         }
 
         public string FilePath { get; }
+        public bool Exists { get; }
         public long Length { get; }
         public long LastWriteTimeUtcTicks { get; }
 
@@ -145,8 +156,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
 
             FileInfo fileInfo = new(filePath);
+            if (!fileInfo.Exists)
+            {
+                return new MigrationFileFingerprint(
+                    filePath,
+                    false,
+                    0,
+                    0);
+            }
+
             return new MigrationFileFingerprint(
                 filePath,
+                true,
                 fileInfo.Length,
                 fileInfo.LastWriteTimeUtc.Ticks);
         }
@@ -154,6 +175,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public bool HasSameValuesAs(MigrationFileFingerprint other)
         {
             return string.Equals(FilePath, other.FilePath, StringComparison.Ordinal) &&
+                Exists == other.Exists &&
                 Length == other.Length &&
                 LastWriteTimeUtcTicks == other.LastWriteTimeUtcTicks;
         }

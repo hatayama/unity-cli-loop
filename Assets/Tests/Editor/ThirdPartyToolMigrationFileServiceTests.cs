@@ -126,6 +126,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void MigrationProjectFingerprint_WhenAsmdefMetaChanges_DoesNotMatch()
+        {
+            // Verifies that cached migration plans are rejected after asmref GUID resolution changes.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                string metaPath = asmdefPath + ".meta";
+                File.WriteAllText(
+                    asmdefPath,
+                    @"{ ""name"": ""VendorTools.Editor"", ""references"": [] }");
+                File.WriteAllText(metaPath, "guid: 11111111111111111111111111111111");
+                ProjectFileInventory firstInventory = ProjectFileInventory.Create(projectRoot);
+                MigrationProjectFingerprint fingerprint =
+                    MigrationProjectFingerprint.CaptureFromInventory(firstInventory);
+
+                File.WriteAllText(metaPath, "guid: 22222222222222222222222222222222");
+                File.SetLastWriteTimeUtc(metaPath, DateTime.UtcNow.AddMinutes(1));
+                ProjectFileInventory changedInventory = ProjectFileInventory.Create(projectRoot);
+
+                Assert.That(fingerprint.Matches(changedInventory), Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void PreflightScanner_WhenSourceHasNoMigrationMarkers_ReturnsNoTargets()
         {
             // Verifies that startup preflight can skip full scans when no migration marker text exists.
