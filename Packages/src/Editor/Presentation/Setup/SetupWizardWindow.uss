@@ -78,22 +78,11 @@
 .setup-step__title {
     -unity-font-style: bold;
     font-size: 13px;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
 }
 
 .setup-step__content {
     padding-left: 4px;
-}
-
-.setup-step--migration-alert {
-    background-color: #5c4a00;
-    border-color: #7a6400;
-    border-width: 2px;
-}
-
-.setup-step--migration-alert .setup-step__title,
-.setup-step--migration-alert .setup-step__status-label {
-    color: var(--setup-color-warning);
 }
 
 .setup-step__status-row {
@@ -113,7 +102,7 @@
 
 .setup-step__description-label {
     white-space: normal;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
 }
 
 .setup-progress-bar {
@@ -293,8 +282,8 @@
 }
 
 .setup-section-actions {
-    margin-top: -4px;
-    margin-bottom: 8px;
+    margin-top: -2px;
+    margin-bottom: 10px;
 }
 
 .setup-section-actions__button-row {
@@ -323,6 +312,13 @@
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0;
+}
+
+.setup-section-divider {
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.18);
+    margin-top: 4px;
+    margin-bottom: 14px;
 }
 
 .setup-footer__github-link {

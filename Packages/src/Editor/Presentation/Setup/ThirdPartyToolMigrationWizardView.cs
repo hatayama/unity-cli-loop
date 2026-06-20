@@ -86,6 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement migrationButtonRow = CreateMigrationButtonRow(content);
             Button migrateButton = CreateMigrateButton(migrationButtonRow);
             (Button refreshButton, Button closeButton) = CreateCSharpMigrationActionSection(mainScrollView);
+            CreateSectionDivider(mainScrollView);
             (EnumField migrationSkillTargetField, Button migrationSkillButton) =
                 CreateAiMigrationSkillSection(mainScrollView);
             CreateFooter(mainScrollView);
@@ -192,7 +193,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             VisualElement migrationSection = new VisualElement();
             migrationSection.AddToClassList("setup-step");
-            migrationSection.AddToClassList("setup-step--migration-alert");
             mainScrollView.Add(migrationSection);
 
             Label titleLabel = new Label(ThirdPartyToolMigrationWizardText.CSharpMigrationSectionTitle);
@@ -202,6 +202,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement content = new VisualElement();
             content.AddToClassList("setup-step__content");
             migrationSection.Add(content);
+
+            Label descriptionLabel = new Label(ThirdPartyToolMigrationWizardText.CSharpMigrationDescriptionText);
+            descriptionLabel.AddToClassList("setup-step__description-label");
+            content.Add(descriptionLabel);
             return content;
         }
 
@@ -266,6 +270,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return (refreshButton, closeButton);
         }
 
+        private static void CreateSectionDivider(ScrollView mainScrollView)
+        {
+            VisualElement divider = new VisualElement();
+            divider.AddToClassList("setup-section-divider");
+            mainScrollView.Add(divider);
+        }
+
         private static (EnumField migrationSkillTargetField, Button migrationSkillButton)
             CreateAiMigrationSkillSection(ScrollView mainScrollView)
         {
@@ -311,6 +322,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 false,
                 SkillInstallState.Missing);
             migrationSkillButton.AddToClassList("setup-button");
+            migrationSkillButton.AddToClassList("setup-button--primary");
             buttonRow.Add(migrationSkillButton);
             return (migrationSkillTargetField, migrationSkillButton);
         }

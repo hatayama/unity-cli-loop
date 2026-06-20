@@ -10,6 +10,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     internal static class ThirdPartyToolMigrationWizardText
     {
         internal const string CSharpMigrationSectionTitle = "C# Source Structure Migration";
+        internal const string CSharpMigrationDescriptionText =
+            "Use this for C# custom tool source files that still use the V2 API. This section scans the Unity " +
+            "project and can rewrite matching C# files automatically.";
         internal const string AiMigrationSkillSectionTitle = "AI Skill and Script Migration";
         internal const string AiMigrationSkillDescriptionText =
             "Install a temporary AI skill for updating SKILL.md, Markdown, shell scripts, and PowerShell scripts " +
