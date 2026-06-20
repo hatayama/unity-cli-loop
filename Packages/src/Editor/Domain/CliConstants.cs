@@ -38,6 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string CLI_RELEASE_TAG_PREFIX = "cli-v";
         public const string BETA_VERSION_MARKER = "-beta.";
         public const string SKILL_DIR_PREFIX = "uloop-";
+        public const string TEMPORARY_SKILLS_DIR_NAME = "TemporarySkills";
+        public const string V3_CLI_INVOCATION_MIGRATION_SKILL_NAME = "v3-cli-invocation-migration";
         public const string UNITY_PACKAGES_DIR_NAME = "Packages";
         public const string PACKAGE_SOURCE_DIR_NAME = "src";
         public const string CLI_LAYOUT_CONTRACT_FILE_NAME = "layout-contract.json";

@@ -17,6 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string MigrationButtonMigratingText = "Migrating...";
         private const string MigrationButtonNoTargetsText = "Nothing to migrate";
         private const string MigrationButtonCheckRequiredText = "Check required";
+        private const string InstallMigrationSkillButtonText = "Install Migration Skill";
+        private const string RemoveMigrationSkillButtonText = "Remove Migration Skill";
+        private const string UpdatingMigrationSkillButtonText = "Updating...";
 
         internal static string GetMigrationStatusText(int fileCount)
         {
@@ -63,6 +66,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return hasMigrationTargets ? MigrationButtonReadyText : MigrationButtonNoTargetsText;
+        }
+
+        internal static string GetMigrationSkillButtonText(
+            bool isUpdating,
+            SkillInstallState installState)
+        {
+            if (isUpdating)
+            {
+                return UpdatingMigrationSkillButtonText;
+            }
+
+            return installState == SkillInstallState.Installed || installState == SkillInstallState.Outdated
+                ? RemoveMigrationSkillButtonText
+                : InstallMigrationSkillButtonText;
         }
     }
 }

@@ -162,6 +162,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
+        [TestCase(false, SkillInstallState.Missing, "Install Migration Skill")]
+        [TestCase(false, SkillInstallState.Checking, "Install Migration Skill")]
+        [TestCase(false, SkillInstallState.Installed, "Remove Migration Skill")]
+        [TestCase(false, SkillInstallState.Outdated, "Remove Migration Skill")]
+        [TestCase(true, SkillInstallState.Installed, "Updating...")]
+        public void GetMigrationSkillButtonText_ReturnsExpectedLabel(
+            bool isUpdating,
+            SkillInstallState installState,
+            string expectedLabel)
+        {
+            // Verifies that the migration skill action reflects install, remove, and busy states.
+            string label = ThirdPartyToolMigrationWizardWindow.GetMigrationSkillButtonText(
+                isUpdating,
+                installState);
+
+            Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
         [TestCase(0, 1, 1, 4, 1000, 100, true)]
         [TestCase(10, 50, 1, 4, 1000, 100, false)]
         [TestCase(10, 110, 1, 4, 1000, 100, true)]

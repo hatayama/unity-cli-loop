@@ -86,6 +86,57 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 _toolSettingsService.GetDisabledTools());
         }
 
+        public SkillInstallState GetV3MigrationSkillInstallStateAtProjectRoot(
+            string projectRoot,
+            SkillSetupTargetInfo target,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            return ToolSkillSynchronizer.GetV3MigrationSkillInstallStateAtProjectRoot(
+                projectRoot,
+                ToSynchronizerInfo(target),
+                groupSkillsUnderUnityCliLoop);
+        }
+
+        public async Task InstallV3MigrationSkillFilesAsync(
+            string projectRoot,
+            List<SkillSetupTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(targets != null, "targets must not be null");
+            ct.ThrowIfCancellationRequested();
+
+            List<ToolSkillSynchronizer.SkillTargetInfo> synchronizerTargets = targets
+                .Select(ToSynchronizerInfo)
+                .ToList();
+            await ToolSkillSynchronizer.InstallV3MigrationSkillFilesAtProjectRoot(
+                projectRoot,
+                synchronizerTargets,
+                groupSkillsUnderUnityCliLoop);
+        }
+
+        public async Task RemoveV3MigrationSkillFilesAsync(
+            string projectRoot,
+            List<SkillSetupTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(targets != null, "targets must not be null");
+            ct.ThrowIfCancellationRequested();
+
+            List<ToolSkillSynchronizer.SkillTargetInfo> synchronizerTargets = targets
+                .Select(ToSynchronizerInfo)
+                .ToList();
+            await ToolSkillSynchronizer.RemoveV3MigrationSkillFilesAtProjectRoot(
+                projectRoot,
+                synchronizerTargets,
+                groupSkillsUnderUnityCliLoop);
+        }
+
         private static SkillSetupTargetInfo ToDomainInfo(ToolSkillSynchronizer.SkillTargetInfo target)
         {
             return new SkillSetupTargetInfo(

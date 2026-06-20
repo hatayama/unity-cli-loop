@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     public class ThirdPartyToolMigrationWizardWindow : EditorWindow
     {
         private const string WindowTitle = "Unity CLI Loop Migration";
+        private const bool GroupMigrationSkillUnderUnityCliLoop = false;
         private static readonly Vector2 InitialWindowSize =
             ThirdPartyToolMigrationWizardWindowResizer.InitialWindowSize;
         private static readonly Vector2 MinimumWindowSize =
@@ -26,7 +28,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private bool _shouldRefreshAfterCreateGui;
 
         private bool _isMigrating;
+        private bool _isUpdatingMigrationSkill;
+        private SkillsTarget _migrationSkillTarget = SkillsTarget.Claude;
+        private SkillInstallState _migrationSkillInstallState = SkillInstallState.Missing;
         private CancellationTokenSource _migrationOperationCts;
+        private SkillSetupUseCase _skillSetupUseCase;
         private ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private ThirdPartyToolMigrationWizardView _view;
         private ThirdPartyToolMigrationWizardWindowResizer _resizer;
@@ -196,6 +202,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 hasCheckedMigrationStatus);
         }
 
+        internal static string GetMigrationSkillButtonText(
+            bool isUpdating,
+            SkillInstallState installState)
+        {
+            return ThirdPartyToolMigrationWizardText.GetMigrationSkillButtonText(isUpdating, installState);
+        }
+
         internal static bool HasFiniteSize(Vector2 size)
         {
             return ThirdPartyToolMigrationWizardWindowResizer.HasFiniteSize(size);
@@ -304,18 +317,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 rootVisualElement,
                 RefreshUI,
                 HandleMigrateThirdPartyTools,
+                HandleMigrationSkillTargetChanged,
+                HandleToggleMigrationSkill,
                 Close);
             _resizer = new ThirdPartyToolMigrationWizardWindowResizer(this, _view.MainScrollView);
             _resizer.BindSizeUpdates();
 
             bool shouldStartInitialRefresh = ConsumeShouldStartInitialRefresh();
             ShowInitialState(shouldStartInitialRefresh);
+            RefreshMigrationSkillState();
             ScheduleInitialRefresh(shouldStartInitialRefresh);
             ScheduleResizeToContent();
         }
 
         private void InitializeApplicationServices()
         {
+            _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
             _thirdPartyToolMigrationUseCase = ThirdPartyToolMigrationUseCaseRegistry.GetRegisteredUseCase();
         }
 
@@ -476,6 +493,81 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _view.ShowCheckingState(progress, _isMigrating);
             ScheduleResizeToContent();
+        }
+
+        private void RefreshMigrationSkillState()
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            SkillSetupTargetInfo target = CreateMigrationSkillTargetInfo(_migrationSkillTarget);
+            _migrationSkillInstallState = _skillSetupUseCase.GetV3MigrationSkillInstallStateAtProjectRoot(
+                projectRoot,
+                target,
+                GroupMigrationSkillUnderUnityCliLoop);
+            UpdateMigrationSkillState();
+        }
+
+        private void UpdateMigrationSkillState()
+        {
+            _view.SetMigrationSkillState(
+                _migrationSkillTarget,
+                _migrationSkillInstallState,
+                _isUpdatingMigrationSkill);
+            ScheduleResizeToContent();
+        }
+
+        private void HandleMigrationSkillTargetChanged(SkillsTarget target)
+        {
+            _migrationSkillTarget = target;
+            RefreshMigrationSkillState();
+        }
+
+        private async void HandleToggleMigrationSkill()
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            SkillSetupTargetInfo target = CreateMigrationSkillTargetInfo(_migrationSkillTarget);
+            List<SkillSetupTargetInfo> targets = new() { target };
+            _isUpdatingMigrationSkill = true;
+            UpdateMigrationSkillState();
+
+            try
+            {
+                if (_migrationSkillInstallState == SkillInstallState.Installed
+                    || _migrationSkillInstallState == SkillInstallState.Outdated)
+                {
+                    await _skillSetupUseCase.RemoveV3MigrationSkillFilesAsync(
+                        projectRoot,
+                        targets,
+                        GroupMigrationSkillUnderUnityCliLoop,
+                        CancellationToken.None);
+                    return;
+                }
+
+                await _skillSetupUseCase.InstallV3MigrationSkillFilesAsync(
+                    projectRoot,
+                    targets,
+                    GroupMigrationSkillUnderUnityCliLoop,
+                    CancellationToken.None);
+            }
+            finally
+            {
+                _isUpdatingMigrationSkill = false;
+                RefreshMigrationSkillState();
+            }
+        }
+
+        private static SkillSetupTargetInfo CreateMigrationSkillTargetInfo(SkillsTarget target)
+        {
+            SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
+                target,
+                GroupMigrationSkillUnderUnityCliLoop);
+            return new SkillSetupTargetInfo(
+                selection.DisplayName,
+                selection.DirectoryName,
+                selection.InstallFlag,
+                hasSkillsDirectory: true,
+                hasExistingSkills: false,
+                hasDifferentLayoutSkills: false,
+                SkillInstallState.Missing);
         }
 
         private void ScheduleResizeToContent()

@@ -20,6 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly ProgressBar _migrationProgressBar;
         private readonly VisualElement _migrationButtonRow;
         private readonly Button _migrateButton;
+        private readonly EnumField _migrationSkillTargetField;
+        private readonly Button _migrationSkillButton;
         private readonly Button _refreshButton;
         private readonly Button _closeButton;
 
@@ -29,6 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ProgressBar migrationProgressBar,
             VisualElement migrationButtonRow,
             Button migrateButton,
+            EnumField migrationSkillTargetField,
+            Button migrationSkillButton,
             Button refreshButton,
             Button closeButton)
         {
@@ -37,6 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(migrationProgressBar != null, "migrationProgressBar must not be null");
             Debug.Assert(migrationButtonRow != null, "migrationButtonRow must not be null");
             Debug.Assert(migrateButton != null, "migrateButton must not be null");
+            Debug.Assert(migrationSkillTargetField != null, "migrationSkillTargetField must not be null");
+            Debug.Assert(migrationSkillButton != null, "migrationSkillButton must not be null");
             Debug.Assert(refreshButton != null, "refreshButton must not be null");
             Debug.Assert(closeButton != null, "closeButton must not be null");
 
@@ -45,6 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrationProgressBar = migrationProgressBar;
             _migrationButtonRow = migrationButtonRow;
             _migrateButton = migrateButton;
+            _migrationSkillTargetField = migrationSkillTargetField;
+            _migrationSkillButton = migrationSkillButton;
             _refreshButton = refreshButton;
             _closeButton = closeButton;
         }
@@ -55,11 +63,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement root,
             Action refresh,
             Action migrate,
+            Action<SkillsTarget> migrationSkillTargetChanged,
+            Action toggleMigrationSkill,
             Action close)
         {
             Debug.Assert(root != null, "root must not be null");
             Debug.Assert(refresh != null, "refresh must not be null");
             Debug.Assert(migrate != null, "migrate must not be null");
+            Debug.Assert(migrationSkillTargetChanged != null, "migrationSkillTargetChanged must not be null");
+            Debug.Assert(toggleMigrationSkill != null, "toggleMigrationSkill must not be null");
             Debug.Assert(close != null, "close must not be null");
 
             string ussPath = $"{UnityCliLoopConstants.PackageAssetPath}/{USS_RELATIVE_PATH}";
@@ -73,7 +85,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ProgressBar migrationProgressBar = CreateProgressBar(content);
             VisualElement migrationButtonRow = CreateMigrationButtonRow(content);
             Button migrateButton = CreateMigrateButton(migrationButtonRow);
-            (Button refreshButton, Button closeButton) = CreateFooter(mainScrollView);
+            (EnumField migrationSkillTargetField, Button migrationSkillButton, Button refreshButton, Button closeButton) =
+                CreateFooter(mainScrollView);
 
             ThirdPartyToolMigrationWizardView view = new ThirdPartyToolMigrationWizardView(
                 mainScrollView,
@@ -81,10 +94,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 migrationProgressBar,
                 migrationButtonRow,
                 migrateButton,
+                migrationSkillTargetField,
+                migrationSkillButton,
                 refreshButton,
                 closeButton);
-            view.BindEvents(refresh, migrate, close);
+            view.BindEvents(refresh, migrate, migrationSkillTargetChanged, toggleMigrationSkill, close);
             return view;
+        }
+
+        internal void SetMigrationSkillState(
+            SkillsTarget target,
+            SkillInstallState installState,
+            bool isUpdating)
+        {
+            _migrationSkillTargetField.SetValueWithoutNotify(target);
+            _migrationSkillButton.text = ThirdPartyToolMigrationWizardText.GetMigrationSkillButtonText(
+                isUpdating,
+                installState);
+            _migrationSkillTargetField.SetEnabled(!isUpdating);
+            _migrationSkillButton.SetEnabled(!isUpdating);
         }
 
         internal void ShowNotCheckedState(bool isMigrating)
@@ -212,11 +240,27 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return migrateButton;
         }
 
-        private static (Button refreshButton, Button closeButton) CreateFooter(ScrollView mainScrollView)
+        private static (EnumField migrationSkillTargetField, Button migrationSkillButton, Button refreshButton, Button closeButton)
+            CreateFooter(ScrollView mainScrollView)
         {
             VisualElement footer = new VisualElement();
             footer.AddToClassList("setup-footer");
             mainScrollView.Add(footer);
+
+            VisualElement migrationSkillRow = new VisualElement();
+            migrationSkillRow.AddToClassList("setup-footer__button-row");
+            footer.Add(migrationSkillRow);
+
+            EnumField migrationSkillTargetField = new EnumField(SkillsTarget.Claude);
+            migrationSkillTargetField.AddToClassList("setup-dropdown");
+            migrationSkillRow.Add(migrationSkillTargetField);
+
+            Button migrationSkillButton = new Button();
+            migrationSkillButton.text = ThirdPartyToolMigrationWizardText.GetMigrationSkillButtonText(
+                false,
+                SkillInstallState.Missing);
+            migrationSkillButton.AddToClassList("setup-button");
+            migrationSkillRow.Add(migrationSkillButton);
 
             VisualElement footerButtonRow = new VisualElement();
             footerButtonRow.AddToClassList("setup-footer__button-row");
@@ -238,13 +282,26 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 "Window > Unity CLI Loop > Custom Tool Migration.");
             reopenHintLabel.AddToClassList("setup-footer__hint-label");
             footer.Add(reopenHintLabel);
-            return (refreshButton, closeButton);
+            return (migrationSkillTargetField, migrationSkillButton, refreshButton, closeButton);
         }
 
-        private void BindEvents(Action refresh, Action migrate, Action close)
+        private void BindEvents(
+            Action refresh,
+            Action migrate,
+            Action<SkillsTarget> migrationSkillTargetChanged,
+            Action toggleMigrationSkill,
+            Action close)
         {
             _refreshButton.clicked += refresh;
             _migrateButton.clicked += migrate;
+            _migrationSkillButton.clicked += toggleMigrationSkill;
+            _migrationSkillTargetField.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue is SkillsTarget target)
+                {
+                    migrationSkillTargetChanged(target);
+                }
+            });
             _closeButton.clicked += close;
         }
 

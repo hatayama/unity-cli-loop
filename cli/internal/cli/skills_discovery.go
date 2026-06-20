@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -29,6 +30,27 @@ func collectSkillDefinitions(projectRoot string) ([]skillDefinition, error) {
 		return skills[left].name < skills[right].name
 	})
 	return skills, nil
+}
+
+func collectV3MigrationSkillDefinition(projectRoot string) ([]skillDefinition, error) {
+	packageRoot := resolvePackageRoot(projectRoot)
+	if packageRoot == "" {
+		return nil, errors.New("unity CLI Loop package root was not found")
+	}
+
+	skillDirectory := filepath.Join(
+		packageRoot,
+		"TemporarySkills",
+		v3MigrationSkillName,
+		"Skill")
+	skill, ok, err := readSkillDefinition(skillDirectory)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, errors.New("v3 CLI invocation migration skill source was not found")
+	}
+	return []skillDefinition{skill}, nil
 }
 
 func collectInternalSkillToolNames(projectRoot string) map[string]bool {

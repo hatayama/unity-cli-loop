@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -115,6 +116,49 @@ name: uloop-cached-package
 		"uloop-launch",
 		"uloop-local-package",
 	}
+	if !reflect.DeepEqual(actualNames, expectedNames) {
+		t.Fatalf("skill names mismatch:\nactual:   %#v\nexpected: %#v", actualNames, expectedNames)
+	}
+}
+
+// Tests that the temporary V3 migration skill stays out of normal skill discovery.
+func TestCollectSkillDefinitionsSkipsV3MigrationSkill(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills/v3-cli-invocation-migration/Skill", `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration
+`)
+
+	skills, err := collectSkillDefinitions(projectRoot)
+	if err != nil {
+		t.Fatalf("collectSkillDefinitions failed: %v", err)
+	}
+
+	if len(skills) != 0 {
+		t.Fatalf("temporary migration skill should not be discovered normally: %#v", skills)
+	}
+}
+
+// Tests that the dedicated V3 migration skill discovery reads only the temporary skill source.
+func TestCollectV3MigrationSkillDefinitionReadsTemporarySkill(t *testing.T) {
+	projectRoot := t.TempDir()
+	writePackageRootMarker(t, projectRoot)
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills/v3-cli-invocation-migration/Skill", `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration
+`)
+
+	skills, err := collectV3MigrationSkillDefinition(projectRoot)
+	if err != nil {
+		t.Fatalf("collectV3MigrationSkillDefinition failed: %v", err)
+	}
+
+	actualNames := skillNames(skills)
+	expectedNames := []string{"v3-cli-invocation-migration"}
 	if !reflect.DeepEqual(actualNames, expectedNames) {
 		t.Fatalf("skill names mismatch:\nactual:   %#v\nexpected: %#v", actualNames, expectedNames)
 	}
@@ -824,6 +868,143 @@ name: uloop-sample
 	}
 }
 
+// Tests that the dedicated V3 migration install copies only the temporary skill.
+func TestRunV3MigrationSkillInstallAndUninstall(t *testing.T) {
+	projectRoot := t.TempDir()
+	writePackageRootMarker(t, projectRoot)
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills/v3-cli-invocation-migration/Skill", `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration
+`)
+	if err := os.MkdirAll(
+		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills", "v3-cli-invocation-migration", "Skill", "scripts"),
+		0o755); err != nil {
+		t.Fatalf("failed to create script dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills", "v3-cli-invocation-migration", "Skill", "scripts", "detect.sh"),
+		[]byte("#!/bin/sh\n"),
+		0o644); err != nil {
+		t.Fatalf("failed to write script: %v", err)
+	}
+	skills, err := collectV3MigrationSkillDefinition(projectRoot)
+	if err != nil {
+		t.Fatalf("collectV3MigrationSkillDefinition failed: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	options := skillCommandOptions{targets: []skillTarget{targetConfigs["codex"]}}
+
+	installCode := runV3MigrationSkillInstall(projectRoot, skills, options, stdout, stderr)
+
+	if installCode != 0 {
+		t.Fatalf("install should succeed: code=%d stderr=%s", installCode, stderr.String())
+	}
+	installedDir := filepath.Join(projectRoot, ".codex", "skills", "v3-cli-invocation-migration")
+	if _, err := os.Stat(filepath.Join(installedDir, "SKILL.md")); err != nil {
+		t.Fatalf("migration skill should be installed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(installedDir, "scripts", "detect.sh")); err != nil {
+		t.Fatalf("migration skill script should be installed: %v", err)
+	}
+	unrelatedSkillDir := filepath.Join(projectRoot, ".codex", "skills", "uloop-compile")
+	writeSkillFile(t, unrelatedSkillDir, "---\nname: uloop-compile\n---\n")
+
+	uninstallCode := runV3MigrationSkillUninstall(projectRoot, skills, options, stdout, stderr)
+
+	if uninstallCode != 0 {
+		t.Fatalf("uninstall should succeed: code=%d stderr=%s", uninstallCode, stderr.String())
+	}
+	if _, err := os.Stat(installedDir); !os.IsNotExist(err) {
+		t.Fatalf("migration skill should be removed: %v", err)
+	}
+	if _, err := os.Stat(unrelatedSkillDir); err != nil {
+		t.Fatalf("unrelated skill should remain: %v", err)
+	}
+}
+
+// Tests that the POSIX detector reports boolean, first-party, and output-field candidates.
+func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	fixtureFile := filepath.Join(fixtureRoot, "docs", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(fixtureFile), 0o755); err != nil {
+		t.Fatalf("failed to create fixture dir: %v", err)
+	}
+	fixtureContent := strings.Join([]string{
+		"uloop compile --wait-for-domain-reload true",
+		"uloop some-tool --enabled false",
+		"jq '.Success'",
+	}, "\n")
+	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	scriptPath := filepath.Join(
+		findRepositoryRootForSkillsTest(t),
+		"Packages",
+		"src",
+		"TemporarySkills",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"scripts",
+		"detect-v3-cli-invocation-candidates.sh")
+
+	command := exec.Command("sh", scriptPath, fixtureRoot)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("detector failed: %v\n%s", err, string(output))
+	}
+	text := string(output)
+	for _, expected := range []string{"FIRST_PARTY_OPTION", "ARG_BOOL", "OUTPUT_FIELD"} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("detector output missing %s:\n%s", expected, text)
+		}
+	}
+}
+
+// Tests that the PowerShell detector reports candidates when PowerShell is available.
+func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
+	pwshPath, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Skip("pwsh is not installed")
+	}
+	fixtureRoot := t.TempDir()
+	fixtureFile := filepath.Join(fixtureRoot, "scripts", "migrate.ps1")
+	if err := os.MkdirAll(filepath.Dir(fixtureFile), 0o755); err != nil {
+		t.Fatalf("failed to create fixture dir: %v", err)
+	}
+	fixtureContent := strings.Join([]string{
+		"uloop run-tests --save-before-run false",
+		"uloop some-tool --enabled true",
+		"$result.Success",
+	}, "\n")
+	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	scriptPath := filepath.Join(
+		findRepositoryRootForSkillsTest(t),
+		"Packages",
+		"src",
+		"TemporarySkills",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"scripts",
+		"detect-v3-cli-invocation-candidates.ps1")
+
+	command := exec.Command(pwshPath, "-NoProfile", "-File", scriptPath, "-Root", fixtureRoot)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("detector failed: %v\n%s", err, string(output))
+	}
+	text := string(output)
+	for _, expected := range []string{"FIRST_PARTY_OPTION", "ARG_BOOL", "OUTPUT_FIELD"} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("detector output missing %s:\n%s", expected, text)
+		}
+	}
+}
+
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
 	writeSkillFile(t, filepath.Join(projectRoot, filepath.FromSlash(relativeDir)), content)
@@ -837,6 +1018,14 @@ func writeManifest(t *testing.T, projectRoot string, content string) {
 	}
 	if err := os.WriteFile(filepath.Join(manifestDir, "manifest.json"), []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write manifest: %v", err)
+	}
+}
+
+func writePackageRootMarker(t *testing.T, projectRoot string) {
+	t.Helper()
+	markerPath := filepath.Join(projectRoot, "Packages", "src", "Editor", "FirstPartyTools")
+	if err := os.MkdirAll(markerPath, 0o755); err != nil {
+		t.Fatalf("failed to create package root marker: %v", err)
 	}
 }
 
@@ -901,4 +1090,22 @@ func assertSkillContentContains(t *testing.T, skills []skillDefinition, skillNam
 		return
 	}
 	t.Fatalf("skill not found: %s", skillName)
+}
+
+func findRepositoryRootForSkillsTest(t *testing.T) string {
+	t.Helper()
+	currentDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(currentDir, ".git")); err == nil {
+			return currentDir
+		}
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir {
+			t.Fatal("repository root not found")
+		}
+		currentDir = parentDir
+	}
 }

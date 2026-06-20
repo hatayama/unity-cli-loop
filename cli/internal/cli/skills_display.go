@@ -56,6 +56,8 @@ func printSkillsHelp(stdout io.Writer) {
 	writeLine(stdout, "  uloop skills list [options]")
 	writeLine(stdout, "  uloop skills install [options]")
 	writeLine(stdout, "  uloop skills uninstall [options]")
+	writeLine(stdout, "  uloop skills install-v3-migration [options]")
+	writeLine(stdout, "  uloop skills uninstall-v3-migration [options]")
 	writeLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
 }
@@ -78,6 +80,14 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	if command == "install" {
 		writeLine(stdout, "Targets that already contain uloop skills are refreshed automatically,")
 		writeLine(stdout, "even when their flag is omitted, so previously installed copies never go stale.")
+		writeLine(stdout, "")
+	}
+	if command == "install-v3-migration" {
+		writeLine(stdout, "Installs only the temporary V3 CLI invocation migration skill.")
+		writeLine(stdout, "")
+	}
+	if command == "uninstall-v3-migration" {
+		writeLine(stdout, "Removes only the temporary V3 CLI invocation migration skill.")
 		writeLine(stdout, "")
 	}
 	printGlobalOptionsHelp(stdout)
