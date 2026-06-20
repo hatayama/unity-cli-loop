@@ -4227,6 +4227,61 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
+        public async Task ApplyMigrationAsync_WhenProjectChangesDuringPreview_RebuildsPlan()
+        {
+            // Verifies that cached preview plans are not applied after files change during plan creation.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                string editedToolSource = "public sealed class EditedTool {}";
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                FileChangingProgress progress = new(() =>
+                {
+                    File.WriteAllText(toolPath, editedToolSource);
+                    File.SetLastWriteTimeUtc(toolPath, DateTime.UtcNow.AddMinutes(1));
+                });
+                ThirdPartyToolMigrationPreview preview =
+                    await service.PreviewMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(projectRoot, progress, CancellationToken.None);
+
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(result.FilePaths, Does.Not.Contain(toolPath));
+                Assert.That(File.ReadAllText(toolPath), Is.EqualTo(editedToolSource));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task PreviewMigrationAsync_WhenUnrelatedAsmdefJsonIsMalformedAndNoAsmrefs_PreviewsAsmdefRepair()
         {
             // Verifies that unrelated malformed asmdefs do not block previewing repairable asmdef changes.
@@ -4894,6 +4949,32 @@ public sealed class ScreenshotResponse : UnityCliLoopToolResponse
                 }
 
                 _cts.Cancel();
+            }
+        }
+
+        private sealed class FileChangingProgress : IProgress<ThirdPartyToolMigrationProgress>
+        {
+            private readonly Action _changeProject;
+            private bool _hasChangedProject;
+
+            public FileChangingProgress(Action changeProject)
+            {
+                Assert.That(changeProject, Is.Not.Null);
+
+                _changeProject = changeProject;
+            }
+
+            public void Report(ThirdPartyToolMigrationProgress value)
+            {
+                if (_hasChangedProject ||
+                    value.TotalItemCount == 0 ||
+                    value.ProcessedItemCount < 1)
+                {
+                    return;
+                }
+
+                _hasChangedProject = true;
+                _changeProject();
             }
         }
 

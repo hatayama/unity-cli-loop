@@ -27,6 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             ProjectFileInventory inventory = ProjectFileInventory.Create(projectRoot);
+            MigrationProjectFingerprint projectFingerprint =
+                MigrationProjectFingerprint.CaptureFromInventory(inventory);
             MigrationAssemblyUsage assemblyUsage = ThirdPartyToolMigrationAssemblyUsageAnalyzer.FindMigrationAssemblyUsage(
                 projectRoot,
                 inventory.CSharpFilePaths,
@@ -172,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new MigrationPlan(
                 changes,
                 replacementCount,
-                MigrationProjectFingerprint.CaptureFromInventory(inventory));
+                projectFingerprint);
         }
 
         internal static async Task<MigrationPlan> CreateAsync(
@@ -194,6 +196,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return MigrationPlan.Empty;
             }
 
+            MigrationProjectFingerprint projectFingerprint =
+                MigrationProjectFingerprint.CaptureFromInventory(inventory);
             MigrationProgressCounter progressCounter = new(GetPreviewWorkItemCount(inventory), progress);
             ThirdPartyToolMigrationSourceFileCache sourceFileCache = new();
             MigrationAssemblyUsage assemblyUsage = await ThirdPartyToolMigrationAssemblyUsageAsyncAnalyzer.FindMigrationAssemblyUsageAsync(
@@ -367,7 +371,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new MigrationPlan(
                 changes,
                 replacementCount,
-                MigrationProjectFingerprint.CaptureFromInventory(inventory));
+                projectFingerprint);
         }
 
 
