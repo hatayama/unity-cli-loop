@@ -8,6 +8,7 @@ using UnityEngine;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using ApplicationRegistrar = io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -261,7 +262,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // for compatibility with existing code
             _bridgeServer = result.ServerInstance;
 
-            UnityCliLoopToolRegistrar.WarmupRegistry();
+            ApplicationRegistrar.WarmupRegistry();
             await MarkServerReadyAsync("manual-start", cancellationToken);
         }
 
@@ -646,7 +647,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // Clear reconnection-related flags on successful recovery
                 _sessionStateService.ClearReconnectingFlags();
                 _sessionStateService.ClearPostCompileReconnectingUI();
-                UnityCliLoopToolRegistrar.WarmupRegistry();
+                ApplicationRegistrar.WarmupRegistry();
                 await MarkServerReadyAsync("server-recovery", cancellationToken);
 
                 ActivateStartupProtection(5000);

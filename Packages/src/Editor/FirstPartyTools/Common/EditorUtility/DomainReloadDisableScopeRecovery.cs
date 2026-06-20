@@ -21,8 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string MarkerFilePathForTests => DomainReloadDisableScopeRecoveryConstants.MarkerFilePath;
         internal static string TempFilePathForTests => DomainReloadDisableScopeRecoveryConstants.TempFilePath;
 
-        [InitializeOnLoadMethod]
-        private static void RestorePendingSettingsOnEditorLoad()
+        internal static void RestoreForEditorStartup()
         {
             if (AssetDatabase.IsAssetImportWorkerProcess())
             {

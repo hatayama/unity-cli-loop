@@ -50,16 +50,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetMigrationProgressText_WhenProgressExists_ReturnsCheckCount()
+        public void GetMigrationProgressText_WhenPreviewProgressExists_ReturnsCheckCount()
         {
             // Verifies that the migration wizard reports scan progress while migration targets are unknown.
             ThirdPartyToolMigrationProgress progress = new(3, 12);
 
-            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationProgressText(progress);
+            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationProgressText(
+                progress,
+                isMigrating: false);
 
             Assert.That(
                 text,
-                Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 checks complete."));
+                Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 steps complete."));
+        }
+
+        [Test]
+        public void GetMigrationProgressText_WhenApplyProgressExists_ReturnsMigrationCount()
+        {
+            // Verifies that the migration wizard distinguishes apply progress from preview scans.
+            ThirdPartyToolMigrationProgress progress = new(4, 12);
+
+            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationProgressText(
+                progress,
+                isMigrating: true);
+
+            Assert.That(
+                text,
+                Is.EqualTo("Migrating project files for V3 custom tools...\n4/12 steps complete."));
         }
 
         [TestCase(false, false, false, "Check required")]
@@ -113,15 +130,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(false, false, false)]
         public void ShouldApplyMigrationProgress_ReturnsExpectedValue(
             bool isCancellationRequested,
-            bool hasActivePreview,
+            bool hasActiveOperation,
             bool expected)
         {
             // Verifies that stale migration progress cannot overwrite a rendered preview result.
             bool shouldApply = ThirdPartyToolMigrationWizardWindow.ShouldApplyMigrationProgress(
                 isCancellationRequested,
-                hasActivePreview);
+                hasActiveOperation);
 
             Assert.That(shouldApply, Is.EqualTo(expected));
+        }
+
+        [TestCase(1)]
+        [TestCase(0)]
+        public void ShouldRefreshAfterMigration_WhenMigrationCompletes_ReturnsFalse(int migratedFileCount)
+        {
+            // Verifies that a completed migration does not immediately start another scan.
+            ThirdPartyToolMigrationResult result =
+                new(migratedFileCount, migratedFileCount, System.Array.Empty<string>());
+
+            bool shouldRefresh = ThirdPartyToolMigrationWizardWindow.ShouldRefreshAfterMigration(result);
+
+            Assert.That(shouldRefresh, Is.False);
+        }
+
+        [TestCase(false, 0, true)]
+        [TestCase(true, 0, false)]
+        [TestCase(false, 1, true)]
+        [TestCase(true, 1, true)]
+        public void ShouldFinishMigrationOnMainThread_ReturnsExpectedValue(
+            bool isCancellationRequested,
+            int migratedFileCount,
+            bool expected)
+        {
+            // Verifies that completed file writes still reach the main-thread asset refresh even after late cancellation.
+            ThirdPartyToolMigrationResult result =
+                new(migratedFileCount, migratedFileCount, System.Array.Empty<string>());
+
+            bool shouldFinish = ThirdPartyToolMigrationWizardWindow.ShouldFinishMigrationOnMainThread(
+                isCancellationRequested,
+                result);
+
+            Assert.That(shouldFinish, Is.EqualTo(expected));
+        }
+
+        [TestCase(true, false, true)]
+        [TestCase(true, true, false)]
+        [TestCase(false, false, false)]
+        public void ShouldRefreshAfterInterruptedMigration_ReturnsExpectedValue(
+            bool isMigrationCompletionPending,
+            bool isCancellationRequested,
+            bool expected)
+        {
+            // Verifies that failed async migrations restore the wizard while user cancellations stay quiet.
+            bool shouldRefresh = ThirdPartyToolMigrationWizardWindow.ShouldRefreshAfterInterruptedMigration(
+                isMigrationCompletionPending,
+                isCancellationRequested);
+
+            Assert.That(shouldRefresh, Is.EqualTo(expected));
         }
 
         [Test]

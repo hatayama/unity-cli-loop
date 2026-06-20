@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     }
 
     /// <summary>
-    /// Reports preview scan progress so editor UI can repaint while project files are inspected.
+    /// Reports migration progress so editor UI can repaint while project files are inspected.
     /// </summary>
     public readonly struct ThirdPartyToolMigrationProgress
     {
@@ -83,6 +83,10 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             CancellationToken ct);
         Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct);
         ThirdPartyToolMigrationResult ApplyMigration(string projectRoot);
+        Task<ThirdPartyToolMigrationResult> ApplyMigrationAsync(
+            string projectRoot,
+            IProgress<ThirdPartyToolMigrationProgress> progress,
+            CancellationToken ct);
     }
 
     /// <summary>

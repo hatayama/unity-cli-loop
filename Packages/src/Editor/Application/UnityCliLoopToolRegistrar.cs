@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// <summary>
     /// Manages the shared editor tool registry and custom tool registrations.
     /// </summary>
-    public sealed class UnityCliLoopToolRegistrarService
+    public sealed class UnityCliLoopToolRegistrarService : IUnityCliLoopToolRegistrar
     {
         private readonly IInternalToolNameProvider _internalToolNameProvider;
         private readonly UnityCliLoopToolExecutionService _toolExecutionService;

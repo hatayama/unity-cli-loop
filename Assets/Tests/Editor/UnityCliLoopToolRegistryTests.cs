@@ -9,6 +9,7 @@ using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using ApplicationRegistrar = io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -449,7 +450,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void StaticRegistrarCustomToolMethods_RegisterAndUnregisterManualTool()
         {
             // Tests that extension-facing static registrar APIs still delegate to the shared registry.
-            UnityCliLoopToolRegistrarService previousService = UnityCliLoopToolRegistrar.Service;
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
             ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
@@ -457,24 +458,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UnityCliLoopToolExecutionService());
             ManualRegistrationTool tool = new();
 
-            UnityCliLoopToolRegistrar.RegisterService(service);
+            ApplicationRegistrar.RegisterService(service);
             try
             {
-                UnityCliLoopToolRegistrar.RegisterCustomTool(tool);
+                ApplicationRegistrar.RegisterCustomTool(tool);
 
-                string[] toolNames = UnityCliLoopToolRegistrar.GetRegisteredCustomTools()
+                string[] toolNames = ApplicationRegistrar.GetRegisteredCustomTools()
                     .Select(toolInfo => toolInfo.Name)
                     .ToArray();
-                Assert.That(UnityCliLoopToolRegistrar.IsCustomToolRegistered(tool.ToolName), Is.True);
+                Assert.That(ApplicationRegistrar.IsCustomToolRegistered(tool.ToolName), Is.True);
                 Assert.That(toolNames, Does.Contain(tool.ToolName));
 
-                UnityCliLoopToolRegistrar.UnregisterCustomTool(tool.ToolName);
+                ApplicationRegistrar.UnregisterCustomTool(tool.ToolName);
 
-                Assert.That(UnityCliLoopToolRegistrar.IsCustomToolRegistered(tool.ToolName), Is.False);
+                Assert.That(ApplicationRegistrar.IsCustomToolRegistered(tool.ToolName), Is.False);
             }
             finally
             {
-                UnityCliLoopToolRegistrar.RegisterService(previousService);
+                ApplicationRegistrar.RegisterService(previousService);
             }
         }
 

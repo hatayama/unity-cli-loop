@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
+using ApplicationRegistrar = io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -36,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// Get command registry
         /// Use this registry when adding new commands
         /// </summary>
-        public static UnityCliLoopToolRegistry CommandRegistry => UnityCliLoopToolRegistrar.GetRegistry();
+        public static UnityCliLoopToolRegistry CommandRegistry => ApplicationRegistrar.GetRegistry();
 
         /// <summary>
         /// Generic command execution method
@@ -59,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return response;
             }
 
-            response = await UnityCliLoopToolRegistrar.ExecuteToolAsync(
+            response = await ApplicationRegistrar.ExecuteToolAsync(
                 commandName,
                 paramsToken,
                 ct);
