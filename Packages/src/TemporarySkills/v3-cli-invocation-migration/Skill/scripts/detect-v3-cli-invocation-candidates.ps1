@@ -90,22 +90,22 @@ Get-CandidateFile -Directory $Root |
         for ($index = 0; $index -lt $lines.Count; $index++) {
             $line = $lines[$index]
             $lineNumber = $index + 1
-            if ($line -match "uloop\s+[^#|;&]*--[A-Za-z0-9][A-Za-z0-9-]*(\s+|=)(true|false)(\s|$|[|;&])") {
+            if ($line -match "uloop\s+[^#|;&]*--[A-Za-z0-9][A-Za-z0-9-]*(\s+|=)(true|false)([^A-Za-z0-9_-]|$)") {
                 Write-Candidate -Kind "ARG_BOOL" -Path $path -LineNumber $lineNumber -Line $line
             }
-            if ($line -match "uloop\s+compile\s+[^#|;&]*--(wait-for-domain-reload|reload-external-scene-changes|force-recompile)(\s|=|$)") {
+            if ($line -match "uloop\s+compile\s+[^#|;&]*--(wait-for-domain-reload|reload-external-scene-changes|force-recompile)([^A-Za-z0-9_-]|$)") {
                 Write-Candidate -Kind "FIRST_PARTY_OPTION" -Path $path -LineNumber $lineNumber -Line $line
             }
-            if ($line -match "uloop\s+run-tests\s+[^#|;&]*--save-before-run(\s|=|$)") {
+            if ($line -match "uloop\s+run-tests\s+[^#|;&]*--save-before-run([^A-Za-z0-9_-]|$)") {
                 Write-Candidate -Kind "FIRST_PARTY_OPTION" -Path $path -LineNumber $lineNumber -Line $line
             }
-            if ($line -match "uloop\s+(record-input|replay-input)\s+[^#|;&]*--show-overlay(\s|=|$)") {
+            if ($line -match "uloop\s+(record-input|replay-input)\s+[^#|;&]*--show-overlay([^A-Za-z0-9_-]|$)") {
                 Write-Candidate -Kind "FIRST_PARTY_OPTION" -Path $path -LineNumber $lineNumber -Line $line
             }
-            if ($line -match "uloop\s+get-hierarchy\s+[^#|;&]*--include-(components|inactive)(\s|=|$)") {
+            if ($line -match "uloop\s+get-hierarchy\s+[^#|;&]*--include-(components|inactive)([^A-Za-z0-9_-]|$)") {
                 Write-Candidate -Kind "FIRST_PARTY_OPTION" -Path $path -LineNumber $lineNumber -Line $line
             }
-            if ($line -match "uloop\s+execute-dynamic-code\s+[^#|;&]*--compile-only(\s|=|$)") {
+            if ($line -match "uloop\s+execute-dynamic-code\s+[^#|;&]*--compile-only([^A-Za-z0-9_-]|$)") {
                 Write-Candidate -Kind "FIRST_PARTY_OPTION" -Path $path -LineNumber $lineNumber -Line $line
             }
             if ($line -cmatch "\.($outputFields)([^A-Za-z0-9_]|$)") {

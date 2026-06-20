@@ -12,22 +12,22 @@ do
     function report(kind) {
       printf "%s %s:%d: %s\n", kind, FILENAME, FNR, $0
     }
-    /uloop[[:space:]][^#|;&]*--[[:alnum:]][[:alnum:]-]*([[:space:]]+|=)(true|false)([[:space:]]|$|[|;&])/ {
+    /uloop[[:space:]][^#|;&]*--[[:alnum:]][[:alnum:]-]*([[:space:]]+|=)(true|false)([^[:alnum:]_-]|$)/ {
       report("ARG_BOOL")
     }
-    /uloop[[:space:]]+compile[[:space:]][^#|;&]*--(wait-for-domain-reload|reload-external-scene-changes|force-recompile)([[:space:]]|=|$)/ {
+    /uloop[[:space:]]+compile[[:space:]][^#|;&]*--(wait-for-domain-reload|reload-external-scene-changes|force-recompile)([^[:alnum:]_-]|$)/ {
       report("FIRST_PARTY_OPTION")
     }
-    /uloop[[:space:]]+run-tests[[:space:]][^#|;&]*--save-before-run([[:space:]]|=|$)/ {
+    /uloop[[:space:]]+run-tests[[:space:]][^#|;&]*--save-before-run([^[:alnum:]_-]|$)/ {
       report("FIRST_PARTY_OPTION")
     }
-    /uloop[[:space:]]+(record-input|replay-input)[[:space:]][^#|;&]*--show-overlay([[:space:]]|=|$)/ {
+    /uloop[[:space:]]+(record-input|replay-input)[[:space:]][^#|;&]*--show-overlay([^[:alnum:]_-]|$)/ {
       report("FIRST_PARTY_OPTION")
     }
-    /uloop[[:space:]]+get-hierarchy[[:space:]][^#|;&]*--include-(components|inactive)([[:space:]]|=|$)/ {
+    /uloop[[:space:]]+get-hierarchy[[:space:]][^#|;&]*--include-(components|inactive)([^[:alnum:]_-]|$)/ {
       report("FIRST_PARTY_OPTION")
     }
-    /uloop[[:space:]]+execute-dynamic-code[[:space:]][^#|;&]*--compile-only([[:space:]]|=|$)/ {
+    /uloop[[:space:]]+execute-dynamic-code[[:space:]][^#|;&]*--compile-only([^[:alnum:]_-]|$)/ {
       report("FIRST_PARTY_OPTION")
     }
     /\.(Success|Message|ErrorMessage|ErrorCount|WarningCount|TotalCount|DisplayedCount|LogType|StackTrace|XmlPath|TestCount|PassedCount|FailedCount|SkippedCount|CompletedAt|ScreenshotCount|Screenshots|CompilationErrors|ErrorCode|UpdatedCode|DiagnosticsSummary|OutputPath|InputPath|TotalFrames|DurationSeconds|CurrentFrame|IsReplaying|KeyName|PositionX|PositionY|EndPositionX|EndPositionY|HitGameObjectName|IsPlaying|IsPaused|ClearedLogCount|ClearedCounts)([^[:alnum:]_]|$)/ {

@@ -1000,6 +1000,8 @@ func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 	fixtureContent := strings.Join([]string{
 		"uloop compile --wait-for-domain-reload true",
 		"uloop some-tool --enabled false",
+		"inline `uloop compile --wait-for-domain-reload`",
+		"inline `uloop some-tool --enabled false`",
 		"jq '.Success'",
 	}, "\n")
 	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
@@ -1044,6 +1046,14 @@ func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 			t.Fatalf("detector output missing %s:\n%s", expected, text)
 		}
 	}
+	for _, expected := range []string{
+		"inline `uloop compile --wait-for-domain-reload`",
+		"inline `uloop some-tool --enabled false`",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("detector output missing inline Markdown candidate %q:\n%s", expected, text)
+		}
+	}
 	if strings.Contains(text, "self-noise") {
 		t.Fatalf("detector should skip bundled migration skill sources:\n%s", text)
 	}
@@ -1063,6 +1073,8 @@ func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 	fixtureContent := strings.Join([]string{
 		"uloop run-tests --save-before-run false",
 		"uloop some-tool --enabled true",
+		"inline `uloop run-tests --save-before-run`",
+		"inline `uloop some-tool --enabled true`",
 		"$result.Success",
 		"$result.success",
 	}, "\n")
@@ -1088,6 +1100,14 @@ func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 	for _, expected := range []string{"FIRST_PARTY_OPTION", "ARG_BOOL", "OUTPUT_FIELD"} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("detector output missing %s:\n%s", expected, text)
+		}
+	}
+	for _, expected := range []string{
+		"inline `uloop run-tests --save-before-run`",
+		"inline `uloop some-tool --enabled true`",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("detector output missing inline Markdown candidate %q:\n%s", expected, text)
 		}
 	}
 	if strings.Contains(text, "$result.success") {
