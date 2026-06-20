@@ -1,3 +1,6 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -27,6 +30,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     shouldAutoScanThirdPartyToolMigration);
 
             Assert.That(shouldStartInitialRefresh, Is.EqualTo(expected));
+        }
+
+        [TestCase(false, false, false)]
+        [TestCase(true, false, true)]
+        [TestCase(true, true, false)]
+        public void ShouldOpenWindowAfterAutoScan_ReturnsExpectedValue(
+            bool hasMigrationTargets,
+            bool isCancellationRequested,
+            bool expected)
+        {
+            // Verifies that auto-scan opens the migration window only when preflight finds work.
+            bool shouldOpenWindow = ThirdPartyToolMigrationWizardWindow.ShouldOpenWindowAfterAutoScan(
+                hasMigrationTargets,
+                isCancellationRequested);
+
+            Assert.That(shouldOpenWindow, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public async Task RunAutoScanAsync_WhenTargetsExist_OpensWindowAndConsumesState()
+        {
+            // Verifies that a successful auto-scan opens the migration wizard and consumes the session flag.
+            bool openedWindow = false;
+            bool consumedSessionState = false;
+            System.Exception loggedException = null;
+
+            bool didOpenWindow = await ThirdPartyToolMigrationWizardWindow.RunAutoScanAsync(
+                _ => Task.FromResult(true),
+                _ => Task.CompletedTask,
+                () => openedWindow = true,
+                () => consumedSessionState = true,
+                ex => loggedException = ex,
+                CancellationToken.None);
+
+            Assert.That(didOpenWindow, Is.True);
+            Assert.That(openedWindow, Is.True);
+            Assert.That(consumedSessionState, Is.True);
+            Assert.That(loggedException, Is.Null);
+        }
+
+        [Test]
+        public async Task RunAutoScanAsync_WhenScanThrows_LogsExceptionAndConsumesState()
+        {
+            // Verifies that failed auto-scans cannot leak the session flag or crash through async void.
+            bool openedWindow = false;
+            bool consumedSessionState = false;
+            System.InvalidOperationException expectedException = new("scan failed");
+            System.Exception loggedException = null;
+
+            bool didOpenWindow = await ThirdPartyToolMigrationWizardWindow.RunAutoScanAsync(
+                _ => Task.FromException<bool>(expectedException),
+                _ => Task.CompletedTask,
+                () => openedWindow = true,
+                () => consumedSessionState = true,
+                ex => loggedException = ex,
+                CancellationToken.None);
+
+            Assert.That(didOpenWindow, Is.False);
+            Assert.That(openedWindow, Is.False);
+            Assert.That(consumedSessionState, Is.True);
+            Assert.That(loggedException, Is.SameAs(expectedException));
         }
 
         [TestCase(

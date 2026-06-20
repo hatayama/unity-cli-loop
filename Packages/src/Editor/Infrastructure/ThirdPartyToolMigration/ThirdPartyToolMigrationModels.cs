@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,15 +27,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
     internal readonly struct MigrationPlan
     {
-        public static MigrationPlan Empty => new(new List<MigrationFileChange>(), 0);
+        public static MigrationPlan Empty => new(
+            new List<MigrationFileChange>(),
+            0,
+            MigrationProjectFingerprint.Empty);
 
-        public MigrationPlan(List<MigrationFileChange> changes, int replacementCount)
+        public MigrationPlan(
+            List<MigrationFileChange> changes,
+            int replacementCount,
+            MigrationProjectFingerprint projectFingerprint)
         {
             Debug.Assert(changes != null, "changes must not be null");
             Debug.Assert(replacementCount >= 0, "replacementCount must not be negative");
 
             Changes = changes ?? throw new ArgumentNullException(nameof(changes));
             ReplacementCount = replacementCount;
+            ProjectFingerprint = projectFingerprint;
             ChangedFilePaths = Changes
                 .Select(change => change.FilePath)
                 .OrderBy(path => path, StringComparer.Ordinal)
@@ -43,7 +51,192 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public List<MigrationFileChange> Changes { get; }
         public int ReplacementCount { get; }
+        public MigrationProjectFingerprint ProjectFingerprint { get; }
         public List<string> ChangedFilePaths { get; }
+    }
+
+    /// <summary>
+    /// Captures candidate file state so cached migration plans are reused only while project files match.
+    /// </summary>
+    internal readonly struct MigrationProjectFingerprint
+    {
+        public static MigrationProjectFingerprint Empty => new(Array.Empty<MigrationFileFingerprint>());
+
+        private readonly MigrationFileFingerprint[] _fileFingerprints;
+
+        private MigrationProjectFingerprint(MigrationFileFingerprint[] fileFingerprints)
+        {
+            Debug.Assert(fileFingerprints != null, "fileFingerprints must not be null");
+
+            _fileFingerprints = fileFingerprints;
+        }
+
+        public static MigrationProjectFingerprint CaptureFromInventory(ProjectFileInventory inventory)
+        {
+            Debug.Assert(inventory != null, "inventory must not be null");
+
+            List<string> filePaths = new();
+            filePaths.AddRange(inventory.CSharpFilePaths);
+            filePaths.AddRange(inventory.AsmdefFilePaths);
+            filePaths.AddRange(inventory.AsmrefFilePaths);
+            foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
+            {
+                filePaths.Add(asmdefFilePath + ".meta");
+            }
+
+            filePaths.Sort(StringComparer.Ordinal);
+
+            MigrationFileFingerprint[] fileFingerprints = new MigrationFileFingerprint[filePaths.Count];
+            for (int index = 0; index < filePaths.Count; index++)
+            {
+                fileFingerprints[index] = MigrationFileFingerprint.Capture(filePaths[index]);
+            }
+
+            return new MigrationProjectFingerprint(fileFingerprints);
+        }
+
+        public bool Matches(ProjectFileInventory inventory)
+        {
+            Debug.Assert(inventory != null, "inventory must not be null");
+
+            MigrationProjectFingerprint currentFingerprint = CaptureFromInventory(inventory);
+            return MatchesFingerprint(currentFingerprint);
+        }
+
+        private bool MatchesFingerprint(MigrationProjectFingerprint other)
+        {
+            MigrationFileFingerprint[] fileFingerprints = _fileFingerprints ?? Array.Empty<MigrationFileFingerprint>();
+            MigrationFileFingerprint[] otherFileFingerprints =
+                other._fileFingerprints ?? Array.Empty<MigrationFileFingerprint>();
+            if (fileFingerprints.Length != otherFileFingerprints.Length)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < fileFingerprints.Length; index++)
+            {
+                if (!fileFingerprints[index].HasSameValuesAs(otherFileFingerprints[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Captures one candidate file's identity and modification state for migration plan cache validation.
+    /// </summary>
+    internal readonly struct MigrationFileFingerprint
+    {
+        private const int ContentHashBufferSize = 8192;
+        private const ulong ContentHashOffsetBasis = 14695981039346656037UL;
+        private const ulong ContentHashPrime = 1099511628211UL;
+
+        private MigrationFileFingerprint(
+            string filePath,
+            bool exists,
+            long length,
+            long lastWriteTimeUtcTicks,
+            ulong contentHash)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+            Debug.Assert(length >= 0, "length must not be negative");
+            Debug.Assert(lastWriteTimeUtcTicks >= 0, "lastWriteTimeUtcTicks must not be negative");
+
+            FilePath = filePath;
+            Exists = exists;
+            Length = length;
+            LastWriteTimeUtcTicks = lastWriteTimeUtcTicks;
+            ContentHash = contentHash;
+        }
+
+        public string FilePath { get; }
+        public bool Exists { get; }
+        public long Length { get; }
+        public long LastWriteTimeUtcTicks { get; }
+        public ulong ContentHash { get; }
+
+        public static MigrationFileFingerprint Capture(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            FileInfo fileInfo = new(filePath);
+            if (!fileInfo.Exists)
+            {
+                return new MigrationFileFingerprint(
+                    filePath,
+                    false,
+                    0,
+                    0,
+                    0);
+            }
+
+            return new MigrationFileFingerprint(
+                filePath,
+                true,
+                fileInfo.Length,
+                fileInfo.LastWriteTimeUtc.Ticks,
+                CaptureContentHash(filePath));
+        }
+
+        public bool HasSameValuesAs(MigrationFileFingerprint other)
+        {
+            return string.Equals(FilePath, other.FilePath, StringComparison.Ordinal) &&
+                Exists == other.Exists &&
+                Length == other.Length &&
+                LastWriteTimeUtcTicks == other.LastWriteTimeUtcTicks &&
+                ContentHash == other.ContentHash;
+        }
+
+        private static ulong CaptureContentHash(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            try
+            {
+                return CaptureReadableContentHash(filePath);
+            }
+            catch (Exception ex) when (IsSkippableContentHashException(ex))
+            {
+                return 0;
+            }
+        }
+
+        private static ulong CaptureReadableContentHash(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            byte[] buffer = new byte[ContentHashBufferSize];
+            ulong contentHash = ContentHashOffsetBasis;
+            using FileStream stream = File.OpenRead(filePath);
+            while (true)
+            {
+                int readByteCount = stream.Read(buffer, 0, buffer.Length);
+                if (readByteCount == 0)
+                {
+                    return contentHash;
+                }
+
+                for (int index = 0; index < readByteCount; index++)
+                {
+                    unchecked
+                    {
+                        contentHash ^= buffer[index];
+                        contentHash *= ContentHashPrime;
+                    }
+                }
+            }
+        }
+
+        private static bool IsSkippableContentHashException(Exception ex)
+        {
+            Debug.Assert(ex != null, "ex must not be null");
+
+            return ex is IOException ||
+                   ex is UnauthorizedAccessException;
+        }
     }
 
     internal sealed class MigrationProgressCounter

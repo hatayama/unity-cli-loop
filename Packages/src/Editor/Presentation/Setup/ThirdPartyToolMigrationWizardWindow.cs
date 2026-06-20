@@ -47,7 +47,86 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void ShowWindowForAutoScan()
         {
+            _ = RunAutoScanAsync(
+                HasMigrationTargetsForAutoScanAsync,
+                SwitchToMainThreadForAutoScanAsync,
+                OpenWindowAfterAutoScan,
+                ConsumeAutoScanSessionState,
+                LogAutoScanException,
+                CancellationToken.None);
+        }
+
+        internal static async Task<bool> RunAutoScanAsync(
+            System.Func<CancellationToken, Task<bool>> hasMigrationTargetsAsync,
+            System.Func<CancellationToken, Task> switchToMainThreadAsync,
+            System.Action openWindow,
+            System.Action consumeAutoScanSessionState,
+            System.Action<System.Exception> logException,
+            CancellationToken ct)
+        {
+            Debug.Assert(hasMigrationTargetsAsync != null, "hasMigrationTargetsAsync must not be null");
+            Debug.Assert(switchToMainThreadAsync != null, "switchToMainThreadAsync must not be null");
+            Debug.Assert(openWindow != null, "openWindow must not be null");
+            Debug.Assert(consumeAutoScanSessionState != null, "consumeAutoScanSessionState must not be null");
+            Debug.Assert(logException != null, "logException must not be null");
+
+            try
+            {
+                bool hasMigrationTargets = await hasMigrationTargetsAsync(ct);
+                await switchToMainThreadAsync(ct);
+                if (!ShouldOpenWindowAfterAutoScan(hasMigrationTargets, ct.IsCancellationRequested))
+                {
+                    return false;
+                }
+
+                openWindow();
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                logException(ex);
+                return false;
+            }
+            finally
+            {
+                consumeAutoScanSessionState();
+            }
+        }
+
+        private static async Task<bool> HasMigrationTargetsForAutoScanAsync(CancellationToken ct)
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            ThirdPartyToolMigrationUseCase migrationUseCase =
+                ThirdPartyToolMigrationUseCaseRegistry.GetRegisteredUseCase();
+            return await Task.Run(async () =>
+                await migrationUseCase.HasMigrationTargetsAsync(projectRoot, ct), ct);
+        }
+
+        private static async Task SwitchToMainThreadForAutoScanAsync(CancellationToken ct)
+        {
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await MainThreadSwitcher.SwitchToMainThread();
+        }
+
+        private static void OpenWindowAfterAutoScan()
+        {
             ShowWindowInternal(true);
+        }
+
+        private static void ConsumeAutoScanSessionState()
+        {
+            GetSessionStateService().ConsumeShouldAutoScanThirdPartyToolMigration();
+        }
+
+        private static void LogAutoScanException(System.Exception ex)
+        {
+            Debug.Assert(ex != null, "ex must not be null");
+
+            Debug.LogException(ex);
         }
 
         internal static bool ShouldStartInitialRefresh(
@@ -57,6 +136,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return ThirdPartyToolMigrationWizardStateRules.ShouldStartInitialRefresh(
                 shouldRefreshAfterCreateGui,
                 shouldAutoScanThirdPartyToolMigration);
+        }
+
+        internal static bool ShouldOpenWindowAfterAutoScan(
+            bool hasMigrationTargets,
+            bool isCancellationRequested)
+        {
+            return hasMigrationTargets && !isCancellationRequested;
         }
 
         internal static void PrepareForOpen(

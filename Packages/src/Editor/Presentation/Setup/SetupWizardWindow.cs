@@ -80,14 +80,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static bool ShouldAutoScanThirdPartyToolMigration(string currentVersion, string lastSeenVersion)
         {
-            if (string.IsNullOrEmpty(lastSeenVersion))
+            if (!TryGetMajorVersion(currentVersion, out int currentMajorVersion))
             {
                 return false;
             }
 
-            if (!TryGetMajorVersion(currentVersion, out int currentMajorVersion))
+            if (string.IsNullOrEmpty(lastSeenVersion))
             {
-                return false;
+                return currentMajorVersion == 3;
             }
 
             if (!TryGetMajorVersion(lastSeenVersion, out int lastSeenMajorVersion))
