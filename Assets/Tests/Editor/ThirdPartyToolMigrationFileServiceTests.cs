@@ -126,11 +126,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void StreamingPreflightScanner_WhenSourceHasNoMigrationMarkers_ReturnsNoTargets()
+        public void ManagedPreflightSearchStrategy_WhenSourceHasNoMigrationMarkers_ReturnsNoTargets()
         {
             // Verifies that startup preflight can skip full scans when no migration marker text exists.
             MigrationTargetPreflightResult result =
-                ThirdPartyToolMigrationStreamingPreflightScanner.InspectSourceText(
+                ThirdPartyToolMigrationManagedPreflightSearchStrategy.InspectSourceText(
                     "public sealed class PlainTool {}",
                     ".cs");
 
@@ -138,11 +138,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void StreamingPreflightScanner_WhenLegacyToolSourceExists_ReturnsHasTargets()
+        public void ManagedPreflightSearchStrategy_WhenLegacyToolSourceExists_ReturnsHasTargets()
         {
             // Verifies that startup preflight detects direct legacy custom tool source immediately.
             MigrationTargetPreflightResult result =
-                ThirdPartyToolMigrationStreamingPreflightScanner.InspectSourceText(
+                ThirdPartyToolMigrationManagedPreflightSearchStrategy.InspectSourceText(
                     "using io.github.hatayama.uLoopMCP; [McpTool] public sealed class HelloTool {}",
                     ".cs");
 
@@ -150,11 +150,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void StreamingPreflightScanner_WhenLegacyNamespaceIsOnlyComment_ReturnsNeedsFullScan()
+        public void ManagedPreflightSearchStrategy_WhenLegacyNamespaceIsOnlyComment_ReturnsNeedsFullScan()
         {
             // Verifies that startup preflight does not report targets from marker text inside comments.
             MigrationTargetPreflightResult result =
-                ThirdPartyToolMigrationStreamingPreflightScanner.InspectSourceText(
+                ThirdPartyToolMigrationManagedPreflightSearchStrategy.InspectSourceText(
                     "// using io.github.hatayama.uLoopMCP;",
                     ".cs");
 
@@ -162,15 +162,99 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void StreamingPreflightScanner_WhenLegacyAsmdefReferenceExists_ReturnsHasTargets()
+        public void ManagedPreflightSearchStrategy_WhenLegacyAsmdefReferenceExists_ReturnsHasTargets()
         {
             // Verifies that startup preflight detects legacy asmdef references without building an inventory.
             MigrationTargetPreflightResult result =
-                ThirdPartyToolMigrationStreamingPreflightScanner.InspectSourceText(
+                ThirdPartyToolMigrationManagedPreflightSearchStrategy.InspectSourceText(
                     @"{ ""references"": [ ""uLoopMCP.Editor"" ] }",
                     ".asmdef");
 
             Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.HasTargets));
+        }
+
+        [Test]
+        public async Task PreflightSearchPipeline_WhenFirstStrategyIsDecisive_DoesNotRunNextStrategy()
+        {
+            // Verifies that rg and managed preflight strategies share one decisive-result pipeline.
+            FakePreflightSearchStrategy firstStrategy =
+                new FakePreflightSearchStrategy(MigrationTargetPreflightResult.NoTargets);
+            FakePreflightSearchStrategy secondStrategy =
+                new FakePreflightSearchStrategy(MigrationTargetPreflightResult.HasTargets);
+            ThirdPartyToolMigrationPreflightSearchPipeline pipeline =
+                new ThirdPartyToolMigrationPreflightSearchPipeline(
+                    new IThirdPartyToolMigrationPreflightSearchStrategy[]
+                    {
+                        firstStrategy,
+                        secondStrategy
+                    });
+
+            MigrationTargetPreflightResult result =
+                await pipeline.FindMigrationTargetAsync("ProjectRoot", CancellationToken.None);
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NoTargets));
+            Assert.That(firstStrategy.CallCount, Is.EqualTo(1));
+            Assert.That(secondStrategy.CallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task PreflightSearchPipeline_WhenFirstStrategyNeedsFullScan_RunsNextStrategy()
+        {
+            // Verifies that inconclusive rg results fall through to the managed preflight strategy.
+            FakePreflightSearchStrategy firstStrategy =
+                new FakePreflightSearchStrategy(MigrationTargetPreflightResult.NeedsFullScan);
+            FakePreflightSearchStrategy secondStrategy =
+                new FakePreflightSearchStrategy(MigrationTargetPreflightResult.HasTargets);
+            ThirdPartyToolMigrationPreflightSearchPipeline pipeline =
+                new ThirdPartyToolMigrationPreflightSearchPipeline(
+                    new IThirdPartyToolMigrationPreflightSearchStrategy[]
+                    {
+                        firstStrategy,
+                        secondStrategy
+                    });
+
+            MigrationTargetPreflightResult result =
+                await pipeline.FindMigrationTargetAsync("ProjectRoot", CancellationToken.None);
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.HasTargets));
+            Assert.That(firstStrategy.CallCount, Is.EqualTo(1));
+            Assert.That(secondStrategy.CallCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void RipgrepPreflightSearchStrategy_WhenNoMatchExitCode_ReturnsNoTargets()
+        {
+            // Verifies that rg's no-match exit code can skip the managed file scan.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationRipgrepPreflightSearchStrategy.MapExitCodeToResult(1);
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NoTargets));
+        }
+
+        [Test]
+        public void RipgrepPreflightSearchStrategy_WhenMatchExitCode_ReturnsNeedsFullScan()
+        {
+            // Verifies that rg matches remain candidates for managed or full migration checks.
+            MigrationTargetPreflightResult result =
+                ThirdPartyToolMigrationRipgrepPreflightSearchStrategy.MapExitCodeToResult(0);
+
+            Assert.That(result, Is.EqualTo(MigrationTargetPreflightResult.NeedsFullScan));
+        }
+
+        [Test]
+        public void RipgrepPreflightSearchStrategy_BuildArguments_UsesSharedMarkersAndUnityGlobs()
+        {
+            // Verifies that rg searches the same marker set as the managed preflight strategy.
+            string arguments = ThirdPartyToolMigrationRipgrepPreflightSearchStrategy.BuildArguments("Assets");
+
+            Assert.That(arguments, Does.Contain("--fixed-strings"));
+            Assert.That(arguments, Does.Contain("--no-ignore"));
+            Assert.That(arguments, Does.Contain("--hidden"));
+            Assert.That(arguments, Does.Contain("--glob \"*.cs\""));
+            Assert.That(arguments, Does.Contain("--glob \"*.asmdef\""));
+            Assert.That(arguments, Does.Contain("\"io.github.hatayama.uLoopMCP\""));
+            Assert.That(arguments, Does.Contain("\"uLoopMCP.Editor\""));
+            Assert.That(arguments, Does.Contain("--glob \"!**/Library/**\""));
         }
 
         [Test]
@@ -4834,6 +4918,27 @@ public sealed class ScreenshotResponse : UnityCliLoopToolResponse
                 }
 
                 _cts.Cancel();
+            }
+        }
+
+        private sealed class FakePreflightSearchStrategy : IThirdPartyToolMigrationPreflightSearchStrategy
+        {
+            private readonly MigrationTargetPreflightResult _result;
+
+            public FakePreflightSearchStrategy(MigrationTargetPreflightResult result)
+            {
+                _result = result;
+            }
+
+            public int CallCount { get; private set; }
+
+            public Task<MigrationTargetPreflightResult> FindMigrationTargetAsync(
+                string projectRoot,
+                CancellationToken ct)
+            {
+                // Verifies pipeline sequencing without depending on the filesystem or rg.
+                CallCount++;
+                return Task.FromResult(_result);
             }
         }
     }

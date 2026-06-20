@@ -8,29 +8,12 @@ using System.Threading.Tasks;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Streams project files for cheap fixed-text migration markers before the full target scan runs.
+    /// Searches project files with managed C# IO when external fast search is unavailable or inconclusive.
     /// </summary>
-    internal static class ThirdPartyToolMigrationStreamingPreflightScanner
+    internal sealed class ThirdPartyToolMigrationManagedPreflightSearchStrategy :
+        IThirdPartyToolMigrationPreflightSearchStrategy
     {
-        private static readonly string[] DirectCSharpCandidateMarkers =
-        {
-            ThirdPartyToolMigrationRuleCatalog.LegacyNamespace,
-            ThirdPartyToolMigrationRuleCatalog.CurrentNamespace,
-            ThirdPartyToolMigrationRuleCatalog.CurrentApplicationNamespace,
-            ThirdPartyToolMigrationRuleCatalog.CurrentDomainNamespace,
-            ThirdPartyToolMigrationRuleCatalog.CurrentFirstPartyToolsNamespace,
-            "McpTool",
-            "CustomToolManager",
-            ThirdPartyToolMigrationRuleCatalog.LegacyEditorDelayTypeName,
-            ThirdPartyToolMigrationRuleCatalog.LegacyTimerDelayTypeName,
-            ThirdPartyToolMigrationRuleCatalog.LegacyMainThreadSwitcherTypeName,
-            ThirdPartyToolMigrationRuleCatalog.LegacyPlayerLoopTimingTypeName,
-            ThirdPartyToolMigrationRuleCatalog.LegacyEditorWindowCaptureUtilityTypeName,
-            "UnityCliLoopToolRegistrar",
-            "ToolInfo"
-        };
-
-        internal static async Task<MigrationTargetPreflightResult> FindMigrationTargetAsync(
+        public async Task<MigrationTargetPreflightResult> FindMigrationTargetAsync(
             string projectRoot,
             CancellationToken ct)
         {
@@ -179,19 +162,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            return source.IndexOf(
-                    ThirdPartyToolMigrationRuleCatalog.LegacyEditorAssemblyName,
-                    StringComparison.Ordinal) >= 0 ||
-                source.IndexOf(
-                    ThirdPartyToolMigrationRuleCatalog.LegacyRuntimeAssemblyName,
-                    StringComparison.Ordinal) >= 0;
+            return ContainsAny(source, ThirdPartyToolMigrationPreflightMarkerSet.AsmdefCandidateMarkers);
         }
 
         private static bool ContainsCSharpCandidateMarker(string source)
         {
             Debug.Assert(source != null, "source must not be null");
 
-            return ContainsAny(source, DirectCSharpCandidateMarkers) ||
+            return ContainsAny(source, ThirdPartyToolMigrationPreflightMarkerSet.DirectCSharpCandidateMarkers) ||
                 ContainsAnyTypeReplacementRuleMarker(
                     source,
                     ThirdPartyToolMigrationRuleCatalog.ToolContractTypeReplacementRules) ||

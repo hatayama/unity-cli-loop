@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
             MigrationTargetPreflightResult preflightResult =
-                await ThirdPartyToolMigrationStreamingPreflightScanner.FindMigrationTargetAsync(projectRoot, ct);
+                await ThirdPartyToolMigrationPreflightScanner.FindMigrationTargetAsync(projectRoot, ct);
             if (preflightResult == MigrationTargetPreflightResult.NoTargets)
             {
                 return false;
