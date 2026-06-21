@@ -246,6 +246,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.GreaterThan(GetVisualElementIndex(root, installButton)));
         }
 
+        [Test]
+        public void Create_WhenMigrationSkillSectionExists_PlacesCopyButtonOutsidePromptFoldout()
+        {
+            // Verifies that the copy action remains available outside the collapsible prompt body.
+            VisualElement root = new();
+            ThirdPartyToolMigrationWizardView.Create(
+                root,
+                () => { },
+                () => { },
+                _ => { },
+                () => { },
+                () => { });
+
+            Foldout promptFoldout = root.Query<Foldout>().ToList()
+                .Find(foldout => foldout.text == "Prompt for your AI agent");
+            Button copyButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Copy AI Prompt");
+
+            Assert.That(promptFoldout, Is.Not.Null);
+            Assert.That(copyButton, Is.Not.Null);
+            System.Collections.Generic.List<Button> foldoutButtons = promptFoldout.Query<Button>().ToList();
+            Assert.That(foldoutButtons.Contains(copyButton), Is.False);
+            Assert.That(
+                GetVisualElementIndex(root, copyButton),
+                Is.GreaterThan(GetVisualElementIndex(root, promptFoldout)));
+        }
+
         [TestCase(SkillInstallState.Installed, true)]
         [TestCase(SkillInstallState.Outdated, true)]
         [TestCase(SkillInstallState.Missing, false)]

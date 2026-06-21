@@ -332,6 +332,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             migrationSkillButton.AddToClassList("setup-button--primary");
             buttonRow.Add(migrationSkillButton);
             CreateMigrationSkillUsageFoldout(actionSection);
+            CreateMigrationSkillPromptCopyButton(actionSection);
             return (migrationSkillTargetField, migrationSkillButton);
         }
 
@@ -347,13 +348,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 "setup-skill-usage-text");
             usageFoldout.Add(usageTextField);
 
+            usageFoldout.SetValueWithoutNotify(false);
+        }
+
+        private static void CreateMigrationSkillPromptCopyButton(VisualElement content)
+        {
             Button copyPromptButton = new Button(ThirdPartyToolMigrationWizardWindow.CopyMigrationSkillPromptToClipboard);
             copyPromptButton.text = ThirdPartyToolMigrationWizardText.GetMigrationSkillPromptCopyButtonText();
             copyPromptButton.AddToClassList("setup-button");
             copyPromptButton.AddToClassList("setup-button--small");
             copyPromptButton.AddToClassList("setup-skill-usage-copy-button");
-            usageFoldout.Add(copyPromptButton);
-            usageFoldout.SetValueWithoutNotify(false);
+            content.Add(copyPromptButton);
         }
 
         private static void CreateFooter(ScrollView mainScrollView)
