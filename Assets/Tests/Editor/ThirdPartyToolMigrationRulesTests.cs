@@ -479,6 +479,7 @@ public sealed class ScreenshotTool
                     hasLegacyAssemblySource: true,
                     hasAssemblyScopedCurrentToolContractsUsing: false,
                     hasAssemblyScopedCurrentApplicationUsing: false,
+                    hasAssemblyScopedCurrentDomainUsing: false,
                     hasAssemblyScopedCurrentFirstPartyToolsUsing: false,
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
@@ -543,6 +544,7 @@ public sealed class ScreenshotTool
                     hasLegacyAssemblySource: true,
                     hasAssemblyScopedCurrentToolContractsUsing: false,
                     hasAssemblyScopedCurrentApplicationUsing: false,
+                    hasAssemblyScopedCurrentDomainUsing: false,
                     hasAssemblyScopedCurrentFirstPartyToolsUsing: false,
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
@@ -579,6 +581,7 @@ public sealed class ScreenshotTool
                     hasLegacyAssemblySource: false,
                     hasAssemblyScopedCurrentToolContractsUsing: false,
                     hasAssemblyScopedCurrentApplicationUsing: false,
+                    hasAssemblyScopedCurrentDomainUsing: false,
                     hasAssemblyScopedCurrentFirstPartyToolsUsing: true,
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
@@ -588,7 +591,7 @@ public sealed class ScreenshotTool
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "return (await io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
+                "return (await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
             Assert.That(result.Content, Does.Not.Contain("return await EditorWindowCaptureUtility.CaptureWindowAsync"));
         }
 
@@ -626,6 +629,7 @@ public static class EditorWindowCaptureUtility
                     hasLegacyAssemblySource: true,
                     hasAssemblyScopedCurrentToolContractsUsing: false,
                     hasAssemblyScopedCurrentApplicationUsing: false,
+                    hasAssemblyScopedCurrentDomainUsing: false,
                     hasAssemblyScopedCurrentFirstPartyToolsUsing: false,
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
@@ -690,7 +694,7 @@ public sealed class ScreenshotTool
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "return (await io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
+                "return (await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
             Assert.That(result.Content, Does.Not.Contain("return await EditorWindowCaptureUtility.CaptureWindowAsync"));
         }
 
@@ -747,7 +751,7 @@ public sealed class ScreenshotTool
             Assert.That(result.Content, Does.Contain(
                 "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
             Assert.That(result.Content, Does.Contain(
-                "return (await io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
+                "return (await Fpt.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
             Assert.That(result.Content, Does.Not.Contain("Fpt.UnityCliLoopConstants"));
         }
 
@@ -1015,9 +1019,9 @@ public sealed class ScreenshotHelper
             Assert.That(result.Content, Does.Contain(
                 "new io.github.hatayama.UnityCliLoop.ToolContracts.UIElementInfo()"));
             Assert.That(result.Content, Does.Contain(
-                "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.FindWindowsByName"));
+                "EditorWindowCaptureUtility.FindWindowsByName"));
             Assert.That(result.Content, Does.Contain(
-                "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.GetOpenWindowNames"));
+                "EditorWindowCaptureUtility.GetOpenWindowNames"));
         }
 
         [Test]
@@ -1422,7 +1426,7 @@ public sealed class MainThreadTool
         [Test]
         public void MigrateCSharpSource_WhenCurrentApplicationAliasSwitcherHasLegacyTiming_RemovesTimingArgument()
         {
-            // Verifies that partially migrated Application aliases receive the V3 argument shape without rebinding.
+            // Verifies that moved public contract types are rebound when a partially migrated Application alias is used.
             string source = @"using System.Threading;
 using System.Threading.Tasks;
 using App = io.github.hatayama.UnityCliLoop.Application;
@@ -1442,7 +1446,8 @@ public sealed class MainThreadTool
             Assert.That(result.Content, Does.Contain(
                 "using App = io.github.hatayama.UnityCliLoop.Application;"));
             Assert.That(result.Content, Does.Contain(
-                "await App.MainThreadSwitcher.SwitchToMainThread(ct);"));
+                "await io.github.hatayama.UnityCliLoop.ToolContracts.MainThreadSwitcher.SwitchToMainThread(ct);"));
+            Assert.That(result.Content, Does.Not.Contain("App.MainThreadSwitcher"));
             Assert.That(result.Content, Does.Not.Contain("PlayerLoopTiming.Update"));
         }
 
@@ -1737,6 +1742,7 @@ public sealed class MainThreadTool
                     hasLegacyAssemblySource: true,
                     hasAssemblyScopedCurrentToolContractsUsing: false,
                     hasAssemblyScopedCurrentApplicationUsing: false,
+                    hasAssemblyScopedCurrentDomainUsing: false,
                     hasAssemblyScopedCurrentFirstPartyToolsUsing: false,
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
@@ -3793,6 +3799,7 @@ public sealed class OtherTool
                     hasLegacyAssemblySource: true,
                     hasAssemblyScopedCurrentToolContractsUsing: false,
                     hasAssemblyScopedCurrentApplicationUsing: false,
+                    hasAssemblyScopedCurrentDomainUsing: false,
                     hasAssemblyScopedCurrentFirstPartyToolsUsing: false,
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
@@ -3817,6 +3824,7 @@ public sealed class OtherTool
                     hasLegacyAssemblySource: true,
                     hasAssemblyScopedCurrentToolContractsUsing: false,
                     hasAssemblyScopedCurrentApplicationUsing: false,
+                    hasAssemblyScopedCurrentDomainUsing: false,
                     hasAssemblyScopedCurrentFirstPartyToolsUsing: false,
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
@@ -4070,9 +4078,9 @@ public sealed class OtherTool
         }
 
         [Test]
-        public void MigrateAsmdefSource_WhenManualRegistrationIsUsed_RewritesToToolContractsReference()
+        public void MigrateAsmdefSource_WhenManualRegistrationIsUsed_AddsApplicationReference()
         {
-            // Verifies that migrated manual registration code references the public ToolContracts assembly.
+            // Verifies that manual registration code keeps the Application assembly when requested.
             string source = @"{
     ""name"": ""MyCompany.Tools.Editor"",
     ""references"": [
@@ -4091,14 +4099,14 @@ public sealed class OtherTool
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-            Assert.That(result.Content, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            Assert.That(result.Content, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
             Assert.That(result.Content, Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
         }
 
         [Test]
-        public void MigrateAsmdefSource_WhenDomainMetadataIsUsed_RewritesToToolContractsReference()
+        public void MigrateAsmdefSource_WhenDomainMetadataIsUsed_AddsDomainReference()
         {
-            // Verifies that ToolInfo-only helper assemblies can resolve metadata through ToolContracts.
+            // Verifies that domain metadata code keeps the Domain assembly when requested.
             string source = @"{
     ""name"": ""MyCompany.Tools.Editor"",
     ""references"": [
@@ -4117,14 +4125,14 @@ public sealed class OtherTool
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-            Assert.That(result.Content, Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+            Assert.That(result.Content, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             Assert.That(result.Content, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
         }
 
         [Test]
-        public void MigrateAsmdefSource_WhenCurrentDomainMetadataRequiresReference_AddsToolContractsReference()
+        public void MigrateAsmdefSource_WhenCurrentDomainMetadataRequiresReference_AddsDomainReference()
         {
-            // Verifies that direct V3 Domain consumers are redirected through ToolContracts access.
+            // Verifies that direct V3 Domain consumers receive the Domain assembly reference.
             string source = @"{
     ""name"": ""MyCompany.Tools.Editor"",
     ""references"": []
@@ -4140,8 +4148,8 @@ public sealed class OtherTool
                     requiresFirstPartyScreenshotReference: false);
 
             Assert.That(result.Changed, Is.True);
-            Assert.That(result.Content, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
-            Assert.That(result.Content, Does.Not.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+            Assert.That(result.Content, Does.Not.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            Assert.That(result.Content, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
             Assert.That(result.Content, Does.Not.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
         }
 

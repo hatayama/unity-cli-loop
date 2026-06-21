@@ -93,6 +93,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyUsage.AssemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory);
                 bool hasAssemblyScopedCurrentApplicationUsing =
                     assemblyUsage.AssemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory);
+                bool hasAssemblyScopedCurrentDomainUsing =
+                    assemblyUsage.AssemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory);
                 bool hasAssemblyScopedCurrentFirstPartyToolsUsing =
                     assemblyUsage.AssemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory);
                 bool hasLegacyAssemblySource =
@@ -104,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         hasLegacyAssemblySource,
                         hasAssemblyScopedCurrentToolContractsUsing,
                         hasAssemblyScopedCurrentApplicationUsing,
+                        hasAssemblyScopedCurrentDomainUsing,
                         hasAssemblyScopedCurrentFirstPartyToolsUsing,
                         legacyAssemblyAliases,
                         legacyAssemblyToolInfoAliases,
@@ -278,6 +281,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyUsage.AssemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory);
                 bool hasAssemblyScopedCurrentApplicationUsing =
                     assemblyUsage.AssemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory);
+                bool hasAssemblyScopedCurrentDomainUsing =
+                    assemblyUsage.AssemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory);
                 bool hasAssemblyScopedCurrentFirstPartyToolsUsing =
                     assemblyUsage.AssemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory);
                 bool hasLegacyAssemblySource =
@@ -289,6 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         hasLegacyAssemblySource,
                         hasAssemblyScopedCurrentToolContractsUsing,
                         hasAssemblyScopedCurrentApplicationUsing,
+                        hasAssemblyScopedCurrentDomainUsing,
                         hasAssemblyScopedCurrentFirstPartyToolsUsing,
                         legacyAssemblyAliases,
                         legacyAssemblyToolInfoAliases,

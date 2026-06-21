@@ -298,6 +298,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             HashSet<string> assemblyScopedLegacyDirectories,
             HashSet<string> assemblyScopedCurrentToolContractsDirectories,
             HashSet<string> assemblyScopedCurrentApplicationDirectories,
+            HashSet<string> assemblyScopedCurrentDomainDirectories,
             HashSet<string> assemblyScopedCurrentFirstPartyToolsDirectories,
             Dictionary<string, string[]> assemblyScopedLegacyAliasesByDirectory,
             Dictionary<string, string[]> assemblyScopedLegacyToolInfoAliasesByDirectory,
@@ -323,6 +324,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(
                 assemblyScopedCurrentApplicationDirectories != null,
                 "assemblyScopedCurrentApplicationDirectories must not be null");
+            Debug.Assert(
+                assemblyScopedCurrentDomainDirectories != null,
+                "assemblyScopedCurrentDomainDirectories must not be null");
             Debug.Assert(
                 assemblyScopedCurrentFirstPartyToolsDirectories != null,
                 "assemblyScopedCurrentFirstPartyToolsDirectories must not be null");
@@ -366,6 +370,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 throw new ArgumentNullException(nameof(assemblyScopedCurrentToolContractsDirectories));
             AssemblyScopedCurrentApplicationDirectories = assemblyScopedCurrentApplicationDirectories ??
                 throw new ArgumentNullException(nameof(assemblyScopedCurrentApplicationDirectories));
+            AssemblyScopedCurrentDomainDirectories = assemblyScopedCurrentDomainDirectories ??
+                throw new ArgumentNullException(nameof(assemblyScopedCurrentDomainDirectories));
             AssemblyScopedCurrentFirstPartyToolsDirectories = assemblyScopedCurrentFirstPartyToolsDirectories ??
                 throw new ArgumentNullException(nameof(assemblyScopedCurrentFirstPartyToolsDirectories));
             AssemblyScopedLegacyAliasesByDirectory = assemblyScopedLegacyAliasesByDirectory ??
@@ -396,6 +402,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public HashSet<string> AssemblyScopedLegacyDirectories { get; }
         public HashSet<string> AssemblyScopedCurrentToolContractsDirectories { get; }
         public HashSet<string> AssemblyScopedCurrentApplicationDirectories { get; }
+        public HashSet<string> AssemblyScopedCurrentDomainDirectories { get; }
         public HashSet<string> AssemblyScopedCurrentFirstPartyToolsDirectories { get; }
         public Dictionary<string, string[]> AssemblyScopedLegacyAliasesByDirectory { get; }
         public Dictionary<string, string[]> AssemblyScopedLegacyToolInfoAliasesByDirectory { get; }

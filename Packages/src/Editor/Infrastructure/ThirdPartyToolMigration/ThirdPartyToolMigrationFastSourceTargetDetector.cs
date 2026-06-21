@@ -34,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Dictionary<string, HashSet<string>> assemblyScopedLegacyToolInfoAliasesByDirectory,
             HashSet<string> assemblyScopedCurrentToolContractsDirectories,
             HashSet<string> assemblyScopedCurrentApplicationDirectories,
+            HashSet<string> assemblyScopedCurrentDomainDirectories,
             HashSet<string> assemblyScopedCurrentFirstPartyToolsDirectories,
             Dictionary<string, HashSet<string>> assemblyScopedCurrentApplicationAliasesByDirectory,
             Dictionary<string, HashSet<string>> assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
@@ -60,6 +61,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(
                 assemblyScopedCurrentApplicationDirectories != null,
                 "assemblyScopedCurrentApplicationDirectories must not be null");
+            Debug.Assert(
+                assemblyScopedCurrentDomainDirectories != null,
+                "assemblyScopedCurrentDomainDirectories must not be null");
             Debug.Assert(
                 assemblyScopedCurrentFirstPartyToolsDirectories != null,
                 "assemblyScopedCurrentFirstPartyToolsDirectories must not be null");
@@ -116,6 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         hasLegacyAssemblySource,
                         assemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory),
                         assemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
+                        assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory),
                         assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
                         legacyAssemblyAliases,
                         legacyAssemblyToolInfoAliases,

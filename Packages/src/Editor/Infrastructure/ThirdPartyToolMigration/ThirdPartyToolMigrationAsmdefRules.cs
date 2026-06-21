@@ -95,8 +95,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 CurrentToolContractsGuidReference
             };
+            AddRequiredMigratedLegacyEditorReference(
+                references,
+                requiresApplicationReference,
+                CurrentApplicationGuidReference);
+            AddRequiredMigratedLegacyEditorReference(
+                references,
+                requiresDomainReference,
+                CurrentDomainGuidReference);
+            AddRequiredMigratedLegacyEditorReference(
+                references,
+                requiresFirstPartyScreenshotReference,
+                CurrentFirstPartyToolsScreenshotGuidReference);
 
             return references.ToArray();
+        }
+
+        internal static void AddRequiredMigratedLegacyEditorReference(
+            List<string> references,
+            bool isRequired,
+            string reference)
+        {
+            Debug.Assert(references != null, "references must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
+
+            if (!isRequired)
+            {
+                return;
+            }
+
+            references.Add(reference);
         }
 
         internal static void AddRequiredCurrentAsmdefReferences(
@@ -111,15 +139,39 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(references != null, "references must not be null");
             Debug.Assert(addedReferences != null, "addedReferences must not be null");
 
-            if (requiresToolContractsReference ||
-                requiresApplicationReference ||
-                requiresDomainReference ||
-                requiresFirstPartyScreenshotReference)
+            if (requiresToolContractsReference)
             {
                 AddRequiredCurrentAsmdefReference(
                     references,
                     addedReferences,
                     CurrentToolContractsGuidReference,
+                    ref replacementCount);
+            }
+
+            if (requiresApplicationReference)
+            {
+                AddRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentApplicationGuidReference,
+                    ref replacementCount);
+            }
+
+            if (requiresDomainReference)
+            {
+                AddRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentDomainGuidReference,
+                    ref replacementCount);
+            }
+
+            if (requiresFirstPartyScreenshotReference)
+            {
+                AddRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentFirstPartyToolsScreenshotGuidReference,
                     ref replacementCount);
             }
         }

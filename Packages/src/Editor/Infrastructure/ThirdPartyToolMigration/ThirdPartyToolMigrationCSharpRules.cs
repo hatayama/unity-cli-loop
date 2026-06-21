@@ -62,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 hasLegacyAssemblySource: ContainsLegacyToolMigrationMarker(source),
                 hasAssemblyScopedCurrentToolContractsUsing: false,
                 hasAssemblyScopedCurrentApplicationUsing: false,
+                hasAssemblyScopedCurrentDomainUsing: false,
                 hasAssemblyScopedCurrentFirstPartyToolsUsing: false,
                 legacyAssemblyAliases: Array.Empty<string>(),
                 legacyAssemblyToolInfoAliases: Array.Empty<string>(),
@@ -75,6 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool hasLegacyAssemblySource,
             bool hasAssemblyScopedCurrentToolContractsUsing,
             bool hasAssemblyScopedCurrentApplicationUsing,
+            bool hasAssemblyScopedCurrentDomainUsing,
             bool hasAssemblyScopedCurrentFirstPartyToolsUsing,
             string[] legacyAssemblyAliases,
             string[] legacyAssemblyToolInfoAliases,
@@ -138,7 +140,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool canMigrateBareLegacyFirstPartyScreenshotApi =
                 canMigrateBareLegacyToolAttribute ||
                 canUseCurrentToolContracts ||
+                hasAssemblyScopedCurrentFirstPartyToolsUsing ||
                 hasCurrentFirstPartyToolsNamespaceUsage;
+            bool canMigrateBareCurrentDomainContractType =
+                hasAssemblyScopedCurrentDomainUsing ||
+                hasCurrentDomainNamespaceUsage;
             bool canMigrateBareLegacyApplicationApi =
                 canMigrateBareLegacyToolAttribute ||
                 canUseCurrentToolContracts ||
@@ -147,6 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool canMigrateBareLegacyApplicationTypeName =
                 canMigrateBareLegacyToolAttribute ||
                 canUseCurrentToolContracts ||
+                hasAssemblyScopedCurrentApplicationUsing ||
                 hasCurrentApplicationNamespaceUsage;
             bool canMigrateBareLegacyToolInfoConstructor =
                 canMigrateBareLegacyToolAttribute;
@@ -260,13 +267,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             migratedContent = ReplaceLegacyFirstPartyScreenshotTypeNamesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
+                currentFirstPartyToolsNamespaceAliases,
                 canMigrateBareLegacyFirstPartyScreenshotApi,
+                canPreserveBareCurrentToolContractsReferences,
+                assemblyDeclaredTypeNames,
+                ref replacementCount);
+            migratedContent = ReplaceCurrentDomainContractTypeNamesInCode(
+                migratedContent,
+                canMigrateBareCurrentDomainContractType,
                 canPreserveBareCurrentToolContractsReferences,
                 assemblyDeclaredTypeNames,
                 ref replacementCount);
             migratedContent = ReplaceLegacyApplicationTypeNamesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
+                currentApplicationNamespaceAliases,
                 canMigrateBareLegacyApplicationTypeName,
                 canPreserveBareCurrentToolContractsReferences,
                 assemblyDeclaredTypeNames,

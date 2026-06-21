@@ -54,7 +54,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source) ||
-                ThirdPartyToolMigrationRules.ContainsCurrentRegistrarApi(source) ||
                 ThirdPartyToolMigrationRules.ContainsLegacyApplicationApiForAssembly(
                     source,
                     legacyAssemblyDirectories.Contains(assemblyDirectory) ||
@@ -69,12 +68,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     currentApplicationAssemblyAliases,
                     assemblyDeclaredTypeNames))
             {
+                toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
+            }
+
+            if (ThirdPartyToolMigrationRules.ContainsCurrentRegistrarApi(source))
+            {
                 applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
             }
 
             if (ThirdPartyToolMigrationRules.ContainsRegistrarDomainReturnApi(source))
             {
-                domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
             }
 
             if (ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApi(source) ||
@@ -83,6 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     hasAssemblyScopedCurrentDomainNamespaceUsage))
             {
                 domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
             }
         }
 
@@ -412,8 +417,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
                         currentFirstPartyToolsAssemblyAliases,
                         assemblyDeclaredTypeNames);
-                if (hasLegacyScreenshotSourceTarget ||
-                    hasCurrentRenderingCaptureSourceTarget ||
+                if (hasLegacyScreenshotSourceTarget)
+                {
+                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (hasCurrentRenderingCaptureSourceTarget ||
                     hasCurrentScreenshotReferenceRequirement)
                 {
                     firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
