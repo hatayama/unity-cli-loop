@@ -115,6 +115,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool hasLegacyNamespaceUsingDirective = RegexMatchesCode(source, LegacyNamespaceUsingRegex);
             bool hasCurrentApplicationNamespaceUsage = RegexMatchesCode(source, CurrentApplicationNamespaceRegex);
             bool hasCurrentDomainNamespaceUsage = RegexMatchesCode(source, CurrentDomainNamespaceRegex);
+            bool hasCurrentDomainUsingDirective =
+                RegexMatchesCode(source, CurrentDomainUsingRegex) ||
+                RegexMatchesCode(source, CurrentDomainGlobalUsingRegex);
             bool hasCurrentToolContractsNamespaceUsage = RegexMatchesCode(source, CurrentToolContractsNamespaceRegex);
             bool hasCurrentToolContractsUsingDirective =
                 RegexMatchesCode(source, CurrentToolContractsUsingRegex);
@@ -152,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 hasCurrentFirstPartyToolsNamespaceUsage;
             bool canMigrateBareCurrentDomainContractType =
                 hasAssemblyScopedCurrentDomainUsing ||
-                hasCurrentDomainNamespaceUsage;
+                hasCurrentDomainUsingDirective;
             bool canMigrateBareLegacyApplicationApi =
                 canMigrateBareLegacyToolAttribute ||
                 canUseCurrentToolContracts ||

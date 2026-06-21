@@ -155,6 +155,47 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCurrentDomainAliasAndQualifiedReferenceExist_KeepsUnrelatedBareContracts()
+        {
+            // Verifies that Domain aliases and qualified references do not enable unrelated bare type rewrites.
+            string source = @"using Dom = io.github.hatayama.UnityCliLoop.Domain;
+using Vendor.Metadata;
+
+public sealed class MetadataConsumer
+{
+    private ToolInfo info;
+    private ServiceResult<int> result;
+
+    public Dom.ToolSettingsCatalogItem[] AliasCatalog()
+    {
+        return new Dom.ToolSettingsCatalogItem[0];
+    }
+
+    public io.github.hatayama.UnityCliLoop.Domain.ToolSettingsCatalogItem[] QualifiedCatalog()
+    {
+        return new io.github.hatayama.UnityCliLoop.Domain.ToolSettingsCatalogItem[0];
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("private ToolInfo info;"));
+            Assert.That(result.Content, Does.Contain("private ServiceResult<int> result;"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.ToolContracts.ToolSettingsCatalogItem[] AliasCatalog"));
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.ToolContracts.ToolSettingsCatalogItem[0]"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.ToolContracts.ToolSettingsCatalogItem[] QualifiedCatalog"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "private io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo info;"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "private io.github.hatayama.UnityCliLoop.ToolContracts.ServiceResult<int> result;"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenCurrentToolContractsReferencesUseBareNames_KeepsContent()
         {
             // Verifies that already-current ToolContracts references are not rewritten to fully qualified names.
