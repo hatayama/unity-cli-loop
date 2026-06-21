@@ -301,7 +301,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ThirdPartyToolMigrationWizardText.AiMigrationSkillDescriptionText,
                 "setup-step__description-label");
             content.Add(descriptionTextField);
-            CreateMigrationSkillUsageFoldout(content);
 
             VisualElement actionSection = new VisualElement();
             actionSection.AddToClassList("setup-section-actions");
@@ -332,6 +331,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             migrationSkillButton.AddToClassList("setup-button");
             migrationSkillButton.AddToClassList("setup-button--primary");
             buttonRow.Add(migrationSkillButton);
+            CreateMigrationSkillUsageFoldout(actionSection);
             return (migrationSkillTargetField, migrationSkillButton);
         }
 

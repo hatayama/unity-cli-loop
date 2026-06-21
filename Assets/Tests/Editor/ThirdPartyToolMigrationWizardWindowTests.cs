@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Presentation;
@@ -220,6 +221,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        [Test]
+        public void Create_WhenMigrationSkillSectionExists_PlacesPromptAfterInstallButton()
+        {
+            // Verifies that the AI prompt is shown below the migration skill install action.
+            VisualElement root = new();
+            ThirdPartyToolMigrationWizardView.Create(
+                root,
+                () => { },
+                () => { },
+                _ => { },
+                () => { },
+                () => { });
+
+            Button installButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Install Migration Skill");
+            Foldout promptFoldout = root.Query<Foldout>().ToList()
+                .Find(foldout => foldout.text == "Prompt for your AI agent");
+
+            Assert.That(installButton, Is.Not.Null);
+            Assert.That(promptFoldout, Is.Not.Null);
+            Assert.That(
+                GetVisualElementIndex(root, promptFoldout),
+                Is.GreaterThan(GetVisualElementIndex(root, installButton)));
+        }
+
         [TestCase(SkillInstallState.Installed, true)]
         [TestCase(SkillInstallState.Outdated, true)]
         [TestCase(SkillInstallState.Missing, false)]
@@ -430,6 +456,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 148f)));
+        }
+
+        private static int GetVisualElementIndex(VisualElement root, VisualElement target)
+        {
+            Debug.Assert(root != null, "root must not be null");
+            Debug.Assert(target != null, "target must not be null");
+
+            System.Collections.Generic.List<VisualElement> elements = root.Query<VisualElement>().ToList();
+            return elements.IndexOf(target);
         }
     }
 }
