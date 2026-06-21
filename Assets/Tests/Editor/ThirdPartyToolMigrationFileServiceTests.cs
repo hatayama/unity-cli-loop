@@ -3789,6 +3789,51 @@ public sealed class ScreenshotMetadata
         }
 
         [Test]
+        public void ApplyMigration_WhenCurrentFirstPartyFindWindowsUsesFirstPartyReference_AddsToolContractsReference()
+        {
+            // Verifies that preserved FirstParty capture APIs keep direct ToolContracts asmdef access.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string sourcePath = Path.Combine(toolDirectory, "WindowFinder.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(sourcePath, @"using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+public sealed class WindowFinder
+{
+    public object Find()
+    {
+        return EditorWindowCaptureUtility.FindWindowsByName(""Game"");
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:a0bdbd2c5705643fbb9aef9fac8fd46a""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(sourcePath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(result.FilePaths.Contains(sourcePath), Is.False);
+                Assert.That(migratedSource, Does.Contain("EditorWindowCaptureUtility.FindWindowsByName"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenCurrentApplicationLocalUsingUsesMovedSwitcher_AddsApplicationReference()
         {
             // Verifies that preserved local Application using directives keep their asmdef reference.

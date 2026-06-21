@@ -450,7 +450,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
                         currentFirstPartyToolsAssemblyAliases,
                         assemblyDeclaredTypeNames);
-                if (hasLegacyScreenshotSourceTarget || hasCurrentFirstPartyToolsContractSourceTarget)
+                if (hasLegacyScreenshotSourceTarget ||
+                    hasCurrentFirstPartyToolsContractSourceTarget ||
+                    hasCurrentScreenshotReferenceRequirement)
                 {
                     toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }

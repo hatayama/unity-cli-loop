@@ -356,6 +356,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         hasAssemblyScopedCurrentFirstPartyToolsUsing,
                         currentFirstPartyToolsAssemblyAliases,
                         assemblyDeclaredTypeNames);
+                bool hasCurrentFirstPartyScreenshotReferenceRequirement =
+                    ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotApiForAssembly(
+                        source,
+                        hasAssemblyScopedCurrentFirstPartyToolsUsing,
+                        currentFirstPartyToolsAssemblyAliases,
+                        assemblyDeclaredTypeNames);
                 if (ThirdPartyToolMigrationRules.ContainsLegacyFirstPartyScreenshotApiForAssembly(
                         source,
                         assemblyScopedLegacyDirectories.Contains(assemblyDirectory) ||
@@ -365,16 +371,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         legacyAssemblyAliases,
                         assemblyDeclaredTypeNames) ||
                     hasLegacyEditorWindowCaptureUtilitySourceTarget ||
-                    hasCurrentFirstPartyToolsContractSourceTarget)
+                    hasCurrentFirstPartyToolsContractSourceTarget ||
+                    hasCurrentFirstPartyScreenshotReferenceRequirement)
                 {
                     toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
-                if (ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotApiForAssembly(
-                        source,
-                        hasAssemblyScopedCurrentFirstPartyToolsUsing,
-                        currentFirstPartyToolsAssemblyAliases,
-                        assemblyDeclaredTypeNames))
+                if (hasCurrentFirstPartyScreenshotReferenceRequirement)
                 {
                     firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
