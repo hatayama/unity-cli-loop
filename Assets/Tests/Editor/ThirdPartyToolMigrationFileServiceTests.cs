@@ -3879,6 +3879,46 @@ public sealed class SkillStateProbe
         }
 
         [Test]
+        public void ApplyMigration_WhenCurrentDomainLocalUsingOnlyNeedsReference_AddsDomainReference()
+        {
+            // Verifies that Domain types preserved in Domain still keep their asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string sourcePath = Path.Combine(toolDirectory, "ToolSettingsProbe.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(sourcePath, @"using io.github.hatayama.UnityCliLoop.Domain;
+
+public sealed class ToolSettingsProbe
+{
+    public ToolSettingsService Service;
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(sourcePath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(result.FilePaths.Contains(sourcePath), Is.False);
+                Assert.That(migratedSource, Does.Contain("ToolSettingsService Service;"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task HasMigrationTargetsAsync_WhenAssemblyUsesCurrentApplicationGlobalAlias_ReturnsTrue()
         {
             // Verifies that preview detection treats current Application global aliases as assembly-scoped.

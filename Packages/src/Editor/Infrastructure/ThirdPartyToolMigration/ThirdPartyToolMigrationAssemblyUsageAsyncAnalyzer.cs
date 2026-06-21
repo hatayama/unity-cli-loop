@@ -138,6 +138,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     domainReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
+                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainUsing(source))
+                {
+                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
                 if (ThirdPartyToolMigrationRules.ContainsCurrentDomainNamespaceAlias(source))
                 {
                     domainReferenceAssemblyDirectories.Add(assemblyDirectory);

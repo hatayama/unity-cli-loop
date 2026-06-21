@@ -213,6 +213,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return RegexMatchesCode(source, CurrentDomainGlobalUsingRegex);
         }
 
+        internal static bool ContainsCurrentDomainUsing(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, CurrentDomainUsingRegex);
+        }
+
         internal static bool ContainsCurrentDomainNamespaceAlias(string source)
         {
             Debug.Assert(source != null, "source must not be null");

@@ -253,6 +253,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ThirdPartyToolMigrationDetectionRules.ContainsCurrentDomainGlobalUsing(source);
         }
 
+        internal static bool ContainsCurrentDomainUsing(string source)
+        {
+            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentDomainUsing(source);
+        }
+
         internal static bool ContainsCurrentDomainNamespaceAlias(string source)
         {
             return ThirdPartyToolMigrationDetectionRules.ContainsCurrentDomainNamespaceAlias(source);
