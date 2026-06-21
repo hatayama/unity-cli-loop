@@ -90,23 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            string migratedContent = ReplaceRegexInCode(
-                source,
-                CurrentApplicationNamespaceRegex,
-                _ => CurrentNamespace,
-                ref replacementCount);
-            migratedContent = ReplaceRegexInCode(
-                migratedContent,
-                CurrentDomainNamespaceRegex,
-                _ => CurrentNamespace,
-                ref replacementCount);
-            migratedContent = ReplaceRegexInCode(
-                migratedContent,
-                CurrentFirstPartyToolsNamespaceRegex,
-                _ => CurrentNamespace,
-                ref replacementCount);
-
-            return migratedContent;
+            // Do not blanket-rewrite current package namespaces because many first-party/internal types still live there.
+            return source;
         }
 
         internal static string ReplaceUnqualifiedLegacyRegistrarReferencesInCode(

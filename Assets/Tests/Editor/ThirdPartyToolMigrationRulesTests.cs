@@ -61,6 +61,67 @@ namespace Samples
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCurrentFirstPartyToolTypesAreUsed_KeepsNamespaceImport()
+        {
+            // Verifies that first-party tool implementations are not rebound to the public contract namespace.
+            string source = @"using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class InputTest
+{
+    private SimulateKeyboardTool tool = null;
+    private SimulateKeyboardResponse response = null;
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+            Assert.That(result.ReplacementCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenCurrentApplicationTypesAreUsed_KeepsNamespaceImport()
+        {
+            // Verifies that application-layer implementation references are not rebound to the public contract namespace.
+            string source = @"using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class SetupTest
+{
+    private SkillInstallState installState;
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+            Assert.That(result.ReplacementCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenCurrentDomainTypesAreUsed_KeepsNamespaceImport()
+        {
+            // Verifies that domain-layer implementation references are not rebound to the public contract namespace.
+            string source = @"using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class SettingsTest
+{
+    private ToolSettingsService settingsService;
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+            Assert.That(result.ReplacementCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolAttributeSuffixHasArguments_DropsUnsupportedArguments()
         {
             // Verifies that old attribute suffix syntax does not keep removed V3 attribute arguments.
@@ -636,7 +697,7 @@ public sealed class ScreenshotTool
         [Test]
         public void MigrateCSharpSource_WhenCurrentFirstPartyToolsAliasCaptureLacksTimeout_RewritesCaptureCall()
         {
-            // Verifies that current FirstPartyTools namespace aliases move to ToolContracts and receive the V3 timeout argument.
+            // Verifies that current FirstPartyTools aliases receive the V3 timeout argument without rebinding the namespace.
             string source = @"using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -656,7 +717,7 @@ public sealed class ScreenshotTool
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "using Fpt = io.github.hatayama.UnityCliLoop.ToolContracts;"));
+                "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
             Assert.That(result.Content, Does.Contain(
                 "return (await io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, io.github.hatayama.UnityCliLoop.ToolContracts.UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
             Assert.That(result.Content, Does.Not.Contain("Fpt.UnityCliLoopConstants"));
@@ -1142,7 +1203,7 @@ public sealed class RenderingCapture
         [Test]
         public void MigrateCSharpSource_WhenCurrentRenderingCaptureUsesFirstPartyAlias_AddsDiscard()
         {
-            // Verifies that current FirstPartyTools aliases move to ToolContracts and receive the V3 rendering discard.
+            // Verifies that current FirstPartyTools aliases receive the V3 rendering discard without rebinding the namespace.
             string source = @"using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -1163,7 +1224,7 @@ public sealed class RenderingCapture
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "using Fpt = io.github.hatayama.UnityCliLoop.ToolContracts;"));
+                "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
             Assert.That(result.Content, Does.Contain(
                 "(texture, yOffset, _) = await Fpt.EditorWindowCaptureUtility.CaptureGameRenderingAsync"));
         }
@@ -1333,7 +1394,7 @@ public sealed class MainThreadTool
         [Test]
         public void MigrateCSharpSource_WhenCurrentApplicationAliasSwitcherHasLegacyTiming_RemovesTimingArgument()
         {
-            // Verifies that partially migrated Application aliases move to ToolContracts and receive the V3 argument shape.
+            // Verifies that partially migrated Application aliases receive the V3 argument shape without rebinding.
             string source = @"using System.Threading;
 using System.Threading.Tasks;
 using App = io.github.hatayama.UnityCliLoop.Application;
@@ -1351,7 +1412,7 @@ public sealed class MainThreadTool
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "using App = io.github.hatayama.UnityCliLoop.ToolContracts;"));
+                "using App = io.github.hatayama.UnityCliLoop.Application;"));
             Assert.That(result.Content, Does.Contain(
                 "await App.MainThreadSwitcher.SwitchToMainThread(ct);"));
             Assert.That(result.Content, Does.Not.Contain("PlayerLoopTiming.Update"));
