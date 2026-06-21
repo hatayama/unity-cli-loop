@@ -1243,6 +1243,50 @@ func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 	}
 }
 
+// Tests that Windows PowerShell reports UTF-8 no-BOM file line numbers correctly.
+func TestV3MigrationSkillWindowsPowerShellDetectorReportsUtf8LineNumbers(t *testing.T) {
+	powerShellPath, err := exec.LookPath("powershell")
+	if err != nil {
+		t.Skip("powershell is not installed")
+	}
+	fixtureRoot := t.TempDir()
+	fixtureFile := filepath.Join(fixtureRoot, "sample.md")
+	fixtureContent := strings.Join([]string{
+		"# Plan",
+		"",
+		"## 検証",
+		"",
+		"日本語の説明文です。UTF-8 BOMなしの行番号を検証します。",
+		"",
+		"もう一つの日本語行です。PowerShellの既定読み込みとの差を確認します。",
+		"",
+		"uloop compile --wait-for-domain-reload",
+	}, "\n")
+	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
+		t.Fatalf("failed to write UTF-8 fixture: %v", err)
+	}
+	scriptPath := filepath.Join(
+		findRepositoryRootForSkillsTest(t),
+		"Packages",
+		"src",
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"scripts",
+		"detect-v3-cli-invocation-candidates.ps1")
+
+	command := exec.Command(powerShellPath, "-NoProfile", "-File", scriptPath, "-Root", fixtureRoot)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("detector failed: %v\n%s", err, string(output))
+	}
+	text := string(output)
+	expected := "sample.md:9: uloop compile --wait-for-domain-reload"
+	if !strings.Contains(text, expected) {
+		t.Fatalf("detector output missing UTF-8 physical line number %q:\n%s", expected, text)
+	}
+}
+
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
 	writeSkillFile(t, filepath.Join(projectRoot, filepath.FromSlash(relativeDir)), content)

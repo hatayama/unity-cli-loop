@@ -94,7 +94,7 @@ function Write-Candidate {
 Get-CandidateFile -Directory $Root |
     ForEach-Object {
         $path = $_.FullName
-        $lines = @(Get-Content -LiteralPath $path)
+        $lines = @(Get-Content -LiteralPath $path -Encoding UTF8)
         for ($index = 0; $index -lt $lines.Count; $index++) {
             $line = $lines[$index]
             $lineNumber = $index + 1

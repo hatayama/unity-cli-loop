@@ -81,8 +81,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 Name = name;
                 ToolName = toolName;
-                SkillFiles = skillFiles;
+                SkillFiles = skillFiles.ToDictionary(
+                    pair => NormalizeSkillRelativePath(pair.Key),
+                    pair => pair.Value,
+                    StringComparer.Ordinal);
             }
+        }
+
+        private static string NormalizeSkillRelativePath(string relativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(relativePath), "relativePath must not be null or empty");
+
+            return relativePath.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar);
         }
 
         internal static string GetSkillsRoot(string targetRoot)
