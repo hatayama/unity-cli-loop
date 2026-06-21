@@ -95,12 +95,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         [TestCase(
             1,
-            "1 file needs V3 custom tool migration.\n" +
+            "1 file needs V3 C# source structure migration.\n" +
             "The Unity Console is showing errors because this file still uses the old custom tool API.\n\n" +
             "Click Migrate to update it automatically. The errors should disappear after migration.")]
         [TestCase(
             3,
-            "3 files need V3 custom tool migration.\n" +
+            "3 files need V3 C# source structure migration.\n" +
             "The Unity Console is showing errors because these files still use the old custom tool API.\n\n" +
             "Click Migrate to update them automatically. The errors should disappear after migration.")]
         public void GetMigrationStatusText_WhenTargetsExist_ReturnsFileCount(
@@ -125,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 text,
-                Is.EqualTo("Scanning project for V3 custom tool migration...\n3/12 steps complete."));
+                Is.EqualTo("Scanning C# source files for V3 custom tool API migration...\n3/12 steps complete."));
         }
 
         [Test]
@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 text,
-                Is.EqualTo("Migrating project files for V3 custom tools...\n4/12 steps complete."));
+                Is.EqualTo("Migrating C# source files to V3 custom tool APIs...\n4/12 steps complete."));
         }
 
         [TestCase(false, false, false, "Check required")]
@@ -160,6 +160,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 hasCheckedMigrationStatus);
 
             Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
+        [TestCase(false, SkillInstallState.Missing, "Install Migration Skill")]
+        [TestCase(false, SkillInstallState.Checking, "Install Migration Skill")]
+        [TestCase(false, SkillInstallState.Installed, "Remove Migration Skill")]
+        [TestCase(false, SkillInstallState.Outdated, "Remove Migration Skill")]
+        [TestCase(true, SkillInstallState.Installed, "Updating...")]
+        public void GetMigrationSkillButtonText_ReturnsExpectedLabel(
+            bool isUpdating,
+            SkillInstallState installState,
+            string expectedLabel)
+        {
+            // Verifies that the migration skill action reflects install, remove, and busy states.
+            string label = ThirdPartyToolMigrationWizardWindow.GetMigrationSkillButtonText(
+                isUpdating,
+                installState);
+
+            Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
+        [TestCase(SkillInstallState.Installed, true)]
+        [TestCase(SkillInstallState.Outdated, true)]
+        [TestCase(SkillInstallState.Missing, false)]
+        [TestCase(SkillInstallState.Checking, false)]
+        public void ShouldRemoveMigrationSkill_ReturnsExpectedValue(
+            SkillInstallState installState,
+            bool expected)
+        {
+            // Verifies that the migration skill action removes only when files are detected.
+            bool shouldRemove = ThirdPartyToolMigrationWizardWindow.ShouldRemoveMigrationSkill(installState);
+
+            Assert.That(shouldRemove, Is.EqualTo(expected));
         }
 
         [TestCase(0, 1, 1, 4, 1000, 100, true)]

@@ -16,35 +16,43 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
 
-        private readonly Label _migrationStatusLabel;
+        private readonly TextField _migrationStatusTextField;
         private readonly ProgressBar _migrationProgressBar;
         private readonly VisualElement _migrationButtonRow;
         private readonly Button _migrateButton;
+        private readonly EnumField _migrationSkillTargetField;
+        private readonly Button _migrationSkillButton;
         private readonly Button _refreshButton;
         private readonly Button _closeButton;
 
         private ThirdPartyToolMigrationWizardView(
             ScrollView mainScrollView,
-            Label migrationStatusLabel,
+            TextField migrationStatusTextField,
             ProgressBar migrationProgressBar,
             VisualElement migrationButtonRow,
             Button migrateButton,
+            EnumField migrationSkillTargetField,
+            Button migrationSkillButton,
             Button refreshButton,
             Button closeButton)
         {
             Debug.Assert(mainScrollView != null, "mainScrollView must not be null");
-            Debug.Assert(migrationStatusLabel != null, "migrationStatusLabel must not be null");
+            Debug.Assert(migrationStatusTextField != null, "migrationStatusTextField must not be null");
             Debug.Assert(migrationProgressBar != null, "migrationProgressBar must not be null");
             Debug.Assert(migrationButtonRow != null, "migrationButtonRow must not be null");
             Debug.Assert(migrateButton != null, "migrateButton must not be null");
+            Debug.Assert(migrationSkillTargetField != null, "migrationSkillTargetField must not be null");
+            Debug.Assert(migrationSkillButton != null, "migrationSkillButton must not be null");
             Debug.Assert(refreshButton != null, "refreshButton must not be null");
             Debug.Assert(closeButton != null, "closeButton must not be null");
 
             MainScrollView = mainScrollView;
-            _migrationStatusLabel = migrationStatusLabel;
+            _migrationStatusTextField = migrationStatusTextField;
             _migrationProgressBar = migrationProgressBar;
             _migrationButtonRow = migrationButtonRow;
             _migrateButton = migrateButton;
+            _migrationSkillTargetField = migrationSkillTargetField;
+            _migrationSkillButton = migrationSkillButton;
             _refreshButton = refreshButton;
             _closeButton = closeButton;
         }
@@ -55,11 +63,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement root,
             Action refresh,
             Action migrate,
+            Action<SkillsTarget> migrationSkillTargetChanged,
+            Action toggleMigrationSkill,
             Action close)
         {
             Debug.Assert(root != null, "root must not be null");
             Debug.Assert(refresh != null, "refresh must not be null");
             Debug.Assert(migrate != null, "migrate must not be null");
+            Debug.Assert(migrationSkillTargetChanged != null, "migrationSkillTargetChanged must not be null");
+            Debug.Assert(toggleMigrationSkill != null, "toggleMigrationSkill must not be null");
             Debug.Assert(close != null, "close must not be null");
 
             string ussPath = $"{UnityCliLoopConstants.PackageAssetPath}/{USS_RELATIVE_PATH}";
@@ -68,28 +80,47 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             root.styleSheets.Add(styleSheet);
 
             ScrollView mainScrollView = CreateMainScrollView(root);
-            VisualElement content = CreateMigrationSection(mainScrollView);
-            Label migrationStatusLabel = CreateStatusLabel(content);
+            VisualElement content = CreateCSharpMigrationSection(mainScrollView);
+            TextField migrationStatusTextField = CreateStatusTextField(content);
             ProgressBar migrationProgressBar = CreateProgressBar(content);
             VisualElement migrationButtonRow = CreateMigrationButtonRow(content);
             Button migrateButton = CreateMigrateButton(migrationButtonRow);
-            (Button refreshButton, Button closeButton) = CreateFooter(mainScrollView);
+            (Button refreshButton, Button closeButton) = CreateCSharpMigrationActionSection(mainScrollView);
+            CreateSectionDivider(mainScrollView);
+            (EnumField migrationSkillTargetField, Button migrationSkillButton) =
+                CreateAiMigrationSkillSection(mainScrollView);
+            CreateFooter(mainScrollView);
 
             ThirdPartyToolMigrationWizardView view = new ThirdPartyToolMigrationWizardView(
                 mainScrollView,
-                migrationStatusLabel,
+                migrationStatusTextField,
                 migrationProgressBar,
                 migrationButtonRow,
                 migrateButton,
+                migrationSkillTargetField,
+                migrationSkillButton,
                 refreshButton,
                 closeButton);
-            view.BindEvents(refresh, migrate, close);
+            view.BindEvents(refresh, migrate, migrationSkillTargetChanged, toggleMigrationSkill, close);
             return view;
+        }
+
+        internal void SetMigrationSkillState(
+            SkillsTarget target,
+            SkillInstallState installState,
+            bool isUpdating)
+        {
+            _migrationSkillTargetField.SetValueWithoutNotify(target);
+            _migrationSkillButton.text = ThirdPartyToolMigrationWizardText.GetMigrationSkillButtonText(
+                isUpdating,
+                installState);
+            _migrationSkillTargetField.SetEnabled(!isUpdating);
+            _migrationSkillButton.SetEnabled(!isUpdating);
         }
 
         internal void ShowNotCheckedState(bool isMigrating)
         {
-            _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.MigrationNotCheckedText;
+            _migrationStatusTextField.SetValueWithoutNotify(ThirdPartyToolMigrationWizardText.MigrationNotCheckedText);
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             ViewDataBinder.SetVisible(_migrationButtonRow, false);
             _migrateButton.SetEnabled(false);
@@ -104,7 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void ShowMigrationTargetsState(int fileCount, bool isMigrating)
         {
-            _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.GetMigrationStatusText(fileCount);
+            _migrationStatusTextField.SetValueWithoutNotify(
+                ThirdPartyToolMigrationWizardText.GetMigrationStatusText(fileCount));
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             ViewDataBinder.SetVisible(_migrationButtonRow, true);
             _migrateButton.SetEnabled(!isMigrating);
@@ -119,7 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void ShowNoMigrationTargetsState(bool isMigrating)
         {
-            _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.NoMigrationTargetsText;
+            _migrationStatusTextField.SetValueWithoutNotify(ThirdPartyToolMigrationWizardText.NoMigrationTargetsText);
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             ViewDataBinder.SetVisible(_migrationButtonRow, true);
             _migrateButton.SetEnabled(false);
@@ -134,9 +166,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void ShowCheckingState(ThirdPartyToolMigrationProgress progress, bool isMigrating)
         {
-            _migrationStatusLabel.text = ThirdPartyToolMigrationWizardText.GetMigrationProgressText(
-                progress,
-                isMigrating);
+            _migrationStatusTextField.SetValueWithoutNotify(
+                ThirdPartyToolMigrationWizardText.GetMigrationProgressText(progress, isMigrating));
             ViewDataBinder.SetVisible(_migrationProgressBar, true);
             ViewDataBinder.SetVisible(_migrationButtonRow, true);
             UpdateMigrationProgressBar(progress);
@@ -158,30 +189,36 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return mainScrollView;
         }
 
-        private static VisualElement CreateMigrationSection(ScrollView mainScrollView)
+        private static VisualElement CreateCSharpMigrationSection(ScrollView mainScrollView)
         {
             VisualElement migrationSection = new VisualElement();
             migrationSection.AddToClassList("setup-step");
-            migrationSection.AddToClassList("setup-step--migration-alert");
             mainScrollView.Add(migrationSection);
 
-            Label titleLabel = new Label("Custom Tool Migration");
-            titleLabel.AddToClassList("setup-step__title");
-            migrationSection.Add(titleLabel);
+            TextField titleTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.CSharpMigrationSectionTitle,
+                "setup-step__title");
+            migrationSection.Add(titleTextField);
 
             VisualElement content = new VisualElement();
             content.AddToClassList("setup-step__content");
             migrationSection.Add(content);
+
+            TextField descriptionTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.CSharpMigrationDescriptionText,
+                "setup-step__description-label");
+            content.Add(descriptionTextField);
             return content;
         }
 
-        private static Label CreateStatusLabel(VisualElement content)
+        private static TextField CreateStatusTextField(VisualElement content)
         {
-            Label migrationStatusLabel = new Label();
-            migrationStatusLabel.AddToClassList("setup-step__status-label");
-            migrationStatusLabel.AddToClassList("setup-step__status-label--standalone");
-            content.Add(migrationStatusLabel);
-            return migrationStatusLabel;
+            TextField migrationStatusTextField = CreateSelectableText(
+                string.Empty,
+                "setup-step__status-label");
+            migrationStatusTextField.AddToClassList("setup-step__status-label--standalone");
+            content.Add(migrationStatusTextField);
+            return migrationStatusTextField;
         }
 
         private static ProgressBar CreateProgressBar(VisualElement content)
@@ -207,44 +244,154 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Button migrateButton = new Button();
             migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(false, false, false);
             migrateButton.AddToClassList("setup-button");
+            migrateButton.AddToClassList("setup-button--primary");
             migrateButton.AddToClassList("setup-button--migration-action");
             migrationButtonRow.Add(migrateButton);
             return migrateButton;
         }
 
-        private static (Button refreshButton, Button closeButton) CreateFooter(ScrollView mainScrollView)
+        private static (Button refreshButton, Button closeButton) CreateCSharpMigrationActionSection(
+            ScrollView mainScrollView)
         {
-            VisualElement footer = new VisualElement();
-            footer.AddToClassList("setup-footer");
-            mainScrollView.Add(footer);
+            VisualElement actionSection = new VisualElement();
+            actionSection.AddToClassList("setup-section-actions");
+            mainScrollView.Add(actionSection);
 
-            VisualElement footerButtonRow = new VisualElement();
-            footerButtonRow.AddToClassList("setup-footer__button-row");
-            footer.Add(footerButtonRow);
+            VisualElement buttonRow = new VisualElement();
+            buttonRow.AddToClassList("setup-section-actions__button-row");
+            actionSection.Add(buttonRow);
 
             Button refreshButton = new Button();
             refreshButton.text = "Check";
             refreshButton.AddToClassList("setup-button");
             refreshButton.AddToClassList("setup-button--primary");
-            footerButtonRow.Add(refreshButton);
+            buttonRow.Add(refreshButton);
 
             Button closeButton = new Button();
             closeButton.text = "Close";
             closeButton.AddToClassList("setup-button");
-            footerButtonRow.Add(closeButton);
-
-            Label reopenHintLabel = new Label(
-                "You can close this wizard and reopen it later from\n" +
-                "Window > Unity CLI Loop > Custom Tool Migration.");
-            reopenHintLabel.AddToClassList("setup-footer__hint-label");
-            footer.Add(reopenHintLabel);
+            buttonRow.Add(closeButton);
             return (refreshButton, closeButton);
         }
 
-        private void BindEvents(Action refresh, Action migrate, Action close)
+        private static void CreateSectionDivider(ScrollView mainScrollView)
+        {
+            VisualElement divider = new VisualElement();
+            divider.AddToClassList("setup-section-divider");
+            mainScrollView.Add(divider);
+        }
+
+        private static (EnumField migrationSkillTargetField, Button migrationSkillButton)
+            CreateAiMigrationSkillSection(ScrollView mainScrollView)
+        {
+            VisualElement migrationSkillSection = new VisualElement();
+            migrationSkillSection.AddToClassList("setup-step");
+            mainScrollView.Add(migrationSkillSection);
+
+            TextField titleTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.AiMigrationSkillSectionTitle,
+                "setup-step__title");
+            migrationSkillSection.Add(titleTextField);
+
+            VisualElement content = new VisualElement();
+            content.AddToClassList("setup-step__content");
+            migrationSkillSection.Add(content);
+
+            TextField descriptionTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.AiMigrationSkillDescriptionText,
+                "setup-step__description-label");
+            content.Add(descriptionTextField);
+            CreateMigrationSkillUsageFoldout(content);
+
+            VisualElement actionSection = new VisualElement();
+            actionSection.AddToClassList("setup-section-actions");
+            mainScrollView.Add(actionSection);
+
+            VisualElement targetRow = new VisualElement();
+            targetRow.AddToClassList("setup-section-actions__field-row");
+            actionSection.Add(targetRow);
+
+            TextField targetLabelTextField = CreateSelectableText(
+                "Install target",
+                "setup-section-actions__field-label");
+            targetRow.Add(targetLabelTextField);
+
+            EnumField migrationSkillTargetField = new EnumField(SkillsTarget.Claude);
+            migrationSkillTargetField.AddToClassList("setup-dropdown");
+            migrationSkillTargetField.AddToClassList("setup-section-actions__field");
+            targetRow.Add(migrationSkillTargetField);
+
+            VisualElement buttonRow = new VisualElement();
+            buttonRow.AddToClassList("setup-section-actions__button-row");
+            actionSection.Add(buttonRow);
+
+            Button migrationSkillButton = new Button();
+            migrationSkillButton.text = ThirdPartyToolMigrationWizardText.GetMigrationSkillButtonText(
+                false,
+                SkillInstallState.Missing);
+            migrationSkillButton.AddToClassList("setup-button");
+            migrationSkillButton.AddToClassList("setup-button--primary");
+            buttonRow.Add(migrationSkillButton);
+            return (migrationSkillTargetField, migrationSkillButton);
+        }
+
+        private static void CreateMigrationSkillUsageFoldout(VisualElement content)
+        {
+            Foldout usageFoldout = new Foldout();
+            usageFoldout.text = ThirdPartyToolMigrationWizardText.AiMigrationSkillUsageFoldoutTitle;
+            usageFoldout.AddToClassList("setup-skill-usage-foldout");
+            content.Add(usageFoldout);
+
+            TextField usageTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.AiMigrationSkillUsageExampleText,
+                "setup-skill-usage-text");
+            usageFoldout.Add(usageTextField);
+            usageFoldout.SetValueWithoutNotify(false);
+        }
+
+        private static void CreateFooter(ScrollView mainScrollView)
+        {
+            VisualElement footer = new VisualElement();
+            footer.AddToClassList("setup-footer");
+            mainScrollView.Add(footer);
+
+            TextField reopenHintTextField = CreateSelectableText(
+                "You can close this wizard and reopen it later from\n" +
+                "Window > Unity CLI Loop > Custom Tool Migration.",
+                "setup-footer__hint-label");
+            footer.Add(reopenHintTextField);
+        }
+
+        private static TextField CreateSelectableText(string text, string className)
+        {
+            TextField textField = new TextField();
+            textField.multiline = true;
+            textField.isReadOnly = true;
+            textField.selectAllOnFocus = false;
+            textField.selectAllOnMouseUp = false;
+            textField.SetValueWithoutNotify(text);
+            textField.AddToClassList("setup-selectable-text");
+            textField.AddToClassList(className);
+            return textField;
+        }
+
+        private void BindEvents(
+            Action refresh,
+            Action migrate,
+            Action<SkillsTarget> migrationSkillTargetChanged,
+            Action toggleMigrationSkill,
+            Action close)
         {
             _refreshButton.clicked += refresh;
             _migrateButton.clicked += migrate;
+            _migrationSkillButton.clicked += toggleMigrationSkill;
+            _migrationSkillTargetField.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue is SkillsTarget target)
+                {
+                    migrationSkillTargetChanged(target);
+                }
+            });
             _closeButton.clicked += close;
         }
 

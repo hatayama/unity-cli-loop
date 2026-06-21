@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -93,7 +94,17 @@ name: uloop-local-package
 
 # local package
 `)
-	writeManifest(t, projectRoot, `{"dependencies":{"com.example.cached":"1.0.0"}}`)
+	manifestLocalPackageRoot := filepath.Join(t.TempDir(), "manifest-local-package")
+	writeSkillFile(t, filepath.Join(manifestLocalPackageRoot, "Editor", "ManifestLocalTool", "Skill"), `---
+name: uloop-manifest-local-package
+---
+
+# manifest local package
+`)
+	writeManifest(
+		t,
+		projectRoot,
+		`{"dependencies":{"com.example.cached":"1.0.0","com.example.manifest-local":"file:`+filepath.ToSlash(manifestLocalPackageRoot)+`"}}`)
 	writeTestSkill(t, projectRoot, "Library/PackageCache/com.example.cached@1.0.0/Editor/CachedTool/Skill", `---
 name: uloop-cached-package
 ---
@@ -114,9 +125,129 @@ name: uloop-cached-package
 		"uloop-hello",
 		"uloop-launch",
 		"uloop-local-package",
+		"uloop-manifest-local-package",
 	}
 	if !reflect.DeepEqual(actualNames, expectedNames) {
 		t.Fatalf("skill names mismatch:\nactual:   %#v\nexpected: %#v", actualNames, expectedNames)
+	}
+}
+
+// Tests that the temporary V3 migration skill stays out of normal skill discovery.
+func TestCollectSkillDefinitionsSkipsV3MigrationSkill(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills~/v3-cli-invocation-migration/Skill", `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration
+`)
+
+	skills, err := collectSkillDefinitions(projectRoot)
+	if err != nil {
+		t.Fatalf("collectSkillDefinitions failed: %v", err)
+	}
+
+	if len(skills) != 0 {
+		t.Fatalf("temporary migration skill should not be discovered normally: %#v", skills)
+	}
+}
+
+// Tests that the dedicated V3 migration skill discovery reads only the temporary skill source.
+func TestCollectV3MigrationSkillDefinitionReadsTemporarySkill(t *testing.T) {
+	projectRoot := t.TempDir()
+	writePackageRootMarker(t, projectRoot)
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills~/v3-cli-invocation-migration/Skill", `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration
+`)
+
+	skills, err := collectV3MigrationSkillDefinition(projectRoot)
+	if err != nil {
+		t.Fatalf("collectV3MigrationSkillDefinition failed: %v", err)
+	}
+
+	actualNames := skillNames(skills)
+	expectedNames := []string{"v3-cli-invocation-migration"}
+	if !reflect.DeepEqual(actualNames, expectedNames) {
+		t.Fatalf("skill names mismatch:\nactual:   %#v\nexpected: %#v", actualNames, expectedNames)
+	}
+}
+
+// Tests that the dedicated V3 migration source must declare the expected skill name.
+func TestCollectV3MigrationSkillDefinitionRejectsUnexpectedName(t *testing.T) {
+	projectRoot := t.TempDir()
+	writePackageRootMarker(t, projectRoot)
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills~/v3-cli-invocation-migration/Skill", `---
+name: other-migration-skill
+---
+
+# temporary migration
+`)
+
+	_, err := collectV3MigrationSkillDefinition(projectRoot)
+
+	if err == nil {
+		t.Fatal("collectV3MigrationSkillDefinition should fail for an unexpected skill name")
+	}
+	if !strings.Contains(err.Error(), "unexpected name") {
+		t.Fatalf("error should explain the unexpected skill name: %v", err)
+	}
+}
+
+// Tests that the dedicated V3 migration skill can be read from a manifest file dependency.
+func TestCollectV3MigrationSkillDefinitionReadsManifestFilePackage(t *testing.T) {
+	projectRoot := t.TempDir()
+	packageRoot := filepath.Join(t.TempDir(), "Packages", "src")
+	markerPath := filepath.Join(packageRoot, "Editor", "FirstPartyTools")
+	if err := os.MkdirAll(markerPath, 0o755); err != nil {
+		t.Fatalf("failed to create marker path: %v", err)
+	}
+	writeManifest(t, projectRoot, `{"dependencies":{"io.github.hatayama.uloopmcp":"file:`+filepath.ToSlash(packageRoot)+`"}}`)
+	writeSkillFile(t, filepath.Join(
+		packageRoot,
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill"), `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration
+`)
+
+	skills, err := collectV3MigrationSkillDefinition(projectRoot)
+	if err != nil {
+		t.Fatalf("collectV3MigrationSkillDefinition failed: %v", err)
+	}
+
+	actualNames := skillNames(skills)
+	expectedNames := []string{"v3-cli-invocation-migration"}
+	if !reflect.DeepEqual(actualNames, expectedNames) {
+		t.Fatalf("skill names mismatch:\nactual:   %#v\nexpected: %#v", actualNames, expectedNames)
+	}
+}
+
+// Tests that local manifest packages from other dependencies cannot replace the Unity CLI Loop package root.
+func TestResolvePackageRootIgnoresOtherManifestFilePackages(t *testing.T) {
+	projectRoot := t.TempDir()
+	otherPackageRoot := filepath.Join(t.TempDir(), "AOtherPackage")
+	packageRoot := filepath.Join(t.TempDir(), "ZUnityCliLoopPackage")
+	for _, candidateRoot := range []string{otherPackageRoot, packageRoot} {
+		markerPath := filepath.Join(candidateRoot, "Editor", "FirstPartyTools")
+		if err := os.MkdirAll(markerPath, 0o755); err != nil {
+			t.Fatalf("failed to create marker path: %v", err)
+		}
+	}
+	writeManifest(
+		t,
+		projectRoot,
+		`{"dependencies":{"com.example.other":"file:`+filepath.ToSlash(otherPackageRoot)+`","io.github.hatayama.uloopmcp":"file:`+filepath.ToSlash(packageRoot)+`"}}`)
+
+	actualRoot := filepath.Clean(resolvePackageRoot(projectRoot))
+	expectedRoot := filepath.Clean(packageRoot)
+	if actualRoot != expectedRoot {
+		t.Fatalf("package root mismatch: actual=%s expected=%s", actualRoot, expectedRoot)
 	}
 }
 
@@ -824,6 +955,339 @@ name: uloop-sample
 	}
 }
 
+// Tests that the dedicated V3 migration install copies only the temporary skill.
+func TestRunV3MigrationSkillInstallAndUninstall(t *testing.T) {
+	projectRoot := t.TempDir()
+	writePackageRootMarker(t, projectRoot)
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills~/v3-cli-invocation-migration/Skill", `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration
+`)
+	if err := os.MkdirAll(
+		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills~", "v3-cli-invocation-migration", "Skill", "scripts"),
+		0o755); err != nil {
+		t.Fatalf("failed to create script dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills~", "v3-cli-invocation-migration", "Skill", "scripts", "detect.sh"),
+		[]byte("#!/bin/sh\n"),
+		0o644); err != nil {
+		t.Fatalf("failed to write script: %v", err)
+	}
+	skills, err := collectV3MigrationSkillDefinition(projectRoot)
+	if err != nil {
+		t.Fatalf("collectV3MigrationSkillDefinition failed: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	options := skillCommandOptions{targets: []skillTarget{targetConfigs["codex"]}}
+
+	installCode := runV3MigrationSkillInstall(projectRoot, skills, options, stdout, stderr)
+
+	if installCode != 0 {
+		t.Fatalf("install should succeed: code=%d stderr=%s", installCode, stderr.String())
+	}
+	installedDir := filepath.Join(projectRoot, ".codex", "skills", "v3-cli-invocation-migration")
+	if _, err := os.Stat(filepath.Join(installedDir, "SKILL.md")); err != nil {
+		t.Fatalf("migration skill should be installed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(installedDir, "scripts", "detect.sh")); err != nil {
+		t.Fatalf("migration skill script should be installed: %v", err)
+	}
+	unrelatedSkillDir := filepath.Join(projectRoot, ".codex", "skills", "uloop-compile")
+	writeSkillFile(t, unrelatedSkillDir, "---\nname: uloop-compile\n---\n")
+
+	uninstallCode := runV3MigrationSkillUninstall(projectRoot, options, stdout, stderr)
+
+	if uninstallCode != 0 {
+		t.Fatalf("uninstall should succeed: code=%d stderr=%s", uninstallCode, stderr.String())
+	}
+	if _, err := os.Stat(installedDir); !os.IsNotExist(err) {
+		t.Fatalf("migration skill should be removed: %v", err)
+	}
+	if _, err := os.Stat(unrelatedSkillDir); err != nil {
+		t.Fatalf("unrelated skill should remain: %v", err)
+	}
+}
+
+// Tests that uninstalling the temporary migration skill does not require package source discovery.
+func TestTryHandleSkillsRequestUninstallV3MigrationWithoutPackageSource(t *testing.T) {
+	originalUserHomeDir := userHomeDir
+	homeDir := t.TempDir()
+	userHomeDir = func() (string, error) {
+		return homeDir, nil
+	}
+	t.Cleanup(func() {
+		userHomeDir = originalUserHomeDir
+	})
+
+	installedDir := filepath.Join(homeDir, ".codex", "skills", v3MigrationSkillName)
+	writeSkillFile(t, installedDir, "---\nname: v3-cli-invocation-migration\n---\n")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	handled, code := tryHandleSkillsRequest(
+		[]string{"skills", "uninstall-v3-migration", "--global", "--codex"},
+		t.TempDir(),
+		"",
+		stdout,
+		stderr,
+	)
+
+	if !handled || code != 0 {
+		t.Fatalf("uninstall should succeed without package source: handled=%v code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if _, err := os.Stat(installedDir); !os.IsNotExist(err) {
+		t.Fatalf("migration skill should be removed: %v", err)
+	}
+}
+
+// Tests that uninstalling the temporary migration skill removes both supported layouts.
+func TestRunV3MigrationSkillUninstallRemovesAlternateLayout(t *testing.T) {
+	projectRoot := t.TempDir()
+	target := targetConfigs["codex"]
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	flatDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, false)
+	groupedDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, true)
+	writeSkillFile(t, flatDir, "---\nname: v3-cli-invocation-migration\n---\n")
+	writeSkillFile(t, groupedDir, "---\nname: v3-cli-invocation-migration\n---\n")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	options := skillCommandOptions{targets: []skillTarget{target}}
+
+	code := runV3MigrationSkillUninstall(projectRoot, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("uninstall should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(flatDir); !os.IsNotExist(err) {
+		t.Fatalf("flat migration skill should be removed: %v", err)
+	}
+	if _, err := os.Stat(groupedDir); !os.IsNotExist(err) {
+		t.Fatalf("grouped migration skill should be removed: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Removed: 1") {
+		t.Fatalf("removed count should report one migration skill: %s", stdout.String())
+	}
+}
+
+// Tests that the POSIX detector reports boolean, first-party, and output-field candidates.
+func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	fixtureFile := filepath.Join(fixtureRoot, "docs", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(fixtureFile), 0o755); err != nil {
+		t.Fatalf("failed to create fixture dir: %v", err)
+	}
+	fixtureContent := strings.Join([]string{
+		"uloop compile --wait-for-domain-reload true",
+		"uloop some-tool --enabled false",
+		"inline `uloop compile --wait-for-domain-reload`",
+		"inline `uloop some-tool --enabled false`",
+		"jq '.Success'",
+	}, "\n")
+	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	bundledReferenceFile := filepath.Join(
+		fixtureRoot,
+		"Packages",
+		"src",
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"references",
+		"first-party-v2-to-v3.md")
+	if err := os.MkdirAll(filepath.Dir(bundledReferenceFile), 0o755); err != nil {
+		t.Fatalf("failed to create bundled reference dir: %v", err)
+	}
+	if err := os.WriteFile(
+		bundledReferenceFile,
+		[]byte("uloop bundled-tool --self-noise false\n"),
+		0o644); err != nil {
+		t.Fatalf("failed to write bundled reference: %v", err)
+	}
+	embeddedBundledReferenceFile := filepath.Join(
+		fixtureRoot,
+		"Packages",
+		"io.github.hatayama.uloopmcp",
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"references",
+		"first-party-v2-to-v3.md")
+	if err := os.MkdirAll(filepath.Dir(embeddedBundledReferenceFile), 0o755); err != nil {
+		t.Fatalf("failed to create embedded bundled reference dir: %v", err)
+	}
+	if err := os.WriteFile(
+		embeddedBundledReferenceFile,
+		[]byte("uloop embedded-bundled-tool --self-noise false\n"),
+		0o644); err != nil {
+		t.Fatalf("failed to write embedded bundled reference: %v", err)
+	}
+	scriptPath := filepath.Join(
+		findRepositoryRootForSkillsTest(t),
+		"Packages",
+		"src",
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"scripts",
+		"detect-v3-cli-invocation-candidates.sh")
+
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh is not installed")
+	}
+	command := exec.Command(shPath, scriptPath, fixtureRoot)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("detector failed: %v\n%s", err, string(output))
+	}
+	text := string(output)
+	for _, expected := range []string{"FIRST_PARTY_OPTION", "ARG_BOOL", "OUTPUT_FIELD"} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("detector output missing %s:\n%s", expected, text)
+		}
+	}
+	for _, expected := range []string{
+		"inline `uloop compile --wait-for-domain-reload`",
+		"inline `uloop some-tool --enabled false`",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("detector output missing inline Markdown candidate %q:\n%s", expected, text)
+		}
+	}
+	if strings.Contains(text, "self-noise") {
+		t.Fatalf("detector should skip bundled migration skill sources:\n%s", text)
+	}
+}
+
+// Tests that the PowerShell detector reports candidates when PowerShell is available.
+func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
+	pwshPath, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Skip("pwsh is not installed")
+	}
+	fixtureRoot := t.TempDir()
+	fixtureFile := filepath.Join(fixtureRoot, "scripts", "migrate.ps1")
+	if err := os.MkdirAll(filepath.Dir(fixtureFile), 0o755); err != nil {
+		t.Fatalf("failed to create fixture dir: %v", err)
+	}
+	fixtureContent := strings.Join([]string{
+		"uloop run-tests --save-before-run false",
+		"uloop some-tool --enabled true",
+		"inline `uloop run-tests --save-before-run`",
+		"inline `uloop some-tool --enabled true`",
+		"$result.Success",
+		"$result.success",
+	}, "\n")
+	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	embeddedBundledReferenceFile := filepath.Join(
+		fixtureRoot,
+		"Packages",
+		"io.github.hatayama.uloopmcp",
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"references",
+		"first-party-v2-to-v3.md")
+	if err := os.MkdirAll(filepath.Dir(embeddedBundledReferenceFile), 0o755); err != nil {
+		t.Fatalf("failed to create embedded bundled reference dir: %v", err)
+	}
+	if err := os.WriteFile(
+		embeddedBundledReferenceFile,
+		[]byte("uloop embedded-bundled-tool --self-noise true\n"),
+		0o644); err != nil {
+		t.Fatalf("failed to write embedded bundled reference: %v", err)
+	}
+	scriptPath := filepath.Join(
+		findRepositoryRootForSkillsTest(t),
+		"Packages",
+		"src",
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"scripts",
+		"detect-v3-cli-invocation-candidates.ps1")
+
+	command := exec.Command(pwshPath, "-NoProfile", "-File", scriptPath, "-Root", fixtureRoot)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("detector failed: %v\n%s", err, string(output))
+	}
+	text := string(output)
+	for _, expected := range []string{"FIRST_PARTY_OPTION", "ARG_BOOL", "OUTPUT_FIELD"} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("detector output missing %s:\n%s", expected, text)
+		}
+	}
+	for _, expected := range []string{
+		"inline `uloop run-tests --save-before-run`",
+		"inline `uloop some-tool --enabled true`",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("detector output missing inline Markdown candidate %q:\n%s", expected, text)
+		}
+	}
+	if strings.Contains(text, "$result.success") {
+		t.Fatalf("detector should not report already migrated camelCase fields:\n%s", text)
+	}
+	if strings.Contains(text, "self-noise") {
+		t.Fatalf("detector should skip bundled migration skill sources:\n%s", text)
+	}
+}
+
+// Tests that Windows PowerShell reports UTF-8 no-BOM file line numbers correctly.
+func TestV3MigrationSkillWindowsPowerShellDetectorReportsUtf8LineNumbers(t *testing.T) {
+	powerShellPath, err := exec.LookPath("powershell")
+	if err != nil {
+		t.Skip("powershell is not installed")
+	}
+	fixtureRoot := t.TempDir()
+	fixtureFile := filepath.Join(fixtureRoot, "sample.md")
+	fixtureContent := strings.Join([]string{
+		"# Plan",
+		"",
+		"## 検証",
+		"",
+		"日本語の説明文です。UTF-8 BOMなしの行番号を検証します。",
+		"",
+		"もう一つの日本語行です。PowerShellの既定読み込みとの差を確認します。",
+		"",
+		"uloop compile --wait-for-domain-reload",
+	}, "\n")
+	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
+		t.Fatalf("failed to write UTF-8 fixture: %v", err)
+	}
+	scriptPath := filepath.Join(
+		findRepositoryRootForSkillsTest(t),
+		"Packages",
+		"src",
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"scripts",
+		"detect-v3-cli-invocation-candidates.ps1")
+
+	command := exec.Command(powerShellPath, "-NoProfile", "-File", scriptPath, "-Root", fixtureRoot)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("detector failed: %v\n%s", err, string(output))
+	}
+	text := string(output)
+	expected := "sample.md:9: uloop compile --wait-for-domain-reload"
+	if !strings.Contains(text, expected) {
+		t.Fatalf("detector output missing UTF-8 physical line number %q:\n%s", expected, text)
+	}
+}
+
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
 	writeSkillFile(t, filepath.Join(projectRoot, filepath.FromSlash(relativeDir)), content)
@@ -837,6 +1301,14 @@ func writeManifest(t *testing.T, projectRoot string, content string) {
 	}
 	if err := os.WriteFile(filepath.Join(manifestDir, "manifest.json"), []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write manifest: %v", err)
+	}
+}
+
+func writePackageRootMarker(t *testing.T, projectRoot string) {
+	t.Helper()
+	markerPath := filepath.Join(projectRoot, "Packages", "src", "Editor", "FirstPartyTools")
+	if err := os.MkdirAll(markerPath, 0o755); err != nil {
+		t.Fatalf("failed to create package root marker: %v", err)
 	}
 }
 
@@ -901,4 +1373,22 @@ func assertSkillContentContains(t *testing.T, skills []skillDefinition, skillNam
 		return
 	}
 	t.Fatalf("skill not found: %s", skillName)
+}
+
+func findRepositoryRootForSkillsTest(t *testing.T) string {
+	t.Helper()
+	currentDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(currentDir, ".git")); err == nil {
+			return currentDir
+		}
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir {
+			t.Fatal("repository root not found")
+		}
+		currentDir = parentDir
+	}
 }

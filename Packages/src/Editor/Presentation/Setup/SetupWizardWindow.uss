@@ -78,22 +78,37 @@
 .setup-step__title {
     -unity-font-style: bold;
     font-size: 13px;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
 }
 
 .setup-step__content {
     padding-left: 4px;
 }
 
-.setup-step--migration-alert {
-    background-color: #5c4a00;
-    border-color: #7a6400;
-    border-width: 2px;
+.setup-selectable-text {
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    padding-top: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    padding-left: 0;
 }
 
-.setup-step--migration-alert .setup-step__title,
-.setup-step--migration-alert .setup-step__status-label {
-    color: var(--setup-color-warning);
+.setup-selectable-text .unity-base-text-field__input,
+.setup-selectable-text .unity-text-field__input {
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    padding-top: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+    white-space: normal;
 }
 
 .setup-step__status-row {
@@ -109,6 +124,11 @@
 .setup-step__status-label--standalone {
     margin-left: 0;
     white-space: normal;
+}
+
+.setup-step__description-label {
+    white-space: normal;
+    margin-bottom: 10px;
 }
 
 .setup-progress-bar {
@@ -285,6 +305,56 @@
 .setup-footer__button-row .setup-button {
     flex-grow: 1;
     flex-basis: 0;
+}
+
+.setup-section-actions {
+    margin-top: -2px;
+    margin-bottom: 10px;
+}
+
+.setup-section-actions__button-row {
+    flex-direction: row;
+}
+
+.setup-section-actions__button-row .setup-button {
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+.setup-section-actions__field-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+.setup-section-actions__field-label {
+    width: 76px;
+    flex-shrink: 0;
+    margin-right: 6px;
+    color: var(--setup-color-muted);
+}
+
+.setup-section-actions__field {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.setup-section-divider {
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.18);
+    margin-top: 4px;
+    margin-bottom: 14px;
+}
+
+.setup-skill-usage-foldout {
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.setup-skill-usage-text {
+    margin-top: 6px;
+    margin-left: 14px;
 }
 
 .setup-footer__github-link {

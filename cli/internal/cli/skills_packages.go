@@ -54,12 +54,23 @@ func enumerateDirectProjectPackageRoots(projectRoot string) []string {
 }
 
 func resolveManifestLocalPackageRoots(projectRoot string) []string {
+	return resolveManifestLocalPackageRootsMatching(projectRoot, nil)
+}
+
+func resolveTargetManifestLocalPackageRoots(projectRoot string) []string {
+	return resolveManifestLocalPackageRootsMatching(projectRoot, isTargetManifestPackageName)
+}
+
+func resolveManifestLocalPackageRootsMatching(projectRoot string, includeDependency func(string) bool) []string {
 	dependencies := readManifestDependencies(projectRoot)
 	if len(dependencies) == 0 {
 		return []string{}
 	}
 	packageRoots := []string{}
-	for _, dependencyValue := range dependencies {
+	for dependencyName, dependencyValue := range dependencies {
+		if includeDependency != nil && !includeDependency(dependencyName) {
+			continue
+		}
 		localPath := resolveLocalDependencyPath(dependencyValue, projectRoot)
 		if localPath == "" {
 			continue
@@ -109,6 +120,11 @@ func resolvePackageRoot(projectRoot string) string {
 		filepath.Join(projectRoot, "Packages", packageNameAlias),
 	}
 	for _, candidate := range candidates {
+		if resolvedRoot := resolvePackageRootCandidate(candidate); resolvedRoot != "" {
+			return resolvedRoot
+		}
+	}
+	for _, candidate := range resolveTargetManifestLocalPackageRoots(projectRoot) {
 		if resolvedRoot := resolvePackageRootCandidate(candidate); resolvedRoot != "" {
 			return resolvedRoot
 		}
@@ -199,4 +215,10 @@ func isTargetPackageCacheDir(dirName string) bool {
 	normalizedName := strings.ToLower(dirName)
 	return strings.HasPrefix(normalizedName, strings.ToLower(packageName)+"@") ||
 		strings.HasPrefix(normalizedName, strings.ToLower(packageNameAlias)+"@")
+}
+
+func isTargetManifestPackageName(dependencyName string) bool {
+	normalizedName := strings.ToLower(dependencyName)
+	return normalizedName == strings.ToLower(packageName) ||
+		normalizedName == strings.ToLower(packageNameAlias)
 }

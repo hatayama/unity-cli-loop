@@ -81,8 +81,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 Name = name;
                 ToolName = toolName;
-                SkillFiles = skillFiles;
+                SkillFiles = skillFiles.ToDictionary(
+                    pair => NormalizeSkillRelativePath(pair.Key),
+                    pair => pair.Value,
+                    StringComparer.Ordinal);
             }
+        }
+
+        private static string NormalizeSkillRelativePath(string relativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(relativePath), "relativePath must not be null or empty");
+
+            return relativePath.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar);
         }
 
         internal static string GetSkillsRoot(string targetRoot)
@@ -258,6 +270,45 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 .Values
                 .Select(source => new SkillSourceInfo(source.Name, source.ToolName, source.SkillFiles))
                 .ToList();
+        }
+
+        internal static SkillSourceInfo GetSkillSourceInfoFromDirectory(string skillDirectory)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(skillDirectory), "skillDirectory must not be null or empty");
+
+            string skillFilePath = Path.Combine(skillDirectory, SkillFileName);
+            Debug.Assert(File.Exists(skillFilePath), "skill source must contain SKILL.md");
+
+            string skillContent = File.ReadAllText(skillFilePath);
+            string skillName = ParseNameFromFrontmatter(skillContent);
+            Debug.Assert(IsSafeSkillPathComponent(skillName), "skillName must be a single safe path component");
+
+            return new SkillSourceInfo(
+                skillName,
+                ParseToolNameFromFrontmatter(skillContent),
+                CollectSourceSkillFiles(skillDirectory, skillFilePath));
+        }
+
+        internal static SkillInstallState GetInstalledStateForSkillSource(
+            string targetRoot,
+            SkillSourceInfo skill,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(targetRoot), "targetRoot must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(skill.Name), "skill name must not be null or empty");
+
+            string installedSkillDirectory = GetInstalledSkillDirectoryPath(
+                targetRoot,
+                skill.Name,
+                groupSkillsUnderUnityCliLoop);
+            if (!Directory.Exists(installedSkillDirectory))
+            {
+                return SkillInstallState.Missing;
+            }
+
+            return IsSkillDirectoryOutdated(skill.SkillFiles, installedSkillDirectory)
+                ? SkillInstallState.Outdated
+                : SkillInstallState.Installed;
         }
 
         internal static string GetInstalledSkillDirectoryPathForLayout(
