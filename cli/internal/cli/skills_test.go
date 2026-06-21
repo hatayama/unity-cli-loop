@@ -244,9 +244,10 @@ func TestResolvePackageRootIgnoresOtherManifestFilePackages(t *testing.T) {
 		projectRoot,
 		`{"dependencies":{"com.example.other":"file:`+filepath.ToSlash(otherPackageRoot)+`","io.github.hatayama.uloopmcp":"file:`+filepath.ToSlash(packageRoot)+`"}}`)
 
-	actualRoot := resolvePackageRoot(projectRoot)
-	if actualRoot != packageRoot {
-		t.Fatalf("package root mismatch: actual=%s expected=%s", actualRoot, packageRoot)
+	actualRoot := filepath.Clean(resolvePackageRoot(projectRoot))
+	expectedRoot := filepath.Clean(packageRoot)
+	if actualRoot != expectedRoot {
+		t.Fatalf("package root mismatch: actual=%s expected=%s", actualRoot, expectedRoot)
 	}
 }
 
