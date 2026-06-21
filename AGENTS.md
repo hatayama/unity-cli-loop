@@ -60,7 +60,7 @@ Most day-to-day development happens on macOS, but this project must keep working
 Before changing scripts, skill files, generated-file synchronization, path handling, or text parsing, assume Windows will expose bugs that macOS hides.
 
 - Treat encoding as explicit input. When PowerShell reads UTF-8 repository files, pass `-Encoding UTF8`; Windows PowerShell 5.1 otherwise uses a legacy default that can corrupt non-ASCII text and even report wrong line numbers.
-- Treat line endings as data. POSIX shell scripts must remain LF-friendly, and PowerShell/Markdown/skill files must be read in a way that works with both LF and CRLF. If a script fails only under bash, WSL, or Git Bash, check CRLF before changing logic.
+- Repository text files should use LF by default. Only keep CRLF when a specific tool or file format requires it. Preserve expected line endings when writing generated files, and normalize line endings before comparison only when logical text equality is intended. If a script fails only under bash, WSL, or Git Bash, check CRLF before changing logic.
 - Normalize relative paths at API boundaries. Do not compare raw path strings that may contain `/` on one side and `\` on another. Convert separators before storing, comparing, deleting, or syncing generated files.
 - Prefer forward slashes in JSON `file:` paths and other cross-platform config values. Use escaped backslashes only when the target format explicitly requires them.
 - Validate Windows-facing PowerShell with both `pwsh` and Windows PowerShell when practical, especially for multiline arguments, here-strings, UTF-8 files, and native executable calls.
