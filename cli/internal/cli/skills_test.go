@@ -1167,6 +1167,79 @@ func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 	}
 }
 
+// Tests that the POSIX detector limits output fields to JSON parser contexts.
+func TestV3MigrationSkillPosixDetectorIgnoresNonParserOutputFields(t *testing.T) {
+	fixtureRoot := t.TempDir()
+	markdownFile := filepath.Join(fixtureRoot, "docs", "notes.md")
+	if err := os.MkdirAll(filepath.Dir(markdownFile), 0o755); err != nil {
+		t.Fatalf("failed to create Markdown fixture dir: %v", err)
+	}
+	markdownContent := strings.Join([]string{
+		"jq '.Success'",
+		"case ConnectStatus.Success:",
+		"_soundController?.IsPlaying() == true",
+		"_soundController?.IsPaused() == true",
+	}, "\n")
+	if err := os.WriteFile(markdownFile, []byte(markdownContent), 0o644); err != nil {
+		t.Fatalf("failed to write Markdown fixture: %v", err)
+	}
+	powerShellFile := filepath.Join(fixtureRoot, "scripts", "migrate.ps1")
+	if err := os.MkdirAll(filepath.Dir(powerShellFile), 0o755); err != nil {
+		t.Fatalf("failed to create PowerShell fixture dir: %v", err)
+	}
+	powerShellContent := strings.Join([]string{
+		"[pscustomobject]$result = $text | ConvertFrom-Json",
+		"if ($result.Success -ne $true) { throw 'failed' }",
+		"[System.Text.RegularExpressions.Match]$baseMatch = [regex]::Match($line, '^Frame')",
+		"if (-not $baseMatch.Success) { throw 'bad line' }",
+		"[pscustomobject]$status = $text | ConvertFrom-Json",
+		"[pscustomobject]$status = Get-ReplayStatus",
+		"if ($status.IsReplaying -eq $true) { Write-Host 'running' }",
+	}, "\n")
+	if err := os.WriteFile(powerShellFile, []byte(powerShellContent), 0o644); err != nil {
+		t.Fatalf("failed to write PowerShell fixture: %v", err)
+	}
+	scriptPath := filepath.Join(
+		findRepositoryRootForSkillsTest(t),
+		"Packages",
+		"src",
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"scripts",
+		"detect-v3-cli-invocation-candidates.sh")
+
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh is not installed")
+	}
+	command := exec.Command(shPath, scriptPath, fixtureRoot)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("detector failed: %v\n%s", err, string(output))
+	}
+	text := string(output)
+	for _, expected := range []string{
+		"jq '.Success'",
+		"$result.Success",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("detector output missing parser candidate %q:\n%s", expected, text)
+		}
+	}
+	for _, unexpected := range []string{
+		"ConnectStatus.Success",
+		"_soundController?.IsPlaying()",
+		"_soundController?.IsPaused()",
+		"$baseMatch.Success",
+		"$status.IsReplaying",
+	} {
+		if strings.Contains(text, unexpected) {
+			t.Fatalf("detector should ignore non-parser field %q:\n%s", unexpected, text)
+		}
+	}
+}
+
 // Tests that the PowerShell detector reports candidates when PowerShell is available.
 func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 	pwshPath, err := exec.LookPath("pwsh")
@@ -1183,8 +1256,14 @@ func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 		"uloop some-tool --enabled true",
 		"inline `uloop run-tests --save-before-run`",
 		"inline `uloop some-tool --enabled true`",
+		"[pscustomobject]$result = $text | ConvertFrom-Json",
 		"$result.Success",
 		"$result.success",
+		"[System.Text.RegularExpressions.Match]$baseMatch = [regex]::Match($line, '^Frame')",
+		"$baseMatch.Success",
+		"[pscustomobject]$status = $text | ConvertFrom-Json",
+		"[pscustomobject]$status = Get-ReplayStatus",
+		"$status.IsReplaying",
 	}, "\n")
 	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
@@ -1238,6 +1317,12 @@ func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 	}
 	if strings.Contains(text, "$result.success") {
 		t.Fatalf("detector should not report already migrated camelCase fields:\n%s", text)
+	}
+	if strings.Contains(text, "$baseMatch.Success") {
+		t.Fatalf("detector should ignore non-json PowerShell fields:\n%s", text)
+	}
+	if strings.Contains(text, "$status.IsReplaying") {
+		t.Fatalf("detector should forget reassigned PowerShell json variables:\n%s", text)
 	}
 	if strings.Contains(text, "self-noise") {
 		t.Fatalf("detector should skip bundled migration skill sources:\n%s", text)

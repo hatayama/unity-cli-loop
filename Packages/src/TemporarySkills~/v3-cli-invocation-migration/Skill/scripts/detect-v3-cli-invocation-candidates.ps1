@@ -91,10 +91,54 @@ function Write-Candidate {
     Write-Output "$Kind ${Path}:${LineNumber}: $Line"
 }
 
+function Update-JsonVariableFromLine {
+    param(
+        [hashtable] $JsonVariables,
+        [string] $Line
+    )
+
+    $assignmentPattern = '\$([A-Za-z_][A-Za-z0-9_]*)\s*=[^\r\n#;]*'
+    $matches = [System.Text.RegularExpressions.Regex]::Matches($Line, $assignmentPattern)
+    foreach ($match in $matches) {
+        [string] $variableName = $match.Groups[1].Value
+        if ($match.Value -cmatch "ConvertFrom-Json") {
+            $JsonVariables[$variableName] = $true
+        } else {
+            [void] $JsonVariables.Remove($variableName)
+        }
+    }
+}
+
+function Test-ContainsJqOutputField {
+    param([string] $Line)
+
+    $jqCommandPattern = '(^|[\s`|;&(])jq\s'
+    return $Line -cmatch $jqCommandPattern -and
+        $Line -cmatch "\.($outputFields)([^A-Za-z0-9_]|$)"
+}
+
+function Test-ContainsJsonVariableOutputField {
+    param(
+        [hashtable] $JsonVariables,
+        [string] $Line
+    )
+
+    foreach ($variableName in $JsonVariables.Keys) {
+        [string] $escapedVariableName = [System.Text.RegularExpressions.Regex]::Escape($variableName)
+        [string] $variablePattern = '\$' + $escapedVariableName + '\.(' + $outputFields + ')([^A-Za-z0-9_]|$)'
+        if ($Line -cmatch $variablePattern) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 Get-CandidateFile -Directory $Root |
     ForEach-Object {
         $path = $_.FullName
         $lines = @(Get-Content -LiteralPath $path -Encoding UTF8)
+        $jsonVariables = @{}
         for ($index = 0; $index -lt $lines.Count; $index++) {
             $line = $lines[$index]
             $lineNumber = $index + 1
@@ -116,7 +160,9 @@ Get-CandidateFile -Directory $Root |
             if ($line -match "uloop\s+execute-dynamic-code\s+[^#|;&]*--compile-only([^A-Za-z0-9_-]|$)") {
                 Write-Candidate -Kind "FIRST_PARTY_OPTION" -Path $path -LineNumber $lineNumber -Line $line
             }
-            if ($line -cmatch "\.($outputFields)([^A-Za-z0-9_]|$)") {
+            Update-JsonVariableFromLine -JsonVariables $jsonVariables -Line $line
+            if ((Test-ContainsJqOutputField -Line $line) -or
+                (Test-ContainsJsonVariableOutputField -JsonVariables $jsonVariables -Line $line)) {
                 Write-Candidate -Kind "OUTPUT_FIELD" -Path $path -LineNumber $lineNumber -Line $line
             }
         }
