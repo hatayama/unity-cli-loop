@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.10](https://github.com/hatayama/unity-cli-loop/compare/v2.1.9...v2.1.10) (2026-06-20)
+
+
+### Bug Fixes
+
+* get-logs works with active Console search filters ([#1379](https://github.com/hatayama/unity-cli-loop/issues/1379)) ([941cb2f](https://github.com/hatayama/unity-cli-loop/commit/941cb2fb1888a943f4218d51325f33aecaf6e57f))
+* Unity 6.5 projects compile without metadata type conflicts ([#1377](https://github.com/hatayama/unity-cli-loop/issues/1377)) ([4a33119](https://github.com/hatayama/unity-cli-loop/commit/4a3311984c0c3ea11b27dff24b1987cb1a3de383))
+
 ## [2.1.9](https://github.com/hatayama/unity-cli-loop/compare/v2.1.8...v2.1.9) (2026-06-14)
 
 
