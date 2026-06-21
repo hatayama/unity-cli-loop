@@ -19,7 +19,7 @@ $excludedDirectories = @(
 $targetExtensions = @(".md", ".sh", ".bash", ".zsh", ".ps1", ".psm1")
 $outputFields = "Success|Message|ErrorMessage|ErrorCount|WarningCount|TotalCount|DisplayedCount|LogType|StackTrace|XmlPath|TestCount|PassedCount|FailedCount|SkippedCount|CompletedAt|ScreenshotCount|Screenshots|CompilationErrors|ErrorCode|UpdatedCode|DiagnosticsSummary|OutputPath|InputPath|TotalFrames|DurationSeconds|CurrentFrame|IsReplaying|KeyName|PositionX|PositionY|EndPositionX|EndPositionY|HitGameObjectName|IsPlaying|IsPaused|ClearedLogCount|ClearedCounts"
 $bundledMigrationSkillPath = [System.IO.Path]::Combine(
-    "TemporarySkills",
+    "TemporarySkills~",
     "v3-cli-invocation-migration"
 )
 

@@ -40,7 +40,7 @@ func collectV3MigrationSkillDefinition(projectRoot string) ([]skillDefinition, e
 
 	skillDirectory := filepath.Join(
 		packageRoot,
-		"TemporarySkills",
+		"TemporarySkills~",
 		v3MigrationSkillName,
 		"Skill")
 	skill, ok, err := readSkillDefinition(skillDirectory)

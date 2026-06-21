@@ -135,7 +135,7 @@ name: uloop-cached-package
 // Tests that the temporary V3 migration skill stays out of normal skill discovery.
 func TestCollectSkillDefinitionsSkipsV3MigrationSkill(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills/v3-cli-invocation-migration/Skill", `---
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills~/v3-cli-invocation-migration/Skill", `---
 name: v3-cli-invocation-migration
 ---
 
@@ -156,7 +156,7 @@ name: v3-cli-invocation-migration
 func TestCollectV3MigrationSkillDefinitionReadsTemporarySkill(t *testing.T) {
 	projectRoot := t.TempDir()
 	writePackageRootMarker(t, projectRoot)
-	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills/v3-cli-invocation-migration/Skill", `---
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills~/v3-cli-invocation-migration/Skill", `---
 name: v3-cli-invocation-migration
 ---
 
@@ -186,7 +186,7 @@ func TestCollectV3MigrationSkillDefinitionReadsManifestFilePackage(t *testing.T)
 	writeManifest(t, projectRoot, `{"dependencies":{"io.github.hatayama.uloopmcp":"file:`+filepath.ToSlash(packageRoot)+`"}}`)
 	writeSkillFile(t, filepath.Join(
 		packageRoot,
-		"TemporarySkills",
+		"TemporarySkills~",
 		"v3-cli-invocation-migration",
 		"Skill"), `---
 name: v3-cli-invocation-migration
@@ -937,19 +937,19 @@ name: uloop-sample
 func TestRunV3MigrationSkillInstallAndUninstall(t *testing.T) {
 	projectRoot := t.TempDir()
 	writePackageRootMarker(t, projectRoot)
-	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills/v3-cli-invocation-migration/Skill", `---
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills~/v3-cli-invocation-migration/Skill", `---
 name: v3-cli-invocation-migration
 ---
 
 # temporary migration
 `)
 	if err := os.MkdirAll(
-		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills", "v3-cli-invocation-migration", "Skill", "scripts"),
+		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills~", "v3-cli-invocation-migration", "Skill", "scripts"),
 		0o755); err != nil {
 		t.Fatalf("failed to create script dir: %v", err)
 	}
 	if err := os.WriteFile(
-		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills", "v3-cli-invocation-migration", "Skill", "scripts", "detect.sh"),
+		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills~", "v3-cli-invocation-migration", "Skill", "scripts", "detect.sh"),
 		[]byte("#!/bin/sh\n"),
 		0o644); err != nil {
 		t.Fatalf("failed to write script: %v", err)
@@ -1075,7 +1075,7 @@ func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 		fixtureRoot,
 		"Packages",
 		"src",
-		"TemporarySkills",
+		"TemporarySkills~",
 		"v3-cli-invocation-migration",
 		"Skill",
 		"references",
@@ -1093,7 +1093,7 @@ func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 		fixtureRoot,
 		"Packages",
 		"io.github.hatayama.uloopmcp",
-		"TemporarySkills",
+		"TemporarySkills~",
 		"v3-cli-invocation-migration",
 		"Skill",
 		"references",
@@ -1111,7 +1111,7 @@ func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 		findRepositoryRootForSkillsTest(t),
 		"Packages",
 		"src",
-		"TemporarySkills",
+		"TemporarySkills~",
 		"v3-cli-invocation-migration",
 		"Skill",
 		"scripts",
@@ -1167,7 +1167,7 @@ func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 		fixtureRoot,
 		"Packages",
 		"io.github.hatayama.uloopmcp",
-		"TemporarySkills",
+		"TemporarySkills~",
 		"v3-cli-invocation-migration",
 		"Skill",
 		"references",
@@ -1185,7 +1185,7 @@ func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
 		findRepositoryRootForSkillsTest(t),
 		"Packages",
 		"src",
-		"TemporarySkills",
+		"TemporarySkills~",
 		"v3-cli-invocation-migration",
 		"Skill",
 		"scripts",
