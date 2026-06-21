@@ -59,6 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string[] currentFirstPartyToolsNamespaceAliases,
             bool canMigrateBareLegacyEditorWindowCaptureUtility,
             bool shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+            bool canPreserveBareCurrentToolContractsReferences,
             bool canUseBareCurrentFirstPartyTools,
             string[] assemblyDeclaredTypeNames)
         {
@@ -76,6 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     currentFirstPartyToolsNamespaceAliases,
                     canMigrateBareLegacyEditorWindowCaptureUtility,
                     shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                    canPreserveBareCurrentToolContractsReferences,
                     HasProtectedEditorWindowCaptureUtilityDeclaration(source, assemblyDeclaredTypeNames));
             (string captureWindowTaskContent, int captureWindowTaskReplacementCount) =
                 ReplaceLegacyEditorWindowCaptureUtilityCaptureWindowTaskCallsInCode(
@@ -84,6 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     currentFirstPartyToolsNamespaceAliases,
                     canMigrateBareLegacyEditorWindowCaptureUtility,
                     shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                    canPreserveBareCurrentToolContractsReferences,
                     HasProtectedEditorWindowCaptureUtilityDeclaration(captureWindowContent, assemblyDeclaredTypeNames));
             (string captureGameRenderingContent, int captureGameRenderingReplacementCount) =
                 ReplaceLegacyEditorWindowCaptureUtilityCaptureGameRenderingCallsInCode(
@@ -92,6 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     currentFirstPartyToolsNamespaceAliases,
                     canMigrateBareLegacyEditorWindowCaptureUtility,
                     shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                    canPreserveBareCurrentToolContractsReferences,
                     HasProtectedEditorWindowCaptureUtilityDeclaration(
                         captureWindowTaskContent,
                         assemblyDeclaredTypeNames));
@@ -102,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     currentFirstPartyToolsNamespaceAliases,
                     canMigrateBareLegacyEditorWindowCaptureUtility,
                     shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                    canPreserveBareCurrentToolContractsReferences,
                     HasProtectedEditorWindowCaptureUtilityDeclaration(
                         captureGameRenderingContent,
                         assemblyDeclaredTypeNames));
@@ -128,6 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string[] currentFirstPartyToolsNamespaceAliases,
                 bool canMigrateBareLegacyEditorWindowCaptureUtility,
                 bool shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                bool canPreserveBareCurrentToolContractsReferences,
                 bool hasProtectedBareEditorWindowCaptureUtility)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -189,9 +195,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
                 builder.Append(shouldExtractTexture ? "(await " : "await ");
-                builder.Append(CurrentNamespace);
-                builder.Append('.');
-                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                AppendMigratedEditorWindowCaptureUtilityReference(
+                    builder,
+                    match,
+                    canPreserveBareCurrentToolContractsReferences);
                 builder.Append('.');
                 builder.Append(EditorWindowCaptureUtilityCaptureWindowMethodName);
                 builder.Append('(');
@@ -223,6 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string[] currentFirstPartyToolsNamespaceAliases,
                 bool canMigrateBareLegacyEditorWindowCaptureUtility,
                 bool shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                bool canPreserveBareCurrentToolContractsReferences,
                 bool hasProtectedBareEditorWindowCaptureUtility)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -276,9 +284,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                builder.Append(CurrentNamespace);
-                builder.Append('.');
-                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                AppendMigratedEditorWindowCaptureUtilityReference(
+                    builder,
+                    match,
+                    canPreserveBareCurrentToolContractsReferences);
                 builder.Append('.');
                 builder.Append(EditorWindowCaptureUtilityCaptureWindowMethodName);
                 builder.Append('(');
@@ -305,6 +314,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string[] currentFirstPartyToolsNamespaceAliases,
                 bool canMigrateBareLegacyEditorWindowCaptureUtility,
                 bool shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                bool canPreserveBareCurrentToolContractsReferences,
                 bool hasProtectedBareEditorWindowCaptureUtility)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -358,9 +368,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
                 builder.Append("await ");
-                builder.Append(CurrentNamespace);
-                builder.Append('.');
-                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                AppendMigratedEditorWindowCaptureUtilityReference(
+                    builder,
+                    match,
+                    canPreserveBareCurrentToolContractsReferences);
                 builder.Append('.');
                 builder.Append(EditorWindowCaptureUtilityCaptureGameRenderingMethodName);
                 builder.Append('(');
@@ -387,6 +398,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string[] currentFirstPartyToolsNamespaceAliases,
                 bool canMigrateBareLegacyEditorWindowCaptureUtility,
                 bool shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                bool canPreserveBareCurrentToolContractsReferences,
                 bool hasProtectedBareEditorWindowCaptureUtility)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -440,9 +452,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                builder.Append(CurrentNamespace);
-                builder.Append('.');
-                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                AppendMigratedEditorWindowCaptureUtilityReference(
+                    builder,
+                    match,
+                    canPreserveBareCurrentToolContractsReferences);
                 builder.Append('.');
                 builder.Append(EditorWindowCaptureUtilityCaptureGameRenderingMethodName);
                 builder.Append('(');
@@ -460,6 +473,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
             return (builder.ToString(), replacementCount);
+        }
+
+        private static void AppendMigratedEditorWindowCaptureUtilityReference(
+            StringBuilder builder,
+            Match match,
+            bool canPreserveBareCurrentToolContractsReferences)
+        {
+            Debug.Assert(builder != null, "builder must not be null");
+            Debug.Assert(match != null, "match must not be null");
+
+            if (match.Groups["editorWindowCaptureUtility"].Success &&
+                canPreserveBareCurrentToolContractsReferences)
+            {
+                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                return;
+            }
+
+            builder.Append(CurrentNamespace);
+            builder.Append('.');
+            builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
         }
 
     }

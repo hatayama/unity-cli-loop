@@ -209,6 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string source,
             string[] aliases,
             bool canMigrateBareLegacyApplicationApi,
+            bool canPreserveBareCurrentToolContractsReferences,
             string[] assemblyDeclaredTypeNames,
             ref int replacementCount)
         {
@@ -246,13 +247,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Regex unqualifiedRegex = new(
                     $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b(?!\s*=)",
                     RegexOptions.Compiled);
+                string unqualifiedReplacement = canPreserveBareCurrentToolContractsReferences
+                    ? rule.CurrentName
+                    : $"{CurrentNamespace}.{rule.CurrentName}";
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     unqualifiedRegex,
                     match => canMigrateBareLegacyApplicationApi &&
                         !hasProtectedTypeDeclaration &&
                         ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
-                            ? $"{CurrentNamespace}.{rule.CurrentName}"
+                            ? unqualifiedReplacement
                             : match.Value,
                     ref replacementCount);
             }
@@ -264,6 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string source,
             string[] aliases,
             bool canMigrateBareLegacyFirstPartyScreenshotApi,
+            bool canPreserveBareCurrentToolContractsReferences,
             string[] assemblyDeclaredTypeNames,
             ref int replacementCount)
         {
@@ -301,13 +306,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Regex unqualifiedRegex = new(
                     $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b(?!\s*=)",
                     RegexOptions.Compiled);
+                string unqualifiedReplacement = canPreserveBareCurrentToolContractsReferences
+                    ? rule.CurrentName
+                    : $"{CurrentNamespace}.{rule.CurrentName}";
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     unqualifiedRegex,
                     match => canMigrateBareLegacyFirstPartyScreenshotApi &&
                         !hasProtectedTypeDeclaration &&
                         ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
-                            ? $"{CurrentNamespace}.{rule.CurrentName}"
+                            ? unqualifiedReplacement
                             : match.Value,
                     ref replacementCount);
             }

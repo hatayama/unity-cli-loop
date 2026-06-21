@@ -118,6 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 hasLegacyNamespaceUsingDirective ||
                 hasCurrentToolContractsUsingDirective ||
                 hasAssemblyScopedCurrentToolContractsUsing;
+            bool canPreserveBareCurrentToolContractsReferences =
+                hasCurrentToolContractsUsingDirective ||
+                hasAssemblyScopedCurrentToolContractsUsing;
             bool canMigrateBareLegacyToolAttribute =
                 hasLegacyAssemblySource ||
                 hasLegacyNamespaceUsage ||
@@ -249,6 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     currentFirstPartyToolsNamespaceAliases,
                     canMigrateBareLegacyEditorWindowCaptureUtility,
                     shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                    canPreserveBareCurrentToolContractsReferences,
                     canUseBareCurrentFirstPartyTools,
                     assemblyDeclaredTypeNames);
             migratedContent = editorWindowCaptureMigratedContent;
@@ -257,12 +261,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 migratedContent,
                 legacyNamespaceAliases,
                 canMigrateBareLegacyFirstPartyScreenshotApi,
+                canPreserveBareCurrentToolContractsReferences,
                 assemblyDeclaredTypeNames,
                 ref replacementCount);
             migratedContent = ReplaceLegacyApplicationTypeNamesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
                 canMigrateBareLegacyApplicationTypeName,
+                canPreserveBareCurrentToolContractsReferences,
                 assemblyDeclaredTypeNames,
                 ref replacementCount);
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(

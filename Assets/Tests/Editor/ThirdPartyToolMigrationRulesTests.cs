@@ -122,6 +122,34 @@ public sealed class SettingsTest
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCurrentToolContractsReferencesUseBareNames_KeepsContent()
+        {
+            // Verifies that already-current ToolContracts references are not rewritten to fully qualified names.
+            string source = @"using System.Collections.Generic;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class CurrentReferences
+{
+    private WindowMatchMode matchMode = WindowMatchMode.exact;
+
+    public void Run()
+    {
+        EditorWindowCaptureUtility.GetOpenWindowNames();
+        MainThreadSwitcher.RegisterService(null);
+        ScreenshotResponse response = new();
+        List<UIElementInfo> elements = new();
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.Content, Is.EqualTo(source));
+            Assert.That(result.ReplacementCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolAttributeSuffixHasArguments_DropsUnsupportedArguments()
         {
             // Verifies that old attribute suffix syntax does not keep removed V3 attribute arguments.
@@ -635,7 +663,7 @@ public sealed class ScreenshotTool : UnityCliLoopTool<ScreenshotSchema, Screensh
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "return (await io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
+                "return (await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;"));
             Assert.That(result.Content, Does.Not.Contain("return await EditorWindowCaptureUtility.CaptureWindowAsync"));
         }
 
@@ -1042,7 +1070,7 @@ public sealed class UIElementInfo
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureWindowAsync"));
+                "EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)"));
             Assert.That(result.Content, Does.Contain("private UIElementInfo CreateElementInfo()"));
             Assert.That(result.Content, Does.Contain("List<UIElementInfo> clickableElements"));
             Assert.That(result.Content, Does.Not.Contain(
@@ -1196,7 +1224,7 @@ public sealed class RenderingCapture
 
             Assert.That(result.Changed, Is.True);
             Assert.That(result.Content, Does.Contain(
-                "(texture, yOffset, _) = await io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility.CaptureGameRenderingAsync"));
+                "(texture, yOffset, _) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync"));
             Assert.That(result.Content, Does.Not.Contain("(texture, yOffset) = await"));
         }
 
@@ -1415,6 +1443,33 @@ public sealed class MainThreadTool
                 "using App = io.github.hatayama.UnityCliLoop.Application;"));
             Assert.That(result.Content, Does.Contain(
                 "await App.MainThreadSwitcher.SwitchToMainThread(ct);"));
+            Assert.That(result.Content, Does.Not.Contain("PlayerLoopTiming.Update"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenCurrentToolContractsSwitcherHasLegacyTiming_PreservesBareReference()
+        {
+            // Verifies that partially migrated ToolContracts calls drop legacy timing without adding full qualifiers.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+public sealed class MainThreadTool
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "await MainThreadSwitcher.SwitchToMainThread(ct);"));
+            Assert.That(result.Content, Does.Not.Contain(
+                "io.github.hatayama.UnityCliLoop.ToolContracts.MainThreadSwitcher"));
             Assert.That(result.Content, Does.Not.Contain("PlayerLoopTiming.Update"));
         }
 
