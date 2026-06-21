@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.37](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.36...cli-v3.0.0-beta.37) (2026-06-21)
+
+
+### Features
+
+* V3 CLI invocation migration skills are available from the wizard ([#1382](https://github.com/hatayama/unity-cli-loop/issues/1382)) ([a327f4a](https://github.com/hatayama/unity-cli-loop/commit/a327f4ad2179b5cd44b1aa5d2747494712edf657))
+
 ## [3.0.0-beta.36](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.35...cli-v3.0.0-beta.36) (2026-06-17)
 
 
