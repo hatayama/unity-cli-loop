@@ -159,9 +159,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isMigrating,
                 false,
                 true);
-            ViewDataBinder.SetVisible(_refreshButton, false);
-            ViewDataBinder.SetVisible(_closeButton, true);
-            _closeButton.SetEnabled(true);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
+            _refreshButton.SetEnabled(false);
         }
 
         internal void ShowCheckingState(ThirdPartyToolMigrationProgress progress, bool isMigrating)

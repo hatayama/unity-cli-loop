@@ -273,6 +273,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.GreaterThan(GetVisualElementIndex(root, promptFoldout)));
         }
 
+        [Test]
+        public void ShowNoMigrationTargetsState_DisablesCheckButtonWithoutShowingCloseButton()
+        {
+            // Verifies that the completed migration state keeps Check visible but unavailable.
+            VisualElement root = new();
+            ThirdPartyToolMigrationWizardView view = ThirdPartyToolMigrationWizardView.Create(
+                root,
+                () => { },
+                () => { },
+                _ => { },
+                () => { },
+                () => { });
+
+            view.ShowNoMigrationTargetsState(isMigrating: false);
+
+            Button checkButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Check");
+            Button closeButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Close");
+
+            Assert.That(checkButton, Is.Not.Null);
+            Assert.That(closeButton, Is.Not.Null);
+            Assert.That(checkButton.style.display.value, Is.EqualTo(DisplayStyle.Flex));
+            Assert.That(checkButton.enabledSelf, Is.False);
+            Assert.That(closeButton.style.display.value, Is.EqualTo(DisplayStyle.None));
+        }
+
         [TestCase(SkillInstallState.Installed, true)]
         [TestCase(SkillInstallState.Outdated, true)]
         [TestCase(SkillInstallState.Missing, false)]
