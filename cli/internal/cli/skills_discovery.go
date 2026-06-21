@@ -50,6 +50,9 @@ func collectV3MigrationSkillDefinition(projectRoot string) ([]skillDefinition, e
 	if !ok {
 		return nil, errors.New("v3 CLI invocation migration skill source was not found")
 	}
+	if skill.name != v3MigrationSkillName {
+		return nil, errors.New("v3 CLI invocation migration skill source has an unexpected name")
+	}
 	return []skillDefinition{skill}, nil
 }
 

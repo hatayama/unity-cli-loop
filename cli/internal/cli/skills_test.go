@@ -175,6 +175,27 @@ name: v3-cli-invocation-migration
 	}
 }
 
+// Tests that the dedicated V3 migration source must declare the expected skill name.
+func TestCollectV3MigrationSkillDefinitionRejectsUnexpectedName(t *testing.T) {
+	projectRoot := t.TempDir()
+	writePackageRootMarker(t, projectRoot)
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills~/v3-cli-invocation-migration/Skill", `---
+name: other-migration-skill
+---
+
+# temporary migration
+`)
+
+	_, err := collectV3MigrationSkillDefinition(projectRoot)
+
+	if err == nil {
+		t.Fatal("collectV3MigrationSkillDefinition should fail for an unexpected skill name")
+	}
+	if !strings.Contains(err.Error(), "unexpected name") {
+		t.Fatalf("error should explain the unexpected skill name: %v", err)
+	}
+}
+
 // Tests that the dedicated V3 migration skill can be read from a manifest file dependency.
 func TestCollectV3MigrationSkillDefinitionReadsManifestFilePackage(t *testing.T) {
 	projectRoot := t.TempDir()
@@ -1117,7 +1138,11 @@ func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
 		"scripts",
 		"detect-v3-cli-invocation-candidates.sh")
 
-	command := exec.Command("sh", scriptPath, fixtureRoot)
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh is not installed")
+	}
+	command := exec.Command(shPath, scriptPath, fixtureRoot)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("detector failed: %v\n%s", err, string(output))

@@ -35,6 +35,12 @@ function Test-IsTargetFile {
     return $File.Name -eq "SKILL.md" -or $targetExtensions -contains $File.Extension
 }
 
+function Test-IsReparsePointDirectory {
+    param([System.IO.DirectoryInfo] $Directory)
+
+    return ($Directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+}
+
 function Test-IsBundledMigrationSkillPath {
     param([string] $Path)
 
@@ -66,6 +72,7 @@ function Get-CandidateFile {
     Get-ChildItem -LiteralPath $Directory -Directory |
         Where-Object {
             -not (Test-IsExcludedDirectoryName -Name $_.Name) -and
+            -not (Test-IsReparsePointDirectory -Directory $_) -and
             -not (Test-IsBundledMigrationSkillPath -Path $_.FullName)
         } |
         ForEach-Object {
