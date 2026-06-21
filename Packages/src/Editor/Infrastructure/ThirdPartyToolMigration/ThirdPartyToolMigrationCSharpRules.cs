@@ -67,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 legacyAssemblyAliases: Array.Empty<string>(),
                 legacyAssemblyToolInfoAliases: Array.Empty<string>(),
                 currentApplicationAssemblyAliases: Array.Empty<string>(),
+                currentDomainAssemblyAliases: Array.Empty<string>(),
                 currentFirstPartyToolsAssemblyAliases: Array.Empty<string>(),
                 assemblyDeclaredTypeNames: Array.Empty<string>());
         }
@@ -81,6 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string[] legacyAssemblyAliases,
             string[] legacyAssemblyToolInfoAliases,
             string[] currentApplicationAssemblyAliases,
+            string[] currentDomainAssemblyAliases,
             string[] currentFirstPartyToolsAssemblyAliases,
             string[] assemblyDeclaredTypeNames)
         {
@@ -91,6 +93,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 currentApplicationAssemblyAliases != null,
                 "currentApplicationAssemblyAliases must not be null");
             Debug.Assert(
+                currentDomainAssemblyAliases != null,
+                "currentDomainAssemblyAliases must not be null");
+            Debug.Assert(
                 currentFirstPartyToolsAssemblyAliases != null,
                 "currentFirstPartyToolsAssemblyAliases must not be null");
             Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
@@ -100,6 +105,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string[] currentApplicationNamespaceAliases = GetCombinedCurrentApplicationNamespaceAliases(
                 source,
                 currentApplicationAssemblyAliases);
+            string[] currentDomainNamespaceAliases = GetCombinedCurrentDomainNamespaceAliases(
+                source,
+                currentDomainAssemblyAliases);
             string[] currentFirstPartyToolsNamespaceAliases = GetCombinedCurrentFirstPartyToolsNamespaceAliases(
                 source,
                 currentFirstPartyToolsAssemblyAliases);
@@ -274,6 +282,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ref replacementCount);
             migratedContent = ReplaceCurrentDomainContractTypeNamesInCode(
                 migratedContent,
+                currentDomainNamespaceAliases,
                 canMigrateBareCurrentDomainContractType,
                 canPreserveBareCurrentToolContractsReferences,
                 assemblyDeclaredTypeNames,

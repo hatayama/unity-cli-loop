@@ -1192,6 +1192,52 @@ public static class ToolMetadataProvider
         }
 
         [Test]
+        public void ApplyMigration_WhenAssemblyUsesCurrentDomainGlobalAliasAndSplitMetadata_RewritesDomainAliasContracts()
+        {
+            // Verifies that split V3 Domain aliases do not leave moved contract types in the Domain namespace.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string globalUsingPath = Path.Combine(toolDirectory, "GlobalUsings.cs");
+                string metadataPath = Path.Combine(toolDirectory, "ToolMetadataProvider.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(globalUsingPath, "global using Dom = io.github.hatayama.UnityCliLoop.Domain;");
+                File.WriteAllText(metadataPath, @"public static class ToolMetadataProvider
+{
+    public static Dom.ToolInfo[] GetTools()
+    {
+        return new Dom.ToolInfo[0];
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(File.ReadAllText(globalUsingPath), Does.Contain(
+                    "global using Dom = io.github.hatayama.UnityCliLoop.Domain;"));
+                Assert.That(File.ReadAllText(metadataPath), Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo[] GetTools()"));
+                Assert.That(File.ReadAllText(metadataPath), Does.Not.Contain("Dom.ToolInfo"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(File.ReadAllText(asmdefPath), Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenUnrelatedAsmdefJsonIsMalformedAndNoAsmrefs_AppliesAsmdefRepair()
         {
             // Verifies that unrelated malformed asmdefs do not block applying repairable asmdef changes.
@@ -3546,6 +3592,37 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
     ""references"": [
         ""GUID:214998e563c124e8a88199b2dd1f522d""
     ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task HasMigrationTargetsAsync_WhenCurrentDomainGlobalUsingOnlyNeedsReference_ReturnsTrue()
+        {
+            // Verifies that startup detection reports a missing Domain reference for current Domain global using.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "GlobalUsings.cs"),
+                    "global using io.github.hatayama.UnityCliLoop.Domain;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
 }");
 
                 ThirdPartyToolMigrationFileService service = new();

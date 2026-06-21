@@ -122,6 +122,39 @@ public sealed class SettingsTest
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCurrentDomainAliasUsesMovedContractTypes_RewritesContracts()
+        {
+            // Verifies that current Domain aliases do not leave moved public contract types in the Domain namespace.
+            string source = @"using Dom = io.github.hatayama.UnityCliLoop.Domain;
+
+public static class ToolMetadataProvider
+{
+    public static Dom.ToolInfo[] GetTools()
+    {
+        return new Dom.ToolInfo[0];
+    }
+
+    public static Dom.ServiceResult<int> Create()
+    {
+        return null;
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo[] GetTools"));
+            Assert.That(result.Content, Does.Contain(
+                "new io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo[0]"));
+            Assert.That(result.Content, Does.Contain(
+                "io.github.hatayama.UnityCliLoop.ToolContracts.ServiceResult<int> Create"));
+            Assert.That(result.Content, Does.Not.Contain("Dom.ToolInfo"));
+            Assert.That(result.Content, Does.Not.Contain("Dom.ServiceResult"));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenCurrentToolContractsReferencesUseBareNames_KeepsContent()
         {
             // Verifies that already-current ToolContracts references are not rewritten to fully qualified names.
@@ -484,6 +517,7 @@ public sealed class ScreenshotTool
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
                     currentApplicationAssemblyAliases: System.Array.Empty<string>(),
+                    currentDomainAssemblyAliases: System.Array.Empty<string>(),
                     currentFirstPartyToolsAssemblyAliases: System.Array.Empty<string>(),
                     assemblyDeclaredTypeNames: System.Array.Empty<string>());
 
@@ -549,6 +583,7 @@ public sealed class ScreenshotTool
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
                     currentApplicationAssemblyAliases: System.Array.Empty<string>(),
+                    currentDomainAssemblyAliases: System.Array.Empty<string>(),
                     currentFirstPartyToolsAssemblyAliases: System.Array.Empty<string>(),
                     assemblyDeclaredTypeNames: System.Array.Empty<string>());
 
@@ -586,6 +621,7 @@ public sealed class ScreenshotTool
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
                     currentApplicationAssemblyAliases: System.Array.Empty<string>(),
+                    currentDomainAssemblyAliases: System.Array.Empty<string>(),
                     currentFirstPartyToolsAssemblyAliases: System.Array.Empty<string>(),
                     assemblyDeclaredTypeNames: System.Array.Empty<string>());
 
@@ -634,6 +670,7 @@ public static class EditorWindowCaptureUtility
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
                     currentApplicationAssemblyAliases: System.Array.Empty<string>(),
+                    currentDomainAssemblyAliases: System.Array.Empty<string>(),
                     currentFirstPartyToolsAssemblyAliases: System.Array.Empty<string>(),
                     assemblyDeclaredTypeNames: new[] { "EditorWindowCaptureUtility" });
 
@@ -1747,6 +1784,7 @@ public sealed class MainThreadTool
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
                     currentApplicationAssemblyAliases: System.Array.Empty<string>(),
+                    currentDomainAssemblyAliases: System.Array.Empty<string>(),
                     currentFirstPartyToolsAssemblyAliases: System.Array.Empty<string>(),
                     assemblyDeclaredTypeNames: new[] { "MainThreadSwitcher" });
 
@@ -3804,6 +3842,7 @@ public sealed class OtherTool
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
                     currentApplicationAssemblyAliases: System.Array.Empty<string>(),
+                    currentDomainAssemblyAliases: System.Array.Empty<string>(),
                     currentFirstPartyToolsAssemblyAliases: System.Array.Empty<string>(),
                     assemblyDeclaredTypeNames: System.Array.Empty<string>());
 
@@ -3829,6 +3868,7 @@ public sealed class OtherTool
                     legacyAssemblyAliases: System.Array.Empty<string>(),
                     legacyAssemblyToolInfoAliases: System.Array.Empty<string>(),
                     currentApplicationAssemblyAliases: System.Array.Empty<string>(),
+                    currentDomainAssemblyAliases: System.Array.Empty<string>(),
                     currentFirstPartyToolsAssemblyAliases: System.Array.Empty<string>(),
                     assemblyDeclaredTypeNames: System.Array.Empty<string>());
 

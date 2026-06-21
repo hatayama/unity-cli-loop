@@ -234,6 +234,49 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
+        internal static bool ContainsCurrentDomainContractAliasReference(
+            string source,
+            string[] currentDomainNamespaceAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(
+                currentDomainNamespaceAliases != null,
+                "currentDomainNamespaceAliases must not be null");
+
+            foreach (string alias in currentDomainNamespaceAliases)
+            {
+                if (ContainsSingleCurrentDomainContractAliasReference(source, alias, "ToolInfo"))
+                {
+                    return true;
+                }
+
+                foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
+                {
+                    if (ContainsSingleCurrentDomainContractAliasReference(source, alias, rule.CurrentName))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        internal static bool ContainsSingleCurrentDomainContractAliasReference(
+            string source,
+            string alias,
+            string typeName)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(alias), "alias must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(typeName), "typeName must not be null or empty");
+
+            Regex aliasRegex = new(
+                $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(typeName)}\b",
+                RegexOptions.Compiled);
+            return RegexMatchesCode(source, aliasRegex);
+        }
+
         internal static bool ContainsLegacyAssemblyScopedTypeName(
             string source,
             CodeTextMask codeTextMask,

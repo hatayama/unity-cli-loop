@@ -213,6 +213,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return RegexMatchesCode(source, CurrentDomainGlobalUsingRegex);
         }
 
+        internal static bool ContainsCurrentDomainNamespaceAlias(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, CurrentDomainNamespaceAliasRegex);
+        }
+
         internal static bool ContainsCurrentToolContractsGlobalUsing(string source)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -253,6 +260,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
 
             return GetRegexGroupValuesInCode(source, LegacyGlobalNamespaceAliasRegex, "alias");
+        }
+
+        internal static string[] GetCurrentDomainGlobalNamespaceAliases(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return GetRegexGroupValuesInCode(source, CurrentDomainGlobalNamespaceAliasRegex, "alias");
         }
 
         internal static string[] GetLegacyGlobalToolInfoTypeAliases(string source)

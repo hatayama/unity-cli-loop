@@ -66,6 +66,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new(StringComparer.Ordinal);
             Dictionary<string, HashSet<string>> assemblyScopedCurrentApplicationAliasesByDirectory =
                 new(StringComparer.Ordinal);
+            Dictionary<string, HashSet<string>> assemblyScopedCurrentDomainAliasesByDirectory =
+                new(StringComparer.Ordinal);
             Dictionary<string, HashSet<string>> assemblyScopedCurrentFirstPartyToolsAliasesByDirectory =
                 new(StringComparer.Ordinal);
             HashSet<string> toolContractsReferenceAssemblyDirectories = new(StringComparer.Ordinal);
@@ -135,6 +137,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (ThirdPartyToolMigrationRules.ContainsCurrentDomainGlobalUsing(source))
                 {
                     assemblyScopedCurrentDomainDirectories.Add(assemblyDirectory);
+                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainNamespaceAlias(source))
+                {
+                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                    AddAssemblyScopedNames(
+                        assemblyScopedCurrentDomainAliasesByDirectory,
+                        assemblyDirectory,
+                        ThirdPartyToolMigrationRules.GetCurrentDomainGlobalNamespaceAliases(source));
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsCurrentToolContractsGlobalUsing(source))
@@ -193,6 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 assemblyScopedCurrentDomainDirectories,
                 assemblyScopedCurrentFirstPartyToolsDirectories,
                 assemblyScopedCurrentApplicationAliasesByDirectory,
+                assemblyScopedCurrentDomainAliasesByDirectory,
                 assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
                 assemblyDeclaredTypeNamesByDirectory,
                 ct);
@@ -328,6 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CreateAssemblyScopedLegacyAliasesByDirectory(assemblyScopedLegacyAliasesByDirectory),
                 CreateAssemblyScopedLegacyAliasesByDirectory(assemblyScopedLegacyToolInfoAliasesByDirectory),
                 CreateAssemblyScopedNamesByDirectory(assemblyScopedCurrentApplicationAliasesByDirectory),
+                CreateAssemblyScopedNamesByDirectory(assemblyScopedCurrentDomainAliasesByDirectory),
                 CreateAssemblyScopedNamesByDirectory(assemblyScopedCurrentFirstPartyToolsAliasesByDirectory),
                 CreateAssemblyScopedNamesByDirectory(assemblyDeclaredTypeNamesByDirectory),
                 toolContractsReferenceAssemblyDirectories,

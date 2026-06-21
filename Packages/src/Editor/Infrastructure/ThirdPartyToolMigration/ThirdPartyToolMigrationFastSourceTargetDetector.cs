@@ -37,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             HashSet<string> assemblyScopedCurrentDomainDirectories,
             HashSet<string> assemblyScopedCurrentFirstPartyToolsDirectories,
             Dictionary<string, HashSet<string>> assemblyScopedCurrentApplicationAliasesByDirectory,
+            Dictionary<string, HashSet<string>> assemblyScopedCurrentDomainAliasesByDirectory,
             Dictionary<string, HashSet<string>> assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
             Dictionary<string, HashSet<string>> assemblyDeclaredTypeNamesByDirectory,
             CancellationToken ct)
@@ -70,6 +71,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(
                 assemblyScopedCurrentApplicationAliasesByDirectory != null,
                 "assemblyScopedCurrentApplicationAliasesByDirectory must not be null");
+            Debug.Assert(
+                assemblyScopedCurrentDomainAliasesByDirectory != null,
+                "assemblyScopedCurrentDomainAliasesByDirectory must not be null");
             Debug.Assert(
                 assemblyScopedCurrentFirstPartyToolsAliasesByDirectory != null,
                 "assemblyScopedCurrentFirstPartyToolsAliasesByDirectory must not be null");
@@ -125,6 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         legacyAssemblyAliases,
                         legacyAssemblyToolInfoAliases,
                         GetAssemblyScopedNames(assemblyScopedCurrentApplicationAliasesByDirectory, assemblyDirectory),
+                        GetAssemblyScopedNames(assemblyScopedCurrentDomainAliasesByDirectory, assemblyDirectory),
                         GetAssemblyScopedNames(
                             assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
                             assemblyDirectory),

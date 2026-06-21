@@ -114,6 +114,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"\bglobal\s+using\s+(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\s*;",
                 RegexOptions.Compiled);
 
+        internal static readonly Regex CurrentDomainNamespaceAliasRegex =
+            new(
+                $@"\b(?:global\s+)?using\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\s*;",
+                RegexOptions.Compiled);
+
+        internal static readonly Regex CurrentDomainGlobalNamespaceAliasRegex =
+            new(
+                $@"\bglobal\s+using\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\s*;",
+                RegexOptions.Compiled);
+
         internal static readonly Regex CurrentToolContractsGlobalUsingRegex =
             new(
                 $@"\bglobal\s+using\s+(?:global::)?{Regex.Escape(CurrentNamespace)}\s*;",

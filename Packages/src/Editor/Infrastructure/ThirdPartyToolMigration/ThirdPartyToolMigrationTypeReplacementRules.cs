@@ -389,12 +389,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static string ReplaceCurrentDomainContractTypeNamesInCode(
             string source,
+            string[] currentDomainNamespaceAliases,
             bool canMigrateBareCurrentDomainContractType,
             bool canPreserveBareCurrentToolContractsReferences,
             string[] assemblyDeclaredTypeNames,
             ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(
+                currentDomainNamespaceAliases != null,
+                "currentDomainNamespaceAliases must not be null");
             Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
 
             string migratedContent = source;
@@ -403,6 +407,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 migratedContent = ReplaceCurrentDomainContractTypeNameInCode(
                     migratedContent,
                     rule.CurrentName,
+                    currentDomainNamespaceAliases,
                     canMigrateBareCurrentDomainContractType,
                     canPreserveBareCurrentToolContractsReferences,
                     assemblyDeclaredTypeNames,
@@ -412,6 +417,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ReplaceCurrentDomainContractTypeNameInCode(
                 migratedContent,
                 "ToolInfo",
+                currentDomainNamespaceAliases,
                 canMigrateBareCurrentDomainContractType,
                 canPreserveBareCurrentToolContractsReferences,
                 assemblyDeclaredTypeNames,
@@ -421,6 +427,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static string ReplaceCurrentDomainContractTypeNameInCode(
             string source,
             string typeName,
+            string[] currentDomainNamespaceAliases,
             bool canMigrateBareCurrentDomainContractType,
             bool canPreserveBareCurrentToolContractsReferences,
             string[] assemblyDeclaredTypeNames,
@@ -428,6 +435,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(!string.IsNullOrEmpty(typeName), "typeName must not be null or empty");
+            Debug.Assert(
+                currentDomainNamespaceAliases != null,
+                "currentDomainNamespaceAliases must not be null");
             Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
 
             bool hasProtectedTypeDeclaration = DeclaresLocalType(source, typeName) ||
@@ -441,6 +451,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 fullyQualifiedRegex,
                 _ => $"{CurrentNamespace}.{typeName}",
                 ref replacementCount);
+
+            foreach (string alias in currentDomainNamespaceAliases)
+            {
+                Regex aliasRegex = new(
+                    $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(typeName)}\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    aliasRegex,
+                    _ => $"{CurrentNamespace}.{typeName}",
+                    ref replacementCount);
+            }
 
             Regex unqualifiedRegex = new(
                 $@"(?<![\.:])\b{Regex.Escape(typeName)}\b(?!\s*=)",
