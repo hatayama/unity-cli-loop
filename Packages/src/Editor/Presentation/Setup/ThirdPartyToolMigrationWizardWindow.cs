@@ -209,6 +209,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return ThirdPartyToolMigrationWizardText.GetMigrationSkillButtonText(isUpdating, installState);
         }
 
+        internal static string GetMigrationSkillPromptText()
+        {
+            return ThirdPartyToolMigrationWizardText.AiMigrationSkillPromptText;
+        }
+
+        internal static string GetMigrationSkillPromptCopyButtonText()
+        {
+            return ThirdPartyToolMigrationWizardText.GetMigrationSkillPromptCopyButtonText();
+        }
+
+        internal static void CopyMigrationSkillPromptToClipboard()
+        {
+            EditorGUIUtility.systemCopyBuffer = GetMigrationSkillPromptText();
+        }
+
         internal static bool ShouldRemoveMigrationSkill(SkillInstallState installState)
         {
             return installState == SkillInstallState.Installed

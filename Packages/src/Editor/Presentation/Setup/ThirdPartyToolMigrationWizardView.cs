@@ -343,9 +343,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             content.Add(usageFoldout);
 
             TextField usageTextField = CreateSelectableText(
-                ThirdPartyToolMigrationWizardText.AiMigrationSkillUsageExampleText,
+                ThirdPartyToolMigrationWizardText.AiMigrationSkillPromptText,
                 "setup-skill-usage-text");
             usageFoldout.Add(usageTextField);
+
+            Button copyPromptButton = new Button(ThirdPartyToolMigrationWizardWindow.CopyMigrationSkillPromptToClipboard);
+            copyPromptButton.text = ThirdPartyToolMigrationWizardText.GetMigrationSkillPromptCopyButtonText();
+            copyPromptButton.AddToClassList("setup-button");
+            copyPromptButton.AddToClassList("setup-button--small");
+            copyPromptButton.AddToClassList("setup-skill-usage-copy-button");
+            usageFoldout.Add(copyPromptButton);
             usageFoldout.SetValueWithoutNotify(false);
         }
 

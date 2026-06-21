@@ -180,6 +180,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
+        [Test]
+        public void GetMigrationSkillPromptText_ReturnsActionablePrompt()
+        {
+            // Verifies that the wizard provides a copyable prompt for asking an AI agent to run the skill.
+            string prompt = ThirdPartyToolMigrationWizardWindow.GetMigrationSkillPromptText();
+
+            Assert.That(prompt, Does.Contain("v3-cli-invocation-migration"));
+            Assert.That(prompt, Does.Contain("SKILL.md, Markdown, POSIX shell scripts, and PowerShell scripts"));
+            Assert.That(prompt, Does.Contain("Do not change C# snippets"));
+            Assert.That(prompt, Does.Contain("summarize changed files"));
+        }
+
+        [Test]
+        public void GetMigrationSkillPromptCopyButtonText_ReturnsClearLabel()
+        {
+            // Verifies that the copy button label describes the clipboard action.
+            string label = ThirdPartyToolMigrationWizardWindow.GetMigrationSkillPromptCopyButtonText();
+
+            Assert.That(label, Is.EqualTo("Copy AI Prompt"));
+        }
+
+        [Test]
+        public void CopyMigrationSkillPromptToClipboard_WritesPrompt()
+        {
+            // Verifies that the copy action places the AI prompt on the system clipboard.
+            string originalClipboard = EditorGUIUtility.systemCopyBuffer;
+            try
+            {
+                ThirdPartyToolMigrationWizardWindow.CopyMigrationSkillPromptToClipboard();
+
+                Assert.That(
+                    EditorGUIUtility.systemCopyBuffer,
+                    Is.EqualTo(ThirdPartyToolMigrationWizardWindow.GetMigrationSkillPromptText()));
+            }
+            finally
+            {
+                EditorGUIUtility.systemCopyBuffer = originalClipboard;
+            }
+        }
+
         [TestCase(SkillInstallState.Installed, true)]
         [TestCase(SkillInstallState.Outdated, true)]
         [TestCase(SkillInstallState.Missing, false)]
