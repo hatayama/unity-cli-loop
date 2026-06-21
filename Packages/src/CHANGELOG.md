@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.0.0-beta.38](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.37...v3.0.0-beta.38) (2026-06-21)
+
+
+### Features
+
+* V3 CLI invocation migration skills are available from the wizard ([#1382](https://github.com/hatayama/unity-cli-loop/issues/1382)) ([a327f4a](https://github.com/hatayama/unity-cli-loop/commit/a327f4ad2179b5cd44b1aa5d2747494712edf657))
+
+
+### Bug Fixes
+
+* get-logs works with active Console filters ([#1381](https://github.com/hatayama/unity-cli-loop/issues/1381)) ([ffd3c91](https://github.com/hatayama/unity-cli-loop/commit/ffd3c9138484cb95c275fa9720bc8e24cfafd500))
+* Migration checks are faster and more reliable ([#1376](https://github.com/hatayama/unity-cli-loop/issues/1376)) ([07f3020](https://github.com/hatayama/unity-cli-loop/commit/07f302047b62c3b3ebb1d9e498c3961aa0a1e8ca))
+* Migration now upgrades v3 editor tools without leaving compile errors ([#1374](https://github.com/hatayama/unity-cli-loop/issues/1374)) ([7dec89f](https://github.com/hatayama/unity-cli-loop/commit/7dec89f032e0b572b423227fc69dbb3190a65c52))
+
 ## [3.0.0-beta.37](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.36...v3.0.0-beta.37) (2026-06-18)
 
 
