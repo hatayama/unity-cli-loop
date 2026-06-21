@@ -73,5 +73,46 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 groupSkillsUnderUnityCliLoop,
                 ct);
         }
+
+        public SkillInstallState GetV3MigrationSkillInstallStateAtProjectRoot(
+            string projectRoot,
+            SkillSetupTargetInfo target,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            return _skillSetupService.GetV3MigrationSkillInstallStateAtProjectRoot(
+                projectRoot,
+                target,
+                groupSkillsUnderUnityCliLoop);
+        }
+
+        public Task InstallV3MigrationSkillFilesAsync(
+            string projectRoot,
+            List<SkillSetupTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
+        {
+            Debug.Assert(targets != null, "targets must not be null");
+
+            return _skillSetupService.InstallV3MigrationSkillFilesAsync(
+                projectRoot,
+                targets,
+                groupSkillsUnderUnityCliLoop,
+                ct);
+        }
+
+        public Task RemoveV3MigrationSkillFilesAsync(
+            string projectRoot,
+            List<SkillSetupTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
+        {
+            Debug.Assert(targets != null, "targets must not be null");
+
+            return _skillSetupService.RemoveV3MigrationSkillFilesAsync(
+                projectRoot,
+                targets,
+                groupSkillsUnderUnityCliLoop,
+                ct);
+        }
     }
 }

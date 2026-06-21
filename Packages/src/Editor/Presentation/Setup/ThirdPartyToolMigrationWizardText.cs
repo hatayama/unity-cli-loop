@@ -9,14 +9,33 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     internal static class ThirdPartyToolMigrationWizardText
     {
-        internal const string MigrationNotCheckedText = "Migration status has not been checked.";
-        internal const string NoMigrationTargetsText = "No V3 custom tool migration is needed.";
-        private const string MigrationCheckingText = "Scanning project for V3 custom tool migration...";
-        private const string MigrationApplyingText = "Migrating project files for V3 custom tools...";
+        internal const string CSharpMigrationSectionTitle = "C# Source Structure Migration";
+        internal const string CSharpMigrationDescriptionText =
+            "Use this for C# custom tool source files that still use the V2 API. This section scans the Unity " +
+            "project and can rewrite matching C# files automatically.";
+        internal const string AiMigrationSkillSectionTitle = "AI Skill and Script Migration";
+        internal const string AiMigrationSkillDescriptionText =
+            "Install a temporary AI skill for updating SKILL.md, Markdown, shell scripts, and PowerShell scripts " +
+            "that call uloop.\nThe skill gives your AI agent a checklist and detection scripts; this window only " +
+            "installs or removes it.";
+        internal const string AiMigrationSkillUsageFoldoutTitle = "How to use this skill";
+        internal const string AiMigrationSkillUsageExampleText =
+            "After installing the skill, open your AI agent in this project and ask it to use the installed " +
+            "migration skill.\n\nExample prompt:\nUse the v3-cli-invocation-migration skill to scan this project " +
+            "for Unity CLI Loop V2 CLI invocation patterns in SKILL.md, Markdown, shell scripts, and PowerShell " +
+            "scripts. Update them for V3 CLI usage, then summarize the changed files and any commands I should " +
+            "verify manually.";
+        internal const string MigrationNotCheckedText = "C# source migration status has not been checked.";
+        internal const string NoMigrationTargetsText = "No C# source structure migration is needed.";
+        private const string MigrationCheckingText = "Scanning C# source files for V3 custom tool API migration...";
+        private const string MigrationApplyingText = "Migrating C# source files to V3 custom tool APIs...";
         private const string MigrationButtonReadyText = "Migrate";
         private const string MigrationButtonMigratingText = "Migrating...";
         private const string MigrationButtonNoTargetsText = "Nothing to migrate";
         private const string MigrationButtonCheckRequiredText = "Check required";
+        private const string InstallMigrationSkillButtonText = "Install Migration Skill";
+        private const string RemoveMigrationSkillButtonText = "Remove Migration Skill";
+        private const string UpdatingMigrationSkillButtonText = "Updating...";
 
         internal static string GetMigrationStatusText(int fileCount)
         {
@@ -27,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string subject = fileCount == 1 ? "this file still uses" : "these files still use";
             string objectPronoun = fileCount == 1 ? "it" : "them";
 
-            return $"{fileCount} {noun} {verb} V3 custom tool migration.\n" +
+            return $"{fileCount} {noun} {verb} V3 C# source structure migration.\n" +
                 $"The Unity Console is showing errors because {subject} the old custom tool API.\n\n" +
                 $"Click Migrate to update {objectPronoun} automatically. " +
                 "The errors should disappear after migration.";
@@ -63,6 +82,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return hasMigrationTargets ? MigrationButtonReadyText : MigrationButtonNoTargetsText;
+        }
+
+        internal static string GetMigrationSkillButtonText(
+            bool isUpdating,
+            SkillInstallState installState)
+        {
+            if (isUpdating)
+            {
+                return UpdatingMigrationSkillButtonText;
+            }
+
+            return installState == SkillInstallState.Installed || installState == SkillInstallState.Outdated
+                ? RemoveMigrationSkillButtonText
+                : InstallMigrationSkillButtonText;
         }
     }
 }

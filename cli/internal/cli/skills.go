@@ -13,6 +13,7 @@ const (
 	skillsCommandName    = "skills"
 	managedSkillsDir     = "unity-cli-loop"
 	skillFileName        = "SKILL.md"
+	v3MigrationSkillName = "v3-cli-invocation-migration"
 	uloopSettingsDir     = ".uloop"
 	toolSettingsFile     = "settings.tools.json"
 	manifestFileName     = "manifest.json"
@@ -123,6 +124,25 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 		writeClassifiedError(stderr, err, errorContext{command: skillsCommandName})
 		return true, 1
 	}
+
+	if isV3MigrationSkillSubcommand(subcommand) {
+		if len(options.targets) == 0 {
+			printSkillsTargetGuidance(subcommand, stdout)
+			return true, 0
+		}
+		switch subcommand {
+		case "install-v3-migration":
+			skills, err := collectV3MigrationSkillDefinition(projectRoot)
+			if err != nil {
+				writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+				return true, 1
+			}
+			return true, runV3MigrationSkillInstall(projectRoot, skills, options, stdout, stderr)
+		case "uninstall-v3-migration":
+			return true, runV3MigrationSkillUninstall(projectRoot, options, stdout, stderr)
+		}
+	}
+
 	skills, err := collectSkillDefinitions(projectRoot)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
@@ -178,7 +198,16 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 
 func isKnownSkillsSubcommand(subcommand string) bool {
 	switch subcommand {
-	case "list", "install", "uninstall":
+	case "list", "install", "uninstall", "install-v3-migration", "uninstall-v3-migration":
+		return true
+	default:
+		return false
+	}
+}
+
+func isV3MigrationSkillSubcommand(subcommand string) bool {
+	switch subcommand {
+	case "install-v3-migration", "uninstall-v3-migration":
 		return true
 	default:
 		return false

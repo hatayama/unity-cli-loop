@@ -59,6 +59,20 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             string toolName,
             bool groupSkillsUnderUnityCliLoop,
             CancellationToken ct);
+        SkillInstallState GetV3MigrationSkillInstallStateAtProjectRoot(
+            string projectRoot,
+            SkillSetupTargetInfo target,
+            bool groupSkillsUnderUnityCliLoop);
+        Task InstallV3MigrationSkillFilesAsync(
+            string projectRoot,
+            List<SkillSetupTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct);
+        Task RemoveV3MigrationSkillFilesAsync(
+            string projectRoot,
+            List<SkillSetupTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct);
     }
 
     /// <summary>
@@ -127,6 +141,53 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             return _skillSetupPort.InstallSkillFilesForToolAsync(
                 toolName,
+                groupSkillsUnderUnityCliLoop,
+                ct);
+        }
+
+        public SkillInstallState GetV3MigrationSkillInstallStateAtProjectRoot(
+            string projectRoot,
+            SkillSetupTargetInfo target,
+            bool groupSkillsUnderUnityCliLoop)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            return _skillSetupPort.GetV3MigrationSkillInstallStateAtProjectRoot(
+                projectRoot,
+                target,
+                groupSkillsUnderUnityCliLoop);
+        }
+
+        public Task InstallV3MigrationSkillFilesAsync(
+            string projectRoot,
+            List<SkillSetupTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(targets != null, "targets must not be null");
+            ct.ThrowIfCancellationRequested();
+
+            return _skillSetupPort.InstallV3MigrationSkillFilesAsync(
+                projectRoot,
+                targets,
+                groupSkillsUnderUnityCliLoop,
+                ct);
+        }
+
+        public Task RemoveV3MigrationSkillFilesAsync(
+            string projectRoot,
+            List<SkillSetupTargetInfo> targets,
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(targets != null, "targets must not be null");
+            ct.ThrowIfCancellationRequested();
+
+            return _skillSetupPort.RemoveV3MigrationSkillFilesAsync(
+                projectRoot,
+                targets,
                 groupSkillsUnderUnityCliLoop,
                 ct);
         }
