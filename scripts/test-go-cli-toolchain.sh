@@ -43,15 +43,15 @@ create_repo() {
   printf '%s\n' "$repo_dir"
 }
 
-SUCCESS_REPO=$(create_repo "1.26.3")
-write_fake_go "1.26.3"
+SUCCESS_REPO=$(create_repo "1.26.4")
+write_fake_go "1.26.4"
 (
   . "$ROOT_DIR/scripts/go-cli-toolchain.sh"
   require_go_cli_toolchain "$SUCCESS_REPO"
 )
 
-FAILURE_REPO=$(create_repo "1.26.3")
-write_fake_go "1.26.2"
+FAILURE_REPO=$(create_repo "1.26.4")
+write_fake_go "1.26.3"
 MISMATCH_STDOUT="$TMP_DIR/mismatch.out"
 MISMATCH_STDERR="$TMP_DIR/mismatch.err"
 if (
@@ -62,7 +62,7 @@ if (
   exit 1
 fi
 
-if ! grep -F "Go 1.26.3 is required" "$MISMATCH_STDERR" >/dev/null 2>&1; then
+if ! grep -F "Go 1.26.4 is required" "$MISMATCH_STDERR" >/dev/null 2>&1; then
   echo "Expected mismatch error to mention the required Go version." >&2
   exit 1
 fi
