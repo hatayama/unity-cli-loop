@@ -305,12 +305,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 string[] currentDomainAssemblyAliases =
                     GetAssemblyScopedNames(assemblyScopedCurrentDomainAliasesByDirectory, assemblyDirectory);
+                string[] currentDomainNamespaceAliases =
+                    ThirdPartyToolMigrationAliasRules.GetCombinedCurrentDomainNamespaceAliases(
+                        source,
+                        currentDomainAssemblyAliases);
                 if (ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApiForAssembly(
                         source,
                         assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory)) ||
                     ThirdPartyToolMigrationRules.ContainsCurrentDomainContractAliasReference(
                         source,
-                        currentDomainAssemblyAliases))
+                        currentDomainNamespaceAliases))
                 {
                     toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
@@ -334,6 +338,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         legacyAssemblyAliases,
                         currentFirstPartyToolsAssemblyAliases,
                         assemblyDeclaredTypeNames);
+                bool hasCurrentFirstPartyToolsContractSourceTarget =
+                    ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotContractApiForAssembly(
+                        source,
+                        hasAssemblyScopedCurrentFirstPartyToolsUsing,
+                        currentFirstPartyToolsAssemblyAliases,
+                        assemblyDeclaredTypeNames);
                 if (ThirdPartyToolMigrationRules.ContainsLegacyFirstPartyScreenshotApiForAssembly(
                         source,
                         assemblyScopedLegacyDirectories.Contains(assemblyDirectory) ||
@@ -342,7 +352,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         hasAssemblyScopedCurrentToolContractsUsing,
                         legacyAssemblyAliases,
                         assemblyDeclaredTypeNames) ||
-                    hasLegacyEditorWindowCaptureUtilitySourceTarget)
+                    hasLegacyEditorWindowCaptureUtilitySourceTarget ||
+                    hasCurrentFirstPartyToolsContractSourceTarget)
                 {
                     toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }

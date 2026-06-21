@@ -395,5 +395,57 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
+        internal static bool ContainsCurrentFirstPartyScreenshotContractReference(
+            string source,
+            bool canUseBareCurrentFirstPartyScreenshotType,
+            string[] currentFirstPartyToolsNamespaceAliases,
+            string[] assemblyDeclaredTypeNames)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(
+                currentFirstPartyToolsNamespaceAliases != null,
+                "currentFirstPartyToolsNamespaceAliases must not be null");
+            Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
+
+            CodeTextMask codeTextMask = CodeTextMask.Create(source);
+            foreach (TypeReplacementRule rule in FirstPartyScreenshotTypeReplacementRules)
+            {
+                if (string.Equals(
+                        rule.CurrentName,
+                        LegacyEditorWindowCaptureUtilityTypeName,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                bool hasProtectedTypeDeclaration = DeclaresLocalType(source, rule.CurrentName) ||
+                    assemblyDeclaredTypeNames.Contains(rule.CurrentName);
+                Regex fullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.){Regex.Escape(rule.CurrentName)}\b",
+                    RegexOptions.Compiled);
+                if (RegexMatchesCode(source, fullyQualifiedRegex))
+                {
+                    return true;
+                }
+
+                foreach (string alias in currentFirstPartyToolsNamespaceAliases)
+                {
+                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.CurrentName))
+                    {
+                        return true;
+                    }
+                }
+
+                if (canUseBareCurrentFirstPartyScreenshotType &&
+                    !hasProtectedTypeDeclaration &&
+                    ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.CurrentName))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
     }
 }

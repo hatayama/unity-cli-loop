@@ -3700,6 +3700,97 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
+        public void ApplyMigration_WhenCurrentDomainLocalAliasUsesMovedContractTypes_AddsToolContractsReference()
+        {
+            // Verifies that local Domain aliases rewritten to ToolContracts also update asmdef references.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "ToolMetadataProvider.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using Dom = io.github.hatayama.UnityCliLoop.Domain;
+
+public static class ToolMetadataProvider
+{
+    public static Dom.ToolInfo[] GetTools()
+    {
+        return new Dom.ToolInfo[0];
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:5c4588558a3624eacbce0f50007cf1eb""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ToolInfo[] GetTools"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenCurrentFirstPartyToolsAliasUsesMovedContractTypes_AddsToolContractsReference()
+        {
+            // Verifies that current FirstPartyTools contract rewrites also add the ToolContracts asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "ScreenshotMetadata.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+public sealed class ScreenshotMetadata
+{
+    public Fpt.WindowMatchMode MatchMode => Fpt.WindowMatchMode.contains;
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:a0bdbd2c5705643fbb9aef9fac8fd46a""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.WindowMatchMode MatchMode"));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.WindowMatchMode.contains"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task HasMigrationTargetsAsync_WhenAssemblyUsesCurrentApplicationGlobalAlias_ReturnsTrue()
         {
             // Verifies that preview detection treats current Application global aliases as assembly-scoped.
@@ -4986,6 +5077,108 @@ public sealed class CurrentScreenshotTool
                 Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
                 Assert.That(File.ReadAllText(aliasUsingPath), Does.Contain(
                     "using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenCurrentDomainLocalAliasUsesMovedContractTypes_AddsToolContractsReference()
+        {
+            // Verifies that async migration adds ToolContracts refs for local Domain alias rewrites.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "ToolMetadataProvider.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using Dom = io.github.hatayama.UnityCliLoop.Domain;
+
+public static class ToolMetadataProvider
+{
+    public static Dom.ServiceResult<int> Create()
+    {
+        return null;
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:5c4588558a3624eacbce0f50007cf1eb""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(
+                        projectRoot,
+                        new Progress<ThirdPartyToolMigrationProgress>(),
+                        CancellationToken.None);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ServiceResult<int> Create"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:5c4588558a3624eacbce0f50007cf1eb"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task ApplyMigrationAsync_WhenCurrentFirstPartyToolsAliasUsesMovedContractTypes_AddsToolContractsReference()
+        {
+            // Verifies that async migration adds ToolContracts refs for current FirstPartyTools contract rewrites.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "ScreenshotMetadata.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using Fpt = io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+public sealed class ScreenshotMetadata
+{
+    public Fpt.ScreenshotSchema CreateSchema()
+    {
+        return new Fpt.ScreenshotSchema();
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:a0bdbd2c5705643fbb9aef9fac8fd46a""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(
+                        projectRoot,
+                        new Progress<ThirdPartyToolMigrationProgress>(),
+                        CancellationToken.None);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.ScreenshotSchema CreateSchema"));
+                Assert.That(migratedSource, Does.Contain(
+                    "new io.github.hatayama.UnityCliLoop.ToolContracts.ScreenshotSchema()"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             }
             finally
             {

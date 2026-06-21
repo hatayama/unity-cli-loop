@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool hasAssemblyScopedCurrentDomainNamespaceUsage,
             bool hasAssemblyScopedCurrentApplicationNamespaceUsage,
             string[] currentApplicationAssemblyAliases,
+            string[] currentDomainAssemblyAliases,
             string[] assemblyDeclaredTypeNames,
             HashSet<string> legacyAssemblyDirectories,
             HashSet<string> toolContractsReferenceAssemblyDirectories,
@@ -33,6 +34,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(
                 currentApplicationAssemblyAliases != null,
                 "currentApplicationAssemblyAliases must not be null");
+            Debug.Assert(
+                currentDomainAssemblyAliases != null,
+                "currentDomainAssemblyAliases must not be null");
             Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
             Debug.Assert(legacyAssemblyDirectories != null, "legacyAssemblyDirectories must not be null");
             Debug.Assert(
@@ -84,7 +88,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApi(source) ||
                 ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApiForAssembly(
                     source,
-                    hasAssemblyScopedCurrentDomainNamespaceUsage))
+                    hasAssemblyScopedCurrentDomainNamespaceUsage) ||
+                ThirdPartyToolMigrationRules.ContainsCurrentDomainContractAliasReference(
+                    source,
+                    ThirdPartyToolMigrationAliasRules.GetCombinedCurrentDomainNamespaceAliases(
+                        source,
+                        currentDomainAssemblyAliases)))
             {
                 domainReferenceAssemblyDirectories.Add(assemblyDirectory);
                 toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
@@ -100,6 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             HashSet<string> assemblyScopedCurrentDomainDirectories,
             HashSet<string> assemblyScopedCurrentApplicationDirectories,
             Dictionary<string, HashSet<string>> assemblyScopedCurrentApplicationAliasesByDirectory,
+            Dictionary<string, HashSet<string>> assemblyScopedCurrentDomainAliasesByDirectory,
             Dictionary<string, HashSet<string>> assemblyDeclaredTypeNamesByDirectory,
             HashSet<string> legacyAssemblyDirectories,
             HashSet<string> toolContractsReferenceAssemblyDirectories,
@@ -125,6 +135,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(
                 assemblyScopedCurrentApplicationAliasesByDirectory != null,
                 "assemblyScopedCurrentApplicationAliasesByDirectory must not be null");
+            Debug.Assert(
+                assemblyScopedCurrentDomainAliasesByDirectory != null,
+                "assemblyScopedCurrentDomainAliasesByDirectory must not be null");
             Debug.Assert(
                 assemblyDeclaredTypeNamesByDirectory != null,
                 "assemblyDeclaredTypeNamesByDirectory must not be null");
@@ -169,6 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory),
                     assemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
                     GetAssemblyScopedNames(assemblyScopedCurrentApplicationAliasesByDirectory, assemblyDirectory),
+                    GetAssemblyScopedNames(assemblyScopedCurrentDomainAliasesByDirectory, assemblyDirectory),
                     GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory),
                     legacyAssemblyDirectories,
                     toolContractsReferenceAssemblyDirectories,
@@ -187,6 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             HashSet<string> assemblyScopedCurrentDomainDirectories,
             HashSet<string> assemblyScopedCurrentApplicationDirectories,
             Dictionary<string, HashSet<string>> assemblyScopedCurrentApplicationAliasesByDirectory,
+            Dictionary<string, HashSet<string>> assemblyScopedCurrentDomainAliasesByDirectory,
             Dictionary<string, HashSet<string>> assemblyDeclaredTypeNamesByDirectory,
             HashSet<string> legacyAssemblyDirectories,
             HashSet<string> toolContractsReferenceAssemblyDirectories,
@@ -212,6 +227,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(
                 assemblyScopedCurrentApplicationAliasesByDirectory != null,
                 "assemblyScopedCurrentApplicationAliasesByDirectory must not be null");
+            Debug.Assert(
+                assemblyScopedCurrentDomainAliasesByDirectory != null,
+                "assemblyScopedCurrentDomainAliasesByDirectory must not be null");
             Debug.Assert(
                 assemblyDeclaredTypeNamesByDirectory != null,
                 "assemblyDeclaredTypeNamesByDirectory must not be null");
@@ -253,6 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory),
                     assemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
                     GetAssemblyScopedNames(assemblyScopedCurrentApplicationAliasesByDirectory, assemblyDirectory),
+                    GetAssemblyScopedNames(assemblyScopedCurrentDomainAliasesByDirectory, assemblyDirectory),
                     GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory),
                     legacyAssemblyDirectories,
                     toolContractsReferenceAssemblyDirectories,
@@ -411,13 +430,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
                         currentFirstPartyToolsAssemblyAliases,
                         assemblyDeclaredTypeNames);
+                bool hasCurrentFirstPartyToolsContractSourceTarget =
+                    ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotContractApiForAssembly(
+                        source,
+                        assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
+                        currentFirstPartyToolsAssemblyAliases,
+                        assemblyDeclaredTypeNames);
                 bool hasCurrentRenderingCaptureSourceTarget =
                     ThirdPartyToolMigrationRules.ContainsCurrentCaptureGameRenderingDeconstructionMigrationForAssembly(
                         source,
                         assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
                         currentFirstPartyToolsAssemblyAliases,
                         assemblyDeclaredTypeNames);
-                if (hasLegacyScreenshotSourceTarget)
+                if (hasLegacyScreenshotSourceTarget || hasCurrentFirstPartyToolsContractSourceTarget)
                 {
                     toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
@@ -440,7 +465,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
-                if (hasLegacyScreenshotSourceTarget || hasCurrentRenderingCaptureSourceTarget)
+                if (hasLegacyScreenshotSourceTarget ||
+                    hasCurrentRenderingCaptureSourceTarget ||
+                    hasCurrentFirstPartyToolsContractSourceTarget)
                 {
                     return true;
                 }

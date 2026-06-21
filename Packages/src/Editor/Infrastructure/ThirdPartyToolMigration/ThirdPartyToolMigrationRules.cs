@@ -220,6 +220,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ThirdPartyToolMigrationApiDetectionRules.ContainsCurrentFirstPartyScreenshotApiForAssembly(source, hasAssemblyScopedCurrentFirstPartyToolsUsing, currentFirstPartyToolsAssemblyAliases, assemblyDeclaredTypeNames);
         }
 
+        internal static bool ContainsCurrentFirstPartyScreenshotContractApiForAssembly(
+            string source,
+            bool hasAssemblyScopedCurrentFirstPartyToolsUsing,
+            string[] currentFirstPartyToolsAssemblyAliases,
+            string[] assemblyDeclaredTypeNames)
+        {
+            return ThirdPartyToolMigrationApiDetectionRules.ContainsCurrentFirstPartyScreenshotContractApiForAssembly(source, hasAssemblyScopedCurrentFirstPartyToolsUsing, currentFirstPartyToolsAssemblyAliases, assemblyDeclaredTypeNames);
+        }
+
         internal static bool ContainsCurrentCaptureGameRenderingDeconstructionMigrationForAssembly(
             string source,
             bool hasAssemblyScopedCurrentFirstPartyToolsUsing,
