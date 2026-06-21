@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -966,15 +965,15 @@ name: v3-cli-invocation-migration
 # temporary migration
 `)
 	if err := os.MkdirAll(
-		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills~", "v3-cli-invocation-migration", "Skill", "scripts"),
+		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills~", "v3-cli-invocation-migration", "Skill", "references"),
 		0o755); err != nil {
-		t.Fatalf("failed to create script dir: %v", err)
+		t.Fatalf("failed to create reference dir: %v", err)
 	}
 	if err := os.WriteFile(
-		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills~", "v3-cli-invocation-migration", "Skill", "scripts", "detect.sh"),
-		[]byte("#!/bin/sh\n"),
+		filepath.Join(projectRoot, "Packages", "src", "TemporarySkills~", "v3-cli-invocation-migration", "Skill", "references", "first-party-v2-to-v3.md"),
+		[]byte("# reference\n"),
 		0o644); err != nil {
-		t.Fatalf("failed to write script: %v", err)
+		t.Fatalf("failed to write reference: %v", err)
 	}
 	skills, err := collectV3MigrationSkillDefinition(projectRoot)
 	if err != nil {
@@ -983,18 +982,27 @@ name: v3-cli-invocation-migration
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	options := skillCommandOptions{targets: []skillTarget{targetConfigs["codex"]}}
+	installedDir := filepath.Join(projectRoot, ".codex", "skills", "v3-cli-invocation-migration")
+	if err := os.MkdirAll(filepath.Join(installedDir, "scripts"), 0o755); err != nil {
+		t.Fatalf("failed to create stale script dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(installedDir, "scripts", "detect.sh"), []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatalf("failed to write stale script: %v", err)
+	}
 
 	installCode := runV3MigrationSkillInstall(projectRoot, skills, options, stdout, stderr)
 
 	if installCode != 0 {
 		t.Fatalf("install should succeed: code=%d stderr=%s", installCode, stderr.String())
 	}
-	installedDir := filepath.Join(projectRoot, ".codex", "skills", "v3-cli-invocation-migration")
 	if _, err := os.Stat(filepath.Join(installedDir, "SKILL.md")); err != nil {
 		t.Fatalf("migration skill should be installed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(installedDir, "scripts", "detect.sh")); err != nil {
-		t.Fatalf("migration skill script should be installed: %v", err)
+	if _, err := os.Stat(filepath.Join(installedDir, "references", "first-party-v2-to-v3.md")); err != nil {
+		t.Fatalf("migration skill reference should be installed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(installedDir, "scripts", "detect.sh")); !os.IsNotExist(err) {
+		t.Fatalf("stale migration skill script should be removed: %v", err)
 	}
 	unrelatedSkillDir := filepath.Join(projectRoot, ".codex", "skills", "uloop-compile")
 	writeSkillFile(t, unrelatedSkillDir, "---\nname: uloop-compile\n---\n")
@@ -1073,303 +1081,6 @@ func TestRunV3MigrationSkillUninstallRemovesAlternateLayout(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "Removed: 1") {
 		t.Fatalf("removed count should report one migration skill: %s", stdout.String())
-	}
-}
-
-// Tests that the POSIX detector reports boolean, first-party, and output-field candidates.
-func TestV3MigrationSkillPosixDetectorReportsCandidates(t *testing.T) {
-	fixtureRoot := t.TempDir()
-	fixtureFile := filepath.Join(fixtureRoot, "docs", "SKILL.md")
-	if err := os.MkdirAll(filepath.Dir(fixtureFile), 0o755); err != nil {
-		t.Fatalf("failed to create fixture dir: %v", err)
-	}
-	fixtureContent := strings.Join([]string{
-		"uloop compile --wait-for-domain-reload true",
-		"uloop some-tool --enabled false",
-		"inline `uloop compile --wait-for-domain-reload`",
-		"inline `uloop some-tool --enabled false`",
-		"jq '.Success'",
-	}, "\n")
-	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
-		t.Fatalf("failed to write fixture: %v", err)
-	}
-	bundledReferenceFile := filepath.Join(
-		fixtureRoot,
-		"Packages",
-		"src",
-		"TemporarySkills~",
-		"v3-cli-invocation-migration",
-		"Skill",
-		"references",
-		"first-party-v2-to-v3.md")
-	if err := os.MkdirAll(filepath.Dir(bundledReferenceFile), 0o755); err != nil {
-		t.Fatalf("failed to create bundled reference dir: %v", err)
-	}
-	if err := os.WriteFile(
-		bundledReferenceFile,
-		[]byte("uloop bundled-tool --self-noise false\n"),
-		0o644); err != nil {
-		t.Fatalf("failed to write bundled reference: %v", err)
-	}
-	embeddedBundledReferenceFile := filepath.Join(
-		fixtureRoot,
-		"Packages",
-		"io.github.hatayama.uloopmcp",
-		"TemporarySkills~",
-		"v3-cli-invocation-migration",
-		"Skill",
-		"references",
-		"first-party-v2-to-v3.md")
-	if err := os.MkdirAll(filepath.Dir(embeddedBundledReferenceFile), 0o755); err != nil {
-		t.Fatalf("failed to create embedded bundled reference dir: %v", err)
-	}
-	if err := os.WriteFile(
-		embeddedBundledReferenceFile,
-		[]byte("uloop embedded-bundled-tool --self-noise false\n"),
-		0o644); err != nil {
-		t.Fatalf("failed to write embedded bundled reference: %v", err)
-	}
-	scriptPath := filepath.Join(
-		findRepositoryRootForSkillsTest(t),
-		"Packages",
-		"src",
-		"TemporarySkills~",
-		"v3-cli-invocation-migration",
-		"Skill",
-		"scripts",
-		"detect-v3-cli-invocation-candidates.sh")
-
-	shPath, err := exec.LookPath("sh")
-	if err != nil {
-		t.Skip("sh is not installed")
-	}
-	command := exec.Command(shPath, scriptPath, fixtureRoot)
-	output, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("detector failed: %v\n%s", err, string(output))
-	}
-	text := string(output)
-	for _, expected := range []string{"FIRST_PARTY_OPTION", "ARG_BOOL", "OUTPUT_FIELD"} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("detector output missing %s:\n%s", expected, text)
-		}
-	}
-	for _, expected := range []string{
-		"inline `uloop compile --wait-for-domain-reload`",
-		"inline `uloop some-tool --enabled false`",
-	} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("detector output missing inline Markdown candidate %q:\n%s", expected, text)
-		}
-	}
-	if strings.Contains(text, "self-noise") {
-		t.Fatalf("detector should skip bundled migration skill sources:\n%s", text)
-	}
-}
-
-// Tests that the POSIX detector limits output fields to JSON parser contexts.
-func TestV3MigrationSkillPosixDetectorIgnoresNonParserOutputFields(t *testing.T) {
-	fixtureRoot := t.TempDir()
-	markdownFile := filepath.Join(fixtureRoot, "docs", "notes.md")
-	if err := os.MkdirAll(filepath.Dir(markdownFile), 0o755); err != nil {
-		t.Fatalf("failed to create Markdown fixture dir: %v", err)
-	}
-	markdownContent := strings.Join([]string{
-		"jq '.Success'",
-		"case ConnectStatus.Success:",
-		"_soundController?.IsPlaying() == true",
-		"_soundController?.IsPaused() == true",
-	}, "\n")
-	if err := os.WriteFile(markdownFile, []byte(markdownContent), 0o644); err != nil {
-		t.Fatalf("failed to write Markdown fixture: %v", err)
-	}
-	powerShellFile := filepath.Join(fixtureRoot, "scripts", "migrate.ps1")
-	if err := os.MkdirAll(filepath.Dir(powerShellFile), 0o755); err != nil {
-		t.Fatalf("failed to create PowerShell fixture dir: %v", err)
-	}
-	powerShellContent := strings.Join([]string{
-		"[pscustomobject]$result = $text | ConvertFrom-Json",
-		"if ($result.Success -ne $true) { throw 'failed' }",
-		"[System.Text.RegularExpressions.Match]$baseMatch = [regex]::Match($line, '^Frame')",
-		"if (-not $baseMatch.Success) { throw 'bad line' }",
-		"[pscustomobject]$status = $text | ConvertFrom-Json",
-		"[pscustomobject]$status = Get-ReplayStatus",
-		"if ($status.IsReplaying -eq $true) { Write-Host 'running' }",
-	}, "\n")
-	if err := os.WriteFile(powerShellFile, []byte(powerShellContent), 0o644); err != nil {
-		t.Fatalf("failed to write PowerShell fixture: %v", err)
-	}
-	scriptPath := filepath.Join(
-		findRepositoryRootForSkillsTest(t),
-		"Packages",
-		"src",
-		"TemporarySkills~",
-		"v3-cli-invocation-migration",
-		"Skill",
-		"scripts",
-		"detect-v3-cli-invocation-candidates.sh")
-
-	shPath, err := exec.LookPath("sh")
-	if err != nil {
-		t.Skip("sh is not installed")
-	}
-	command := exec.Command(shPath, scriptPath, fixtureRoot)
-	output, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("detector failed: %v\n%s", err, string(output))
-	}
-	text := string(output)
-	for _, expected := range []string{
-		"jq '.Success'",
-		"$result.Success",
-	} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("detector output missing parser candidate %q:\n%s", expected, text)
-		}
-	}
-	for _, unexpected := range []string{
-		"ConnectStatus.Success",
-		"_soundController?.IsPlaying()",
-		"_soundController?.IsPaused()",
-		"$baseMatch.Success",
-		"$status.IsReplaying",
-	} {
-		if strings.Contains(text, unexpected) {
-			t.Fatalf("detector should ignore non-parser field %q:\n%s", unexpected, text)
-		}
-	}
-}
-
-// Tests that the PowerShell detector reports candidates when PowerShell is available.
-func TestV3MigrationSkillPowerShellDetectorReportsCandidates(t *testing.T) {
-	pwshPath, err := exec.LookPath("pwsh")
-	if err != nil {
-		t.Skip("pwsh is not installed")
-	}
-	fixtureRoot := t.TempDir()
-	fixtureFile := filepath.Join(fixtureRoot, "scripts", "migrate.ps1")
-	if err := os.MkdirAll(filepath.Dir(fixtureFile), 0o755); err != nil {
-		t.Fatalf("failed to create fixture dir: %v", err)
-	}
-	fixtureContent := strings.Join([]string{
-		"uloop run-tests --save-before-run false",
-		"uloop some-tool --enabled true",
-		"inline `uloop run-tests --save-before-run`",
-		"inline `uloop some-tool --enabled true`",
-		"[pscustomobject]$result = $text | ConvertFrom-Json",
-		"$result.Success",
-		"$result.success",
-		"[System.Text.RegularExpressions.Match]$baseMatch = [regex]::Match($line, '^Frame')",
-		"$baseMatch.Success",
-		"[pscustomobject]$status = $text | ConvertFrom-Json",
-		"[pscustomobject]$status = Get-ReplayStatus",
-		"$status.IsReplaying",
-	}, "\n")
-	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
-		t.Fatalf("failed to write fixture: %v", err)
-	}
-	embeddedBundledReferenceFile := filepath.Join(
-		fixtureRoot,
-		"Packages",
-		"io.github.hatayama.uloopmcp",
-		"TemporarySkills~",
-		"v3-cli-invocation-migration",
-		"Skill",
-		"references",
-		"first-party-v2-to-v3.md")
-	if err := os.MkdirAll(filepath.Dir(embeddedBundledReferenceFile), 0o755); err != nil {
-		t.Fatalf("failed to create embedded bundled reference dir: %v", err)
-	}
-	if err := os.WriteFile(
-		embeddedBundledReferenceFile,
-		[]byte("uloop embedded-bundled-tool --self-noise true\n"),
-		0o644); err != nil {
-		t.Fatalf("failed to write embedded bundled reference: %v", err)
-	}
-	scriptPath := filepath.Join(
-		findRepositoryRootForSkillsTest(t),
-		"Packages",
-		"src",
-		"TemporarySkills~",
-		"v3-cli-invocation-migration",
-		"Skill",
-		"scripts",
-		"detect-v3-cli-invocation-candidates.ps1")
-
-	command := exec.Command(pwshPath, "-NoProfile", "-File", scriptPath, "-Root", fixtureRoot)
-	output, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("detector failed: %v\n%s", err, string(output))
-	}
-	text := string(output)
-	for _, expected := range []string{"FIRST_PARTY_OPTION", "ARG_BOOL", "OUTPUT_FIELD"} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("detector output missing %s:\n%s", expected, text)
-		}
-	}
-	for _, expected := range []string{
-		"inline `uloop run-tests --save-before-run`",
-		"inline `uloop some-tool --enabled true`",
-	} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("detector output missing inline Markdown candidate %q:\n%s", expected, text)
-		}
-	}
-	if strings.Contains(text, "$result.success") {
-		t.Fatalf("detector should not report already migrated camelCase fields:\n%s", text)
-	}
-	if strings.Contains(text, "$baseMatch.Success") {
-		t.Fatalf("detector should ignore non-json PowerShell fields:\n%s", text)
-	}
-	if strings.Contains(text, "$status.IsReplaying") {
-		t.Fatalf("detector should forget reassigned PowerShell json variables:\n%s", text)
-	}
-	if strings.Contains(text, "self-noise") {
-		t.Fatalf("detector should skip bundled migration skill sources:\n%s", text)
-	}
-}
-
-// Tests that Windows PowerShell reports UTF-8 no-BOM file line numbers correctly.
-func TestV3MigrationSkillWindowsPowerShellDetectorReportsUtf8LineNumbers(t *testing.T) {
-	powerShellPath, err := exec.LookPath("powershell")
-	if err != nil {
-		t.Skip("powershell is not installed")
-	}
-	fixtureRoot := t.TempDir()
-	fixtureFile := filepath.Join(fixtureRoot, "sample.md")
-	fixtureContent := strings.Join([]string{
-		"# Plan",
-		"",
-		"## 検証",
-		"",
-		"日本語の説明文です。UTF-8 BOMなしの行番号を検証します。",
-		"",
-		"もう一つの日本語行です。PowerShellの既定読み込みとの差を確認します。",
-		"",
-		"uloop compile --wait-for-domain-reload",
-	}, "\n")
-	if err := os.WriteFile(fixtureFile, []byte(fixtureContent), 0o644); err != nil {
-		t.Fatalf("failed to write UTF-8 fixture: %v", err)
-	}
-	scriptPath := filepath.Join(
-		findRepositoryRootForSkillsTest(t),
-		"Packages",
-		"src",
-		"TemporarySkills~",
-		"v3-cli-invocation-migration",
-		"Skill",
-		"scripts",
-		"detect-v3-cli-invocation-candidates.ps1")
-
-	command := exec.Command(powerShellPath, "-NoProfile", "-File", scriptPath, "-Root", fixtureRoot)
-	output, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("detector failed: %v\n%s", err, string(output))
-	}
-	text := string(output)
-	expected := "sample.md:9: uloop compile --wait-for-domain-reload"
-	if !strings.Contains(text, expected) {
-		t.Fatalf("detector output missing UTF-8 physical line number %q:\n%s", expected, text)
 	}
 }
 
@@ -1458,22 +1169,4 @@ func assertSkillContentContains(t *testing.T, skills []skillDefinition, skillNam
 		return
 	}
 	t.Fatalf("skill not found: %s", skillName)
-}
-
-func findRepositoryRootForSkillsTest(t *testing.T) string {
-	t.Helper()
-	currentDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get working directory: %v", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(currentDir, ".git")); err == nil {
-			return currentDir
-		}
-		parentDir := filepath.Dir(currentDir)
-		if parentDir == currentDir {
-			t.Fatal("repository root not found")
-		}
-		currentDir = parentDir
-	}
 }
