@@ -3839,6 +3839,46 @@ public sealed class MainThreadUsage
         }
 
         [Test]
+        public void ApplyMigration_WhenCurrentApplicationLocalUsingOnlyNeedsReference_AddsApplicationReference()
+        {
+            // Verifies that Application types preserved in Application still keep their asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string sourcePath = Path.Combine(toolDirectory, "SkillStateProbe.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(sourcePath, @"using io.github.hatayama.UnityCliLoop.Application;
+
+public sealed class SkillStateProbe
+{
+    public SkillInstallState State;
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(sourcePath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(1));
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(result.FilePaths.Contains(sourcePath), Is.False);
+                Assert.That(migratedSource, Does.Contain("SkillInstallState State;"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
+                Assert.That(migratedAsmdef, Does.Not.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task HasMigrationTargetsAsync_WhenAssemblyUsesCurrentApplicationGlobalAlias_ReturnsTrue()
         {
             // Verifies that preview detection treats current Application global aliases as assembly-scoped.

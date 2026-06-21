@@ -158,6 +158,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
+                if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationUsing(source))
+                {
+                    applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
                 if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationNamespaceAlias(source))
                 {
                     applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
@@ -295,12 +300,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     hasCurrentApplicationSourceTarget)
                 {
                     toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (hasCurrentApplicationSourceTarget &&
-                    ThirdPartyToolMigrationRules.ContainsCurrentApplicationUsing(source))
-                {
-                    applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsRegistrarDomainReturnApiForAssembly(
