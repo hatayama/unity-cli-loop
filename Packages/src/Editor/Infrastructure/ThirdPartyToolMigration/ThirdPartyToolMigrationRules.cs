@@ -268,6 +268,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ThirdPartyToolMigrationDetectionRules.ContainsCurrentApplicationGlobalUsing(source);
         }
 
+        internal static bool ContainsCurrentApplicationUsing(string source)
+        {
+            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentApplicationUsing(source);
+        }
+
         internal static bool ContainsCurrentApplicationNamespaceAlias(string source)
         {
             return ThirdPartyToolMigrationDetectionRules.ContainsCurrentApplicationNamespaceAlias(source);

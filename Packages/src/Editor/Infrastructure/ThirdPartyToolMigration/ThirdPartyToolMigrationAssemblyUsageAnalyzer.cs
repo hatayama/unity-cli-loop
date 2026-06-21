@@ -205,6 +205,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 bool hasLegacyCSharpApi = ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
                 string[] currentApplicationAssemblyAliases =
                     GetAssemblyScopedNames(assemblyScopedCurrentApplicationAliasesByDirectory, assemblyDirectory);
+                bool hasCurrentApplicationSourceTarget =
+                    ThirdPartyToolMigrationRules.ContainsCurrentApplicationApiForAssembly(
+                        source,
+                        assemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
+                        currentApplicationAssemblyAliases,
+                        GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory));
 
                 if (ThirdPartyToolMigrationRules.ContainsLegacyDomainHelperApiForAssembly(
                         source,
@@ -228,13 +234,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         legacyAssemblyAliases,
                         GetAssemblyScopedNames(assemblyScopedCurrentApplicationAliasesByDirectory, assemblyDirectory),
                         GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory)) ||
-                    ThirdPartyToolMigrationRules.ContainsCurrentApplicationApiForAssembly(
-                        source,
-                        assemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
-                        GetAssemblyScopedNames(assemblyScopedCurrentApplicationAliasesByDirectory, assemblyDirectory),
-                        GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory)))
+                    hasCurrentApplicationSourceTarget)
                 {
                     toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (hasCurrentApplicationSourceTarget &&
+                    ThirdPartyToolMigrationRules.ContainsCurrentApplicationUsing(source))
+                {
+                    applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsRegistrarDomainReturnApiForAssembly(

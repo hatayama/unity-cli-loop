@@ -459,9 +459,7 @@ public sealed class HelloResponse : BaseToolResponse
 }");
                 File.WriteAllText(asmdefPath, @"{
     ""name"": ""VendorTools.Editor"",
-    ""references"": [
-        ""GUID:214998e563c124e8a88199b2dd1f522d""
-    ]
+    ""references"": []
 }");
 
                 ThirdPartyToolMigrationFileService service = new();
@@ -3782,6 +3780,56 @@ public sealed class ScreenshotMetadata
                 Assert.That(migratedSource, Does.Contain(
                     "io.github.hatayama.UnityCliLoop.ToolContracts.WindowMatchMode.contains"));
                 Assert.That(migratedAsmdef, Does.Contain("GUID:a0bdbd2c5705643fbb9aef9fac8fd46a"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenCurrentApplicationLocalUsingUsesMovedSwitcher_AddsApplicationReference()
+        {
+            // Verifies that preserved local Application using directives keep their asmdef reference.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "MainThreadUsage.cs");
+                string asmdefPath = Path.Combine(toolDirectory, "VendorTools.Editor.asmdef");
+                File.WriteAllText(toolPath, @"using System.Threading;
+using System.Threading.Tasks;
+using io.github.hatayama.UnityCliLoop.Application;
+
+public sealed class MainThreadUsage
+{
+    public async Task RunAsync(CancellationToken ct)
+    {
+        await MainThreadSwitcher.SwitchToMainThread(PlayerLoopTiming.Update, ct);
+    }
+}");
+                File.WriteAllText(asmdefPath, @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:214998e563c124e8a88199b2dd1f522d""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+                string migratedAsmdef = File.ReadAllText(asmdefPath);
+
+                Assert.That(result.FileCount, Is.EqualTo(2));
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(result.FilePaths.Contains(asmdefPath), Is.True);
+                Assert.That(migratedSource, Does.Contain(
+                    "using io.github.hatayama.UnityCliLoop.Application;"));
+                Assert.That(migratedSource, Does.Contain(
+                    "io.github.hatayama.UnityCliLoop.ToolContracts.MainThreadSwitcher.SwitchToMainThread(ct)"));
+                Assert.That(migratedAsmdef, Does.Contain("GUID:214998e563c124e8a88199b2dd1f522d"));
                 Assert.That(migratedAsmdef, Does.Contain("GUID:fc3fd32eddbee40e39c2d76dc184957b"));
             }
             finally

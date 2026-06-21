@@ -234,6 +234,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return RegexMatchesCode(source, CurrentApplicationGlobalUsingRegex);
         }
 
+        internal static bool ContainsCurrentApplicationUsing(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return RegexMatchesCode(source, CurrentApplicationUsingRegex);
+        }
+
         internal static bool ContainsCurrentApplicationNamespaceAlias(string source)
         {
             Debug.Assert(source != null, "source must not be null");
