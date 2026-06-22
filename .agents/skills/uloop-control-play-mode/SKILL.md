@@ -49,6 +49,7 @@ uloop control-play-mode --action Step
 ## Output
 
 Returns JSON with the current play mode state:
+
 - `IsPlaying`: Whether Unity is currently in play mode
 - `IsPaused`: Whether play mode is paused
 - `Changed`: Whether the requested action changed the current play mode state

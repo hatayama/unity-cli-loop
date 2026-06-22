@@ -3,6 +3,8 @@ name: uloop-wait-for-pause-point
 description: "Pauses Unity's playback and allows you to inspect specific frames. Use this for bug investigation or PlayMode/E2E testing. It's the most convenient yet rigorous method for verifying variable states at specific frames or confirming whether particular code has been executed."
 ---
 
+# uloop wait-for-pause-point
+
 ## Quick Check Template
 
 Use this small loop for one representative frame you care about:
@@ -19,14 +21,14 @@ Debug.Log($"state-transition-applied localValue={localValue} reason={reason}");
 UloopPausePoint.Pause("state-transition-applied");
 ```
 
-2. Compile, enter PlayMode, then enable the marker:
+1. Compile, enter PlayMode, then enable the marker:
 
 ```bash
 uloop enable-pause-point --id state-transition-applied --timeout-seconds 30
 ```
 
-3. Trigger the action with a `simulate-*` command.
-4. Wait for the marker and read the focused log in one call, even if the trigger command already returned `InterruptedByPausePoint=true`:
+1. Trigger the action with a `simulate-*` command.
+2. Wait for the marker and read the focused log in one call, even if the trigger command already returned `InterruptedByPausePoint=true`:
 
 ```bash
 uloop wait-for-pause-point --id state-transition-applied --timeout-seconds 30
@@ -38,8 +40,8 @@ Read `EvidenceSummary` first when it is present. It groups `EditorState`, pause 
 
 Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time.
 
-5. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
-6. Clear the marker with `uloop clear-pause-point --id state-transition-applied` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios. The clear response's `EditorState` describes Unity Editor play/pause state, not marker state.
+1. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
+2. Clear the marker with `uloop clear-pause-point --id state-transition-applied` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios. The clear response's `EditorState` describes Unity Editor play/pause state, not marker state.
 
 ## When To Use
 

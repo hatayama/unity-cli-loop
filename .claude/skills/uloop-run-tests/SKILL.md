@@ -57,6 +57,7 @@ uloop run-tests --filter-type regex --filter-value ".*Integration.*"
 ## Output
 
 Returns JSON with:
+
 - `Success` (boolean): Whether all tests passed
 - `Status` (string): Machine-readable execution status such as `Passed`, `Failed`, `NoTestsFound`, or `ExecutionFailed`
 - `HasFailures` (boolean): Whether any discovered test failed
@@ -73,6 +74,7 @@ Returns JSON with:
 ### XML Result File
 
 When tests fail, NUnit XML results are automatically saved to `{project_root}/.uloop/outputs/TestResults/<timestamp>.xml`. The XML contains per-test-case results including:
+
 - Test name and full name
 - Pass/fail/skip status and duration
 - For failed tests: `<message>` (assertion error) and `<stack-trace>`

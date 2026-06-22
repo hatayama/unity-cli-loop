@@ -56,6 +56,7 @@ uloop get-hierarchy --use-selection
 ## Output
 
 Returns JSON with:
+
 - `Message` (string): Human-readable guidance pointing at the saved file
 - `HierarchyFilePath` (string): Filesystem path to the JSON file that contains the actual hierarchy data
 

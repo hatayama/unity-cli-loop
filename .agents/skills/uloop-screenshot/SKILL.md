@@ -72,6 +72,7 @@ uloop screenshot --output-directory /tmp/screenshots
 ## Output
 
 Returns JSON with:
+
 - `ScreenshotCount`: Number of windows captured
 - `Screenshots`: Array of screenshot info, each containing:
   - `ImagePath`: Absolute path to the saved PNG file. Empty when `--elements-only` is used because no image file is written.

@@ -43,6 +43,7 @@ Prefer terminal commands for file operations and keep snippets focused on Unity 
 ## Output
 
 Returns JSON:
+
 - `Success`: boolean — overall execution success
 - `Result`: string — value of the snippet's `return` statement (empty when omitted)
 - `Logs`: string[] — execution messages from the dynamic-code tool; read Unity Console `Debug.Log` output with `get-logs`

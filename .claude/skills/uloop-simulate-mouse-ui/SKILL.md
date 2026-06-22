@@ -64,7 +64,6 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 |--------|-------------|
 | `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
 
-
 ## Coordinate System
 
 - Origin is **top-left** (0, 0)
@@ -125,6 +124,7 @@ uloop simulate-mouse-ui --action DragEnd --x 600 --y 300
 ## Output
 
 Returns JSON with:
+
 - `Success`: Whether the operation succeeded
 - `Message`: Status message (e.g. "Hit element: ButtonStart" or "No UI element under (x, y)")
 - `Action`: Echoes which action was executed (`Click`, `Drag`, `DragStart`, `DragMove`, `DragEnd`, or `LongPress`)

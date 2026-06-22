@@ -42,6 +42,7 @@ uloop simulate-keyboard --action <action> --key <key> [options]
 Use `Press` for edge-triggered keyboard code such as `Keyboard.current.spaceKey.wasPressedThisFrame`.
 `KeyDown` emits one initial press edge, then only keeps the key held. It does not keep `wasPressedThisFrame` true while the key remains held.
 If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` true but runtime state does not change, do not immediately rewrite the user's runtime code to `isPressed`. First verify that the target component is active during the command, that it polls input in the configured Input System update phase, and that a missed `KeyDown` edge is followed by `KeyUp` before retrying.
+
 ### Pause Point Inspection (Standard for E2E)
 
 For standard frame proof when this input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Place markers after the app consumed the key, not immediately after `simulate-keyboard`.
@@ -85,6 +86,7 @@ uloop simulate-keyboard --action KeyUp --key LeftShift
 ## Output
 
 Returns JSON with:
+
 - `Success` (boolean): Whether the action succeeded (e.g. `KeyDown` on a not-yet-held key, `KeyUp` on a currently-held key, or `Press` round-trip)
 - `Message` (string): Description of what happened or why it failed
 - `Action` (string): The `--action` value that was applied (`Press`, `KeyDown`, or `KeyUp`)

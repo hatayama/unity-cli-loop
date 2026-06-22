@@ -39,6 +39,7 @@ uloop clear-console --add-confirmation-message
 ## Output
 
 Returns JSON with:
+
 - `Success` (boolean): Whether the clear operation succeeded
 - `ClearedLogCount` (number): Total number of log entries that were cleared
 - `ClearedCounts` (object): Breakdown by log type

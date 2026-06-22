@@ -44,6 +44,7 @@ Replay injects input frame-by-frame, so the game must also be deterministic to p
 ## Output
 
 The CLI prints JSON with:
+
 - `Success`: Whether the operation succeeded
 - `Message`: Status message
 - `Action`: Echoes which action was executed (`Start` or `Stop`)

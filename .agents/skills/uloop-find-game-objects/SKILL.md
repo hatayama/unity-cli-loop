@@ -70,6 +70,7 @@ uloop find-game-objects --search-mode Selected --include-inactive
 ## Output
 
 Returns JSON with:
+
 - `Results` (array): Matching GameObjects, each containing:
   - `Name` (string): GameObject name
   - `Path` (string): Hierarchy path (e.g., `Canvas/Panel/Button`)
@@ -84,6 +85,7 @@ Returns JSON with:
 ### Multi-selection file export
 
 For `Selected` mode with **multiple** successfully serialized GameObjects, inline `Results` is not populated and the data is written to a file instead. Two extra fields appear:
+
 - `ResultsFilePath` (string): Relative path under `.uloop/outputs/FindGameObjectsResults/`
 - `Message` (string): Human-readable summary (e.g., "5 GameObjects exported")
 

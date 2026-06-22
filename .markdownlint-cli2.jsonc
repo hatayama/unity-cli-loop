@@ -1,0 +1,12 @@
+{
+  "config": {
+    "MD013": false,
+    "MD060": false
+  },
+  "globs": [
+    "Packages/src/**/Skill/SKILL.md",
+    "Assets/Editor/CustomCommandSamples/**/Skill/SKILL.md",
+    ".agents/skills/**/SKILL.md",
+    ".claude/skills/**/SKILL.md"
+  ]
+}

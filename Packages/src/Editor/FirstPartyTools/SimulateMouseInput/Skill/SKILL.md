@@ -61,7 +61,6 @@ For standard frame proof when this input drives a state transition, follow the `
 |--------|-------------|
 | `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
 
-
 ## When to use this vs simulate-mouse-ui
 
 All rows below assume the New Input System is installed.
@@ -109,6 +108,7 @@ uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --dura
 ## Output
 
 Returns JSON with:
+
 - `Success`: Whether the operation succeeded
 - `Message`: Status message
 - `Action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`)

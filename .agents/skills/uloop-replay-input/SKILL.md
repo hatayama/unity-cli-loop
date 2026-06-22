@@ -48,6 +48,7 @@ Replay injects the exact same input frame-by-frame, but the game must also be de
 ## Output
 
 Returns JSON with:
+
 - `Success`: Whether the operation succeeded
 - `Message`: Status message
 - `Action`: Echoes which action was executed (`Start`, `Stop`, or `Status`)
