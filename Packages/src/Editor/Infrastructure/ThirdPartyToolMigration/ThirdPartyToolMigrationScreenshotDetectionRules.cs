@@ -334,7 +334,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 foreach (string alias in aliases)
                 {
-                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
+                    if (ContainsAliasQualifiedName(source, alias, rule.LegacyName))
                     {
                         return true;
                     }
@@ -378,7 +378,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 foreach (string alias in currentFirstPartyToolsNamespaceAliases)
                 {
-                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.CurrentName))
+                    if (ContainsAliasQualifiedName(source, alias, rule.CurrentName))
                     {
                         return true;
                     }
@@ -430,7 +430,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 foreach (string alias in currentFirstPartyToolsNamespaceAliases)
                 {
-                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.CurrentName))
+                    if (ContainsAliasQualifiedName(source, alias, rule.CurrentName))
                     {
                         return true;
                     }
