@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             "for V3.\n\n" +
             "Scope:\n" +
             "- Check SKILL.md, Markdown, POSIX shell scripts, and PowerShell scripts.\n" +
-            "- Migrate V2 boolean arguments, renamed first-party options, removed commands, and first-party JSON output fields.\n" +
+            "- Migrate V2 boolean arguments, renamed first-party options, and removed commands.\n" +
             "- Read nearby context before editing. Do not change C# snippets, enum/member references, regex match properties, DTO properties, or non-uloop JSON.\n" +
             "- After editing, summarize changed files, remaining candidates, and any commands I should verify manually.";
         internal const string MigrationNotCheckedText = "C# source migration status has not been checked.";

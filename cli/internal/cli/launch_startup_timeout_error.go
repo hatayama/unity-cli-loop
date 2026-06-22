@@ -43,10 +43,10 @@ func waitForLaunchReadiness(ctx context.Context, projectRoot string) error {
 func unityStartupTimeoutCLIError(err launchStartupTimeoutError, context errorContext) cliError {
 	projectRoot := firstNonEmpty(context.projectRoot, err.projectRoot)
 	details := map[string]any{
-		"timeoutSeconds": int(launchReadinessTimeout.Seconds()),
+		"TimeoutSeconds": int(launchReadinessTimeout.Seconds()),
 	}
 	if err.cause != nil {
-		details["cause"] = err.cause.Error()
+		details["Cause"] = err.cause.Error()
 	}
 	return cliError{
 		ErrorCode:   errorCodeUnityStartupTimeout,

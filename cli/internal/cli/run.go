@@ -164,8 +164,8 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 
 func writeVersionJSON(stdout io.Writer) {
 	content, err := json.Marshal(map[string]any{
-		"cliVersion":      version,
-		"protocolVersion": protocolVersion,
+		"CliVersion":      version,
+		"ProtocolVersion": protocolVersion,
 	})
 	if err != nil {
 		panic(err)
@@ -407,7 +407,7 @@ func writeJSON(stdout io.Writer, result json.RawMessage) {
 }
 
 type compileResultStatus struct {
-	Success *bool `json:"success"`
+	Success *bool `json:"Success"`
 }
 
 type compileReadinessWaitMode int

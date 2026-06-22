@@ -40,6 +40,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             JObject serializedResponse = JObject.Parse(
                 JsonConvert.SerializeObject(response, JsonRpcResponseSerializer.Settings));
 
+            Assert.That(serializedResponse["Success"], Is.Not.Null);
+            Assert.That(serializedResponse["Result"], Is.Not.Null);
+            Assert.That(serializedResponse["success"], Is.Null);
+            Assert.That(serializedResponse["result"], Is.Null);
             Assert.That(serializedResponse["timings"], Is.Null);
             Assert.That(serializedResponse["emitTimingsInJsonResponse"], Is.Null);
             Assert.That(serializedResponse["emitsTimingsInJsonResponse"], Is.Null);
@@ -48,9 +52,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
-        public void ExecuteDynamicCodeResponse_WhenSerializedWithInternalSignals_KeepsLegacyControlFieldNames()
+        public void ExecuteDynamicCodeResponse_WhenSerializedWithInternalSignals_KeepsControlFieldNames()
         {
-            // Tests that protocol-2 CLIs can still strip internal wait and timing fields from stdout.
+            // Tests that CLIs can still strip internal wait and timing fields from stdout.
             ExecuteDynamicCodeResponse response = new()
             {
                 Success = true,
@@ -63,10 +67,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             JObject serializedResponse = JObject.Parse(
                 JsonConvert.SerializeObject(response, JsonRpcResponseSerializer.Settings));
 
-            Assert.That(serializedResponse["success"], Is.Not.Null);
-            Assert.That(serializedResponse["result"], Is.Not.Null);
+            Assert.That(serializedResponse["Success"], Is.Not.Null);
+            Assert.That(serializedResponse["Result"], Is.Not.Null);
             Assert.That(serializedResponse["DomainReloadWaitRequired"], Is.Not.Null);
             Assert.That(serializedResponse["Timings"], Is.Not.Null);
+            Assert.That(serializedResponse["success"], Is.Null);
+            Assert.That(serializedResponse["result"], Is.Null);
             Assert.That(serializedResponse["domainReloadWaitRequired"], Is.Null);
             Assert.That(serializedResponse["timings"], Is.Null);
         }

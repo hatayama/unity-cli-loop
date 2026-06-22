@@ -327,7 +327,7 @@ func assertJSONSuccess(result commandResult, label string) (map[string]any, erro
 		return nil, err
 	}
 
-	if success, ok := payload["success"].(bool); !ok || !success {
+	if success, ok := payload["Success"].(bool); !ok || !success {
 		printCommandContext(label, result)
 		return nil, fmt.Errorf("%s returned invalid success payload: %v", label, payload)
 	}
@@ -336,7 +336,7 @@ func assertJSONSuccess(result commandResult, label string) (map[string]any, erro
 }
 
 func assertDynamicCodeResult(payload map[string]any) error {
-	result, ok := payload["result"].(string)
+	result, ok := payload["Result"].(string)
 	if ok && result == expectedDynamicCodeResult {
 		return nil
 	}

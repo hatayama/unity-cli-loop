@@ -87,7 +87,7 @@ func TestWriteDebugTiming_WhenUnityTimingsExist_ShouldWriteUnityTimingLines(t *t
 	t.Setenv(debugTimingEnvName, "1")
 	var stderr bytes.Buffer
 	outcome := unityipc.UnitySendOutcome{
-		Result: []byte(`{"success":true,"timings":["[Perf] Build: 12.3ms","[Perf] Execution: 4.5ms"]}`),
+		Result: []byte(`{"Success":true,"Timings":["[Perf] Build: 12.3ms","[Perf] Execution: 4.5ms"]}`),
 	}
 
 	writeDebugTiming(&stderr, executeDynamicCodeCommandName, time.Millisecond, outcome)
@@ -108,31 +108,31 @@ func TestStripDebugTimingResult_WhenUnityTimingsExist_ShouldRemoveTimings(t *tes
 	t.Setenv(debugTimingEnvName, "1")
 	result := stripDebugTimingResult(
 		executeDynamicCodeCommandName,
-		[]byte(`{"success":true,"result":"ok","timings":["[Perf] Build: 12.3ms"]}`),
-	)
-
-	output := string(result)
-	if strings.Contains(output, "timings") {
-		t.Fatalf("Timings remained in sanitized result: %s", output)
-	}
-	if !strings.Contains(output, `"result":"ok"`) {
-		t.Fatalf("sanitized result lost normal fields: %s", output)
-	}
-}
-
-// Verifies that legacy-cased debug-only Unity timings are also removed from JSON stdout.
-func TestStripDebugTimingResult_WhenLegacyUnityTimingsExist_ShouldRemoveTimings(t *testing.T) {
-	t.Setenv(debugTimingEnvName, "1")
-	result := stripDebugTimingResult(
-		executeDynamicCodeCommandName,
-		[]byte(`{"success":true,"result":"ok","Timings":["[Perf] Build: 12.3ms"]}`),
+		[]byte(`{"Success":true,"Result":"ok","Timings":["[Perf] Build: 12.3ms"]}`),
 	)
 
 	output := string(result)
 	if strings.Contains(output, "Timings") {
+		t.Fatalf("Timings remained in sanitized result: %s", output)
+	}
+	if !strings.Contains(output, `"Result":"ok"`) {
+		t.Fatalf("sanitized result lost normal fields: %s", output)
+	}
+}
+
+// Verifies that legacy lower-camel debug-only Unity timings are also removed from JSON stdout.
+func TestStripDebugTimingResult_WhenLegacyLowerCamelUnityTimingsExist_ShouldRemoveTimings(t *testing.T) {
+	t.Setenv(debugTimingEnvName, "1")
+	result := stripDebugTimingResult(
+		executeDynamicCodeCommandName,
+		[]byte(`{"Success":true,"Result":"ok","timings":["[Perf] Build: 12.3ms"]}`),
+	)
+
+	output := string(result)
+	if strings.Contains(output, "timings") {
 		t.Fatalf("legacy Timings remained in sanitized result: %s", output)
 	}
-	if !strings.Contains(output, `"result":"ok"`) {
+	if !strings.Contains(output, `"Result":"ok"`) {
 		t.Fatalf("sanitized result lost normal fields: %s", output)
 	}
 }

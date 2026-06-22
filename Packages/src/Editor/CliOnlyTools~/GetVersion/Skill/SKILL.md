@@ -21,6 +21,7 @@ None.
 ## Output
 
 Returns JSON with:
+
 - `UnityVersion`: Unity Editor version
 - `Platform`: Current platform
 - `DataPath`: Assets folder path

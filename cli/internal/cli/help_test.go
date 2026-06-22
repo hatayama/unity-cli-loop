@@ -61,10 +61,10 @@ func TestRunProjectLocalVersionJSONIncludesProtocolVersion(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("version json output is not JSON: %v\n%s", err, stdout.String())
 	}
-	if payload["cliVersion"] != version {
+	if payload["CliVersion"] != version {
 		t.Fatalf("cliVersion mismatch: %#v", payload)
 	}
-	if payload["protocolVersion"] != float64(protocolVersion) {
+	if payload["ProtocolVersion"] != float64(protocolVersion) {
 		t.Fatalf("protocolVersion mismatch: %#v", payload)
 	}
 }

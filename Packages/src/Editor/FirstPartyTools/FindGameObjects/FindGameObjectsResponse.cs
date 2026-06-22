@@ -7,16 +7,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class FindGameObjectsResponse : UnityCliLoopToolResponse
     {
-        public FindGameObjectResult[] results { get; set; }
-        public int totalFound { get; set; }
-        public string errorMessage { get; set; }
+        public FindGameObjectResult[] Results { get; set; }
+
+        public int TotalFound { get; set; }
+
+        public string ErrorMessage { get; set; }
 
         // For multiple selection file output
-        public string resultsFilePath { get; set; }
-        public string message { get; set; }
+        public string ResultsFilePath { get; set; }
+
+        public string Message { get; set; }
 
         // Processing errors for objects that failed to serialize
-        public ProcessingError[] processingErrors { get; set; }
+        public ProcessingError[] ProcessingErrors { get; set; }
     }
 
     /// <summary>
@@ -24,12 +27,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class FindGameObjectResult
     {
-        public string name { get; set; }
-        public string path { get; set; }
-        public bool isActive { get; set; }
-        public string tag { get; set; }
-        public int layer { get; set; }
-        public ComponentInfo[] components { get; set; }
+        public string Name { get; set; }
+
+        public string Path { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public string Tag { get; set; }
+
+        public int Layer { get; set; }
+
+        public ComponentInfo[] Components { get; set; }
     }
 
     /// <summary>
@@ -37,8 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ProcessingError
     {
-        public string gameObjectName { get; set; }
-        public string gameObjectPath { get; set; }
-        public string error { get; set; }
+        public string GameObjectName { get; set; }
+
+        public string GameObjectPath { get; set; }
+
+        public string Error { get; set; }
     }
 }

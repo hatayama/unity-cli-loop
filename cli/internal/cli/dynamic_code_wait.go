@@ -9,8 +9,8 @@ import (
 const (
 	domainReloadWaitParam                          = "WaitForDomainReload"
 	dynamicCodeCompileOnlyParam                    = "CompileOnly"
-	dynamicCodeDomainReloadWaitRequiredField       = "domainReloadWaitRequired"
-	legacyDynamicCodeDomainReloadWaitRequiredField = "DomainReloadWaitRequired"
+	dynamicCodeDomainReloadWaitRequiredField       = "DomainReloadWaitRequired"
+	legacyDynamicCodeDomainReloadWaitRequiredField = "domainReloadWaitRequired"
 )
 
 func shouldWaitForExecuteDynamicCodeDomainReload(command string, params map[string]any) bool {
@@ -34,7 +34,7 @@ func domainReloadWaitEnabled(params map[string]any, defaultValue bool) bool {
 
 func executeDynamicCodeDomainReloadWaitRequired(result []byte) bool {
 	var payload struct {
-		DomainReloadWaitRequired bool `json:"domainReloadWaitRequired"`
+		DomainReloadWaitRequired bool `json:"DomainReloadWaitRequired"`
 	}
 	if err := json.Unmarshal(result, &payload); err != nil {
 		return false

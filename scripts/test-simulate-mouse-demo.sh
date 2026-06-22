@@ -71,8 +71,8 @@ assert_json_success() {
     json=$1
     context=$2
 
-    printf '%s\n' "$json" | jq -e '.success == true' >/dev/null \
-        || fail "$context failed: $(printf '%s\n' "$json" | jq -r '.errorMessage // .message // .error // "unknown error"')"
+    printf '%s\n' "$json" | jq -e '.Success == true' >/dev/null \
+        || fail "$context failed: $(printf '%s\n' "$json" | jq -r '.ErrorMessage // .Message // .Error // "unknown error"')"
 }
 
 assert_text_equals() {
@@ -101,7 +101,7 @@ wait_play_mode() {
     attempt=0
     while [ "$attempt" -lt 20 ]; do
         json=$(run_uloop_json execute-dynamic-code --code 'using UnityEngine; return Application.isPlaying;')
-        if printf '%s\n' "$json" | jq -e '.success == true and .result == "True"' >/dev/null; then
+        if printf '%s\n' "$json" | jq -e '.Success == true and .Result == "True"' >/dev/null; then
             return
         fi
 
@@ -128,7 +128,7 @@ return SceneManager.GetActiveScene().path;
 
     json=$(run_uloop_json execute-dynamic-code --code "$code")
     assert_json_success "$json" "Load demo scene"
-    scene=$(printf '%s\n' "$json" | jq -r '.result')
+    scene=$(printf '%s\n' "$json" | jq -r '.Result')
     assert_text_equals "$scene" "$SCENE_PATH" "Active scene"
 }
 
@@ -214,7 +214,7 @@ return displayTexts[selectedIndex] + " / " + currentGameViewSize.x + "x" + curre
 
     json=$(run_uloop_json execute-dynamic-code --code "$code")
     assert_json_success "$json" "Select Full HD Game View"
-    printf '    %s\n' "$(printf '%s\n' "$json" | jq -r '.result')"
+    printf '    %s\n' "$(printf '%s\n' "$json" | jq -r '.Result')"
     sleep 1
 }
 
@@ -251,7 +251,7 @@ return selectedSizeIndexProperty.GetValue(gameView, null).ToString();
 
     json=$(run_uloop_json execute-dynamic-code --code "$code")
     assert_json_success "$json" "Capture Game View size index"
-    printf '%s\n' "$json" | jq -r '.result'
+    printf '%s\n' "$json" | jq -r '.Result'
 }
 
 restore_game_view_size_index() {
@@ -299,16 +299,16 @@ capture_annotated_elements() {
         --annotate-elements \
         --elements-only >"$ELEMENTS_JSON"
 
-    jq -e '.screenshotCount == 1 and (.screenshots[0].annotatedElements | length > 0)' "$ELEMENTS_JSON" >/dev/null \
+    jq -e '.ScreenshotCount == 1 and (.Screenshots[0].AnnotatedElements | length > 0)' "$ELEMENTS_JSON" >/dev/null \
         || fail "No annotated UI elements were returned"
 }
 
 get_element_json() {
     name=$1
-    count=$(jq --arg name "$name" '[.screenshots[0].annotatedElements[] | select(.name == $name)] | length' "$ELEMENTS_JSON")
+    count=$(jq --arg name "$name" '[.Screenshots[0].AnnotatedElements[] | select(.Name == $name)] | length' "$ELEMENTS_JSON")
     [ "$count" = "1" ] || fail "Expected exactly one annotated element named '$name', found $count"
 
-    jq -c --arg name "$name" '.screenshots[0].annotatedElements[] | select(.name == $name)' "$ELEMENTS_JSON"
+    jq -c --arg name "$name" '.Screenshots[0].AnnotatedElements[] | select(.Name == $name)' "$ELEMENTS_JSON"
 }
 
 element_field() {
@@ -323,11 +323,11 @@ assert_mouse_response() {
     expected_hit=$3
 
     printf '%s\n' "$json" | jq -e --arg action "$expected_action" \
-        '.success == true and .action == $action' >/dev/null \
-        || fail "$expected_action failed: $(printf '%s\n' "$json" | jq -r '.message // "unknown error"')"
+        '.Success == true and .Action == $action' >/dev/null \
+        || fail "$expected_action failed: $(printf '%s\n' "$json" | jq -r '.Message // "unknown error"')"
 
     if [ -n "$expected_hit" ]; then
-        actual_hit=$(printf '%s\n' "$json" | jq -r '.hitGameObjectName // ""')
+        actual_hit=$(printf '%s\n' "$json" | jq -r '.HitGameObjectName // ""')
         assert_text_equals "$actual_hit" "$expected_hit" "hitGameObjectName"
     fi
 }
@@ -335,9 +335,9 @@ assert_mouse_response() {
 invoke_click() {
     name=$1
     element=$(get_element_json "$name")
-    x=$(element_field "$element" "simX")
-    y=$(element_field "$element" "simY")
-    path=$(element_field "$element" "path")
+    x=$(element_field "$element" "SimX")
+    y=$(element_field "$element" "SimY")
+    path=$(element_field "$element" "Path")
 
     json=$(run_uloop_json simulate-mouse-ui \
         --action Click \
@@ -352,9 +352,9 @@ invoke_long_press() {
     name=$1
     duration=$2
     element=$(get_element_json "$name")
-    x=$(element_field "$element" "simX")
-    y=$(element_field "$element" "simY")
-    path=$(element_field "$element" "path")
+    x=$(element_field "$element" "SimX")
+    y=$(element_field "$element" "SimY")
+    path=$(element_field "$element" "Path")
 
     json=$(run_uloop_json simulate-mouse-ui \
         --action LongPress \
@@ -371,12 +371,12 @@ invoke_drag_to_drop_zone() {
     speed=$2
     element=$(get_element_json "$name")
     drop_zone=$(get_element_json "DropZone")
-    from_x=$(element_field "$element" "simX")
-    from_y=$(element_field "$element" "simY")
-    to_x=$(element_field "$drop_zone" "simX")
-    to_y=$(element_field "$drop_zone" "simY")
-    target_path=$(element_field "$element" "path")
-    drop_path=$(element_field "$drop_zone" "path")
+    from_x=$(element_field "$element" "SimX")
+    from_y=$(element_field "$element" "SimY")
+    to_x=$(element_field "$drop_zone" "SimX")
+    to_y=$(element_field "$drop_zone" "SimY")
+    target_path=$(element_field "$element" "Path")
+    drop_path=$(element_field "$drop_zone" "Path")
 
     json=$(run_uloop_json simulate-mouse-ui \
         --action Drag \
@@ -394,9 +394,9 @@ invoke_drag_to_drop_zone() {
 invoke_drag_start() {
     name=$1
     element=$(get_element_json "$name")
-    x=$(element_field "$element" "simX")
-    y=$(element_field "$element" "simY")
-    path=$(element_field "$element" "path")
+    x=$(element_field "$element" "SimX")
+    y=$(element_field "$element" "SimY")
+    path=$(element_field "$element" "Path")
 
     json=$(run_uloop_json simulate-mouse-ui \
         --action DragStart \
@@ -452,7 +452,7 @@ return text.text;
 
     json=$(run_uloop_json execute-dynamic-code --code "$code")
     assert_json_success "$json" "Read text from $object_name"
-    printf '%s\n' "$json" | jq -r '.result'
+    printf '%s\n' "$json" | jq -r '.Result'
 }
 
 get_long_press_button_text() {
@@ -468,7 +468,7 @@ return text.text;
 
     json=$(run_uloop_json execute-dynamic-code --code "$code")
     assert_json_success "$json" "Read LongPressButton text"
-    printf '%s\n' "$json" | jq -r '.result'
+    printf '%s\n' "$json" | jq -r '.Result'
 }
 
 get_drop_zone_status() {
@@ -483,7 +483,7 @@ return dropZone.StatusMessage;
 
     json=$(run_uloop_json execute-dynamic-code --code "$code")
     assert_json_success "$json" "Read DropZone status"
-    printf '%s\n' "$json" | jq -r '.result'
+    printf '%s\n' "$json" | jq -r '.Result'
 }
 
 get_virtual_pad_state() {
@@ -499,17 +499,17 @@ return pad.Direction.ToString("F3");
 
     json=$(run_uloop_json execute-dynamic-code --code "$code")
     assert_json_success "$json" "Read VirtualPad state"
-    printf '%s\n' "$json" | jq -r '.result'
+    printf '%s\n' "$json" | jq -r '.Result'
 }
 
 exercise_virtual_pad() {
     virtual_pad=$(get_element_json "VirtualPadBackground")
-    pad_x=$(element_field "$virtual_pad" "simX")
-    pad_y=$(element_field "$virtual_pad" "simY")
-    pad_width=$(printf '%s\n' "$virtual_pad" | jq -r '.boundsMaxX - .boundsMinX')
-    pad_height=$(printf '%s\n' "$virtual_pad" | jq -r '.boundsMaxY - .boundsMinY')
+    pad_x=$(element_field "$virtual_pad" "SimX")
+    pad_y=$(element_field "$virtual_pad" "SimY")
+    pad_width=$(printf '%s\n' "$virtual_pad" | jq -r '.BoundsMaxX - .BoundsMinX')
+    pad_height=$(printf '%s\n' "$virtual_pad" | jq -r '.BoundsMaxY - .BoundsMinY')
     pad_offset=$(jq -nr --argjson width "$pad_width" --argjson height "$pad_height" '([$width, $height] | min) * 0.28')
-    target_path=$(element_field "$virtual_pad" "path")
+    target_path=$(element_field "$virtual_pad" "Path")
 
     json=$(run_uloop_json simulate-mouse-ui \
         --action DragStart \
@@ -582,11 +582,11 @@ assert_text_equals "$(get_drop_zone_status)" "Dropped: RedBox" "DropZone after R
 
 green_box=$(get_element_json "GreenBox")
 drop_zone=$(get_element_json "DropZone")
-green_x=$(element_field "$green_box" "simX")
-green_y=$(element_field "$green_box" "simY")
-drop_x=$(element_field "$drop_zone" "simX")
-drop_y=$(element_field "$drop_zone" "simY")
-drop_path=$(element_field "$drop_zone" "path")
+green_x=$(element_field "$green_box" "SimX")
+green_y=$(element_field "$green_box" "SimY")
+drop_x=$(element_field "$drop_zone" "SimX")
+drop_y=$(element_field "$drop_zone" "SimY")
+drop_path=$(element_field "$drop_zone" "Path")
 
 invoke_drag_start "GreenBox"
 move_x=$(jq -nr --argjson center "$drop_x" '$center + 150')

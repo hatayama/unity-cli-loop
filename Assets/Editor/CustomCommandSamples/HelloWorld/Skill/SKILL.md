@@ -40,13 +40,15 @@ uloop hello-world --name "Carlos" --language spanish --no-include-timestamp
 ## Output
 
 Returns JSON with:
-- `message`: The greeting message
-- `language`: Language used for greeting
-- `timestamp`: Current timestamp (if enabled)
+
+- `Message`: The greeting message
+- `Language`: Language used for greeting
+- `Timestamp`: Current timestamp (if enabled)
 
 ## Notes
 
 This is a sample custom tool demonstrating:
+
 - Type-safe parameter handling with Schema
 - Enum parameters for language selection
 - Value-less flag parameters

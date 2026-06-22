@@ -121,17 +121,17 @@ func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 		t.Fatalf("timeout error missing from stderr: %s", stderr.String())
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
-	editorState, ok := envelope.Error.Details["editorState"].(map[string]any)
-	if !ok || editorState["isPlaying"] != true || editorState["isPaused"] != false || editorState["capturedAt"] != "Current" {
+	editorState, ok := envelope.Error.Details["EditorState"].(map[string]any)
+	if !ok || editorState["IsPlaying"] != true || editorState["IsPaused"] != false || editorState["CapturedAt"] != "Current" {
 		t.Fatalf("editorState detail mismatch: %#v", envelope.Error.Details)
 	}
-	if envelope.Error.Details["markerMessage"] != "Pause point enabled." {
+	if envelope.Error.Details["MarkerMessage"] != "Pause point enabled." {
 		t.Fatalf("markerMessage detail mismatch: %#v", envelope.Error.Details)
 	}
-	if envelope.Error.Details["elapsedSinceEnabledMilliseconds"] != float64(100) {
+	if envelope.Error.Details["ElapsedSinceEnabledMilliseconds"] != float64(100) {
 		t.Fatalf("elapsedSinceEnabledMilliseconds detail mismatch: %#v", envelope.Error.Details)
 	}
-	if envelope.Error.Details["remainingMilliseconds"] != float64(900) {
+	if envelope.Error.Details["RemainingMilliseconds"] != float64(900) {
 		t.Fatalf("remainingMilliseconds detail mismatch: %#v", envelope.Error.Details)
 	}
 }
@@ -157,16 +157,16 @@ func TestPausePointExpiredErrorReportsRecoveryFields(t *testing.T) {
 		timeoutSeconds: 1,
 	}, response, pausePointWaitStateExpired)
 
-	if cliErr.Details["expired"] != true {
+	if cliErr.Details["Expired"] != true {
 		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
 	}
-	if cliErr.Details["enabledAtUtc"] != "2026-06-03T00:00:00.0000000Z" {
+	if cliErr.Details["EnabledAtUtc"] != "2026-06-03T00:00:00.0000000Z" {
 		t.Fatalf("enabledAtUtc detail mismatch: %#v", cliErr.Details)
 	}
-	if cliErr.Details["generation"] != 7 {
+	if cliErr.Details["Generation"] != 7 {
 		t.Fatalf("generation detail mismatch: %#v", cliErr.Details)
 	}
-	if cliErr.Details["recommendedNextAction"] != response.RecommendedNextAction {
+	if cliErr.Details["RecommendedNextAction"] != response.RecommendedNextAction {
 		t.Fatalf("recommendedNextAction detail mismatch: %#v", cliErr.Details)
 	}
 }
@@ -186,7 +186,7 @@ func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 		timeoutSeconds: 5,
 	}, response, pausePointWaitStateExpired)
 
-	if cliErr.Details["timeoutSeconds"] != 30 {
+	if cliErr.Details["TimeoutSeconds"] != 30 {
 		t.Fatalf("timeoutSeconds detail mismatch: %#v", cliErr.Details)
 	}
 }
@@ -205,7 +205,7 @@ func TestPausePointExpiredErrorDerivesExpiredFromStatus(t *testing.T) {
 		timeoutSeconds: 1,
 	}, response, pausePointWaitStateExpired)
 
-	if cliErr.Details["expired"] != true {
+	if cliErr.Details["Expired"] != true {
 		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
 	}
 }
@@ -348,11 +348,11 @@ func TestRunWaitForPausePointReportsNotEnabledError(t *testing.T) {
 	if envelope.Error.ErrorCode != errorCodePausePointNotEnabled {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
-	if envelope.Error.Details["status"] != pausePointStatusNotEnabled {
+	if envelope.Error.Details["Status"] != pausePointStatusNotEnabled {
 		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
 	}
-	editorState, ok := envelope.Error.Details["editorState"].(map[string]any)
-	if !ok || editorState["isPlaying"] != true || editorState["isPaused"] != false || editorState["capturedAt"] != "Current" {
+	editorState, ok := envelope.Error.Details["EditorState"].(map[string]any)
+	if !ok || editorState["IsPlaying"] != true || editorState["IsPaused"] != false || editorState["CapturedAt"] != "Current" {
 		t.Fatalf("editorState details mismatch: %#v", envelope.Error.Details)
 	}
 }
@@ -579,10 +579,10 @@ func TestRunWaitForPausePointIgnoresLogFetchFailure(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected success despite log fetch failure, got %d with stderr %s", code, stderr.String())
 	}
-	if strings.Contains(stdout.String(), "matchingLogs") {
+	if strings.Contains(stdout.String(), "MatchingLogs") {
 		t.Fatalf("MatchingLogs must be omitted when the fetch fails: %s", stdout.String())
 	}
-	if strings.Contains(stdout.String(), "evidenceSummary") {
+	if strings.Contains(stdout.String(), "EvidenceSummary") {
 		t.Fatalf("EvidenceSummary must be omitted when the fetch fails: %s", stdout.String())
 	}
 }
@@ -649,16 +649,16 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
 	// The detail key mirrors the hit-response field name, so one spelling covers both surfaces.
-	matchingLogs, ok := envelope.Error.Details["matchingLogs"].([]any)
+	matchingLogs, ok := envelope.Error.Details["MatchingLogs"].([]any)
 	if !ok || len(matchingLogs) != 1 {
 		t.Fatalf("MatchingLogs detail mismatch: %#v", envelope.Error.Details)
 	}
-	evidenceSummary, ok := envelope.Error.Details["evidenceSummary"].(map[string]any)
+	evidenceSummary, ok := envelope.Error.Details["EvidenceSummary"].(map[string]any)
 	if !ok {
 		t.Fatalf("EvidenceSummary detail missing: %#v", envelope.Error.Details)
 	}
-	evidenceLogs, ok := evidenceSummary["matchingLogs"].(map[string]any)
-	if !ok || evidenceLogs["mayBeTruncated"] != true || evidenceLogs["matchingLogCount"] != float64(3) {
+	evidenceLogs, ok := evidenceSummary["MatchingLogs"].(map[string]any)
+	if !ok || evidenceLogs["MayBeTruncated"] != true || evidenceLogs["MatchingLogCount"] != float64(3) {
 		t.Fatalf("EvidenceSummary matching logs mismatch: %#v", evidenceSummary)
 	}
 }
@@ -703,7 +703,7 @@ func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 				timeoutSeconds: 1,
 			}, testCase.response, pausePointWaitStateTimeout)
 
-			if cliErr.Details["hint"] != testCase.wantHint {
+			if cliErr.Details["Hint"] != testCase.wantHint {
 				t.Fatalf("hint mismatch: %#v", cliErr.Details)
 			}
 		})
@@ -751,7 +751,7 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 				timeoutSeconds: 1,
 			}, testCase.response, pausePointWaitStateExpired)
 
-			if cliErr.Details["hint"] != testCase.wantHint {
+			if cliErr.Details["Hint"] != testCase.wantHint {
 				t.Fatalf("hint mismatch: %#v", cliErr.Details)
 			}
 		})
@@ -770,7 +770,7 @@ func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 		id:             "jump",
 		timeoutSeconds: 1,
 	}, hitResponse, pausePointWaitStateTimeout)
-	if _, exists := timeoutErr.Details["hint"]; exists {
+	if _, exists := timeoutErr.Details["Hint"]; exists {
 		t.Fatalf("hint should be omitted when no diagnosis applies: %#v", timeoutErr.Details)
 	}
 
@@ -783,7 +783,7 @@ func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 		id:             "jump",
 		timeoutSeconds: 1,
 	}, clearedResponse, pausePointWaitStateCleared)
-	if _, exists := clearedErr.Details["hint"]; exists {
+	if _, exists := clearedErr.Details["Hint"]; exists {
 		t.Fatalf("hint should be omitted for cleared markers: %#v", clearedErr.Details)
 	}
 }
@@ -807,7 +807,7 @@ func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
 	if cliErr.ErrorCode != errorCodePausePointExpired {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	if cliErr.Details["remainingMilliseconds"] != int64(0) {
+	if cliErr.Details["RemainingMilliseconds"] != int64(0) {
 		t.Fatalf("remainingMilliseconds detail mismatch: %#v", cliErr.Details)
 	}
 }

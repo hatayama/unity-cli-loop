@@ -62,12 +62,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.results, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(2));
-            Assert.That(response.results.Length, Is.EqualTo(2));
+            Assert.That(response.Results, Is.Not.Null);
+            Assert.That(response.TotalFound, Is.EqualTo(2));
+            Assert.That(response.Results.Length, Is.EqualTo(2));
             
             // Check that both TestObject1 and TestObject2 are found
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject1"));
             Assert.That(foundNames, Does.Contain("TestObject2"));
             Assert.That(foundNames, Does.Not.Contain("AnotherObject"));
@@ -85,9 +85,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(0));
-            Assert.That(response.errorMessage, Is.Not.Null);
-            Assert.That(response.errorMessage, Does.Contain("At least one search criterion"));
+            Assert.That(response.TotalFound, Is.EqualTo(0));
+            Assert.That(response.ErrorMessage, Is.Not.Null);
+            Assert.That(response.ErrorMessage, Does.Contain("At least one search criterion"));
         }
         
         [Test]
@@ -108,9 +108,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.GreaterThanOrEqualTo(2)); // Scene might have other objects with BoxCollider
+            Assert.That(response.TotalFound, Is.GreaterThanOrEqualTo(2)); // Scene might have other objects with BoxCollider
             
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject1"));
             Assert.That(foundNames, Does.Contain("AnotherObject"));
             Assert.That(foundNames, Does.Not.Contain("TestObject2"));
@@ -135,12 +135,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(1));
-            Assert.That(response.results[0].name, Is.EqualTo("TestObject1"));
+            Assert.That(response.TotalFound, Is.EqualTo(1));
+            Assert.That(response.Results[0].Name, Is.EqualTo("TestObject1"));
             
             // Verify components are returned
-            ComponentInfo boxCollider = System.Array.Find(response.results[0].components, c => c.type == "BoxCollider");
-            ComponentInfo rigidbody = System.Array.Find(response.results[0].components, c => c.type == "Rigidbody");
+            ComponentInfo boxCollider = System.Array.Find(response.Results[0].Components, c => c.Type == "BoxCollider");
+            ComponentInfo rigidbody = System.Array.Find(response.Results[0].Components, c => c.Type == "Rigidbody");
             Assert.That(boxCollider, Is.Not.Null);
             Assert.That(rigidbody, Is.Not.Null);
         }
@@ -167,19 +167,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.GreaterThanOrEqualTo(3)); // At least our 3 test objects
+            Assert.That(response.TotalFound, Is.GreaterThanOrEqualTo(3)); // At least our 3 test objects
             
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject1"));
             Assert.That(foundNames, Does.Contain("TestObject2"));
             Assert.That(foundNames, Does.Contain("AnotherObject"));
             
             // Verify tag is returned in results
-            foreach (var result in response.results)
+            foreach (var result in response.Results)
             {
-                if (result.name == "TestObject1" || result.name == "TestObject2" || result.name == "AnotherObject")
+                if (result.Name == "TestObject1" || result.Name == "TestObject2" || result.Name == "AnotherObject")
                 {
-                    Assert.That(result.tag, Is.EqualTo("Untagged"));
+                    Assert.That(result.Tag, Is.EqualTo("Untagged"));
                 }
             }
         }
@@ -203,15 +203,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(2));
+            Assert.That(response.TotalFound, Is.EqualTo(2));
             
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject2"));
             Assert.That(foundNames, Does.Contain("AnotherObject"));
             Assert.That(foundNames, Does.Not.Contain("TestObject1"));
             
             // Verify layer is returned in results
-            Assert.That(response.results[0].layer, Is.EqualTo(enemyLayer));
+            Assert.That(response.Results[0].Layer, Is.EqualTo(enemyLayer));
         }
         
         [Test]
@@ -235,9 +235,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.GreaterThanOrEqualTo(2));
+                Assert.That(response.TotalFound, Is.GreaterThanOrEqualTo(2));
                 
-                string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+                string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
                 Assert.That(foundNames, Does.Contain("Enemy1"));
                 Assert.That(foundNames, Does.Contain("Enemy2"));
                 Assert.That(foundNames, Does.Not.Contain("Player1"));
@@ -271,9 +271,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(3)); // Should find all 3 objects including inactive
+            Assert.That(response.TotalFound, Is.EqualTo(3)); // Should find all 3 objects including inactive
             
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject1"));
             Assert.That(foundNames, Does.Contain("TestObject2"));
             Assert.That(foundNames, Does.Contain("AnotherObject"));
@@ -299,9 +299,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(1)); // Should only find active object
-            Assert.That(response.results[0].name, Is.EqualTo("TestObject1"));
-            Assert.That(response.results[0].isActive, Is.True);
+            Assert.That(response.TotalFound, Is.EqualTo(1)); // Should only find active object
+            Assert.That(response.Results[0].Name, Is.EqualTo("TestObject1"));
+            Assert.That(response.Results[0].IsActive, Is.True);
         }
         
         [Test]
@@ -327,13 +327,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(1)); // Only TestObject2 matches all criteria
-            Assert.That(response.results[0].name, Is.EqualTo("TestObject2"));
+            Assert.That(response.TotalFound, Is.EqualTo(1)); // Only TestObject2 matches all criteria
+            Assert.That(response.Results[0].Name, Is.EqualTo("TestObject2"));
             
             // Verify all criteria are met
-            ComponentInfo boxCollider = System.Array.Find(response.results[0].components, c => c.type == "BoxCollider");
+            ComponentInfo boxCollider = System.Array.Find(response.Results[0].Components, c => c.Type == "BoxCollider");
             Assert.That(boxCollider, Is.Not.Null);
-            Assert.That(response.results[0].layer, Is.EqualTo(8));
+            Assert.That(response.Results[0].Layer, Is.EqualTo(8));
         }
         
         [Test]
@@ -361,13 +361,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.results.Length, Is.EqualTo(5)); // Should be limited to 5
-                Assert.That(response.totalFound, Is.EqualTo(5)); // Total found should also be 5
+                Assert.That(response.Results.Length, Is.EqualTo(5)); // Should be limited to 5
+                Assert.That(response.TotalFound, Is.EqualTo(5)); // Total found should also be 5
                 
                 // Verify all results match the pattern
-                foreach (var result in response.results)
+                foreach (var result in response.Results)
                 {
-                    Assert.That(result.name, Does.StartWith("ManyObject"));
+                    Assert.That(result.Name, Does.StartWith("ManyObject"));
                 }
             }
             finally
@@ -403,9 +403,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
-                Assert.That(response.results[0].name, Is.EqualTo("Grandchild"));
-                Assert.That(response.results[0].path, Is.EqualTo("Parent/Child/Grandchild"));
+                Assert.That(response.TotalFound, Is.EqualTo(1));
+                Assert.That(response.Results[0].Name, Is.EqualTo("Grandchild"));
+                Assert.That(response.Results[0].Path, Is.EqualTo("Parent/Child/Grandchild"));
             }
             finally
             {
@@ -435,8 +435,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
-                Assert.That(response.results[0].name, Is.EqualTo("ExactName"));
+                Assert.That(response.TotalFound, Is.EqualTo(1));
+                Assert.That(response.Results[0].Name, Is.EqualTo("ExactName"));
             }
             finally
             {
@@ -468,9 +468,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(4)); // Includes SetUp objects (TestObject1, TestObject2)
+                Assert.That(response.TotalFound, Is.EqualTo(4)); // Includes SetUp objects (TestObject1, TestObject2)
 
-                string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+                string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
                 Assert.That(foundNames, Does.Contain("TestObjectOne"));
                 Assert.That(foundNames, Does.Contain("AnotherTestObjectTwo"));
                 Assert.That(foundNames, Does.Not.Contain("DifferentName"));
@@ -500,9 +500,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(0));
-            Assert.That(response.results, Is.Empty);
-            Assert.That(response.message, Does.Contain("No GameObjects"));
+            Assert.That(response.TotalFound, Is.EqualTo(0));
+            Assert.That(response.Results, Is.Empty);
+            Assert.That(response.Message, Does.Contain("No GameObjects"));
         }
 
         [Test]
@@ -524,11 +524,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
-                Assert.That(response.results, Is.Not.Null);
-                Assert.That(response.results.Length, Is.EqualTo(1));
-                Assert.That(response.results[0].name, Is.EqualTo("TestObject1"));
-                Assert.That(response.resultsFilePath, Is.Null);
+                Assert.That(response.TotalFound, Is.EqualTo(1));
+                Assert.That(response.Results, Is.Not.Null);
+                Assert.That(response.Results.Length, Is.EqualTo(1));
+                Assert.That(response.Results[0].Name, Is.EqualTo("TestObject1"));
+                Assert.That(response.ResultsFilePath, Is.Null);
             }
             finally
             {
@@ -554,13 +554,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(2));
-                Assert.That(response.resultsFilePath, Is.Not.Null);
-                Assert.That(response.resultsFilePath, Does.Contain("FindGameObjectsResults"));
-                Assert.That(response.message, Does.Contain("Multiple objects selected"));
+                Assert.That(response.TotalFound, Is.EqualTo(2));
+                Assert.That(response.ResultsFilePath, Is.Not.Null);
+                Assert.That(response.ResultsFilePath, Does.Contain("FindGameObjectsResults"));
+                Assert.That(response.Message, Does.Contain("Multiple objects selected"));
 
                 // Verify file exists
-                string fullPath = Path.Combine(UnityEngine.Application.dataPath, "..", response.resultsFilePath);
+                string fullPath = Path.Combine(UnityEngine.Application.dataPath, "..", response.ResultsFilePath);
                 Assert.That(File.Exists(fullPath), Is.True, $"Export file should exist at {fullPath}");
 
                 // Cleanup exported file
@@ -596,10 +596,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
-                Assert.That(response.results, Is.Not.Null);
-                Assert.That(response.results.Length, Is.EqualTo(1));
-                Assert.That(response.results[0].name, Is.EqualTo("TestObject1"));
+                Assert.That(response.TotalFound, Is.EqualTo(1));
+                Assert.That(response.Results, Is.Not.Null);
+                Assert.That(response.Results.Length, Is.EqualTo(1));
+                Assert.That(response.Results[0].Name, Is.EqualTo("TestObject1"));
             }
             finally
             {
@@ -630,21 +630,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
+                Assert.That(response.TotalFound, Is.EqualTo(1));
 
                 ComponentInfo meshRenderer = System.Array.Find(
-                    response.results[0].components, c => c.type == "MeshRenderer");
+                    response.Results[0].Components, c => c.Type == "MeshRenderer");
                 Assert.That(meshRenderer, Is.Not.Null);
 
                 ComponentPropertyInfo probeAnchor = System.Array.Find(
-                    meshRenderer.properties, p => p.name == "Probe Anchor");
+                    meshRenderer.Properties, p => p.Name == "Probe Anchor");
                 Assert.That(probeAnchor, Is.Not.Null, "MeshRenderer should have Probe Anchor property");
-                Assert.That(probeAnchor.type, Is.EqualTo("ObjectReference"));
+                Assert.That(probeAnchor.Type, Is.EqualTo("ObjectReference"));
 
                 string expectedEntityId = GetExpectedObjectId(anchorTarget.transform);
 
                 // Value should be a structured object with name, type, entityId
-                JObject valueObj = JObject.FromObject(probeAnchor.value);
+                JObject valueObj = JObject.FromObject(probeAnchor.Value);
                 Assert.That(valueObj["name"].ToString(), Is.EqualTo("AnchorTarget"));
                 Assert.That(valueObj["type"].ToString(), Is.EqualTo("Transform"));
                 Assert.That(valueObj["entityId"].ToString(), Is.EqualTo(expectedEntityId));
@@ -672,17 +672,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(1));
+            Assert.That(response.TotalFound, Is.EqualTo(1));
 
             ComponentInfo meshRenderer = System.Array.Find(
-                response.results[0].components, c => c.type == "MeshRenderer");
+                response.Results[0].Components, c => c.Type == "MeshRenderer");
             Assert.That(meshRenderer, Is.Not.Null);
 
             ComponentPropertyInfo probeAnchor = System.Array.Find(
-                meshRenderer.properties, p => p.name == "Probe Anchor");
+                meshRenderer.Properties, p => p.Name == "Probe Anchor");
             Assert.That(probeAnchor, Is.Not.Null, "MeshRenderer should have Probe Anchor property");
 
-            JObject valueObj = JObject.FromObject(probeAnchor.value);
+            JObject valueObj = JObject.FromObject(probeAnchor.Value);
             Assert.That(valueObj["name"].ToString(), Is.EqualTo("None"));
             Assert.That(valueObj["type"].ToString(), Is.EqualTo("None"));
             Assert.That(valueObj["entityId"].ToString(), Is.EqualTo("0"));
@@ -721,11 +721,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(2));
-                Assert.That(response.resultsFilePath, Is.Not.Null); // Multiple selection exports to file
+                Assert.That(response.TotalFound, Is.EqualTo(2));
+                Assert.That(response.ResultsFilePath, Is.Not.Null); // Multiple selection exports to file
 
                 // Cleanup exported file
-                string fullPath = Path.Combine(UnityEngine.Application.dataPath, "..", response.resultsFilePath);
+                string fullPath = Path.Combine(UnityEngine.Application.dataPath, "..", response.ResultsFilePath);
                 if (File.Exists(fullPath))
                 {
                     File.Delete(fullPath);

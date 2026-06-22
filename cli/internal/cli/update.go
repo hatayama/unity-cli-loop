@@ -57,7 +57,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 			Command:     updateCommandName,
 			NextActions: []string{"Retry `uloop update` after checking network access to GitHub."},
 			Details: map[string]any{
-				"cause": err.Error(),
+				"Cause": err.Error(),
 			},
 		})
 		return true, 1

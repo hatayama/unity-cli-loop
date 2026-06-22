@@ -36,8 +36,8 @@ func TestRunControlPlayModeWithStateWaitPollsStatusAfterStaleInitialResponse(t *
 		requests,
 		serverErr,
 		[]string{
-			`{"isPlaying":false,"isPaused":false,"message":"Play mode started"}`,
-			`{"isPlaying":true,"isPaused":false,"message":"Play mode status"}`,
+			`{"IsPlaying":false,"IsPaused":false,"Message":"Play mode started"}`,
+			`{"IsPlaying":true,"IsPaused":false,"Message":"Play mode status"}`,
 		})
 
 	connection := unityipc.Connection{
@@ -113,8 +113,8 @@ func TestRunControlPlayModeWithStateWaitPreservesStopChangeFields(t *testing.T) 
 		make(chan map[string]any, 2),
 		serverErr,
 		[]string{
-			`{"isPlaying":true,"isPaused":false,"changed":true,"wasAlreadyStopped":false,"message":"Play mode stopped"}`,
-			`{"isPlaying":false,"isPaused":false,"message":"Play mode status"}`,
+			`{"IsPlaying":true,"IsPaused":false,"Changed":true,"WasAlreadyStopped":false,"Message":"Play mode stopped"}`,
+			`{"IsPlaying":false,"IsPaused":false,"Message":"Play mode status"}`,
 		})
 
 	connection := unityipc.Connection{
@@ -194,7 +194,7 @@ func TestRunControlPlayModeWithStateWaitFailsWhenStateNeverMatches(t *testing.T)
 	go serveRepeatedControlPlayModeResponse(
 		listener,
 		serverErr,
-		`{"isPlaying":false,"isPaused":false,"message":"Play mode status"}`)
+		`{"IsPlaying":false,"IsPaused":false,"Message":"Play mode status"}`)
 
 	connection := unityipc.Connection{
 		Endpoint: unityipc.Endpoint{
@@ -253,7 +253,7 @@ func TestRunControlPlayModeWithStateWaitFailsImmediatelyWhenCompileErrorsBlockPl
 		requests,
 		serverErr,
 		[]string{
-			`{"isPlaying":false,"isPaused":false,"blockedByCompileErrors":true,"compileErrorCount":1,"compileErrors":[{"message":"CS1002: ; expected","file":"Assets/Scripts/Sample.cs","line":12}],"message":"Play mode could not start because Unity has compiler errors."}`,
+			`{"IsPlaying":false,"IsPaused":false,"BlockedByCompileErrors":true,"CompileErrorCount":1,"CompileErrors":[{"Message":"CS1002: ; expected","File":"Assets/Scripts/Sample.cs","Line":12}],"Message":"Play mode could not start because Unity has compiler errors."}`,
 		})
 
 	connection := unityipc.Connection{
@@ -287,7 +287,7 @@ func TestRunControlPlayModeWithStateWaitFailsImmediatelyWhenCompileErrorsBlockPl
 	if envelope.Error.ErrorCode != errorCodeControlPlayModeCompileErrors {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
-	if envelope.Error.Details["compileErrorCount"] != float64(1) {
+	if envelope.Error.Details["CompileErrorCount"] != float64(1) {
 		t.Fatalf("compile error count mismatch: %#v", envelope.Error.Details)
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte("CS1002")) {
@@ -334,8 +334,8 @@ func TestRunControlPlayModeWithStateWaitFailsWhenCompileErrorsAppearDuringPollin
 		requests,
 		serverErr,
 		[]string{
-			`{"isPlaying":false,"isPaused":false,"message":"Play mode started"}`,
-			`{"isPlaying":false,"isPaused":false,"blockedByCompileErrors":true,"compileErrorCount":1,"compileErrors":[{"message":"CS1525: invalid expression","file":"Assets/Scripts/Sample.cs","line":3}],"message":"Play mode could not start because Unity has compiler errors."}`,
+			`{"IsPlaying":false,"IsPaused":false,"Message":"Play mode started"}`,
+			`{"IsPlaying":false,"IsPaused":false,"BlockedByCompileErrors":true,"CompileErrorCount":1,"CompileErrors":[{"Message":"CS1525: invalid expression","File":"Assets/Scripts/Sample.cs","Line":3}],"Message":"Play mode could not start because Unity has compiler errors."}`,
 		})
 
 	connection := unityipc.Connection{

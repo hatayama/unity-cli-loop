@@ -32,13 +32,13 @@ type compileCompletionOptions struct {
 }
 
 type compileStatusResponse struct {
-	Ready                    bool            `json:"ready"`
-	HasResult                bool            `json:"hasResult"`
-	IsCompiling              bool            `json:"isCompiling"`
-	IsUpdating               bool            `json:"isUpdating"`
-	IsDomainReloadInProgress bool            `json:"isDomainReloadInProgress"`
-	Result                   json.RawMessage `json:"result"`
-	Message                  string          `json:"message"`
+	Ready                    bool            `json:"Ready"`
+	HasResult                bool            `json:"HasResult"`
+	IsCompiling              bool            `json:"IsCompiling"`
+	IsUpdating               bool            `json:"IsUpdating"`
+	IsDomainReloadInProgress bool            `json:"IsDomainReloadInProgress"`
+	Result                   json.RawMessage `json:"Result"`
+	Message                  string          `json:"Message"`
 }
 
 var queryCompileStatus = queryCompileStatusFromUnity
@@ -469,10 +469,18 @@ func compileResultLogSummary(result json.RawMessage) compileResultSummary {
 		return compileResultSummary{}
 	}
 	return compileResultSummary{
-		success:      payload["success"],
-		errorCount:   payload["errorCount"],
-		warningCount: payload["warningCount"],
+		success:      firstPresentJSONValue(payload, "Success", "success"),
+		errorCount:   firstPresentJSONValue(payload, "ErrorCount", "errorCount"),
+		warningCount: firstPresentJSONValue(payload, "WarningCount", "warningCount"),
 	}
+}
+
+func firstPresentJSONValue(payload map[string]any, primaryKey string, legacyKey string) any {
+	value, ok := payload[primaryKey]
+	if ok {
+		return value
+	}
+	return payload[legacyKey]
 }
 
 func compileStatusLogContext(status compileStatusResponse) map[string]any {

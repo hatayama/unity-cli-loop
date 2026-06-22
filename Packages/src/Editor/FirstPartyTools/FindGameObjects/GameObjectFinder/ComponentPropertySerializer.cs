@@ -38,9 +38,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     if (value != null)
                     {
                         ComponentPropertyInfo info = new()                        {
-                            name = iterator.displayName,
-                            type = iterator.propertyType.ToString(),
-                            value = SerializeValue(value)
+                            Name = iterator.displayName,
+                            Type = iterator.propertyType.ToString(),
+                            Value = SerializeValue(value)
                         };
 
                         propertyInfos.Add(info);

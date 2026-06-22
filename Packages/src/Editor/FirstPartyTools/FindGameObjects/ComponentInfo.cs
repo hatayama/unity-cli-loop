@@ -1,4 +1,3 @@
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -6,9 +5,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ComponentInfo
     {
-        public string type { get; set; }
-        public string fullTypeName { get; set; }
-        public ComponentPropertyInfo[] properties { get; set; }
+        public string Type { get; set; }
+
+        public string FullTypeName { get; set; }
+
+        public ComponentPropertyInfo[] Properties { get; set; }
     }
     
     /// <summary>
@@ -16,8 +17,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ComponentPropertyInfo
     {
-        public string name { get; set; }
-        public string type { get; set; }
-        public object value { get; set; }
+        public string Name { get; set; }
+
+        public string Type { get; set; }
+
+        public object Value { get; set; }
     }
 }
