@@ -18,60 +18,60 @@ const (
 var fetchMatchingLogs = fetchMatchingLogsFromUnity
 
 type pausePointMatchingLog struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
+	Type    string `json:"Type"`
+	Message string `json:"Message"`
 }
 
 type pausePointMatchingLogsResult struct {
-	SearchText     string                  `json:"searchText"`
-	TotalCount     int                     `json:"totalCount"`
-	DisplayedCount int                     `json:"displayedCount"`
-	MaxCount       int                     `json:"maxCount"`
-	Logs           []pausePointMatchingLog `json:"logs"`
+	SearchText     string                  `json:"SearchText"`
+	TotalCount     int                     `json:"TotalCount"`
+	DisplayedCount int                     `json:"DisplayedCount"`
+	MaxCount       int                     `json:"MaxCount"`
+	Logs           []pausePointMatchingLog `json:"Logs"`
 }
 
 type pausePointEvidenceSummary struct {
-	EditorState  pausePointEditorState        `json:"editorState"`
-	PausePoint   pausePointEvidencePausePoint `json:"pausePoint"`
-	MatchingLogs pausePointEvidenceLogs       `json:"matchingLogs"`
-	Warning      string                       `json:"warning"`
+	EditorState  pausePointEditorState        `json:"EditorState"`
+	PausePoint   pausePointEvidencePausePoint `json:"PausePoint"`
+	MatchingLogs pausePointEvidenceLogs       `json:"MatchingLogs"`
+	Warning      string                       `json:"Warning"`
 }
 
 type pausePointEvidencePausePoint struct {
-	Id                   string `json:"id"`
-	Status               string `json:"status"`
-	Generation           int    `json:"generation"`
-	HitCount             int    `json:"hitCount"`
-	MultipleHitsObserved bool   `json:"multipleHitsObserved"`
-	FirstHitAtUtc        string `json:"firstHitAtUtc"`
-	LastHitAtUtc         string `json:"lastHitAtUtc"`
-	FirstHitSequence     int    `json:"firstHitSequence"`
-	LastHitSequence      int    `json:"lastHitSequence"`
+	Id                   string `json:"Id"`
+	Status               string `json:"Status"`
+	Generation           int    `json:"Generation"`
+	HitCount             int    `json:"HitCount"`
+	MultipleHitsObserved bool   `json:"MultipleHitsObserved"`
+	FirstHitAtUtc        string `json:"FirstHitAtUtc"`
+	LastHitAtUtc         string `json:"LastHitAtUtc"`
+	FirstHitSequence     int    `json:"FirstHitSequence"`
+	LastHitSequence      int    `json:"LastHitSequence"`
 }
 
 type pausePointEvidenceLogs struct {
-	SearchText                   string `json:"searchText"`
-	MatchingLogCount             int    `json:"matchingLogCount"`
-	ReturnedLogCount             int    `json:"returnedLogCount"`
-	MaxCount                     int    `json:"maxCount"`
-	MayBeTruncated               bool   `json:"mayBeTruncated"`
-	MultipleMatchingLogsObserved bool   `json:"multipleMatchingLogsObserved"`
+	SearchText                   string `json:"SearchText"`
+	MatchingLogCount             int    `json:"MatchingLogCount"`
+	ReturnedLogCount             int    `json:"ReturnedLogCount"`
+	MaxCount                     int    `json:"MaxCount"`
+	MayBeTruncated               bool   `json:"MayBeTruncated"`
+	MultipleMatchingLogsObserved bool   `json:"MultipleMatchingLogsObserved"`
 }
 
 // pausePointWaitResult extends the hit response with marker-matching logs and
 // evidence summary so agents do not need a separate get-logs call while Unity is paused.
 type pausePointWaitResult struct {
 	pausePointStatusResponse
-	MatchingLogs    []pausePointMatchingLog   `json:"matchingLogs"`
-	EvidenceSummary pausePointEvidenceSummary `json:"evidenceSummary"`
+	MatchingLogs    []pausePointMatchingLog   `json:"MatchingLogs"`
+	EvidenceSummary pausePointEvidenceSummary `json:"EvidenceSummary"`
 }
 
 type pausePointGetLogsResponse struct {
-	TotalCount     int                     `json:"totalCount"`
-	DisplayedCount int                     `json:"displayedCount"`
-	MaxCount       int                     `json:"maxCount"`
-	SearchText     string                  `json:"searchText"`
-	Logs           []pausePointMatchingLog `json:"logs"`
+	TotalCount     int                     `json:"TotalCount"`
+	DisplayedCount int                     `json:"DisplayedCount"`
+	MaxCount       int                     `json:"MaxCount"`
+	SearchText     string                  `json:"SearchText"`
+	Logs           []pausePointMatchingLog `json:"Logs"`
 }
 
 func fetchMatchingLogsFromUnity(
@@ -173,7 +173,7 @@ func buildPausePointEvidenceWarning(logs pausePointMatchingLogsResult, hitCount 
 	if evidenceLogs.MultipleMatchingLogsObserved {
 		warnings = append(
 			warnings,
-			"Multiple matching logs were observed for this pause point id; inspect matchingLogs before treating the scenario as single-fire evidence.")
+			"Multiple matching logs were observed for this pause point id; inspect MatchingLogs before treating the scenario as single-fire evidence.")
 	}
 	if hitCount > 1 {
 		warnings = append(

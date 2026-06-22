@@ -70,21 +70,23 @@ uloop find-game-objects --search-mode Selected --include-inactive
 ## Output
 
 Returns JSON with:
-- `results` (array): Matching GameObjects, each containing:
-  - `name` (string): GameObject name
-  - `path` (string): Hierarchy path (e.g., `Canvas/Panel/Button`)
-  - `isActive` (boolean): Active state in hierarchy
-  - `tag` (string): GameObject tag
-  - `layer` (number): Layer index
-  - `components` (array): Each entry has `type` (short name, e.g., `Rigidbody`), `fullTypeName` (e.g., `UnityEngine.Rigidbody`), and `properties` (array of Inspector-visible `{name, type, value}` pairs)
-- `totalFound` (number): Results returned (after `--max-results` clipping). For multi-selection file export, this is the number exported.
-- `errorMessage` (string): Top-level failure summary (empty on success)
-- `processingErrors` (array): Selected-mode per-GameObject serialization failures, each `{gameObjectName, gameObjectPath, error}`. Omitted/null or empty on clean runs.
+
+- `Results` (array): Matching GameObjects, each containing:
+  - `Name` (string): GameObject name
+  - `Path` (string): Hierarchy path (e.g., `Canvas/Panel/Button`)
+  - `IsActive` (boolean): Active state in hierarchy
+  - `Tag` (string): GameObject tag
+  - `Layer` (number): Layer index
+  - `Components` (array): Each entry has `Type` (short name, e.g., `Rigidbody`), `FullTypeName` (e.g., `UnityEngine.Rigidbody`), and `Properties` (array of Inspector-visible `{Name, Type, Value}` pairs)
+- `TotalFound` (number): Results returned (after `--max-results` clipping). For multi-selection file export, this is the number exported.
+- `ErrorMessage` (string): Top-level failure summary (empty on success)
+- `ProcessingErrors` (array): Selected-mode per-GameObject serialization failures, each `{GameObjectName, GameObjectPath, Error}`. Omitted/null or empty on clean runs.
 
 ### Multi-selection file export
 
-For `Selected` mode with **multiple** successfully serialized GameObjects, inline `results` is not populated and the data is written to a file instead. Two extra fields appear:
-- `resultsFilePath` (string): Relative path under `.uloop/outputs/FindGameObjectsResults/`
-- `message` (string): Human-readable summary (e.g., "5 GameObjects exported")
+For `Selected` mode with **multiple** successfully serialized GameObjects, inline `Results` is not populated and the data is written to a file instead. Two extra fields appear:
 
-Single-selection and search-mode calls (`Exact`, `Path`, `Regex`, `Contains`) always return inline. No selection (`Selected` mode with empty selection) returns empty `results` plus a `message`.
+- `ResultsFilePath` (string): Relative path under `.uloop/outputs/FindGameObjectsResults/`
+- `Message` (string): Human-readable summary (e.g., "5 GameObjects exported")
+
+Single-selection and search-mode calls (`Exact`, `Path`, `Regex`, `Contains`) always return inline. No selection (`Selected` mode with empty selection) returns empty `Results` plus a `Message`.

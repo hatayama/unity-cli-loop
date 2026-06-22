@@ -23,9 +23,9 @@ func TestWriteErrorEnvelopeWritesMachineReadableJSON(t *testing.T) {
 		Command:     "sample",
 		NextActions: []string{"Pass a valid boolean value for `--enabled`."},
 		Details: map[string]any{
-			"option":       "--enabled",
-			"received":     "maybe",
-			"expectedType": "boolean",
+			"Option":       "--enabled",
+			"Received":     "maybe",
+			"ExpectedType": "boolean",
 		},
 	})
 
@@ -39,7 +39,7 @@ func TestWriteErrorEnvelopeWritesMachineReadableJSON(t *testing.T) {
 	if envelope.Error.ErrorCode != errorCodeInvalidArgument {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
-	if envelope.Error.Details["option"] != "--enabled" {
+	if envelope.Error.Details["Option"] != "--enabled" {
 		t.Fatalf("details mismatch: %#v", envelope.Error.Details)
 	}
 }
@@ -68,7 +68,7 @@ func TestBuildToolParamsReturnsStructuredBooleanValueError(t *testing.T) {
 	if cliErr.ErrorCode != errorCodeInvalidArgument {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	if cliErr.Details["expectedType"] != "flag" {
+	if cliErr.Details["ExpectedType"] != "flag" {
 		t.Fatalf("details mismatch: %#v", cliErr.Details)
 	}
 }
@@ -103,7 +103,7 @@ func TestClassifyConnectionAttemptAllowsNilCause(t *testing.T) {
 	if cliErr.ErrorCode != errorCodeUnityNotReachable {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	if cliErr.Details["cause"] != "" {
+	if cliErr.Details["Cause"] != "" {
 		t.Fatalf("cause should be empty for nil unwrap: %#v", cliErr.Details)
 	}
 }
@@ -135,7 +135,7 @@ func TestClassifyUnityServerNotRespondingError(t *testing.T) {
 			t.Fatalf("next action should not guide restart: %#v", cliErr.NextActions)
 		}
 	}
-	if cliErr.Details["endpoint"] != "/tmp/uloop/UnityCliLoop-sample.sock" {
+	if cliErr.Details["Endpoint"] != "/tmp/uloop/UnityCliLoop-sample.sock" {
 		t.Fatalf("details mismatch: %#v", cliErr.Details)
 	}
 }
@@ -157,10 +157,10 @@ func TestClassifyEditorUnresponsiveError(t *testing.T) {
 	if !cliErr.Retryable || !cliErr.SafeToRetry {
 		t.Fatalf("retry flags mismatch: %#v", cliErr)
 	}
-	if cliErr.Details["stallSeconds"] != float64(321) {
+	if cliErr.Details["StallSeconds"] != float64(321) {
 		t.Fatalf("stall seconds details mismatch: %#v", cliErr.Details)
 	}
-	if strings.Contains(cliErr.Details["cause"].(string), "launch -r") {
+	if strings.Contains(cliErr.Details["Cause"].(string), "launch -r") {
 		t.Fatalf("cause should not include stale restart advice: %#v", cliErr.Details)
 	}
 	joinedActions := strings.Join(cliErr.NextActions, "\n")
@@ -194,7 +194,7 @@ func TestClassifyLaunchStartupTimeoutError(t *testing.T) {
 			t.Fatalf("next action should avoid package guesses and launch retry guidance: %#v", cliErr.NextActions)
 		}
 	}
-	if cliErr.Details["timeoutSeconds"] != 600 {
+	if cliErr.Details["TimeoutSeconds"] != 600 {
 		t.Fatalf("timeout details mismatch: %#v", cliErr.Details)
 	}
 }
@@ -216,7 +216,7 @@ func TestClassifyLaunchProcessExitTimeoutError(t *testing.T) {
 	if !cliErr.Retryable || !cliErr.SafeToRetry {
 		t.Fatalf("process exit timeout should be retryable: %#v", cliErr)
 	}
-	if cliErr.Details["pid"] != 123 {
+	if cliErr.Details["Pid"] != 123 {
 		t.Fatalf("pid details mismatch: %#v", cliErr.Details)
 	}
 }
@@ -263,7 +263,7 @@ func TestClassifyRPCErrorKeepsData(t *testing.T) {
 	if cliErr.ErrorCode != errorCodeUnityRPCError {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	data, ok := cliErr.Details["data"].(map[string]any)
+	data, ok := cliErr.Details["Data"].(map[string]any)
 	if !ok {
 		t.Fatalf("rpc data missing: %#v", cliErr.Details)
 	}
@@ -334,7 +334,7 @@ func TestClassifyServerBusyRPCError(t *testing.T) {
 	if cliErr.Message != expectedMessage {
 		t.Fatalf("message mismatch: %s", cliErr.Message)
 	}
-	data, ok := cliErr.Details["data"].(map[string]any)
+	data, ok := cliErr.Details["Data"].(map[string]any)
 	if !ok {
 		t.Fatalf("busy data missing: %#v", cliErr.Details)
 	}
@@ -377,6 +377,40 @@ func TestWriteClassifiedServerBusyRPCErrorWritesBusyStatus(t *testing.T) {
 	}
 	if bytes.Contains(stderr.Bytes(), []byte("Success")) || bytes.Contains(stderr.Bytes(), []byte("errorCode")) {
 		t.Fatalf("busy output should not include error envelope fields: %s", stderr.String())
+	}
+}
+
+func TestWriteErrorEnvelopeServerBusyAcceptsLegacyLowercaseDataDetails(t *testing.T) {
+	// Verifies legacy lower-camel error details still preserve busy tool names in status output.
+	cliErr := cliError{
+		ErrorCode: errorCodeUnityServerBusy,
+		Message:   "Unity is busy.",
+		Command:   "get-logs",
+		Details: map[string]any{
+			"data": map[string]any{
+				"runningToolName":   "compile",
+				"requestedToolName": "get-logs",
+				"isPlaying":         true,
+				"isPaused":          false,
+			},
+		},
+	}
+	var stderr bytes.Buffer
+
+	writeErrorEnvelope(&stderr, cliErr)
+
+	var envelope cliStatusEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
+	}
+	if envelope.RunningToolName != "compile" || envelope.RequestedToolName != "get-logs" {
+		t.Fatalf("tool names mismatch: %#v", envelope)
+	}
+	if envelope.IsPlaying == nil || *envelope.IsPlaying != true {
+		t.Fatalf("isPlaying mismatch: %#v", envelope)
+	}
+	if envelope.IsPaused == nil || *envelope.IsPaused != false {
+		t.Fatalf("isPaused mismatch: %#v", envelope)
 	}
 }
 
@@ -466,7 +500,7 @@ func TestUnknownCommandErrorIncludesAvailableCommands(t *testing.T) {
 	if cliErr.ErrorCode != errorCodeUnknownCommand {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	available, ok := cliErr.Details["availableCommands"].([]string)
+	available, ok := cliErr.Details["AvailableCommands"].([]string)
 	if !ok {
 		t.Fatalf("available commands missing: %#v", cliErr.Details)
 	}

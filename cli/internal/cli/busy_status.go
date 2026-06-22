@@ -9,12 +9,12 @@ import (
 const cliStatusBusy = "Busy"
 
 type cliStatusEnvelope struct {
-	Status            string `json:"status"`
-	Message           string `json:"message"`
-	RunningToolName   string `json:"runningToolName,omitempty"`
-	RequestedToolName string `json:"requestedToolName,omitempty"`
-	IsPlaying         *bool  `json:"isPlaying,omitempty"`
-	IsPaused          *bool  `json:"isPaused,omitempty"`
+	Status            string `json:"Status"`
+	Message           string `json:"Message"`
+	RunningToolName   string `json:"RunningToolName,omitempty"`
+	RequestedToolName string `json:"RequestedToolName,omitempty"`
+	IsPlaying         *bool  `json:"IsPlaying,omitempty"`
+	IsPaused          *bool  `json:"IsPaused,omitempty"`
 }
 
 type serverBusyStatusDetails struct {
@@ -40,7 +40,7 @@ func writeBusyStatusEnvelope(writer io.Writer, message string, details serverBus
 }
 
 func serverBusyStatusDetailsFromError(err cliError) serverBusyStatusDetails {
-	data, ok := err.Details["data"].(map[string]any)
+	data, ok := serverBusyDetailsData(err.Details)
 	if !ok {
 		return serverBusyStatusDetails{
 			requestedToolName: err.Command,
@@ -57,6 +57,15 @@ func serverBusyStatusDetailsFromError(err cliError) serverBusyStatusDetails {
 		isPaused:          isPaused,
 		hasIsPaused:       hasIsPaused,
 	}
+}
+
+func serverBusyDetailsData(details map[string]any) (map[string]any, bool) {
+	data, ok := details["Data"].(map[string]any)
+	if ok {
+		return data, true
+	}
+	data, ok = details["data"].(map[string]any)
+	return data, ok
 }
 
 func optionalBool(hasValue bool, value bool) *bool {

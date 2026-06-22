@@ -28,6 +28,7 @@ uloop get-project-info
 ## Output
 
 Returns JSON with project information:
+
 - Unity version
 - Project name
 - Platform settings

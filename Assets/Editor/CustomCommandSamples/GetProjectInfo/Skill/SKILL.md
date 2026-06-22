@@ -21,6 +21,7 @@ None.
 ## Output
 
 Returns JSON with:
+
 - `ProjectName`: Application product name
 - `CompanyName`: Company name
 - `Version`: Application version

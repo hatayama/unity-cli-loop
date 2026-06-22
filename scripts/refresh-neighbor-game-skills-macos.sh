@@ -393,7 +393,7 @@ return SceneManager.GetActiveScene().path;
         fail "failed to execute sample scene open command: $project"
     fi
 
-    if ! printf '%s\n' "$response" | jq -e --arg scene_path "$sample_scene_path" '.success == true and .result == $scene_path' >/dev/null; then
+    if ! printf '%s\n' "$response" | jq -e --arg scene_path "$sample_scene_path" '.Success == true and .Result == $scene_path' >/dev/null; then
         printf '%s\n' "$response" >&2
         fail "failed to open sample scene: $project"
     fi

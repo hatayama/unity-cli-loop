@@ -44,11 +44,12 @@ Replay injects input frame-by-frame, so the game must also be deterministic to p
 ## Output
 
 The CLI prints JSON with:
-- `success`: Whether the operation succeeded
-- `message`: Status message
-- `action`: Echoes which action was executed (`Start` or `Stop`)
-- `outputPath`: Path to saved recording (nullable; populated on `Stop` only)
-- `totalFrames`: Number of frames recorded (nullable int; populated on `Stop` only)
-- `durationSeconds`: Recording duration in seconds (nullable float; populated on `Stop` only)
 
-Frame data lives only in the JSON file at `outputPath`; internal metadata fields are not included in the response.
+- `Success`: Whether the operation succeeded
+- `Message`: Status message
+- `Action`: Echoes which action was executed (`Start` or `Stop`)
+- `OutputPath`: Path to saved recording (nullable; populated on `Stop` only)
+- `TotalFrames`: Number of frames recorded (nullable int; populated on `Stop` only)
+- `DurationSeconds`: Recording duration in seconds (nullable float; populated on `Stop` only)
+
+Frame data lives only in the JSON file at `OutputPath`; internal metadata fields are not included in the response.

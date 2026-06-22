@@ -6,24 +6,24 @@ import (
 )
 
 type listCatalog struct {
-	Version       string     `json:"version,omitempty"`
-	ServerVersion string     `json:"serverVersion,omitempty"`
-	UpdatedAt     string     `json:"updatedAt,omitempty"`
-	Tools         []listTool `json:"tools"`
+	Version       string     `json:"Version,omitempty"`
+	ServerVersion string     `json:"ServerVersion,omitempty"`
+	UpdatedAt     string     `json:"UpdatedAt,omitempty"`
+	Tools         []listTool `json:"Tools"`
 }
 
 type listTool struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description,omitempty"`
-	Options     []listOption `json:"options"`
+	Name        string       `json:"Name"`
+	Description string       `json:"Description,omitempty"`
+	Options     []listOption `json:"Options"`
 }
 
 type listOption struct {
-	Name        string   `json:"name"`
-	Type        string   `json:"type,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Default     any      `json:"default,omitempty"`
-	Values      []string `json:"values,omitempty"`
+	Name        string   `json:"Name"`
+	Type        string   `json:"Type,omitempty"`
+	Description string   `json:"Description,omitempty"`
+	Default     any      `json:"Default,omitempty"`
+	Values      []string `json:"Values,omitempty"`
 }
 
 func formatToolListResult(result json.RawMessage) json.RawMessage {

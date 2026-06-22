@@ -15,18 +15,18 @@ const (
 )
 
 type launchReadyResponse struct {
-	Success           bool   `json:"success"`
-	Ready             bool   `json:"ready"`
-	ServerReady       bool   `json:"serverReady"`
-	ProjectIpcReady   bool   `json:"projectIpcReady"`
-	AlreadyRunning    bool   `json:"alreadyRunning"`
-	Launched          bool   `json:"launched"`
-	Restarted         bool   `json:"restarted"`
-	Quit              bool   `json:"quit"`
-	PreviousProcessId *int   `json:"previousProcessId,omitempty"`
-	CurrentProcessId  *int   `json:"currentProcessId,omitempty"`
-	ProjectRoot       string `json:"projectRoot"`
-	Message           string `json:"message"`
+	Success           bool   `json:"Success"`
+	Ready             bool   `json:"Ready"`
+	ServerReady       bool   `json:"ServerReady"`
+	ProjectIpcReady   bool   `json:"ProjectIpcReady"`
+	AlreadyRunning    bool   `json:"AlreadyRunning"`
+	Launched          bool   `json:"Launched"`
+	Restarted         bool   `json:"Restarted"`
+	Quit              bool   `json:"Quit"`
+	PreviousProcessId *int   `json:"PreviousProcessId,omitempty"`
+	CurrentProcessId  *int   `json:"CurrentProcessId,omitempty"`
+	ProjectRoot       string `json:"ProjectRoot"`
+	Message           string `json:"Message"`
 }
 
 func writeLaunchReadinessWait(stdout io.Writer, spinner *terminalSpinner) {

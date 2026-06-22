@@ -171,9 +171,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void StoreCompileResult_WhenResultIsPersisted_UsesCamelCaseJson()
+        public void StoreCompileResult_WhenResultIsPersisted_UsesPascalCaseJson()
         {
-            // Verifies delayed compile polling reads the same camelCase response contract as immediate tool responses.
+            // Verifies delayed compile polling reads the same PascalCase response contract as immediate tool responses.
             UnityCliLoopEditorSessionStateService sessionStateService =
                 UnityCliLoopEditorSessionStateTestFactory.CreateService();
             UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
@@ -202,9 +202,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopStoredCompileResult storedResult =
                     sessionStateService.GetCompileResult("compile_test_request");
 
-                Assert.That(storedResult.ResultJson, Does.Contain("\"success\":true"));
-                Assert.That(storedResult.ResultJson, Does.Contain("\"errorCount\":0"));
-                Assert.That(storedResult.ResultJson, Does.Not.Contain("\"Success\""));
+                Assert.That(storedResult.ResultJson, Does.Contain("\"Success\":true"));
+                Assert.That(storedResult.ResultJson, Does.Contain("\"ErrorCount\":0"));
+                Assert.That(storedResult.ResultJson, Does.Not.Contain("\"success\""));
             }
             finally
             {

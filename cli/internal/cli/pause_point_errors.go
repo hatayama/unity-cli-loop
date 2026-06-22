@@ -32,7 +32,7 @@ func pausePointWaitError(
 			true)
 		hint := pausePointExpiredHint(response)
 		if hint != "" {
-			expiredError.Details["hint"] = hint
+			expiredError.Details["Hint"] = hint
 		}
 		return expiredError
 	case pausePointWaitStateCleared:
@@ -53,7 +53,7 @@ func pausePointWaitError(
 			true)
 		hint := pausePointTimeoutHint(response)
 		if hint != "" {
-			timeoutError.Details["hint"] = hint
+			timeoutError.Details["Hint"] = hint
 		}
 		return timeoutError
 	}
@@ -114,22 +114,22 @@ func pausePointStateError(
 		NextActions: []string{
 			"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
 			"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
-			"Check `details.status`, `details.editorState`, `details.elapsedSinceEnabledMilliseconds`, and `details.remainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+			"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
 			"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
 		},
 		Details: map[string]any{
-			"id":                              options.id,
-			"status":                          response.Status,
-			"expired":                         response.Expired,
-			"hitCount":                        response.HitCount,
-			"timeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
-			"enabledAtUtc":                    response.EnabledAtUtc,
-			"elapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
-			"generation":                      response.Generation,
-			"editorState":                     response.EditorState,
-			"remainingMilliseconds":           pausePointRemainingMilliseconds(options, response),
-			"markerMessage":                   response.Message,
-			"recommendedNextAction":           response.RecommendedNextAction,
+			"Id":                              options.id,
+			"Status":                          response.Status,
+			"Expired":                         response.Expired,
+			"HitCount":                        response.HitCount,
+			"TimeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
+			"EnabledAtUtc":                    response.EnabledAtUtc,
+			"ElapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
+			"Generation":                      response.Generation,
+			"EditorState":                     response.EditorState,
+			"RemainingMilliseconds":           pausePointRemainingMilliseconds(options, response),
+			"MarkerMessage":                   response.Message,
+			"RecommendedNextAction":           response.RecommendedNextAction,
 		},
 	}
 }

@@ -49,12 +49,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return new FindGameObjectsResponse
             {
-                results = ToResults(result.Results),
-                totalFound = result.TotalFound,
-                errorMessage = result.ErrorMessage,
-                resultsFilePath = result.ResultsFilePath,
-                message = result.Message,
-                processingErrors = ToProcessingErrors(result.ProcessingErrors),
+                Results = ToResults(result.Results),
+                TotalFound = result.TotalFound,
+                ErrorMessage = result.ErrorMessage,
+                ResultsFilePath = result.ResultsFilePath,
+                Message = result.Message,
+                ProcessingErrors = ToProcessingErrors(result.ProcessingErrors),
             };
         }
 
@@ -71,12 +71,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityCliLoopGameObjectResult result = results[i];
                 mappedResults[i] = new FindGameObjectResult
                 {
-                    name = result.Name,
-                    path = result.Path,
-                    isActive = result.IsActive,
-                    tag = result.Tag,
-                    layer = result.Layer,
-                    components = result.Components,
+                    Name = result.Name,
+                    Path = result.Path,
+                    IsActive = result.IsActive,
+                    Tag = result.Tag,
+                    Layer = result.Layer,
+                    Components = result.Components,
                 };
             }
 
@@ -96,9 +96,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityCliLoopGameObjectProcessingError error = errors[i];
                 mappedErrors[i] = new ProcessingError
                 {
-                    gameObjectName = error.GameObjectName,
-                    gameObjectPath = error.GameObjectPath,
-                    error = error.Error,
+                    GameObjectName = error.GameObjectName,
+                    GameObjectPath = error.GameObjectPath,
+                    Error = error.Error,
                 };
             }
 

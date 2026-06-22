@@ -190,6 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(prompt, Does.Contain("v3-cli-invocation-migration"));
             Assert.That(prompt, Does.Contain("SKILL.md, Markdown, POSIX shell scripts, and PowerShell scripts"));
             Assert.That(prompt, Does.Contain("Do not change C# snippets"));
+            Assert.That(prompt, Does.Not.Contain("JSON output fields"));
             Assert.That(prompt, Does.Contain("summarize changed files"));
         }
 

@@ -43,16 +43,17 @@ Prefer terminal commands for file operations and keep snippets focused on Unity 
 ## Output
 
 Returns JSON:
-- `success`: boolean — overall execution success
-- `result`: string — value of the snippet's `return` statement (empty when omitted)
-- `logs`: string[] — execution messages from the dynamic-code tool; read Unity Console `Debug.Log` output with `get-logs`
-- `compilationErrors`: object[] — Roslyn diagnostics with `message`, `line`, `column`, `errorCode`, optional `hint` and `suggestions`
-- `error` / `errorMessage`: string — top-level failure summary (empty on success)
-- `updatedCode`: string|null — the wrapped form actually compiled (handy when debugging using-statement reordering)
-- `diagnosticsSummary`: string|null — compact summary when diagnostics are available
-- `diagnostics`: object[] — structured diagnostics; same shape as `compilationErrors`, usually populated together with it
 
-On `success: false`, inspect `compilationErrors` first. If empty, read `errorMessage` (and `logs` for extra context) — the failure may be a runtime exception, cancellation, or an "execution in progress" rejection, all of which return empty `compilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
+- `Success`: boolean — overall execution success
+- `Result`: string — value of the snippet's `return` statement (empty when omitted)
+- `Logs`: string[] — execution messages from the dynamic-code tool; read Unity Console `Debug.Log` output with `get-logs`
+- `CompilationErrors`: object[] — Roslyn diagnostics with `Message`, `Line`, `Column`, `ErrorCode`, optional `Hint` and `Suggestions`
+- `Error` / `ErrorMessage`: string — top-level failure summary (empty on success)
+- `UpdatedCode`: string|null — the wrapped form actually compiled (handy when debugging using-statement reordering)
+- `DiagnosticsSummary`: string|null — compact summary when diagnostics are available
+- `Diagnostics`: object[] — structured diagnostics; same shape as `CompilationErrors`, usually populated together with it
+
+On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
 
 ## Code Examples by Category
 

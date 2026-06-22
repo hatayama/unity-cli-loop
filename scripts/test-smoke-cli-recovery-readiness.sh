@@ -48,18 +48,18 @@ func main() {
 		fmt.Printf("Unity is already running for %s (PID: 1234)\n", projectPath)
 	case "get-logs":
 		if os.Getenv("ULOOP_FAKE_CONNECTION_FAILURE") == "1" {
-			fmt.Fprintln(os.Stderr, "{\n  \"success\": false,\n  \"error\": {\n    \"errorCode\": \"UNITY_NOT_REACHABLE\",\n    \"message\": \"The Unity CLI Loop server is not reachable for this project.\",\n    \"nextActions\": [\n      \"If Unity is closed, run `uloop launch`.\"\n    ]\n  }\n}")
+			fmt.Fprintln(os.Stderr, "{\n  \"Success\": false,\n  \"Error\": {\n    \"ErrorCode\": \"UNITY_NOT_REACHABLE\",\n    \"Message\": \"The Unity CLI Loop server is not reachable for this project.\",\n    \"NextActions\": [\n      \"If Unity is closed, run `uloop launch`.\"\n    ]\n  }\n}")
 			os.Exit(1)
 		}
-		fmt.Println(`{"displayedCount":0,"logs":[],"maxCount":1,"totalCount":0}`)
+		fmt.Println(`{"DisplayedCount":0,"Logs":[],"MaxCount":1,"TotalCount":0}`)
 	case "compile":
 		if os.Getenv("ULOOP_FAKE_COMPILE_WITHOUT_SUCCESS") == "1" {
-			fmt.Println(`{"errorCount":0,"warningCount":0}`)
+			fmt.Println(`{"ErrorCount":0,"WarningCount":0}`)
 			return
 		}
-		fmt.Println(`{"success":true,"errorCount":0,"warningCount":0}`)
+		fmt.Println(`{"Success":true,"ErrorCount":0,"WarningCount":0}`)
 	case "execute-dynamic-code":
-		fmt.Println(`{"success":true,"result":"cli-recovery-readiness-e2e"}`)
+		fmt.Println(`{"Success":true,"Result":"cli-recovery-readiness-e2e"}`)
 	default:
 		fmt.Fprintf(os.Stderr, "unexpected command: %s\n", commandName)
 		os.Exit(98)

@@ -52,7 +52,7 @@ uloop simulate-mouse-input --action <action> [options]
 
 For standard frame proof when this input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Place markers after the app consumed the mouse input, not immediately after `simulate-mouse-input`.
 
-- If `interruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `pausePointId` and `pausePointHitCount` identify the marker.
+- If `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `PausePointId` and `PausePointHitCount` identify the marker.
 - Remove temporary pause-point/log instrumentation before final validation when it was added only for inspection.
 
 ### Global Options (optional)
@@ -60,7 +60,6 @@ For standard frame proof when this input drives a state transition, follow the `
 | Option | Description |
 |--------|-------------|
 | `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
 
 ## When to use this vs simulate-mouse-ui
 
@@ -109,15 +108,16 @@ uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --dura
 ## Output
 
 Returns JSON with:
-- `success`: Whether the operation succeeded
-- `message`: Status message
-- `action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`)
-- `button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
-- `positionX`: Target X coordinate (nullable float; populated for `Click` / `LongPress`)
-- `positionY`: Target Y coordinate (nullable float; populated for `Click` / `LongPress`)
-- `interruptedByPausePoint`: True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
-- `pausePointId`: The id from `UloopPausePoint.Pause("<id>")` when it caused the interruption
-- `pausePointHitCount`: The hit count for that `UloopPausePoint.Pause("<id>")`
-- `pausePointHits` (array, nullable): Every marker hit during this input as `{id, hitCount}` entries, in hit order. Read this when one input may trigger several markers; `pausePointId` only names the latest one
+
+- `Success`: Whether the operation succeeded
+- `Message`: Status message
+- `Action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`)
+- `Button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
+- `PositionX`: Target X coordinate (nullable float; populated for `Click` / `LongPress`)
+- `PositionY`: Target Y coordinate (nullable float; populated for `Click` / `LongPress`)
+- `InterruptedByPausePoint`: True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
+- `PausePointId`: The id from `UloopPausePoint.Pause("<id>")` when it caused the interruption
+- `PausePointHitCount`: The hit count for that `UloopPausePoint.Pause("<id>")`
+- `PausePointHits` (array, nullable): Every marker hit during this input as `{Id, HitCount}` entries, in hit order. Read this when one input may trigger several markers; `PausePointId` only names the latest one
 
 Verify visual outcome with a follow-up screenshot.

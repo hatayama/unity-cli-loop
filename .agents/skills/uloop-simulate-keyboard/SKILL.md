@@ -42,11 +42,12 @@ uloop simulate-keyboard --action <action> --key <key> [options]
 Use `Press` for edge-triggered keyboard code such as `Keyboard.current.spaceKey.wasPressedThisFrame`.
 `KeyDown` emits one initial press edge, then only keeps the key held. It does not keep `wasPressedThisFrame` true while the key remains held.
 If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` true but runtime state does not change, do not immediately rewrite the user's runtime code to `isPressed`. First verify that the target component is active during the command, that it polls input in the configured Input System update phase, and that a missed `KeyDown` edge is followed by `KeyUp` before retrying.
+
 ### Pause Point Inspection (Standard for E2E)
 
 For standard frame proof when this input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Place markers after the app consumed the key, not immediately after `simulate-keyboard`.
 
-- If `interruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `pausePointId` and `pausePointHitCount` identify the marker. `pressEdgeObserved` is still reported on pause-point interruptions.
+- If `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `PausePointId` and `PausePointHitCount` identify the marker. `PressEdgeObserved` is still reported on pause-point interruptions.
 
 ### KeyDown/KeyUp Rules
 
@@ -85,15 +86,16 @@ uloop simulate-keyboard --action KeyUp --key LeftShift
 ## Output
 
 Returns JSON with:
-- `success` (boolean): Whether the action succeeded (e.g. `KeyDown` on a not-yet-held key, `KeyUp` on a currently-held key, or `Press` round-trip)
-- `message` (string): Description of what happened or why it failed
-- `action` (string): The `--action` value that was applied (`Press`, `KeyDown`, or `KeyUp`)
-- `keyName` (string, nullable): The key that was acted on; may be `null` when the action could not resolve a key
-- `interruptedByPausePoint` (boolean): True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
-- `pausePointId` (string, nullable): The marker id when a `UloopPausePoint.Pause` marker caused the interruption
-- `pausePointHitCount` (integer, nullable): The marker hit count when a `UloopPausePoint.Pause` marker caused the interruption
-- `pausePointHits` (array, nullable): Every marker hit during this input as `{id, hitCount}` entries, in hit order. Read this when one input may trigger several markers; `pausePointId` only names the latest one
-- `pressEdgeObserved` (boolean, nullable): For `Press` and `KeyDown`, whether the press edge (`wasPressedThisFrame`) was actually visible inside a gameplay input update. `false` means the CLI succeeded but gameplay polling most likely missed the edge (e.g. the press was consumed by an editor-only input update) — retry the input or verify with a focused log instead of trusting `success` alone. `null` only for `KeyUp` and for timed-out responses; pause-point interruptions still report the observed value
+
+- `Success` (boolean): Whether the action succeeded (e.g. `KeyDown` on a not-yet-held key, `KeyUp` on a currently-held key, or `Press` round-trip)
+- `Message` (string): Description of what happened or why it failed
+- `Action` (string): The `--action` value that was applied (`Press`, `KeyDown`, or `KeyUp`)
+- `KeyName` (string, nullable): The key that was acted on; may be `null` when the action could not resolve a key
+- `InterruptedByPausePoint` (boolean): True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
+- `PausePointId` (string, nullable): The marker id when a `UloopPausePoint.Pause` marker caused the interruption
+- `PausePointHitCount` (integer, nullable): The marker hit count when a `UloopPausePoint.Pause` marker caused the interruption
+- `PausePointHits` (array, nullable): Every marker hit during this input as `{Id, HitCount}` entries, in hit order. Read this when one input may trigger several markers; `PausePointId` only names the latest one
+- `PressEdgeObserved` (boolean, nullable): For `Press` and `KeyDown`, whether the press edge (`wasPressedThisFrame`) was actually visible inside a gameplay input update. `false` means the CLI succeeded but gameplay polling most likely missed the edge (e.g. the press was consumed by an editor-only input update) — retry the input or verify with a focused log instead of trusting `Success` alone. `null` only for `KeyUp` and for timed-out responses; pause-point interruptions still report the observed value
 
 ## Prerequisites
 

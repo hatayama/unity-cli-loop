@@ -306,6 +306,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return SkillInstallState.Missing;
             }
 
+            string installedSkillFilePath = Path.Combine(installedSkillDirectory, SkillFileName);
+            if (!File.Exists(installedSkillFilePath))
+            {
+                return SkillInstallState.Missing;
+            }
+
             return IsSkillDirectoryOutdated(skill.SkillFiles, installedSkillDirectory)
                 ? SkillInstallState.Outdated
                 : SkillInstallState.Installed;

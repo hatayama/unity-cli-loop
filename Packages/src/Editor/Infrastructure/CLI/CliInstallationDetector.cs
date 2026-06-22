@@ -45,6 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string SHELL_CONTRACT_STATUS_START_MARKER = "__ULOOP_CONTRACT_STATUS_START__";
         private const string SHELL_CONTRACT_STATUS_END_MARKER = "__ULOOP_CONTRACT_STATUS_END__";
         private const string SHELL_SUCCESS_EXIT_CODE = "0";
+        private const string VERSION_JSON_CLI_VERSION_PROPERTY = "CliVersion";
+        private const string VERSION_JSON_PROTOCOL_VERSION_PROPERTY = "ProtocolVersion";
 
         private string _cachedCliVersion;
         private int? _cachedCliProtocolVersion;
@@ -362,8 +364,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             try
             {
                 JObject parsed = JObject.Parse(jsonLine);
-                string version = parsed["cliVersion"]?.ToString();
-                JToken protocolVersionToken = parsed["protocolVersion"];
+                string version = parsed[VERSION_JSON_CLI_VERSION_PROPERTY]?.ToString();
+                JToken protocolVersionToken = parsed[VERSION_JSON_PROTOCOL_VERSION_PROPERTY];
                 int? protocolVersion = ReadProtocolVersion(protocolVersionToken);
                 return new CliInstallationDetection(version, protocolVersion, executablePath);
             }
