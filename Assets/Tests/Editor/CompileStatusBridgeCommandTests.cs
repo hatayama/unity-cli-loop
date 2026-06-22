@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionStateService.StoreCompileResult(
                 "compile_test_request",
                 forceRecompile: false,
-                resultJson: "{\"success\":true}",
+                resultJson: "{\"Success\":true}",
                 completedAtUtc: System.DateTime.UtcNow);
 
             GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
             Assert.That(response.Result, Is.Not.Null);
-            Assert.That(response.Result["success"]?.Value<bool>(), Is.True);
+            Assert.That(response.Result["Success"]?.Value<bool>(), Is.True);
         }
 
         [Test]
@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionStateService.StoreCompileResult(
                 "compile_test_request",
                 forceRecompile: false,
-                resultJson: "{\"success\":true}",
+                resultJson: "{\"Success\":true}",
                 completedAtUtc: System.DateTime.UtcNow);
 
             GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionStateService.StoreCompileResult(
                 "compile_old_request",
                 forceRecompile: false,
-                resultJson: "{\"success\":true}",
+                resultJson: "{\"Success\":true}",
                 completedAtUtc: System.DateTime.UtcNow);
 
             GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
@@ -138,10 +138,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
-            Assert.That(response.Result["success"]?.Type, Is.EqualTo(JTokenType.Null));
-            Assert.That(response.Result["errorCount"]?.Type, Is.EqualTo(JTokenType.Null));
-            Assert.That(response.Result["warnings"]?.Type, Is.EqualTo(JTokenType.Null));
-            Assert.That(response.Result["message"]?.ToString(), Does.Contain("reloaded scripts"));
+            Assert.That(response.Result["Success"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["Warnings"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["Message"]?.ToString(), Does.Contain("reloaded scripts"));
             Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
         }
 
@@ -186,10 +186,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
-            Assert.That(response.Result["success"]?.Type, Is.EqualTo(JTokenType.Null));
-            Assert.That(response.Result["errorCount"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["Success"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(
-                response.Result["message"]?.ToString(),
+                response.Result["Message"]?.ToString(),
                 Is.EqualTo(ForceCompileUnknownResult.MessageText));
         }
     }

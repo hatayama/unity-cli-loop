@@ -38,9 +38,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             GetHierarchyResponse response = baseResponse as GetHierarchyResponse;
             
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.hierarchyFilePath, Is.Not.Empty);
-            Assert.That(response.message, Does.Contain("Hierarchy data saved"));
-            DeleteExportedFile(response.hierarchyFilePath);
+            Assert.That(response.HierarchyFilePath, Is.Not.Empty);
+            Assert.That(response.Message, Does.Contain("Hierarchy data saved"));
+            DeleteExportedFile(response.HierarchyFilePath);
         }
         
         [Test]
@@ -55,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             GetHierarchyResponse response = baseResponse as GetHierarchyResponse;
             
             Assert.That(response, Is.Not.Null);
-            DeleteExportedFile(response.hierarchyFilePath);
+            DeleteExportedFile(response.HierarchyFilePath);
         }
         
         [Test]
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             GetHierarchyResponse response = baseResponse as GetHierarchyResponse;
             
             Assert.That(response, Is.Not.Null);
-            DeleteExportedFile(response.hierarchyFilePath);
+            DeleteExportedFile(response.HierarchyFilePath);
         }
         
         [Test]

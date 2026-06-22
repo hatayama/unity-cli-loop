@@ -49,14 +49,14 @@ uloop control-play-mode --action Step
 ## Output
 
 Returns JSON with the current play mode state:
-- `isPlaying`: Whether Unity is currently in play mode
-- `isPaused`: Whether play mode is paused
-- `changed`: Whether the requested action changed the current play mode state
-- `wasAlreadyStopped`: Whether `Stop` was requested while Play Mode was already stopped
-- `message`: Description of the action performed
+- `IsPlaying`: Whether Unity is currently in play mode
+- `IsPaused`: Whether play mode is paused
+- `Changed`: Whether the requested action changed the current play mode state
+- `WasAlreadyStopped`: Whether `Stop` was requested while Play Mode was already stopped
+- `Message`: Description of the action performed
 
 ## Notes
 
-- Stop on an already-stopped Editor sets `changed: false`, `wasAlreadyStopped: true`
+- Stop on an already-stopped Editor sets `Changed: false`, `WasAlreadyStopped: true`
 - Step is independent of `Time.timeScale`; requires PlayMode to be running
 - The command waits for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.

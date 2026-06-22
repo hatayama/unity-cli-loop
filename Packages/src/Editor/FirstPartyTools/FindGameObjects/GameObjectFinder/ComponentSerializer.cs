@@ -35,9 +35,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ComponentPropertyInfo[] properties = _propertySerializer.SerializeProperties(component);
                 
                 ComponentInfo info = new()                {
-                    type = componentTypeName,
-                    fullTypeName = component.GetType().FullName,
-                    properties = properties
+                    Type = componentTypeName,
+                    FullTypeName = component.GetType().FullName,
+                    Properties = properties
                 };
                 
                 componentInfos.Add(info);

@@ -48,11 +48,11 @@ Replay injects the exact same input frame-by-frame, but the game must also be de
 ## Output
 
 Returns JSON with:
-- `success`: Whether the operation succeeded
-- `message`: Status message
-- `action`: Echoes which action was executed (`Start`, `Stop`, or `Status`)
-- `inputPath`: Path to recording file (nullable string; populated on `Start` only)
-- `currentFrame`: Current replay frame index (nullable int)
-- `totalFrames`: Total frames in the recording (nullable int)
-- `progress`: Replay progress (nullable float in 0.0 – 1.0)
-- `isReplaying`: Whether replay is currently active (nullable bool)
+- `Success`: Whether the operation succeeded
+- `Message`: Status message
+- `Action`: Echoes which action was executed (`Start`, `Stop`, or `Status`)
+- `InputPath`: Path to recording file (nullable string; populated on `Start` only)
+- `CurrentFrame`: Current replay frame index (nullable int)
+- `TotalFrames`: Total frames in the recording (nullable int)
+- `Progress`: Replay progress (nullable float in 0.0 – 1.0)
+- `IsReplaying`: Whether replay is currently active (nullable bool)

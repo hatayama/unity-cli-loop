@@ -50,18 +50,18 @@ uloop launch --quit
 May print status/progress lines before the final JSON payload, such as project path, detected Unity version, or readiness wait messages.
 
 The final JSON payload includes:
-- `success`: whether the command completed
-- `ready`: whether Unity CLI Loop is ready for commands
-- `serverReady`: whether the Unity CLI Loop server accepted requests
-- `projectIpcReady`: whether the project IPC path accepted tool requests
-- `alreadyRunning`: whether an existing Unity process was reused
-- `launched`: whether this command launched a Unity process
-- `restarted`: whether this command stopped an existing process and launched a new one
-- `quit`: whether this command stopped Unity without launching a new process
-- `previousProcessId`: process ID stopped by restart or quit, when available
-- `currentProcessId`: current Unity process ID, when available
-- `projectRoot`: resolved project root
-- `message`: readiness summary
+- `Success`: whether the command completed
+- `Ready`: whether Unity CLI Loop is ready for commands
+- `ServerReady`: whether the Unity CLI Loop server accepted requests
+- `ProjectIpcReady`: whether the project IPC path accepted tool requests
+- `AlreadyRunning`: whether an existing Unity process was reused
+- `Launched`: whether this command launched a Unity process
+- `Restarted`: whether this command stopped an existing process and launched a new one
+- `Quit`: whether this command stopped Unity without launching a new process
+- `PreviousProcessId`: process ID stopped by restart or quit, when available
+- `CurrentProcessId`: current Unity process ID, when available
+- `ProjectRoot`: resolved project root
+- `Message`: readiness summary
 
 ## Notes
 

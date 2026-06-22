@@ -19,13 +19,13 @@ func (err *argumentError) toCLIError(context errorContext) cliError {
 	command := firstNonEmpty(err.command, context.command)
 	details := map[string]any{}
 	if err.option != "" {
-		details["option"] = err.option
+		details["Option"] = err.option
 	}
 	if err.received != "" {
-		details["received"] = err.received
+		details["Received"] = err.received
 	}
 	if err.expectedType != "" {
-		details["expectedType"] = err.expectedType
+		details["ExpectedType"] = err.expectedType
 	}
 
 	nextActions := err.nextActions

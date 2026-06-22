@@ -56,7 +56,7 @@ uloop get-hierarchy --use-selection
 ## Output
 
 Returns JSON with:
-- `message` (string): Human-readable guidance pointing at the saved file
-- `hierarchyFilePath` (string): Filesystem path to the JSON file that contains the actual hierarchy data
+- `Message` (string): Human-readable guidance pointing at the saved file
+- `HierarchyFilePath` (string): Filesystem path to the JSON file that contains the actual hierarchy data
 
-The hierarchy itself is **not** in the response — it is written to the file at `hierarchyFilePath`. Open that file to read the `Context` and `Hierarchy` payload (GameObject tree, components, etc.).
+The hierarchy itself is **not** in the response — it is written to the file at `HierarchyFilePath`. Open that file to read the `Context` and `Hierarchy` payload (GameObject tree, components, etc.).

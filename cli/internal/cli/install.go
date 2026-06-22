@@ -65,10 +65,10 @@ func tryHandleInstallRequest(ctx context.Context, args []string, stdout io.Write
 
 func installSetupFailureError(err error, installerStderr string) cliError {
 	details := map[string]any{
-		"cause": err.Error(),
+		"Cause": err.Error(),
 	}
 	if stderrText := strings.TrimSpace(installerStderr); stderrText != "" {
-		details["installerStderr"] = stderrText
+		details["InstallerStderr"] = stderrText
 	}
 
 	return cliError{

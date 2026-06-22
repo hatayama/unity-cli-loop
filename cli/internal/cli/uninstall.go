@@ -65,7 +65,7 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 			Command:     uninstallCommandName,
 			NextActions: []string{"Retry `uloop uninstall` after checking file permissions."},
 			Details: map[string]any{
-				"cause": err.Error(),
+				"Cause": err.Error(),
 			},
 		})
 		return true, 1

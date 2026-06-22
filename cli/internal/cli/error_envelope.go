@@ -45,15 +45,15 @@ const (
 )
 
 type cliError struct {
-	ErrorCode   string         `json:"errorCode"`
-	Phase       string         `json:"phase"`
-	Message     string         `json:"message"`
-	Retryable   bool           `json:"retryable"`
-	SafeToRetry bool           `json:"safeToRetry"`
-	ProjectRoot string         `json:"projectRoot,omitempty"`
-	Command     string         `json:"command,omitempty"`
-	NextActions []string       `json:"nextActions"`
-	Details     map[string]any `json:"details,omitempty"`
+	ErrorCode   string         `json:"ErrorCode"`
+	Phase       string         `json:"Phase"`
+	Message     string         `json:"Message"`
+	Retryable   bool           `json:"Retryable"`
+	SafeToRetry bool           `json:"SafeToRetry"`
+	ProjectRoot string         `json:"ProjectRoot,omitempty"`
+	Command     string         `json:"Command,omitempty"`
+	NextActions []string       `json:"NextActions"`
+	Details     map[string]any `json:"Details,omitempty"`
 }
 
 func (err cliError) Error() string {
@@ -61,8 +61,8 @@ func (err cliError) Error() string {
 }
 
 type cliErrorEnvelope struct {
-	Success bool     `json:"success"`
-	Error   cliError `json:"error"`
+	Success bool     `json:"Success"`
+	Error   cliError `json:"Error"`
 }
 
 type errorContext struct {
@@ -134,7 +134,7 @@ func responseTimeoutAfterAcceptError(err error, context errorContext) cliError {
 			"Retry after Unity finishes the command, compiling, reloading scripts, or restarting the bridge.",
 		},
 		Details: map[string]any{
-			"cause": err.Error(),
+			"Cause": err.Error(),
 		},
 	}
 }
@@ -175,8 +175,8 @@ func classifyError(err error, context errorContext) cliError {
 				"Confirm that the command targets the intended Unity project and the Editor package is installed.",
 			},
 			Details: map[string]any{
-				"endpoint": notRespondingErr.endpoint,
-				"cause":    notRespondingErr.causeText(),
+				"Endpoint": notRespondingErr.endpoint,
+				"Cause":    notRespondingErr.causeText(),
 			},
 		}
 	}
@@ -202,8 +202,8 @@ func classifyError(err error, context errorContext) cliError {
 				"Confirm that the command targets the intended Unity project.",
 			},
 			Details: map[string]any{
-				"endpoint": connectionErr.Endpoint,
-				"cause":    connectionAttemptCause(connectionErr),
+				"Endpoint": connectionErr.Endpoint,
+				"Cause":    connectionAttemptCause(connectionErr),
 			},
 		}
 	}
@@ -211,19 +211,19 @@ func classifyError(err error, context errorContext) cliError {
 	var rpcErr *unityipc.RPCError
 	if errors.As(err, &rpcErr) {
 		details := map[string]any{
-			"code":    rpcErr.Code,
-			"message": rpcErr.Message,
+			"Code":    rpcErr.Code,
+			"Message": rpcErr.Message,
 		}
 		var decodedData map[string]any
 		if len(rpcErr.Data) > 0 {
 			var data any
 			if json.Unmarshal(rpcErr.Data, &data) == nil {
-				details["data"] = data
+				details["Data"] = data
 				if typedData, ok := data.(map[string]any); ok {
 					decodedData = typedData
 				}
 			} else {
-				details["data"] = string(rpcErr.Data)
+				details["Data"] = string(rpcErr.Data)
 			}
 		}
 		if rpcDataType(decodedData) == "cli_update_required" {
@@ -399,7 +399,7 @@ func disconnectedAfterAcceptError(err error, context errorContext) cliError {
 			"Retry after Unity finishes compiling, reloading scripts, or restarting the bridge.",
 		},
 		Details: map[string]any{
-			"cause": err.Error(),
+			"Cause": err.Error(),
 		},
 	}
 }
@@ -418,7 +418,7 @@ func disconnectedAfterDispatchError(err error, context errorContext) cliError {
 			"Retry after Unity finishes compiling, reloading scripts, or restarting the bridge.",
 		},
 		Details: map[string]any{
-			"cause": err.Error(),
+			"Cause": err.Error(),
 		},
 	}
 }
@@ -438,8 +438,8 @@ func unityServerNotRespondingAfterDispatchError(err unityServerNotRespondingErro
 			"Run `uloop focus-window` if Unity appears stalled in the background.",
 		},
 		Details: map[string]any{
-			"endpoint": err.endpoint,
-			"cause":    err.causeText(),
+			"Endpoint": err.endpoint,
+			"Cause":    err.causeText(),
 		},
 	}
 }
@@ -458,7 +458,7 @@ func unknownCommandError(command string, cache toolsCache, context errorContext)
 			"Run `uloop sync` if the local tool cache may be stale.",
 		},
 		Details: map[string]any{
-			"availableCommands": availableCommandNames(cache),
+			"AvailableCommands": availableCommandNames(cache),
 		},
 	}
 }

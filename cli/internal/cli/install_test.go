@@ -127,10 +127,10 @@ func TestInstallSetupFailureErrorIncludesInstallerStderr(t *testing.T) {
 	if cliErr.ErrorCode != errorCodeInternalError {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	if cliErr.Details["cause"] != context.Canceled.Error() {
+	if cliErr.Details["Cause"] != context.Canceled.Error() {
 		t.Fatalf("cause detail mismatch: %#v", cliErr.Details)
 	}
-	if cliErr.Details["installerStderr"] != "warning before failure" {
+	if cliErr.Details["InstallerStderr"] != "warning before failure" {
 		t.Fatalf("installer stderr detail mismatch: %#v", cliErr.Details)
 	}
 }

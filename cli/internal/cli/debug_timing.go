@@ -71,7 +71,7 @@ func extractUnityDebugTimings(command string, result json.RawMessage) []string {
 	}
 
 	var payload struct {
-		Timings []string `json:"timings"`
+		Timings []string `json:"Timings"`
 	}
 	if err := json.Unmarshal(result, &payload); err != nil {
 		return nil

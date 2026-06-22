@@ -30,17 +30,17 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 
                 if (response is FindGameObjectsResponse findResponse)
                 {
-                    Debug.Log($"Found {findResponse.totalFound} objects with Camera");
+                    Debug.Log($"Found {findResponse.TotalFound} objects with Camera");
                     
-                    foreach (FindGameObjectResult result in findResponse.results)
+                    foreach (FindGameObjectResult result in findResponse.Results)
                     {
-                        Debug.Log($"- {result.name}: {result.components.Length} components");
+                        Debug.Log($"- {result.Name}: {result.Components.Length} components");
                         
-                        foreach (ComponentInfo component in result.components)
+                        foreach (ComponentInfo component in result.Components)
                         {
-                            if (component.type == "Camera")
+                            if (component.Type == "Camera")
                             {
-                                Debug.Log($"  Camera: {component.properties?.Length ?? 0} properties");
+                                Debug.Log($"  Camera: {component.Properties?.Length ?? 0} properties");
                             }
                         }
                     }
@@ -73,16 +73,16 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 
                 if (response is FindGameObjectsResponse findResponse)
                 {
-                    Debug.Log($"[FindGameObjectsTestMenu] Found {findResponse.totalFound} objects");
+                    Debug.Log($"[FindGameObjectsTestMenu] Found {findResponse.TotalFound} objects");
                     
-                    foreach (FindGameObjectResult result in findResponse.results)
+                    foreach (FindGameObjectResult result in findResponse.Results)
                     {
-                        Debug.Log($"[FindGameObjectsTestMenu] - {result.name} at {result.path}");
-                        Debug.Log($"[FindGameObjectsTestMenu]   Components: {result.components.Length}");
+                        Debug.Log($"[FindGameObjectsTestMenu] - {result.Name} at {result.Path}");
+                        Debug.Log($"[FindGameObjectsTestMenu]   Components: {result.Components.Length}");
                         
-                        foreach (ComponentInfo component in result.components)
+                        foreach (ComponentInfo component in result.Components)
                         {
-                            Debug.Log($"[FindGameObjectsTestMenu]   - {component.type}: {component.properties?.Length ?? 0} properties");
+                            Debug.Log($"[FindGameObjectsTestMenu]   - {component.Type}: {component.Properties?.Length ?? 0} properties");
                         }
                     }
                 }

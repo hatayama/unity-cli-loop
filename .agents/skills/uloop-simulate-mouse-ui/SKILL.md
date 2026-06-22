@@ -13,7 +13,7 @@ Simulate mouse interaction on Unity PlayMode UI.
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. Get UI element info: `uloop screenshot --capture-mode rendering --annotate-elements --elements-only`
-3. Use the `annotatedElements` array to find the target element by `label`, `name`, or `path` (A=frontmost, B=next, ...). Use `interaction` to distinguish click targets from drag/drop/text targets, then use `simX`/`simY` directly as `--x`/`--y` coordinates.
+3. Use the `AnnotatedElements` array to find the target element by `label`, `name`, or `path` (A=frontmost, B=next, ...). Use `interaction` to distinguish click targets from drag/drop/text targets, then use `simX`/`simY` directly as `--x`/`--y` coordinates.
 4. Execute the needed `uloop simulate-mouse-ui` commands
 5. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
 6. When this UI input verifies a state transition, use Pause Point inspection from the section below as the standard frame proof
@@ -38,7 +38,7 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 | `--duration` | number | `0.5` | Hold duration in seconds for LongPress action. |
 | `--button` | enum | `Left` | Mouse button. `Click` and `LongPress` support `Left`, `Right`, and `Middle`. Drag actions support `Left` only; other buttons return an error. |
 | `--bypass-raycast` | flag | - | For `Click`, `LongPress`, `Drag`, and `DragStart`, bypass EventSystem raycast and dispatch pointer events directly to `--target-path`. Use when a raycast-blocking overlay visually covers the intended target. |
-| `--target-path` | string | `""` | Hierarchy path of the target GameObject, for example `Canvas/Panel/Button`. Required when `--bypass-raycast` is used with `Click`, `LongPress`, `Drag`, or `DragStart`; prefer `annotatedElements[].path` from screenshot JSON. |
+| `--target-path` | string | `""` | Hierarchy path of the target GameObject, for example `Canvas/Panel/Button`. Required when `--bypass-raycast` is used with `Click`, `LongPress`, `Drag`, or `DragStart`; prefer `AnnotatedElements[].Path` from screenshot JSON. |
 | `--drop-target-path` | string | `""` | Optional hierarchy path of a drop target for `Drag` or `DragEnd`, for example `Canvas/DropZone`. Use this when the drop zone is also behind a raycast blocker. |
 
 ### Actions
@@ -69,9 +69,9 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 
 - Origin is **top-left** (0, 0)
 - All positions are in **screen pixels**
-- Get coordinates from `annotatedElements` JSON (`simX`/`simY`) — do NOT look up GameObject positions
+- Get coordinates from `AnnotatedElements` JSON (`SimX`/`SimY`) — do NOT look up GameObject positions
 - Clicking or long-pressing on empty space (no UI element) still succeeds with a message indicating no element was hit
-- Dragging on empty space (no draggable UI element) returns `success = false`
+- Dragging on empty space (no draggable UI element) returns `Success = false`
 - `--bypass-raycast` still uses coordinates for pointer event positions, but chooses the clicked, long-pressed, or dragged GameObject by `--target-path`
 - If `--target-path` or `--drop-target-path` matches multiple active GameObjects, the command fails instead of choosing an arbitrary duplicate
 
@@ -125,15 +125,15 @@ uloop simulate-mouse-ui --action DragEnd --x 600 --y 300
 ## Output
 
 Returns JSON with:
-- `success`: Whether the operation succeeded
-- `message`: Status message (e.g. "Hit element: ButtonStart" or "No UI element under (x, y)")
-- `action`: Echoes which action was executed (`Click`, `Drag`, `DragStart`, `DragMove`, `DragEnd`, or `LongPress`)
-- `hitGameObjectName`: Name of the topmost UI element under the pointer (nullable string; null if nothing was hit)
-- `positionX`: Target X coordinate that was used
-- `positionY`: Target Y coordinate that was used
-- `endPositionX`: Drag end X coordinate (nullable float; populated for drag actions only)
-- `endPositionY`: Drag end Y coordinate (nullable float; populated for drag actions only)
+- `Success`: Whether the operation succeeded
+- `Message`: Status message (e.g. "Hit element: ButtonStart" or "No UI element under (x, y)")
+- `Action`: Echoes which action was executed (`Click`, `Drag`, `DragStart`, `DragMove`, `DragEnd`, or `LongPress`)
+- `HitGameObjectName`: Name of the topmost UI element under the pointer (nullable string; null if nothing was hit)
+- `PositionX`: Target X coordinate that was used
+- `PositionY`: Target Y coordinate that was used
+- `EndPositionX`: Drag end X coordinate (nullable float; populated for drag actions only)
+- `EndPositionY`: Drag end Y coordinate (nullable float; populated for drag actions only)
 
 Verify the visual outcome with a follow-up `uloop screenshot --capture-mode rendering --annotate-elements`.
 
-Note: Click and LongPress on empty space (no UI element) still return `success = true` with `hitGameObjectName = null`. Drag actions on empty space return `success = false`.
+Note: Click and LongPress on empty space (no UI element) still return `Success = true` with `HitGameObjectName = null`. Drag actions on empty space return `Success = false`.

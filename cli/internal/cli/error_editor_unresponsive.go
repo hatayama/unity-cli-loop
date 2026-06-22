@@ -28,8 +28,8 @@ func unityEditorUnresponsiveError(err *unityipc.EditorUnresponsiveError, context
 			"Close the modal dialog or wait for the Editor operation to finish, then retry the command.",
 		},
 		Details: map[string]any{
-			"stallSeconds": err.StallSeconds,
-			"cause":        "Unity Editor main thread did not tick while the IPC heartbeat stayed alive.",
+			"StallSeconds": err.StallSeconds,
+			"Cause":        "Unity Editor main thread did not tick while the IPC heartbeat stayed alive.",
 		},
 	}
 }

@@ -147,8 +147,8 @@ func executeDynamicCodeReadinessProbeParams() map[string]any {
 }
 
 type executeDynamicCodeReadinessResponse struct {
-	Success      bool   `json:"success"`
-	ErrorMessage string `json:"errorMessage"`
+	Success      bool   `json:"Success"`
+	ErrorMessage string `json:"ErrorMessage"`
 }
 
 func isExecuteDynamicCodeAvailable(projectRoot string) bool {

@@ -30,8 +30,8 @@ func unityProcessExitTimeoutCLIError(err launchProcessExitTimeoutError, context 
 			"If Unity remains visible or keeps project files locked, close the Unity process from the OS and retry.",
 		},
 		Details: map[string]any{
-			"pid":            err.pid,
-			"timeoutSeconds": int(err.timeout.Seconds()),
+			"Pid":            err.pid,
+			"TimeoutSeconds": int(err.timeout.Seconds()),
 		},
 	}
 }

@@ -33,8 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(parsed["error"], Is.Null);
             Assert.That(parsed["result"], Is.Not.Null);
-            Assert.That(parsed["result"]?["unityVersion"]?.ToString(), Is.Not.Null.And.Not.Empty);
-            Assert.That(parsed["result"]?["UnityVersion"], Is.Null);
+            Assert.That(parsed["result"]?["UnityVersion"]?.ToString(), Is.Not.Null.And.Not.Empty);
+            Assert.That(parsed["result"]?["unityVersion"], Is.Null);
         }
 
         [Test]
@@ -479,7 +479,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 JObject parsedHierarchy = JObject.Parse(hierarchyResponse);
 
                 Assert.That(parsedHierarchy["error"], Is.Null);
-                Assert.That(parsedHierarchy["result"]?["hierarchyFilePath"]?.ToString(), Is.Not.Empty);
+                Assert.That(parsedHierarchy["result"]?["HierarchyFilePath"]?.ToString(), Is.Not.Empty);
 
                 logsResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequestWithParams(
@@ -495,7 +495,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 JObject parsedLogs = JObject.Parse(logsResponse);
 
                 Assert.That(parsedLogs["error"], Is.Null);
-                Assert.That(parsedLogs["result"]?["displayedCount"]?.ToObject<int>(), Is.EqualTo(0));
+                Assert.That(parsedLogs["result"]?["DisplayedCount"]?.ToObject<int>(), Is.EqualTo(0));
             }
             finally
             {
@@ -697,7 +697,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             JObject parsed = JObject.Parse(response);
-            string relativePath = parsed["result"]?["hierarchyFilePath"]?.ToString();
+            string relativePath = parsed["result"]?["HierarchyFilePath"]?.ToString();
             if (string.IsNullOrEmpty(relativePath))
             {
                 return;
