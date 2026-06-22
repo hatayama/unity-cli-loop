@@ -1,6 +1,13 @@
 # First-Party V2 to V3 CLI Migration
 
-Use this reference as the canonical migration map. Search results are only candidates. Edit a match only after the surrounding context proves it is a V2 `uloop` invocation.
+Use this reference as the canonical option migration map. Search results are
+only candidates. Edit a match only after the surrounding context proves it is
+a V2 `uloop` invocation.
+
+This migration is option-only by default. Do not reformat surrounding text or
+scripts, and do not change non-`uloop` commands. A valid edit only replaces,
+adds, or removes a `uloop` option token and the boolean value attached to that
+option in the same invocation.
 
 ## Search Checklist
 
@@ -9,7 +16,8 @@ Prefer `rg` when available, but any repository search tool is acceptable.
 - Search `uloop` first and inspect command examples, shell scripts, PowerShell scripts, and agent skills.
 - Search boolean-looking CLI syntax: `--` plus nearby `true` or `false`, including `--flag true`, `--flag=false`, and inline Markdown command examples.
 - Search renamed first-party option names: `wait-for-domain-reload`, `reload-external-scene-changes`, `force-recompile`, `save-before-run`, `show-overlay`, `include-components`, `include-inactive`, and `compile-only`.
-- Search removed first-party commands: `get-project-info` and `get-version`.
+- Search removed first-party commands only to report them as out-of-scope
+  command migration candidates: `get-project-info` and `get-version`.
 - Skip generated installed skill copies under `.agents`, `.claude`, `.codex`, `.cursor`, `.gemini`, `.windsurf`, `.agent`, or equivalent target folders unless the user explicitly asks to migrate installed copies.
 
 ## Boolean Argument Rules
@@ -50,5 +58,5 @@ For third-party tools, inspect the current tool schema or docs before choosing t
 
 | V2 command | V3 handling |
 | --- | --- |
-| `uloop get-project-info` | Replace manually based on caller intent. Do not guess from the command name alone. |
-| `uloop get-version` | Replace manually based on caller intent. Do not guess from the command name alone. |
+| `uloop get-project-info` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
+| `uloop get-version` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
