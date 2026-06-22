@@ -81,6 +81,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return GetRegexGroupValuesInCode(source, CurrentApplicationNamespaceAliasRegex, "alias");
         }
 
+        internal static string[] GetCurrentDomainNamespaceAliases(string source)
+        {
+            Debug.Assert(source != null, "source must not be null");
+
+            return GetRegexGroupValuesInCode(source, CurrentDomainNamespaceAliasRegex, "alias");
+        }
+
         internal static string[] GetCombinedLegacyNamespaceAliases(
             string source,
             string[] legacyAssemblyAliases)
@@ -118,6 +125,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return GetCurrentApplicationNamespaceAliases(source)
                 .Concat(currentApplicationAssemblyAliases)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+        }
+
+        internal static string[] GetCombinedCurrentDomainNamespaceAliases(
+            string source,
+            string[] currentDomainAssemblyAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(
+                currentDomainAssemblyAliases != null,
+                "currentDomainAssemblyAliases must not be null");
+
+            return GetCurrentDomainNamespaceAliases(source)
+                .Concat(currentDomainAssemblyAliases)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
         }

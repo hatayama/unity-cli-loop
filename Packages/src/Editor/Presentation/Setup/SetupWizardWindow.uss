@@ -357,6 +357,10 @@
     margin-left: 14px;
 }
 
+.setup-skill-usage-copy-button {
+    margin-left: 14px;
+}
+
 .setup-footer__github-link {
     flex-direction: row;
     justify-content: flex-end;

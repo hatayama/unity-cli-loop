@@ -16,15 +16,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal const string AiMigrationSkillSectionTitle = "AI Skill and Script Migration";
         internal const string AiMigrationSkillDescriptionText =
             "Install a temporary AI skill for updating SKILL.md, Markdown, shell scripts, and PowerShell scripts " +
-            "that call uloop.\nThe skill gives your AI agent a checklist and detection scripts; this window only " +
-            "installs or removes it.";
-        internal const string AiMigrationSkillUsageFoldoutTitle = "How to use this skill";
-        internal const string AiMigrationSkillUsageExampleText =
-            "After installing the skill, open your AI agent in this project and ask it to use the installed " +
-            "migration skill.\n\nExample prompt:\nUse the v3-cli-invocation-migration skill to scan this project " +
-            "for Unity CLI Loop V2 CLI invocation patterns in SKILL.md, Markdown, shell scripts, and PowerShell " +
-            "scripts. Update them for V3 CLI usage, then summarize the changed files and any commands I should " +
-            "verify manually.";
+            "that call uloop.\nThe skill teaches your AI agent how to search, inspect context, and update only " +
+            "real V2 CLI usage. This window only installs or removes it.";
+        internal const string AiMigrationSkillUsageFoldoutTitle = "Prompt for your AI agent";
+        internal const string AiMigrationSkillPromptText =
+            "Use the v3-cli-invocation-migration skill in this project to update Unity CLI Loop V2 CLI usage " +
+            "for V3.\n\n" +
+            "Scope:\n" +
+            "- Check SKILL.md, Markdown, POSIX shell scripts, and PowerShell scripts.\n" +
+            "- Migrate V2 boolean arguments, renamed first-party options, removed commands, and first-party JSON output fields.\n" +
+            "- Read nearby context before editing. Do not change C# snippets, enum/member references, regex match properties, DTO properties, or non-uloop JSON.\n" +
+            "- After editing, summarize changed files, remaining candidates, and any commands I should verify manually.";
         internal const string MigrationNotCheckedText = "C# source migration status has not been checked.";
         internal const string NoMigrationTargetsText = "No C# source structure migration is needed.";
         private const string MigrationCheckingText = "Scanning C# source files for V3 custom tool API migration...";
@@ -36,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string InstallMigrationSkillButtonText = "Install Migration Skill";
         private const string RemoveMigrationSkillButtonText = "Remove Migration Skill";
         private const string UpdatingMigrationSkillButtonText = "Updating...";
+        private const string CopyMigrationSkillPromptButtonText = "Copy AI Prompt";
 
         internal static string GetMigrationStatusText(int fileCount)
         {
@@ -96,6 +99,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return installState == SkillInstallState.Installed || installState == SkillInstallState.Outdated
                 ? RemoveMigrationSkillButtonText
                 : InstallMigrationSkillButtonText;
+        }
+
+        internal static string GetMigrationSkillPromptCopyButtonText()
+        {
+            return CopyMigrationSkillPromptButtonText;
         }
     }
 }

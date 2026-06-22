@@ -56,6 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new(StringComparer.Ordinal);
             Dictionary<string, HashSet<string>> assemblyScopedCurrentApplicationAliasesByDirectory =
                 new(StringComparer.Ordinal);
+            Dictionary<string, HashSet<string>> assemblyScopedCurrentDomainAliasesByDirectory =
+                new(StringComparer.Ordinal);
             Dictionary<string, HashSet<string>> assemblyScopedCurrentFirstPartyToolsAliasesByDirectory =
                 new(StringComparer.Ordinal);
             Dictionary<string, HashSet<string>> assemblyDeclaredTypeNamesByDirectory =
@@ -78,10 +80,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         assemblyScopedLegacyDirectories,
                         assemblyScopedCurrentToolContractsDirectories,
                         assemblyScopedCurrentApplicationDirectories,
+                        assemblyScopedCurrentDomainDirectories,
                         assemblyScopedCurrentFirstPartyToolsDirectories,
                         assemblyScopedLegacyAliasesByDirectory,
                         assemblyScopedLegacyToolInfoAliasesByDirectory,
                         assemblyScopedCurrentApplicationAliasesByDirectory,
+                        assemblyScopedCurrentDomainAliasesByDirectory,
                         assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
                         assemblyDeclaredTypeNamesByDirectory,
                         toolContractsReferenceAssemblyDirectories,
@@ -131,6 +135,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (ThirdPartyToolMigrationRules.ContainsCurrentDomainGlobalUsing(source))
                 {
                     assemblyScopedCurrentDomainDirectories.Add(assemblyDirectory);
+                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainUsing(source))
+                {
+                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainNamespaceAlias(source))
+                {
+                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                    AddAssemblyScopedNames(
+                        assemblyScopedCurrentDomainAliasesByDirectory,
+                        assemblyDirectory,
+                        ThirdPartyToolMigrationRules.GetCurrentDomainGlobalNamespaceAliases(source));
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsCurrentToolContractsGlobalUsing(source))
@@ -141,6 +160,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationGlobalUsing(source))
                 {
                     assemblyScopedCurrentApplicationDirectories.Add(assemblyDirectory);
+                    applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationUsing(source))
+                {
                     applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
@@ -168,15 +192,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         ThirdPartyToolMigrationRules.GetCurrentFirstPartyToolsGlobalNamespaceAliases(source));
                 }
 
-                if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source) ||
-                    ThirdPartyToolMigrationRules.ContainsCurrentRegistrarApi(source))
+                if (ThirdPartyToolMigrationRules.ContainsLegacyRegistrarApi(source))
+                {
+                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (ThirdPartyToolMigrationRules.ContainsCurrentRegistrarApi(source))
                 {
                     registrarAssemblyDirectories.Add(assemblyDirectory);
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsRegistrarDomainReturnApi(source))
                 {
-                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsCurrentToolContractsApi(source))
@@ -192,6 +220,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApi(source))
                 {
                     domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
             }
 
@@ -206,10 +235,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         assemblyScopedLegacyDirectories,
                         assemblyScopedCurrentToolContractsDirectories,
                         assemblyScopedCurrentApplicationDirectories,
+                        assemblyScopedCurrentDomainDirectories,
                         assemblyScopedCurrentFirstPartyToolsDirectories,
                         assemblyScopedLegacyAliasesByDirectory,
                         assemblyScopedLegacyToolInfoAliasesByDirectory,
                         assemblyScopedCurrentApplicationAliasesByDirectory,
+                        assemblyScopedCurrentDomainAliasesByDirectory,
                         assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
                         assemblyDeclaredTypeNamesByDirectory,
                         toolContractsReferenceAssemblyDirectories,
@@ -242,6 +273,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 bool hasLegacyCSharpApi = ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
                 string[] currentApplicationAssemblyAliases =
                     GetAssemblyScopedNames(assemblyScopedCurrentApplicationAliasesByDirectory, assemblyDirectory);
+                bool hasCurrentApplicationSourceTarget =
+                    ThirdPartyToolMigrationRules.ContainsCurrentApplicationApiForAssembly(
+                        source,
+                        assemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
+                        currentApplicationAssemblyAliases,
+                        GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory));
 
                 if (ThirdPartyToolMigrationRules.ContainsLegacyDomainHelperApiForAssembly(
                         source,
@@ -265,13 +302,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         legacyAssemblyAliases,
                         currentApplicationAssemblyAliases,
                         GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory)) ||
-                    ThirdPartyToolMigrationRules.ContainsCurrentApplicationApiForAssembly(
-                        source,
-                        assemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
-                        currentApplicationAssemblyAliases,
-                        GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory)))
+                    hasCurrentApplicationSourceTarget)
                 {
-                    registrarAssemblyDirectories.Add(assemblyDirectory);
+                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
                 if (ThirdPartyToolMigrationRules.ContainsRegistrarDomainReturnApiForAssembly(
@@ -279,14 +312,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         assemblyScopedLegacyDirectories.Contains(assemblyDirectory),
                         legacyAssemblyAliases))
                 {
-                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
+                string[] currentDomainAssemblyAliases =
+                    GetAssemblyScopedNames(assemblyScopedCurrentDomainAliasesByDirectory, assemblyDirectory);
+                string[] currentDomainNamespaceAliases =
+                    ThirdPartyToolMigrationAliasRules.GetCombinedCurrentDomainNamespaceAliases(
+                        source,
+                        currentDomainAssemblyAliases);
                 if (ThirdPartyToolMigrationRules.ContainsCurrentDomainMetadataApiForAssembly(
                         source,
-                        assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory)))
+                        assemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory)) ||
+                    ThirdPartyToolMigrationRules.ContainsCurrentDomainContractAliasReference(
+                        source,
+                        currentDomainNamespaceAliases))
                 {
-                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
+                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
 
                 bool hasAssemblyScopedCurrentToolContractsUsing =
@@ -308,6 +350,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         legacyAssemblyAliases,
                         currentFirstPartyToolsAssemblyAliases,
                         assemblyDeclaredTypeNames);
+                bool hasCurrentFirstPartyToolsContractSourceTarget =
+                    ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotContractApiForAssembly(
+                        source,
+                        hasAssemblyScopedCurrentFirstPartyToolsUsing,
+                        currentFirstPartyToolsAssemblyAliases,
+                        assemblyDeclaredTypeNames);
+                bool hasCurrentFirstPartyScreenshotReferenceRequirement =
+                    ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotApiForAssembly(
+                        source,
+                        hasAssemblyScopedCurrentFirstPartyToolsUsing,
+                        currentFirstPartyToolsAssemblyAliases,
+                        assemblyDeclaredTypeNames);
                 if (ThirdPartyToolMigrationRules.ContainsLegacyFirstPartyScreenshotApiForAssembly(
                         source,
                         assemblyScopedLegacyDirectories.Contains(assemblyDirectory) ||
@@ -317,11 +371,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         legacyAssemblyAliases,
                         assemblyDeclaredTypeNames) ||
                     hasLegacyEditorWindowCaptureUtilitySourceTarget ||
-                    ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotApiForAssembly(
-                        source,
-                        hasAssemblyScopedCurrentFirstPartyToolsUsing,
-                        currentFirstPartyToolsAssemblyAliases,
-                        assemblyDeclaredTypeNames))
+                    hasCurrentFirstPartyToolsContractSourceTarget ||
+                    hasCurrentFirstPartyScreenshotReferenceRequirement)
+                {
+                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
+                }
+
+                if (hasCurrentFirstPartyScreenshotReferenceRequirement)
                 {
                     firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
                 }
@@ -344,14 +400,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 applicationReferenceAssemblyDirectories.Add(registrarAssemblyDirectory);
             }
 
-            foreach (string domainMetadataAssemblyDirectory in domainMetadataAssemblyDirectories)
-            {
-                if (legacyAssemblyDirectories.Contains(domainMetadataAssemblyDirectory))
-                {
-                    domainReferenceAssemblyDirectories.Add(domainMetadataAssemblyDirectory);
-                }
-            }
-
             return CreateMigrationAssemblyUsage(
                 asmdefDirectories,
                 assemblyReferenceDirectories,
@@ -359,10 +407,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 assemblyScopedLegacyDirectories,
                 assemblyScopedCurrentToolContractsDirectories,
                 assemblyScopedCurrentApplicationDirectories,
+                assemblyScopedCurrentDomainDirectories,
                 assemblyScopedCurrentFirstPartyToolsDirectories,
                 assemblyScopedLegacyAliasesByDirectory,
                 assemblyScopedLegacyToolInfoAliasesByDirectory,
                 assemblyScopedCurrentApplicationAliasesByDirectory,
+                assemblyScopedCurrentDomainAliasesByDirectory,
                 assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
                 assemblyDeclaredTypeNamesByDirectory,
                 toolContractsReferenceAssemblyDirectories,

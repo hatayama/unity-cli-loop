@@ -90,23 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            string migratedContent = ReplaceRegexInCode(
-                source,
-                CurrentApplicationNamespaceRegex,
-                _ => CurrentNamespace,
-                ref replacementCount);
-            migratedContent = ReplaceRegexInCode(
-                migratedContent,
-                CurrentDomainNamespaceRegex,
-                _ => CurrentNamespace,
-                ref replacementCount);
-            migratedContent = ReplaceRegexInCode(
-                migratedContent,
-                CurrentFirstPartyToolsNamespaceRegex,
-                _ => CurrentNamespace,
-                ref replacementCount);
-
-            return migratedContent;
+            // Do not blanket-rewrite current package namespaces because many first-party/internal types still live there.
+            return source;
         }
 
         internal static string ReplaceUnqualifiedLegacyRegistrarReferencesInCode(
@@ -223,12 +208,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static string ReplaceLegacyApplicationTypeNamesInCode(
             string source,
             string[] aliases,
+            string[] currentApplicationNamespaceAliases,
             bool canMigrateBareLegacyApplicationApi,
+            bool canPreserveBareCurrentToolContractsReferences,
             string[] assemblyDeclaredTypeNames,
             ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(aliases != null, "aliases must not be null");
+            Debug.Assert(
+                currentApplicationNamespaceAliases != null,
+                "currentApplicationNamespaceAliases must not be null");
             Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
 
             string migratedContent = source;
@@ -246,6 +236,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     _ => $"{CurrentNamespace}.{rule.CurrentName}",
                     ref replacementCount);
 
+                Regex currentApplicationFullyQualifiedRegex = new(
+                    $@"(?:(?:global::)?{Regex.Escape(CurrentApplicationNamespace)}\.){Regex.Escape(rule.CurrentName)}\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    currentApplicationFullyQualifiedRegex,
+                    _ => $"{CurrentNamespace}.{rule.CurrentName}",
+                    ref replacementCount);
+
                 foreach (string alias in aliases)
                 {
                     Regex aliasRegex = new(
@@ -258,16 +257,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         ref replacementCount);
                 }
 
+                foreach (string alias in currentApplicationNamespaceAliases)
+                {
+                    Regex currentApplicationAliasRegex = new(
+                        $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(rule.CurrentName)}\b",
+                        RegexOptions.Compiled);
+                    migratedContent = ReplaceRegexInCode(
+                        migratedContent,
+                        currentApplicationAliasRegex,
+                        _ => $"{CurrentNamespace}.{rule.CurrentName}",
+                        ref replacementCount);
+                }
+
                 Regex unqualifiedRegex = new(
                     $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b(?!\s*=)",
                     RegexOptions.Compiled);
+                string unqualifiedReplacement = canPreserveBareCurrentToolContractsReferences
+                    ? rule.CurrentName
+                    : $"{CurrentNamespace}.{rule.CurrentName}";
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     unqualifiedRegex,
                     match => canMigrateBareLegacyApplicationApi &&
                         !hasProtectedTypeDeclaration &&
                         ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
-                            ? $"{CurrentNamespace}.{rule.CurrentName}"
+                            ? unqualifiedReplacement
                             : match.Value,
                     ref replacementCount);
             }
@@ -278,12 +292,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static string ReplaceLegacyFirstPartyScreenshotTypeNamesInCode(
             string source,
             string[] aliases,
+            string[] currentFirstPartyToolsNamespaceAliases,
             bool canMigrateBareLegacyFirstPartyScreenshotApi,
+            bool canPreserveBareCurrentToolContractsReferences,
             string[] assemblyDeclaredTypeNames,
             ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(aliases != null, "aliases must not be null");
+            Debug.Assert(
+                currentFirstPartyToolsNamespaceAliases != null,
+                "currentFirstPartyToolsNamespaceAliases must not be null");
             Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
 
             string migratedContent = source;
@@ -313,21 +332,153 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         ref replacementCount);
                 }
 
+                if (!string.Equals(
+                        rule.CurrentName,
+                        LegacyEditorWindowCaptureUtilityTypeName,
+                        StringComparison.Ordinal))
+                {
+                    Regex currentFirstPartyFullyQualifiedRegex = new(
+                        $@"(?:(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\.){Regex.Escape(rule.CurrentName)}\b",
+                        RegexOptions.Compiled);
+                    migratedContent = ReplaceRegexInCode(
+                        migratedContent,
+                        currentFirstPartyFullyQualifiedRegex,
+                        _ => $"{CurrentNamespace}.{rule.CurrentName}",
+                        ref replacementCount);
+
+                    foreach (string alias in currentFirstPartyToolsNamespaceAliases)
+                    {
+                        Regex currentFirstPartyAliasRegex = new(
+                            $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(rule.CurrentName)}\b",
+                            RegexOptions.Compiled);
+                        migratedContent = ReplaceRegexInCode(
+                            migratedContent,
+                            currentFirstPartyAliasRegex,
+                            _ => $"{CurrentNamespace}.{rule.CurrentName}",
+                            ref replacementCount);
+                    }
+                }
+
                 Regex unqualifiedRegex = new(
                     $@"(?<![\.:])\b{Regex.Escape(rule.LegacyName)}\b(?!\s*=)",
                     RegexOptions.Compiled);
+                if (string.Equals(
+                        rule.CurrentName,
+                        LegacyEditorWindowCaptureUtilityTypeName,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string unqualifiedReplacement = canPreserveBareCurrentToolContractsReferences
+                    ? rule.CurrentName
+                    : $"{CurrentNamespace}.{rule.CurrentName}";
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     unqualifiedRegex,
                     match => canMigrateBareLegacyFirstPartyScreenshotApi &&
                         !hasProtectedTypeDeclaration &&
                         ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
-                            ? $"{CurrentNamespace}.{rule.CurrentName}"
+                            ? unqualifiedReplacement
                             : match.Value,
                     ref replacementCount);
             }
 
             return migratedContent;
+        }
+
+        internal static string ReplaceCurrentDomainContractTypeNamesInCode(
+            string source,
+            string[] currentDomainNamespaceAliases,
+            bool canMigrateBareCurrentDomainContractType,
+            bool canPreserveBareCurrentToolContractsReferences,
+            string[] assemblyDeclaredTypeNames,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(
+                currentDomainNamespaceAliases != null,
+                "currentDomainNamespaceAliases must not be null");
+            Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
+
+            string migratedContent = source;
+            foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
+            {
+                migratedContent = ReplaceCurrentDomainContractTypeNameInCode(
+                    migratedContent,
+                    rule.CurrentName,
+                    currentDomainNamespaceAliases,
+                    canMigrateBareCurrentDomainContractType,
+                    canPreserveBareCurrentToolContractsReferences,
+                    assemblyDeclaredTypeNames,
+                    ref replacementCount);
+            }
+
+            return ReplaceCurrentDomainContractTypeNameInCode(
+                migratedContent,
+                "ToolInfo",
+                currentDomainNamespaceAliases,
+                canMigrateBareCurrentDomainContractType,
+                canPreserveBareCurrentToolContractsReferences,
+                assemblyDeclaredTypeNames,
+                ref replacementCount);
+        }
+
+        internal static string ReplaceCurrentDomainContractTypeNameInCode(
+            string source,
+            string typeName,
+            string[] currentDomainNamespaceAliases,
+            bool canMigrateBareCurrentDomainContractType,
+            bool canPreserveBareCurrentToolContractsReferences,
+            string[] assemblyDeclaredTypeNames,
+            ref int replacementCount)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(typeName), "typeName must not be null or empty");
+            Debug.Assert(
+                currentDomainNamespaceAliases != null,
+                "currentDomainNamespaceAliases must not be null");
+            Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
+
+            bool hasProtectedTypeDeclaration = DeclaresLocalType(source, typeName) ||
+                assemblyDeclaredTypeNames.Contains(typeName);
+            string migratedContent = source;
+            Regex fullyQualifiedRegex = new(
+                $@"(?:(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\.){Regex.Escape(typeName)}\b",
+                RegexOptions.Compiled);
+            migratedContent = ReplaceRegexInCode(
+                migratedContent,
+                fullyQualifiedRegex,
+                _ => $"{CurrentNamespace}.{typeName}",
+                ref replacementCount);
+
+            foreach (string alias in currentDomainNamespaceAliases)
+            {
+                Regex aliasRegex = new(
+                    $@"(?<!\w){Regex.Escape(alias)}\.{Regex.Escape(typeName)}\b",
+                    RegexOptions.Compiled);
+                migratedContent = ReplaceRegexInCode(
+                    migratedContent,
+                    aliasRegex,
+                    _ => $"{CurrentNamespace}.{typeName}",
+                    ref replacementCount);
+            }
+
+            Regex unqualifiedRegex = new(
+                $@"(?<![\.:])\b{Regex.Escape(typeName)}\b(?!\s*=)",
+                RegexOptions.Compiled);
+            string unqualifiedReplacement = canPreserveBareCurrentToolContractsReferences
+                ? typeName
+                : $"{CurrentNamespace}.{typeName}";
+            return ReplaceRegexInCode(
+                migratedContent,
+                unqualifiedRegex,
+                match => canMigrateBareCurrentDomainContractType &&
+                    !hasProtectedTypeDeclaration &&
+                    ShouldMigrateLegacyTypeReference(migratedContent, typeName, match.Index)
+                        ? unqualifiedReplacement
+                        : match.Value,
+                ref replacementCount);
         }
 
         internal static string ReplaceLegacyToolInfoTypeReferencesInCode(string source, ref int replacementCount)

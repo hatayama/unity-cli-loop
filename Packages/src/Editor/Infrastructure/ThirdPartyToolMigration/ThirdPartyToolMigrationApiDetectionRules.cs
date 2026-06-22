@@ -369,6 +369,33 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 assemblyDeclaredTypeNames);
         }
 
+        internal static bool ContainsCurrentFirstPartyScreenshotContractApiForAssembly(
+            string source,
+            bool hasAssemblyScopedCurrentFirstPartyToolsUsing,
+            string[] currentFirstPartyToolsAssemblyAliases,
+            string[] assemblyDeclaredTypeNames)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(
+                currentFirstPartyToolsAssemblyAliases != null,
+                "currentFirstPartyToolsAssemblyAliases must not be null");
+            Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
+
+            bool hasCurrentFirstPartyToolsNamespaceUsage =
+                RegexMatchesCode(source, CurrentFirstPartyToolsNamespaceRegex);
+            string[] currentFirstPartyToolsNamespaceAliases = GetCombinedCurrentFirstPartyToolsNamespaceAliases(
+                source,
+                currentFirstPartyToolsAssemblyAliases);
+            bool canUseBareCurrentFirstPartyScreenshotType =
+                hasAssemblyScopedCurrentFirstPartyToolsUsing ||
+                hasCurrentFirstPartyToolsNamespaceUsage;
+            return ContainsCurrentFirstPartyScreenshotContractReference(
+                source,
+                canUseBareCurrentFirstPartyScreenshotType,
+                currentFirstPartyToolsNamespaceAliases,
+                assemblyDeclaredTypeNames);
+        }
+
         internal static bool ContainsCurrentCaptureGameRenderingDeconstructionMigrationForAssembly(
             string source,
             bool hasAssemblyScopedCurrentFirstPartyToolsUsing,

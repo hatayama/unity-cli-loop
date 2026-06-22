@@ -75,6 +75,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     currentApplicationAssemblyAliases = Array.Empty<string>();
                 }
+                string[] currentDomainAssemblyAliases;
+                if (!assemblyUsage.AssemblyScopedCurrentDomainAliasesByDirectory.TryGetValue(
+                        assemblyDirectory,
+                        out currentDomainAssemblyAliases))
+                {
+                    currentDomainAssemblyAliases = Array.Empty<string>();
+                }
                 string[] currentFirstPartyToolsAssemblyAliases;
                 if (!assemblyUsage.AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory.TryGetValue(
                         assemblyDirectory,
@@ -93,6 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyUsage.AssemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory);
                 bool hasAssemblyScopedCurrentApplicationUsing =
                     assemblyUsage.AssemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory);
+                bool hasAssemblyScopedCurrentDomainUsing =
+                    assemblyUsage.AssemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory);
                 bool hasAssemblyScopedCurrentFirstPartyToolsUsing =
                     assemblyUsage.AssemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory);
                 bool hasLegacyAssemblySource =
@@ -104,10 +113,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         hasLegacyAssemblySource,
                         hasAssemblyScopedCurrentToolContractsUsing,
                         hasAssemblyScopedCurrentApplicationUsing,
+                        hasAssemblyScopedCurrentDomainUsing,
                         hasAssemblyScopedCurrentFirstPartyToolsUsing,
                         legacyAssemblyAliases,
                         legacyAssemblyToolInfoAliases,
                         currentApplicationAssemblyAliases,
+                        currentDomainAssemblyAliases,
                         currentFirstPartyToolsAssemblyAliases,
                         assemblyDeclaredTypeNames);
                 if (!result.Changed)
@@ -260,6 +271,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     currentApplicationAssemblyAliases = Array.Empty<string>();
                 }
+                string[] currentDomainAssemblyAliases;
+                if (!assemblyUsage.AssemblyScopedCurrentDomainAliasesByDirectory.TryGetValue(
+                        assemblyDirectory,
+                        out currentDomainAssemblyAliases))
+                {
+                    currentDomainAssemblyAliases = Array.Empty<string>();
+                }
                 string[] currentFirstPartyToolsAssemblyAliases;
                 if (!assemblyUsage.AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory.TryGetValue(
                         assemblyDirectory,
@@ -278,6 +296,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyUsage.AssemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory);
                 bool hasAssemblyScopedCurrentApplicationUsing =
                     assemblyUsage.AssemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory);
+                bool hasAssemblyScopedCurrentDomainUsing =
+                    assemblyUsage.AssemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory);
                 bool hasAssemblyScopedCurrentFirstPartyToolsUsing =
                     assemblyUsage.AssemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory);
                 bool hasLegacyAssemblySource =
@@ -289,10 +309,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         hasLegacyAssemblySource,
                         hasAssemblyScopedCurrentToolContractsUsing,
                         hasAssemblyScopedCurrentApplicationUsing,
+                        hasAssemblyScopedCurrentDomainUsing,
                         hasAssemblyScopedCurrentFirstPartyToolsUsing,
                         legacyAssemblyAliases,
                         legacyAssemblyToolInfoAliases,
                         currentApplicationAssemblyAliases,
+                        currentDomainAssemblyAliases,
                         currentFirstPartyToolsAssemblyAliases,
                         assemblyDeclaredTypeNames);
                 if (!result.Changed)

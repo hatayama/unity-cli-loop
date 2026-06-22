@@ -62,10 +62,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 hasLegacyAssemblySource: ContainsLegacyToolMigrationMarker(source),
                 hasAssemblyScopedCurrentToolContractsUsing: false,
                 hasAssemblyScopedCurrentApplicationUsing: false,
+                hasAssemblyScopedCurrentDomainUsing: false,
                 hasAssemblyScopedCurrentFirstPartyToolsUsing: false,
                 legacyAssemblyAliases: Array.Empty<string>(),
                 legacyAssemblyToolInfoAliases: Array.Empty<string>(),
                 currentApplicationAssemblyAliases: Array.Empty<string>(),
+                currentDomainAssemblyAliases: Array.Empty<string>(),
                 currentFirstPartyToolsAssemblyAliases: Array.Empty<string>(),
                 assemblyDeclaredTypeNames: Array.Empty<string>());
         }
@@ -75,10 +77,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool hasLegacyAssemblySource,
             bool hasAssemblyScopedCurrentToolContractsUsing,
             bool hasAssemblyScopedCurrentApplicationUsing,
+            bool hasAssemblyScopedCurrentDomainUsing,
             bool hasAssemblyScopedCurrentFirstPartyToolsUsing,
             string[] legacyAssemblyAliases,
             string[] legacyAssemblyToolInfoAliases,
             string[] currentApplicationAssemblyAliases,
+            string[] currentDomainAssemblyAliases,
             string[] currentFirstPartyToolsAssemblyAliases,
             string[] assemblyDeclaredTypeNames)
         {
@@ -89,6 +93,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 currentApplicationAssemblyAliases != null,
                 "currentApplicationAssemblyAliases must not be null");
             Debug.Assert(
+                currentDomainAssemblyAliases != null,
+                "currentDomainAssemblyAliases must not be null");
+            Debug.Assert(
                 currentFirstPartyToolsAssemblyAliases != null,
                 "currentFirstPartyToolsAssemblyAliases must not be null");
             Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
@@ -98,6 +105,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string[] currentApplicationNamespaceAliases = GetCombinedCurrentApplicationNamespaceAliases(
                 source,
                 currentApplicationAssemblyAliases);
+            string[] currentDomainNamespaceAliases = GetCombinedCurrentDomainNamespaceAliases(
+                source,
+                currentDomainAssemblyAliases);
             string[] currentFirstPartyToolsNamespaceAliases = GetCombinedCurrentFirstPartyToolsNamespaceAliases(
                 source,
                 currentFirstPartyToolsAssemblyAliases);
@@ -105,17 +115,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool hasLegacyNamespaceUsingDirective = RegexMatchesCode(source, LegacyNamespaceUsingRegex);
             bool hasCurrentApplicationNamespaceUsage = RegexMatchesCode(source, CurrentApplicationNamespaceRegex);
             bool hasCurrentDomainNamespaceUsage = RegexMatchesCode(source, CurrentDomainNamespaceRegex);
+            bool hasCurrentDomainUsingDirective =
+                RegexMatchesCode(source, CurrentDomainUsingRegex) ||
+                RegexMatchesCode(source, CurrentDomainGlobalUsingRegex);
             bool hasCurrentToolContractsNamespaceUsage = RegexMatchesCode(source, CurrentToolContractsNamespaceRegex);
             bool hasCurrentToolContractsUsingDirective =
                 RegexMatchesCode(source, CurrentToolContractsUsingRegex);
             bool hasCurrentFirstPartyToolsNamespaceUsage =
                 RegexMatchesCode(source, CurrentFirstPartyToolsNamespaceRegex);
+            bool hasCurrentFirstPartyToolsUsingDirective =
+                RegexMatchesCode(source, CurrentFirstPartyToolsUsingRegex) ||
+                RegexMatchesCode(source, CurrentFirstPartyToolsGlobalUsingRegex);
             bool canUseCurrentToolContracts =
                 hasCurrentToolContractsNamespaceUsage ||
                 hasAssemblyScopedCurrentToolContractsUsing;
             bool canUseBareCurrentToolContracts =
                 hasLegacyAssemblySource ||
                 hasLegacyNamespaceUsingDirective ||
+                hasCurrentToolContractsUsingDirective ||
+                hasAssemblyScopedCurrentToolContractsUsing;
+            bool canPreserveBareCurrentToolContractsReferences =
                 hasCurrentToolContractsUsingDirective ||
                 hasAssemblyScopedCurrentToolContractsUsing;
             bool canMigrateBareLegacyToolAttribute =
@@ -129,13 +148,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 hasCurrentFirstPartyToolsNamespaceUsage;
             bool canUseBareCurrentFirstPartyTools =
                 hasAssemblyScopedCurrentFirstPartyToolsUsing ||
-                hasCurrentFirstPartyToolsNamespaceUsage;
+                hasCurrentFirstPartyToolsUsingDirective;
             bool shouldQualifyBareEditorWindowCaptureUtilityTimeout =
                 !canUseBareCurrentToolContracts;
             bool canMigrateBareLegacyFirstPartyScreenshotApi =
                 canMigrateBareLegacyToolAttribute ||
                 canUseCurrentToolContracts ||
+                hasAssemblyScopedCurrentFirstPartyToolsUsing ||
                 hasCurrentFirstPartyToolsNamespaceUsage;
+            bool canMigrateBareCurrentDomainContractType =
+                hasAssemblyScopedCurrentDomainUsing ||
+                hasCurrentDomainUsingDirective;
             bool canMigrateBareLegacyApplicationApi =
                 canMigrateBareLegacyToolAttribute ||
                 canUseCurrentToolContracts ||
@@ -144,6 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool canMigrateBareLegacyApplicationTypeName =
                 canMigrateBareLegacyToolAttribute ||
                 canUseCurrentToolContracts ||
+                hasAssemblyScopedCurrentApplicationUsing ||
                 hasCurrentApplicationNamespaceUsage;
             bool canMigrateBareLegacyToolInfoConstructor =
                 canMigrateBareLegacyToolAttribute;
@@ -249,6 +273,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     currentFirstPartyToolsNamespaceAliases,
                     canMigrateBareLegacyEditorWindowCaptureUtility,
                     shouldQualifyBareEditorWindowCaptureUtilityTimeout,
+                    canPreserveBareCurrentToolContractsReferences,
                     canUseBareCurrentFirstPartyTools,
                     assemblyDeclaredTypeNames);
             migratedContent = editorWindowCaptureMigratedContent;
@@ -256,13 +281,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             migratedContent = ReplaceLegacyFirstPartyScreenshotTypeNamesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
+                currentFirstPartyToolsNamespaceAliases,
                 canMigrateBareLegacyFirstPartyScreenshotApi,
+                canPreserveBareCurrentToolContractsReferences,
+                assemblyDeclaredTypeNames,
+                ref replacementCount);
+            migratedContent = ReplaceCurrentDomainContractTypeNamesInCode(
+                migratedContent,
+                currentDomainNamespaceAliases,
+                canMigrateBareCurrentDomainContractType,
+                canPreserveBareCurrentToolContractsReferences,
                 assemblyDeclaredTypeNames,
                 ref replacementCount);
             migratedContent = ReplaceLegacyApplicationTypeNamesInCode(
                 migratedContent,
                 legacyNamespaceAliases,
+                currentApplicationNamespaceAliases,
                 canMigrateBareLegacyApplicationTypeName,
+                canPreserveBareCurrentToolContractsReferences,
                 assemblyDeclaredTypeNames,
                 ref replacementCount);
             migratedContent = ReplaceLegacyRegistrarAliasesInCode(

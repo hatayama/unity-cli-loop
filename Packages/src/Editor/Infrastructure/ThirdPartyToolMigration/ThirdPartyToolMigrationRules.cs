@@ -18,10 +18,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool hasLegacyAssemblySource,
             bool hasAssemblyScopedCurrentToolContractsUsing,
             bool hasAssemblyScopedCurrentApplicationUsing,
+            bool hasAssemblyScopedCurrentDomainUsing,
             bool hasAssemblyScopedCurrentFirstPartyToolsUsing,
             string[] legacyAssemblyAliases,
             string[] legacyAssemblyToolInfoAliases,
             string[] currentApplicationAssemblyAliases,
+            string[] currentDomainAssemblyAliases,
             string[] currentFirstPartyToolsAssemblyAliases,
             string[] assemblyDeclaredTypeNames)
         {
@@ -30,10 +32,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 hasLegacyAssemblySource,
                 hasAssemblyScopedCurrentToolContractsUsing,
                 hasAssemblyScopedCurrentApplicationUsing,
+                hasAssemblyScopedCurrentDomainUsing,
                 hasAssemblyScopedCurrentFirstPartyToolsUsing,
                 legacyAssemblyAliases,
                 legacyAssemblyToolInfoAliases,
                 currentApplicationAssemblyAliases,
+                currentDomainAssemblyAliases,
                 currentFirstPartyToolsAssemblyAliases,
                 assemblyDeclaredTypeNames);
         }
@@ -160,6 +164,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ThirdPartyToolMigrationApiDetectionRules.ContainsCurrentDomainMetadataApiForAssembly(source, hasAssemblyScopedCurrentDomainUsing);
         }
 
+        internal static bool ContainsCurrentDomainContractAliasReference(
+            string source,
+            string[] currentDomainNamespaceAliases)
+        {
+            return ThirdPartyToolMigrationDomainDetectionRules.ContainsCurrentDomainContractAliasReference(
+                source,
+                currentDomainNamespaceAliases);
+        }
+
         internal static bool ContainsLegacyFirstPartyScreenshotApiForAssembly(
             string source,
             bool hasLegacyAssemblySource,
@@ -207,6 +220,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ThirdPartyToolMigrationApiDetectionRules.ContainsCurrentFirstPartyScreenshotApiForAssembly(source, hasAssemblyScopedCurrentFirstPartyToolsUsing, currentFirstPartyToolsAssemblyAliases, assemblyDeclaredTypeNames);
         }
 
+        internal static bool ContainsCurrentFirstPartyScreenshotContractApiForAssembly(
+            string source,
+            bool hasAssemblyScopedCurrentFirstPartyToolsUsing,
+            string[] currentFirstPartyToolsAssemblyAliases,
+            string[] assemblyDeclaredTypeNames)
+        {
+            return ThirdPartyToolMigrationApiDetectionRules.ContainsCurrentFirstPartyScreenshotContractApiForAssembly(source, hasAssemblyScopedCurrentFirstPartyToolsUsing, currentFirstPartyToolsAssemblyAliases, assemblyDeclaredTypeNames);
+        }
+
         internal static bool ContainsCurrentCaptureGameRenderingDeconstructionMigrationForAssembly(
             string source,
             bool hasAssemblyScopedCurrentFirstPartyToolsUsing,
@@ -231,6 +253,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ThirdPartyToolMigrationDetectionRules.ContainsCurrentDomainGlobalUsing(source);
         }
 
+        internal static bool ContainsCurrentDomainUsing(string source)
+        {
+            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentDomainUsing(source);
+        }
+
+        internal static bool ContainsCurrentDomainNamespaceAlias(string source)
+        {
+            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentDomainNamespaceAlias(source);
+        }
+
         internal static bool ContainsCurrentToolContractsGlobalUsing(string source)
         {
             return ThirdPartyToolMigrationDetectionRules.ContainsCurrentToolContractsGlobalUsing(source);
@@ -239,6 +271,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static bool ContainsCurrentApplicationGlobalUsing(string source)
         {
             return ThirdPartyToolMigrationDetectionRules.ContainsCurrentApplicationGlobalUsing(source);
+        }
+
+        internal static bool ContainsCurrentApplicationUsing(string source)
+        {
+            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentApplicationUsing(source);
         }
 
         internal static bool ContainsCurrentApplicationNamespaceAlias(string source)
@@ -269,6 +306,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static string[] GetCurrentApplicationGlobalNamespaceAliases(string source)
         {
             return ThirdPartyToolMigrationDetectionRules.GetCurrentApplicationGlobalNamespaceAliases(source);
+        }
+
+        internal static string[] GetCurrentDomainGlobalNamespaceAliases(string source)
+        {
+            return ThirdPartyToolMigrationDetectionRules.GetCurrentDomainGlobalNamespaceAliases(source);
         }
 
         internal static string[] GetCurrentFirstPartyToolsGlobalNamespaceAliases(string source)

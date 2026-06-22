@@ -159,9 +159,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isMigrating,
                 false,
                 true);
-            ViewDataBinder.SetVisible(_refreshButton, false);
-            ViewDataBinder.SetVisible(_closeButton, true);
-            _closeButton.SetEnabled(true);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
+            _refreshButton.SetEnabled(false);
         }
 
         internal void ShowCheckingState(ThirdPartyToolMigrationProgress progress, bool isMigrating)
@@ -301,7 +301,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ThirdPartyToolMigrationWizardText.AiMigrationSkillDescriptionText,
                 "setup-step__description-label");
             content.Add(descriptionTextField);
-            CreateMigrationSkillUsageFoldout(content);
 
             VisualElement actionSection = new VisualElement();
             actionSection.AddToClassList("setup-section-actions");
@@ -332,6 +331,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             migrationSkillButton.AddToClassList("setup-button");
             migrationSkillButton.AddToClassList("setup-button--primary");
             buttonRow.Add(migrationSkillButton);
+            CreateMigrationSkillUsageFoldout(actionSection);
+            CreateMigrationSkillPromptCopyButton(actionSection);
             return (migrationSkillTargetField, migrationSkillButton);
         }
 
@@ -343,10 +344,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             content.Add(usageFoldout);
 
             TextField usageTextField = CreateSelectableText(
-                ThirdPartyToolMigrationWizardText.AiMigrationSkillUsageExampleText,
+                ThirdPartyToolMigrationWizardText.AiMigrationSkillPromptText,
                 "setup-skill-usage-text");
             usageFoldout.Add(usageTextField);
+
             usageFoldout.SetValueWithoutNotify(false);
+        }
+
+        private static void CreateMigrationSkillPromptCopyButton(VisualElement content)
+        {
+            Button copyPromptButton = new Button(ThirdPartyToolMigrationWizardWindow.CopyMigrationSkillPromptToClipboard);
+            copyPromptButton.text = ThirdPartyToolMigrationWizardText.GetMigrationSkillPromptCopyButtonText();
+            copyPromptButton.AddToClassList("setup-button");
+            copyPromptButton.AddToClassList("setup-button--small");
+            copyPromptButton.AddToClassList("setup-skill-usage-copy-button");
+            content.Add(copyPromptButton);
         }
 
         private static void CreateFooter(ScrollView mainScrollView)

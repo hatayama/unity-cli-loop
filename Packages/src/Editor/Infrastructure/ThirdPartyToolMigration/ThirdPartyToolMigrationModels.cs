@@ -298,10 +298,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             HashSet<string> assemblyScopedLegacyDirectories,
             HashSet<string> assemblyScopedCurrentToolContractsDirectories,
             HashSet<string> assemblyScopedCurrentApplicationDirectories,
+            HashSet<string> assemblyScopedCurrentDomainDirectories,
             HashSet<string> assemblyScopedCurrentFirstPartyToolsDirectories,
             Dictionary<string, string[]> assemblyScopedLegacyAliasesByDirectory,
             Dictionary<string, string[]> assemblyScopedLegacyToolInfoAliasesByDirectory,
             Dictionary<string, string[]> assemblyScopedCurrentApplicationAliasesByDirectory,
+            Dictionary<string, string[]> assemblyScopedCurrentDomainAliasesByDirectory,
             Dictionary<string, string[]> assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
             Dictionary<string, string[]> assemblyDeclaredTypeNamesByDirectory,
             HashSet<string> toolContractsReferenceAssemblyDirectories,
@@ -324,6 +326,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 assemblyScopedCurrentApplicationDirectories != null,
                 "assemblyScopedCurrentApplicationDirectories must not be null");
             Debug.Assert(
+                assemblyScopedCurrentDomainDirectories != null,
+                "assemblyScopedCurrentDomainDirectories must not be null");
+            Debug.Assert(
                 assemblyScopedCurrentFirstPartyToolsDirectories != null,
                 "assemblyScopedCurrentFirstPartyToolsDirectories must not be null");
             Debug.Assert(
@@ -335,6 +340,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(
                 assemblyScopedCurrentApplicationAliasesByDirectory != null,
                 "assemblyScopedCurrentApplicationAliasesByDirectory must not be null");
+            Debug.Assert(
+                assemblyScopedCurrentDomainAliasesByDirectory != null,
+                "assemblyScopedCurrentDomainAliasesByDirectory must not be null");
             Debug.Assert(
                 assemblyScopedCurrentFirstPartyToolsAliasesByDirectory != null,
                 "assemblyScopedCurrentFirstPartyToolsAliasesByDirectory must not be null");
@@ -366,6 +374,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 throw new ArgumentNullException(nameof(assemblyScopedCurrentToolContractsDirectories));
             AssemblyScopedCurrentApplicationDirectories = assemblyScopedCurrentApplicationDirectories ??
                 throw new ArgumentNullException(nameof(assemblyScopedCurrentApplicationDirectories));
+            AssemblyScopedCurrentDomainDirectories = assemblyScopedCurrentDomainDirectories ??
+                throw new ArgumentNullException(nameof(assemblyScopedCurrentDomainDirectories));
             AssemblyScopedCurrentFirstPartyToolsDirectories = assemblyScopedCurrentFirstPartyToolsDirectories ??
                 throw new ArgumentNullException(nameof(assemblyScopedCurrentFirstPartyToolsDirectories));
             AssemblyScopedLegacyAliasesByDirectory = assemblyScopedLegacyAliasesByDirectory ??
@@ -375,6 +385,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             AssemblyScopedCurrentApplicationAliasesByDirectory =
                 assemblyScopedCurrentApplicationAliasesByDirectory ??
                 throw new ArgumentNullException(nameof(assemblyScopedCurrentApplicationAliasesByDirectory));
+            AssemblyScopedCurrentDomainAliasesByDirectory =
+                assemblyScopedCurrentDomainAliasesByDirectory ??
+                throw new ArgumentNullException(nameof(assemblyScopedCurrentDomainAliasesByDirectory));
             AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory =
                 assemblyScopedCurrentFirstPartyToolsAliasesByDirectory ??
                 throw new ArgumentNullException(nameof(assemblyScopedCurrentFirstPartyToolsAliasesByDirectory));
@@ -396,10 +409,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public HashSet<string> AssemblyScopedLegacyDirectories { get; }
         public HashSet<string> AssemblyScopedCurrentToolContractsDirectories { get; }
         public HashSet<string> AssemblyScopedCurrentApplicationDirectories { get; }
+        public HashSet<string> AssemblyScopedCurrentDomainDirectories { get; }
         public HashSet<string> AssemblyScopedCurrentFirstPartyToolsDirectories { get; }
         public Dictionary<string, string[]> AssemblyScopedLegacyAliasesByDirectory { get; }
         public Dictionary<string, string[]> AssemblyScopedLegacyToolInfoAliasesByDirectory { get; }
         public Dictionary<string, string[]> AssemblyScopedCurrentApplicationAliasesByDirectory { get; }
+        public Dictionary<string, string[]> AssemblyScopedCurrentDomainAliasesByDirectory { get; }
         public Dictionary<string, string[]> AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory { get; }
         public Dictionary<string, string[]> AssemblyDeclaredTypeNamesByDirectory { get; }
         public HashSet<string> ToolContractsReferenceAssemblyDirectories { get; }
