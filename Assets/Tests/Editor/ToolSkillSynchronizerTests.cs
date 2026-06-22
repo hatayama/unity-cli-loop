@@ -1713,6 +1713,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetV3MigrationSkillInstallStateAtProjectRoot_WhenSkillDirectoryLacksSkillFile_ReturnsMissing()
+        {
+            // Tests that a leftover migration skill directory without SKILL.md is not treated as installed.
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Codex CLI",
+                ".codex",
+                "--codex",
+                hasSkillsDirectory: true,
+                hasExistingSkills: false);
+            string targetRoot = Path.Combine(temporaryRoot, ".codex");
+            string migrationSkillDir = SkillInstallLayout.GetInstalledSkillDirectoryPathForLayout(
+                targetRoot,
+                CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME,
+                groupSkillsUnderUnityCliLoop: false);
+            Directory.CreateDirectory(Path.Combine(migrationSkillDir, "references"));
+
+            SkillInstallState installState = ToolSkillSynchronizer.GetV3MigrationSkillInstallStateAtProjectRoot(
+                temporaryRoot,
+                target,
+                groupSkillsUnderUnityCliLoop: false);
+
+            Assert.That(installState, Is.EqualTo(SkillInstallState.Missing));
+        }
+
+        [Test]
         public async Task RemoveSpecificSkillFilesAtProjectRoot_WhenSkillExists_RemovesOnlyThatSkill()
         {
             // Tests that temporary migration skill removal leaves unrelated installed skills in place.
