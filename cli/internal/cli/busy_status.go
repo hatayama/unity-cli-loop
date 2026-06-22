@@ -40,7 +40,7 @@ func writeBusyStatusEnvelope(writer io.Writer, message string, details serverBus
 }
 
 func serverBusyStatusDetailsFromError(err cliError) serverBusyStatusDetails {
-	data, ok := err.Details["Data"].(map[string]any)
+	data, ok := serverBusyDetailsData(err.Details)
 	if !ok {
 		return serverBusyStatusDetails{
 			requestedToolName: err.Command,
@@ -57,6 +57,15 @@ func serverBusyStatusDetailsFromError(err cliError) serverBusyStatusDetails {
 		isPaused:          isPaused,
 		hasIsPaused:       hasIsPaused,
 	}
+}
+
+func serverBusyDetailsData(details map[string]any) (map[string]any, bool) {
+	data, ok := details["Data"].(map[string]any)
+	if ok {
+		return data, true
+	}
+	data, ok = details["data"].(map[string]any)
+	return data, ok
 }
 
 func optionalBool(hasValue bool, value bool) *bool {

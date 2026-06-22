@@ -41,9 +41,9 @@ uloop hello-world --name "Carlos" --language spanish --no-include-timestamp
 
 Returns JSON with:
 
-- `message`: The greeting message
-- `language`: Language used for greeting
-- `timestamp`: Current timestamp (if enabled)
+- `Message`: The greeting message
+- `Language`: Language used for greeting
+- `Timestamp`: Current timestamp (if enabled)
 
 ## Notes
 

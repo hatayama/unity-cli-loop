@@ -380,6 +380,40 @@ func TestWriteClassifiedServerBusyRPCErrorWritesBusyStatus(t *testing.T) {
 	}
 }
 
+func TestWriteErrorEnvelopeServerBusyAcceptsLegacyLowercaseDataDetails(t *testing.T) {
+	// Verifies legacy lower-camel error details still preserve busy tool names in status output.
+	cliErr := cliError{
+		ErrorCode: errorCodeUnityServerBusy,
+		Message:   "Unity is busy.",
+		Command:   "get-logs",
+		Details: map[string]any{
+			"data": map[string]any{
+				"runningToolName":   "compile",
+				"requestedToolName": "get-logs",
+				"isPlaying":         true,
+				"isPaused":          false,
+			},
+		},
+	}
+	var stderr bytes.Buffer
+
+	writeErrorEnvelope(&stderr, cliErr)
+
+	var envelope cliStatusEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
+	}
+	if envelope.RunningToolName != "compile" || envelope.RequestedToolName != "get-logs" {
+		t.Fatalf("tool names mismatch: %#v", envelope)
+	}
+	if envelope.IsPlaying == nil || *envelope.IsPlaying != true {
+		t.Fatalf("isPlaying mismatch: %#v", envelope)
+	}
+	if envelope.IsPaused == nil || *envelope.IsPaused != false {
+		t.Fatalf("isPaused mismatch: %#v", envelope)
+	}
+}
+
 func TestWriteToolFailureClassifiesDispatchedDisconnect(t *testing.T) {
 	var stderr bytes.Buffer
 

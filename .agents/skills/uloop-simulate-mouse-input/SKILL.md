@@ -118,6 +118,6 @@ Returns JSON with:
 - `InterruptedByPausePoint`: True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
 - `PausePointId`: The id from `UloopPausePoint.Pause("<id>")` when it caused the interruption
 - `PausePointHitCount`: The hit count for that `UloopPausePoint.Pause("<id>")`
-- `PausePointHits` (array, nullable): Every marker hit during this input as `{id, hitCount}` entries, in hit order. Read this when one input may trigger several markers; `PausePointId` only names the latest one
+- `PausePointHits` (array, nullable): Every marker hit during this input as `{Id, HitCount}` entries, in hit order. Read this when one input may trigger several markers; `PausePointId` only names the latest one
 
 Verify visual outcome with a follow-up screenshot.
