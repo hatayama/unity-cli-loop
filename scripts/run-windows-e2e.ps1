@@ -108,7 +108,7 @@ function Invoke-UloopJsonChecked {
 
     [string]$text = Invoke-UloopChecked -CommandArguments $CommandArguments
     [pscustomobject]$json = $text | ConvertFrom-Json
-    if ($json.PSObject.Properties.Name -contains "success" -and $json.success -ne $true) {
+    if ($json.PSObject.Properties.Name -contains "Success" -and $json.Success -ne $true) {
         throw "uloop $($CommandArguments -join " ") returned success=false: $text"
     }
 
@@ -172,11 +172,11 @@ function Wait-PlayMode {
 
         [pscustomobject]$result = $probe.Text | ConvertFrom-Json
         [string]$isPlaying = ""
-        if ($null -ne $result.result) {
-            $isPlaying = $result.result.ToString()
+        if ($null -ne $result.Result) {
+            $isPlaying = $result.Result.ToString()
         }
 
-        if ($result.success -eq $true -and $isPlaying -eq "True") {
+        if ($result.Success -eq $true -and $isPlaying -eq "True") {
             return
         }
 
@@ -221,7 +221,7 @@ return SceneManager.GetActiveScene().path;
 "@
 
     [pscustomobject]$result = Invoke-DynamicCode -Code $code
-    if ($result.result -ne $ScenePath) {
+    if ($result.Result -ne $ScenePath) {
         throw "Failed to open scene: $ScenePath"
     }
 }
@@ -309,7 +309,7 @@ function Invoke-LaunchSmoke {
     Invoke-UloopChecked -CommandArguments @("launch") | Out-Host
     Wait-UnityReady
     [pscustomobject]$result = Invoke-DynamicCode -Code 'return "windows-launch-smoke";'
-    if ($result.result -ne "windows-launch-smoke") {
+    if ($result.Result -ne "windows-launch-smoke") {
         throw "launch smoke dynamic-code readiness check failed"
     }
 }
@@ -376,7 +376,7 @@ if (cube == null) return -9999f;
 return cube.transform.position.z;
 '@
 
-    return [double]$result.result
+    return [double]$result.Result
 }
 
 try {

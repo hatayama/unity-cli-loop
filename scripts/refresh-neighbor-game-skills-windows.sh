@@ -592,7 +592,7 @@ return SceneManager.GetActiveScene().path;
 response_matches_scene() {
     response=$1
     if command -v jq >/dev/null 2>&1; then
-        printf '%s\n' "$response" | jq -e --arg scene_path "$sample_scene_path" '.success == true and .result == $scene_path' >/dev/null
+        printf '%s\n' "$response" | jq -e --arg scene_path "$sample_scene_path" '.Success == true and .Result == $scene_path' >/dev/null
         return $?
     fi
 
@@ -606,7 +606,7 @@ try {
 } catch {
     exit 1
 }
-if (\$Value.success -eq \$true -and \$Value.result -eq \$ScenePath) {
+if (\$Value.Success -eq \$true -and \$Value.Result -eq \$ScenePath) {
     exit 0
 }
 exit 1

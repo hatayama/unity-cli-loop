@@ -109,7 +109,7 @@ function Wait-PlayMode {
         }
 
         [pscustomobject]$result = $probe.Text | ConvertFrom-Json
-        if ($result.success -eq $true -and $result.result -eq "True") {
+        if ($result.Success -eq $true -and $result.Result -eq "True") {
             return
         }
 
@@ -140,14 +140,14 @@ function Assert-MouseResponse {
         [string]$ExpectedHit
     )
 
-    if ($Response.success -ne $true) {
-        throw "$ExpectedAction failed: $($Response.message)"
+    if ($Response.Success -ne $true) {
+        throw "$ExpectedAction failed: $($Response.Message)"
     }
 
-    Assert-EqualText -Actual $Response.action -Expected $ExpectedAction -Context "Action"
+    Assert-EqualText -Actual $Response.Action -Expected $ExpectedAction -Context "Action"
 
     if (-not [string]::IsNullOrWhiteSpace($ExpectedHit)) {
-        Assert-EqualText -Actual $Response.hitGameObjectName -Expected $ExpectedHit -Context "hitGameObjectName"
+        Assert-EqualText -Actual $Response.HitGameObjectName -Expected $ExpectedHit -Context "hitGameObjectName"
     }
 }
 
@@ -157,7 +157,7 @@ function Get-UiElement {
         [string]$Name
     )
 
-    [object[]]$matches = @($Elements | Where-Object { $_.name -eq $Name })
+    [object[]]$matches = @($Elements | Where-Object { $_.Name -eq $Name })
     if ($matches.Count -eq 1) {
         return $matches[0]
     }
@@ -240,11 +240,11 @@ return text.text;
 "@
 
     [pscustomobject]$result = Invoke-UloopJson -CommandArguments @("execute-dynamic-code", "--code", $code)
-    if ($result.success -ne $true) {
-        throw "Failed to read text from ${ObjectName}: $($result.errorMessage)"
+    if ($result.Success -ne $true) {
+        throw "Failed to read text from ${ObjectName}: $($result.ErrorMessage)"
     }
 
-    return $result.result
+    return $result.Result
 }
 
 function Get-DropZoneStatus {
@@ -261,11 +261,11 @@ return dropZone.StatusMessage;
 '@
     )
 
-    if ($result.success -ne $true) {
-        throw "Failed to read DropZone status: $($result.errorMessage)"
+    if ($result.Success -ne $true) {
+        throw "Failed to read DropZone status: $($result.ErrorMessage)"
     }
 
-    return $result.result
+    return $result.Result
 }
 
 function Get-LongPressButtonText {
@@ -283,11 +283,11 @@ return text.text;
 '@
     )
 
-    if ($result.success -ne $true) {
-        throw "Failed to read LongPressButton text: $($result.errorMessage)"
+    if ($result.Success -ne $true) {
+        throw "Failed to read LongPressButton text: $($result.ErrorMessage)"
     }
 
-    return $result.result
+    return $result.Result
 }
 
 function Get-VirtualPadState {
@@ -305,11 +305,11 @@ return pad.Direction.ToString("F3");
 '@
     )
 
-    if ($result.success -ne $true) {
-        throw "Failed to read VirtualPad state: $($result.errorMessage)"
+    if ($result.Success -ne $true) {
+        throw "Failed to read VirtualPad state: $($result.ErrorMessage)"
     }
 
-    return $result.result
+    return $result.Result
 }
 
 function Initialize-DemoScene {
@@ -330,11 +330,11 @@ return SceneManager.GetActiveScene().path;
 "@
 
     [pscustomobject]$result = Invoke-UloopJson -CommandArguments @("execute-dynamic-code", "--code", $code)
-    if ($result.success -ne $true) {
-        throw "Failed to load ${ScenePath}: $($result.errorMessage)"
+    if ($result.Success -ne $true) {
+        throw "Failed to load ${ScenePath}: $($result.ErrorMessage)"
     }
 
-    Assert-EqualText -Actual $result.result -Expected $ScenePath -Context "Active scene"
+    Assert-EqualText -Actual $result.Result -Expected $ScenePath -Context "Active scene"
 }
 
 function Get-AnnotatedElements {
@@ -346,11 +346,11 @@ function Get-AnnotatedElements {
         "--elements-only"
     )
 
-    if ($response.screenshotCount -ne 1) {
-        throw "Expected one screenshot response, got $($response.screenshotCount)"
+    if ($response.ScreenshotCount -ne 1) {
+        throw "Expected one screenshot response, got $($response.ScreenshotCount)"
     }
 
-    [object[]]$elements = @($response.screenshots[0].annotatedElements)
+    [object[]]$elements = @($response.Screenshots[0].AnnotatedElements)
     if ($elements.Count -eq 0) {
         throw "No annotated UI elements were returned"
     }
@@ -386,41 +386,41 @@ try {
     [pscustomobject]$virtualPad = Get-UiElement -Elements $elements -Name "VirtualPadBackground"
 
     Write-Host "[4/7] Clicking counter buttons..."
-    Invoke-MouseUi -Action "Click" -X $clickButton1.simX -Y $clickButton1.simY -TargetPath $clickButton1.path -ExpectedHit "ClickButton1" | Out-Null
-    Invoke-MouseUi -Action "Click" -X $clickButton2.simX -Y $clickButton2.simY -TargetPath $clickButton2.path -ExpectedHit "ClickButton2" | Out-Null
-    Invoke-MouseUi -Action "Click" -X $clickButton1.simX -Y $clickButton1.simY -TargetPath $clickButton1.path -ExpectedHit "ClickButton1" | Out-Null
-    Invoke-MouseUi -Action "Click" -X $clickButton2.simX -Y $clickButton2.simY -TargetPath $clickButton2.path -ExpectedHit "ClickButton2" | Out-Null
+    Invoke-MouseUi -Action "Click" -X $clickButton1.SimX -Y $clickButton1.SimY -TargetPath $clickButton1.Path -ExpectedHit "ClickButton1" | Out-Null
+    Invoke-MouseUi -Action "Click" -X $clickButton2.SimX -Y $clickButton2.SimY -TargetPath $clickButton2.Path -ExpectedHit "ClickButton2" | Out-Null
+    Invoke-MouseUi -Action "Click" -X $clickButton1.SimX -Y $clickButton1.SimY -TargetPath $clickButton1.Path -ExpectedHit "ClickButton1" | Out-Null
+    Invoke-MouseUi -Action "Click" -X $clickButton2.SimX -Y $clickButton2.SimY -TargetPath $clickButton2.Path -ExpectedHit "ClickButton2" | Out-Null
     [string]$counterText = Get-TextFromScene -ObjectName "CounterText"
     Assert-EqualText -Actual $counterText -Expected "Total Clicks: 4" -Context "CounterText"
 
     Write-Host "[5/7] Long-pressing the hold button..."
-    Invoke-MouseUi -Action "LongPress" -X $longPressButton.simX -Y $longPressButton.simY -Duration 3.2 -TargetPath $longPressButton.path -ExpectedHit "LongPressButton" | Out-Null
+    Invoke-MouseUi -Action "LongPress" -X $longPressButton.SimX -Y $longPressButton.SimY -Duration 3.2 -TargetPath $longPressButton.Path -ExpectedHit "LongPressButton" | Out-Null
     [string]$longPressText = Get-LongPressButtonText
     Assert-EqualText -Actual $longPressText -Expected "Activated!" -Context "LongPressButton label"
 
     Write-Host "[6/7] Dragging boxes into the DropZone..."
-    Invoke-MouseUi -Action "Drag" -FromX $redBox.simX -FromY $redBox.simY -X $dropZone.simX -Y $dropZone.simY -DragSpeed 900 -TargetPath $redBox.path -DropTargetPath $dropZone.path -ExpectedHit "RedBox" | Out-Null
+    Invoke-MouseUi -Action "Drag" -FromX $redBox.SimX -FromY $redBox.SimY -X $dropZone.SimX -Y $dropZone.SimY -DragSpeed 900 -TargetPath $redBox.Path -DropTargetPath $dropZone.Path -ExpectedHit "RedBox" | Out-Null
     Assert-EqualText -Actual (Get-DropZoneStatus) -Expected "Dropped: RedBox" -Context "DropZone after RedBox"
 
-    Invoke-MouseUi -Action "DragStart" -X $greenBox.simX -Y $greenBox.simY -DragSpeed 700 -TargetPath $greenBox.path -ExpectedHit "GreenBox" | Out-Null
-    Invoke-MouseUi -Action "DragMove" -X ($dropZone.simX + 150) -Y ($greenBox.simY - 50) -DragSpeed 500 -ExpectedHit "GreenBox" | Out-Null
-    Invoke-MouseUi -Action "DragMove" -X ($dropZone.simX - 150) -Y ($dropZone.simY + 50) -DragSpeed 500 -ExpectedHit "GreenBox" | Out-Null
-    Invoke-MouseUi -Action "DragEnd" -X $dropZone.simX -Y $dropZone.simY -DragSpeed 500 -DropTargetPath $dropZone.path -ExpectedHit "GreenBox" | Out-Null
+    Invoke-MouseUi -Action "DragStart" -X $greenBox.SimX -Y $greenBox.SimY -DragSpeed 700 -TargetPath $greenBox.Path -ExpectedHit "GreenBox" | Out-Null
+    Invoke-MouseUi -Action "DragMove" -X ($dropZone.SimX + 150) -Y ($greenBox.SimY - 50) -DragSpeed 500 -ExpectedHit "GreenBox" | Out-Null
+    Invoke-MouseUi -Action "DragMove" -X ($dropZone.SimX - 150) -Y ($dropZone.SimY + 50) -DragSpeed 500 -ExpectedHit "GreenBox" | Out-Null
+    Invoke-MouseUi -Action "DragEnd" -X $dropZone.SimX -Y $dropZone.SimY -DragSpeed 500 -DropTargetPath $dropZone.Path -ExpectedHit "GreenBox" | Out-Null
     Assert-EqualText -Actual (Get-DropZoneStatus) -Expected "Dropped: GreenBox" -Context "DropZone after GreenBox"
 
-    Invoke-MouseUi -Action "Drag" -FromX $blueBox.simX -FromY $blueBox.simY -X $dropZone.simX -Y $dropZone.simY -DragSpeed 900 -TargetPath $blueBox.path -DropTargetPath $dropZone.path -ExpectedHit "BlueBox" | Out-Null
+    Invoke-MouseUi -Action "Drag" -FromX $blueBox.SimX -FromY $blueBox.SimY -X $dropZone.SimX -Y $dropZone.SimY -DragSpeed 900 -TargetPath $blueBox.Path -DropTargetPath $dropZone.Path -ExpectedHit "BlueBox" | Out-Null
     Assert-EqualText -Actual (Get-DropZoneStatus) -Expected "Dropped: BlueBox" -Context "DropZone after BlueBox"
 
     Write-Host "[7/7] Exercising the virtual pad..."
-    [double]$padWidth = $virtualPad.boundsMaxX - $virtualPad.boundsMinX
-    [double]$padHeight = $virtualPad.boundsMaxY - $virtualPad.boundsMinY
+    [double]$padWidth = $virtualPad.BoundsMaxX - $virtualPad.BoundsMinX
+    [double]$padHeight = $virtualPad.BoundsMaxY - $virtualPad.BoundsMinY
     [double]$padOffset = [Math]::Min($padWidth, $padHeight) * 0.28
-    Invoke-MouseUi -Action "DragStart" -X $virtualPad.simX -Y $virtualPad.simY -TargetPath $virtualPad.path -ExpectedHit "VirtualPadBackground" | Out-Null
-    Invoke-MouseUi -Action "DragMove" -X ($virtualPad.simX + $padOffset) -Y ($virtualPad.simY - $padOffset) -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
-    Invoke-MouseUi -Action "DragMove" -X ($virtualPad.simX - $padOffset) -Y ($virtualPad.simY + $padOffset) -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
-    Invoke-MouseUi -Action "DragMove" -X $virtualPad.simX -Y ($virtualPad.simY - $padOffset) -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
-    Invoke-MouseUi -Action "DragMove" -X ($virtualPad.simX + $padOffset) -Y $virtualPad.simY -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
-    Invoke-MouseUi -Action "DragEnd" -X $virtualPad.simX -Y $virtualPad.simY -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
+    Invoke-MouseUi -Action "DragStart" -X $virtualPad.SimX -Y $virtualPad.SimY -TargetPath $virtualPad.Path -ExpectedHit "VirtualPadBackground" | Out-Null
+    Invoke-MouseUi -Action "DragMove" -X ($virtualPad.SimX + $padOffset) -Y ($virtualPad.SimY - $padOffset) -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
+    Invoke-MouseUi -Action "DragMove" -X ($virtualPad.SimX - $padOffset) -Y ($virtualPad.SimY + $padOffset) -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
+    Invoke-MouseUi -Action "DragMove" -X $virtualPad.SimX -Y ($virtualPad.SimY - $padOffset) -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
+    Invoke-MouseUi -Action "DragMove" -X ($virtualPad.SimX + $padOffset) -Y $virtualPad.SimY -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
+    Invoke-MouseUi -Action "DragEnd" -X $virtualPad.SimX -Y $virtualPad.SimY -DragSpeed 400 -ExpectedHit "VirtualPadBackground" | Out-Null
     Assert-EqualText -Actual (Get-VirtualPadState) -Expected "Zero" -Context "VirtualPad state"
 
     Write-Host ""
