@@ -673,6 +673,37 @@ public sealed class ScreenshotTool
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenCurrentFirstPartyToolsQualifiedReferenceExists_QualifiesBareCaptureMigration()
+        {
+            // Verifies that fully qualified FirstPartyTools references do not make unrelated bare capture calls valid.
+            string source = @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+
+public sealed class ScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        _ = io.github.hatayama.UnityCliLoop.FirstPartyTools.EditorWindowCaptureUtility.GetOpenWindowNames();
+        return await EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+            string expectedCaptureCall =
+                "return (await io.github.hatayama.UnityCliLoop.ToolContracts.EditorWindowCaptureUtility." +
+                "CaptureWindowAsync(window, 1.0f, io.github.hatayama.UnityCliLoop.ToolContracts." +
+                "UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS, ct)).texture;";
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain(expectedCaptureCall));
+            Assert.That(result.Content, Does.Not.Contain(
+                "return (await EditorWindowCaptureUtility.CaptureWindowAsync"));
+        }
+
+        [Test]
         public void MigrateCSharpSourceForLegacyAssembly_WhenAssemblyDeclaresCaptureUtility_KeepsBareLocalHelperCall()
         {
             // Verifies that bare capture calls are not rebound when the project owns the helper type.

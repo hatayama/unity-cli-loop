@@ -123,6 +123,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 RegexMatchesCode(source, CurrentToolContractsUsingRegex);
             bool hasCurrentFirstPartyToolsNamespaceUsage =
                 RegexMatchesCode(source, CurrentFirstPartyToolsNamespaceRegex);
+            bool hasCurrentFirstPartyToolsUsingDirective =
+                RegexMatchesCode(source, CurrentFirstPartyToolsUsingRegex) ||
+                RegexMatchesCode(source, CurrentFirstPartyToolsGlobalUsingRegex);
             bool canUseCurrentToolContracts =
                 hasCurrentToolContractsNamespaceUsage ||
                 hasAssemblyScopedCurrentToolContractsUsing;
@@ -145,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 hasCurrentFirstPartyToolsNamespaceUsage;
             bool canUseBareCurrentFirstPartyTools =
                 hasAssemblyScopedCurrentFirstPartyToolsUsing ||
-                hasCurrentFirstPartyToolsNamespaceUsage;
+                hasCurrentFirstPartyToolsUsingDirective;
             bool shouldQualifyBareEditorWindowCaptureUtilityTimeout =
                 !canUseBareCurrentToolContracts;
             bool canMigrateBareLegacyFirstPartyScreenshotApi =
