@@ -19,6 +19,16 @@ syntax in agent-facing docs and automation.
 
 Prefer `rg` for searches when available. If `rg` is unavailable, use the best available project search tool. Candidate discovery should be repository search plus context inspection, not a generated candidate list.
 
+## Validation Rules
+
+- Verify this migration with targeted search passes and a focused diff review.
+- Do not run Markdownlint as required validation for this migration.
+- If Markdownlint runs anyway and fails, ignore that result for this task.
+  Do not stop, revert, or withhold completion solely because Markdownlint
+  reports existing or unrelated Markdown formatting violations.
+- Do not fix Markdownlint findings as part of this migration unless the
+  finding is directly caused by changing a `uloop` option token.
+
 ## Editing Rules
 
 - Only change option tokens inside confirmed `uloop` command invocations.

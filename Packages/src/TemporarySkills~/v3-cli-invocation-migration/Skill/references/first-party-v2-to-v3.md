@@ -9,6 +9,11 @@ scripts, and do not change non-`uloop` commands. A valid edit only replaces,
 adds, or removes a `uloop` option token and the boolean value attached to that
 option in the same invocation.
 
+Markdownlint is not required validation for this migration. If Markdownlint
+runs and reports existing or unrelated formatting issues, ignore that result,
+continue the option migration, and report the lint result as non-blocking. Do
+not fix Markdownlint findings unless the migration itself created them.
+
 ## Search Checklist
 
 Prefer `rg` when available, but any repository search tool is acceptable.
