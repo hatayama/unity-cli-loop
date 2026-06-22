@@ -88,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 foreach (TypeReplacementRule rule in ToolContractTypeReplacementRules)
                 {
-                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
+                    if (ContainsAliasQualifiedName(source, alias, rule.LegacyName))
                     {
                         return true;
                     }
@@ -96,14 +96,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
                 {
-                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
+                    if (ContainsAliasQualifiedName(source, alias, rule.LegacyName))
                     {
                         return true;
                     }
                 }
 
-                if (ContainsLegacyAliasQualifiedName(source, alias, "ToolInfo") ||
-                    ContainsLegacyAliasQualifiedName(source, alias, "CustomToolManager"))
+                if (ContainsAliasQualifiedName(source, alias, "ToolInfo") ||
+                    ContainsAliasQualifiedName(source, alias, "CustomToolManager"))
                 {
                     return true;
                 }

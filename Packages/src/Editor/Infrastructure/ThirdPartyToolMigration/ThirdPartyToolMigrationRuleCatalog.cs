@@ -114,6 +114,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $@"\bglobal\s+using\s+(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\s*;",
                 RegexOptions.Compiled);
 
+        internal static readonly Regex CurrentDomainUsingRegex =
+            new(
+                $@"(?<!global\s)\busing\s+(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\s*;",
+                RegexOptions.Compiled);
+
+        internal static readonly Regex CurrentDomainNamespaceAliasRegex =
+            new(
+                $@"\b(?:global\s+)?using\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\s*;",
+                RegexOptions.Compiled);
+
+        internal static readonly Regex CurrentDomainGlobalNamespaceAliasRegex =
+            new(
+                $@"\bglobal\s+using\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?{Regex.Escape(CurrentDomainNamespace)}\s*;",
+                RegexOptions.Compiled);
+
         internal static readonly Regex CurrentToolContractsGlobalUsingRegex =
             new(
                 $@"\bglobal\s+using\s+(?:global::)?{Regex.Escape(CurrentNamespace)}\s*;",
@@ -122,6 +137,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static readonly Regex CurrentApplicationGlobalUsingRegex =
             new(
                 $@"\bglobal\s+using\s+(?:global::)?{Regex.Escape(CurrentApplicationNamespace)}\s*;",
+                RegexOptions.Compiled);
+
+        internal static readonly Regex CurrentApplicationUsingRegex =
+            new(
+                $@"(?<!global\s)\busing\s+(?:global::)?{Regex.Escape(CurrentApplicationNamespace)}\s*;",
                 RegexOptions.Compiled);
 
         internal static readonly Regex CurrentApplicationNamespaceAliasRegex =
@@ -142,6 +162,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static readonly Regex CurrentFirstPartyToolsGlobalUsingRegex =
             new(
                 $@"\bglobal\s+using\s+(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\s*;",
+                RegexOptions.Compiled);
+
+        internal static readonly Regex CurrentFirstPartyToolsUsingRegex =
+            new(
+                $@"(?<!global\s)\busing\s+(?:global::)?{Regex.Escape(CurrentFirstPartyToolsNamespace)}\s*;",
                 RegexOptions.Compiled);
 
         internal static readonly Regex CurrentFirstPartyToolsNamespaceAliasRegex =

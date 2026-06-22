@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     internal static class ThirdPartyToolMigrationDomainDetectionRules
     {
-        internal static bool ContainsLegacyAliasQualifiedName(string source, string alias, string typeName)
+        internal static bool ContainsAliasQualifiedName(string source, string alias, string typeName)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(!string.IsNullOrEmpty(alias), "alias must not be null or empty");
@@ -80,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             foreach (string alias in aliases)
             {
-                if (ContainsLegacyAliasQualifiedName(source, alias, "CustomToolManager"))
+                if (ContainsAliasQualifiedName(source, alias, "CustomToolManager"))
                 {
                     return true;
                 }
@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 foreach (string alias in aliases)
                 {
-                    if (ContainsLegacyAliasQualifiedName(source, alias, rule.LegacyName))
+                    if (ContainsAliasQualifiedName(source, alias, rule.LegacyName))
                     {
                         return true;
                     }
@@ -228,6 +228,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (canUseBareCurrentDomainType && RegexMatchesCode(source, unqualifiedRegex))
                 {
                     return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal static bool ContainsCurrentDomainContractAliasReference(
+            string source,
+            string[] currentDomainNamespaceAliases)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(
+                currentDomainNamespaceAliases != null,
+                "currentDomainNamespaceAliases must not be null");
+
+            foreach (string alias in currentDomainNamespaceAliases)
+            {
+                if (ContainsAliasQualifiedName(source, alias, "ToolInfo"))
+                {
+                    return true;
+                }
+
+                foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
+                {
+                    if (ContainsAliasQualifiedName(source, alias, rule.CurrentName))
+                    {
+                        return true;
+                    }
                 }
             }
 
