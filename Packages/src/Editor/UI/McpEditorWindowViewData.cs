@@ -163,6 +163,7 @@ namespace io.github.hatayama.uLoopMCP
         public readonly SkillInstallState SelectedTargetInstallState;
         public readonly SkillsTarget SelectedTarget;
         public readonly bool GroupSkillsUnderUnityCliLoop;
+        public readonly bool UseProjectCliVersion;
         public readonly bool IsInstallingSkills;
 
         public CliSetupData(
@@ -182,6 +183,7 @@ namespace io.github.hatayama.uLoopMCP
             SkillInstallState selectedTargetInstallState,
             SkillsTarget selectedTarget,
             bool groupSkillsUnderUnityCliLoop,
+            bool useProjectCliVersion,
             bool isInstallingSkills)
         {
             IsCliInstalled = isCliInstalled;
@@ -200,6 +202,7 @@ namespace io.github.hatayama.uLoopMCP
             SelectedTargetInstallState = selectedTargetInstallState;
             SelectedTarget = selectedTarget;
             GroupSkillsUnderUnityCliLoop = groupSkillsUnderUnityCliLoop;
+            UseProjectCliVersion = useProjectCliVersion;
             IsInstallingSkills = isInstallingSkills;
         }
     }

@@ -15,6 +15,9 @@ namespace io.github.hatayama.uLoopMCP
         private readonly VisualElement _groupSkillsRow;
         private readonly Toggle _groupSkillsToggle;
         private readonly Label _groupSkillsLabel;
+        private readonly VisualElement _projectCliVersionRow;
+        private readonly Toggle _projectCliVersionToggle;
+        private readonly Label _projectCliVersionLabel;
         private readonly Button _installSkillsButton;
         private readonly VisualElement _skillsSubsection;
 
@@ -27,6 +30,7 @@ namespace io.github.hatayama.uLoopMCP
         public event Action OnRefreshSkillsState;
         public event Action<SkillsTarget> OnSkillsTargetChanged;
         public event Action<bool> OnGroupSkillsChanged;
+        public event Action<bool> OnUseProjectCliVersionChanged;
 
         public CliSetupSection(VisualElement root)
         {
@@ -39,6 +43,9 @@ namespace io.github.hatayama.uLoopMCP
             _groupSkillsRow = root.Q<VisualElement>("group-skills-row");
             _groupSkillsToggle = root.Q<Toggle>("group-skills-toggle");
             _groupSkillsLabel = root.Q<Label>("group-skills-label");
+            _projectCliVersionRow = root.Q<VisualElement>("project-cli-version-row");
+            _projectCliVersionToggle = root.Q<Toggle>("project-cli-version-toggle");
+            _projectCliVersionLabel = root.Q<Label>("project-cli-version-label");
             _installSkillsButton = root.Q<Button>("install-skills-button");
             _skillsSubsection = root.Q<VisualElement>("skills-subsection");
         }
@@ -55,6 +62,12 @@ namespace io.github.hatayama.uLoopMCP
                 OnGroupSkillsChanged?.Invoke(evt.newValue);
             });
             _groupSkillsRow.RegisterCallback<ClickEvent>(HandleGroupSkillsRowClicked);
+            _projectCliVersionToggle.RegisterValueChangedCallback(evt =>
+            {
+                evt.StopPropagation();
+                OnUseProjectCliVersionChanged?.Invoke(evt.newValue);
+            });
+            _projectCliVersionRow.RegisterCallback<ClickEvent>(HandleProjectCliVersionRowClicked);
         }
 
         public void Update(CliSetupData data)
@@ -72,6 +85,7 @@ namespace io.github.hatayama.uLoopMCP
             InitializeTargetFieldIfNeeded(data);
             UpdateRefreshSkillsButton(data);
             UpdateGroupSkillsToggle(data);
+            UpdateProjectCliVersionToggle(data);
             UpdateSkillsSubsection(data);
             UpdateInstallSkillsButton(data);
         }
@@ -167,7 +181,10 @@ namespace io.github.hatayama.uLoopMCP
 
         private void UpdateRefreshSkillsButton(CliSetupData data)
         {
-            bool enabled = data.IsCliInstalled && !data.IsChecking && !data.IsInstallingSkills;
+            bool enabled = data.IsCliInstalled
+                && !data.IsChecking
+                && !data.IsInstallingCli
+                && !data.IsInstallingSkills;
             _refreshSkillsStateButton.SetEnabled(enabled);
             ViewDataBinder.ToggleClass(_refreshSkillsStateButton, "mcp-button--disabled", !enabled);
         }
@@ -176,12 +193,24 @@ namespace io.github.hatayama.uLoopMCP
         {
             ViewDataBinder.SetVisible(_groupSkillsRow, false);
             ViewDataBinder.UpdateToggle(_groupSkillsToggle, data.GroupSkillsUnderUnityCliLoop);
-            _groupSkillsToggle.SetEnabled(data.IsCliInstalled && !data.IsChecking && !data.IsInstallingSkills);
+            _groupSkillsToggle.SetEnabled(data.IsCliInstalled
+                && !data.IsChecking
+                && !data.IsInstallingCli
+                && !data.IsInstallingSkills);
+        }
+
+        private void UpdateProjectCliVersionToggle(CliSetupData data)
+        {
+            ViewDataBinder.UpdateToggle(_projectCliVersionToggle, data.UseProjectCliVersion);
+            _projectCliVersionToggle.SetEnabled(data.IsCliInstalled
+                && !data.IsChecking
+                && !data.IsInstallingCli
+                && !data.IsInstallingSkills);
         }
 
         private void UpdateSkillsSubsection(CliSetupData data)
         {
-            bool enabled = data.IsCliInstalled && !data.IsChecking;
+            bool enabled = data.IsCliInstalled && !data.IsChecking && !data.IsInstallingCli;
             _skillsSubsection.SetEnabled(enabled);
         }
 
@@ -194,7 +223,7 @@ namespace io.github.hatayama.uLoopMCP
             bool enabled = IsInstallSkillsButtonEnabled(
                 data.IsCliInstalled,
                 data.IsInstallingSkills,
-                data.IsChecking,
+                data.IsChecking || data.IsInstallingCli,
                 data.SelectedTargetInstallState);
             SetSkillsButton(label, enabled);
         }
@@ -265,6 +294,24 @@ namespace io.github.hatayama.uLoopMCP
             bool newValue = !_groupSkillsToggle.value;
             _groupSkillsToggle.SetValueWithoutNotify(newValue);
             OnGroupSkillsChanged?.Invoke(newValue);
+        }
+
+        private void HandleProjectCliVersionRowClicked(ClickEvent evt)
+        {
+            evt.StopPropagation();
+            if (!_projectCliVersionToggle.enabledSelf)
+            {
+                return;
+            }
+
+            if (evt.target is VisualElement targetElement && _projectCliVersionToggle.Contains(targetElement))
+            {
+                return;
+            }
+
+            bool newValue = !_projectCliVersionToggle.value;
+            _projectCliVersionToggle.SetValueWithoutNotify(newValue);
+            OnUseProjectCliVersionChanged?.Invoke(newValue);
         }
     }
 }

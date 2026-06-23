@@ -15,6 +15,7 @@ import {
   DEFAULT_GROUP_MANAGED_SKILLS,
 } from './skills-manager.js';
 import { TargetConfig, ALL_TARGET_IDS, getTargetConfig } from './target-config.js';
+import type { SkillCliInvocation } from '../tool-settings-loader.js';
 
 interface SkillsOptions {
   global?: boolean;
@@ -26,6 +27,7 @@ interface SkillsOptions {
   agents?: boolean;
   windsurf?: boolean;
   antigravity?: boolean;
+  cliInvocation?: string;
 }
 
 export function registerSkillsCommand(program: Command): void {
@@ -63,13 +65,23 @@ export function registerSkillsCommand(program: Command): void {
     .option('--agents', 'Install to generic .agents target')
     .option('--windsurf', 'Install to Windsurf')
     .option('--antigravity', 'Install to Antigravity')
+    .option('--cli-invocation <mode>', 'Skill CLI invocation mode: global or npx')
     .action((options: SkillsOptions) => {
       const targets = resolveTargets(options);
       if (targets.length === 0) {
         showTargetGuidance('install');
         return;
       }
-      installSkills(targets, options.global ?? false, DEFAULT_GROUP_MANAGED_SKILLS);
+      const cliInvocation = resolveCliInvocationOption(options.cliInvocation);
+      if (cliInvocation === null) {
+        return;
+      }
+      const global = options.global ?? false;
+      if (global && cliInvocation === 'npx') {
+        console.log('The --cli-invocation npx option is only available for project installs.');
+        return;
+      }
+      installSkills(targets, global, DEFAULT_GROUP_MANAGED_SKILLS, cliInvocation);
     });
 
   skillsCmd
@@ -200,6 +212,7 @@ function installSkills(
   targets: TargetConfig[],
   global: boolean,
   groupManagedSkills: boolean,
+  cliInvocation?: SkillCliInvocation,
 ): void {
   const location = global ? 'global' : 'project';
 
@@ -208,7 +221,7 @@ function installSkills(
 
   for (const target of targets) {
     const dir = getInstallDir(target, global, groupManagedSkills);
-    const result = installAllSkills(target, global, groupManagedSkills);
+    const result = installAllSkills(target, global, groupManagedSkills, cliInvocation);
 
     console.log(`${target.displayName}:`);
     console.log(`  \x1b[32m✓\x1b[0m Installed: ${result.installed}`);
@@ -220,6 +233,21 @@ function installSkills(
     console.log(`  Location: ${dir}`);
     console.log('');
   }
+}
+
+function resolveCliInvocationOption(
+  value: string | undefined,
+): SkillCliInvocation | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === 'global' || value === 'npx') {
+    return value;
+  }
+
+  console.log('The --cli-invocation option must be either global or npx.');
+  return null;
 }
 
 function uninstallSkills(

@@ -53,6 +53,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
                 selectedTargetInstallState: SkillInstallState.Installed,
                 selectedTarget: target,
                 groupSkillsUnderUnityCliLoop: true,
+                useProjectCliVersion: false,
                 isInstallingSkills: false);
 
             bool isInstalled = SkillsTargetSelectionResolver.IsInstalled(data, target);

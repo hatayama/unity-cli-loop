@@ -104,6 +104,39 @@ namespace io.github.hatayama.uLoopMCP
             Assert.IsTrue(ToolSettings.IsToolEnabled("clear-console"));
         }
 
+        [Test]
+        public void GetSkillCliInvocation_WhenSettingsMissing_ShouldReturnGlobal()
+        {
+            DeleteIfExists(SettingsFilePath);
+            ToolSettings.InvalidateCache();
+
+            string result = ToolSettings.GetSkillCliInvocation();
+
+            Assert.AreEqual(CliConstants.SKILL_CLI_INVOCATION_GLOBAL, result);
+        }
+
+        [Test]
+        public void SetSkillCliInvocation_ShouldPersistAcrossCacheInvalidation()
+        {
+            ToolSettings.SetToolEnabled("compile", false);
+            ToolSettings.SetSkillCliInvocation(CliConstants.SKILL_CLI_INVOCATION_NPX);
+            ToolSettings.InvalidateCache();
+
+            Assert.AreEqual(CliConstants.SKILL_CLI_INVOCATION_NPX, ToolSettings.GetSkillCliInvocation());
+            Assert.IsFalse(ToolSettings.IsToolEnabled("compile"));
+        }
+
+        [Test]
+        public void GetSkillCliInvocation_WhenValueIsInvalid_ShouldReturnGlobal()
+        {
+            File.WriteAllText(SettingsFilePath, "{\"disabledTools\":[],\"skillCliInvocation\":\"invalid\"}");
+            ToolSettings.InvalidateCache();
+
+            string result = ToolSettings.GetSkillCliInvocation();
+
+            Assert.AreEqual(CliConstants.SKILL_CLI_INVOCATION_GLOBAL, result);
+        }
+
         // ── Deduplication ──────────────────────────────────────────────
 
         [Test]

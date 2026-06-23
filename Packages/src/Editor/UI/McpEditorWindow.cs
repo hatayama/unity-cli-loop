@@ -100,6 +100,7 @@ namespace io.github.hatayama.uLoopMCP
                 RefreshSelectedTargetInstallStateInBackground();
             };
             _view.OnGroupSkillsChanged += HandleGroupSkillsChanged;
+            _view.OnUseProjectCliVersionChanged += HandleUseProjectCliVersionChanged;
             _view.OnConfigurationFoldoutChanged += UpdateShowConfiguration;
             _view.OnConnectedToolsFoldoutChanged += UpdateShowConnectedTools;
             _view.OnEditorTypeChanged += UpdateSelectedEditorType;
@@ -788,6 +789,8 @@ namespace io.github.hatayama.uLoopMCP
                 needsDowngrade = comparisonAvailable && cliVersionComparison > 0;
             }
             bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
+            bool useProjectCliVersion =
+                ToolSettings.GetSkillCliInvocation() == CliConstants.SKILL_CLI_INVOCATION_NPX;
             SkillInstallState selectedTargetInstallState = includeSkillDirectoryChecks
                 ? _selectedTargetInstallState
                 : SkillInstallState.Checking;
@@ -809,6 +812,7 @@ namespace io.github.hatayama.uLoopMCP
                 selectedTargetInstallState,
                 _skillsTarget,
                 groupSkillsUnderUnityCliLoop,
+                useProjectCliVersion,
                 _isInstallingSkills);
         }
 
@@ -1000,6 +1004,16 @@ namespace io.github.hatayama.uLoopMCP
         private void HandleGroupSkillsChanged(bool groupSkillsUnderUnityCliLoop)
         {
             ApplyFlatSkillInstallPreference();
+            RefreshSelectedTargetInstallStateFast();
+            RefreshSelectedTargetInstallStateInBackground();
+        }
+
+        private void HandleUseProjectCliVersionChanged(bool useProjectCliVersion)
+        {
+            string invocation = useProjectCliVersion
+                ? CliConstants.SKILL_CLI_INVOCATION_NPX
+                : CliConstants.SKILL_CLI_INVOCATION_GLOBAL;
+            ToolSettings.SetSkillCliInvocation(invocation);
             RefreshSelectedTargetInstallStateFast();
             RefreshSelectedTargetInstallStateInBackground();
         }
