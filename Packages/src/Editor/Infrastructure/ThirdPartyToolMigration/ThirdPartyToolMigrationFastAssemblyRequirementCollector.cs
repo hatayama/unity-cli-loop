@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -166,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return;
                 }
 
-                string source = File.ReadAllText(csharpFilePath);
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
                 inspectedEntryCount++;
                 if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
                 {
@@ -250,7 +249,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return;
                 }
 
-                string source = File.ReadAllText(csharpFilePath);
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
                 inspectedEntryCount++;
                 if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
                 {
@@ -317,7 +316,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return;
                 }
 
-                string source = File.ReadAllText(csharpFilePath);
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
                 inspectedEntryCount++;
                 if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
                 {
@@ -391,7 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return false;
                 }
 
-                string source = File.ReadAllText(csharpFilePath);
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
                 inspectedEntryCount++;
                 if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
                 {

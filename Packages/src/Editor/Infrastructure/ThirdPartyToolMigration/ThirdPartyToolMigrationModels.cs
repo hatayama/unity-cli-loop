@@ -162,8 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
 
-            FileInfo fileInfo = new(filePath);
-            if (!fileInfo.Exists)
+            if (!ThirdPartyToolMigrationFileAccess.Exists(filePath))
             {
                 return new MigrationFileFingerprint(
                     filePath,
@@ -176,8 +175,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return new MigrationFileFingerprint(
                 filePath,
                 true,
-                fileInfo.Length,
-                fileInfo.LastWriteTimeUtc.Ticks,
+                ThirdPartyToolMigrationFileAccess.GetLength(filePath),
+                ThirdPartyToolMigrationFileAccess.GetLastWriteTimeUtc(filePath).Ticks,
                 CaptureContentHash(filePath));
         }
 
@@ -210,7 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             byte[] buffer = new byte[ContentHashBufferSize];
             ulong contentHash = ContentHashOffsetBasis;
-            using FileStream stream = File.OpenRead(filePath);
+            using FileStream stream = ThirdPartyToolMigrationFileAccess.OpenRead(filePath);
             while (true)
             {
                 int readByteCount = stream.Read(buffer, 0, buffer.Length);
