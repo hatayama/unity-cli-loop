@@ -17,6 +17,7 @@ namespace io.github.hatayama.uLoopMCP
         private const string CliPackageDirName = "Cli~";
         private const string CliSkillDefinitionsDirName = "skill-definitions";
         private const string CliOnlySkillDefinitionsDirName = "cli-only";
+        private const string MarkdownFileExtension = ".md";
         private static readonly HashSet<string> ExcludedFileNames = new()
         {
             ".meta",
@@ -359,12 +360,29 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             Debug.Assert(skillFiles.ContainsKey(SkillFileName), "skillFiles must contain SKILL.md");
-            string skillContent = Encoding.UTF8.GetString(skillFiles[SkillFileName]);
-            string formattedContent = FormatSkillMarkdownForNpx(
-                skillContent,
-                McpConstants.PackageInfo.version);
-            skillFiles[SkillFileName] = Encoding.UTF8.GetBytes(formattedContent);
+            foreach (string relativePath in skillFiles.Keys.ToArray())
+            {
+                if (!IsMarkdownSkillFile(relativePath))
+                {
+                    continue;
+                }
+
+                string skillContent = Encoding.UTF8.GetString(skillFiles[relativePath]);
+                string formattedContent = FormatSkillMarkdownForNpx(
+                    skillContent,
+                    McpConstants.PackageInfo.version);
+                skillFiles[relativePath] = Encoding.UTF8.GetBytes(formattedContent);
+            }
             return skillFiles;
+        }
+
+        private static bool IsMarkdownSkillFile(string relativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(relativePath), "relativePath must not be null or empty");
+            return string.Equals(
+                Path.GetExtension(relativePath),
+                MarkdownFileExtension,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private static string FormatSkillMarkdownForNpx(string content, string packageVersion)

@@ -1024,7 +1024,7 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public async Task InstallSkillFilesAtProjectRoot_WhenSkillCliInvocationIsNpx_RewritesSkillMarkdownOnly()
+        public async Task InstallSkillFilesAtProjectRoot_WhenSkillCliInvocationIsNpx_RewritesSkillMarkdownFiles()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
             CreateFakeSourceSkillWithContent(
@@ -1067,7 +1067,9 @@ namespace io.github.hatayama.uLoopMCP
             Assert.That(
                 skillContent,
                 Does.Contain($"`npx --yes uloop-cli@{McpConstants.PackageInfo.version} compile`"));
-            Assert.That(referenceContent, Is.EqualTo("Run `uloop compile` in references."));
+            Assert.That(
+                referenceContent,
+                Is.EqualTo($"Run `npx --yes uloop-cli@{McpConstants.PackageInfo.version} compile` in references."));
         }
 
         [Test]

@@ -416,7 +416,7 @@ describe('skill install layout', () => {
 
     expect(installedSkill).toContain('name: uloop-test-npx-skill');
     expect(installedSkill).toContain('`npx --yes uloop-cli@2.9.0 compile`');
-    expect(installedReference).toBe('Run `uloop compile` in examples.');
+    expect(installedReference).toBe('Run `npx --yes uloop-cli@2.9.0 compile` in examples.');
   });
 
   it('should mark npx-installed skills as outdated when the project setting returns to global', () => {

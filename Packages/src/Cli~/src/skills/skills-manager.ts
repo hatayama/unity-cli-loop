@@ -19,7 +19,7 @@ import {
   readdirSync,
   renameSync,
 } from 'fs';
-import { join, dirname, resolve, isAbsolute, sep } from 'path';
+import { join, dirname, resolve, isAbsolute, sep, extname } from 'path';
 import { homedir } from 'os';
 import { TargetConfig } from './target-config.js';
 import { findUnityProjectRoot, getUnityProjectStatus } from '../project-root.js';
@@ -88,6 +88,7 @@ class SkillsPathConstants {
   public static readonly NPX_COMMAND = 'npx';
   public static readonly NPX_YES_FLAG = '--yes';
   public static readonly NPM_CLI_PACKAGE_NAME = 'uloop-cli';
+  public static readonly MARKDOWN_FILE_EXTENSION = '.md';
   public static readonly PACKAGE_NAMES = [
     SkillsPathConstants.PACKAGE_NAME,
     SkillsPathConstants.PACKAGE_NAME_ALIAS,
@@ -1018,7 +1019,31 @@ function formatSkillsForCliInvocation(
   return skills.map((skill) => ({
     ...skill,
     content: formatSkillContentForNpx(skill.content, packageVersion),
+    additionalFiles: formatAdditionalSkillFilesForNpx(skill.additionalFiles, packageVersion),
   }));
+}
+
+function formatAdditionalSkillFilesForNpx(
+  additionalFiles: Record<string, Buffer> | undefined,
+  packageVersion: string,
+): Record<string, Buffer> | undefined {
+  if (!additionalFiles) {
+    return undefined;
+  }
+
+  const formattedFiles: Record<string, Buffer> = {};
+  for (const [relativePath, content] of Object.entries(additionalFiles)) {
+    const formattedContent = isMarkdownSkillFile(relativePath)
+      ? Buffer.from(formatSkillContentForNpx(content.toString('utf-8'), packageVersion), 'utf-8')
+      : content;
+    // eslint-disable-next-line security/detect-object-injection -- Paths are controlled by package files, not user input.
+    formattedFiles[relativePath] = formattedContent;
+  }
+  return formattedFiles;
+}
+
+function isMarkdownSkillFile(relativePath: string): boolean {
+  return extname(relativePath).toLowerCase() === SkillsPathConstants.MARKDOWN_FILE_EXTENSION;
 }
 
 function formatSkillContentForNpx(content: string, packageVersion: string): string {
