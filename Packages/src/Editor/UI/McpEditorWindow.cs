@@ -818,7 +818,7 @@ namespace io.github.hatayama.uLoopMCP
 
         private void RefreshSelectedTargetInstallStateFast()
         {
-            if (!CliInstallationDetector.IsCliInstalled())
+            if (!CanManageSkills())
             {
                 _selectedTargetInstallState = SkillInstallState.Missing;
                 RefreshCliSetupSection();
@@ -832,7 +832,7 @@ namespace io.github.hatayama.uLoopMCP
         private void RefreshSelectedTargetInstallStateInBackground()
         {
             CancelSkillInstallStateRefresh();
-            if (!CliInstallationDetector.IsCliInstalled() || _isRefreshingVersion || _isInstallingSkills)
+            if (!CanManageSkills() || _isRefreshingVersion || _isInstallingSkills)
             {
                 return;
             }
@@ -963,11 +963,11 @@ namespace io.github.hatayama.uLoopMCP
 
         private async void HandleInstallSkills()
         {
-            if (!CliInstallationDetector.IsCliInstalled())
+            if (!CanManageSkills())
             {
                 EditorUtility.DisplayDialog(
                     "CLI Not Found",
-                    "uloop-cli is not installed. Please install the CLI first.",
+                    "uloop-cli is not installed. Please install the CLI first or enable project CLI version.",
                     "OK");
                 return;
             }
@@ -1016,6 +1016,12 @@ namespace io.github.hatayama.uLoopMCP
             ToolSettings.SetSkillCliInvocation(invocation);
             RefreshSelectedTargetInstallStateFast();
             RefreshSelectedTargetInstallStateInBackground();
+        }
+
+        private static bool CanManageSkills()
+        {
+            return CliInstallationDetector.IsCliInstalled()
+                || ToolSettings.GetSkillCliInvocation() == CliConstants.SKILL_CLI_INVOCATION_NPX;
         }
 
         private void RefreshRepositoryRootSupport()

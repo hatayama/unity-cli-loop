@@ -7,9 +7,11 @@ namespace io.github.hatayama.uLoopMCP
     public class CliSetupSection
     {
         private readonly VisualElement _cliStatusIcon;
+        private readonly VisualElement _globalCliStatusRow;
         private readonly Label _cliStatusLabel;
         private readonly Button _refreshCliVersionButton;
         private readonly Button _installCliButton;
+        private readonly VisualElement _globalCliSeparator;
         private readonly EnumField _skillsTargetField;
         private readonly Button _refreshSkillsStateButton;
         private readonly VisualElement _groupSkillsRow;
@@ -35,9 +37,11 @@ namespace io.github.hatayama.uLoopMCP
         public CliSetupSection(VisualElement root)
         {
             _cliStatusIcon = root.Q<VisualElement>("cli-status-icon");
+            _globalCliStatusRow = root.Q<VisualElement>("global-cli-status-row");
             _cliStatusLabel = root.Q<Label>("cli-status-label");
             _refreshCliVersionButton = root.Q<Button>("refresh-cli-version-button");
             _installCliButton = root.Q<Button>("install-cli-button");
+            _globalCliSeparator = root.Q<VisualElement>("global-cli-separator");
             _skillsTargetField = root.Q<EnumField>("skills-target-field");
             _refreshSkillsStateButton = root.Q<Button>("refresh-skills-state-button");
             _groupSkillsRow = root.Q<VisualElement>("group-skills-row");
@@ -80,6 +84,7 @@ namespace io.github.hatayama.uLoopMCP
             _lastData = data;
 
             UpdateCliStatus(data);
+            UpdateGlobalCliVisibility(data);
             UpdateRefreshButton(data);
             UpdateInstallCliButton(data);
             InitializeTargetFieldIfNeeded(data);
@@ -115,6 +120,14 @@ namespace io.github.hatayama.uLoopMCP
         private void UpdateRefreshButton(CliSetupData data)
         {
             _refreshCliVersionButton.SetEnabled(!data.IsChecking);
+        }
+
+        private void UpdateGlobalCliVisibility(CliSetupData data)
+        {
+            bool visible = !data.UseProjectCliVersion;
+            ViewDataBinder.SetVisible(_globalCliStatusRow, visible);
+            ViewDataBinder.SetVisible(_installCliButton, visible);
+            ViewDataBinder.SetVisible(_globalCliSeparator, visible);
         }
 
         private void UpdateInstallCliButton(CliSetupData data)
@@ -181,7 +194,8 @@ namespace io.github.hatayama.uLoopMCP
 
         private void UpdateRefreshSkillsButton(CliSetupData data)
         {
-            bool enabled = data.IsCliInstalled
+            bool canManageSkills = CanManageSkills(data);
+            bool enabled = canManageSkills
                 && !data.IsChecking
                 && !data.IsInstallingCli
                 && !data.IsInstallingSkills;
@@ -193,7 +207,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             ViewDataBinder.SetVisible(_groupSkillsRow, false);
             ViewDataBinder.UpdateToggle(_groupSkillsToggle, data.GroupSkillsUnderUnityCliLoop);
-            _groupSkillsToggle.SetEnabled(data.IsCliInstalled
+            _groupSkillsToggle.SetEnabled(CanManageSkills(data)
                 && !data.IsChecking
                 && !data.IsInstallingCli
                 && !data.IsInstallingSkills);
@@ -202,30 +216,34 @@ namespace io.github.hatayama.uLoopMCP
         private void UpdateProjectCliVersionToggle(CliSetupData data)
         {
             ViewDataBinder.UpdateToggle(_projectCliVersionToggle, data.UseProjectCliVersion);
-            _projectCliVersionToggle.SetEnabled(data.IsCliInstalled
-                && !data.IsChecking
+            _projectCliVersionToggle.SetEnabled(!data.IsChecking
                 && !data.IsInstallingCli
                 && !data.IsInstallingSkills);
         }
 
         private void UpdateSkillsSubsection(CliSetupData data)
         {
-            bool enabled = data.IsCliInstalled && !data.IsChecking && !data.IsInstallingCli;
+            bool enabled = CanManageSkills(data) && !data.IsChecking && !data.IsInstallingCli;
             _skillsSubsection.SetEnabled(enabled);
         }
 
         private void UpdateInstallSkillsButton(CliSetupData data)
         {
             string label = GetInstallSkillsButtonText(
-                data.IsCliInstalled,
+                CanManageSkills(data),
                 data.IsInstallingSkills,
                 data.SelectedTargetInstallState);
             bool enabled = IsInstallSkillsButtonEnabled(
-                data.IsCliInstalled,
+                CanManageSkills(data),
                 data.IsInstallingSkills,
                 data.IsChecking || data.IsInstallingCli,
                 data.SelectedTargetInstallState);
             SetSkillsButton(label, enabled);
+        }
+
+        private static bool CanManageSkills(CliSetupData data)
+        {
+            return data.IsCliInstalled || data.UseProjectCliVersion;
         }
 
         private void SetSkillsButton(string text, bool enabled)

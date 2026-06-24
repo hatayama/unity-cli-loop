@@ -276,7 +276,9 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void CanManageSkills_WhenCliIsMissing_ReturnsFalse()
         {
-            bool canManageSkills = SetupWizardWindow.CanManageSkills(cliInstalled: false);
+            bool canManageSkills = SetupWizardWindow.CanManageSkills(
+                cliInstalled: false,
+                useProjectCliVersion: false);
 
             Assert.That(canManageSkills, Is.False);
         }
@@ -284,7 +286,19 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void CanManageSkills_WhenCliIsInstalled_ReturnsTrue()
         {
-            bool canManageSkills = SetupWizardWindow.CanManageSkills(cliInstalled: true);
+            bool canManageSkills = SetupWizardWindow.CanManageSkills(
+                cliInstalled: true,
+                useProjectCliVersion: false);
+
+            Assert.That(canManageSkills, Is.True);
+        }
+
+        [Test]
+        public void CanManageSkills_WhenProjectCliVersionIsEnabled_ReturnsTrue()
+        {
+            bool canManageSkills = SetupWizardWindow.CanManageSkills(
+                cliInstalled: false,
+                useProjectCliVersion: true);
 
             Assert.That(canManageSkills, Is.True);
         }
