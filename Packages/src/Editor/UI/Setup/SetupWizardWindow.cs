@@ -195,6 +195,7 @@ namespace io.github.hatayama.uLoopMCP
         private bool _isSkillsTargetFieldInitialized;
         private bool _shouldUseFirstInstallSkillsUi;
         private bool _installSkillsFlat;
+        private bool _projectCliVersionChangedByToggle;
         [SerializeField]
         private string _lastSeenSetupWizardVersionBeforeOpen = string.Empty;
         private IVisualElementScheduledItem _initialRefreshScheduledItem;
@@ -341,6 +342,8 @@ namespace io.github.hatayama.uLoopMCP
             _projectCliVersionToggle.RegisterValueChangedCallback(evt =>
             {
                 evt.StopPropagation();
+                _projectCliVersionChangedByToggle = true;
+                _projectCliVersionToggle.schedule.Execute(() => _projectCliVersionChangedByToggle = false);
                 HandleProjectCliVersionChanged(evt.newValue);
             });
             _projectCliVersionRow.RegisterCallback<ClickEvent>(HandleProjectCliVersionRowClicked);
@@ -981,8 +984,9 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            if (evt.target is VisualElement targetElement && _projectCliVersionToggle.Contains(targetElement))
+            if (_projectCliVersionChangedByToggle)
             {
+                _projectCliVersionChangedByToggle = false;
                 return;
             }
 

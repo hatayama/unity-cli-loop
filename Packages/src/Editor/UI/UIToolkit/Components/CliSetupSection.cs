@@ -25,6 +25,7 @@ namespace io.github.hatayama.uLoopMCP
 
         private CliSetupData _lastData;
         private bool _isTargetFieldInitialized;
+        private bool _projectCliVersionChangedByToggle;
 
         public event Action OnRefreshCliVersion;
         public event Action OnInstallCli;
@@ -69,6 +70,8 @@ namespace io.github.hatayama.uLoopMCP
             _projectCliVersionToggle.RegisterValueChangedCallback(evt =>
             {
                 evt.StopPropagation();
+                _projectCliVersionChangedByToggle = true;
+                _projectCliVersionToggle.schedule.Execute(() => _projectCliVersionChangedByToggle = false);
                 OnUseProjectCliVersionChanged?.Invoke(evt.newValue);
             });
             _projectCliVersionRow.RegisterCallback<ClickEvent>(HandleProjectCliVersionRowClicked);
@@ -322,8 +325,9 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            if (evt.target is VisualElement targetElement && _projectCliVersionToggle.Contains(targetElement))
+            if (_projectCliVersionChangedByToggle)
             {
+                _projectCliVersionChangedByToggle = false;
                 return;
             }
 
