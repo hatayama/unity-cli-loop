@@ -322,6 +322,12 @@ namespace io.github.hatayama.uLoopMCP
             _isSkillsTargetFieldInitialized = true;
         }
 
+        private void RefreshSkillsTargetField()
+        {
+            Debug.Assert(_isSkillsTargetFieldInitialized, "skills target field must be initialized");
+            _skillsTargetField.SetValueWithoutNotify(_skillsTarget);
+        }
+
         private void InitializeGroupSkillsToggle()
         {
             ApplyFlatSkillInstallPreference();
@@ -568,6 +574,14 @@ namespace io.github.hatayama.uLoopMCP
             return string.IsNullOrEmpty(lastSeenSetupWizardVersion);
         }
 
+        internal static bool ShouldUseTargetSelectionSkillsUi(
+            bool shouldUseFirstInstallSkillsUi,
+            int installableTargetCount)
+        {
+            Debug.Assert(installableTargetCount >= 0, "installableTargetCount must not be negative");
+            return shouldUseFirstInstallSkillsUi || installableTargetCount == 0;
+        }
+
         internal static bool CanManageSkills(bool cliInstalled, bool useProjectCliVersion)
         {
             return cliInstalled || useProjectCliVersion;
@@ -618,6 +632,27 @@ namespace io.github.hatayama.uLoopMCP
                    || selectedTargetInfo.InstallState == SkillInstallState.Checking
                 ? new List<ToolSkillSynchronizer.SkillTargetInfo>()
                 : new List<ToolSkillSynchronizer.SkillTargetInfo> { selectedTargetInfo };
+        }
+
+        internal static List<ToolSkillSynchronizer.SkillTargetInfo> GetSetupWizardInstallableSkillTargets(
+            IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets,
+            SkillsTarget target,
+            bool groupSkillsUnderUnityCliLoop,
+            bool shouldUseFirstInstallSkillsUi)
+        {
+            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
+                FilterInstallableSkillTargets(targets);
+            if (!ShouldUseTargetSelectionSkillsUi(
+                    shouldUseFirstInstallSkillsUi,
+                    installableTargets.Count))
+            {
+                return installableTargets;
+            }
+
+            return GetFirstInstallableSkillTargets(
+                targets,
+                target,
+                groupSkillsUnderUnityCliLoop);
         }
 
         private void UpdateCliStep(bool cliInstalled, string cliVersion, bool cliVersionMatched)
@@ -678,12 +713,16 @@ namespace io.github.hatayama.uLoopMCP
             RefreshProjectCliVersionToggle();
             _projectCliVersionToggle.SetEnabled(!_isInstallingSkills);
 
-            bool useFirstInstallSkillsUi = _shouldUseFirstInstallSkillsUi;
-            ViewDataBinder.SetVisible(_skillsTargetRow, useFirstInstallSkillsUi);
-            ViewDataBinder.SetVisible(_skillsTargetList, !useFirstInstallSkillsUi);
+            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets = FilterInstallableSkillTargets(targets);
+            bool useTargetSelectionSkillsUi = ShouldUseTargetSelectionSkillsUi(
+                _shouldUseFirstInstallSkillsUi,
+                installableTargets.Count);
+            ViewDataBinder.SetVisible(_skillsTargetRow, useTargetSelectionSkillsUi);
+            ViewDataBinder.SetVisible(_skillsTargetList, !useTargetSelectionSkillsUi);
 
-            if (useFirstInstallSkillsUi)
+            if (useTargetSelectionSkillsUi)
             {
+                RefreshSkillsTargetField();
                 ToolSkillSynchronizer.SkillTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
                     targets,
                     _skillsTarget,
@@ -700,8 +739,6 @@ namespace io.github.hatayama.uLoopMCP
                     selectedTargetInfo.InstallState));
                 return;
             }
-
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets = FilterInstallableSkillTargets(targets);
 
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in installableTargets)
             {
@@ -724,15 +761,6 @@ namespace io.github.hatayama.uLoopMCP
                 item.Add(statusLabel);
 
                 _skillsTargetList.Add(item);
-            }
-
-            if (installableTargets.Count == 0)
-            {
-                UpdateSkillsStatusLabel(
-                    "Create a tool folder to enable skill installation (.claude/, .agents/, etc.)");
-                _installSkillsButton.SetEnabled(false);
-                _installSkillsButton.text = "Install Skills";
-                return;
             }
 
             bool isCheckingSkills = installableTargets.Any(
@@ -906,9 +934,12 @@ namespace io.github.hatayama.uLoopMCP
             CancelSkillInstallStateRefresh();
             string projectRoot = UnityMcpPathResolver.GetProjectRoot();
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets = _shouldUseFirstInstallSkillsUi
-                ? GetFirstInstallableSkillTargets(targets, _skillsTarget, !_installSkillsFlat)
-                : FilterInstallableSkillTargets(targets);
+            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
+                GetSetupWizardInstallableSkillTargets(
+                    targets,
+                    _skillsTarget,
+                    !_installSkillsFlat,
+                    _shouldUseFirstInstallSkillsUi);
             if (installableTargets.Count == 0) return;
 
             _isInstallingSkills = true;

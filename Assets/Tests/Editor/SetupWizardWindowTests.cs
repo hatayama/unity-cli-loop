@@ -274,6 +274,36 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
+        public void ShouldUseTargetSelectionSkillsUi_WhenFirstInstall_ReturnsTrue()
+        {
+            bool shouldUseTargetSelectionUi = SetupWizardWindow.ShouldUseTargetSelectionSkillsUi(
+                shouldUseFirstInstallSkillsUi: true,
+                installableTargetCount: 1);
+
+            Assert.That(shouldUseTargetSelectionUi, Is.True);
+        }
+
+        [Test]
+        public void ShouldUseTargetSelectionSkillsUi_WhenNoInstallableTargets_ReturnsTrue()
+        {
+            bool shouldUseTargetSelectionUi = SetupWizardWindow.ShouldUseTargetSelectionSkillsUi(
+                shouldUseFirstInstallSkillsUi: false,
+                installableTargetCount: 0);
+
+            Assert.That(shouldUseTargetSelectionUi, Is.True);
+        }
+
+        [Test]
+        public void ShouldUseTargetSelectionSkillsUi_WhenInstallableTargetsExistAfterFirstInstall_ReturnsFalse()
+        {
+            bool shouldUseTargetSelectionUi = SetupWizardWindow.ShouldUseTargetSelectionSkillsUi(
+                shouldUseFirstInstallSkillsUi: false,
+                installableTargetCount: 1);
+
+            Assert.That(shouldUseTargetSelectionUi, Is.False);
+        }
+
+        [Test]
         public void CanManageSkills_WhenCliIsMissing_ReturnsFalse()
         {
             bool canManageSkills = SetupWizardWindow.CanManageSkills(
@@ -405,6 +435,52 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.That(installableTargets.Count, Is.EqualTo(1));
             Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
             Assert.That(installableTargets[0].InstallState, Is.EqualTo(SkillInstallState.Missing));
+        }
+
+        [Test]
+        public void GetSetupWizardInstallableSkillTargets_WhenNoInstallableTargetsAfterFirstInstall_ReturnsSelectedTarget()
+        {
+            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
+                SetupWizardWindow.GetSetupWizardInstallableSkillTargets(
+                    new List<ToolSkillSynchronizer.SkillTargetInfo>(),
+                    SkillsTarget.Codex,
+                    groupSkillsUnderUnityCliLoop: false,
+                    shouldUseFirstInstallSkillsUi: false);
+
+            Assert.That(installableTargets.Count, Is.EqualTo(1));
+            Assert.That(installableTargets[0].DirName, Is.EqualTo(".codex"));
+            Assert.That(installableTargets[0].HasSkillsDirectory, Is.False);
+            Assert.That(installableTargets[0].InstallState, Is.EqualTo(SkillInstallState.Missing));
+        }
+
+        [Test]
+        public void GetSetupWizardInstallableSkillTargets_WhenInstallableTargetsExistAfterFirstInstall_ReturnsExistingTargets()
+        {
+            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
+            {
+                new(
+                    "Claude Code",
+                    ".claude",
+                    "--claude",
+                    hasSkillsDirectory: true,
+                    hasExistingSkills: false),
+                new(
+                    "Codex CLI",
+                    ".codex",
+                    "--codex",
+                    hasSkillsDirectory: false,
+                    hasExistingSkills: false)
+            };
+
+            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
+                SetupWizardWindow.GetSetupWizardInstallableSkillTargets(
+                    targets,
+                    SkillsTarget.Codex,
+                    groupSkillsUnderUnityCliLoop: false,
+                    shouldUseFirstInstallSkillsUi: false);
+
+            Assert.That(installableTargets.Count, Is.EqualTo(1));
+            Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
         }
 
         [TestCase(SkillInstallState.Installed, false, true, "Installed")]
