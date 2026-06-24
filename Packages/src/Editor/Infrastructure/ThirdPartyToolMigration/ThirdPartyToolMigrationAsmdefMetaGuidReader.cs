@@ -15,12 +15,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(asmdefFilePath), "asmdefFilePath must not be null or empty");
 
             string metaPath = asmdefFilePath + ".meta";
-            if (!File.Exists(metaPath))
+            if (!ThirdPartyToolMigrationFileAccess.Exists(metaPath))
             {
                 return string.Empty;
             }
 
-            return ReadAsmdefGuidReferenceFromMetaFile(metaPath, File.ReadLines);
+            return ReadAsmdefGuidReferenceFromMetaFile(metaPath, ThirdPartyToolMigrationFileAccess.ReadLines);
         }
 
         internal static string ReadAsmdefGuidReferenceFromMetaFile(

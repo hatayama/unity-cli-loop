@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -14,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly Dictionary<string, string> _sources = new(StringComparer.Ordinal);
 
         internal ThirdPartyToolMigrationSourceFileCache()
-            : this(File.ReadAllText)
+            : this(ThirdPartyToolMigrationFileAccess.ReadAllText)
         {
         }
 

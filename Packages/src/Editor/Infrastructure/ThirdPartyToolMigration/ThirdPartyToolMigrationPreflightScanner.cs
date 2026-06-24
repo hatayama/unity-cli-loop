@@ -186,7 +186,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             try
             {
-                return (true, File.ReadAllText(filePath));
+                return (true, ThirdPartyToolMigrationFileAccess.ReadAllText(filePath));
             }
             catch (Exception ex) when (IsSkippablePreflightReadException(ex))
             {

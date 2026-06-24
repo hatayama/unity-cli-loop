@@ -12,6 +12,8 @@ using Newtonsoft.Json.Linq;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 
+using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationFileServiceConstants;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
@@ -68,6 +70,162 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(firstSource, Is.EqualTo("source:Assets/VendorTools/HelloTool.cs"));
             Assert.That(secondSource, Is.EqualTo(firstSource));
             Assert.That(readCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        [Platform(Include = "Win")]
+        public void ThirdPartyToolMigrationSourceFileCache_WhenWindowsPathExceedsLegacyLimit_ReadsSource()
+        {
+            // Verifies that migration preview can inspect source files beyond the legacy Windows path limit.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string longDirectoryPath = CreateLongDirectoryPath(projectRoot);
+                string filePath = Path.Combine(longDirectoryPath, "LongPathTool.cs");
+                Directory.CreateDirectory(ToWindowsExtendedLengthPath(longDirectoryPath));
+                File.WriteAllText(
+                    ToWindowsExtendedLengthPath(filePath),
+                    "public sealed class LongPathTool {}");
+
+                Assert.That(filePath.Length, Is.GreaterThanOrEqualTo(WindowsLegacyMaxPathLength));
+                ThirdPartyToolMigrationSourceFileCache cache = new();
+
+                string source = cache.ReadAllText(filePath);
+
+                Assert.That(source, Does.Contain("LongPathTool"));
+            }
+            finally
+            {
+                Directory.Delete(ToWindowsExtendedLengthPath(projectRoot), recursive: true);
+            }
+        }
+
+        [Test]
+        [Platform(Include = "Win")]
+        public async Task ApplyMigrationAsync_WhenWindowsPathExceedsLegacyLimit_MigratesSource()
+        {
+            // Verifies that migration apply can rewrite source files beyond the legacy Windows path limit.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string longDirectoryPath = CreateLongDirectoryPath(projectRoot);
+                string filePath = Path.Combine(longDirectoryPath, "LongPathTool.cs");
+                Directory.CreateDirectory(ToWindowsExtendedLengthPath(longDirectoryPath));
+                File.WriteAllText(
+                    ToWindowsExtendedLengthPath(filePath),
+                    @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class LongPathTool : AbstractUnityTool<LongPathSchema, LongPathResponse>
+{
+}
+
+public sealed class LongPathSchema : BaseToolSchema
+{
+}
+
+public sealed class LongPathResponse : BaseToolResponse
+{
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(
+                        projectRoot,
+                        new Progress<ThirdPartyToolMigrationProgress>(),
+                        CancellationToken.None);
+                string migratedSource = File.ReadAllText(ToWindowsExtendedLengthPath(filePath));
+
+                Assert.That(result.FilePaths.Contains(filePath), Is.True);
+                Assert.That(migratedSource, Does.Contain("UnityCliLoopTool<LongPathSchema, LongPathResponse>"));
+            }
+            finally
+            {
+                Directory.Delete(ToWindowsExtendedLengthPath(projectRoot), recursive: true);
+            }
+        }
+
+        [Test]
+        [Platform(Include = "Win")]
+        public async Task ApplyMigrationAsync_WhenWindowsDirectoryPathExceedsLegacyLimit_MigratesSource()
+        {
+            // Verifies that migration apply can discover source files in directories beyond the legacy Windows path limit.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string longDirectoryPath = CreateVeryLongDirectoryPath(projectRoot);
+                string filePath = Path.Combine(longDirectoryPath, "LongDirectoryTool.cs");
+                Directory.CreateDirectory(ToWindowsExtendedLengthPath(longDirectoryPath));
+                File.WriteAllText(
+                    ToWindowsExtendedLengthPath(filePath),
+                    @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class LongDirectoryTool : AbstractUnityTool<LongDirectorySchema, LongDirectoryResponse>
+{
+}
+
+public sealed class LongDirectorySchema : BaseToolSchema
+{
+}
+
+public sealed class LongDirectoryResponse : BaseToolResponse
+{
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                ThirdPartyToolMigrationResult result =
+                    await service.ApplyMigrationAsync(
+                        projectRoot,
+                        new Progress<ThirdPartyToolMigrationProgress>(),
+                        CancellationToken.None);
+                string migratedSource = File.ReadAllText(ToWindowsExtendedLengthPath(filePath));
+
+                Assert.That(longDirectoryPath.Length, Is.GreaterThanOrEqualTo(WindowsLegacyMaxPathLength));
+                Assert.That(result.FilePaths.Contains(filePath), Is.True);
+                Assert.That(
+                    migratedSource,
+                    Does.Contain("UnityCliLoopTool<LongDirectorySchema, LongDirectoryResponse>"));
+            }
+            finally
+            {
+                Directory.Delete(ToWindowsExtendedLengthPath(projectRoot), recursive: true);
+            }
+        }
+
+        [Test]
+        [Platform(Include = "Win")]
+        public void MigrationProjectFingerprint_WhenWindowsPathExceedsLegacyLimit_DetectsContentChange()
+        {
+            // Verifies that long-path source edits invalidate cached migration plans.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string longDirectoryPath = CreateLongDirectoryPath(projectRoot);
+                string filePath = Path.Combine(longDirectoryPath, "LongPathTool.cs");
+                string originalSource = "public sealed class AlphaTool {}";
+                string changedSource = "public sealed class BravoTool {}";
+                DateTime originalLastWriteTimeUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                Directory.CreateDirectory(ToWindowsExtendedLengthPath(longDirectoryPath));
+                File.WriteAllText(ToWindowsExtendedLengthPath(filePath), originalSource);
+                File.SetLastWriteTimeUtc(ToWindowsExtendedLengthPath(filePath), originalLastWriteTimeUtc);
+                ProjectFileInventory firstInventory = ProjectFileInventory.Create(projectRoot);
+                MigrationProjectFingerprint fingerprint =
+                    MigrationProjectFingerprint.CaptureFromInventory(firstInventory);
+
+                File.WriteAllText(ToWindowsExtendedLengthPath(filePath), changedSource);
+                File.SetLastWriteTimeUtc(ToWindowsExtendedLengthPath(filePath), originalLastWriteTimeUtc);
+                ProjectFileInventory changedInventory = ProjectFileInventory.Create(projectRoot);
+
+                Assert.That(changedSource.Length, Is.EqualTo(originalSource.Length));
+                Assert.That(fingerprint.Matches(changedInventory), Is.False);
+            }
+            finally
+            {
+                Directory.Delete(ToWindowsExtendedLengthPath(projectRoot), recursive: true);
+            }
         }
 
         [Test]
@@ -5470,6 +5628,54 @@ public sealed class ScreenshotResponse : UnityCliLoopToolResponse
             Directory.CreateDirectory(Path.Combine(projectRoot, "ProjectSettings"));
             Directory.CreateDirectory(Path.Combine(projectRoot, "Assets"));
             return projectRoot;
+        }
+
+        private static string CreateLongDirectoryPath(string projectRoot)
+        {
+            Assert.That(projectRoot, Is.Not.Empty);
+
+            string directoryPath = Path.Combine(projectRoot, "Assets");
+            int segmentIndex = 0;
+            while (Path.Combine(directoryPath, "LongPathTool.cs").Length < WindowsLegacyMaxPathLength)
+            {
+                directoryPath = Path.Combine(directoryPath, "LongPathSegment" + segmentIndex.ToString("D2"));
+                segmentIndex++;
+            }
+
+            return directoryPath;
+        }
+
+        private static string CreateVeryLongDirectoryPath(string projectRoot)
+        {
+            Assert.That(projectRoot, Is.Not.Empty);
+
+            string directoryPath = Path.Combine(projectRoot, "Assets");
+            int segmentIndex = 0;
+            while (directoryPath.Length < WindowsLegacyMaxPathLength)
+            {
+                directoryPath = Path.Combine(directoryPath, "LongDirectorySegment" + segmentIndex.ToString("D2"));
+                segmentIndex++;
+            }
+
+            return directoryPath;
+        }
+
+        private static string ToWindowsExtendedLengthPath(string path)
+        {
+            Assert.That(path, Is.Not.Empty);
+
+            string fullPath = Path.GetFullPath(path);
+            if (fullPath.StartsWith(WindowsExtendedLengthPathPrefix, StringComparison.Ordinal))
+            {
+                return fullPath;
+            }
+
+            if (fullPath.StartsWith(WindowsUncPathPrefix, StringComparison.Ordinal))
+            {
+                return WindowsExtendedLengthUncPathPrefix + fullPath.Substring(WindowsUncPathPrefix.Length);
+            }
+
+            return WindowsExtendedLengthPathPrefix + fullPath;
         }
 
         private sealed class RecordingMigrationProgress : IProgress<ThirdPartyToolMigrationProgress>

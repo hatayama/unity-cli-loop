@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             foreach (string csharpFilePath in inventory.CSharpFilePaths)
             {
-                string source = File.ReadAllText(csharpFilePath);
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source) &&
                     !ThirdPartyToolMigrationRules.ContainsLegacyTypeAliasReference(source, legacyToolInfoAliases))
                 {
@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 assemblyUsage,
                 changes,
                 removedPlayerLoopTimingSignaturesByAssemblyDirectory,
-                File.ReadAllText);
+                ThirdPartyToolMigrationFileAccess.ReadAllText);
 
             foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
             {
@@ -158,7 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     out requiresApplicationReference,
                     out requiresDomainReference,
                     out requiresFirstPartyScreenshotReference);
-                string source = File.ReadAllText(asmdefFilePath);
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(asmdefFilePath);
                 if (!hasAssemblyMigrationRequirement &&
                     !ThirdPartyToolMigrationRules.ContainsLegacyMigrationCandidateText(source))
                 {

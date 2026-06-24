@@ -84,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return false;
                 }
 
-                string source = File.ReadAllText(csharpFilePath);
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
                 if (ContainsFastCSharpMigrationTarget(source))
                 {
                     return true;
@@ -320,7 +320,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return false;
                 }
 
-                string source = File.ReadAllText(asmdefFilePath);
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(asmdefFilePath);
                 if (ContainsFastAsmdefMigrationTarget(source))
                 {
                     return true;
