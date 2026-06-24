@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.38](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.37...cli-v3.0.0-beta.38) (2026-06-22)
+
+
+### Bug Fixes
+
+* Keep V3 CLI JSON output compatible with V2 ([#1391](https://github.com/hatayama/unity-cli-loop/issues/1391)) ([d07ffa2](https://github.com/hatayama/unity-cli-loop/commit/d07ffa204fbc864eb5b0c0db891baf8e277889ae))
+* Make V3 migration safer and easier to run ([#1386](https://github.com/hatayama/unity-cli-loop/issues/1386)) ([03087ce](https://github.com/hatayama/unity-cli-loop/commit/03087ce3b9df4255e5a867195a939ac490d687ae))
+
 ## [3.0.0-beta.37](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.36...cli-v3.0.0-beta.37) (2026-06-21)
 
 
