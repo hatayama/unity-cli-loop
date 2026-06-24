@@ -79,6 +79,28 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return File.Exists(GetFileSystemPath(filePath));
         }
 
+        internal static long GetLength(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            FileInfo fileInfo = new(GetFileSystemPath(filePath));
+            return fileInfo.Length;
+        }
+
+        internal static DateTime GetLastWriteTimeUtc(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            return File.GetLastWriteTimeUtc(GetFileSystemPath(filePath));
+        }
+
+        internal static FileStream OpenRead(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            return File.OpenRead(GetFileSystemPath(filePath));
+        }
+
         internal static void Move(string sourceFilePath, string destinationFilePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(sourceFilePath), "sourceFilePath must not be null or empty");
