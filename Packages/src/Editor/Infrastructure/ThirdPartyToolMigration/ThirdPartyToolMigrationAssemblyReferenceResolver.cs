@@ -269,7 +269,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static bool TryReadJsonObjectFromFile(string filePath, out JObject jsonObject)
         {
-            return TryReadJsonObjectForMigration(filePath, File.ReadAllText, out jsonObject);
+            return TryReadJsonObjectForMigration(
+                filePath,
+                ThirdPartyToolMigrationFileAccess.ReadAllText,
+                out jsonObject);
         }
 
         internal static bool TryReadJsonObjectFromCache(

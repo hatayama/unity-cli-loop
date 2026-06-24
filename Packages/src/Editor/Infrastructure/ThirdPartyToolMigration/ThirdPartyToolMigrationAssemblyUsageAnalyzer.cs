@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             foreach (string csharpFilePath in csharpFilePaths)
             {
-                string source = File.ReadAllText(csharpFilePath);
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
                 sourceByCSharpFilePath.Add(csharpFilePath, source);
                 if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
                 {

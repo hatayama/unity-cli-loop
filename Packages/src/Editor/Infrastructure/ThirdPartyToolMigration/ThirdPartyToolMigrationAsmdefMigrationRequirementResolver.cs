@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 out requiresApplicationReference,
                 out requiresDomainReference,
                 out requiresFirstPartyScreenshotReference);
-            string source = File.ReadAllText(asmdefFilePath);
+            string source = ThirdPartyToolMigrationFileAccess.ReadAllText(asmdefFilePath);
             if (!hasAssemblyMigrationRequirement &&
                 !ThirdPartyToolMigrationRules.ContainsLegacyMigrationCandidateText(source))
             {
