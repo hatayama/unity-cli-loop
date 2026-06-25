@@ -341,33 +341,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(methodNameIndex >= 0, "methodNameIndex must not be negative");
 
-            int index = methodNameIndex - 1;
-            while (index >= 0 && char.IsWhiteSpace(source[index]))
-            {
-                index--;
-            }
+            int index = SkipWhitespaceBackward(source, methodNameIndex - 1);
 
             if (index < 0 || source[index] != '.')
             {
                 return string.Empty;
             }
 
-            index--;
-            while (index >= 0 && char.IsWhiteSpace(source[index]))
-            {
-                index--;
-            }
-
-            if (index >= 0 && (source[index] == '?' || source[index] == '!'))
-            {
-                index--;
-                while (index >= 0 && char.IsWhiteSpace(source[index]))
-                {
-                    index--;
-                }
-            }
+            index = SkipNullableMemberAccessorSuffix(source, index - 1);
 
             int expressionEndIndex = index + 1;
+            index = ReadMemberTargetStartIndex(source, index);
+
+            return source.Substring(index + 1, expressionEndIndex - index - 1).Trim();
+        }
+
+        private static int SkipNullableMemberAccessorSuffix(string source, int index)
+        {
+            index = SkipWhitespaceBackward(source, index);
+            if (index < 0 || (source[index] != '?' && source[index] != '!'))
+            {
+                return index;
+            }
+
+            return SkipWhitespaceBackward(source, index - 1);
+        }
+
+        private static int ReadMemberTargetStartIndex(string source, int index)
+        {
             while (index >= 0)
             {
                 if (IsIdentifierCharacter(source[index]) || source[index] == '.')
@@ -385,7 +386,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 break;
             }
 
-            return source.Substring(index + 1, expressionEndIndex - index - 1).Trim();
+            return index;
         }
     }
 }

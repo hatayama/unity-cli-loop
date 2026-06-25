@@ -56,16 +56,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private object GetSerializedPropertyValue(SerializedProperty property)
         {
+            if (property.propertyType == SerializedPropertyType.ObjectReference)
+            {
+                return GetObjectReferenceValue(property);
+            }
+
+            if (property.propertyType == SerializedPropertyType.Enum)
+            {
+                return property.enumNames[property.enumValueIndex];
+            }
+
+            if (property.propertyType == SerializedPropertyType.Integer ||
+                property.propertyType == SerializedPropertyType.LayerMask)
+            {
+                return property.intValue;
+            }
+
+            if (IsPrimitiveSerializedPropertyType(property.propertyType))
+            {
+                return GetPrimitiveSerializedPropertyValue(property);
+            }
+
+            return IsUnityStructSerializedPropertyType(property.propertyType)
+                ? GetUnityStructSerializedPropertyValue(property)
+                : null;
+        }
+
+        private static bool IsPrimitiveSerializedPropertyType(SerializedPropertyType propertyType)
+        {
+            return propertyType == SerializedPropertyType.Boolean ||
+                propertyType == SerializedPropertyType.Float ||
+                propertyType == SerializedPropertyType.String;
+        }
+
+        private static bool IsUnityStructSerializedPropertyType(SerializedPropertyType propertyType)
+        {
+            return propertyType == SerializedPropertyType.Color ||
+                propertyType == SerializedPropertyType.Vector2 ||
+                propertyType == SerializedPropertyType.Vector3 ||
+                propertyType == SerializedPropertyType.Vector4 ||
+                propertyType == SerializedPropertyType.Rect ||
+                propertyType == SerializedPropertyType.Bounds ||
+                propertyType == SerializedPropertyType.Quaternion;
+        }
+
+        private static object GetPrimitiveSerializedPropertyValue(SerializedProperty property)
+        {
             switch (property.propertyType)
             {
-                case SerializedPropertyType.Integer:
-                    return property.intValue;
                 case SerializedPropertyType.Boolean:
                     return property.boolValue;
                 case SerializedPropertyType.Float:
                     return property.floatValue;
-                case SerializedPropertyType.String:
+                default:
+                    Debug.Assert(
+                        property.propertyType == SerializedPropertyType.String,
+                        "Primitive property serialization only supports bool, float, and string.");
                     return property.stringValue;
+            }
+        }
+
+        private static object GetUnityStructSerializedPropertyValue(SerializedProperty property)
+        {
+            switch (property.propertyType)
+            {
                 case SerializedPropertyType.Color:
                     return property.colorValue;
                 case SerializedPropertyType.Vector2:
@@ -78,16 +132,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return property.rectValue;
                 case SerializedPropertyType.Bounds:
                     return property.boundsValue;
-                case SerializedPropertyType.Quaternion:
-                    return property.quaternionValue;
-                case SerializedPropertyType.Enum:
-                    return property.enumNames[property.enumValueIndex];
-                case SerializedPropertyType.LayerMask:
-                    return property.intValue;
-                case SerializedPropertyType.ObjectReference:
-                    return GetObjectReferenceValue(property);
                 default:
-                    return null; // Unsupported property types
+                    Debug.Assert(
+                        property.propertyType == SerializedPropertyType.Quaternion,
+                        "Unity struct property serialization only supports Unity value structs.");
+                    return property.quaternionValue;
             }
         }
 

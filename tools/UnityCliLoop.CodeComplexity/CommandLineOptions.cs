@@ -165,7 +165,7 @@ namespace UnityCliLoop.CodeComplexity
                 "",
                 "Options:",
                 "  --root <path>                         Repository root. Defaults to current directory.",
-                "  --max-complexity <number>             CA1502 threshold. Defaults to 25.",
+                "  --max-complexity <number>             CA1502 threshold. Defaults to 15.",
                 "  --include-non-production true|false   Include Assets and tests sources. Defaults to false.",
                 "  --format table|json                   Output format. Defaults to table.",
                 "  --fail-on-exceeded true|false         Exit 1 when CA1502 diagnostics exist. Defaults to false.");

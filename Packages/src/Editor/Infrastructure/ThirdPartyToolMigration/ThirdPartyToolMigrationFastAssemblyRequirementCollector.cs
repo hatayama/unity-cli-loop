@@ -407,76 +407,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     asmdefDirectories,
                     assemblyReferenceDirectories,
                     projectRoot);
-                string[] assemblyDeclaredTypeNames =
-                    GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory);
-                string[] currentFirstPartyToolsAssemblyAliases =
-                    GetAssemblyScopedNames(
-                        assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
-                        assemblyDirectory);
-                bool hasLegacyEditorWindowCaptureUtilitySourceTarget =
-                    ThirdPartyToolMigrationRules.ContainsLegacyEditorWindowCaptureUtilityMigrationForAssembly(
-                        source,
-                        legacyAssemblyDirectories.Contains(assemblyDirectory),
-                        assemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory),
-                        assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
-                        Array.Empty<string>(),
-                        currentFirstPartyToolsAssemblyAliases,
-                        assemblyDeclaredTypeNames);
-                bool hasLegacyScreenshotSourceTarget =
-                    ThirdPartyToolMigrationRules.ContainsLegacyFirstPartyScreenshotApiForAssembly(
-                        source,
-                        legacyAssemblyDirectories.Contains(assemblyDirectory) ||
-                        assemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory) ||
-                        ThirdPartyToolMigrationRules.ContainsCurrentToolContractsApi(source),
-                        Array.Empty<string>(),
-                        assemblyDeclaredTypeNames) ||
-                    hasLegacyEditorWindowCaptureUtilitySourceTarget;
-                bool hasCurrentScreenshotReferenceRequirement =
-                    ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotApiForAssembly(
-                        source,
-                        assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
-                        currentFirstPartyToolsAssemblyAliases,
-                        assemblyDeclaredTypeNames);
-                bool hasCurrentFirstPartyToolsContractSourceTarget =
-                    ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotContractApiForAssembly(
-                        source,
-                        assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
-                        currentFirstPartyToolsAssemblyAliases,
-                        assemblyDeclaredTypeNames);
-                bool hasCurrentRenderingCaptureSourceTarget =
-                    ThirdPartyToolMigrationRules.ContainsCurrentCaptureGameRenderingDeconstructionMigrationForAssembly(
-                        source,
-                        assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
-                        currentFirstPartyToolsAssemblyAliases,
-                        assemblyDeclaredTypeNames);
-                if (hasLegacyScreenshotSourceTarget ||
-                    hasCurrentFirstPartyToolsContractSourceTarget ||
-                    hasCurrentScreenshotReferenceRequirement)
-                {
-                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (hasCurrentRenderingCaptureSourceTarget ||
-                    hasCurrentScreenshotReferenceRequirement)
-                {
-                    firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsLegacyEditorWindowCaptureUtilityTimeoutMigrationForAssembly(
-                        source,
-                        legacyAssemblyDirectories.Contains(assemblyDirectory),
-                        assemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory),
-                        assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
-                        Array.Empty<string>(),
-                        currentFirstPartyToolsAssemblyAliases,
-                        assemblyDeclaredTypeNames))
-                {
-                    toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (hasLegacyScreenshotSourceTarget ||
-                    hasCurrentRenderingCaptureSourceTarget ||
-                    hasCurrentFirstPartyToolsContractSourceTarget)
+                bool foundMigrationTarget = CollectFastFirstPartyScreenshotRequirementsForSource(
+                    source,
+                    assemblyDirectory,
+                    legacyAssemblyDirectories,
+                    assemblyScopedCurrentToolContractsDirectories,
+                    assemblyScopedCurrentFirstPartyToolsDirectories,
+                    assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
+                    assemblyDeclaredTypeNamesByDirectory,
+                    toolContractsReferenceAssemblyDirectories,
+                    firstPartyScreenshotReferenceAssemblyDirectories);
+                if (foundMigrationTarget)
                 {
                     return true;
                 }
@@ -484,6 +425,179 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return false;
+        }
+
+        private static bool CollectFastFirstPartyScreenshotRequirementsForSource(
+            string source,
+            string assemblyDirectory,
+            HashSet<string> legacyAssemblyDirectories,
+            HashSet<string> assemblyScopedCurrentToolContractsDirectories,
+            HashSet<string> assemblyScopedCurrentFirstPartyToolsDirectories,
+            Dictionary<string, HashSet<string>> assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
+            Dictionary<string, HashSet<string>> assemblyDeclaredTypeNamesByDirectory,
+            HashSet<string> toolContractsReferenceAssemblyDirectories,
+            HashSet<string> firstPartyScreenshotReferenceAssemblyDirectories)
+        {
+            string[] assemblyDeclaredTypeNames =
+                GetAssemblyScopedNames(assemblyDeclaredTypeNamesByDirectory, assemblyDirectory);
+            string[] currentFirstPartyToolsAssemblyAliases =
+                GetAssemblyScopedNames(assemblyScopedCurrentFirstPartyToolsAliasesByDirectory, assemblyDirectory);
+            FirstPartyScreenshotRequirementScan scan = ScanFastFirstPartyScreenshotRequirement(
+                source,
+                assemblyDirectory,
+                legacyAssemblyDirectories,
+                assemblyScopedCurrentToolContractsDirectories,
+                assemblyScopedCurrentFirstPartyToolsDirectories,
+                currentFirstPartyToolsAssemblyAliases,
+                assemblyDeclaredTypeNames);
+
+            if (scan.RequiresToolContractsReference)
+            {
+                toolContractsReferenceAssemblyDirectories.Add(assemblyDirectory);
+            }
+
+            if (scan.RequiresFirstPartyScreenshotReference)
+            {
+                firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
+            }
+
+            return scan.HasMigrationTarget;
+        }
+
+        private static FirstPartyScreenshotRequirementScan ScanFastFirstPartyScreenshotRequirement(
+            string source,
+            string assemblyDirectory,
+            HashSet<string> legacyAssemblyDirectories,
+            HashSet<string> assemblyScopedCurrentToolContractsDirectories,
+            HashSet<string> assemblyScopedCurrentFirstPartyToolsDirectories,
+            string[] currentFirstPartyToolsAssemblyAliases,
+            string[] assemblyDeclaredTypeNames)
+        {
+            bool hasLegacyEditorWindowCaptureUtilitySourceTarget =
+                HasLegacyEditorWindowCaptureUtilitySourceTarget(
+                    source,
+                    assemblyDirectory,
+                    legacyAssemblyDirectories,
+                    assemblyScopedCurrentToolContractsDirectories,
+                    assemblyScopedCurrentFirstPartyToolsDirectories,
+                    currentFirstPartyToolsAssemblyAliases,
+                    assemblyDeclaredTypeNames);
+            bool hasLegacyScreenshotSourceTarget = HasLegacyScreenshotSourceTarget(
+                source,
+                assemblyDirectory,
+                legacyAssemblyDirectories,
+                assemblyScopedCurrentToolContractsDirectories,
+                assemblyDeclaredTypeNames,
+                hasLegacyEditorWindowCaptureUtilitySourceTarget);
+            bool hasCurrentScreenshotReferenceRequirement =
+                ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotApiForAssembly(
+                    source,
+                    assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
+                    currentFirstPartyToolsAssemblyAliases,
+                    assemblyDeclaredTypeNames);
+            bool hasCurrentFirstPartyToolsContractSourceTarget =
+                ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyScreenshotContractApiForAssembly(
+                    source,
+                    assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
+                    currentFirstPartyToolsAssemblyAliases,
+                    assemblyDeclaredTypeNames);
+            bool hasCurrentRenderingCaptureSourceTarget =
+                ThirdPartyToolMigrationRules.ContainsCurrentCaptureGameRenderingDeconstructionMigrationForAssembly(
+                    source,
+                    assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
+                    currentFirstPartyToolsAssemblyAliases,
+                    assemblyDeclaredTypeNames);
+            bool hasTimeoutMigration = HasLegacyEditorWindowCaptureUtilityTimeoutMigration(
+                source,
+                assemblyDirectory,
+                legacyAssemblyDirectories,
+                assemblyScopedCurrentToolContractsDirectories,
+                assemblyScopedCurrentFirstPartyToolsDirectories,
+                currentFirstPartyToolsAssemblyAliases,
+                assemblyDeclaredTypeNames);
+            return new FirstPartyScreenshotRequirementScan(
+                hasLegacyScreenshotSourceTarget ||
+                hasCurrentFirstPartyToolsContractSourceTarget ||
+                hasCurrentScreenshotReferenceRequirement ||
+                hasTimeoutMigration,
+                hasCurrentRenderingCaptureSourceTarget ||
+                hasCurrentScreenshotReferenceRequirement,
+                hasLegacyScreenshotSourceTarget ||
+                hasCurrentRenderingCaptureSourceTarget ||
+                hasCurrentFirstPartyToolsContractSourceTarget);
+        }
+
+        private static bool HasLegacyEditorWindowCaptureUtilitySourceTarget(
+            string source,
+            string assemblyDirectory,
+            HashSet<string> legacyAssemblyDirectories,
+            HashSet<string> assemblyScopedCurrentToolContractsDirectories,
+            HashSet<string> assemblyScopedCurrentFirstPartyToolsDirectories,
+            string[] currentFirstPartyToolsAssemblyAliases,
+            string[] assemblyDeclaredTypeNames)
+        {
+            return ThirdPartyToolMigrationRules.ContainsLegacyEditorWindowCaptureUtilityMigrationForAssembly(
+                source,
+                legacyAssemblyDirectories.Contains(assemblyDirectory),
+                assemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory),
+                assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
+                Array.Empty<string>(),
+                currentFirstPartyToolsAssemblyAliases,
+                assemblyDeclaredTypeNames);
+        }
+
+        private static bool HasLegacyScreenshotSourceTarget(
+            string source,
+            string assemblyDirectory,
+            HashSet<string> legacyAssemblyDirectories,
+            HashSet<string> assemblyScopedCurrentToolContractsDirectories,
+            string[] assemblyDeclaredTypeNames,
+            bool hasLegacyEditorWindowCaptureUtilitySourceTarget)
+        {
+            return ThirdPartyToolMigrationRules.ContainsLegacyFirstPartyScreenshotApiForAssembly(
+                source,
+                legacyAssemblyDirectories.Contains(assemblyDirectory) ||
+                assemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory) ||
+                ThirdPartyToolMigrationRules.ContainsCurrentToolContractsApi(source),
+                Array.Empty<string>(),
+                assemblyDeclaredTypeNames) ||
+                hasLegacyEditorWindowCaptureUtilitySourceTarget;
+        }
+
+        private static bool HasLegacyEditorWindowCaptureUtilityTimeoutMigration(
+            string source,
+            string assemblyDirectory,
+            HashSet<string> legacyAssemblyDirectories,
+            HashSet<string> assemblyScopedCurrentToolContractsDirectories,
+            HashSet<string> assemblyScopedCurrentFirstPartyToolsDirectories,
+            string[] currentFirstPartyToolsAssemblyAliases,
+            string[] assemblyDeclaredTypeNames)
+        {
+            return ThirdPartyToolMigrationRules.ContainsLegacyEditorWindowCaptureUtilityTimeoutMigrationForAssembly(
+                source,
+                legacyAssemblyDirectories.Contains(assemblyDirectory),
+                assemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory),
+                assemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
+                Array.Empty<string>(),
+                currentFirstPartyToolsAssemblyAliases,
+                assemblyDeclaredTypeNames);
+        }
+
+        private readonly struct FirstPartyScreenshotRequirementScan
+        {
+            public FirstPartyScreenshotRequirementScan(
+                bool requiresToolContractsReference,
+                bool requiresFirstPartyScreenshotReference,
+                bool hasMigrationTarget)
+            {
+                RequiresToolContractsReference = requiresToolContractsReference;
+                RequiresFirstPartyScreenshotReference = requiresFirstPartyScreenshotReference;
+                HasMigrationTarget = hasMigrationTarget;
+            }
+
+            public bool RequiresToolContractsReference { get; }
+            public bool RequiresFirstPartyScreenshotReference { get; }
+            public bool HasMigrationTarget { get; }
         }
     }
 }
