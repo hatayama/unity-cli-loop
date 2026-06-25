@@ -367,6 +367,37 @@ describe('skill install layout', () => {
     ).toBeDefined();
   });
 
+  it('should not assert when project CLI mode cannot resolve a package version during status checks', () => {
+    const projectRoot = createUnityProjectRoot();
+    const toolDir = join(
+      projectRoot,
+      'Assets',
+      'Vision',
+      'Editor',
+      'McpExtensions',
+      'FallbackTool',
+    );
+    mkdirSync(toolDir, { recursive: true });
+    writeFileSync(
+      join(toolDir, 'SKILL.md'),
+      ['---', 'name: uloop-fallback-tool', '---', '', 'Run `uloop compile`.', ''].join('\n'),
+      'utf-8',
+    );
+
+    process.chdir(projectRoot);
+
+    expect(() => getAllSkillStatuses(getTargetConfig('claude'), false, true)).not.toThrow();
+  });
+
+  it('should reject project CLI installs when the package version cannot be resolved', () => {
+    const projectRoot = createUnityProjectRoot();
+    process.chdir(projectRoot);
+
+    expect(() => installAllSkills(getTargetConfig('claude'), false, true, 'npx')).toThrow(
+      'Cannot install skills with project CLI version because Unity CLI Loop package root was not found.',
+    );
+  });
+
   it('should install run-tests skill when test framework package is missing', () => {
     const projectRoot = createUnityProjectRoot();
     writeProjectPackageVersion(projectRoot, '2.9.0');

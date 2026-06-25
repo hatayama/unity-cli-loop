@@ -163,6 +163,17 @@ describe('tool-settings-loader', () => {
       expect(saved.disabledTools).toEqual(['compile']);
       expect(saved.skillCliInvocation).toBe('npx');
     });
+
+    it('should replace array settings when saving invocation', () => {
+      writeFileSync(join(testDir, '.uloop', 'settings.tools.json'), JSON.stringify([]));
+
+      saveSkillCliInvocation('global');
+
+      const saved = JSON.parse(
+        readFileSync(join(testDir, '.uloop', 'settings.tools.json'), 'utf-8'),
+      ) as { skillCliInvocation?: string };
+      expect(saved.skillCliInvocation).toBe('global');
+    });
   });
 
   // ── isToolEnabled ──────────────────────────────────────────────

@@ -173,7 +173,6 @@ namespace io.github.hatayama.uLoopMCP
         private Toggle _groupSkillsToggle;
         private Label _groupSkillsLabel;
         private Toggle _projectCliVersionToggle;
-        private Label _projectCliVersionLabel;
         private VisualElement _skillsTargetList;
         private VisualElement _skillsStatusDivider;
         private Label _skillsStatusLabel;
@@ -195,7 +194,6 @@ namespace io.github.hatayama.uLoopMCP
         private bool _isSkillsTargetFieldInitialized;
         private bool _shouldUseFirstInstallSkillsUi;
         private bool _installSkillsFlat;
-        private bool _projectCliVersionChangedByToggle;
         [SerializeField]
         private string _lastSeenSetupWizardVersionBeforeOpen = string.Empty;
         private IVisualElementScheduledItem _initialRefreshScheduledItem;
@@ -258,7 +256,6 @@ namespace io.github.hatayama.uLoopMCP
             _groupSkillsToggle = rootVisualElement.Q<Toggle>("group-skills-toggle");
             _groupSkillsLabel = rootVisualElement.Q<Label>("group-skills-label");
             _projectCliVersionToggle = rootVisualElement.Q<Toggle>("project-cli-version-toggle");
-            _projectCliVersionLabel = rootVisualElement.Q<Label>("project-cli-version-label");
             _skillsTargetList = rootVisualElement.Q<VisualElement>("skills-target-list");
             _skillsStatusDivider = rootVisualElement.Q<VisualElement>("skills-status-divider");
             _skillsStatusLabel = rootVisualElement.Q<Label>("skills-status-label");
@@ -348,8 +345,6 @@ namespace io.github.hatayama.uLoopMCP
             _projectCliVersionToggle.RegisterValueChangedCallback(evt =>
             {
                 evt.StopPropagation();
-                _projectCliVersionChangedByToggle = true;
-                _projectCliVersionToggle.schedule.Execute(() => _projectCliVersionChangedByToggle = false);
                 HandleProjectCliVersionChanged(evt.newValue);
             });
             _projectCliVersionRow.RegisterCallback<ClickEvent>(HandleProjectCliVersionRowClicked);
@@ -1015,9 +1010,8 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            if (_projectCliVersionChangedByToggle)
+            if (evt.target is VisualElement targetElement && _projectCliVersionToggle.Contains(targetElement))
             {
-                _projectCliVersionChangedByToggle = false;
                 return;
             }
 

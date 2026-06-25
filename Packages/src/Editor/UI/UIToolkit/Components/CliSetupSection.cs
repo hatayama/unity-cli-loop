@@ -19,13 +19,11 @@ namespace io.github.hatayama.uLoopMCP
         private readonly Label _groupSkillsLabel;
         private readonly VisualElement _projectCliVersionRow;
         private readonly Toggle _projectCliVersionToggle;
-        private readonly Label _projectCliVersionLabel;
         private readonly Button _installSkillsButton;
         private readonly VisualElement _skillsSubsection;
 
         private CliSetupData _lastData;
         private bool _isTargetFieldInitialized;
-        private bool _projectCliVersionChangedByToggle;
 
         public event Action OnRefreshCliVersion;
         public event Action OnInstallCli;
@@ -50,7 +48,6 @@ namespace io.github.hatayama.uLoopMCP
             _groupSkillsLabel = root.Q<Label>("group-skills-label");
             _projectCliVersionRow = root.Q<VisualElement>("project-cli-version-row");
             _projectCliVersionToggle = root.Q<Toggle>("project-cli-version-toggle");
-            _projectCliVersionLabel = root.Q<Label>("project-cli-version-label");
             _installSkillsButton = root.Q<Button>("install-skills-button");
             _skillsSubsection = root.Q<VisualElement>("skills-subsection");
         }
@@ -70,8 +67,6 @@ namespace io.github.hatayama.uLoopMCP
             _projectCliVersionToggle.RegisterValueChangedCallback(evt =>
             {
                 evt.StopPropagation();
-                _projectCliVersionChangedByToggle = true;
-                _projectCliVersionToggle.schedule.Execute(() => _projectCliVersionChangedByToggle = false);
                 OnUseProjectCliVersionChanged?.Invoke(evt.newValue);
             });
             _projectCliVersionRow.RegisterCallback<ClickEvent>(HandleProjectCliVersionRowClicked);
@@ -325,9 +320,8 @@ namespace io.github.hatayama.uLoopMCP
                 return;
             }
 
-            if (_projectCliVersionChangedByToggle)
+            if (evt.target is VisualElement targetElement && _projectCliVersionToggle.Contains(targetElement))
             {
-                _projectCliVersionChangedByToggle = false;
                 return;
             }
 

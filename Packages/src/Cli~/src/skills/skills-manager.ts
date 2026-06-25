@@ -783,12 +783,13 @@ export function installAllSkills(
   };
 
   const cliInvocation = resolveSkillCliInvocation(global, requestedInvocation);
+  const baseDir = getSkillsBaseDir(target, global);
+  ensurePackageVersionForNpxInstall(cliInvocation);
   if (!global && requestedInvocation !== undefined) {
     saveSkillCliInvocation(requestedInvocation);
   }
 
   const allSkills = collectAllSkills(cliInvocation);
-  const baseDir = getSkillsBaseDir(target, global);
   result.deprecatedRemoved = removeDeprecatedSkillDirs(baseDir);
   if (groupManagedSkills) {
     migrateLegacyManagedSkills(
@@ -1015,12 +1016,32 @@ function formatSkillsForCliInvocation(
     return skills;
   }
 
-  assert(packageVersion !== null, 'packageVersion must be resolved for npx skill invocation');
+  if (packageVersion === null) {
+    return skills;
+  }
+
   return skills.map((skill) => ({
     ...skill,
     content: formatSkillContentForNpx(skill.content, packageVersion),
     additionalFiles: formatAdditionalSkillFilesForNpx(skill.additionalFiles, packageVersion),
   }));
+}
+
+function ensurePackageVersionForNpxInstall(cliInvocation: SkillCliInvocation): void {
+  if (cliInvocation === 'global') {
+    return;
+  }
+
+  const projectRoot = findUnityProjectRoot();
+  const packageRoot = projectRoot ? resolvePackageRoot(projectRoot) : null;
+  if (packageRoot !== null) {
+    readPackageVersion(packageRoot);
+    return;
+  }
+
+  throw new Error(
+    `Cannot install skills with project CLI version because ${PRODUCT_DISPLAY_NAME} package root was not found.`,
+  );
 }
 
 function formatAdditionalSkillFilesForNpx(
