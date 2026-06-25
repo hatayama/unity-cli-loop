@@ -114,9 +114,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ToggleDescription_WhenSameToolSelectedTwice_ShowsThenHidesDescriptionPopup()
+        public void ToggleDescription_WhenSameToolSelectedTwice_ShowsThenHidesDescriptionOverlay()
         {
-            // Tests that the help toggle opens and closes the description popup.
+            // Tests that the help toggle opens and closes the overlay dialog.
             VisualElement root = CreateRootElement();
             ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
@@ -125,23 +125,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileDescription: "Compile description");
 
             section.Update(data);
-            VisualElement popup = root.Q<VisualElement>("tool-description-popup");
+            VisualElement overlay = root.Q<VisualElement>("tool-description-overlay");
+            VisualElement dialog = root.Q<VisualElement>("tool-description-dialog");
 
-            section.ToggleDescriptionPopupForTool("compile");
+            section.ToggleDescriptionDialogForTool("compile");
 
-            Assert.AreEqual(DisplayStyle.Flex, popup.style.display.value);
-            Assert.AreEqual("compile", root.Q<Label>("tool-description-popup-title").text);
-            Assert.AreEqual("Compile description", root.Q<Label>("tool-description-popup-body").text);
+            Assert.AreEqual(DisplayStyle.Flex, overlay.style.display.value);
+            Assert.IsNotNull(dialog);
+            Assert.AreEqual("compile", root.Q<Label>("tool-description-dialog-title").text);
+            Assert.AreEqual("Compile description", root.Q<Label>("tool-description-dialog-body").text);
 
-            section.ToggleDescriptionPopupForTool("compile");
+            section.ToggleDescriptionDialogForTool("compile");
 
-            Assert.AreEqual(DisplayStyle.None, popup.style.display.value);
+            Assert.AreEqual(DisplayStyle.None, overlay.style.display.value);
         }
 
         [Test]
-        public void ToggleDescription_WhenAnotherToolIsSelected_SwitchesDescriptionPopup()
+        public void ToggleDescription_WhenShown_AddsOverlayOutsideToolList()
         {
-            // Tests that selecting another help toggle moves the popup selection.
+            // Tests that the description dialog overlays the settings window instead of taking space in the list.
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new(root);
+            ToolSettingsSectionData data = CreateData(
+                compileEnabled: true,
+                includeGetLogs: false,
+                compileDescription: "Compile description");
+
+            section.Update(data);
+            section.ToggleDescriptionDialogForTool("compile");
+
+            VisualElement overlay = root.Q<VisualElement>("tool-description-overlay");
+            VisualElement toolListContainer = root.Q<VisualElement>("tool-list-container");
+
+            Assert.AreEqual(DisplayStyle.Flex, overlay.style.display.value);
+            Assert.AreEqual("window-root", overlay.parent.name);
+            Assert.IsNull(toolListContainer.Q<VisualElement>("tool-description-overlay"));
+        }
+
+        [Test]
+        public void ToggleDescription_WhenAnotherToolIsSelected_SwitchesDescriptionDialog()
+        {
+            // Tests that selecting another help toggle moves the dialog selection.
             VisualElement root = CreateRootElement();
             ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
@@ -156,13 +180,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             VisualElement getLogsRow = BindToolListRow(root, 2);
             Button getLogsInfoButton = getLogsRow.Q<Button>("tool-list-row-info-toggle");
 
-            section.ToggleDescriptionPopupForTool("compile");
-            section.ToggleDescriptionPopupForTool("get-logs");
+            section.ToggleDescriptionDialogForTool("compile");
+            section.ToggleDescriptionDialogForTool("get-logs");
             listView.bindItem(compileRow, 1);
             listView.bindItem(getLogsRow, 2);
 
-            Assert.AreEqual("get-logs", root.Q<Label>("tool-description-popup-title").text);
-            Assert.AreEqual("Logs description", root.Q<Label>("tool-description-popup-body").text);
+            Assert.AreEqual("get-logs", root.Q<Label>("tool-description-dialog-title").text);
+            Assert.AreEqual("Logs description", root.Q<Label>("tool-description-dialog-body").text);
             Assert.IsFalse(compileRow.Q<Button>("tool-list-row-info-toggle").ClassListContains("unity-cli-loop-tool-toggle-row__info-toggle--selected"));
             Assert.IsTrue(getLogsInfoButton.ClassListContains("unity-cli-loop-tool-toggle-row__info-toggle--selected"));
         }
@@ -218,20 +242,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static VisualElement CreateRootElement()
         {
             VisualElement root = new();
-            Foldout foldout = new()            {
+            VisualElement windowRoot = new()
+            {
+                name = "window-root"
+            };
+            Foldout foldout = new()
+            {
                 name = "tool-settings-foldout"
             };
-            VisualElement container = new()            {
+            VisualElement container = new()
+            {
                 name = "tool-list-container"
             };
 
-            VisualElement toolSettingsInfoContainer = new()            {
+            VisualElement toolSettingsInfoContainer = new()
+            {
                 name = "tool-settings-info-container"
             };
 
             foldout.Add(toolSettingsInfoContainer);
             foldout.Add(container);
-            root.Add(foldout);
+            windowRoot.Add(foldout);
+            root.Add(windowRoot);
             return root;
         }
 

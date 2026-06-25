@@ -11,6 +11,7 @@
 
 /* Main Container */
 .unity-cli-loop-window-root {
+    position: relative;
     flex-direction: column;
     flex-grow: 1;
     flex-shrink: 1;
@@ -381,27 +382,40 @@
     padding-left: 0;
 }
 
-.unity-cli-loop-tool-description-popup {
-    margin: 4px 6px 6px 14px;
-    padding: 6px 8px;
-    border-width: 1px;
-    border-color: rgba(255, 255, 255, 0.16);
-    border-radius: 3px;
-    background-color: rgba(0, 0, 0, 0.18);
+.unity-cli-loop-tool-description-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background-color: rgba(0, 0, 0, 0.34);
 }
 
-.unity-cli-loop-tool-description-popup__header {
+.unity-cli-loop-tool-description-dialog {
+    width: 280px;
+    max-width: 360px;
+    padding: 10px 12px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.24);
+    border-radius: 3px;
+    background-color: rgb(48, 48, 48);
+}
+
+.unity-cli-loop-tool-description-dialog__header {
     flex-direction: row;
     align-items: center;
-    margin-bottom: 3px;
+    margin-bottom: 6px;
 }
 
-.unity-cli-loop-tool-description-popup__title {
+.unity-cli-loop-tool-description-dialog__title {
     flex-grow: 1;
     -unity-font-style: bold;
 }
 
-.unity-cli-loop-tool-description-popup__close-button {
+.unity-cli-loop-tool-description-dialog__close-button {
     width: 18px;
     height: 18px;
     min-width: 18px;
@@ -409,7 +423,7 @@
     margin-left: 6px;
 }
 
-.unity-cli-loop-tool-description-popup__body {
+.unity-cli-loop-tool-description-dialog__body {
     white-space: normal;
     color: #cfcfcf;
 }

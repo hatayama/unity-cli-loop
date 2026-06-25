@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly Foldout _foldout;
         private readonly VisualElement _toolSettingsInfoContainer;
         private readonly VisualElement _toolListContainer;
-        private readonly VisualElement _descriptionPopup;
+        private readonly VisualElement _descriptionOverlay;
         private readonly Label _descriptionTitleLabel;
         private readonly Label _descriptionBodyLabel;
         private readonly Button _descriptionCloseButton;
@@ -44,16 +44,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _toolListContainer = root.Q<VisualElement>("tool-list-container");
             Debug.Assert(_toolListContainer != null, "tool-list-container must not be null");
 
-            (VisualElement Popup, Label TitleLabel, Label BodyLabel, Button CloseButton) descriptionPopup =
-                CreateToolDescriptionPopup();
-            _descriptionPopup = descriptionPopup.Popup;
-            _descriptionTitleLabel = descriptionPopup.TitleLabel;
-            _descriptionBodyLabel = descriptionPopup.BodyLabel;
-            _descriptionCloseButton = descriptionPopup.CloseButton;
-            _descriptionCloseButton.clicked += HideDescriptionPopupAndRefresh;
+            VisualElement descriptionOverlayRoot = root.Q<VisualElement>("window-root") ?? root;
+            (VisualElement Overlay, Label TitleLabel, Label BodyLabel, Button CloseButton) descriptionOverlay =
+                CreateToolDescriptionOverlay();
+            _descriptionOverlay = descriptionOverlay.Overlay;
+            _descriptionTitleLabel = descriptionOverlay.TitleLabel;
+            _descriptionBodyLabel = descriptionOverlay.BodyLabel;
+            _descriptionCloseButton = descriptionOverlay.CloseButton;
+            _descriptionCloseButton.clicked += HideDescriptionDialogAndRefresh;
             _toolListStatusLabel = CreateToolListStatusLabel();
             _toolListView = CreateToolListView();
-            _toolListContainer.Add(_descriptionPopup);
+            descriptionOverlayRoot.Add(_descriptionOverlay);
             _toolListContainer.Add(_toolListStatusLabel);
             _toolListContainer.Add(_toolListView);
             ClearToolList();
@@ -130,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _togglesByToolName.Clear();
             _layoutSignature = string.Empty;
 
-            HideDescriptionPopup();
+            HideDescriptionDialog();
             SetToolListStatus("Loading tools...");
             ViewDataBinder.SetVisible(_toolListView, false);
             SetToolSettingsInfoVisible(false);
@@ -146,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _togglesByToolName.Clear();
             _layoutSignature = string.Empty;
 
-            HideDescriptionPopup();
+            HideDescriptionDialog();
             SetToolListStatus("Tool registry not yet initialized. Start the server first.");
             ViewDataBinder.SetVisible(_toolListView, false);
             SetToolSettingsInfoVisible(false);
@@ -162,7 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _togglesByToolName.Clear();
             _layoutSignature = string.Empty;
 
-            HideDescriptionPopup();
+            HideDescriptionDialog();
             ViewDataBinder.SetVisible(_toolListStatusLabel, false);
             ViewDataBinder.SetVisible(_toolListView, false);
             SetToolSettingsInfoVisible(false);
@@ -222,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _toolListRows.Clear();
             _togglesByToolName.Clear();
-            HideDescriptionPopup();
+            HideDescriptionDialog();
 
             if (data.BuiltInTools.Length > 0)
             {
@@ -298,34 +299,39 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             builder.Append(';');
         }
 
-        private static (VisualElement Popup, Label TitleLabel, Label BodyLabel, Button CloseButton) CreateToolDescriptionPopup()
+        private static (VisualElement Overlay, Label TitleLabel, Label BodyLabel, Button CloseButton) CreateToolDescriptionOverlay()
         {
-            VisualElement popup = new();
-            popup.name = "tool-description-popup";
-            popup.AddToClassList("unity-cli-loop-tool-description-popup");
+            VisualElement overlay = new();
+            overlay.name = "tool-description-overlay";
+            overlay.AddToClassList("unity-cli-loop-tool-description-overlay");
+
+            VisualElement dialog = new();
+            dialog.name = "tool-description-dialog";
+            dialog.AddToClassList("unity-cli-loop-tool-description-dialog");
 
             VisualElement header = new();
-            header.AddToClassList("unity-cli-loop-tool-description-popup__header");
+            header.AddToClassList("unity-cli-loop-tool-description-dialog__header");
 
             Label titleLabel = new();
-            titleLabel.name = "tool-description-popup-title";
-            titleLabel.AddToClassList("unity-cli-loop-tool-description-popup__title");
+            titleLabel.name = "tool-description-dialog-title";
+            titleLabel.AddToClassList("unity-cli-loop-tool-description-dialog__title");
 
             Button closeButton = new();
-            closeButton.name = "tool-description-popup-close-button";
+            closeButton.name = "tool-description-dialog-close-button";
             closeButton.text = "x";
-            closeButton.AddToClassList("unity-cli-loop-tool-description-popup__close-button");
+            closeButton.AddToClassList("unity-cli-loop-tool-description-dialog__close-button");
 
             Label bodyLabel = new();
-            bodyLabel.name = "tool-description-popup-body";
-            bodyLabel.AddToClassList("unity-cli-loop-tool-description-popup__body");
+            bodyLabel.name = "tool-description-dialog-body";
+            bodyLabel.AddToClassList("unity-cli-loop-tool-description-dialog__body");
 
             header.Add(titleLabel);
             header.Add(closeButton);
-            popup.Add(header);
-            popup.Add(bodyLabel);
-            ViewDataBinder.SetVisible(popup, false);
-            return (popup, titleLabel, bodyLabel, closeButton);
+            dialog.Add(header);
+            dialog.Add(bodyLabel);
+            overlay.Add(dialog);
+            ViewDataBinder.SetVisible(overlay, false);
+            return (overlay, titleLabel, bodyLabel, closeButton);
         }
 
         private static Label CreateToolListStatusLabel()
@@ -406,7 +412,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     return;
                 }
 
-                item.Owner?.ToggleDescriptionPopupForTool(item.ToolName);
+                item.Owner?.ToggleDescriptionDialogForTool(item.ToolName);
             });
             row.Add(infoButton);
             return row;
@@ -490,13 +496,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _toolListView.RefreshItems();
         }
 
-        internal void ToggleDescriptionPopupForTool(string toolName)
+        internal void ToggleDescriptionDialogForTool(string toolName)
         {
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
 
             ToolListRowData item = FindToolRow(toolName);
             Debug.Assert(item != null, "tool row must exist");
-            ToggleDescriptionPopupForRow(item);
+            ToggleDescriptionDialogForRow(item);
         }
 
         private ToolListRowData FindToolRow(string toolName)
@@ -515,22 +521,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return null;
         }
 
-        private void ToggleDescriptionPopupForRow(ToolListRowData item)
+        private void ToggleDescriptionDialogForRow(ToolListRowData item)
         {
             Debug.Assert(item != null, "item must not be null");
 
             if (_selectedDescriptionToolName == item.ToolName)
             {
-                HideDescriptionPopup();
+                HideDescriptionDialog();
                 RefreshToolListView();
                 return;
             }
 
-            ShowDescriptionPopup(item);
+            ShowDescriptionDialog(item);
             RefreshToolListView();
         }
 
-        private void ShowDescriptionPopup(ToolListRowData item)
+        private void ShowDescriptionDialog(ToolListRowData item)
         {
             Debug.Assert(item != null, "item must not be null");
             Debug.Assert(!string.IsNullOrWhiteSpace(item.SkillDescription), "item must have a skill description");
@@ -538,20 +544,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _selectedDescriptionToolName = item.ToolName;
             _descriptionTitleLabel.text = item.ToolName;
             _descriptionBodyLabel.text = item.SkillDescription;
-            ViewDataBinder.SetVisible(_descriptionPopup, true);
+            ViewDataBinder.SetVisible(_descriptionOverlay, true);
         }
 
-        private void HideDescriptionPopup()
+        private void HideDescriptionDialog()
         {
             _selectedDescriptionToolName = string.Empty;
             _descriptionTitleLabel.text = string.Empty;
             _descriptionBodyLabel.text = string.Empty;
-            ViewDataBinder.SetVisible(_descriptionPopup, false);
+            ViewDataBinder.SetVisible(_descriptionOverlay, false);
         }
 
-        private void HideDescriptionPopupAndRefresh()
+        private void HideDescriptionDialogAndRefresh()
         {
-            HideDescriptionPopup();
+            HideDescriptionDialog();
             RefreshToolListView();
         }
 
