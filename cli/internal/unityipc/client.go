@@ -229,86 +229,165 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 			progress(ProgressEventAccepted)
 		}
 
-		cancelAccept()
-		heartbeatSilence := client.getHeartbeatSilence(response.ULoop.HeartbeatIntervalSeconds)
-		absoluteDeadline := time.Now().Add(client.getResponseTimeout())
-		if err := applyPostAcceptDeadline(conn, heartbeatSilence, absoluteDeadline); err != nil {
-			timing.Total = time.Since(startedAt)
-			outcome.Timing = timing
-			return outcome, err
+		return client.readAcceptedResponse(
+			ctx,
+			conn,
+			reader,
+			progress,
+			cancelAccept,
+			startedAt,
+			timing,
+			outcome,
+			response,
+		)
+	}
+
+	return finishRPCResponse(response, outcome, timing, startedAt)
+}
+
+func (client *Client) readAcceptedResponse(
+	ctx context.Context,
+	conn net.Conn,
+	reader *bufio.Reader,
+	progress ProgressFunc,
+	cancelAccept context.CancelFunc,
+	startedAt time.Time,
+	timing UnitySendTiming,
+	outcome UnitySendOutcome,
+	response rpcResponse,
+) (UnitySendOutcome, error) {
+	cancelAccept()
+	heartbeatSilence := client.getHeartbeatSilence(response.ULoop.HeartbeatIntervalSeconds)
+	absoluteDeadline := time.Now().Add(client.getResponseTimeout())
+	if err := applyPostAcceptDeadline(conn, heartbeatSilence, absoluteDeadline); err != nil {
+		return finishOutcomeWithError(outcome, timing, startedAt, err)
+	}
+	stopCancelWatcher := watchConnectionCancellation(ctx, conn)
+	defer stopCancelWatcher()
+
+	for {
+		nextResponse, err := readRPCResponse(reader, &timing)
+		if err != nil {
+			return client.finishAcceptedReadError(
+				ctx,
+				outcome,
+				timing,
+				startedAt,
+				heartbeatSilence,
+				absoluteDeadline,
+				err,
+			)
 		}
-		stopCancelWatcher := watchConnectionCancellation(ctx, conn)
-		defer stopCancelWatcher()
-
-		for {
-			response, err = readRPCResponse(reader, &timing)
-			if err != nil {
-				timing.Total = time.Since(startedAt)
-				outcome.Timing = timing
-				if ctx.Err() != nil {
-					return outcome, ctx.Err()
-				}
-				if heartbeatSilence > 0 && isDeadlineExpiry(err) && time.Now().Before(absoluteDeadline) {
-					return outcome, fmt.Errorf(
-						"no response or heartbeat from Unity for %s; the connection or server stalled: %w",
-						heartbeatSilence, err)
-				}
-				return outcome, err
-			}
-			if response.ULoop.Phase != rpcResponsePhaseHeartbeat {
-				break
-			}
-			if ctx.Err() != nil {
-				timing.Total = time.Since(startedAt)
-				outcome.Timing = timing
-				return outcome, ctx.Err()
-			}
-
-			stallSeconds := response.ULoop.MainThreadStallSeconds
-			if stallSeconds >= mainThreadStallProgressThresholdSeconds {
-				if client.mainThreadStallHandler != nil {
-					client.mainThreadStallHandler(stallSeconds)
-				}
-				if progress != nil {
-					progress(fmt.Sprintf(
-						"Unity main thread stuck %.0fs; check modal/long operation...",
-						stallSeconds))
-				}
-			}
-			if stallSeconds >= client.getMainThreadStallLimit().Seconds() {
-				timing.Total = time.Since(startedAt)
-				outcome.Timing = timing
-				return outcome, &EditorUnresponsiveError{StallSeconds: stallSeconds}
-			}
-			if heartbeatSilence > 0 {
-				if err := applyPostAcceptDeadline(conn, heartbeatSilence, absoluteDeadline); err != nil {
-					timing.Total = time.Since(startedAt)
-					outcome.Timing = timing
-					return outcome, err
-				}
-			}
+		response = nextResponse
+		if response.ULoop.Phase != rpcResponsePhaseHeartbeat {
+			break
+		}
+		if ctx.Err() != nil {
+			return finishOutcomeWithError(outcome, timing, startedAt, ctx.Err())
+		}
+		if err := client.handleHeartbeatResponse(
+			conn,
+			response,
+			progress,
+			heartbeatSilence,
+			absoluteDeadline,
+		); err != nil {
+			return finishOutcomeWithError(outcome, timing, startedAt, err)
 		}
 	}
 
+	return finishRPCResponse(response, outcome, timing, startedAt)
+}
+
+func (client *Client) finishAcceptedReadError(
+	ctx context.Context,
+	outcome UnitySendOutcome,
+	timing UnitySendTiming,
+	startedAt time.Time,
+	heartbeatSilence time.Duration,
+	absoluteDeadline time.Time,
+	err error,
+) (UnitySendOutcome, error) {
+	if ctx.Err() != nil {
+		return finishOutcomeWithError(outcome, timing, startedAt, ctx.Err())
+	}
+	if heartbeatSilence > 0 && isDeadlineExpiry(err) && time.Now().Before(absoluteDeadline) {
+		return finishOutcomeWithError(
+			outcome,
+			timing,
+			startedAt,
+			fmt.Errorf(
+				"no response or heartbeat from Unity for %s; the connection or server stalled: %w",
+				heartbeatSilence,
+				err),
+		)
+	}
+	return finishOutcomeWithError(outcome, timing, startedAt, err)
+}
+
+func (client *Client) handleHeartbeatResponse(
+	conn net.Conn,
+	response rpcResponse,
+	progress ProgressFunc,
+	heartbeatSilence time.Duration,
+	absoluteDeadline time.Time,
+) error {
+	stallSeconds := response.ULoop.MainThreadStallSeconds
+	if stallSeconds >= mainThreadStallProgressThresholdSeconds {
+		client.reportMainThreadStall(stallSeconds, progress)
+	}
+	if stallSeconds >= client.getMainThreadStallLimit().Seconds() {
+		return &EditorUnresponsiveError{StallSeconds: stallSeconds}
+	}
+	if heartbeatSilence > 0 {
+		return applyPostAcceptDeadline(conn, heartbeatSilence, absoluteDeadline)
+	}
+	return nil
+}
+
+func (client *Client) reportMainThreadStall(stallSeconds float64, progress ProgressFunc) {
+	if client.mainThreadStallHandler != nil {
+		client.mainThreadStallHandler(stallSeconds)
+	}
+	if progress != nil {
+		progress(fmt.Sprintf(
+			"Unity main thread stuck %.0fs; check modal/long operation...",
+			stallSeconds))
+	}
+}
+
+func finishRPCResponse(
+	response rpcResponse,
+	outcome UnitySendOutcome,
+	timing UnitySendTiming,
+	startedAt time.Time,
+) (UnitySendOutcome, error) {
 	if response.Error != nil {
-		timing.Total = time.Since(startedAt)
-		outcome.Timing = timing
-		return outcome, &RPCError{
+		return finishOutcomeWithError(outcome, timing, startedAt, &RPCError{
 			Code:    response.Error.Code,
 			Message: response.Error.Message,
 			Data:    response.Error.Data,
-		}
+		})
 	}
 	if len(response.Result) == 0 {
-		timing.Total = time.Since(startedAt)
-		outcome.Timing = timing
-		return outcome, fmt.Errorf("UNITY_NO_RESPONSE")
+		return finishOutcomeWithError(outcome, timing, startedAt, fmt.Errorf("UNITY_NO_RESPONSE"))
 	}
 
 	outcome.Result = response.Result
 	timing.Total = time.Since(startedAt)
 	outcome.Timing = timing
 	return outcome, nil
+}
+
+func finishOutcomeWithError(
+	outcome UnitySendOutcome,
+	timing UnitySendTiming,
+	startedAt time.Time,
+	err error,
+) (UnitySendOutcome, error) {
+	timing.Total = time.Since(startedAt)
+	outcome.Timing = timing
+	return outcome, err
 }
 
 func (client *Client) getAcceptTimeout() time.Duration {
