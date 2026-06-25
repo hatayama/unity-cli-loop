@@ -45,7 +45,7 @@ namespace UnityCliLoop.CodeComplexity
         {
             return new CodeComplexityOptions(
                 rootPath,
-                maxComplexity: 25,
+                maxComplexity: 15,
                 includeNonProduction: false,
                 ReportFormat.Table,
                 failOnExceeded: false);

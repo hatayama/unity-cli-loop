@@ -181,11 +181,7 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 	retryTicker := time.NewTicker(serverConnectionRetryPoll)
 	defer retryTicker.Stop()
 	for {
-		client := unityipc.NewClient(connection, version)
-		if responseTimeout > 0 {
-			client = client.WithResponseTimeout(responseTimeout)
-		}
-		client = client.WithMainThreadStallHandler(func(stallSeconds float64) {
+		client := newConnectionRetryClient(connection, responseTimeout, func(stallSeconds float64) {
 			focusController.handleMainThreadStall(ctx, stallSeconds)
 		})
 		// Each attempt keeps the base accept bound: a dispatched request that never gets
@@ -199,69 +195,43 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			// usually absorbs back-to-back tool calls without bothering the caller.
 			lastOutcome = outcome
 			lastErr = err
-			if time.Since(startedAt) >= serverConnectionRetryTimeout {
-				if ctx.Err() != nil {
-					return lastOutcome, ctx.Err()
-				}
-				return lastOutcome, lastErr
-			}
-			select {
-			case <-retryContext.Done():
-				if ctx.Err() != nil {
-					return lastOutcome, ctx.Err()
-				}
-				return lastOutcome, lastErr
-			case <-retryTicker.C:
+			if finished, finalOutcome, finalErr := finishBusyRetry(
+				ctx,
+				retryContext,
+				startedAt,
+				retryTicker,
+				lastOutcome,
+				lastErr,
+			); finished {
+				return finalOutcome, finalErr
 			}
 			continue
 		}
 		if !shouldRetryUndispatchedConnection(err, outcome) {
-			// A transport error after a busy response in this window must not mask the
-			// busy; the server answered moments ago, so busy is the truer diagnosis.
-			// An RPC error is a real Unity answer, not a transport artifact, and must
-			// surface as-is. The transport error is not compared against the window
-			// deadline because the connection deadline can fire microseconds before
-			// the context reports expiry.
-			if err != nil && !isRPCError(err) && isUnityServerBusyRPCError(lastErr) {
-				if ctx.Err() != nil {
-					return outcome, ctx.Err()
-				}
-				return lastOutcome, lastErr
-			}
-			if reason, ok := connectionRetryFocusReasonForError(err, outcome, responseTimeout); ok {
-				focusController.tryFocus(ctx, reason, err)
-				focusController.keepUnityFocusedAfterReturn()
-			}
-			return outcome, err
+			return finishNonRetryableConnectionAttempt(
+				ctx,
+				outcome,
+				err,
+				lastOutcome,
+				lastErr,
+				responseTimeout,
+				focusController,
+			)
 		}
 
 		runningProcess, processErr := findRunningUnityProcessForConnectionRetry(retryContext, connection.ProjectRoot)
-		if processErr != nil {
-			if retryContext.Err() != nil {
-				if ctx.Err() != nil {
-					return outcome, ctx.Err()
-				}
-				// A busy response seen during the window is the truer diagnosis than a
-				// final dial cut short by the expiring retry context.
-				if isUnityServerBusyRPCError(lastErr) {
-					return lastOutcome, lastErr
-				}
-				return outcome, unityServerNotRespondingError{
-					projectRoot: connection.ProjectRoot,
-					endpoint:    connection.Endpoint.Address,
-					cause:       err,
-				}
-			}
-			return outcome, processErr
-		}
-		if runningProcess == nil {
-			// Same masking as the probe-error path: a busy response seen during the
-			// window proves a server answered moments ago, so it is a truer diagnosis
-			// than a final dial cut short by the expiring retry context.
-			if retryContext.Err() != nil && isUnityServerBusyRPCError(lastErr) {
-				return lastOutcome, lastErr
-			}
-			return outcome, err
+		if finished, finalOutcome, finalErr := finishUndispatchedRetryProbe(
+			ctx,
+			retryContext,
+			connection,
+			outcome,
+			err,
+			processErr,
+			runningProcess,
+			lastOutcome,
+			lastErr,
+		); finished {
+			return finalOutcome, finalErr
 		}
 		focusController.tryFocusProcess(
 			retryContext,
@@ -272,27 +242,16 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 
 		lastOutcome = outcome
 		lastErr = err
-		if time.Since(startedAt) >= unityAliveRetryWindow() {
-			if ctx.Err() != nil {
-				return lastOutcome, ctx.Err()
-			}
-			return lastOutcome, unityServerNotRespondingError{
-				projectRoot: connection.ProjectRoot,
-				endpoint:    connection.Endpoint.Address,
-				cause:       lastErr,
-			}
-		}
-		select {
-		case <-retryContext.Done():
-			if ctx.Err() != nil {
-				return lastOutcome, ctx.Err()
-			}
-			return lastOutcome, unityServerNotRespondingError{
-				projectRoot: connection.ProjectRoot,
-				endpoint:    connection.Endpoint.Address,
-				cause:       lastErr,
-			}
-		case <-retryTicker.C:
+		if finished, finalOutcome, finalErr := finishUnityAliveRetryWait(
+			ctx,
+			retryContext,
+			startedAt,
+			retryTicker,
+			connection,
+			lastOutcome,
+			lastErr,
+		); finished {
+			return finalOutcome, finalErr
 		}
 	}
 }

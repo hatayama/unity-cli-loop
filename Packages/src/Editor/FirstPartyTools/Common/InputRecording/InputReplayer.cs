@@ -456,17 +456,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void ApplyUiEvents()
         {
-            if (!_replayMousePosition.HasValue)
+            UiReplayFrame? replayFrame = CreateUiReplayFrame();
+            if (!replayFrame.HasValue)
             {
                 RestoreUiInputModules();
                 return;
             }
 
+            ApplyUiPointerActivity(replayFrame.Value);
+            ApplyUiPointerRelease(replayFrame.Value);
+        }
+
+        private UiReplayFrame? CreateUiReplayFrame()
+        {
+            if (!_replayMousePosition.HasValue)
+            {
+                return null;
+            }
+
             EventSystem? eventSystem = EventSystem.current;
             if (eventSystem == null)
             {
-                RestoreUiInputModules();
-                return;
+                return null;
             }
 
             Vector2 screenPos = _replayMousePosition.Value;
@@ -483,52 +494,98 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Vector2 gameViewSize = Handles.GetMainGameViewSize();
             Vector2 inputPos = new(screenPos.x, gameViewSize.y - screenPos.y);
 
-            if (justPressed)
+            return new UiReplayFrame(
+                eventSystem,
+                screenPos,
+                inputPos,
+                gameViewSize,
+                leftHeld,
+                justPressed,
+                justReleased,
+                mouseMoved);
+        }
+
+        private void ApplyUiPointerActivity(UiReplayFrame replayFrame)
+        {
+            if (replayFrame.JustPressed)
             {
                 _suppressIdleUiOverlay = false;
                 _pressTime = Time.realtimeSinceStartup;
-                OnUiPointerDown(screenPos, eventSystem);
+                OnUiPointerDown(replayFrame.ScreenPosition, replayFrame.EventSystem);
                 SimulateMouseUiOverlayState.Update(
-                    MouseAction.Click, inputPos, null, _currentPressTarget?.name, gameViewSize);
+                    MouseAction.Click,
+                    replayFrame.InputPosition,
+                    null,
+                    _currentPressTarget?.name,
+                    replayFrame.GameViewSize);
                 SimulateMouseUiOverlayState.RequestExpandAnimation();
+                return;
             }
-            else if (leftHeld && (_currentPressTarget != null || _currentDragTarget != null))
-            {
-                OnUiDrag(screenPos);
 
-                if (_isDragging)
-                {
-                    Vector2 pressInputPos = new(_pressScreenPosition.x, gameViewSize.y - _pressScreenPosition.y);
-                    SimulateMouseUiOverlayState.Update(
-                        MouseAction.Drag, inputPos, pressInputPos, null, gameViewSize);
-                }
-                else
-                {
-                    float elapsed = Time.realtimeSinceStartup - _pressTime;
-                    if (elapsed >= 0.5f)
-                    {
-                        SimulateMouseUiOverlayState.Update(
-                            MouseAction.LongPress, inputPos, null, _currentPressTarget?.name, gameViewSize);
-                        SimulateMouseUiOverlayState.UpdateLongPressElapsed(elapsed);
-                    }
-                }
+            if (replayFrame.LeftHeld && (_currentPressTarget != null || _currentDragTarget != null))
+            {
+                ApplyUiPointerHold(replayFrame);
+                return;
             }
-            else if (!_suppressIdleUiOverlay || mouseMoved)
+
+            if (!_suppressIdleUiOverlay || replayFrame.MouseMoved)
             {
                 // Keeping the overlay hidden until the pointer actually moves prevents release fade-out
                 // from being cancelled by the next idle frame at the same position.
                 _suppressIdleUiOverlay = false;
                 SimulateMouseUiOverlayState.Update(
-                    MouseAction.Click, inputPos, null, null, gameViewSize);
+                    MouseAction.Click,
+                    replayFrame.InputPosition,
+                    null,
+                    null,
+                    replayFrame.GameViewSize);
+            }
+        }
+
+        private void ApplyUiPointerHold(UiReplayFrame replayFrame)
+        {
+            OnUiDrag(replayFrame.ScreenPosition);
+
+            if (_isDragging)
+            {
+                Vector2 pressInputPos = new(
+                    _pressScreenPosition.x,
+                    replayFrame.GameViewSize.y - _pressScreenPosition.y);
+                SimulateMouseUiOverlayState.Update(
+                    MouseAction.Drag,
+                    replayFrame.InputPosition,
+                    pressInputPos,
+                    null,
+                    replayFrame.GameViewSize);
+                return;
             }
 
-            if (justReleased)
+            float elapsed = Time.realtimeSinceStartup - _pressTime;
+            if (elapsed < 0.5f)
             {
-                OnUiPointerUp(screenPos, eventSystem);
-                _suppressIdleUiOverlay = true;
-                SimulateMouseUiOverlayState.RequestDissipateAnimation();
-                SimulateMouseUiOverlayState.Clear();
+                return;
             }
+
+            SimulateMouseUiOverlayState.Update(
+                MouseAction.LongPress,
+                replayFrame.InputPosition,
+                null,
+                _currentPressTarget?.name,
+                replayFrame.GameViewSize);
+            SimulateMouseUiOverlayState.UpdateLongPressElapsed(elapsed);
+        }
+
+        private void ApplyUiPointerRelease(UiReplayFrame replayFrame)
+        {
+            if (!replayFrame.JustReleased)
+            {
+                return;
+            }
+
+            OnUiPointerUp(replayFrame.ScreenPosition, replayFrame.EventSystem);
+            _suppressIdleUiOverlay = true;
+            SimulateMouseUiOverlayState.RequestDissipateAnimation();
+            SimulateMouseUiOverlayState.Clear();
         }
 
         private void OnUiPointerDown(Vector2 screenPos, EventSystem eventSystem)
@@ -732,6 +789,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 StopReplay();
             }
+        }
+
+        private readonly struct UiReplayFrame
+        {
+            public UiReplayFrame(
+                EventSystem eventSystem,
+                Vector2 screenPosition,
+                Vector2 inputPosition,
+                Vector2 gameViewSize,
+                bool leftHeld,
+                bool justPressed,
+                bool justReleased,
+                bool mouseMoved)
+            {
+                EventSystem = eventSystem;
+                ScreenPosition = screenPosition;
+                InputPosition = inputPosition;
+                GameViewSize = gameViewSize;
+                LeftHeld = leftHeld;
+                JustPressed = justPressed;
+                JustReleased = justReleased;
+                MouseMoved = mouseMoved;
+            }
+
+            public EventSystem EventSystem { get; }
+            public Vector2 ScreenPosition { get; }
+            public Vector2 InputPosition { get; }
+            public Vector2 GameViewSize { get; }
+            public bool LeftHeld { get; }
+            public bool JustPressed { get; }
+            public bool JustReleased { get; }
+            public bool MouseMoved { get; }
         }
     }
 

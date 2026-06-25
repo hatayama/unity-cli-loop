@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/cli/internal/project"
@@ -21,17 +20,8 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 1
 	}
 
-	if len(remainingArgs) == 0 || isHelpRequest(remainingArgs) {
-		printHelpForResolvedProject(stdout, projectPath)
-		return 0
-	}
-	if isVersionJSONRequest(remainingArgs) {
-		writeVersionJSON(stdout)
-		return 0
-	}
-	if isVersionRequest(remainingArgs) {
-		writeLine(stdout, version)
-		return 0
+	if handled, code := tryHandleGlobalInfoRequest(remainingArgs, projectPath, stdout); handled {
+		return code
 	}
 
 	command := remainingArgs[0]
@@ -43,39 +33,17 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 1
 	}
 
-	if shouldHandleCompletionRequest(remainingArgs) {
-		completionTools := loadCompletionTools(startPath, projectPath)
-		if handled, code := tryHandleCompletionRequest(remainingArgs, completionTools, stdout, stderr); handled {
-			return code
-		}
-	}
-	if isUnknownLeadingOption(command) {
-		writeClassifiedError(stderr, &argumentError{
-			message:     "Unknown global option: " + command,
-			option:      command,
-			nextActions: []string{"Run `uloop --help` to inspect supported global options."},
-		}, errorContext{})
-		return 1
-	}
-	if handled, code := tryHandleUpdateRequest(ctx, remainingArgs, stdout, stderr); handled {
+	if handled, code := tryHandlePreConnectionRequest(
+		ctx,
+		remainingArgs,
+		command,
+		commandArgs,
+		startPath,
+		projectPath,
+		stdout,
+		stderr,
+	); handled {
 		return code
-	}
-	if handled, code := tryHandleInstallRequest(ctx, remainingArgs, stdout, stderr); handled {
-		return code
-	}
-	if handled, code := tryHandleUninstallRequest(ctx, remainingArgs, stdout, stderr); handled {
-		return code
-	}
-	if handled, code := tryHandleLaunchRequest(ctx, remainingArgs, startPath, projectPath, stdout, stderr); handled {
-		return code
-	}
-	if handled, code := tryHandleSkillsRequest(remainingArgs, startPath, projectPath, stdout, stderr); handled {
-		return code
-	}
-	if containsHelpRequest(commandArgs) {
-		if handled, code := tryHandleCommandHelp(command, startPath, projectPath, stdout, stderr); handled {
-			return code
-		}
 	}
 
 	connection, err := project.ResolveConnection(startPath, projectPath)
@@ -83,83 +51,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		writeClassifiedError(stderr, err, errorContext{command: command})
 		return 1
 	}
-	if isSettingsManagedNativeToolCommand(command) &&
-		isToolDisabledByToolSettings(command, loadDisabledTools(connection.ProjectRoot)) {
-		writeErrorEnvelope(stderr, nativeToolDisabledError(connection.ProjectRoot, command))
-		return 1
-	}
-	switch command {
-	case "list":
-		return runList(ctx, connection, stdout, stderr)
-	case "sync":
-		return runSync(ctx, connection, stdout, stderr)
-	case "focus-window":
-		return runFocusWindow(ctx, connection.ProjectRoot, stdout, stderr)
-	case pausePointWaitCommandName:
-		return runWaitForPausePointCommand(ctx, connection, commandArgs, stdout, stderr)
-	case pausePointStatusUserCommandName:
-		return runPausePointStatusCommand(ctx, connection, commandArgs, stdout, stderr)
-	default:
-		tool, cache, ok, err := findToolForCommand(connection.ProjectRoot, command)
-		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: command})
-			return 1
-		}
-		if !ok {
-			writeErrorEnvelope(stderr, unknownCommandError(command, cache, errorContext{
-				projectRoot: connection.ProjectRoot,
-				command:     command,
-			}))
-			return 1
-		}
-
-		commandArgs, dynamicCodeFilePath, err := extractDynamicCodeFileFlag(command, commandArgs)
-		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{
-				projectRoot: connection.ProjectRoot,
-				command:     command,
-			})
-			return 1
-		}
-
-		params, nestedProjectPath, err := buildToolParams(commandArgs, tool)
-		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{
-				projectRoot: connection.ProjectRoot,
-				command:     command,
-			})
-			return 1
-		}
-		if err := applyDynamicCodeFileParam(params, dynamicCodeFilePath); err != nil {
-			writeClassifiedError(stderr, err, errorContext{
-				projectRoot: connection.ProjectRoot,
-				command:     command,
-			})
-			return 1
-		}
-		if nestedProjectPath != "" {
-			nestedConnection, err := project.ResolveConnection(startPath, nestedProjectPath)
-			if err != nil {
-				writeClassifiedError(stderr, err, errorContext{
-					projectRoot: connection.ProjectRoot,
-					command:     command,
-				})
-				return 1
-			}
-			nestedProjectPath = nestedConnection.ProjectRoot
-		}
-		if nestedProjectPath != "" && nestedProjectPath != connection.ProjectRoot {
-			writeErrorEnvelope(stderr, (&argumentError{
-				message:      "--project-path must target the same Unity project for this command",
-				option:       "--project-path",
-				expectedType: "path",
-				command:      command,
-				nextActions:  []string{"Use one `--project-path <path>` value for the target Unity project."},
-			}).toCLIError(errorContext{projectRoot: connection.ProjectRoot, command: command}))
-			return 1
-		}
-		return runTool(ctx, connection, command, params, stdout, stderr)
-	}
+	return runResolvedProjectCommand(ctx, connection, command, commandArgs, startPath, stdout, stderr)
 }
 
 func writeVersionJSON(stdout io.Writer) {
@@ -171,10 +63,6 @@ func writeVersionJSON(stdout io.Writer) {
 		panic(err)
 	}
 	writeLine(stdout, string(content))
-}
-
-func isUnknownLeadingOption(command string) bool {
-	return strings.HasPrefix(command, "-")
 }
 
 func runTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stdout io.Writer, stderr io.Writer) int {

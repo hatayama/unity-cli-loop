@@ -3856,6 +3856,51 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
+        public async Task HasMigrationTargetsAsync_WhenAssemblyUsesLegacyGlobalAliasForScreenshotCapture_ReturnsTrue()
+        {
+            // Verifies that startup detection carries legacy global aliases into screenshot fast scans.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "GlobalUsings.cs"),
+                    "global using Old = io.github.hatayama.uLoopMCP;");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "ScreenshotTool.cs"),
+                    @"using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEngine;
+
+public sealed class ScreenshotTool
+{
+    public async Task<Texture2D> CaptureAsync(EditorWindow window, CancellationToken ct)
+    {
+        return await Old.EditorWindowCaptureUtility.CaptureWindowAsync(window, 1.0f, ct);
+    }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": []
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public void ApplyMigration_WhenCurrentDomainLocalAliasUsesMovedContractTypes_AddsToolContractsReference()
         {
             // Verifies that local Domain aliases rewritten to ToolContracts also update asmdef references.

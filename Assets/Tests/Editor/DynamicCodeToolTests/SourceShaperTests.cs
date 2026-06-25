@@ -47,5 +47,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             Assert.IsTrue(hasReturn);
         }
+
+        [Test]
+        public void Analyze_WhenAttributedTypeHasAccessModifier_ShouldDetectTypeDeclaration()
+        {
+            // Verifies attributed public types are not mistaken for top-level statements.
+            string source = "[System.Serializable] public sealed class Example {}";
+
+            SourceShapeResult result = SourceShaper.Analyze(source);
+
+            Assert.IsTrue(result.HasTypeDeclaration);
+            Assert.IsFalse(result.HasTopLevelStatements);
+        }
     }
 }

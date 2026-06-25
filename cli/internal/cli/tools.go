@@ -254,14 +254,7 @@ func findProperty(tool toolDefinition, kebabName string) (string, toolProperty, 
 func convertValue(value string, property toolProperty, option string) (any, error) {
 	switch strings.ToLower(property.Type) {
 	case "boolean":
-		switch strings.ToLower(value) {
-		case "true":
-			return true, nil
-		case "false":
-			return false, nil
-		default:
-			return nil, invalidValueArgumentError(option, value, "boolean")
-		}
+		return convertBooleanValue(value, option)
 	case "integer":
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
@@ -275,28 +268,51 @@ func convertValue(value string, property toolProperty, option string) (any, erro
 		}
 		return parsed, nil
 	case "array":
-		if strings.HasPrefix(value, "[") {
-			var parsed []any
-			if err := json.Unmarshal([]byte(value), &parsed); err != nil {
-				return nil, invalidValueArgumentError(option, value, "array")
-			}
-			return parsed, nil
-		}
-		parts := strings.Split(value, ",")
-		result := make([]string, 0, len(parts))
-		for _, part := range parts {
-			result = append(result, strings.TrimSpace(part))
-		}
-		return result, nil
+		return convertArrayValue(value, option)
 	case "object":
-		var parsed map[string]any
-		if err := json.Unmarshal([]byte(value), &parsed); err != nil {
-			return nil, invalidValueArgumentError(option, value, "object")
-		}
-		return parsed, nil
+		return convertObjectValue(value, option)
 	default:
 		return value, nil
 	}
+}
+
+func convertBooleanValue(value string, option string) (bool, error) {
+	switch strings.ToLower(value) {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, invalidValueArgumentError(option, value, "boolean")
+	}
+}
+
+func convertArrayValue(value string, option string) (any, error) {
+	if strings.HasPrefix(value, "[") {
+		var parsed []any
+		if err := json.Unmarshal([]byte(value), &parsed); err != nil {
+			return nil, invalidValueArgumentError(option, value, "array")
+		}
+		return parsed, nil
+	}
+
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		result = append(result, strings.TrimSpace(part))
+	}
+	return result, nil
+}
+
+func convertObjectValue(value string, option string) (map[string]any, error) {
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(value), &parsed); err != nil {
+		return nil, invalidValueArgumentError(option, value, "object")
+	}
+	if parsed == nil {
+		return nil, invalidValueArgumentError(option, value, "object")
+	}
+	return parsed, nil
 }
 
 func optionNameForProperty(toolName string, propertyName string, property toolProperty) string {

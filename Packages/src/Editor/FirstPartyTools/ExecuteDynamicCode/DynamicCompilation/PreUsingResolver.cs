@@ -89,59 +89,84 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 pos = SourceShaper.SkipWhitespace(source, pos);
                 if (pos >= length) break;
 
-                if (source[pos] == '#')
+                int afterLeadingTrivia = SkipExistingNamespaceLeadingTrivia(source, pos);
+                if (afterLeadingTrivia != pos)
                 {
-                    pos = SkipToEndOfLine(source, pos);
-                    continue;
-                }
-
-                // Skip comments that appear before using directives
-                int skipped = SourceShaper.AdvanceOneTokenPublic(source, pos);
-                if (skipped > pos + 1 && !char.IsLetterOrDigit(source[pos]) && source[pos] != '_')
-                {
-                    pos = skipped;
+                    pos = afterLeadingTrivia;
                     continue;
                 }
 
                 // Handle "global using Ns;" — advance past "global" to reach "using"
-                int usingPos = pos;
-                if (SourceShaper.StartsWithKeyword(source, pos, "global"))
-                {
-                    usingPos = SourceShaper.SkipWhitespace(source, pos + 6);
-                }
-
+                int usingPos = GetUsingKeywordPosition(source, pos);
                 if (!SourceShaper.StartsWithKeyword(source, usingPos, "using"))
                 {
                     break;
                 }
 
                 int afterUsing = SourceShaper.SkipWhitespace(source, usingPos + 5);
-                if (SourceShaper.StartsWithKeyword(source, afterUsing, "static") ||
-                    SourceShaper.StartsWithKeyword(source, afterUsing, "var") ||
-                    (afterUsing < length && source[afterUsing] == '('))
+                if (ShouldSkipUsingDirective(source, afterUsing, length))
                 {
                     pos = SkipToSemicolon(source, pos);
                     continue;
                 }
 
                 int semiPos = source.IndexOf(';', afterUsing);
-                if (semiPos > afterUsing)
-                {
-                    string ns = source.Substring(afterUsing, semiPos - afterUsing).Trim();
-                    int eqIdx = ns.IndexOf('=');
-                    if (eqIdx >= 0)
-                    {
-                        ns = ns.Substring(eqIdx + 1).Trim();
-                    }
-                    if (ns.Length > 0)
-                    {
-                        namespaces.Add(ns);
-                    }
-                }
+                AddExistingNamespaceFromUsing(source, afterUsing, semiPos, namespaces);
                 pos = semiPos >= 0 ? semiPos + 1 : length;
             }
 
             return namespaces;
+        }
+
+        private static int SkipExistingNamespaceLeadingTrivia(string source, int pos)
+        {
+            if (source[pos] == '#')
+            {
+                return SkipToEndOfLine(source, pos);
+            }
+
+            // Skip comments that appear before using directives
+            int skipped = SourceShaper.AdvanceOneTokenPublic(source, pos);
+            return skipped > pos + 1 && !char.IsLetterOrDigit(source[pos]) && source[pos] != '_'
+                ? skipped
+                : pos;
+        }
+
+        private static int GetUsingKeywordPosition(string source, int pos)
+        {
+            return SourceShaper.StartsWithKeyword(source, pos, "global")
+                ? SourceShaper.SkipWhitespace(source, pos + 6)
+                : pos;
+        }
+
+        private static bool ShouldSkipUsingDirective(string source, int afterUsing, int length)
+        {
+            return SourceShaper.StartsWithKeyword(source, afterUsing, "static") ||
+                SourceShaper.StartsWithKeyword(source, afterUsing, "var") ||
+                (afterUsing < length && source[afterUsing] == '(');
+        }
+
+        private static void AddExistingNamespaceFromUsing(
+            string source,
+            int afterUsing,
+            int semiPos,
+            HashSet<string> namespaces)
+        {
+            if (semiPos <= afterUsing)
+            {
+                return;
+            }
+
+            string ns = source.Substring(afterUsing, semiPos - afterUsing).Trim();
+            int eqIdx = ns.IndexOf('=');
+            if (eqIdx >= 0)
+            {
+                ns = ns.Substring(eqIdx + 1).Trim();
+            }
+            if (ns.Length > 0)
+            {
+                namespaces.Add(ns);
+            }
         }
 
         internal static HashSet<string> ExtractTypeIdentifiers(string source)
@@ -162,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 int advanced = SourceShaper.AdvanceOneTokenPublic(source, pos);
-                if (advanced > pos + 1 && !char.IsLetterOrDigit(source[pos]) && source[pos] != '_')
+                if (ShouldSkipTypeIdentifierToken(source, pos, advanced))
                 {
                     prevWasDot = false;
                     pos = advanced;
@@ -178,31 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (char.IsLetter(c) || c == '_')
                 {
-                    int start = pos;
-                    while (pos < length && (char.IsLetterOrDigit(source[pos]) || source[pos] == '_'))
-                    {
-                        pos++;
-                    }
-
-                    if (!prevWasDot && char.IsUpper(c))
-                    {
-                        string identifier = source.Substring(start, pos - start);
-
-                        // Member initializers (Name = ...), named arguments (Name: ...),
-                        // and labels (Name:) are not type candidates; skip them.
-                        // Exclude == so comparisons are not mistakenly filtered.
-                        int next = SourceShaper.SkipWhitespace(source, pos);
-                        bool looksLikeMemberOrLabel =
-                            next < length &&
-                            (source[next] == ':' ||
-                             (source[next] == '=' && (next + 1 >= length || source[next + 1] != '=')));
-
-                        if (!looksLikeMemberOrLabel && !ExcludedIdentifiers.Contains(identifier))
-                        {
-                            identifiers.Add(identifier);
-                        }
-                    }
-
+                    pos = ConsumeTypeIdentifierCandidate(source, pos, length, prevWasDot, identifiers);
                     prevWasDot = false;
                     continue;
                 }
@@ -212,6 +213,56 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return identifiers;
+        }
+
+        private static bool ShouldSkipTypeIdentifierToken(string source, int pos, int advanced)
+        {
+            return advanced > pos + 1 && !char.IsLetterOrDigit(source[pos]) && source[pos] != '_';
+        }
+
+        private static int ConsumeTypeIdentifierCandidate(
+            string source,
+            int pos,
+            int length,
+            bool prevWasDot,
+            HashSet<string> identifiers)
+        {
+            int start = pos;
+            while (pos < length && (char.IsLetterOrDigit(source[pos]) || source[pos] == '_'))
+            {
+                pos++;
+            }
+
+            if (!prevWasDot && char.IsUpper(source[start]))
+            {
+                AddTypeIdentifierCandidate(source, start, pos, length, identifiers);
+            }
+
+            return pos;
+        }
+
+        private static void AddTypeIdentifierCandidate(
+            string source,
+            int start,
+            int pos,
+            int length,
+            HashSet<string> identifiers)
+        {
+            string identifier = source.Substring(start, pos - start);
+            if (LooksLikeMemberOrLabel(source, pos, length) || ExcludedIdentifiers.Contains(identifier))
+            {
+                return;
+            }
+
+            identifiers.Add(identifier);
+        }
+
+        private static bool LooksLikeMemberOrLabel(string source, int pos, int length)
+        {
+            int next = SourceShaper.SkipWhitespace(source, pos);
+            return next < length &&
+                (source[next] == ':' ||
+                 (source[next] == '=' && (next + 1 >= length || source[next + 1] != '=')));
         }
 
         internal static HashSet<string> ExtractQualifiedTypeIdentifiers(string source)

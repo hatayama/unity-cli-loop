@@ -2,7 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-MAX_COMPLEXITY=${CODE_COMPLEXITY_MAX_COMPLEXITY:-25}
+MAX_COMPLEXITY=${CODE_COMPLEXITY_MAX_COMPLEXITY:-15}
 FAIL_ON_EXCEEDED=$(printf '%s' "${CODE_COMPLEXITY_FAIL_ON_EXCEEDED:-false}" | tr '[:upper:]' '[:lower:]')
 GO_CONFIG="$ROOT_DIR/cli/.golangci-complexity.yml"
 TEMP_GO_CONFIG=
@@ -18,7 +18,7 @@ cleanup() {
 
 trap cleanup 0 1 2 15
 
-if [ "$MAX_COMPLEXITY" != "25" ]; then
+if [ "$MAX_COMPLEXITY" != "15" ]; then
   TEMP_GO_CONFIG="$ROOT_DIR/cli/.golangci-complexity.$$.yml"
   awk -v max_complexity="$MAX_COMPLEXITY" '
     $1 == "max-complexity:" {

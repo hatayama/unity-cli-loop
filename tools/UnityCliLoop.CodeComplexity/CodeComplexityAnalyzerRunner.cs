@@ -132,7 +132,7 @@ namespace UnityCliLoop.CodeComplexity
         private static CodeMetricsAdditionalText CreateCodeMetricsConfig(int maxComplexity)
         {
             string defaultConfigPath = Path.Combine(AppContext.BaseDirectory, "CodeMetricsConfig.txt");
-            if (maxComplexity == 25 && File.Exists(defaultConfigPath))
+            if (maxComplexity == 15 && File.Exists(defaultConfigPath))
             {
                 return CodeMetricsAdditionalText.FromFile(defaultConfigPath);
             }
