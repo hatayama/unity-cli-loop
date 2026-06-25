@@ -11,7 +11,6 @@
 
 /* Main Container */
 .unity-cli-loop-window-root {
-    position: relative;
     flex-direction: column;
     flex-grow: 1;
     flex-shrink: 1;
@@ -365,65 +364,38 @@
     flex-grow: 1;
 }
 
-.unity-cli-loop-tool-toggle-row__info-toggle {
-    width: 18px;
+.unity-cli-loop-tool-toggle-row__details-button {
     height: 18px;
-    min-width: 18px;
+    min-width: 74px;
     margin-left: 6px;
-    padding: 0;
+    padding: 0 6px;
     -unity-text-align: middle-center;
 }
 
-.unity-cli-loop-tool-toggle-row__info-toggle--selected {
-    background-color: rgba(76, 126, 243, 0.34);
+.unity-cli-loop-tool-toggle-row__details-button--selected {
+    background-color: rgba(255, 255, 255, 0.10);
 }
 
 .unity-cli-loop-tool-list-container {
     padding-left: 0;
 }
 
-.unity-cli-loop-tool-description-overlay {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    background-color: rgba(0, 0, 0, 0.34);
+.unity-cli-loop-tool-details-row {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 8px 6px 30px;
+    min-height: 132px;
 }
 
-.unity-cli-loop-tool-description-dialog {
-    width: 280px;
-    max-width: 360px;
-    padding: 10px 12px;
+.unity-cli-loop-tool-details-panel {
+    padding: 8px;
     border-width: 1px;
-    border-color: rgba(255, 255, 255, 0.24);
+    border-color: rgba(255, 255, 255, 0.14);
     border-radius: 3px;
-    background-color: rgb(48, 48, 48);
+    background-color: rgba(255, 255, 255, 0.06);
 }
 
-.unity-cli-loop-tool-description-dialog__header {
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 6px;
-}
-
-.unity-cli-loop-tool-description-dialog__title {
-    flex-grow: 1;
-    -unity-font-style: bold;
-}
-
-.unity-cli-loop-tool-description-dialog__close-button {
-    width: 18px;
-    height: 18px;
-    min-width: 18px;
-    padding: 0;
-    margin-left: 6px;
-}
-
-.unity-cli-loop-tool-description-dialog__body {
+.unity-cli-loop-tool-details-panel__body {
     white-space: normal;
     color: #cfcfcf;
 }

@@ -15,20 +15,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     public class ToolSettingsSection
     {
         private const int ToolListRowHeight = 24;
+        private const int ToolDetailsRowHeight = 132;
         private const int InlineToolRowLimit = 40;
 
         private readonly Foldout _foldout;
         private readonly VisualElement _toolSettingsInfoContainer;
         private readonly VisualElement _toolListContainer;
-        private readonly VisualElement _descriptionOverlay;
-        private readonly Label _descriptionTitleLabel;
-        private readonly Label _descriptionBodyLabel;
-        private readonly Button _descriptionCloseButton;
         private readonly Label _toolListStatusLabel;
         private readonly ListView _toolListView;
         private readonly List<ToolListRowData> _toolListRows = new();
         private readonly Dictionary<string, Toggle> _togglesByToolName = new();
-        private string _selectedDescriptionToolName = string.Empty;
+        private string _expandedDetailsToolName = string.Empty;
         private bool _isRegistryAvailable;
         private bool _isUnavailableStateShown;
         private bool _isLoadingStateShown;
@@ -44,17 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _toolListContainer = root.Q<VisualElement>("tool-list-container");
             Debug.Assert(_toolListContainer != null, "tool-list-container must not be null");
 
-            VisualElement descriptionOverlayRoot = root.Q<VisualElement>("window-root") ?? root;
-            (VisualElement Overlay, Label TitleLabel, Label BodyLabel, Button CloseButton) descriptionOverlay =
-                CreateToolDescriptionOverlay();
-            _descriptionOverlay = descriptionOverlay.Overlay;
-            _descriptionTitleLabel = descriptionOverlay.TitleLabel;
-            _descriptionBodyLabel = descriptionOverlay.BodyLabel;
-            _descriptionCloseButton = descriptionOverlay.CloseButton;
-            _descriptionCloseButton.clicked += HideDescriptionDialogAndRefresh;
             _toolListStatusLabel = CreateToolListStatusLabel();
             _toolListView = CreateToolListView();
-            descriptionOverlayRoot.Add(_descriptionOverlay);
             _toolListContainer.Add(_toolListStatusLabel);
             _toolListContainer.Add(_toolListView);
             ClearToolList();
@@ -97,7 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             for (int i = 0; i < _toolListRows.Count; i++)
             {
                 ToolListRowData row = _toolListRows[i];
-                if (row.IsHeader || row.ToolName != toolName)
+                if (!row.IsTool || row.ToolName != toolName)
                 {
                     continue;
                 }
@@ -131,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _togglesByToolName.Clear();
             _layoutSignature = string.Empty;
 
-            HideDescriptionDialog();
+            HideToolDetails();
             SetToolListStatus("Loading tools...");
             ViewDataBinder.SetVisible(_toolListView, false);
             SetToolSettingsInfoVisible(false);
@@ -147,7 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _togglesByToolName.Clear();
             _layoutSignature = string.Empty;
 
-            HideDescriptionDialog();
+            HideToolDetails();
             SetToolListStatus("Tool registry not yet initialized. Start the server first.");
             ViewDataBinder.SetVisible(_toolListView, false);
             SetToolSettingsInfoVisible(false);
@@ -163,7 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _togglesByToolName.Clear();
             _layoutSignature = string.Empty;
 
-            HideDescriptionDialog();
+            HideToolDetails();
             ViewDataBinder.SetVisible(_toolListStatusLabel, false);
             ViewDataBinder.SetVisible(_toolListView, false);
             SetToolSettingsInfoVisible(false);
@@ -223,7 +211,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _toolListRows.Clear();
             _togglesByToolName.Clear();
-            HideDescriptionDialog();
+            HideToolDetails();
 
             if (data.BuiltInTools.Length > 0)
             {
@@ -264,7 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             for (int i = 0; i < _toolListRows.Count; i++)
             {
                 ToolListRowData row = _toolListRows[i];
-                if (row.IsHeader || row.ToolName != toolName)
+                if (!row.IsTool || row.ToolName != toolName)
                 {
                     continue;
                 }
@@ -299,41 +287,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             builder.Append(';');
         }
 
-        private static (VisualElement Overlay, Label TitleLabel, Label BodyLabel, Button CloseButton) CreateToolDescriptionOverlay()
-        {
-            VisualElement overlay = new();
-            overlay.name = "tool-description-overlay";
-            overlay.AddToClassList("unity-cli-loop-tool-description-overlay");
-
-            VisualElement dialog = new();
-            dialog.name = "tool-description-dialog";
-            dialog.AddToClassList("unity-cli-loop-tool-description-dialog");
-
-            VisualElement header = new();
-            header.AddToClassList("unity-cli-loop-tool-description-dialog__header");
-
-            Label titleLabel = new();
-            titleLabel.name = "tool-description-dialog-title";
-            titleLabel.AddToClassList("unity-cli-loop-tool-description-dialog__title");
-
-            Button closeButton = new();
-            closeButton.name = "tool-description-dialog-close-button";
-            closeButton.text = "x";
-            closeButton.AddToClassList("unity-cli-loop-tool-description-dialog__close-button");
-
-            Label bodyLabel = new();
-            bodyLabel.name = "tool-description-dialog-body";
-            bodyLabel.AddToClassList("unity-cli-loop-tool-description-dialog__body");
-
-            header.Add(titleLabel);
-            header.Add(closeButton);
-            dialog.Add(header);
-            dialog.Add(bodyLabel);
-            overlay.Add(dialog);
-            ViewDataBinder.SetVisible(overlay, false);
-            return (overlay, titleLabel, bodyLabel, closeButton);
-        }
-
         private static Label CreateToolListStatusLabel()
         {
             Label label = new();
@@ -347,8 +300,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ListView listView = new();
             listView.name = "tool-list-view";
             listView.AddToClassList("unity-cli-loop-tool-list-view");
-            listView.fixedItemHeight = ToolListRowHeight;
-            listView.virtualizationMethod = CollectionVirtualizationMethod.FixedHeight;
+            listView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
             listView.selectionType = SelectionType.None;
             listView.itemsSource = _toolListRows;
             listView.makeItem = CreateToolListRowElement;
@@ -370,7 +322,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 evt.StopPropagation();
 
-                if (row.userData is not ToolListRowData item || item.IsHeader)
+                if (row.userData is not ToolListRowData item || !item.IsTool)
                 {
                     return;
                 }
@@ -385,7 +337,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 evt.StopPropagation();
 
-                if (row.userData is not ToolListRowData item || item.IsHeader)
+                if (row.userData is not ToolListRowData item || !item.IsTool)
                 {
                     return;
                 }
@@ -398,23 +350,34 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             row.Add(toggle);
             row.Add(label);
-            Button infoButton = new();
-            infoButton.name = "tool-list-row-info-toggle";
-            infoButton.text = "?";
-            infoButton.tooltip = "Show tool description";
-            infoButton.AddToClassList("unity-cli-loop-tool-toggle-row__info-toggle");
-            infoButton.RegisterCallback<ClickEvent>(evt =>
+            Button detailsButton = new();
+            detailsButton.name = "tool-list-row-details-button";
+            detailsButton.text = "Show Details";
+            detailsButton.tooltip = "Show tool description";
+            detailsButton.AddToClassList("unity-cli-loop-tool-toggle-row__details-button");
+            detailsButton.RegisterCallback<ClickEvent>(evt =>
             {
                 evt.StopPropagation();
 
-                if (row.userData is not ToolListRowData item || item.IsHeader)
+                if (row.userData is not ToolListRowData item || !item.IsTool)
                 {
                     return;
                 }
 
-                item.Owner?.ToggleDescriptionDialogForTool(item.ToolName);
+                item.Owner?.ToggleToolDetailsForTool(item.ToolName);
             });
-            row.Add(infoButton);
+            row.Add(detailsButton);
+
+            VisualElement detailsPanel = new();
+            detailsPanel.name = "tool-list-row-details";
+            detailsPanel.AddToClassList("unity-cli-loop-tool-details-panel");
+
+            Label detailsBody = new();
+            detailsBody.name = "tool-list-row-details-body";
+            detailsBody.AddToClassList("unity-cli-loop-tool-details-panel__body");
+            detailsPanel.Add(detailsBody);
+
+            row.Add(detailsPanel);
             return row;
         }
 
@@ -427,27 +390,45 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             row.userData = item;
 
             Toggle toggle = row.Q<Toggle>("tool-list-row-toggle");
-            Button infoButton = row.Q<Button>("tool-list-row-info-toggle");
+            Button detailsButton = row.Q<Button>("tool-list-row-details-button");
             Label label = row.Q<Label>("tool-list-row-label");
+            VisualElement detailsPanel = row.Q<VisualElement>("tool-list-row-details");
+            Label detailsBody = row.Q<Label>("tool-list-row-details-body");
             Debug.Assert(toggle != null, "tool-list-row-toggle must not be null");
-            Debug.Assert(infoButton != null, "tool-list-row-info-toggle must not be null");
+            Debug.Assert(detailsButton != null, "tool-list-row-details-button must not be null");
             Debug.Assert(label != null, "tool-list-row-label must not be null");
+            Debug.Assert(detailsPanel != null, "tool-list-row-details must not be null");
+            Debug.Assert(detailsBody != null, "tool-list-row-details-body must not be null");
 
-            ResetRowClasses(row, label, infoButton);
+            ResetRowClasses(row, label, detailsButton);
 
             if (item.IsHeader)
             {
-                BindHeaderRow(row, toggle, infoButton, label, item);
+                BindHeaderRow(row, toggle, detailsButton, label, detailsPanel, item);
                 return;
             }
 
-            BindToolRow(row, toggle, infoButton, label, item);
+            if (item.IsDetails)
+            {
+                BindDetailsRow(row, toggle, detailsButton, label, detailsPanel, detailsBody, item);
+                return;
+            }
+
+            BindToolRow(row, toggle, detailsButton, label, detailsPanel, item);
         }
 
-        private void BindHeaderRow(VisualElement row, Toggle toggle, Button infoButton, Label label, ToolListRowData item)
+        private void BindHeaderRow(
+            VisualElement row,
+            Toggle toggle,
+            Button detailsButton,
+            Label label,
+            VisualElement detailsPanel,
+            ToolListRowData item)
         {
             ViewDataBinder.SetVisible(toggle, false);
-            ViewDataBinder.SetVisible(infoButton, false);
+            ViewDataBinder.SetVisible(detailsButton, false);
+            ViewDataBinder.SetVisible(label, true);
+            ViewDataBinder.SetVisible(detailsPanel, false);
             label.text = item.Label;
             label.tooltip = string.Empty;
             row.SetEnabled(true);
@@ -455,16 +436,26 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             label.AddToClassList("unity-cli-loop-tool-group-header");
         }
 
-        private void BindToolRow(VisualElement row, Toggle toggle, Button infoButton, Label label, ToolListRowData item)
+        private void BindToolRow(
+            VisualElement row,
+            Toggle toggle,
+            Button detailsButton,
+            Label label,
+            VisualElement detailsPanel,
+            ToolListRowData item)
         {
             ViewDataBinder.SetVisible(toggle, true);
+            ViewDataBinder.SetVisible(label, true);
+            ViewDataBinder.SetVisible(detailsPanel, false);
             toggle.SetValueWithoutNotify(item.IsEnabled);
             bool hasDescription = !string.IsNullOrWhiteSpace(item.SkillDescription);
-            bool isDescriptionSelected = hasDescription && _selectedDescriptionToolName == item.ToolName;
-            ViewDataBinder.SetVisible(infoButton, hasDescription);
-            if (isDescriptionSelected)
+            bool isDetailsExpanded = hasDescription && _expandedDetailsToolName == item.ToolName;
+            ViewDataBinder.SetVisible(detailsButton, hasDescription);
+            detailsButton.text = isDetailsExpanded ? "Hide Details" : "Show Details";
+            detailsButton.tooltip = isDetailsExpanded ? "Hide tool description" : "Show tool description";
+            if (isDetailsExpanded)
             {
-                infoButton.AddToClassList("unity-cli-loop-tool-toggle-row__info-toggle--selected");
+                detailsButton.AddToClassList("unity-cli-loop-tool-toggle-row__details-button--selected");
             }
             label.text = item.ToolName;
             label.tooltip = string.Empty;
@@ -473,16 +464,35 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _togglesByToolName[item.ToolName] = toggle;
         }
 
-        private static void ResetRowClasses(VisualElement row, Label label, Button infoButton)
+        private static void BindDetailsRow(
+            VisualElement row,
+            Toggle toggle,
+            Button detailsButton,
+            Label label,
+            VisualElement detailsPanel,
+            Label detailsBody,
+            ToolListRowData item)
+        {
+            ViewDataBinder.SetVisible(toggle, false);
+            ViewDataBinder.SetVisible(detailsButton, false);
+            ViewDataBinder.SetVisible(label, false);
+            ViewDataBinder.SetVisible(detailsPanel, true);
+            detailsBody.text = item.SkillDescription;
+            row.SetEnabled(true);
+            row.AddToClassList("unity-cli-loop-tool-details-row");
+        }
+
+        private static void ResetRowClasses(VisualElement row, Label label, Button detailsButton)
         {
             row.RemoveFromClassList("unity-cli-loop-tool-list-row--header");
+            row.RemoveFromClassList("unity-cli-loop-tool-details-row");
             label.RemoveFromClassList("unity-cli-loop-tool-group-header");
-            infoButton.RemoveFromClassList("unity-cli-loop-tool-toggle-row__info-toggle--selected");
+            detailsButton.RemoveFromClassList("unity-cli-loop-tool-toggle-row__details-button--selected");
         }
 
         private void UnbindToolListRowElement(VisualElement row, int index)
         {
-            if (row.userData is ToolListRowData item && !item.IsHeader)
+            if (row.userData is ToolListRowData item && item.IsTool)
             {
                 _togglesByToolName.Remove(item.ToolName);
             }
@@ -496,80 +506,133 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _toolListView.RefreshItems();
         }
 
-        internal void ToggleDescriptionDialogForTool(string toolName)
+        internal void ToggleToolDetailsForTool(string toolName)
         {
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
 
-            ToolListRowData item = FindToolRow(toolName);
+            ToolListRowData item = FindToolRowByName(toolName);
             Debug.Assert(item != null, "tool row must exist");
-            ToggleDescriptionDialogForRow(item);
-        }
+            Debug.Assert(!string.IsNullOrWhiteSpace(item.SkillDescription), "tool row must have details");
 
-        private ToolListRowData FindToolRow(string toolName)
-        {
-            for (int i = 0; i < _toolListRows.Count; i++)
+            if (_expandedDetailsToolName == item.ToolName)
             {
-                ToolListRowData item = _toolListRows[i];
-                if (item.IsHeader || item.ToolName != toolName)
-                {
-                    continue;
-                }
-
-                return item;
-            }
-
-            return null;
-        }
-
-        private void ToggleDescriptionDialogForRow(ToolListRowData item)
-        {
-            Debug.Assert(item != null, "item must not be null");
-
-            if (_selectedDescriptionToolName == item.ToolName)
-            {
-                HideDescriptionDialog();
+                HideToolDetails();
+                UpdateToolListHeight();
                 RefreshToolListView();
                 return;
             }
 
-            ShowDescriptionDialog(item);
+            _expandedDetailsToolName = item.ToolName;
+            RebuildToolDetailsRow();
+            UpdateToolListHeight();
             RefreshToolListView();
         }
 
-        private void ShowDescriptionDialog(ToolListRowData item)
+        private ToolListRowData FindToolRowByName(string toolName)
         {
-            Debug.Assert(item != null, "item must not be null");
-            Debug.Assert(!string.IsNullOrWhiteSpace(item.SkillDescription), "item must have a skill description");
+            int toolIndex = FindToolRowIndex(toolName);
+            if (toolIndex < 0)
+            {
+                return null;
+            }
 
-            _selectedDescriptionToolName = item.ToolName;
-            _descriptionTitleLabel.text = item.ToolName;
-            _descriptionBodyLabel.text = item.SkillDescription;
-            ViewDataBinder.SetVisible(_descriptionOverlay, true);
+            return _toolListRows[toolIndex];
         }
 
-        private void HideDescriptionDialog()
+        private int FindToolRowIndex(string toolName)
         {
-            _selectedDescriptionToolName = string.Empty;
-            _descriptionTitleLabel.text = string.Empty;
-            _descriptionBodyLabel.text = string.Empty;
-            ViewDataBinder.SetVisible(_descriptionOverlay, false);
+            for (int i = 0; i < _toolListRows.Count; i++)
+            {
+                ToolListRowData item = _toolListRows[i];
+                if (!item.IsTool || item.ToolName != toolName)
+                {
+                    continue;
+                }
+
+                return i;
+            }
+
+            return -1;
         }
 
-        private void HideDescriptionDialogAndRefresh()
+        private void HideToolDetails()
         {
-            HideDescriptionDialog();
-            RefreshToolListView();
+            _expandedDetailsToolName = string.Empty;
+            RemoveToolDetailsRows();
+        }
+
+        private void RebuildToolDetailsRow()
+        {
+            RemoveToolDetailsRows();
+
+            if (string.IsNullOrEmpty(_expandedDetailsToolName))
+            {
+                return;
+            }
+
+            int toolIndex = FindToolRowIndex(_expandedDetailsToolName);
+            if (toolIndex < 0)
+            {
+                _expandedDetailsToolName = string.Empty;
+                return;
+            }
+
+            ToolListRowData toolRow = _toolListRows[toolIndex];
+            _toolListRows.Insert(toolIndex + 1, ToolListRowData.CreateDetails(toolRow));
+        }
+
+        private void RemoveToolDetailsRows()
+        {
+            for (int i = _toolListRows.Count - 1; i >= 0; i--)
+            {
+                if (!_toolListRows[i].IsDetails)
+                {
+                    continue;
+                }
+
+                _toolListRows.RemoveAt(i);
+            }
         }
 
         private void UpdateToolListHeight()
         {
-            int visibleRows = Math.Min(_toolListRows.Count, InlineToolRowLimit);
+            int visibleRows = Math.Min(CountNonDetailsRows(), InlineToolRowLimit);
             if (visibleRows <= 0)
             {
                 visibleRows = 1;
             }
 
-            _toolListView.style.height = (visibleRows * ToolListRowHeight) + 2;
+            int detailsRowHeight = HasDetailsRow() ? ToolDetailsRowHeight : 0;
+            _toolListView.style.height = (visibleRows * ToolListRowHeight) + detailsRowHeight + 2;
+        }
+
+        private int CountNonDetailsRows()
+        {
+            int count = 0;
+            for (int i = 0; i < _toolListRows.Count; i++)
+            {
+                if (_toolListRows[i].IsDetails)
+                {
+                    continue;
+                }
+
+                count++;
+            }
+
+            return count;
+        }
+
+        private bool HasDetailsRow()
+        {
+            for (int i = 0; i < _toolListRows.Count; i++)
+            {
+                if (_toolListRows[i].IsDetails)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -578,20 +641,24 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private sealed class ToolListRowData
         {
             public readonly bool IsHeader;
+            public readonly bool IsDetails;
             public readonly string ToolName;
             public readonly string Label;
             public readonly string SkillDescription;
             public bool IsEnabled;
             public ToolSettingsSection Owner;
+            public bool IsTool => !IsHeader && !IsDetails;
 
             private ToolListRowData(
                 bool isHeader,
+                bool isDetails,
                 string toolName,
                 string label,
                 string skillDescription,
                 bool isEnabled)
             {
                 IsHeader = isHeader;
+                IsDetails = isDetails;
                 ToolName = toolName;
                 Label = label;
                 SkillDescription = skillDescription;
@@ -602,6 +669,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 return new ToolListRowData(
                     true,
+                    false,
                     string.Empty,
                     label,
                     string.Empty,
@@ -612,10 +680,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 return new ToolListRowData(
                     false,
+                    false,
                     item.ToolName,
                     item.ToolName,
                     item.SkillDescription,
                     item.IsEnabled);
+            }
+
+            public static ToolListRowData CreateDetails(ToolListRowData toolRow)
+            {
+                Debug.Assert(toolRow != null, "toolRow must not be null");
+                Debug.Assert(toolRow.IsTool, "toolRow must be a tool row");
+
+                return new ToolListRowData(
+                    false,
+                    true,
+                    toolRow.ToolName,
+                    string.Empty,
+                    toolRow.SkillDescription,
+                    true);
             }
         }
     }

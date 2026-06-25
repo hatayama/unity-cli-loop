@@ -13,6 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class ToolSettingsSectionTests
     {
         private const int ToolListRowHeight = 24;
+        private const int ToolDetailsRowHeight = 132;
 
         [Test]
         public void Update_ClosedWithoutToolListData_DoesNotCreateToolRows()
@@ -77,9 +78,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Update_LoadedData_ShowsInfoToggleWhenDescriptionExists()
+        public void Update_LoadedData_ShowsDetailsButtonWhenDescriptionExists()
         {
-            // Tests that rows with skill descriptions expose the help toggle.
+            // Tests that rows with skill descriptions expose the details button.
             VisualElement root = CreateRootElement();
             ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
@@ -90,15 +91,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             section.Update(data);
 
             VisualElement row = BindToolListRow(root, 1);
-            Button infoButton = row.Q<Button>("tool-list-row-info-toggle");
-            Assert.IsNotNull(infoButton);
-            Assert.AreEqual(DisplayStyle.Flex, infoButton.style.display.value);
+            Button detailsButton = row.Q<Button>("tool-list-row-details-button");
+            Assert.IsNotNull(detailsButton);
+            Assert.AreEqual(DisplayStyle.Flex, detailsButton.style.display.value);
+            Assert.AreEqual("Show Details", detailsButton.text);
         }
 
         [Test]
-        public void Update_LoadedData_HidesInfoToggleWhenDescriptionMissing()
+        public void Update_LoadedData_HidesDetailsButtonWhenDescriptionMissing()
         {
-            // Tests that rows without skill descriptions do not show an inert help toggle.
+            // Tests that rows without skill descriptions do not show an inert details button.
             VisualElement root = CreateRootElement();
             ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
@@ -108,15 +110,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             section.Update(data);
 
             VisualElement row = BindToolListRow(root, 1);
-            Button infoButton = row.Q<Button>("tool-list-row-info-toggle");
-            Assert.IsNotNull(infoButton);
-            Assert.AreEqual(DisplayStyle.None, infoButton.style.display.value);
+            Button detailsButton = row.Q<Button>("tool-list-row-details-button");
+            Assert.IsNotNull(detailsButton);
+            Assert.AreEqual(DisplayStyle.None, detailsButton.style.display.value);
         }
 
         [Test]
-        public void ToggleDescription_WhenSameToolSelectedTwice_ShowsThenHidesDescriptionOverlay()
+        public void ToggleDetails_WhenSameToolSelectedTwice_ShowsThenHidesDetailsRow()
         {
-            // Tests that the help toggle opens and closes the overlay dialog.
+            // Tests that the details button opens and closes a details row below the tool.
             VisualElement root = CreateRootElement();
             ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
@@ -125,47 +127,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileDescription: "Compile description");
 
             section.Update(data);
-            VisualElement overlay = root.Q<VisualElement>("tool-description-overlay");
-            VisualElement dialog = root.Q<VisualElement>("tool-description-dialog");
+            IList items = GetToolListItems(root);
+            ListView listView = GetToolListView(root);
 
-            section.ToggleDescriptionDialogForTool("compile");
+            section.ToggleToolDetailsForTool("compile");
 
-            Assert.AreEqual(DisplayStyle.Flex, overlay.style.display.value);
-            Assert.IsNotNull(dialog);
-            Assert.AreEqual("compile", root.Q<Label>("tool-description-dialog-title").text);
-            Assert.AreEqual("Compile description", root.Q<Label>("tool-description-dialog-body").text);
+            VisualElement toolRow = BindToolListRow(root, 1);
+            VisualElement detailsRow = BindToolListRow(root, 2);
+            Button detailsButton = toolRow.Q<Button>("tool-list-row-details-button");
+            Assert.AreEqual(3, items.Count);
+            Assert.AreEqual("Hide Details", detailsButton.text);
+            Assert.IsTrue(detailsButton.ClassListContains("unity-cli-loop-tool-toggle-row__details-button--selected"));
+            Assert.AreEqual("Compile description", detailsRow.Q<Label>("tool-list-row-details-body").text);
+            Assert.AreEqual((2 * ToolListRowHeight) + ToolDetailsRowHeight + 2, listView.style.height.value.value);
 
-            section.ToggleDescriptionDialogForTool("compile");
+            section.ToggleToolDetailsForTool("compile");
+            listView.bindItem(toolRow, 1);
 
-            Assert.AreEqual(DisplayStyle.None, overlay.style.display.value);
+            Assert.AreEqual(2, items.Count);
+            Assert.AreEqual("Show Details", toolRow.Q<Button>("tool-list-row-details-button").text);
         }
 
         [Test]
-        public void ToggleDescription_WhenShown_AddsOverlayOutsideToolList()
+        public void ToggleDetails_WhenShown_AddsDetailsRowBelowTool()
         {
-            // Tests that the description dialog overlays the settings window instead of taking space in the list.
+            // Tests that details appear as an expanded row immediately below the selected tool.
             VisualElement root = CreateRootElement();
             ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
-                includeGetLogs: false,
+                includeGetLogs: true,
                 compileDescription: "Compile description");
 
             section.Update(data);
-            section.ToggleDescriptionDialogForTool("compile");
+            section.ToggleToolDetailsForTool("compile");
 
-            VisualElement overlay = root.Q<VisualElement>("tool-description-overlay");
-            VisualElement toolListContainer = root.Q<VisualElement>("tool-list-container");
+            VisualElement detailsRow = BindToolListRow(root, 2);
+            VisualElement followingToolRow = BindToolListRow(root, 3);
 
-            Assert.AreEqual(DisplayStyle.Flex, overlay.style.display.value);
-            Assert.AreEqual("window-root", overlay.parent.name);
-            Assert.IsNull(toolListContainer.Q<VisualElement>("tool-description-overlay"));
+            Assert.AreEqual("Compile description", detailsRow.Q<Label>("tool-list-row-details-body").text);
+            Assert.AreEqual("get-logs", followingToolRow.Q<Label>("tool-list-row-label").text);
         }
 
         [Test]
-        public void ToggleDescription_WhenAnotherToolIsSelected_SwitchesDescriptionDialog()
+        public void ToggleDetails_WhenAnotherToolIsSelected_SwitchesDetailsRow()
         {
-            // Tests that selecting another help toggle moves the dialog selection.
+            // Tests that selecting another details button moves the expanded details row.
             VisualElement root = CreateRootElement();
             ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
@@ -176,19 +183,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             section.Update(data);
             ListView listView = GetToolListView(root);
+
+            section.ToggleToolDetailsForTool("compile");
+            section.ToggleToolDetailsForTool("get-logs");
             VisualElement compileRow = BindToolListRow(root, 1);
             VisualElement getLogsRow = BindToolListRow(root, 2);
-            Button getLogsInfoButton = getLogsRow.Q<Button>("tool-list-row-info-toggle");
-
-            section.ToggleDescriptionDialogForTool("compile");
-            section.ToggleDescriptionDialogForTool("get-logs");
+            VisualElement detailsRow = BindToolListRow(root, 3);
             listView.bindItem(compileRow, 1);
             listView.bindItem(getLogsRow, 2);
 
-            Assert.AreEqual("get-logs", root.Q<Label>("tool-description-dialog-title").text);
-            Assert.AreEqual("Logs description", root.Q<Label>("tool-description-dialog-body").text);
-            Assert.IsFalse(compileRow.Q<Button>("tool-list-row-info-toggle").ClassListContains("unity-cli-loop-tool-toggle-row__info-toggle--selected"));
-            Assert.IsTrue(getLogsInfoButton.ClassListContains("unity-cli-loop-tool-toggle-row__info-toggle--selected"));
+            Assert.AreEqual("Logs description", detailsRow.Q<Label>("tool-list-row-details-body").text);
+            Assert.AreEqual("Show Details", compileRow.Q<Button>("tool-list-row-details-button").text);
+            Assert.AreEqual("Hide Details", getLogsRow.Q<Button>("tool-list-row-details-button").text);
+            Assert.IsFalse(compileRow.Q<Button>("tool-list-row-details-button").ClassListContains("unity-cli-loop-tool-toggle-row__details-button--selected"));
+            Assert.IsTrue(getLogsRow.Q<Button>("tool-list-row-details-button").ClassListContains("unity-cli-loop-tool-toggle-row__details-button--selected"));
         }
 
         [Test]
