@@ -122,6 +122,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.AreEqual("ClickTarget", lastResponse.HitGameObjectName);
         }
 
+        [UnityTest]
+        public IEnumerator Click_WithBypassRaycastAndClickOnlyTarget_Should_FirePointerUpAndClick()
+        {
+            // Verifies click-only targets still receive pointer up before pointer click.
+            ClickOnlyTracker tracker = CreateClickOnlyElement("ClickOnlyTarget", Vector2.zero, new Vector2(200, 100));
+            yield return null;
+
+            Vector2 screenPos = GetScreenPosition(tracker.gameObject);
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = MouseAction.Click.ToString(),
+                ["x"] = screenPos.x,
+                ["y"] = screenPos.y,
+                ["bypassRaycast"] = true,
+                ["targetPath"] = "TestCanvas/ClickOnlyTarget"
+            });
+
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(tracker.PointerUpCalled, "PointerUp should be fired");
+            Assert.IsTrue(tracker.PointerClickCalled, "PointerClick should be fired");
+            Assert.AreEqual("ClickOnlyTarget", lastResponse.HitGameObjectName);
+        }
+
         // Verifies clipped overlay UI wins over a non-GraphicRaycaster hit behind it.
         [UnityTest]
         public IEnumerator Click_Should_PreferClippedOverlayUiOverNonUiRaycastHit()
@@ -937,6 +961,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             return go.AddComponent<ClickTracker>();
         }
 
+        private ClickOnlyTracker CreateClickOnlyElement(string name, Vector2 anchoredPosition, Vector2 sizeDelta)
+        {
+            GameObject go = CreateUIElement(name, anchoredPosition, sizeDelta);
+            go.AddComponent<Image>();
+            return go.AddComponent<ClickOnlyTracker>();
+        }
+
         private ClickTracker CreateChildClickableElement(string name, Transform parent, Vector2 anchoredPosition, Vector2 sizeDelta)
         {
             GameObject go = CreateChildUIElement(name, parent, anchoredPosition, sizeDelta);
@@ -1102,6 +1133,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         public bool PointerClickCalled { get; private set; }
 
         public void OnPointerDown(PointerEventData eventData) { PointerDownCalled = true; }
+        public void OnPointerUp(PointerEventData eventData) { PointerUpCalled = true; }
+        public void OnPointerClick(PointerEventData eventData) { PointerClickCalled = true; }
+    }
+
+    /// <summary>
+    /// Test support type that exposes click targets without pointer-down handlers.
+    /// </summary>
+    public class ClickOnlyTracker : MonoBehaviour, IPointerUpHandler, IPointerClickHandler
+    {
+        public bool PointerUpCalled { get; private set; }
+        public bool PointerClickCalled { get; private set; }
+
         public void OnPointerUp(PointerEventData eventData) { PointerUpCalled = true; }
         public void OnPointerClick(PointerEventData eventData) { PointerClickCalled = true; }
     }

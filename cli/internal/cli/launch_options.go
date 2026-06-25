@@ -33,9 +33,13 @@ func applyLaunchOption(options *launchOptions, args []string, index int) (int, e
 func isUnsupportedLaunchHubOption(arg string) bool {
 	return arg == "-a" ||
 		arg == "-f" ||
-		arg == "--add-unity-hub" ||
-		arg == "--favorite" ||
-		arg == "--unity-hub-entry"
+		isUnsupportedLaunchHubLongOption(arg, "--add-unity-hub") ||
+		isUnsupportedLaunchHubLongOption(arg, "--favorite") ||
+		isUnsupportedLaunchHubLongOption(arg, "--unity-hub-entry")
+}
+
+func isUnsupportedLaunchHubLongOption(arg string, option string) bool {
+	return arg == option || strings.HasPrefix(arg, option+"=")
 }
 
 func unsupportedLaunchHubOptionError(arg string) error {
@@ -71,8 +75,8 @@ func applyLaunchMaxDepthOption(options *launchOptions, args []string, index int)
 		return index, err
 	}
 	maxDepth, err := strconv.Atoi(value)
-	if err != nil {
-		return index, invalidValueArgumentError("--max-depth", value, "integer")
+	if err != nil || maxDepth < -1 {
+		return index, invalidValueArgumentError("--max-depth", value, "integer >= -1")
 	}
 	options.maxDepth = maxDepth
 	return nextLaunchOptionIndex(index, consumed), nil

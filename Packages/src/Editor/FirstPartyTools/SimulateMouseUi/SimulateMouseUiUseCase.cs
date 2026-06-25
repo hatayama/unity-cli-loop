@@ -488,8 +488,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     resolvedTargets.RawTarget,
                     pointerData,
                     ExecuteEvents.pointerDownHandler);
+            }
+
+            if (resolvedTargets.Target != null)
+            {
                 ExecuteEvents.Execute(
-                    resolvedTargets.PressTarget,
+                    resolvedTargets.Target,
                     pointerData,
                     ExecuteEvents.pointerUpHandler);
             }

@@ -176,13 +176,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             int afterAttr = SkipAttributeBlock(source, pos);
             int nextNonWs = SkipWhitespace(source, afterAttr);
-            if (nextNonWs >= source.Length || !IsTypeDeclarationKeyword(source, nextNonWs))
+            int declarationStart = SkipAccessModifiers(source, nextNonWs);
+            if (declarationStart >= source.Length || !IsTypeDeclarationKeyword(source, declarationStart))
             {
                 return null;
             }
 
             result.HasTypeDeclaration = true;
-            return SkipTopLevelBlock(source, nextNonWs, braceDepth);
+            return SkipTopLevelBlock(source, declarationStart, braceDepth);
         }
 
         private static SourceTopLevelStep? TryAnalyzeModifiedTypeDeclaration(

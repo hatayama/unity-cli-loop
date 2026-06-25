@@ -48,6 +48,24 @@ func TestBuildToolParamsConvertsSchemaTypes(t *testing.T) {
 	}
 }
 
+func TestBuildToolParamsRejectsNullObjectValue(t *testing.T) {
+	// Tests that object schema arguments must parse to JSON objects rather than null.
+	tool := toolDefinition{
+		Name: "sample-tool",
+		InputSchema: inputSchema{
+			Properties: map[string]toolProperty{
+				"Payload": {Type: "object"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--payload", "null"}, tool)
+
+	if err == nil {
+		t.Fatal("expected null object value to be rejected")
+	}
+}
+
 // Tests that default-enabled boolean tool arguments are disabled through --no-* flags.
 func TestBuildToolParamsConvertsDefaultTrueBooleanToNegatedFlag(t *testing.T) {
 	tool := toolDefinition{

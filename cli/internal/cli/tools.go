@@ -309,6 +309,9 @@ func convertObjectValue(value string, option string) (map[string]any, error) {
 	if err := json.Unmarshal([]byte(value), &parsed); err != nil {
 		return nil, invalidValueArgumentError(option, value, "object")
 	}
+	if parsed == nil {
+		return nil, invalidValueArgumentError(option, value, "object")
+	}
 	return parsed, nil
 }
 

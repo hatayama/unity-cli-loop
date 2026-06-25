@@ -54,6 +54,41 @@ func TestParseLaunchOptionsRejectsUnityHubRegistration(t *testing.T) {
 	}
 }
 
+func TestParseLaunchOptionsRejectsUnityHubRegistrationEqualsValues(t *testing.T) {
+	// Verifies deprecated Unity Hub flags keep launch-specific guidance in --flag=value form.
+	for _, arg := range []string{"--add-unity-hub=true", "--favorite=true", "--unity-hub-entry=sample"} {
+		_, err := parseLaunchOptions([]string{arg}, "")
+		if err == nil {
+			t.Fatalf("expected Unity Hub registration option error for %s", arg)
+		}
+
+		var argErr *argumentError
+		if !errors.As(err, &argErr) {
+			t.Fatalf("expected argumentError for %s, got %T", arg, err)
+		}
+		if argErr.message != "Native launch does not support Unity Hub registration options." {
+			t.Fatalf("message mismatch for %s: %s", arg, argErr.message)
+		}
+	}
+}
+
+func TestParseLaunchOptionsRejectsMaxDepthBelowUnlimitedSentinel(t *testing.T) {
+	// Verifies --max-depth only accepts -1 as the unlimited sentinel.
+	_, err := parseLaunchOptions([]string{"--max-depth", "-2"}, "")
+
+	if err == nil {
+		t.Fatal("expected invalid max-depth error")
+	}
+
+	var argErr *argumentError
+	if !errors.As(err, &argErr) {
+		t.Fatalf("expected argumentError, got %T", err)
+	}
+	if argErr.expectedType != "integer >= -1" {
+		t.Fatalf("expectedType mismatch: %s", argErr.expectedType)
+	}
+}
+
 func TestParseLaunchOptionsRejectsEmptyPlatformEqualsValue(t *testing.T) {
 	// Verifies --platform= cannot silently drop the requested build target.
 	_, err := parseLaunchOptions([]string{"--platform="}, "")

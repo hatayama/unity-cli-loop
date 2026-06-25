@@ -201,6 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 scanState.AssemblyReferenceDirectories,
                 projectRoot,
                 scanState.LegacyAssemblyDirectories,
+                scanState.AssemblyScopedLegacyAliasesByDirectory,
                 scanState.AssemblyScopedCurrentToolContractsDirectories,
                 scanState.AssemblyScopedCurrentFirstPartyToolsDirectories,
                 scanState.AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory,

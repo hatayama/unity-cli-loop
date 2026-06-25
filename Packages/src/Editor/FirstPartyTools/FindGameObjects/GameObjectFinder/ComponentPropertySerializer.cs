@@ -109,7 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 case SerializedPropertyType.Float:
                     return property.floatValue;
                 default:
-                    Debug.Assert(
+                    UnityEngine.Debug.Assert(
                         property.propertyType == SerializedPropertyType.String,
                         "Primitive property serialization only supports bool, float, and string.");
                     return property.stringValue;
@@ -133,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 case SerializedPropertyType.Bounds:
                     return property.boundsValue;
                 default:
-                    Debug.Assert(
+                    UnityEngine.Debug.Assert(
                         property.propertyType == SerializedPropertyType.Quaternion,
                         "Unity struct property serialization only supports Unity value structs.");
                     return property.quaternionValue;

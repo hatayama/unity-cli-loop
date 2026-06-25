@@ -67,7 +67,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             RegularString,
             VerbatimString,
             CharLiteral,
-            RawString
+            RawString,
+            LineComment,
+            BlockComment
         }
 
         /// <summary>
@@ -105,6 +107,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (_mode != AttributeArgumentScanMode.None)
                 {
                     return ConsumeActiveMode(index);
+                }
+
+                (bool enteredComment, int commentIndex) = TryEnterComment(index);
+                if (enteredComment)
+                {
+                    return commentIndex;
                 }
 
                 (bool enteredLiteral, int nextIndex) = TryEnterLiteral(index);
@@ -147,6 +155,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         return ConsumeCharLiteral(index);
                     case AttributeArgumentScanMode.RawString:
                         return ConsumeRawString(index);
+                    case AttributeArgumentScanMode.LineComment:
+                        return ConsumeLineComment(index);
+                    case AttributeArgumentScanMode.BlockComment:
+                        return ConsumeBlockComment(index);
                     default:
                         return index;
                 }
@@ -207,6 +219,44 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 return index;
+            }
+
+            private int ConsumeLineComment(int index)
+            {
+                if (_source[index] == '\n' || _source[index] == '\r')
+                {
+                    _mode = AttributeArgumentScanMode.None;
+                }
+
+                return index;
+            }
+
+            private int ConsumeBlockComment(int index)
+            {
+                if (StartsWith(_source, index, "*/"))
+                {
+                    _mode = AttributeArgumentScanMode.None;
+                    return index + 1;
+                }
+
+                return index;
+            }
+
+            private (bool EnteredComment, int NextIndex) TryEnterComment(int index)
+            {
+                if (StartsWith(_source, index, "//"))
+                {
+                    _mode = AttributeArgumentScanMode.LineComment;
+                    return (true, index + 1);
+                }
+
+                if (StartsWith(_source, index, "/*"))
+                {
+                    _mode = AttributeArgumentScanMode.BlockComment;
+                    return (true, index + 1);
+                }
+
+                return (false, index);
             }
 
             private (bool EnteredLiteral, int NextIndex) TryEnterLiteral(int index)
