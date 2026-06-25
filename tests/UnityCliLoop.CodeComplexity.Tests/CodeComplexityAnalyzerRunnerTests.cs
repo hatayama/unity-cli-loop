@@ -170,6 +170,32 @@ namespace UnityCliLoop.CodeComplexity.Tests
             Assert.That(exitCode, Is.EqualTo(2));
         }
 
+        // Verifies that empty root paths return validation failures before path resolution.
+        [Test]
+        public void Main_WhenRootPathIsEmpty_ShouldReturnValidationFailure()
+        {
+            int exitCode = Program.Main(new[]
+            {
+                "--root",
+                string.Empty
+            });
+
+            Assert.That(exitCode, Is.EqualTo(2));
+        }
+
+        // Verifies that malformed root paths return validation failures before path resolution.
+        [Test]
+        public void Main_WhenRootPathContainsNullCharacter_ShouldReturnValidationFailure()
+        {
+            int exitCode = Program.Main(new[]
+            {
+                "--root",
+                "\0"
+            });
+
+            Assert.That(exitCode, Is.EqualTo(2));
+        }
+
         private static void CreateSampleRepository(string rootPath)
         {
             string packageDirectory = Path.Combine(rootPath, "Packages", "src", "Editor", "Sample");

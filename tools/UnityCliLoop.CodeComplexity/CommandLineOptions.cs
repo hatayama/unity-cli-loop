@@ -137,9 +137,15 @@ namespace UnityCliLoop.CodeComplexity
                 return CommandLineParseResult.Failed($"Unknown argument '{argument}'.");
             }
 
+            (bool rootSuccess, string resolvedRootPath, string rootErrorMessage) = ResolveRootPath(rootPath);
+            if (!rootSuccess)
+            {
+                return CommandLineParseResult.Failed(rootErrorMessage);
+            }
+
             return CommandLineParseResult.Succeeded(
                 new CodeComplexityOptions(
-                    Path.GetFullPath(rootPath),
+                    resolvedRootPath,
                     maxComplexity,
                     includeNonProduction,
                     format,
@@ -163,6 +169,21 @@ namespace UnityCliLoop.CodeComplexity
                 "  --include-non-production true|false   Include Assets and tests sources. Defaults to false.",
                 "  --format table|json                   Output format. Defaults to table.",
                 "  --fail-on-exceeded true|false         Exit 1 when CA1502 diagnostics exist. Defaults to false.");
+        }
+
+        private static (bool Success, string Value, string ErrorMessage) ResolveRootPath(string rootPath)
+        {
+            if (string.IsNullOrEmpty(rootPath))
+            {
+                return (false, string.Empty, "--root expects a non-empty path.");
+            }
+
+            if (rootPath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+            {
+                return (false, string.Empty, "--root expects a path without invalid characters.");
+            }
+
+            return (true, Path.GetFullPath(rootPath), string.Empty);
         }
 
         private static (bool Success, string Value, int NextIndex, string ErrorMessage) ReadValue(string[] args, int index, string optionName)
