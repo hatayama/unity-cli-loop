@@ -24,7 +24,15 @@ namespace UnityCliLoop.CodeComplexity
                 return 0;
             }
 
-            CodeComplexityOptions options = CommandLineOptions.Parse(args);
+            CommandLineParseResult parseResult = CommandLineOptions.TryParse(args);
+            if (!parseResult.Success)
+            {
+                Console.Error.WriteLine(parseResult.ErrorMessage);
+                return 2;
+            }
+
+            CodeComplexityOptions options = parseResult.Options
+                ?? throw new InvalidOperationException("Successful command-line parsing must produce options.");
             CodeComplexityAnalyzerRunner runner = new();
             IReadOnlyList<CodeComplexityIssue> issues = await runner.AnalyzeAsync(options, ct);
             CodeComplexityReporter.Write(issues, options);

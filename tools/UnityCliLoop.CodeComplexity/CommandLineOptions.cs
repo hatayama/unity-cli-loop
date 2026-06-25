@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 
@@ -9,7 +10,25 @@ namespace UnityCliLoop.CodeComplexity
     /// </summary>
     public static class CommandLineOptions
     {
+        private const string MaximumInt32Value = "2147483647";
+
         public static CodeComplexityOptions Parse(string[] args)
+        {
+            CommandLineParseResult result = TryParse(args);
+            if (!result.Success)
+            {
+                throw new ArgumentException(result.ErrorMessage);
+            }
+
+            if (result.Options == null)
+            {
+                throw new InvalidOperationException("Successful command-line parsing must produce options.");
+            }
+
+            return result.Options;
+        }
+
+        public static CommandLineParseResult TryParse(string[] args)
         {
             CodeComplexityOptions defaults = CodeComplexityOptions.Default(Directory.GetCurrentDirectory());
             string rootPath = defaults.RootPath;
@@ -23,7 +42,12 @@ namespace UnityCliLoop.CodeComplexity
                 string argument = args[index];
                 if (argument == "--root")
                 {
-                    (string value, int nextIndex) = ReadValue(args, index, argument);
+                    (bool success, string value, int nextIndex, string errorMessage) = ReadValue(args, index, argument);
+                    if (!success)
+                    {
+                        return CommandLineParseResult.Failed(errorMessage);
+                    }
+
                     rootPath = value;
                     index = nextIndex;
                     continue;
@@ -31,50 +55,95 @@ namespace UnityCliLoop.CodeComplexity
 
                 if (argument == "--max-complexity")
                 {
-                    (string value, int nextIndex) = ReadValue(args, index, argument);
-                    maxComplexity = ParsePositiveInteger(value, argument);
+                    (bool success, string value, int nextIndex, string errorMessage) = ReadValue(args, index, argument);
+                    if (!success)
+                    {
+                        return CommandLineParseResult.Failed(errorMessage);
+                    }
+
+                    (bool integerSuccess, int parsedValue, string integerErrorMessage) = ParsePositiveInteger(value, argument);
+                    if (!integerSuccess)
+                    {
+                        return CommandLineParseResult.Failed(integerErrorMessage);
+                    }
+
+                    maxComplexity = parsedValue;
                     index = nextIndex;
                     continue;
                 }
 
                 if (argument == "--include-non-production")
                 {
-                    (string value, int nextIndex) = ReadValue(args, index, argument);
-                    includeNonProduction = ParseBoolean(value, argument);
+                    (bool success, string value, int nextIndex, string errorMessage) = ReadValue(args, index, argument);
+                    if (!success)
+                    {
+                        return CommandLineParseResult.Failed(errorMessage);
+                    }
+
+                    (bool booleanSuccess, bool parsedValue, string booleanErrorMessage) = ParseBoolean(value, argument);
+                    if (!booleanSuccess)
+                    {
+                        return CommandLineParseResult.Failed(booleanErrorMessage);
+                    }
+
+                    includeNonProduction = parsedValue;
                     index = nextIndex;
                     continue;
                 }
 
                 if (argument == "--format")
                 {
-                    (string value, int nextIndex) = ReadValue(args, index, argument);
-                    format = ParseFormat(value);
+                    (bool success, string value, int nextIndex, string errorMessage) = ReadValue(args, index, argument);
+                    if (!success)
+                    {
+                        return CommandLineParseResult.Failed(errorMessage);
+                    }
+
+                    (bool formatSuccess, ReportFormat parsedValue, string formatErrorMessage) = ParseFormat(value);
+                    if (!formatSuccess)
+                    {
+                        return CommandLineParseResult.Failed(formatErrorMessage);
+                    }
+
+                    format = parsedValue;
                     index = nextIndex;
                     continue;
                 }
 
                 if (argument == "--fail-on-exceeded")
                 {
-                    (string value, int nextIndex) = ReadValue(args, index, argument);
-                    failOnExceeded = ParseBoolean(value, argument);
+                    (bool success, string value, int nextIndex, string errorMessage) = ReadValue(args, index, argument);
+                    if (!success)
+                    {
+                        return CommandLineParseResult.Failed(errorMessage);
+                    }
+
+                    (bool booleanSuccess, bool parsedValue, string booleanErrorMessage) = ParseBoolean(value, argument);
+                    if (!booleanSuccess)
+                    {
+                        return CommandLineParseResult.Failed(booleanErrorMessage);
+                    }
+
+                    failOnExceeded = parsedValue;
                     index = nextIndex;
                     continue;
                 }
 
                 if (argument == "--help" || argument == "-h")
                 {
-                    throw new ArgumentException(CreateHelpText());
+                    return CommandLineParseResult.Failed(CreateHelpText());
                 }
 
-                throw new ArgumentException($"Unknown argument '{argument}'.");
+                return CommandLineParseResult.Failed($"Unknown argument '{argument}'.");
             }
 
-            return new CodeComplexityOptions(
-                Path.GetFullPath(rootPath),
-                maxComplexity,
-                includeNonProduction,
-                format,
-                failOnExceeded);
+            return CommandLineParseResult.Succeeded(
+                new CodeComplexityOptions(
+                    Path.GetFullPath(rootPath),
+                    maxComplexity,
+                    includeNonProduction,
+                    format,
+                    failOnExceeded));
         }
 
         public static bool HasHelpOption(string[] args)
@@ -96,61 +165,79 @@ namespace UnityCliLoop.CodeComplexity
                 "  --fail-on-exceeded true|false         Exit 1 when CA1502 diagnostics exist. Defaults to false.");
         }
 
-        private static (string Value, int NextIndex) ReadValue(string[] args, int index, string optionName)
+        private static (bool Success, string Value, int NextIndex, string ErrorMessage) ReadValue(string[] args, int index, string optionName)
         {
             int valueIndex = index + 1;
             if (valueIndex >= args.Length)
             {
-                throw new ArgumentException($"{optionName} requires a value.");
+                return (false, string.Empty, index, $"{optionName} requires a value.");
             }
 
-            return (args[valueIndex], valueIndex);
+            return (true, args[valueIndex], valueIndex, string.Empty);
         }
 
-        private static int ParsePositiveInteger(string value, string optionName)
+        private static (bool Success, int Value, string ErrorMessage) ParsePositiveInteger(string value, string optionName)
         {
-            if (!string.IsNullOrEmpty(value) && value.All(char.IsDigit))
+            if (string.IsNullOrEmpty(value) || !value.All(char.IsDigit))
             {
-                int parsed = int.Parse(value);
-                if (parsed > 0)
-                {
-                    return parsed;
-                }
+                return (false, 0, $"{optionName} expects a positive integer.");
             }
 
-            throw new ArgumentException($"{optionName} expects a positive integer.");
+            string normalized = value.TrimStart('0');
+            if (normalized.Length == 0)
+            {
+                return (false, 0, $"{optionName} expects a positive integer.");
+            }
+
+            if (!IsWithinInt32Range(normalized))
+            {
+                return (false, 0, $"{optionName} expects a positive integer.");
+            }
+
+            return (true, int.Parse(normalized, CultureInfo.InvariantCulture), string.Empty);
         }
 
-        private static ReportFormat ParseFormat(string value)
+        private static bool IsWithinInt32Range(string normalizedValue)
         {
-            string normalized = value.Trim().ToLowerInvariant();
-            if (normalized == "table")
-            {
-                return ReportFormat.Table;
-            }
-
-            if (normalized == "json")
-            {
-                return ReportFormat.Json;
-            }
-
-            throw new ArgumentException($"Unsupported format '{value}'.");
-        }
-
-        private static bool ParseBoolean(string value, string optionName)
-        {
-            string normalized = value.Trim().ToLowerInvariant();
-            if (normalized == "true")
+            if (normalizedValue.Length < MaximumInt32Value.Length)
             {
                 return true;
             }
 
-            if (normalized == "false")
+            return normalizedValue.Length == MaximumInt32Value.Length
+                && string.CompareOrdinal(normalizedValue, MaximumInt32Value) <= 0;
+        }
+
+        private static (bool Success, ReportFormat Value, string ErrorMessage) ParseFormat(string value)
+        {
+            string normalized = value.Trim().ToLowerInvariant();
+            if (normalized == "table")
             {
-                return false;
+                return (true, ReportFormat.Table, string.Empty);
             }
 
-            throw new ArgumentException($"{optionName} expects true or false.");
+            if (normalized == "json")
+            {
+                return (true, ReportFormat.Json, string.Empty);
+            }
+
+            return (false, ReportFormat.Table, $"Unsupported format '{value}'.");
+        }
+
+        private static (bool Success, bool Value, string ErrorMessage) ParseBoolean(string value, string optionName)
+        {
+            string normalized = value.Trim().ToLowerInvariant();
+            if (normalized == "true")
+            {
+                return (true, true, string.Empty);
+            }
+
+            if (normalized == "false")
+            {
+                return (true, false, string.Empty);
+            }
+
+            return (false, false, $"{optionName} expects true or false.");
         }
     }
 }

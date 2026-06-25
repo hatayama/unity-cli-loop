@@ -53,6 +53,39 @@ namespace UnityCliLoop.CodeComplexity
     }
 
     /// <summary>
+    /// Represents expected command-line parsing success or validation failure.
+    /// </summary>
+    public sealed class CommandLineParseResult
+    {
+        public bool Success { get; }
+        public CodeComplexityOptions? Options { get; }
+        public string ErrorMessage { get; }
+
+        private CommandLineParseResult(bool success, CodeComplexityOptions? options, string errorMessage)
+        {
+            Success = success;
+            Options = options;
+            ErrorMessage = errorMessage;
+        }
+
+        public static CommandLineParseResult Succeeded(CodeComplexityOptions options)
+        {
+            return new CommandLineParseResult(
+                success: true,
+                options,
+                errorMessage: string.Empty);
+        }
+
+        public static CommandLineParseResult Failed(string errorMessage)
+        {
+            return new CommandLineParseResult(
+                success: false,
+                options: null,
+                errorMessage);
+        }
+    }
+
+    /// <summary>
     /// Represents one CA1502 complexity diagnostic in a stable reporting shape.
     /// </summary>
     public sealed class CodeComplexityIssue

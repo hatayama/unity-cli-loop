@@ -5,6 +5,7 @@ on:
     branches: [ main, v3-beta ]
     paths:
       - 'cli/**/*.go'
+      - 'cli/.go-version'
       - 'cli/.golangci-complexity.yml'
       - 'Packages/src/**/*.cs'
       - 'tools/UnityCliLoop.CodeComplexity/**'
@@ -53,7 +54,7 @@ jobs:
         if: always()
         run: |
           mkdir -p artifacts
-          (cd cli && golangci-lint run --config .golangci-complexity.yml --output.json.path ../artifacts/go-code-complexity.json ./...) || true
+          (cd cli && golangci-lint run --config .golangci-complexity.yml --issues-exit-code=0 --show-stats=false --output.json.path ../artifacts/go-code-complexity.json ./...)
           dotnet run --project tools/UnityCliLoop.CodeComplexity/UnityCliLoop.CodeComplexity.csproj -- \
             --root . \
             --max-complexity 25 \

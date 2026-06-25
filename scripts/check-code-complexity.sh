@@ -3,7 +3,7 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 MAX_COMPLEXITY=${CODE_COMPLEXITY_MAX_COMPLEXITY:-25}
-FAIL_ON_EXCEEDED=${CODE_COMPLEXITY_FAIL_ON_EXCEEDED:-false}
+FAIL_ON_EXCEEDED=$(printf '%s' "${CODE_COMPLEXITY_FAIL_ON_EXCEEDED:-false}" | tr '[:upper:]' '[:lower:]')
 GO_CONFIG="$ROOT_DIR/cli/.golangci-complexity.yml"
 TEMP_GO_CONFIG=
 

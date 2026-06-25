@@ -90,6 +90,25 @@ namespace UnityCliLoop.CodeComplexity.Tests
                 && issue.Message.Contains("AssetBranch", StringComparison.Ordinal)), Is.True);
         }
 
+        // Verifies that repository-specific preprocessor symbols keep conditional package code visible to CA1502.
+        [Test]
+        public async Task AnalyzeAsync_WhenRepositorySymbolWrapsCode_ShouldAnalyzeConditionalBranch()
+        {
+            CodeComplexityAnalyzerRunner runner = new();
+            CodeComplexityOptions options = new(
+                _rootPath,
+                maxComplexity: 1,
+                includeNonProduction: false,
+                ReportFormat.Table,
+                failOnExceeded: false);
+
+            IReadOnlyList<CodeComplexityIssue> issues = await runner.AnalyzeAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.RuleId == "CA1502"
+                && issue.Message.Contains("ConditionalTestFrameworkBranch", StringComparison.Ordinal)), Is.True);
+        }
+
         // Verifies that advisory mode keeps the command successful when CA1502 diagnostics are present.
         [Test]
         public void Main_WhenFailOnExceededIsFalse_ShouldReturnSuccessForFindings()
@@ -124,6 +143,33 @@ namespace UnityCliLoop.CodeComplexity.Tests
             Assert.That(exitCode, Is.EqualTo(1));
         }
 
+        // Verifies that invalid options return a clean validation failure instead of an unhandled exception.
+        [Test]
+        public void Main_WhenOptionIsUnknown_ShouldReturnValidationFailure()
+        {
+            int exitCode = Program.Main(new[]
+            {
+                "--unknown"
+            });
+
+            Assert.That(exitCode, Is.EqualTo(2));
+        }
+
+        // Verifies that oversized numeric input is rejected without overflowing.
+        [Test]
+        public void Main_WhenMaxComplexityOverflowsInt32_ShouldReturnValidationFailure()
+        {
+            int exitCode = Program.Main(new[]
+            {
+                "--root",
+                _rootPath,
+                "--max-complexity",
+                "999999999999999999999999999999999999"
+            });
+
+            Assert.That(exitCode, Is.EqualTo(2));
+        }
+
         private static void CreateSampleRepository(string rootPath)
         {
             string packageDirectory = Path.Combine(rootPath, "Packages", "src", "Editor", "Sample");
@@ -147,6 +193,18 @@ namespace UnityCliLoop.CodeComplexity.Tests
 
                             return 0;
                         }
+
+                    #if ULOOP_HAS_TEST_FRAMEWORK
+                        public int ConditionalTestFrameworkBranch(bool condition)
+                        {
+                            if (condition)
+                            {
+                                return 1;
+                            }
+
+                            return 0;
+                        }
+                    #endif
                     }
                 }
                 """);
