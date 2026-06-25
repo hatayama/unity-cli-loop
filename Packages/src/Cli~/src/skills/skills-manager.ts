@@ -19,12 +19,18 @@ import {
   readdirSync,
   renameSync,
 } from 'fs';
-import { join, dirname, resolve, isAbsolute, sep } from 'path';
+import { join, dirname, resolve, isAbsolute, sep, extname } from 'path';
 import { homedir } from 'os';
 import { TargetConfig } from './target-config.js';
 import { findUnityProjectRoot, getUnityProjectStatus } from '../project-root.js';
 import { DEPRECATED_SKILLS } from './deprecated-skills.js';
-import { isToolEnabled, loadDisabledTools } from '../tool-settings-loader.js';
+import {
+  isToolEnabled,
+  loadDisabledTools,
+  loadSkillCliInvocation,
+  saveSkillCliInvocation,
+  type SkillCliInvocation,
+} from '../tool-settings-loader.js';
 
 type SkillStatus = 'installed' | 'not_installed' | 'outdated';
 
@@ -78,11 +84,18 @@ class SkillsPathConstants {
   public static readonly PATH_PROTOCOL = 'path:';
   public static readonly PACKAGE_NAME = 'io.github.hatayama.uloopmcp';
   public static readonly PACKAGE_NAME_ALIAS = 'io.github.hatayama.uLoopMCP';
+  public static readonly PACKAGE_JSON_FILE = 'package.json';
+  public static readonly NPX_COMMAND = 'npx';
+  public static readonly NPX_YES_FLAG = '--yes';
+  public static readonly NPM_CLI_PACKAGE_NAME = 'uloop-cli';
+  public static readonly MARKDOWN_FILE_EXTENSION = '.md';
   public static readonly PACKAGE_NAMES = [
     SkillsPathConstants.PACKAGE_NAME,
     SkillsPathConstants.PACKAGE_NAME_ALIAS,
   ];
 }
+
+const ULOOP_COMMAND_PATTERN = /(^|[^A-Za-z0-9_-])uloop(?=\s)/g;
 
 function getGlobalSkillsRoot(target: TargetConfig): string {
   return join(homedir(), target.projectDir, 'skills');
@@ -628,7 +641,8 @@ export function getAllSkillStatuses(
   global: boolean,
   groupManagedSkills: boolean = DEFAULT_GROUP_MANAGED_SKILLS,
 ): SkillInfo[] {
-  const allSkills = collectAllSkills();
+  const cliInvocation = resolveSkillCliInvocation(global);
+  const allSkills = collectAllSkills(cliInvocation);
   return allSkills.map((skill) => ({
     name: skill.name,
     status: getSkillStatus(skill, target, global, groupManagedSkills),
@@ -757,6 +771,7 @@ export function installAllSkills(
   target: TargetConfig,
   global: boolean,
   groupManagedSkills: boolean = DEFAULT_GROUP_MANAGED_SKILLS,
+  requestedInvocation?: SkillCliInvocation,
 ): InstallResult {
   const result: InstallResult = {
     installed: 0,
@@ -767,8 +782,14 @@ export function installAllSkills(
     deprecatedRemoved: 0,
   };
 
-  const allSkills = collectAllSkills();
+  const cliInvocation = resolveSkillCliInvocation(global, requestedInvocation);
   const baseDir = getSkillsBaseDir(target, global);
+  ensurePackageVersionForNpxInstall(cliInvocation);
+  if (!global && requestedInvocation !== undefined) {
+    saveSkillCliInvocation(requestedInvocation);
+  }
+
+  const allSkills = collectAllSkills(cliInvocation);
   result.deprecatedRemoved = removeDeprecatedSkillDirs(baseDir);
   if (groupManagedSkills) {
     migrateLegacyManagedSkills(
@@ -834,7 +855,7 @@ export function uninstallAllSkills(
   const baseDir = getSkillsBaseDir(target, global);
   result.removed += removeDeprecatedSkillDirs(baseDir);
 
-  const allSkills = collectAllSkills();
+  const allSkills = collectAllSkills('global');
   for (const skill of allSkills) {
     const removed = groupManagedSkills
       ? uninstallSkill(skill, target, global, groupManagedSkills)
@@ -860,17 +881,23 @@ export function getInstallDir(
 }
 
 export function getTotalSkillCount(): number {
-  return collectAllSkills().length;
+  return collectAllSkills('global').length;
 }
 
-function collectAllSkills(): SkillDefinition[] {
+function collectAllSkills(cliInvocation: SkillCliInvocation): SkillDefinition[] {
   const projectRoot = findUnityProjectRoot();
   const packageRoot = projectRoot ? resolvePackageRoot(projectRoot) : null;
   const packageSkills = packageRoot ? collectPackageSkillsFromRoot(packageRoot) : [];
   const cliOnlySkills = collectCliOnlySkills();
   const projectSkills = collectProjectSkills(packageRoot ? [packageRoot] : []);
+  const packageVersion =
+    cliInvocation === 'npx' && packageRoot ? readPackageVersion(packageRoot) : null;
 
-  return dedupeSkillsByName([packageSkills, cliOnlySkills, projectSkills]);
+  return formatSkillsForCliInvocation(
+    dedupeSkillsByName([packageSkills, cliOnlySkills, projectSkills]),
+    cliInvocation,
+    packageVersion,
+  );
 }
 
 function collectPackageSkillsFromRoot(packageRoot: string): SkillDefinition[] {
@@ -967,6 +994,115 @@ function dedupeSkillsByName(skillGroups: SkillDefinition[][]): SkillDefinition[]
     }
   }
   return merged;
+}
+
+function resolveSkillCliInvocation(
+  global: boolean,
+  requestedInvocation?: SkillCliInvocation,
+): SkillCliInvocation {
+  if (global) {
+    return 'global';
+  }
+
+  return requestedInvocation ?? loadSkillCliInvocation();
+}
+
+function formatSkillsForCliInvocation(
+  skills: SkillDefinition[],
+  cliInvocation: SkillCliInvocation,
+  packageVersion: string | null,
+): SkillDefinition[] {
+  if (cliInvocation === 'global') {
+    return skills;
+  }
+
+  if (packageVersion === null) {
+    return skills;
+  }
+
+  return skills.map((skill) => ({
+    ...skill,
+    content: formatSkillContentForNpx(skill.content, packageVersion),
+    additionalFiles: formatAdditionalSkillFilesForNpx(skill.additionalFiles, packageVersion),
+  }));
+}
+
+function ensurePackageVersionForNpxInstall(cliInvocation: SkillCliInvocation): void {
+  if (cliInvocation === 'global') {
+    return;
+  }
+
+  const projectRoot = findUnityProjectRoot();
+  const packageRoot = projectRoot ? resolvePackageRoot(projectRoot) : null;
+  if (packageRoot !== null) {
+    readPackageVersion(packageRoot);
+    return;
+  }
+
+  throw new Error(
+    `Cannot install skills with project CLI version because ${PRODUCT_DISPLAY_NAME} package root was not found.`,
+  );
+}
+
+function formatAdditionalSkillFilesForNpx(
+  additionalFiles: Record<string, Buffer> | undefined,
+  packageVersion: string,
+): Record<string, Buffer> | undefined {
+  if (!additionalFiles) {
+    return undefined;
+  }
+
+  const formattedFiles: Record<string, Buffer> = {};
+  for (const [relativePath, content] of Object.entries(additionalFiles)) {
+    const formattedContent = isMarkdownSkillFile(relativePath)
+      ? Buffer.from(formatSkillContentForNpx(content.toString('utf-8'), packageVersion), 'utf-8')
+      : content;
+    // eslint-disable-next-line security/detect-object-injection -- Paths are controlled by package files, not user input.
+    formattedFiles[relativePath] = formattedContent;
+  }
+  return formattedFiles;
+}
+
+function isMarkdownSkillFile(relativePath: string): boolean {
+  return extname(relativePath).toLowerCase() === SkillsPathConstants.MARKDOWN_FILE_EXTENSION;
+}
+
+function formatSkillContentForNpx(content: string, packageVersion: string): string {
+  const npxCommand = [
+    SkillsPathConstants.NPX_COMMAND,
+    SkillsPathConstants.NPX_YES_FLAG,
+    `${SkillsPathConstants.NPM_CLI_PACKAGE_NAME}@${packageVersion}`,
+  ].join(' ');
+  const { frontmatter, body } = splitFrontmatter(content);
+
+  return `${frontmatter}${body.replace(
+    ULOOP_COMMAND_PATTERN,
+    (_match: string, prefix: string) => `${prefix}${npxCommand}`,
+  )}`;
+}
+
+function splitFrontmatter(content: string): { frontmatter: string; body: string } {
+  const match = content.match(/^(---\r?\n[\s\S]*?\r?\n---)(\r?\n?)([\s\S]*)$/);
+  if (!match) {
+    return { frontmatter: '', body: content };
+  }
+
+  return {
+    frontmatter: `${match[1]}${match[2]}`,
+    body: match[3],
+  };
+}
+
+function readPackageVersion(packageRoot: string): string {
+  const packageJsonPath = join(packageRoot, SkillsPathConstants.PACKAGE_JSON_FILE);
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
+    version?: unknown;
+  };
+  assert(
+    typeof packageJson.version === 'string' && packageJson.version.length > 0,
+    'package.json version must be a non-empty string',
+  );
+  return packageJson.version;
 }
 
 function resolvePackageRoot(projectRoot: string): string | null {

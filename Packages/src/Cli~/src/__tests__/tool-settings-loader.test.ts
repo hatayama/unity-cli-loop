@@ -5,7 +5,7 @@
  * Uses temporary directories to avoid affecting real project settings.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -17,7 +17,13 @@ jest.mock('../project-root.js', () => ({
 }));
 
 // Import after mocking
-import { loadDisabledTools, isToolEnabled, filterEnabledTools } from '../tool-settings-loader.js';
+import {
+  filterEnabledTools,
+  isToolEnabled,
+  loadDisabledTools,
+  loadSkillCliInvocation,
+  saveSkillCliInvocation,
+} from '../tool-settings-loader.js';
 import type { ToolDefinition } from '../tool-cache.js';
 
 describe('tool-settings-loader', () => {
@@ -98,6 +104,75 @@ describe('tool-settings-loader', () => {
       const result: string[] = loadDisabledTools();
 
       expect(result).toEqual([]);
+    });
+  });
+
+  // ── skill CLI invocation ───────────────────────────────────────
+
+  describe('skill CLI invocation', () => {
+    it('should return npx when settings file does not exist', () => {
+      const result = loadSkillCliInvocation();
+
+      expect(result).toBe('npx');
+    });
+
+    it('should return npx from settings file', () => {
+      writeFileSync(
+        join(testDir, '.uloop', 'settings.tools.json'),
+        JSON.stringify({ skillCliInvocation: 'npx' }),
+      );
+
+      const result = loadSkillCliInvocation();
+
+      expect(result).toBe('npx');
+    });
+
+    it('should return npx for invalid settings value', () => {
+      writeFileSync(
+        join(testDir, '.uloop', 'settings.tools.json'),
+        JSON.stringify({ skillCliInvocation: 'invalid' }),
+      );
+
+      const result = loadSkillCliInvocation();
+
+      expect(result).toBe('npx');
+    });
+
+    it('should return global from settings file', () => {
+      writeFileSync(
+        join(testDir, '.uloop', 'settings.tools.json'),
+        JSON.stringify({ skillCliInvocation: 'global' }),
+      );
+
+      const result = loadSkillCliInvocation();
+
+      expect(result).toBe('global');
+    });
+
+    it('should save invocation while preserving disabled tools', () => {
+      writeFileSync(
+        join(testDir, '.uloop', 'settings.tools.json'),
+        JSON.stringify({ disabledTools: ['compile'] }),
+      );
+
+      saveSkillCliInvocation('npx');
+
+      const saved = JSON.parse(
+        readFileSync(join(testDir, '.uloop', 'settings.tools.json'), 'utf-8'),
+      ) as { disabledTools?: string[]; skillCliInvocation?: string };
+      expect(saved.disabledTools).toEqual(['compile']);
+      expect(saved.skillCliInvocation).toBe('npx');
+    });
+
+    it('should replace array settings when saving invocation', () => {
+      writeFileSync(join(testDir, '.uloop', 'settings.tools.json'), JSON.stringify([]));
+
+      saveSkillCliInvocation('global');
+
+      const saved = JSON.parse(
+        readFileSync(join(testDir, '.uloop', 'settings.tools.json'), 'utf-8'),
+      ) as { skillCliInvocation?: string };
+      expect(saved.skillCliInvocation).toBe('global');
     });
   });
 

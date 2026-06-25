@@ -13,7 +13,7 @@ interface MockUninstallResult {
 }
 
 const mockGetAllSkillStatuses = jest.fn<unknown[], [unknown, boolean, boolean]>();
-const mockInstallAllSkills = jest.fn<MockInstallResult, [unknown, boolean, boolean]>();
+const mockInstallAllSkills = jest.fn<MockInstallResult, [unknown, boolean, boolean, unknown?]>();
 const mockUninstallAllSkills = jest.fn<MockUninstallResult, [unknown, boolean, boolean]>();
 const mockGetInstallDir = jest.fn<string, [unknown, boolean, boolean]>();
 const mockGetTotalSkillCount = jest.fn<number, []>();
@@ -26,7 +26,8 @@ jest.mock('../skills/skills-manager.js', () => ({
     target: unknown,
     global: boolean,
     groupManagedSkills: boolean,
-  ): MockInstallResult => mockInstallAllSkills(target, global, groupManagedSkills),
+    cliInvocation?: unknown,
+  ): MockInstallResult => mockInstallAllSkills(target, global, groupManagedSkills, cliInvocation),
   uninstallAllSkills: (
     target: unknown,
     global: boolean,
@@ -74,6 +75,50 @@ describe('skills command', () => {
       expect.objectContaining({ id: 'claude' }),
       true,
       false,
+      undefined,
+    );
+  });
+
+  it('passes npx invocation to project installs', async () => {
+    const program = new Command();
+    registerSkillsCommand(program);
+
+    await program.parseAsync([
+      'node',
+      'uloop',
+      'skills',
+      'install',
+      '--claude',
+      '--cli-invocation',
+      'npx',
+    ]);
+
+    expect(mockInstallAllSkills).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'claude' }),
+      false,
+      false,
+      'npx',
+    );
+  });
+
+  it('rejects npx invocation for global installs', async () => {
+    const program = new Command();
+    registerSkillsCommand(program);
+
+    await program.parseAsync([
+      'node',
+      'uloop',
+      'skills',
+      'install',
+      '--claude',
+      '--global',
+      '--cli-invocation',
+      'npx',
+    ]);
+
+    expect(mockInstallAllSkills).not.toHaveBeenCalled();
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      'The --cli-invocation npx option is only available for project installs.',
     );
   });
 });

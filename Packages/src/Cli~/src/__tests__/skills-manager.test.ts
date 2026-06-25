@@ -214,6 +214,43 @@ describe('skill install layout', () => {
     return projectRoot;
   }
 
+  function writeProjectPackageVersion(projectRoot: string, version: string): void {
+    const packageRoot = join(projectRoot, 'Packages', 'src');
+    mkdirSync(packageRoot, { recursive: true });
+    mkdirSync(join(packageRoot, 'Editor', 'Api', 'McpTools'), { recursive: true });
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ version }), 'utf-8');
+  }
+
+  function writePackageSkill(
+    projectRoot: string,
+    skillName: string,
+    body: string,
+    additionalFiles?: Record<string, string>,
+  ): string {
+    const skillDir = join(
+      projectRoot,
+      'Packages',
+      'src',
+      'Editor',
+      'Api',
+      'McpTools',
+      skillName,
+      'Skill',
+    );
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, 'SKILL.md'),
+      ['---', `name: ${skillName}`, '---', '', body, ''].join('\n'),
+      'utf-8',
+    );
+
+    for (const [relativePath, content] of Object.entries(additionalFiles ?? {})) {
+      writeFileSync(join(skillDir, relativePath), content, 'utf-8');
+    }
+
+    return skillDir;
+  }
+
   it('should resolve managed skills under the unity-cli-loop namespace', () => {
     expect(getManagedSkillsDir('/tmp/example/skills')).toBe(
       join('/tmp/example/skills', 'unity-cli-loop'),
@@ -304,6 +341,7 @@ describe('skill install layout', () => {
 
   it('should discover project skills from a direct SKILL.md in the tool folder', () => {
     const projectRoot = createUnityProjectRoot();
+    writeProjectPackageVersion(projectRoot, '2.9.0');
     const toolDir = join(projectRoot, 'Assets', 'SampleFeature', 'Editor', 'McpExtensions', 'ReplayTool');
     mkdirSync(toolDir, { recursive: true });
     writeFileSync(
@@ -329,8 +367,40 @@ describe('skill install layout', () => {
     ).toBeDefined();
   });
 
+  it('should not assert when project CLI mode cannot resolve a package version during status checks', () => {
+    const projectRoot = createUnityProjectRoot();
+    const toolDir = join(
+      projectRoot,
+      'Assets',
+      'SampleFeature',
+      'Editor',
+      'McpExtensions',
+      'FallbackTool',
+    );
+    mkdirSync(toolDir, { recursive: true });
+    writeFileSync(
+      join(toolDir, 'SKILL.md'),
+      ['---', 'name: uloop-fallback-tool', '---', '', 'Run `uloop compile`.', ''].join('\n'),
+      'utf-8',
+    );
+
+    process.chdir(projectRoot);
+
+    expect(() => getAllSkillStatuses(getTargetConfig('claude'), false, true)).not.toThrow();
+  });
+
+  it('should reject project CLI installs when the package version cannot be resolved', () => {
+    const projectRoot = createUnityProjectRoot();
+    process.chdir(projectRoot);
+
+    expect(() => installAllSkills(getTargetConfig('claude'), false, true, 'npx')).toThrow(
+      'Cannot install skills with project CLI version because Unity CLI Loop package root was not found.',
+    );
+  });
+
   it('should install run-tests skill when test framework package is missing', () => {
     const projectRoot = createUnityProjectRoot();
+    writeProjectPackageVersion(projectRoot, '2.9.0');
     const runTestsSkillDir = join(
       projectRoot,
       'Packages',
@@ -362,8 +432,50 @@ describe('skill install layout', () => {
     ).toBe(true);
   });
 
+  it('should install project skills with npx invocation when requested', () => {
+    const projectRoot = createUnityProjectRoot();
+    const skillName = 'uloop-test-npx-skill';
+    writeProjectPackageVersion(projectRoot, '2.9.0');
+    writePackageSkill(projectRoot, skillName, 'Run `uloop compile` for this project.', {
+      'reference.md': 'Run `uloop compile` in examples.',
+    });
+
+    process.chdir(projectRoot);
+
+    installAllSkills(getTargetConfig('claude'), false, true, 'npx');
+
+    const installedSkillDir = join(projectRoot, '.claude', 'skills', 'unity-cli-loop', skillName);
+    const installedSkill = readFileSync(join(installedSkillDir, 'SKILL.md'), 'utf-8');
+    const installedReference = readFileSync(join(installedSkillDir, 'reference.md'), 'utf-8');
+
+    expect(installedSkill).toContain('name: uloop-test-npx-skill');
+    expect(installedSkill).toContain('`npx --yes uloop-cli@2.9.0 compile`');
+    expect(installedReference).toBe('Run `npx --yes uloop-cli@2.9.0 compile` in examples.');
+  });
+
+  it('should mark npx-installed skills as outdated when the project setting returns to global', () => {
+    const projectRoot = createUnityProjectRoot();
+    const skillName = 'uloop-test-switch-skill';
+    writeProjectPackageVersion(projectRoot, '2.9.0');
+    writePackageSkill(projectRoot, skillName, 'Run `uloop compile` for this project.');
+
+    process.chdir(projectRoot);
+
+    installAllSkills(getTargetConfig('claude'), false, true, 'npx');
+    writeFileSync(
+      join(projectRoot, '.uloop', 'settings.tools.json'),
+      JSON.stringify({ skillCliInvocation: 'global' }),
+      'utf-8',
+    );
+
+    const statuses = getAllSkillStatuses(getTargetConfig('claude'), false, true);
+
+    expect(statuses.find((skill) => skill.name === skillName)?.status).toBe('outdated');
+  });
+
   it('should ignore sibling implementation files beside a direct SKILL.md in the tool folder', () => {
     const projectRoot = createUnityProjectRoot();
+    writeProjectPackageVersion(projectRoot, '2.9.0');
     const toolDir = join(projectRoot, 'Assets', 'SampleFeature', 'Editor', 'McpExtensions', 'CaptureTool');
     mkdirSync(toolDir, { recursive: true });
     const skillContent = [

@@ -1024,6 +1024,94 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenSkillCliInvocationIsNpx_RewritesSkillMarkdownFiles()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkillWithContent(
+                temporaryRoot,
+                "uloop-npx-skill",
+                "NpxTool",
+                "---\nname: uloop-npx-skill\n---\nRun `uloop compile` for this project.\n",
+                "reference.md",
+                "Run `uloop compile` in references.");
+            ToolSettings.SaveSettings(new ToolSettingsData
+            {
+                skillCliInvocation = CliConstants.SKILL_CLI_INVOCATION_NPX
+            });
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: false);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { target },
+                    groupSkillsUnderUnityCliLoop: false);
+
+            string installedSkillDir = Path.Combine(
+                temporaryRoot,
+                ".claude",
+                SkillInstallLayout.SkillsDirName,
+                "uloop-npx-skill");
+            string skillContent = File.ReadAllText(Path.Combine(
+                installedSkillDir,
+                SkillInstallLayout.SkillFileName));
+            string referenceContent = File.ReadAllText(Path.Combine(installedSkillDir, "reference.md"));
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(skillContent, Does.Contain("name: uloop-npx-skill"));
+            Assert.That(
+                skillContent,
+                Does.Contain($"`npx --yes uloop-cli@{McpConstants.PackageInfo.version} compile`"));
+            Assert.That(
+                referenceContent,
+                Is.EqualTo($"Run `npx --yes uloop-cli@{McpConstants.PackageInfo.version} compile` in references."));
+        }
+
+        [Test]
+        public async Task DetectTargets_WhenNpxSkillIsInstalledButSettingIsGlobal_ReportsOutdated()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkillWithContent(
+                temporaryRoot,
+                "uloop-npx-switch-skill",
+                "NpxSwitchTool",
+                "---\nname: uloop-npx-switch-skill\n---\nRun `uloop compile` for this project.\n",
+                "reference.md",
+                "reference");
+            ToolSettings.SaveSettings(new ToolSettingsData
+            {
+                skillCliInvocation = CliConstants.SKILL_CLI_INVOCATION_NPX
+            });
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: false);
+
+            await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                temporaryRoot,
+                new[] { target },
+                groupSkillsUnderUnityCliLoop: false);
+            ToolSettings.SetSkillCliInvocation(CliConstants.SKILL_CLI_INVOCATION_GLOBAL);
+
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
+                    temporaryRoot,
+                    requireSkillsDirectory: true,
+                    groupSkillsUnderUnityCliLoop: false)
+                .ToArray();
+
+            Assert.That(detectedTargets.Length, Is.EqualTo(1));
+            Assert.That(detectedTargets[0].InstallState, Is.EqualTo(SkillInstallState.Outdated));
+        }
+
+        [Test]
         public void DetectTargets_WhenOnlyInternalSkillsAreMissing_IgnoresThem()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
@@ -1363,6 +1451,26 @@ namespace io.github.hatayama.uLoopMCP
             {
                 File.WriteAllText(Path.Combine(skillDir, sourceMetaFileRelativePath), "meta");
             }
+        }
+
+        private static void CreateFakeSourceSkillWithContent(
+            string projectRoot,
+            string skillName,
+            string toolDirectoryName,
+            string skillContent,
+            string additionalFileRelativePath,
+            string additionalFileContent)
+        {
+            string skillDir = Path.Combine(
+                projectRoot,
+                "Packages",
+                "com.example.fake",
+                "Editor",
+                toolDirectoryName,
+                "Skill");
+            Directory.CreateDirectory(skillDir);
+            File.WriteAllText(Path.Combine(skillDir, SkillInstallLayout.SkillFileName), skillContent);
+            File.WriteAllText(Path.Combine(skillDir, additionalFileRelativePath), additionalFileContent);
         }
 
         private static string CreateFakeProjectLocalSkill(

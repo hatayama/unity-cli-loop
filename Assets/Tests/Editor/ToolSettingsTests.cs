@@ -104,6 +104,48 @@ namespace io.github.hatayama.uLoopMCP
             Assert.IsTrue(ToolSettings.IsToolEnabled("clear-console"));
         }
 
+        [Test]
+        public void GetSkillCliInvocation_WhenSettingsMissing_ShouldReturnNpx()
+        {
+            DeleteIfExists(SettingsFilePath);
+            ToolSettings.InvalidateCache();
+
+            string result = ToolSettings.GetSkillCliInvocation();
+
+            Assert.AreEqual(CliConstants.SKILL_CLI_INVOCATION_NPX, result);
+        }
+
+        [Test]
+        public void SetSkillCliInvocation_WhenSetToNpx_ShouldPersistAcrossCacheInvalidation()
+        {
+            ToolSettings.SetToolEnabled("compile", false);
+            ToolSettings.SetSkillCliInvocation(CliConstants.SKILL_CLI_INVOCATION_NPX);
+            ToolSettings.InvalidateCache();
+
+            Assert.AreEqual(CliConstants.SKILL_CLI_INVOCATION_NPX, ToolSettings.GetSkillCliInvocation());
+            Assert.IsFalse(ToolSettings.IsToolEnabled("compile"));
+        }
+
+        [Test]
+        public void SetSkillCliInvocation_WhenSetToGlobal_ShouldPersistAcrossCacheInvalidation()
+        {
+            ToolSettings.SetSkillCliInvocation(CliConstants.SKILL_CLI_INVOCATION_GLOBAL);
+            ToolSettings.InvalidateCache();
+
+            Assert.AreEqual(CliConstants.SKILL_CLI_INVOCATION_GLOBAL, ToolSettings.GetSkillCliInvocation());
+        }
+
+        [Test]
+        public void GetSkillCliInvocation_WhenValueIsInvalid_ShouldReturnNpx()
+        {
+            File.WriteAllText(SettingsFilePath, "{\"disabledTools\":[],\"skillCliInvocation\":\"invalid\"}");
+            ToolSettings.InvalidateCache();
+
+            string result = ToolSettings.GetSkillCliInvocation();
+
+            Assert.AreEqual(CliConstants.SKILL_CLI_INVOCATION_NPX, result);
+        }
+
         // ── Deduplication ──────────────────────────────────────────────
 
         [Test]

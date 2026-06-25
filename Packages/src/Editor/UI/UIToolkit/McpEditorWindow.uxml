@@ -12,13 +12,21 @@
 
                     <!-- CLI Content -->
                     <ui:VisualElement name="cli-content">
-                        <ui:VisualElement class="mcp-cli-status-row">
+                        <ui:VisualElement name="project-cli-version-row" class="mcp-toggle-row">
+                            <ui:Toggle name="project-cli-version-toggle" class="mcp-toggle-row__toggle" />
+                            <ui:Label
+                                name="project-cli-version-label"
+                                text="Use project CLI version"
+                                tooltip="Run installed skills through the Unity package version of uloop-cli."
+                                class="mcp-toggle-row__label" />
+                        </ui:VisualElement>
+                        <ui:VisualElement name="global-cli-status-row" class="mcp-cli-status-row">
                             <ui:VisualElement name="cli-status-icon" class="mcp-cli-status-icon mcp-cli-status-icon--not-installed" />
                             <ui:Label name="cli-status-label" text="uloop-cli: Checking..." />
                             <ui:Button name="refresh-cli-version-button" text="↻" class="mcp-button--refresh" />
                         </ui:VisualElement>
                         <ui:Button name="install-cli-button" text="Install CLI" class="mcp-button mcp-button--configure" />
-                        <ui:VisualElement class="mcp-cli-separator" />
+                        <ui:VisualElement name="global-cli-separator" class="mcp-cli-separator" />
 
                         <ui:VisualElement name="skills-subsection">
                             <ui:Label text="Skills" class="mcp-cli-subsection-header" />

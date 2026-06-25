@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 using UnityEngine;
@@ -16,12 +17,16 @@ namespace io.github.hatayama.uLoopMCP
         private const string CliPackageDirName = "Cli~";
         private const string CliSkillDefinitionsDirName = "skill-definitions";
         private const string CliOnlySkillDefinitionsDirName = "cli-only";
+        private const string MarkdownFileExtension = ".md";
         private static readonly HashSet<string> ExcludedFileNames = new()
         {
             ".meta",
             ".DS_Store",
             ".gitkeep"
         };
+        private static readonly Regex UloopCommandPattern = new(
+            "(^|[^A-Za-z0-9_-])uloop(?=\\s)",
+            RegexOptions.Compiled);
 
         private sealed class SkillSourceDefinition
         {
@@ -330,15 +335,77 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Assert(!string.IsNullOrEmpty(skillDirectory), "skillDirectory must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(skillFilePath), "skillFilePath must not be null or empty");
 
+            Dictionary<string, byte[]> sourceFiles;
             if (string.Equals(Path.GetFileName(skillDirectory), "Skill", StringComparison.Ordinal))
             {
-                return CollectInstalledSkillFiles(skillDirectory);
+                sourceFiles = CollectInstalledSkillFiles(skillDirectory);
+                return FormatSkillFilesForCliInvocation(sourceFiles);
             }
 
-            return new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            sourceFiles = new Dictionary<string, byte[]>(StringComparer.Ordinal)
             {
                 [SkillFileName] = File.ReadAllBytes(skillFilePath)
             };
+            return FormatSkillFilesForCliInvocation(sourceFiles);
+        }
+
+        private static Dictionary<string, byte[]> FormatSkillFilesForCliInvocation(
+            Dictionary<string, byte[]> skillFiles)
+        {
+            Debug.Assert(skillFiles != null, "skillFiles must not be null");
+
+            if (ToolSettings.GetSkillCliInvocation() == CliConstants.SKILL_CLI_INVOCATION_GLOBAL)
+            {
+                return skillFiles;
+            }
+
+            Debug.Assert(skillFiles.ContainsKey(SkillFileName), "skillFiles must contain SKILL.md");
+            foreach (string relativePath in skillFiles.Keys.ToArray())
+            {
+                if (!IsMarkdownSkillFile(relativePath))
+                {
+                    continue;
+                }
+
+                string skillContent = Encoding.UTF8.GetString(skillFiles[relativePath]);
+                string formattedContent = FormatSkillMarkdownForNpx(
+                    skillContent,
+                    McpConstants.PackageInfo.version);
+                skillFiles[relativePath] = Encoding.UTF8.GetBytes(formattedContent);
+            }
+            return skillFiles;
+        }
+
+        private static bool IsMarkdownSkillFile(string relativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(relativePath), "relativePath must not be null or empty");
+            return string.Equals(
+                Path.GetExtension(relativePath),
+                MarkdownFileExtension,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string FormatSkillMarkdownForNpx(string content, string packageVersion)
+        {
+            Debug.Assert(content != null, "content must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(packageVersion), "packageVersion must not be null or empty");
+
+            string npxCommand =
+                $"{CliConstants.NPX_EXECUTABLE_NAME} {CliConstants.NPX_YES_FLAG} {CliConstants.NPM_PACKAGE_NAME}@{packageVersion}";
+            Match frontmatterMatch = Regex.Match(
+                content,
+                "^(---\\r?\\n[\\s\\S]*?\\r?\\n---)(\\r?\\n?)([\\s\\S]*)$");
+            if (!frontmatterMatch.Success)
+            {
+                return UloopCommandPattern.Replace(content, match => $"{match.Groups[1].Value}{npxCommand}");
+            }
+
+            string frontmatter = $"{frontmatterMatch.Groups[1].Value}{frontmatterMatch.Groups[2].Value}";
+            string body = frontmatterMatch.Groups[3].Value;
+            string formattedBody = UloopCommandPattern.Replace(
+                body,
+                match => $"{match.Groups[1].Value}{npxCommand}");
+            return $"{frontmatter}{formattedBody}";
         }
 
         private static Dictionary<string, SkillSourceDefinition> GetSkillSources(string projectRoot)

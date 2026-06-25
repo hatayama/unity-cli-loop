@@ -11,9 +11,18 @@
             <ui:Label text="✓ Node.js detected" class="setup-prerequisite__title" />
         </ui:VisualElement>
 
-        <!-- Step 1: Install CLI -->
+        <ui:VisualElement name="project-cli-version-row" class="setup-toggle-row">
+            <ui:Toggle name="project-cli-version-toggle" class="setup-toggle-row__toggle" />
+            <ui:Label
+                name="project-cli-version-label"
+                text="Use project CLI version"
+                tooltip="Run installed skills through the Unity package version of uloop-cli."
+                class="setup-toggle-row__label" />
+        </ui:VisualElement>
+
+        <!-- Global CLI -->
         <ui:VisualElement name="step-1" class="setup-step">
-            <ui:Label text="Step 1: Install CLI" class="setup-step__title" />
+            <ui:Label text="Global CLI" class="setup-step__title" />
             <ui:VisualElement class="setup-step__content">
                 <ui:VisualElement class="setup-step__status-row">
                     <ui:VisualElement name="cli-status-icon" class="setup-status-icon" />
@@ -23,9 +32,9 @@
             </ui:VisualElement>
         </ui:VisualElement>
 
-        <!-- Step 2: Install Skills -->
+        <!-- Skills -->
         <ui:VisualElement name="step-2" class="setup-step">
-            <ui:Label text="Step 2: Install Skills (Optional)" class="setup-step__title" />
+            <ui:Label text="Skills" class="setup-step__title" />
             <ui:VisualElement class="setup-step__content">
                 <ui:VisualElement name="group-skills-row" class="setup-toggle-row">
                     <ui:Toggle name="group-skills-toggle" class="setup-toggle-row__toggle" />

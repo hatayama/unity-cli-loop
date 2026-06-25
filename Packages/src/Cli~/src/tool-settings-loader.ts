@@ -6,7 +6,7 @@
 // File paths are constructed from Unity project root, not from untrusted user input
 /* eslint-disable security/detect-non-literal-fs-filename */
 
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { findUnityProjectRoot } from './project-root.js';
 import type { ToolDefinition } from './tool-cache.js';
@@ -20,8 +20,15 @@ const RUN_TESTS_TOOL_NAME = 'run-tests';
 const UNITY_TEST_FRAMEWORK_DEPENDENCY_PATTERN = /"com\.unity\.test-framework"\s*:/;
 
 interface ToolSettingsData {
-  disabledTools: string[];
+  disabledTools?: unknown;
+  skillCliInvocation?: unknown;
+  [key: string]: unknown;
 }
+
+export type SkillCliInvocation = 'global' | 'npx';
+
+const DEFAULT_SKILL_CLI_INVOCATION: SkillCliInvocation = 'npx';
+const SKILL_CLI_INVOCATIONS = new Set<SkillCliInvocation>(['global', 'npx']);
 
 export function loadDisabledTools(projectPath?: string): string[] {
   const projectRoot: string | null = resolveProjectRoot(projectPath);
@@ -74,36 +81,76 @@ function resolveProjectRoot(projectPath?: string): string | null {
 }
 
 function loadDisabledToolsFromProjectRoot(projectRoot: string): string[] {
+  const data = loadToolSettingsFromProjectRoot(projectRoot);
+  if (!Array.isArray(data.disabledTools)) {
+    return [];
+  }
+
+  return data.disabledTools as string[];
+}
+
+export function loadSkillCliInvocation(projectPath?: string): SkillCliInvocation {
+  const projectRoot: string | null = resolveProjectRoot(projectPath);
+  if (projectRoot === null) {
+    return DEFAULT_SKILL_CLI_INVOCATION;
+  }
+
+  const data = loadToolSettingsFromProjectRoot(projectRoot);
+  return normalizeSkillCliInvocation(data.skillCliInvocation);
+}
+
+export function saveSkillCliInvocation(invocation: SkillCliInvocation, projectPath?: string): void {
+  const projectRoot: string | null = resolveProjectRoot(projectPath);
+  if (projectRoot === null) {
+    throw new Error('Unity project root is required to save skill CLI invocation settings.');
+  }
+
+  const settingsDir: string = join(projectRoot, ULOOP_DIR);
+  mkdirSync(settingsDir, { recursive: true });
+
+  const data = loadToolSettingsFromProjectRoot(projectRoot);
+  data.skillCliInvocation = normalizeSkillCliInvocation(invocation);
+  writeFileSync(join(settingsDir, TOOL_SETTINGS_FILE), JSON.stringify(data, null, 2), 'utf-8');
+}
+
+function loadToolSettingsFromProjectRoot(projectRoot: string): ToolSettingsData {
   const settingsPath: string = join(projectRoot, ULOOP_DIR, TOOL_SETTINGS_FILE);
 
   let content: string;
   try {
     content = readFileSync(settingsPath, 'utf-8');
   } catch {
-    return [];
+    return {};
   }
 
   if (!content.trim()) {
-    return [];
+    return {};
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
   } catch {
-    return [];
+    return {};
   }
 
-  if (typeof parsed !== 'object' || parsed === null) {
-    return [];
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return {};
   }
 
-  const data = parsed as ToolSettingsData;
-  if (!Array.isArray(data.disabledTools)) {
-    return [];
+  return parsed as ToolSettingsData;
+}
+
+function normalizeSkillCliInvocation(value: unknown): SkillCliInvocation {
+  if (typeof value !== 'string') {
+    return DEFAULT_SKILL_CLI_INVOCATION;
   }
 
-  return data.disabledTools;
+  if (!SKILL_CLI_INVOCATIONS.has(value as SkillCliInvocation)) {
+    return DEFAULT_SKILL_CLI_INVOCATION;
+  }
+
+  return value as SkillCliInvocation;
 }
 
 function shouldBypassDisabledSettingForDependencyError(

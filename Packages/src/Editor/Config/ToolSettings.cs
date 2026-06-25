@@ -30,19 +30,20 @@ namespace io.github.hatayama.uLoopMCP
         {
             Debug.Assert(settings != null, "settings must not be null");
 
+            ToolSettingsData normalizedSettings = NormalizeSettings(settings);
             string directory = Path.GetDirectoryName(SettingsFilePath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);
             }
 
-            string json = JsonUtility.ToJson(settings, true);
+            string json = JsonUtility.ToJson(normalizedSettings, true);
 
             Debug.Assert(json.Length <= McpConstants.MAX_SETTINGS_SIZE_BYTES,
                 "Settings JSON content exceeds size limit");
 
             AtomicFileWriter.Write(SettingsFilePath, json);
-            _cachedSettings = settings;
+            _cachedSettings = normalizedSettings;
 
             AtomicFileWriter.CleanupBackup(SettingsFilePath + ".bak");
         }
@@ -85,6 +86,26 @@ namespace io.github.hatayama.uLoopMCP
             return GetSettings().disabledTools;
         }
 
+        public static string GetSkillCliInvocation()
+        {
+            return NormalizeSkillCliInvocation(GetSettings().skillCliInvocation);
+        }
+
+        public static void SetSkillCliInvocation(string invocation)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(invocation), "invocation must not be null or empty");
+
+            ToolSettingsData settings = GetSettings();
+            string normalizedInvocation = NormalizeSkillCliInvocation(invocation);
+            if (settings.skillCliInvocation == normalizedInvocation)
+            {
+                return;
+            }
+
+            ToolSettingsData updated = settings with { skillCliInvocation = normalizedInvocation };
+            SaveSettings(updated);
+        }
+
         public static void InvalidateCache()
         {
             _cachedSettings = null;
@@ -109,17 +130,36 @@ namespace io.github.hatayama.uLoopMCP
                 }
 
                 ToolSettingsData loaded = JsonUtility.FromJson<ToolSettingsData>(json);
-                // disabledTools can be null when JSON is hand-edited with "disabledTools": null
-                if (loaded == null || loaded.disabledTools == null)
+                if (loaded == null)
                 {
                     _cachedSettings = new ToolSettingsData();
                     return;
                 }
-                _cachedSettings = loaded;
+                _cachedSettings = NormalizeSettings(loaded);
                 return;
             }
 
             _cachedSettings = new ToolSettingsData();
+        }
+
+        private static ToolSettingsData NormalizeSettings(ToolSettingsData settings)
+        {
+            Debug.Assert(settings != null, "settings must not be null");
+
+            string[] disabledTools = settings.disabledTools ?? Array.Empty<string>();
+            string skillCliInvocation = NormalizeSkillCliInvocation(settings.skillCliInvocation);
+            return settings with
+            {
+                disabledTools = disabledTools,
+                skillCliInvocation = skillCliInvocation
+            };
+        }
+
+        private static string NormalizeSkillCliInvocation(string invocation)
+        {
+            return invocation == CliConstants.SKILL_CLI_INVOCATION_GLOBAL
+                ? CliConstants.SKILL_CLI_INVOCATION_GLOBAL
+                : CliConstants.SKILL_CLI_INVOCATION_NPX;
         }
     }
 }
