@@ -1,0 +1,69 @@
+name: Code Complexity
+
+on:
+  pull_request:
+    branches: [ main, v3-beta ]
+    paths:
+      - 'cli/**/*.go'
+      - 'cli/.go-version'
+      - 'cli/.golangci-complexity.yml'
+      - 'Packages/src/**/*.cs'
+      - 'tools/UnityCliLoop.CodeComplexity/**'
+      - 'tests/UnityCliLoop.CodeComplexity.Tests/**'
+      - 'scripts/check-code-complexity.sh'
+      - '.github/workflows/code-complexity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  complexity:
+    name: Complexity Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Test C# complexity host
+        run: dotnet test tests/UnityCliLoop.CodeComplexity.Tests/UnityCliLoop.CodeComplexity.Tests.csproj --configuration Release
+
+      - name: Report complexity
+        env:
+          CODE_COMPLEXITY_FAIL_ON_EXCEEDED: 'false'
+        run: scripts/check-code-complexity.sh
+
+      - name: Write complexity artifacts
+        if: always()
+        run: |
+          mkdir -p artifacts
+          (cd cli && golangci-lint run --config .golangci-complexity.yml --issues-exit-code=0 --show-stats=false --output.json.path ../artifacts/go-code-complexity.json ./...)
+          dotnet run --project tools/UnityCliLoop.CodeComplexity/UnityCliLoop.CodeComplexity.csproj -- \
+            --root . \
+            --max-complexity 25 \
+            --format json \
+            --fail-on-exceeded false > artifacts/csharp-code-complexity.json
+
+      - name: Upload complexity artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: code-complexity-results
+          path: artifacts/*.json
