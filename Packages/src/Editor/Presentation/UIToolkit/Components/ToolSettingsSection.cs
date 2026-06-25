@@ -372,8 +372,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             detailsPanel.name = "tool-list-row-details";
             detailsPanel.AddToClassList("unity-cli-loop-tool-details-panel");
 
-            Label detailsBody = new();
+            TextField detailsBody = new();
             detailsBody.name = "tool-list-row-details-body";
+            detailsBody.isReadOnly = true;
+            detailsBody.multiline = true;
             detailsBody.AddToClassList("unity-cli-loop-tool-details-panel__body");
             detailsPanel.Add(detailsBody);
 
@@ -393,7 +395,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Button detailsButton = row.Q<Button>("tool-list-row-details-button");
             Label label = row.Q<Label>("tool-list-row-label");
             VisualElement detailsPanel = row.Q<VisualElement>("tool-list-row-details");
-            Label detailsBody = row.Q<Label>("tool-list-row-details-body");
+            TextField detailsBody = row.Q<TextField>("tool-list-row-details-body");
             Debug.Assert(toggle != null, "tool-list-row-toggle must not be null");
             Debug.Assert(detailsButton != null, "tool-list-row-details-button must not be null");
             Debug.Assert(label != null, "tool-list-row-label must not be null");
@@ -470,14 +472,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Button detailsButton,
             Label label,
             VisualElement detailsPanel,
-            Label detailsBody,
+            TextField detailsBody,
             ToolListRowData item)
         {
             ViewDataBinder.SetVisible(toggle, false);
             ViewDataBinder.SetVisible(detailsButton, false);
             ViewDataBinder.SetVisible(label, false);
             ViewDataBinder.SetVisible(detailsPanel, true);
-            detailsBody.text = item.SkillDescription;
+            detailsBody.SetValueWithoutNotify(item.SkillDescription);
             row.SetEnabled(true);
             row.AddToClassList("unity-cli-loop-tool-details-row");
         }

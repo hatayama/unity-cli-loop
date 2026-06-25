@@ -396,8 +396,20 @@
 }
 
 .unity-cli-loop-tool-details-panel__body {
+    margin: 0;
+    padding: 0;
+    flex-grow: 1;
+    background-color: transparent;
+    border-width: 0;
     white-space: normal;
     color: #cfcfcf;
+}
+
+.unity-cli-loop-tool-details-panel__body .unity-text-field__input {
+    background-color: transparent;
+    border-width: 0;
+    color: #cfcfcf;
+    white-space: normal;
 }
 
 .unity-cli-loop-tool-list-view {

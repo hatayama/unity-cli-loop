@@ -138,7 +138,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.AreEqual(3, items.Count);
             Assert.AreEqual("Hide Details", detailsButton.text);
             Assert.IsTrue(detailsButton.ClassListContains("unity-cli-loop-tool-toggle-row__details-button--selected"));
-            Assert.AreEqual("Compile description", detailsRow.Q<Label>("tool-list-row-details-body").text);
+            TextField detailsBody = detailsRow.Q<TextField>("tool-list-row-details-body");
+            Assert.AreEqual("Compile description", detailsBody.value);
+            Assert.IsTrue(detailsBody.isReadOnly);
             Assert.AreEqual((2 * ToolListRowHeight) + ToolDetailsRowHeight + 2, listView.style.height.value.value);
 
             section.ToggleToolDetailsForTool("compile");
@@ -165,7 +167,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             VisualElement detailsRow = BindToolListRow(root, 2);
             VisualElement followingToolRow = BindToolListRow(root, 3);
 
-            Assert.AreEqual("Compile description", detailsRow.Q<Label>("tool-list-row-details-body").text);
+            TextField detailsBody = detailsRow.Q<TextField>("tool-list-row-details-body");
+            Assert.AreEqual("Compile description", detailsBody.value);
+            Assert.IsTrue(detailsBody.isReadOnly);
             Assert.AreEqual("get-logs", followingToolRow.Q<Label>("tool-list-row-label").text);
         }
 
@@ -192,7 +196,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             listView.bindItem(compileRow, 1);
             listView.bindItem(getLogsRow, 2);
 
-            Assert.AreEqual("Logs description", detailsRow.Q<Label>("tool-list-row-details-body").text);
+            TextField detailsBody = detailsRow.Q<TextField>("tool-list-row-details-body");
+            Assert.AreEqual("Logs description", detailsBody.value);
+            Assert.IsTrue(detailsBody.isReadOnly);
             Assert.AreEqual("Show Details", compileRow.Q<Button>("tool-list-row-details-button").text);
             Assert.AreEqual("Hide Details", getLogsRow.Q<Button>("tool-list-row-details-button").text);
             Assert.IsFalse(compileRow.Q<Button>("tool-list-row-details-button").ClassListContains("unity-cli-loop-tool-toggle-row__details-button--selected"));
