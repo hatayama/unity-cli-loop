@@ -57,148 +57,206 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(argumentsSource != null, "argumentsSource must not be null");
 
-            List<string> arguments = new();
-            int argumentStartIndex = 0;
-            int nestingDepth = 0;
-            bool isInRegularString = false;
-            bool isInVerbatimString = false;
-            bool isInCharLiteral = false;
-            bool isInRawString = false;
-            int rawStringQuoteCount = 0;
-            for (int i = 0; i < argumentsSource.Length; i++)
+            AttributeArgumentSplitter splitter = new(argumentsSource);
+            return splitter.Split();
+        }
+
+        private enum AttributeArgumentScanMode
+        {
+            None,
+            RegularString,
+            VerbatimString,
+            CharLiteral,
+            RawString
+        }
+
+        /// <summary>
+        /// Splits attribute argument text while ignoring commas inside nested syntax and literals.
+        /// </summary>
+        private sealed class AttributeArgumentSplitter
+        {
+            private readonly string _source;
+            private readonly List<string> _arguments = new();
+            private int _argumentStartIndex;
+            private int _nestingDepth;
+            private AttributeArgumentScanMode _mode;
+            private int _rawStringQuoteCount;
+
+            internal AttributeArgumentSplitter(string source)
             {
-                char current = argumentsSource[i];
-                if (isInRegularString)
+                Debug.Assert(source != null, "source must not be null");
+
+                _source = source;
+            }
+
+            internal string[] Split()
+            {
+                for (int index = 0; index < _source.Length; index++)
                 {
-                    if (current == '\\')
-                    {
-                        i++;
-                        continue;
-                    }
-
-                    if (current == '"')
-                    {
-                        isInRegularString = false;
-                    }
-
-                    continue;
+                    index = ConsumeCharacter(index);
                 }
 
-                if (isInVerbatimString)
+                _arguments.Add(_source.Substring(_argumentStartIndex));
+                return _arguments.ToArray();
+            }
+
+            private int ConsumeCharacter(int index)
+            {
+                if (_mode != AttributeArgumentScanMode.None)
                 {
-                    if (current != '"')
-                    {
-                        continue;
-                    }
-
-                    if (i + 1 < argumentsSource.Length && argumentsSource[i + 1] == '"')
-                    {
-                        i++;
-                        continue;
-                    }
-
-                    isInVerbatimString = false;
-                    continue;
+                    return ConsumeActiveMode(index);
                 }
 
-                if (isInRawString)
+                (bool enteredLiteral, int nextIndex) = TryEnterLiteral(index);
+                if (enteredLiteral)
                 {
-                    if (HasRepeatedCharacterAt(argumentsSource, i, '"', rawStringQuoteCount))
-                    {
-                        i += rawStringQuoteCount - 1;
-                        isInRawString = false;
-                    }
-
-                    continue;
+                    return nextIndex;
                 }
 
-                if (isInCharLiteral)
-                {
-                    if (current == '\\')
-                    {
-                        i++;
-                        continue;
-                    }
-
-                    if (current == '\'')
-                    {
-                        isInCharLiteral = false;
-                    }
-
-                    continue;
-                }
-
-                if (IsRawStringStart(argumentsSource, i))
-                {
-                    int dollarCount = CountRepeatedCharacter(argumentsSource, i, '$');
-                    int quoteIndex = i + dollarCount;
-                    rawStringQuoteCount = CountRepeatedCharacter(argumentsSource, quoteIndex, '"');
-                    isInRawString = true;
-                    i = quoteIndex + rawStringQuoteCount - 1;
-                    continue;
-                }
-
-                if (StartsWith(argumentsSource, i, "@\"") ||
-                    StartsWith(argumentsSource, i, "$@\"") ||
-                    StartsWith(argumentsSource, i, "@$\""))
-                {
-                    isInVerbatimString = true;
-                    i += GetStringPrefixLength(argumentsSource, i);
-                    continue;
-                }
-
-                if (StartsWith(argumentsSource, i, "$\""))
-                {
-                    int interpolatedStringEndIndex =
-                        ThirdPartyToolMigrationInterpolatedStringRules.FindRegularInterpolatedStringEndIndex(
-                            argumentsSource,
-                            i);
-                    if (interpolatedStringEndIndex >= 0)
-                    {
-                        i = interpolatedStringEndIndex;
-                        continue;
-                    }
-
-                    isInRegularString = true;
-                    i++;
-                    continue;
-                }
-
-                if (current == '"')
-                {
-                    isInRegularString = true;
-                    continue;
-                }
-
-                if (current == '\'')
-                {
-                    isInCharLiteral = true;
-                    continue;
-                }
-
+                char current = _source[index];
                 if (current == '(' || current == '[' || current == '{')
                 {
-                    nestingDepth++;
-                    continue;
+                    _nestingDepth++;
+                    return index;
                 }
 
                 if (current == ')' || current == ']' || current == '}')
                 {
-                    nestingDepth = Math.Max(0, nestingDepth - 1);
-                    continue;
+                    _nestingDepth = Math.Max(0, _nestingDepth - 1);
+                    return index;
                 }
 
-                if (current != ',' || nestingDepth != 0)
+                if (current == ',' && _nestingDepth == 0)
                 {
-                    continue;
+                    _arguments.Add(_source.Substring(_argumentStartIndex, index - _argumentStartIndex));
+                    _argumentStartIndex = index + 1;
                 }
 
-                arguments.Add(argumentsSource.Substring(argumentStartIndex, i - argumentStartIndex));
-                argumentStartIndex = i + 1;
+                return index;
             }
 
-            arguments.Add(argumentsSource.Substring(argumentStartIndex));
-            return arguments.ToArray();
+            private int ConsumeActiveMode(int index)
+            {
+                switch (_mode)
+                {
+                    case AttributeArgumentScanMode.RegularString:
+                        return ConsumeRegularString(index);
+                    case AttributeArgumentScanMode.VerbatimString:
+                        return ConsumeVerbatimString(index);
+                    case AttributeArgumentScanMode.CharLiteral:
+                        return ConsumeCharLiteral(index);
+                    case AttributeArgumentScanMode.RawString:
+                        return ConsumeRawString(index);
+                    default:
+                        return index;
+                }
+            }
+
+            private int ConsumeRegularString(int index)
+            {
+                if (_source[index] == '\\')
+                {
+                    return index + 1;
+                }
+
+                if (_source[index] == '"')
+                {
+                    _mode = AttributeArgumentScanMode.None;
+                }
+
+                return index;
+            }
+
+            private int ConsumeVerbatimString(int index)
+            {
+                if (_source[index] != '"')
+                {
+                    return index;
+                }
+
+                if (index + 1 < _source.Length && _source[index + 1] == '"')
+                {
+                    return index + 1;
+                }
+
+                _mode = AttributeArgumentScanMode.None;
+                return index;
+            }
+
+            private int ConsumeCharLiteral(int index)
+            {
+                if (_source[index] == '\\')
+                {
+                    return index + 1;
+                }
+
+                if (_source[index] == '\'')
+                {
+                    _mode = AttributeArgumentScanMode.None;
+                }
+
+                return index;
+            }
+
+            private int ConsumeRawString(int index)
+            {
+                if (HasRepeatedCharacterAt(_source, index, '"', _rawStringQuoteCount))
+                {
+                    _mode = AttributeArgumentScanMode.None;
+                    return index + _rawStringQuoteCount - 1;
+                }
+
+                return index;
+            }
+
+            private (bool EnteredLiteral, int NextIndex) TryEnterLiteral(int index)
+            {
+                if (IsRawStringStart(_source, index))
+                {
+                    int dollarCount = CountRepeatedCharacter(_source, index, '$');
+                    int quoteIndex = index + dollarCount;
+                    _rawStringQuoteCount = CountRepeatedCharacter(_source, quoteIndex, '"');
+                    _mode = AttributeArgumentScanMode.RawString;
+                    return (true, quoteIndex + _rawStringQuoteCount - 1);
+                }
+
+                if (StartsWith(_source, index, "@\"") ||
+                    StartsWith(_source, index, "$@\"") ||
+                    StartsWith(_source, index, "@$\""))
+                {
+                    _mode = AttributeArgumentScanMode.VerbatimString;
+                    return (true, index + GetStringPrefixLength(_source, index));
+                }
+
+                if (StartsWith(_source, index, "$\""))
+                {
+                    int interpolatedStringEndIndex =
+                        ThirdPartyToolMigrationInterpolatedStringRules.FindRegularInterpolatedStringEndIndex(
+                            _source,
+                            index);
+                    if (interpolatedStringEndIndex >= 0)
+                    {
+                        return (true, interpolatedStringEndIndex);
+                    }
+
+                    _mode = AttributeArgumentScanMode.RegularString;
+                    return (true, index + 1);
+                }
+
+                if (_source[index] == '"')
+                {
+                    _mode = AttributeArgumentScanMode.RegularString;
+                    return (true, index);
+                }
+
+                if (_source[index] == '\'')
+                {
+                    _mode = AttributeArgumentScanMode.CharLiteral;
+                    return (true, index);
+                }
+
+                return (false, index);
+            }
         }
 
         internal static string GetNamedArgumentValueOrNull(string argument, string argumentName)

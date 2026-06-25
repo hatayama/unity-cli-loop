@@ -33,82 +33,115 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
-            if (!EditorApplication.isPlaying)
+            EventSystem? eventSystem = EventSystem.current;
+            UnityCliLoopMouseUiSimulationResult? validationFailure = ValidateSimulationStart(parameters, eventSystem);
+            if (validationFailure != null)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "PlayMode is not active. Use control-play-mode tool to start PlayMode first.",
-                    Action = parameters.Action.ToString()
-                };
+                return validationFailure;
+            }
+            Debug.Assert(eventSystem != null, "ValidateSimulationStart must reject a missing EventSystem.");
+
+            LogSimulationStart(parameters, correlationId);
+            EnsureOverlayExists();
+
+            UnityCliLoopMouseUiSimulationResult? dragStateFailure = ValidateActiveDragState(parameters);
+            if (dragStateFailure != null)
+            {
+                return dragStateFailure;
             }
 
-            EventSystem? eventSystem = EventSystem.current;
+            UnityCliLoopMouseUiSimulationResult response =
+                await ExecuteMouseAction(parameters, eventSystem, ct).ConfigureAwait(false);
+            LogSimulationComplete(parameters, response, correlationId);
+
+            return response;
+        }
+
+        private static UnityCliLoopMouseUiSimulationResult? ValidateSimulationStart(
+            MouseUiSimulationCommand parameters,
+            EventSystem? eventSystem)
+        {
+            if (!EditorApplication.isPlaying)
+            {
+                return CreateFailure(
+                    parameters,
+                    "PlayMode is not active. Use control-play-mode tool to start PlayMode first.");
+            }
+
             if (eventSystem == null)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "No EventSystem found in the scene. Ensure an EventSystem GameObject exists.",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(
+                    parameters,
+                    "No EventSystem found in the scene. Ensure an EventSystem GameObject exists.");
             }
 
             if (parameters.Action != MouseAction.Click && parameters.Action != MouseAction.LongPress && parameters.DragSpeed < 0f)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = $"DragSpeed must be non-negative, got: {parameters.DragSpeed}",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(parameters, $"DragSpeed must be non-negative, got: {parameters.DragSpeed}");
             }
 
-            // uGUI drag controls (ScrollRect, Slider) only respond to left-button drags
             if (IsDragAction(parameters.Action) && parameters.Button != MouseButton.Left)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = $"Drag actions only support Left button (uGUI ignores non-left drags), got: {parameters.Button}",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(
+                    parameters,
+                    $"Drag actions only support Left button (uGUI ignores non-left drags), got: {parameters.Button}");
             }
 
             if (parameters.BypassRaycast && !SupportsBypassRaycast(parameters.Action))
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "BypassRaycast is not supported for this action.",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(parameters, "BypassRaycast is not supported for this action.");
             }
 
             if (parameters.BypassRaycast &&
                 RequiresBypassTargetPath(parameters.Action) &&
                 string.IsNullOrWhiteSpace(parameters.TargetPath))
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart.",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(
+                    parameters,
+                    "TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart.");
             }
 
             if (!string.IsNullOrWhiteSpace(parameters.DropTargetPath) &&
                 parameters.Action != MouseAction.Drag &&
                 parameters.Action != MouseAction.DragEnd)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "DropTargetPath supports Drag and DragEnd only.",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(parameters, "DropTargetPath supports Drag and DragEnd only.");
             }
 
+            return null;
+        }
+
+        private static UnityCliLoopMouseUiSimulationResult? ValidateActiveDragState(MouseUiSimulationCommand parameters)
+        {
+            if (!MouseDragState.IsDragging || !RequiresIdlePointer(parameters.Action))
+            {
+                return null;
+            }
+
+            return CreateFailure(
+                parameters,
+                $"Cannot {parameters.Action.ToString()} while a split drag is active. Call DragEnd first.");
+        }
+
+        private static bool RequiresIdlePointer(MouseAction action)
+        {
+            return action == MouseAction.Click || action == MouseAction.Drag || action == MouseAction.LongPress;
+        }
+
+        private static UnityCliLoopMouseUiSimulationResult CreateFailure(
+            MouseUiSimulationCommand parameters,
+            string message)
+        {
+            return new UnityCliLoopMouseUiSimulationResult
+            {
+                Success = false,
+                Message = message,
+                Action = parameters.Action.ToString()
+            };
+        }
+
+        private static void LogSimulationStart(MouseUiSimulationCommand parameters, string correlationId)
+        {
             VibeLogger.LogInfo(
                 "simulate_mouse_start",
                 "Mouse simulation started",
@@ -123,61 +156,49 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 },
                 correlationId: correlationId
             );
+        }
 
-            EnsureOverlayExists();
-
-            // Single-pointer model: Click, one-shot Drag, and LongPress are invalid while a split drag is held
-            if (MouseDragState.IsDragging &&
-                (parameters.Action == MouseAction.Click || parameters.Action == MouseAction.Drag || parameters.Action == MouseAction.LongPress))
-            {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = $"Cannot {parameters.Action.ToString()} while a split drag is active. Call DragEnd first.",
-                    Action = parameters.Action.ToString()
-                };
-            }
-
-            UnityCliLoopMouseUiSimulationResult response;
-
-            switch (parameters.Action)
-            {
-                case MouseAction.Click:
-                    response = await ExecuteClick(parameters, eventSystem, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.Drag:
-                    response = await ExecuteDragOneShot(parameters, eventSystem, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.DragStart:
-                    response = await ExecuteDragStart(parameters, eventSystem, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.DragMove:
-                    response = await ExecuteDragMove(parameters, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.DragEnd:
-                    response = await ExecuteDragEnd(parameters, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.LongPress:
-                    response = await ExecuteLongPress(parameters, eventSystem, ct).ConfigureAwait(false);
-                    break;
-
-                default:
-                    throw new ArgumentException($"Unknown mouse action: {parameters.Action}");
-            }
-
+        private static void LogSimulationComplete(
+            MouseUiSimulationCommand parameters,
+            UnityCliLoopMouseUiSimulationResult response,
+            string correlationId)
+        {
             VibeLogger.LogInfo(
                 "simulate_mouse_complete",
                 $"Mouse simulation completed: {response.Message}",
                 new { Action = parameters.Action.ToString(), Success = response.Success },
                 correlationId: correlationId
             );
+        }
 
-            return response;
+        private async Task<UnityCliLoopMouseUiSimulationResult> ExecuteMouseAction(
+            MouseUiSimulationCommand parameters,
+            EventSystem eventSystem,
+            CancellationToken ct)
+        {
+            switch (parameters.Action)
+            {
+                case MouseAction.Click:
+                    return await ExecuteClick(parameters, eventSystem, ct).ConfigureAwait(false);
+
+                case MouseAction.Drag:
+                    return await ExecuteDragOneShot(parameters, eventSystem, ct).ConfigureAwait(false);
+
+                case MouseAction.DragStart:
+                    return await ExecuteDragStart(parameters, eventSystem, ct).ConfigureAwait(false);
+
+                case MouseAction.DragMove:
+                    return await ExecuteDragMove(parameters, ct).ConfigureAwait(false);
+
+                case MouseAction.DragEnd:
+                    return await ExecuteDragEnd(parameters, ct).ConfigureAwait(false);
+
+                case MouseAction.LongPress:
+                    return await ExecuteLongPress(parameters, eventSystem, ct).ConfigureAwait(false);
+
+                default:
+                    throw new ArgumentException($"Unknown mouse action: {parameters.Action}");
+            }
         }
 
         private static void EnsureOverlayExists()

@@ -53,6 +53,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     internal static class ThirdPartyToolMigrationDetectionRules
     {
+        private static readonly string[] MigrationCandidateFragments =
+        {
+            LegacyNamespace,
+            CurrentNamespace,
+            CurrentApplicationNamespace,
+            CurrentDomainNamespace,
+            CurrentFirstPartyToolsNamespace,
+            "McpTool",
+            "CustomToolManager",
+            LegacyEditorDelayTypeName,
+            LegacyTimerDelayTypeName,
+            LegacyMainThreadSwitcherTypeName,
+            LegacyPlayerLoopTimingTypeName,
+            LegacyEditorWindowCaptureUtilityTypeName,
+            "UnityCliLoopToolRegistrar",
+            "ToolInfo"
+        };
+
         internal static bool ContainsLegacyCSharpApi(string source)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -64,52 +82,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            if (ContainsTextFragment(source, LegacyNamespace) ||
-                ContainsTextFragment(source, CurrentNamespace) ||
-                ContainsTextFragment(source, CurrentApplicationNamespace) ||
-                ContainsTextFragment(source, CurrentDomainNamespace) ||
-                ContainsTextFragment(source, CurrentFirstPartyToolsNamespace) ||
-                ContainsTextFragment(source, "McpTool") ||
-                ContainsTextFragment(source, "CustomToolManager") ||
-                ContainsTextFragment(source, LegacyEditorDelayTypeName) ||
-                ContainsTextFragment(source, LegacyTimerDelayTypeName) ||
-                ContainsTextFragment(source, LegacyMainThreadSwitcherTypeName) ||
-                ContainsTextFragment(source, LegacyPlayerLoopTimingTypeName) ||
-                ContainsTextFragment(source, LegacyEditorWindowCaptureUtilityTypeName) ||
-                ContainsTextFragment(source, "UnityCliLoopToolRegistrar") ||
-                ContainsTextFragment(source, "ToolInfo"))
-            {
-                return true;
-            }
+            return ContainsAnyTextFragment(source, MigrationCandidateFragments) ||
+                ContainsAnyReplacementRuleName(source, ToolContractTypeReplacementRules) ||
+                ContainsAnyReplacementRuleName(source, DomainTypeReplacementRules) ||
+                ContainsAnyReplacementRuleName(source, ApplicationTypeReplacementRules) ||
+                ContainsAnyReplacementRuleName(source, FirstPartyScreenshotTypeReplacementRules);
+        }
 
-            foreach (TypeReplacementRule rule in ToolContractTypeReplacementRules)
+        private static bool ContainsAnyTextFragment(string source, string[] fragments)
+        {
+            foreach (string fragment in fragments)
             {
-                if (ContainsTextFragment(source, rule.LegacyName) ||
-                    ContainsTextFragment(source, rule.CurrentName))
+                if (ContainsTextFragment(source, fragment))
                 {
                     return true;
                 }
             }
 
-            foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
-            {
-                if (ContainsTextFragment(source, rule.LegacyName) ||
-                    ContainsTextFragment(source, rule.CurrentName))
-                {
-                    return true;
-                }
-            }
+            return false;
+        }
 
-            foreach (TypeReplacementRule rule in ApplicationTypeReplacementRules)
-            {
-                if (ContainsTextFragment(source, rule.LegacyName) ||
-                    ContainsTextFragment(source, rule.CurrentName))
-                {
-                    return true;
-                }
-            }
-
-            foreach (TypeReplacementRule rule in FirstPartyScreenshotTypeReplacementRules)
+        private static bool ContainsAnyReplacementRuleName(string source, TypeReplacementRule[] rules)
+        {
+            foreach (TypeReplacementRule rule in rules)
             {
                 if (ContainsTextFragment(source, rule.LegacyName) ||
                     ContainsTextFragment(source, rule.CurrentName))

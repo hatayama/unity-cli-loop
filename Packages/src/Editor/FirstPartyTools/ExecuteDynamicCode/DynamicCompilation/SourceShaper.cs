@@ -327,83 +327,97 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static int AdvanceOneToken(string s, int pos)
         {
             if (pos >= s.Length) return s.Length;
-            char c = s[pos];
 
-            // Line comment
-            if (c == '/' && pos + 1 < s.Length && s[pos + 1] == '/')
-            {
-                int end = pos + 2;
-                while (end < s.Length && s[end] != '\n') end++;
-                return end < s.Length ? end + 1 : s.Length;
-            }
-
-            // Block comment
-            if (c == '/' && pos + 1 < s.Length && s[pos + 1] == '*')
-            {
-                int end = pos + 2;
-                while (end + 1 < s.Length && !(s[end] == '*' && s[end + 1] == '/')) end++;
-                return end + 2 < s.Length ? end + 2 : s.Length;
-            }
-
-            // Verbatim string (@"...")
-            if (c == '@' && pos + 1 < s.Length && s[pos + 1] == '"')
-            {
-                int end = pos + 2;
-                while (end < s.Length)
-                {
-                    if (s[end] == '"')
-                    {
-                        if (end + 1 < s.Length && s[end + 1] == '"') { end += 2; continue; }
-                        return end + 1;
-                    }
-                    end++;
-                }
-                return s.Length;
-            }
-
-            // Raw string literal (""" ... """)
-            if (c == '"' && pos + 2 < s.Length && s[pos + 1] == '"' && s[pos + 2] == '"')
-            {
-                int end = pos + 3;
-                while (end + 2 < s.Length)
-                {
-                    if (s[end] == '"' && s[end + 1] == '"' && s[end + 2] == '"') return end + 3;
-                    end++;
-                }
-                return s.Length;
-            }
-
-            // Regular string literal ("...")
-            if (c == '"')
-            {
-                int end = pos + 1;
-                while (end < s.Length && s[end] != '"')
-                {
-                    if (s[end] == '\\') end++; // skip escaped char
-                    end++;
-                }
-                return end < s.Length ? end + 1 : s.Length;
-            }
-
-            // Char literal ('x')
-            if (c == '\'')
-            {
-                int end = pos + 1;
-                while (end < s.Length && s[end] != '\'')
-                {
-                    if (s[end] == '\\') end++;
-                    end++;
-                }
-                return end < s.Length ? end + 1 : s.Length;
-            }
-
-            // Interpolated string ($"...")
-            if (c == '$' && pos + 1 < s.Length && s[pos + 1] == '"')
-            {
-                return SkipInterpolatedString(s, pos + 2);
-            }
+            (bool matched, int nextPosition) = TryAdvanceLineComment(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceBlockComment(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceVerbatimString(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceRawString(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceRegularString(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceCharLiteral(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceInterpolatedString(s, pos);
+            if (matched) return nextPosition;
 
             return pos + 1;
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceLineComment(string s, int pos)
+        {
+            if (pos + 1 >= s.Length || s[pos] != '/' || s[pos + 1] != '/')
+            {
+                return (false, pos);
+            }
+
+            int end = pos + 2;
+            while (end < s.Length && s[end] != '\n') end++;
+            return (true, end < s.Length ? end + 1 : s.Length);
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceBlockComment(string s, int pos)
+        {
+            if (pos + 1 >= s.Length || s[pos] != '/' || s[pos + 1] != '*')
+            {
+                return (false, pos);
+            }
+
+            int end = pos + 2;
+            while (end + 1 < s.Length && !(s[end] == '*' && s[end + 1] == '/')) end++;
+            return (true, end + 2 < s.Length ? end + 2 : s.Length);
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceVerbatimString(string s, int pos)
+        {
+            if (pos + 1 >= s.Length || s[pos] != '@' || s[pos + 1] != '"')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipVerbatimString(s, pos + 2));
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceRawString(string s, int pos)
+        {
+            if (pos + 2 >= s.Length || s[pos] != '"' || s[pos + 1] != '"' || s[pos + 2] != '"')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipRawString(s, pos + 3));
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceRegularString(string s, int pos)
+        {
+            if (s[pos] != '"')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipRegularString(s, pos + 1));
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceCharLiteral(string s, int pos)
+        {
+            if (s[pos] != '\'')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipCharLiteral(s, pos + 1));
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceInterpolatedString(string s, int pos)
+        {
+            if (pos + 1 >= s.Length || s[pos] != '$' || s[pos + 1] != '"')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipInterpolatedString(s, pos + 2));
         }
 
         private static int SkipInterpolatedString(string s, int pos)
