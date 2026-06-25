@@ -52,17 +52,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             public readonly string Name;
             public readonly string ToolName;
+            public readonly string Description;
             public readonly string SkillDirectoryPath;
             public readonly Dictionary<string, byte[]> SkillFiles;
 
             public SkillSourceDefinition(
                 string name,
                 string toolName,
+                string description,
                 string skillDirectoryPath,
                 Dictionary<string, byte[]> skillFiles)
             {
                 Name = name;
                 ToolName = toolName;
+                Description = description;
                 SkillDirectoryPath = skillDirectoryPath;
                 SkillFiles = skillFiles;
             }
@@ -270,6 +273,28 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 .Values
                 .Select(source => new SkillSourceInfo(source.Name, source.ToolName, source.SkillFiles))
                 .ToList();
+        }
+
+        internal static IReadOnlyDictionary<string, string> GetToolDescriptionsByToolName(string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            Dictionary<string, string> descriptions = new(StringComparer.Ordinal);
+            foreach (SkillSourceDefinition source in GetSkillSources(projectRoot).Values)
+            {
+                string toolName = ResolveToolNameForSkillSource(source.Name, source.ToolName);
+                if (string.IsNullOrEmpty(toolName) || string.IsNullOrWhiteSpace(source.Description))
+                {
+                    continue;
+                }
+
+                if (!descriptions.ContainsKey(toolName))
+                {
+                    descriptions[toolName] = source.Description;
+                }
+            }
+
+            return descriptions;
         }
 
         internal static SkillSourceInfo GetSkillSourceInfoFromDirectory(string skillDirectory)
@@ -655,6 +680,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     sources[skillName] = new SkillSourceDefinition(
                         skillName,
                         ParseToolNameFromFrontmatter(skillContent),
+                        ParseDescriptionFromFrontmatter(skillContent),
                         skillDirectory,
                         CollectSourceSkillFiles(skillDirectory, skillFilePath));
                 }
@@ -948,6 +974,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return nameMatch.Groups[1].Value.Trim().Trim('"');
+        }
+
+        private static string ParseDescriptionFromFrontmatter(string content)
+        {
+            Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
+            if (!frontmatterMatch.Success)
+            {
+                return null;
+            }
+
+            string frontmatter = frontmatterMatch.Groups[1].Value;
+            Match descriptionMatch = Regex.Match(frontmatter, @"^description:\s*(.+)$", RegexOptions.Multiline);
+            if (!descriptionMatch.Success)
+            {
+                return null;
+            }
+
+            return descriptionMatch.Groups[1].Value.Trim().Trim('"');
+        }
+
+        private static string ResolveToolNameForSkillSource(string skillName, string toolName)
+        {
+            if (!string.IsNullOrEmpty(toolName))
+            {
+                return toolName;
+            }
+
+            if (string.IsNullOrEmpty(skillName)
+                || !skillName.StartsWith(CliConstants.SKILL_DIR_PREFIX, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return skillName.Substring(CliConstants.SKILL_DIR_PREFIX.Length);
         }
 
         private static bool SkillContentMatchesTool(string content, string skillDirectory, string toolName)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 
@@ -7,32 +8,36 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Application
 {
+    internal interface IToolSkillDescriptionProvider
+    {
+        IReadOnlyDictionary<string, string> GetSkillDescriptionsByToolName();
+    }
+
     internal sealed class ToolSettingsUseCase
     {
-        private static readonly ToolCatalogItem[] NativeToolCatalogItems =
+        private static readonly string[] NativeToolNames =
         {
-            new(
-                UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT,
-                displayDevelopmentOnly: false,
-                isThirdParty: false),
-            new(
-                UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS,
-                displayDevelopmentOnly: false,
-                isThirdParty: false)
+            UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT,
+            UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS
         };
 
         private readonly ToolSettingsService _toolSettingsService;
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
+        private readonly IToolSkillDescriptionProvider _toolSkillDescriptionProvider;
 
         internal ToolSettingsUseCase(
             ToolSettingsService toolSettingsService,
-            UnityCliLoopToolRegistrarService toolRegistrarService)
+            UnityCliLoopToolRegistrarService toolRegistrarService,
+            IToolSkillDescriptionProvider toolSkillDescriptionProvider)
         {
             Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
             Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
+            Debug.Assert(toolSkillDescriptionProvider != null, "toolSkillDescriptionProvider must not be null");
 
             _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
             _toolRegistrarService = toolRegistrarService ?? throw new ArgumentNullException(nameof(toolRegistrarService));
+            _toolSkillDescriptionProvider = toolSkillDescriptionProvider
+                ?? throw new ArgumentNullException(nameof(toolSkillDescriptionProvider));
         }
 
         internal bool IsToolEnabled(string toolName)
@@ -70,14 +75,44 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 return false;
             }
 
+            IReadOnlyDictionary<string, string> descriptions =
+                _toolSkillDescriptionProvider.GetSkillDescriptionsByToolName();
             ToolCatalogItem[] registryTools = registry.GetToolSettingsCatalog()
                 .Select(item => new ToolCatalogItem(
                     item.Name,
                     item.DisplayDevelopmentOnly,
-                    item.IsThirdParty))
+                    item.IsThirdParty,
+                    GetDescriptionForTool(item.Name, descriptions)))
                 .ToArray();
-            allTools = registryTools.Concat(NativeToolCatalogItems).ToArray();
+            allTools = registryTools.Concat(CreateNativeToolCatalogItems(descriptions)).ToArray();
             return true;
+        }
+
+        private static ToolCatalogItem[] CreateNativeToolCatalogItems(IReadOnlyDictionary<string, string> descriptions)
+        {
+            return NativeToolNames
+                .Select(toolName => new ToolCatalogItem(
+                    toolName,
+                    displayDevelopmentOnly: false,
+                    isThirdParty: false,
+                    skillDescription: GetDescriptionForTool(toolName, descriptions)))
+                .ToArray();
+        }
+
+        private static string GetDescriptionForTool(
+            string toolName,
+            IReadOnlyDictionary<string, string> descriptions)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
+            Debug.Assert(descriptions != null, "descriptions must not be null");
+
+            if (descriptions.TryGetValue(toolName, out string description)
+                && !string.IsNullOrWhiteSpace(description))
+            {
+                return description;
+            }
+
+            return string.Empty;
         }
 
         internal readonly struct ToolCatalogItem
@@ -85,15 +120,18 @@ namespace io.github.hatayama.UnityCliLoop.Application
             internal readonly string Name;
             internal readonly bool DisplayDevelopmentOnly;
             internal readonly bool IsThirdParty;
+            internal readonly string SkillDescription;
 
             internal ToolCatalogItem(
                 string name,
                 bool displayDevelopmentOnly,
-                bool isThirdParty)
+                bool isThirdParty,
+                string skillDescription)
             {
                 Name = name;
                 DisplayDevelopmentOnly = displayDevelopmentOnly;
                 IsThirdParty = isThirdParty;
+                SkillDescription = skillDescription;
             }
         }
     }

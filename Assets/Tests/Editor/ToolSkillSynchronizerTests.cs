@@ -1136,6 +1136,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(skillSources.Select(skill => skill.Name), Does.Contain("uloop-launch"));
         }
 
+        // Tests that Tool Settings can read source skill frontmatter descriptions by tool name.
+        [Test]
+        public void GetToolDescriptionsByToolName_WhenSkillHasDescription_MapsDescriptionToToolName()
+        {
+            IReadOnlyDictionary<string, string> descriptions = SkillInstallLayout.GetToolDescriptionsByToolName(_projectRoot);
+
+            Assert.That(descriptions["compile"], Is.EqualTo("Compile the Unity project and report errors/warnings. Use after C# edits."));
+            Assert.That(descriptions[UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT], Does.StartWith("Pauses Unity's playback"));
+        }
+
         // Tests that skill discovery follows bundled tools after they move into the first-party plugin assembly.
         [Test]
         public void GetSkillSourceInfos_WhenFirstPartyToolIsUnderFirstPartyTools_IncludesToolSkill()
