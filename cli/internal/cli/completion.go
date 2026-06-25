@@ -31,97 +31,113 @@ func tryHandleCompletionRequest(args []string, cache toolsCache, stdout io.Write
 		return false, 0
 	}
 
-	if args[0] == listCommandsFlag {
-		printCommandNames(cache, stdout)
-		return true, 0
-	}
-
-	if args[0] == listOptionsFlag {
-		if len(args) < 2 {
-			writeErrorEnvelope(stderr, (&argumentError{
-				message:     "--list-options requires a command name",
-				option:      listOptionsFlag,
-				command:     completionCommand,
-				nextActions: []string{"Pass the command name after `--list-options`."},
-			}).toCLIError(errorContext{command: completionCommand}))
-			return true, 1
-		}
-		printOptionsForCommand(args[1], cache, stdout)
-		return true, 0
+	if handled, code := tryHandleCompletionListRequest(args, cache, stdout, stderr); handled {
+		return true, code
 	}
 
 	if args[0] != completionCommand {
 		return false, 0
 	}
-	if len(args) >= 2 && args[1] == listCommandsFlag {
+	return true, runCompletionCommand(args[1:], cache, stdout, stderr)
+}
+
+func tryHandleCompletionListRequest(args []string, cache toolsCache, stdout io.Writer, stderr io.Writer) (bool, int) {
+	if len(args) == 0 {
+		return false, 0
+	}
+
+	switch args[0] {
+	case listCommandsFlag:
 		printCommandNames(cache, stdout)
 		return true, 0
-	}
-	if len(args) >= 2 && args[1] == listOptionsFlag {
-		if len(args) < 3 {
-			writeErrorEnvelope(stderr, (&argumentError{
-				message:     "--list-options requires a command name",
-				option:      listOptionsFlag,
-				command:     completionCommand,
-				nextActions: []string{"Pass the command name after `--list-options`."},
-			}).toCLIError(errorContext{command: completionCommand}))
+	case listOptionsFlag:
+		if len(args) < 2 {
+			writeMissingCompletionCommandName(stderr)
 			return true, 1
 		}
-		printOptionsForCommand(args[2], cache, stdout)
+		printOptionsForCommand(args[1], cache, stdout)
 		return true, 0
+	default:
+		return false, 0
+	}
+}
+
+func runCompletionCommand(args []string, cache toolsCache, stdout io.Writer, stderr io.Writer) int {
+	if handled, code := tryHandleCompletionListRequest(args, cache, stdout, stderr); handled {
+		return code
 	}
 
-	if containsHelpRequest(args[1:]) {
+	if containsHelpRequest(args) {
 		printCompletionHelp(stdout)
-		return true, 0
+		return 0
 	}
 
-	request, err := parseCompletionRequest(args[1:])
+	request, err := parseCompletionRequest(args)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{command: completionCommand})
-		return true, 1
+		return 1
 	}
+	return runCompletionRequest(request, stdout, stderr)
+}
 
+func runCompletionRequest(request completionRequest, stdout io.Writer, stderr io.Writer) int {
 	shellName := request.shell
 	if shellName == "" {
 		shellName = detectShell()
 	}
 	if shellName == "" {
-		writeErrorEnvelope(stderr, cliError{
-			ErrorCode:   errorCodeInvalidArgument,
-			Phase:       errorPhaseArgumentParsing,
-			Message:     "Could not detect shell.",
-			Retryable:   false,
-			SafeToRetry: false,
-			Command:     completionCommand,
-			NextActions: []string{"Pass `--shell bash`, `--shell zsh`, `--shell powershell`, or `--shell pwsh`."},
-		})
-		return true, 1
+		writeCompletionShellDetectionError(stderr)
+		return 1
 	}
 
 	script := getCompletionScript(shellName)
 	if !request.install {
 		writeLine(stdout, script)
-		return true, 0
+		return 0
 	}
 
 	configPath, err := getShellConfigPath(shellName)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{command: completionCommand})
-		return true, 1
+		return 1
 	}
 	if err := installCompletionScript(configPath, shellName, script); err != nil {
 		writeClassifiedError(stderr, err, errorContext{command: completionCommand})
-		return true, 1
+		return 1
 	}
 
+	writeCompletionInstallResult(stdout, shellName, configPath)
+	return 0
+}
+
+func writeMissingCompletionCommandName(stderr io.Writer) {
+	writeErrorEnvelope(stderr, (&argumentError{
+		message:     "--list-options requires a command name",
+		option:      listOptionsFlag,
+		command:     completionCommand,
+		nextActions: []string{"Pass the command name after `--list-options`."},
+	}).toCLIError(errorContext{command: completionCommand}))
+}
+
+func writeCompletionShellDetectionError(stderr io.Writer) {
+	writeErrorEnvelope(stderr, cliError{
+		ErrorCode:   errorCodeInvalidArgument,
+		Phase:       errorPhaseArgumentParsing,
+		Message:     "Could not detect shell.",
+		Retryable:   false,
+		SafeToRetry: false,
+		Command:     completionCommand,
+		NextActions: []string{"Pass `--shell bash`, `--shell zsh`, `--shell powershell`, or `--shell pwsh`."},
+	})
+}
+
+func writeCompletionInstallResult(stdout io.Writer, shellName string, configPath string) {
 	writeFormat(stdout, "Completion installed to %s\n", configPath)
 	if isPowerShellShell(shellName) {
 		writeLine(stdout, "Restart PowerShell to enable completion.")
-		return true, 0
+		return
 	}
 	writeFormat(stdout, "Run 'source %s' or restart your shell to enable completion.\n", configPath)
-	return true, 0
 }
 
 func shouldHandleCompletionRequest(args []string) bool {
