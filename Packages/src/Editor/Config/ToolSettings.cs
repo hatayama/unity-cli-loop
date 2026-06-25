@@ -157,9 +157,9 @@ namespace io.github.hatayama.uLoopMCP
 
         private static string NormalizeSkillCliInvocation(string invocation)
         {
-            return invocation == CliConstants.SKILL_CLI_INVOCATION_NPX
-                ? CliConstants.SKILL_CLI_INVOCATION_NPX
-                : CliConstants.SKILL_CLI_INVOCATION_GLOBAL;
+            return invocation == CliConstants.SKILL_CLI_INVOCATION_GLOBAL
+                ? CliConstants.SKILL_CLI_INVOCATION_GLOBAL
+                : CliConstants.SKILL_CLI_INVOCATION_NPX;
         }
     }
 }

@@ -217,6 +217,7 @@ describe('skill install layout', () => {
   function writeProjectPackageVersion(projectRoot: string, version: string): void {
     const packageRoot = join(projectRoot, 'Packages', 'src');
     mkdirSync(packageRoot, { recursive: true });
+    mkdirSync(join(packageRoot, 'Editor', 'Api', 'McpTools'), { recursive: true });
     writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ version }), 'utf-8');
   }
 
@@ -340,6 +341,7 @@ describe('skill install layout', () => {
 
   it('should discover project skills from a direct SKILL.md in the tool folder', () => {
     const projectRoot = createUnityProjectRoot();
+    writeProjectPackageVersion(projectRoot, '2.9.0');
     const toolDir = join(projectRoot, 'Assets', 'Vision', 'Editor', 'McpExtensions', 'ReplayTool');
     mkdirSync(toolDir, { recursive: true });
     writeFileSync(
@@ -367,6 +369,7 @@ describe('skill install layout', () => {
 
   it('should install run-tests skill when test framework package is missing', () => {
     const projectRoot = createUnityProjectRoot();
+    writeProjectPackageVersion(projectRoot, '2.9.0');
     const runTestsSkillDir = join(
       projectRoot,
       'Packages',
@@ -441,6 +444,7 @@ describe('skill install layout', () => {
 
   it('should ignore sibling implementation files beside a direct SKILL.md in the tool folder', () => {
     const projectRoot = createUnityProjectRoot();
+    writeProjectPackageVersion(projectRoot, '2.9.0');
     const toolDir = join(projectRoot, 'Assets', 'Vision', 'Editor', 'McpExtensions', 'CaptureTool');
     mkdirSync(toolDir, { recursive: true });
     const skillContent = [

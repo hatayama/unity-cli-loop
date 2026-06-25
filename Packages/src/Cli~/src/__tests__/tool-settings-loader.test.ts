@@ -110,10 +110,10 @@ describe('tool-settings-loader', () => {
   // ── skill CLI invocation ───────────────────────────────────────
 
   describe('skill CLI invocation', () => {
-    it('should return global when settings file does not exist', () => {
+    it('should return npx when settings file does not exist', () => {
       const result = loadSkillCliInvocation();
 
-      expect(result).toBe('global');
+      expect(result).toBe('npx');
     });
 
     it('should return npx from settings file', () => {
@@ -127,10 +127,21 @@ describe('tool-settings-loader', () => {
       expect(result).toBe('npx');
     });
 
-    it('should return global for invalid settings value', () => {
+    it('should return npx for invalid settings value', () => {
       writeFileSync(
         join(testDir, '.uloop', 'settings.tools.json'),
         JSON.stringify({ skillCliInvocation: 'invalid' }),
+      );
+
+      const result = loadSkillCliInvocation();
+
+      expect(result).toBe('npx');
+    });
+
+    it('should return global from settings file', () => {
+      writeFileSync(
+        join(testDir, '.uloop', 'settings.tools.json'),
+        JSON.stringify({ skillCliInvocation: 'global' }),
       );
 
       const result = loadSkillCliInvocation();

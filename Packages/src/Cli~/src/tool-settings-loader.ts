@@ -27,7 +27,7 @@ interface ToolSettingsData {
 
 export type SkillCliInvocation = 'global' | 'npx';
 
-const DEFAULT_SKILL_CLI_INVOCATION: SkillCliInvocation = 'global';
+const DEFAULT_SKILL_CLI_INVOCATION: SkillCliInvocation = 'npx';
 const SKILL_CLI_INVOCATIONS = new Set<SkillCliInvocation>(['global', 'npx']);
 
 export function loadDisabledTools(projectPath?: string): string[] {
