@@ -126,21 +126,7 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 	}
 
 	if isV3MigrationSkillSubcommand(subcommand) {
-		if len(options.targets) == 0 {
-			printSkillsTargetGuidance(subcommand, stdout)
-			return true, 0
-		}
-		switch subcommand {
-		case "install-v3-migration":
-			skills, err := collectV3MigrationSkillDefinition(projectRoot)
-			if err != nil {
-				writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
-				return true, 1
-			}
-			return true, runV3MigrationSkillInstall(projectRoot, skills, options, stdout, stderr)
-		case "uninstall-v3-migration":
-			return true, runV3MigrationSkillUninstall(projectRoot, options, stdout, stderr)
-		}
+		return true, runV3MigrationSkillsSubcommand(subcommand, projectRoot, options, stdout, stderr)
 	}
 
 	skills, err := collectSkillDefinitions(projectRoot)
@@ -149,23 +135,7 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 		return true, 1
 	}
 
-	switch subcommand {
-	case "list":
-		return true, runSkillsList(projectRoot, skills, options, stdout, stderr)
-	case "install":
-		if len(options.targets) == 0 {
-			printSkillsTargetGuidance("install", stdout)
-			return true, 0
-		}
-		return true, runSkillsInstall(projectRoot, skills, options, stdout, stderr)
-	case "uninstall":
-		if len(options.targets) == 0 {
-			printSkillsTargetGuidance("uninstall", stdout)
-			return true, 0
-		}
-		return true, runSkillsUninstall(projectRoot, skills, options, stdout, stderr)
-	}
-	return true, 1
+	return true, runSkillsSubcommand(subcommand, projectRoot, skills, options, stdout, stderr)
 }
 
 func parseSkillsOptions(args []string) (skillCommandOptions, error) {
@@ -410,39 +380,11 @@ func installSkillsForTarget(projectRoot string, target skillTarget, skills []ski
 		}
 	}
 
-	disabledTools := []string{}
-	if !global {
-		disabledTools = loadDisabledTools(projectRoot)
-	}
+	disabledTools := loadDisabledToolsForSkillInstall(projectRoot, global)
 	for _, skill := range skills {
-		if isSkillDisabledByToolSettings(skill, disabledTools) {
-			if err := removeSkillFromAllLayouts(baseDir, skill.name); err != nil {
-				return skillInstallResult{}, err
-			}
-			continue
-		}
-
-		status, err := getSkillStatus(baseDir, skill, grouped)
-		if err != nil {
+		if err := installSkillForTarget(baseDir, skill, disabledTools, grouped, &result); err != nil {
 			return skillInstallResult{}, err
 		}
-		destinationDir := getPreferredSkillDir(baseDir, skill.name, grouped)
-		if status == "installed" {
-			result.skipped++
-			continue
-		}
-		if err := syncSkillDirectory(skill.sourceDirectory, destinationDir); err != nil {
-			return skillInstallResult{}, err
-		}
-		alternateDir := getPreferredSkillDir(baseDir, skill.name, !grouped)
-		if err := os.RemoveAll(alternateDir); err != nil {
-			return skillInstallResult{}, err
-		}
-		if status == "outdated" {
-			result.updated++
-			continue
-		}
-		result.installed++
 	}
 	if !grouped {
 		if err := removeEmptyDir(getPreferredSkillDir(baseDir, managedSkillsDir, false)); err != nil {
@@ -450,6 +392,49 @@ func installSkillsForTarget(projectRoot string, target skillTarget, skills []ski
 		}
 	}
 	return result, nil
+}
+
+func loadDisabledToolsForSkillInstall(projectRoot string, global bool) []string {
+	if global {
+		return []string{}
+	}
+	return loadDisabledTools(projectRoot)
+}
+
+func installSkillForTarget(
+	baseDir string,
+	skill skillDefinition,
+	disabledTools []string,
+	grouped bool,
+	result *skillInstallResult,
+) error {
+	if isSkillDisabledByToolSettings(skill, disabledTools) {
+		return removeSkillFromAllLayouts(baseDir, skill.name)
+	}
+
+	status, err := getSkillStatus(baseDir, skill, grouped)
+	if err != nil {
+		return err
+	}
+	if status == "installed" {
+		result.skipped++
+		return nil
+	}
+
+	destinationDir := getPreferredSkillDir(baseDir, skill.name, grouped)
+	if err := syncSkillDirectory(skill.sourceDirectory, destinationDir); err != nil {
+		return err
+	}
+	alternateDir := getPreferredSkillDir(baseDir, skill.name, !grouped)
+	if err := os.RemoveAll(alternateDir); err != nil {
+		return err
+	}
+	if status == "outdated" {
+		result.updated++
+		return nil
+	}
+	result.installed++
+	return nil
 }
 
 func uninstallSkillsForTarget(projectRoot string, target skillTarget, skills []skillDefinition, global bool, grouped bool) (int, int, error) {

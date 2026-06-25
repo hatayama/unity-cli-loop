@@ -290,6 +290,23 @@ public sealed class CurrentReferences
         }
 
         [Test]
+        public void MigrateCSharpSource_WhenLegacyToolAttributeCommentsContainCommas_PreservesSupportedArguments()
+        {
+            // Verifies that commas inside comments do not split legacy attribute arguments.
+            string source = "using io.github.hatayama.uLoopMCP;\n" +
+                "[McpTool(Description = \"hello\" /*, block */\n" +
+                "    //, line\n" +
+                "    , DisplayDevelopmentOnly = true)] public sealed class HelloTool {}";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Content, Does.Contain("[UnityCliLoopTool(DisplayDevelopmentOnly = true)]"));
+            Assert.That(result.Content, Does.Not.Contain("Description"));
+        }
+
+        [Test]
         public void FindRegularInterpolatedStringEndIndex_WhenHoleContainsInterpolatedRawStringWithRawStringHole_FindsOuterStringEnd()
         {
             // Verifies that raw-string delimiters inside nested interpolation holes do not close the outer string.

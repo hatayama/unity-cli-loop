@@ -36,85 +36,123 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (parameters.StatusOnly)
             {
-                if (parameters.Action == PlayModeAction.Play &&
-                    !EditorApplication.isPlaying &&
-                    _compilationFailureGate.HasScriptCompilationFailed())
-                {
-                    ControlPlayModeCompileError[] compileErrors =
-                        _compilationFailureProvider.GetLastFailedErrors();
-                    return Task.FromResult(CreateCompileErrorBlockedResponse(compileErrors));
-                }
-
-                return Task.FromResult(CreateResponse("Play mode status", false, false));
+                return Task.FromResult(CreateStatusOnlyResponse(parameters));
             }
 
+            ControlPlayModeActionResult actionResult = ExecuteRequestedPlayModeAction(parameters.Action);
+            if (actionResult.HasResponse)
+            {
+                return Task.FromResult(actionResult.Response);
+            }
+
+            return Task.FromResult(CreateResponse(
+                actionResult.Message,
+                actionResult.Changed,
+                actionResult.WasAlreadyStopped));
+        }
+
+        private ControlPlayModeResponse CreateStatusOnlyResponse(ControlPlayModeSchema parameters)
+        {
+            if (ShouldBlockPlayForCompileErrors(parameters.Action, EditorApplication.isPlaying))
+            {
+                ControlPlayModeCompileError[] compileErrors =
+                    _compilationFailureProvider.GetLastFailedErrors();
+                return CreateCompileErrorBlockedResponse(compileErrors);
+            }
+
+            return CreateResponse("Play mode status", false, false);
+        }
+
+        private ControlPlayModeActionResult ExecuteRequestedPlayModeAction(PlayModeAction action)
+        {
             string message;
             bool wasPaused = EditorApplication.isPaused;
             bool wasPlaying = EditorApplication.isPlaying;
-            bool changed = false;
-            bool wasAlreadyStopped = false;
 
-            switch (parameters.Action)
+            switch (action)
             {
                 case PlayModeAction.Play:
-                    if (!wasPlaying && _compilationFailureGate.HasScriptCompilationFailed())
-                    {
-                        ControlPlayModeCompileError[] compileErrors =
-                            _compilationFailureProvider.GetLastFailedErrors();
-                        return Task.FromResult(CreateCompileErrorBlockedResponse(compileErrors));
-                    }
-
-                    if (wasPaused)
-                    {
-                        EditorApplication.isPaused = false;
-                    }
-                    if (!EditorApplication.isPlaying)
-                    {
-                        EditorApplication.isPlaying = true;
-                    }
-                    changed = wasPaused || !wasPlaying;
-                    message = wasPaused ? "Play mode resumed" : "Play mode started";
-                    break;
+                    return ExecutePlayModeStart(wasPaused, wasPlaying);
 
                 case PlayModeAction.Stop:
-                    wasAlreadyStopped = !wasPlaying;
-                    if (wasPaused)
-                    {
-                        EditorApplication.isPaused = false;
-                    }
-                    if (EditorApplication.isPlaying)
-                    {
-                        EditorApplication.isPlaying = false;
-                    }
-                    changed = wasPaused || wasPlaying;
-                    message = wasAlreadyStopped ? "Play mode was already stopped" : "Play mode stopped";
-                    break;
+                    return ExecutePlayModeStop(wasPaused, wasPlaying);
 
                 case PlayModeAction.Pause:
                     EditorApplication.isPaused = true;
-                    changed = !wasPaused;
-                    message = "Play mode paused";
-                    break;
+                    return ControlPlayModeActionResult.FromState("Play mode paused", !wasPaused, false);
 
                 case PlayModeAction.Step:
-                    // Same API as the Editor's Next Frame button: advances one frame and
-                    // leaves the player paused, independent of Time.timeScale.
-                    if (!wasPlaying)
-                    {
-                        message = "Play mode is not running. Step requires PlayMode; start it with --action Play first.";
-                        break;
-                    }
-                    EditorApplication.Step();
-                    changed = true;
-                    message = "Stepped one frame; play mode is paused.";
-                    break;
+                    return ExecutePlayModeStep(wasPlaying);
 
                 default:
-                    message = $"Unknown action: {parameters.Action}";
-                    break;
+                    message = $"Unknown action: {action}";
+                    return ControlPlayModeActionResult.FromState(message, false, false);
+            }
+        }
+
+        private bool ShouldBlockPlayForCompileErrors(PlayModeAction action, bool isPlaying)
+        {
+            return action == PlayModeAction.Play &&
+                !isPlaying &&
+                _compilationFailureGate.HasScriptCompilationFailed();
+        }
+
+        private ControlPlayModeActionResult ExecutePlayModeStart(bool wasPaused, bool wasPlaying)
+        {
+            if (ShouldBlockPlayForCompileErrors(PlayModeAction.Play, wasPlaying))
+            {
+                ControlPlayModeCompileError[] compileErrors =
+                    _compilationFailureProvider.GetLastFailedErrors();
+                return ControlPlayModeActionResult.FromResponse(
+                    CreateCompileErrorBlockedResponse(compileErrors),
+                    true);
             }
 
-            return Task.FromResult(CreateResponse(message, changed, wasAlreadyStopped));
+            if (wasPaused)
+            {
+                EditorApplication.isPaused = false;
+            }
+            if (!EditorApplication.isPlaying)
+            {
+                EditorApplication.isPlaying = true;
+            }
+
+            bool changed = wasPaused || !wasPlaying;
+            string message = wasPaused ? "Play mode resumed" : "Play mode started";
+            return ControlPlayModeActionResult.FromState(message, changed, false);
+        }
+
+        private static ControlPlayModeActionResult ExecutePlayModeStop(bool wasPaused, bool wasPlaying)
+        {
+            bool wasAlreadyStopped = !wasPlaying;
+            if (wasPaused)
+            {
+                EditorApplication.isPaused = false;
+            }
+            if (EditorApplication.isPlaying)
+            {
+                EditorApplication.isPlaying = false;
+            }
+
+            bool changed = wasPaused || wasPlaying;
+            string message = wasAlreadyStopped ? "Play mode was already stopped" : "Play mode stopped";
+            return ControlPlayModeActionResult.FromState(message, changed, wasAlreadyStopped);
+        }
+
+        private static ControlPlayModeActionResult ExecutePlayModeStep(bool wasPlaying)
+        {
+            // Same API as the Editor's Next Frame button: advances one frame and
+            // leaves the player paused, independent of Time.timeScale.
+            if (!wasPlaying)
+            {
+                return ControlPlayModeActionResult.FromState(
+                    "Play mode is not running. Step requires PlayMode; start it with --action Play first.",
+                    false,
+                    false);
+            }
+
+            EditorApplication.Step();
+            return ControlPlayModeActionResult.FromState("Stepped one frame; play mode is paused.", true, false);
         }
 
         private static ControlPlayModeResponse CreateResponse(string message, bool changed, bool wasAlreadyStopped)
@@ -145,6 +183,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.CompileErrors = errors;
             response.CompileErrorCount = errors.Length;
             return response;
+        }
+
+        private readonly struct ControlPlayModeActionResult
+        {
+            private ControlPlayModeActionResult(
+                string message,
+                bool changed,
+                bool wasAlreadyStopped,
+                ControlPlayModeResponse response,
+                bool hasResponse)
+            {
+                Message = message;
+                Changed = changed;
+                WasAlreadyStopped = wasAlreadyStopped;
+                Response = response;
+                HasResponse = hasResponse;
+            }
+
+            public static ControlPlayModeActionResult FromState(
+                string message,
+                bool changed,
+                bool wasAlreadyStopped)
+            {
+                return new ControlPlayModeActionResult(
+                    message,
+                    changed,
+                    wasAlreadyStopped,
+                    null,
+                    false);
+            }
+
+            public static ControlPlayModeActionResult FromResponse(
+                ControlPlayModeResponse response,
+                bool changed)
+            {
+                return new ControlPlayModeActionResult(
+                    response.Message,
+                    changed,
+                    response.WasAlreadyStopped,
+                    response,
+                    true);
+            }
+
+            public string Message { get; }
+            public bool Changed { get; }
+            public bool WasAlreadyStopped { get; }
+            public ControlPlayModeResponse Response { get; }
+            public bool HasResponse { get; }
         }
     }
 }

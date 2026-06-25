@@ -71,9 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return cancelledResponse;
                 }
 
-                ExecuteDynamicCodeResponse response = ConvertExecutionResultToResponse(
-                    finalResult,
-                    originalCode);
+                ExecuteDynamicCodeResponse response = ConvertExecutionResultToResponse(finalResult);
                 response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
                 // Why: domain-reload timeouts can complete while Unity's synchronization context is stalled.
                 bool domainReloadWaitRequired =
@@ -397,9 +395,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "Investigate error cause and improve error handling");
         }
 
-        private ExecuteDynamicCodeResponse ConvertExecutionResultToResponse(
-            ExecutionResult result,
-            string originalCode)
+        private ExecuteDynamicCodeResponse ConvertExecutionResultToResponse(ExecutionResult result)
         {
             ExecuteDynamicCodeResponse response = new()            {
                 Success = result.Success,
@@ -412,61 +408,83 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!result.Success)
             {
-                DynamicCodeFriendlyError friendlyError = _friendlyErrorConverter.Convert(result);
-                response.ErrorMessage = friendlyError.FriendlyMessage;
-                response.Logs = result.Logs != null ? new List<string>(result.Logs) : new List<string>();
-                AddFriendlyFailureDetails(response.Logs, friendlyError);
-
-                if (result.CompilationErrors?.Any() == true)
-                {
-                    response.Diagnostics = BuildDiagnostics(
-                        result.CompilationErrors,
-                        result.UpdatedCode,
-                        result.AmbiguousTypeCandidates);
-                    response.CompilationErrors = response.Diagnostics;
-
-                    int total = response.Diagnostics.Count;
-                    int unique = response.Diagnostics
-                        .GroupBy(error => new { error.Line, error.Column, error.ErrorCode, error.Message })
-                        .Count();
-                    CompilationErrorDto first = response.Diagnostics.First();
-                    response.DiagnosticsSummary =
-                        $"Errors: {unique} unique ({total} total). First at L{first.Line}: {first.ErrorCode} {first.Message}";
-
-                    response.Logs.Add(response.DiagnosticsSummary);
-                }
-
-                response.UpdatedCode = result.UpdatedCode ?? response.UpdatedCode;
+                ApplyFailureResponseDetails(response, result);
             }
 
             if (result.Exception != null)
             {
-                if (response.Logs == null)
-                {
-                    response.Logs = new List<string>();
-                }
-
-                response.Logs.Add($"Exception: {result.Exception.Message}");
-                if (!string.IsNullOrEmpty(result.Exception.StackTrace))
-                {
-                    response.Logs.Add($"Stack Trace: {result.Exception.StackTrace}");
-                }
+                ApplyExceptionResponseDetails(response, result.Exception);
             }
 
             if (result.AutoInjectedNamespaces != null && result.AutoInjectedNamespaces.Count > 0)
             {
-                if (response.Logs == null)
-                {
-                    response.Logs = new List<string>();
-                }
-
-                string usingList = string.Join(" ", result.AutoInjectedNamespaces.Select(ns => $"using {ns};"));
-                response.Logs.Add(
-                    $"Performance hint: Auto-resolved {result.AutoInjectedNamespaces.Count} missing using directive(s): "
-                    + $"{usingList} — Include them in your code to skip auto-resolution and improve compilation speed.");
+                AddAutoInjectedNamespaceHint(response, result.AutoInjectedNamespaces);
             }
 
             return response;
+        }
+
+        private void ApplyFailureResponseDetails(
+            ExecuteDynamicCodeResponse response,
+            ExecutionResult result)
+        {
+            DynamicCodeFriendlyError friendlyError = _friendlyErrorConverter.Convert(result);
+            response.ErrorMessage = friendlyError.FriendlyMessage;
+            response.Logs = result.Logs != null ? new List<string>(result.Logs) : new List<string>();
+            AddFriendlyFailureDetails(response.Logs, friendlyError);
+            ApplyCompilationDiagnostics(response, result);
+            response.UpdatedCode = result.UpdatedCode ?? response.UpdatedCode;
+        }
+
+        private static void ApplyCompilationDiagnostics(
+            ExecuteDynamicCodeResponse response,
+            ExecutionResult result)
+        {
+            if (result.CompilationErrors?.Any() != true)
+            {
+                return;
+            }
+
+            response.Diagnostics = BuildDiagnostics(
+                result.CompilationErrors,
+                result.UpdatedCode,
+                result.AmbiguousTypeCandidates);
+            response.CompilationErrors = response.Diagnostics;
+            response.DiagnosticsSummary = CreateDiagnosticsSummary(response.Diagnostics);
+            response.Logs.Add(response.DiagnosticsSummary);
+        }
+
+        private static string CreateDiagnosticsSummary(List<CompilationErrorDto> diagnostics)
+        {
+            int total = diagnostics.Count;
+            int unique = diagnostics
+                .GroupBy(error => new { error.Line, error.Column, error.ErrorCode, error.Message })
+                .Count();
+            CompilationErrorDto first = diagnostics.First();
+            return $"Errors: {unique} unique ({total} total). First at L{first.Line}: {first.ErrorCode} {first.Message}";
+        }
+
+        private static void ApplyExceptionResponseDetails(
+            ExecuteDynamicCodeResponse response,
+            Exception exception)
+        {
+            response.Logs ??= new List<string>();
+            response.Logs.Add($"Exception: {exception.Message}");
+            if (!string.IsNullOrEmpty(exception.StackTrace))
+            {
+                response.Logs.Add($"Stack Trace: {exception.StackTrace}");
+            }
+        }
+
+        private static void AddAutoInjectedNamespaceHint(
+            ExecuteDynamicCodeResponse response,
+            List<string> autoInjectedNamespaces)
+        {
+            response.Logs ??= new List<string>();
+            string usingList = string.Join(" ", autoInjectedNamespaces.Select(ns => $"using {ns};"));
+            response.Logs.Add(
+                $"Performance hint: Auto-resolved {autoInjectedNamespaces.Count} missing using directive(s): "
+                + $"{usingList} — Include them in your code to skip auto-resolution and improve compilation speed.");
         }
 
         private static void AddFriendlyFailureDetails(

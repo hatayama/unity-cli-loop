@@ -84,108 +84,18 @@ func parseLaunchOptions(args []string, globalProjectPath string) (launchOptions,
 	}
 
 	for index := 0; index < len(args); index++ {
-		arg := args[index]
-		switch {
-		case arg == "-r" || arg == "--restart":
-			options.restart = true
-		case arg == "-q" || arg == "--quit":
-			options.quit = true
-		case arg == "-d" || arg == "--delete-recovery":
-			options.deleteRecovery = true
-		case arg == "-a" || arg == "-f" || arg == "--add-unity-hub" || arg == "--favorite" || arg == "--unity-hub-entry":
-			return launchOptions{}, &argumentError{
-				message:     "Native launch does not support Unity Hub registration options.",
-				option:      arg,
-				command:     launchCommandName,
-				nextActions: []string{"Remove the Unity Hub registration option and retry `uloop launch`."},
-			}
-		case arg == "-p" || arg == "--platform":
-			value, consumed, err := readLaunchOptionValue(arg, args, index)
-			if err != nil {
-				return launchOptions{}, err
-			}
-			options.platform = value
-			if consumed {
-				index++
-			}
-		case strings.HasPrefix(arg, "--platform="):
-			value, _, err := readLaunchOptionValue(arg, args, index)
-			if err != nil {
-				return launchOptions{}, err
-			}
-			options.platform = value
-		case arg == "--max-depth":
-			value, consumed, err := readLaunchOptionValue(arg, args, index)
-			if err != nil {
-				return launchOptions{}, err
-			}
-			maxDepth, err := strconv.Atoi(value)
-			if err != nil {
-				return launchOptions{}, invalidValueArgumentError("--max-depth", value, "integer")
-			}
-			options.maxDepth = maxDepth
-			if consumed {
-				index++
-			}
-		case strings.HasPrefix(arg, "--max-depth="):
-			value := strings.TrimPrefix(arg, "--max-depth=")
-			maxDepth, err := strconv.Atoi(value)
-			if err != nil {
-				return launchOptions{}, invalidValueArgumentError("--max-depth", value, "integer")
-			}
-			options.maxDepth = maxDepth
-		case strings.HasPrefix(arg, "-"):
-			return launchOptions{}, &argumentError{
-				message:     "Unknown launch option: " + arg,
-				option:      arg,
-				command:     launchCommandName,
-				nextActions: []string{"Run `uloop launch --help` to inspect supported launch options."},
-			}
-		default:
-			if options.projectPath != "" {
-				return launchOptions{}, &argumentError{
-					message:     "Unexpected extra launch argument: " + arg,
-					received:    arg,
-					command:     launchCommandName,
-					nextActions: []string{"Pass only one project path to `uloop launch`."},
-				}
-			}
-			options.projectPath = arg
+		nextIndex, err := applyLaunchOption(&options, args, index)
+		if err != nil {
+			return launchOptions{}, err
 		}
+		index = nextIndex
 	}
 
 	return options, nil
 }
 
-func readLaunchOptionValue(option string, args []string, index int) (string, bool, error) {
-	if strings.Contains(option, "=") {
-		parts := strings.SplitN(option, "=", 2)
-		if parts[1] == "" {
-			return "", false, missingValueArgumentError(parts[0])
-		}
-		return parts[1], false, nil
-	}
-	if index+1 >= len(args) || isInvalidLaunchOptionValue(option, args[index+1]) {
-		return "", false, missingValueArgumentError(option)
-	}
-	return args[index+1], true, nil
-}
-
-func isInvalidLaunchOptionValue(option string, value string) bool {
-	if option == "--max-depth" {
-		return isNextOptionToken(value)
-	}
-	return strings.HasPrefix(value, "-")
-}
-
 func runLaunch(ctx context.Context, options launchOptions, startPath string, stdout io.Writer, stderr io.Writer) int {
-	if options.projectPath == "" {
-		depthInfo := strconv.Itoa(options.maxDepth)
-		if options.maxDepth == -1 {
-			depthInfo = "unlimited"
-		}
-		writeFormat(stdout, "Searching for Unity project under %s (max-depth: %s)...\n\n", startPath, depthInfo)
-	}
+	writeLaunchProjectSearch(stdout, options, startPath)
 
 	projectRoot, err := resolveLaunchProjectRoot(startPath, options)
 	if err != nil {
@@ -193,48 +103,18 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		return 1
 	}
 
-	if options.deleteRecovery {
-		if err := os.RemoveAll(filepath.Join(projectRoot, recoveryDirectoryPath)); err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
-			return 1
-		}
-	}
-
-	runningProcess, err := findRunningUnityProcessForLaunch(ctx, projectRoot)
-	if err != nil {
-		// Sandboxes can block the process scan (e.g. /bin/ps). A responding project IPC
-		// proves Unity is running, so plain launch must not fail on the scan alone.
-		// Restart and quit still fail because they need a process id to kill.
-		if !options.restart && !options.quit && probeProjectIpcForLaunchFallback(ctx, projectRoot) == nil {
-			return writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
-		}
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+	if !deleteLaunchRecoveryIfRequested(options, projectRoot, stderr) {
 		return 1
 	}
 
+	runningProcess, handled, code := findLaunchRunningProcess(ctx, options, projectRoot, stdout, stderr)
+	if handled {
+		return code
+	}
+
 	if runningProcess != nil {
-		if !options.restart && !options.quit {
-			logLaunchExistingFocus(ctx, projectRoot, runningProcess.pid)
-			spinner := newLaunchSpinner(stdout, stderr)
-			defer spinner.Stop()
-			writeLaunchReadinessWait(stdout, spinner)
-			if err := waitForLaunchReadiness(ctx, projectRoot); err != nil {
-				writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
-				return 1
-			}
-			spinner.Stop()
-			return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, runningProcess.pid)
-		}
-		if err := killUnityProcessForLaunch(runningProcess.pid); err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
-			return 1
-		}
-		if err := waitForUnityProcessExitForLaunch(ctx, projectRoot, runningProcess.pid, launchProcessExitPoll, launchProcessExitTimeout); err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
-			return 1
-		}
-		if options.quit {
-			return writeLaunchQuitResponse(stdout, stderr, projectRoot, &runningProcess.pid, launchStoppedMessage)
+		if handled, code := handleExistingLaunchProcess(ctx, options, projectRoot, runningProcess, stdout, stderr); handled {
+			return code
 		}
 	}
 
@@ -242,6 +122,98 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		return writeLaunchQuitResponse(stdout, stderr, projectRoot, nil, launchNoProcessMessage)
 	}
 
+	return startUnityAndWaitForReadiness(ctx, options, projectRoot, runningProcess, stdout, stderr)
+}
+
+func writeLaunchProjectSearch(stdout io.Writer, options launchOptions, startPath string) {
+	if options.projectPath != "" {
+		return
+	}
+	depthInfo := strconv.Itoa(options.maxDepth)
+	if options.maxDepth == -1 {
+		depthInfo = "unlimited"
+	}
+	writeFormat(stdout, "Searching for Unity project under %s (max-depth: %s)...\n\n", startPath, depthInfo)
+}
+
+func deleteLaunchRecoveryIfRequested(options launchOptions, projectRoot string, stderr io.Writer) bool {
+	if !options.deleteRecovery {
+		return true
+	}
+	if err := os.RemoveAll(filepath.Join(projectRoot, recoveryDirectoryPath)); err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		return false
+	}
+	return true
+}
+
+func findLaunchRunningProcess(
+	ctx context.Context,
+	options launchOptions,
+	projectRoot string,
+	stdout io.Writer,
+	stderr io.Writer,
+) (*unityProcess, bool, int) {
+	runningProcess, err := findRunningUnityProcessForLaunch(ctx, projectRoot)
+	if err == nil {
+		return runningProcess, false, 0
+	}
+	// Sandboxes can block the process scan (e.g. /bin/ps). A responding project IPC
+	// proves Unity is running, so plain launch must not fail on the scan alone.
+	// Restart and quit still fail because they need a process id to kill.
+	if !options.restart && !options.quit && probeProjectIpcForLaunchFallback(ctx, projectRoot) == nil {
+		return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
+	}
+	writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+	return nil, true, 1
+}
+
+func handleExistingLaunchProcess(
+	ctx context.Context,
+	options launchOptions,
+	projectRoot string,
+	runningProcess *unityProcess,
+	stdout io.Writer,
+	stderr io.Writer,
+) (bool, int) {
+	if !options.restart && !options.quit {
+		return true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.pid, stdout, stderr)
+	}
+	if err := killUnityProcessForLaunch(runningProcess.pid); err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		return true, 1
+	}
+	if err := waitForUnityProcessExitForLaunch(ctx, projectRoot, runningProcess.pid, launchProcessExitPoll, launchProcessExitTimeout); err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		return true, 1
+	}
+	if options.quit {
+		return true, writeLaunchQuitResponse(stdout, stderr, projectRoot, &runningProcess.pid, launchStoppedMessage)
+	}
+	return false, 0
+}
+
+func waitForExistingLaunchReadiness(ctx context.Context, projectRoot string, pid int, stdout io.Writer, stderr io.Writer) int {
+	logLaunchExistingFocus(ctx, projectRoot, pid)
+	spinner := newLaunchSpinner(stdout, stderr)
+	defer spinner.Stop()
+	writeLaunchReadinessWait(stdout, spinner)
+	if err := waitForLaunchReadiness(ctx, projectRoot); err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		return 1
+	}
+	spinner.Stop()
+	return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, pid)
+}
+
+func startUnityAndWaitForReadiness(
+	ctx context.Context,
+	options launchOptions,
+	projectRoot string,
+	runningProcess *unityProcess,
+	stdout io.Writer,
+	stderr io.Writer,
+) int {
 	removedStaleTemp, err := cleanStaleUnityTemp(projectRoot)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})

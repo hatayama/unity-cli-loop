@@ -24,116 +24,168 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Task and Task<T>
             if (typeof(Task).IsAssignableFrom(valueType))
             {
-                Task task = (Task)value;
-                await AwaitTaskWithCancellationAsync(task, cancellationToken).ConfigureAwait(false);
-
-                if (valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(Task<>))
-                {
-                    PropertyInfo resultProperty = valueType.GetProperty("Result");
-                    if (resultProperty != null)
-                    {
-                        object taskResult = resultProperty.GetValue(value);
-                        return taskResult;
-                    }
-                }
-
-                return null;
+                return await AwaitTaskResultIfNeededAsync(value, valueType, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             // ValueTask and ValueTask<T> via AsTask if available
             if (IsValueTask(valueType))
             {
-                Task asTask = ConvertValueTaskToTask(value);
-                await AwaitTaskWithCancellationAsync(asTask, cancellationToken).ConfigureAwait(false);
-                return null;
+                return await AwaitValueTaskResultIfNeededAsync(value, cancellationToken)
+                    .ConfigureAwait(false);
             }
             if (IsGenericValueTask(valueType))
             {
-                Task asTask = ConvertGenericValueTaskToTask(value);
-                await AwaitTaskWithCancellationAsync(asTask, cancellationToken).ConfigureAwait(false);
-
-                Type[] genericArgs = valueType.GetGenericArguments();
-                if (genericArgs != null && genericArgs.Length == 1)
-                {
-                    Type taskType = typeof(Task<>).MakeGenericType(genericArgs[0]);
-                    PropertyInfo resultProperty = taskType.GetProperty("Result");
-                    if (resultProperty != null)
-                    {
-                        object resultValue = resultProperty.GetValue(asTask);
-                        return resultValue;
-                    }
-                }
-                return null;
+                return await AwaitGenericValueTaskResultIfNeededAsync(value, valueType, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             // Awaitable pattern fallback (e.g., UniTask/UniTask<T> or custom awaitables)
-            MethodInfo getAwaiterMethod = valueType.GetMethod("GetAwaiter", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
-            if (getAwaiterMethod != null)
+            return await AwaitCustomAwaitableIfNeededAsync(value, valueType, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        private static async Task<object> AwaitTaskResultIfNeededAsync(
+            object value,
+            Type valueType,
+            CancellationToken cancellationToken)
+        {
+            Task task = (Task)value;
+            await AwaitTaskWithCancellationAsync(task, cancellationToken).ConfigureAwait(false);
+            return TryReadGenericTaskResult(value, valueType);
+        }
+
+        private static object TryReadGenericTaskResult(object value, Type valueType)
+        {
+            if (!valueType.IsGenericType || valueType.GetGenericTypeDefinition() != typeof(Task<>))
             {
-                object awaiter = getAwaiterMethod.Invoke(value, null);
-                if (awaiter == null)
-                {
-                    return value;
-                }
-
-                Type awaiterType = awaiter.GetType();
-                PropertyInfo isCompletedProperty = awaiterType.GetProperty("IsCompleted", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
-                MethodInfo getResultMethod = awaiterType.GetMethod("GetResult", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
-                MethodInfo onCompletedMethod = awaiterType.GetMethod("OnCompleted", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, new Type[] { typeof(Action) }, null);
-                MethodInfo unsafeOnCompletedMethod = awaiterType.GetMethod("UnsafeOnCompleted", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, new Type[] { typeof(Action) }, null);
-
-                if (isCompletedProperty != null)
-                {
-                    bool isCompleted = (bool)isCompletedProperty.GetValue(awaiter);
-                    if (isCompleted)
-                    {
-                        object completedResult = InvokeGetResultSafely(getResultMethod, awaiter);
-                        return completedResult;
-                    }
-                }
-
-                TaskCompletionSource<object> tcs = new();
-
-                Action continuation = () =>
-                {
-                    try
-                    {
-                        object continuationResult = InvokeGetResultSafely(getResultMethod, awaiter);
-                        tcs.TrySetResult(continuationResult);
-                    }
-                    catch (TargetInvocationException tie)
-                    {
-                        Exception inner = tie.InnerException ?? tie;
-                        tcs.TrySetException(inner);
-                    }
-                    catch (Exception ex)
-                    {
-                        tcs.TrySetException(ex);
-                    }
-                };
-
-                if (unsafeOnCompletedMethod != null)
-                {
-                    unsafeOnCompletedMethod.Invoke(awaiter, new object[] { continuation });
-                }
-                else if (onCompletedMethod != null)
-                {
-                    onCompletedMethod.Invoke(awaiter, new object[] { continuation });
-                }
-                else
-                {
-                    // No completion registration; treat as completed
-                    object immediateResult = InvokeGetResultSafely(getResultMethod, awaiter);
-                    return immediateResult;
-                }
-
-                object awaited = await AwaitObjectTaskWithCancellationAsync(tcs.Task, cancellationToken)
-                    .ConfigureAwait(false);
-                return awaited;
+                return null;
             }
 
-            // Not awaitable; return as-is
-            return value;
+            PropertyInfo resultProperty = valueType.GetProperty("Result");
+            return resultProperty != null ? resultProperty.GetValue(value) : null;
+        }
+
+        private static async Task<object> AwaitValueTaskResultIfNeededAsync(
+            object value,
+            CancellationToken cancellationToken)
+        {
+            Task asTask = ConvertValueTaskToTask(value);
+            await AwaitTaskWithCancellationAsync(asTask, cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        private static async Task<object> AwaitGenericValueTaskResultIfNeededAsync(
+            object value,
+            Type valueType,
+            CancellationToken cancellationToken)
+        {
+            Task asTask = ConvertGenericValueTaskToTask(value);
+            await AwaitTaskWithCancellationAsync(asTask, cancellationToken).ConfigureAwait(false);
+            return TryReadGenericValueTaskResult(asTask, valueType);
+        }
+
+        private static object TryReadGenericValueTaskResult(Task asTask, Type valueType)
+        {
+            Type[] genericArgs = valueType.GetGenericArguments();
+            if (genericArgs == null || genericArgs.Length != 1)
+            {
+                return null;
+            }
+
+            Type taskType = typeof(Task<>).MakeGenericType(genericArgs[0]);
+            PropertyInfo resultProperty = taskType.GetProperty("Result");
+            return resultProperty != null ? resultProperty.GetValue(asTask) : null;
+        }
+
+        private static async Task<object> AwaitCustomAwaitableIfNeededAsync(
+            object value,
+            Type valueType,
+            CancellationToken cancellationToken)
+        {
+            MethodInfo getAwaiterMethod = valueType.GetMethod("GetAwaiter", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+            if (getAwaiterMethod == null)
+            {
+                return value;
+            }
+
+            object awaiter = getAwaiterMethod.Invoke(value, null);
+            if (awaiter == null)
+            {
+                return value;
+            }
+
+            return await AwaitCustomAwaiterAsync(awaiter, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static async Task<object> AwaitCustomAwaiterAsync(
+            object awaiter,
+            CancellationToken cancellationToken)
+        {
+            Type awaiterType = awaiter.GetType();
+            PropertyInfo isCompletedProperty = awaiterType.GetProperty("IsCompleted", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+            MethodInfo getResultMethod = awaiterType.GetMethod("GetResult", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+            MethodInfo onCompletedMethod = awaiterType.GetMethod("OnCompleted", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, new Type[] { typeof(Action) }, null);
+            MethodInfo unsafeOnCompletedMethod = awaiterType.GetMethod("UnsafeOnCompleted", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic, null, new Type[] { typeof(Action) }, null);
+
+            if (IsCustomAwaiterAlreadyCompleted(isCompletedProperty, awaiter))
+            {
+                return InvokeGetResultSafely(getResultMethod, awaiter);
+            }
+
+            TaskCompletionSource<object> tcs = new();
+            Action continuation = () => CompleteCustomAwaiterTask(tcs, getResultMethod, awaiter);
+
+            if (unsafeOnCompletedMethod != null)
+            {
+                unsafeOnCompletedMethod.Invoke(awaiter, new object[] { continuation });
+            }
+            else if (onCompletedMethod != null)
+            {
+                onCompletedMethod.Invoke(awaiter, new object[] { continuation });
+            }
+            else
+            {
+                // No completion registration; treat as completed
+                return InvokeGetResultSafely(getResultMethod, awaiter);
+            }
+
+            object awaited = await AwaitObjectTaskWithCancellationAsync(tcs.Task, cancellationToken)
+                .ConfigureAwait(false);
+            return awaited;
+        }
+
+        private static bool IsCustomAwaiterAlreadyCompleted(
+            PropertyInfo isCompletedProperty,
+            object awaiter)
+        {
+            if (isCompletedProperty == null)
+            {
+                return false;
+            }
+
+            return (bool)isCompletedProperty.GetValue(awaiter);
+        }
+
+        private static void CompleteCustomAwaiterTask(
+            TaskCompletionSource<object> tcs,
+            MethodInfo getResultMethod,
+            object awaiter)
+        {
+            try
+            {
+                object continuationResult = InvokeGetResultSafely(getResultMethod, awaiter);
+                tcs.TrySetResult(continuationResult);
+            }
+            catch (TargetInvocationException tie)
+            {
+                Exception inner = tie.InnerException ?? tie;
+                tcs.TrySetException(inner);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
         }
 
         /// <summary>

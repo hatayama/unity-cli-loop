@@ -310,96 +310,64 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             HashSet<string> domainReferenceAssemblyDirectories,
             HashSet<string> firstPartyScreenshotReferenceAssemblyDirectories)
         {
-            Debug.Assert(asmdefDirectories != null, "asmdefDirectories must not be null");
-            Debug.Assert(
-                assemblyReferenceDirectories != null,
-                "assemblyReferenceDirectories must not be null");
-            Debug.Assert(legacyAssemblyDirectories != null, "legacyAssemblyDirectories must not be null");
-            Debug.Assert(
-                assemblyScopedLegacyDirectories != null,
-                "assemblyScopedLegacyDirectories must not be null");
-            Debug.Assert(
-                assemblyScopedCurrentToolContractsDirectories != null,
-                "assemblyScopedCurrentToolContractsDirectories must not be null");
-            Debug.Assert(
-                assemblyScopedCurrentApplicationDirectories != null,
-                "assemblyScopedCurrentApplicationDirectories must not be null");
-            Debug.Assert(
-                assemblyScopedCurrentDomainDirectories != null,
-                "assemblyScopedCurrentDomainDirectories must not be null");
-            Debug.Assert(
-                assemblyScopedCurrentFirstPartyToolsDirectories != null,
-                "assemblyScopedCurrentFirstPartyToolsDirectories must not be null");
-            Debug.Assert(
-                assemblyScopedLegacyAliasesByDirectory != null,
-                "assemblyScopedLegacyAliasesByDirectory must not be null");
-            Debug.Assert(
-                assemblyScopedLegacyToolInfoAliasesByDirectory != null,
-                "assemblyScopedLegacyToolInfoAliasesByDirectory must not be null");
-            Debug.Assert(
-                assemblyScopedCurrentApplicationAliasesByDirectory != null,
-                "assemblyScopedCurrentApplicationAliasesByDirectory must not be null");
-            Debug.Assert(
-                assemblyScopedCurrentDomainAliasesByDirectory != null,
-                "assemblyScopedCurrentDomainAliasesByDirectory must not be null");
-            Debug.Assert(
-                assemblyScopedCurrentFirstPartyToolsAliasesByDirectory != null,
-                "assemblyScopedCurrentFirstPartyToolsAliasesByDirectory must not be null");
-            Debug.Assert(
-                assemblyDeclaredTypeNamesByDirectory != null,
-                "assemblyDeclaredTypeNamesByDirectory must not be null");
-            Debug.Assert(
-                toolContractsReferenceAssemblyDirectories != null,
-                "toolContractsReferenceAssemblyDirectories must not be null");
-            Debug.Assert(
-                applicationReferenceAssemblyDirectories != null,
-                "applicationReferenceAssemblyDirectories must not be null");
-            Debug.Assert(
-                domainReferenceAssemblyDirectories != null,
-                "domainReferenceAssemblyDirectories must not be null");
-            Debug.Assert(
-                firstPartyScreenshotReferenceAssemblyDirectories != null,
-                "firstPartyScreenshotReferenceAssemblyDirectories must not be null");
+            AsmdefDirectories = RequireNotNull(asmdefDirectories, nameof(asmdefDirectories));
+            AssemblyReferenceDirectories =
+                RequireNotNull(assemblyReferenceDirectories, nameof(assemblyReferenceDirectories));
+            LegacyAssemblyDirectories =
+                RequireNotNull(legacyAssemblyDirectories, nameof(legacyAssemblyDirectories));
+            AssemblyScopedLegacyDirectories =
+                RequireNotNull(assemblyScopedLegacyDirectories, nameof(assemblyScopedLegacyDirectories));
+            AssemblyScopedCurrentToolContractsDirectories = RequireNotNull(
+                assemblyScopedCurrentToolContractsDirectories,
+                nameof(assemblyScopedCurrentToolContractsDirectories));
+            AssemblyScopedCurrentApplicationDirectories = RequireNotNull(
+                assemblyScopedCurrentApplicationDirectories,
+                nameof(assemblyScopedCurrentApplicationDirectories));
+            AssemblyScopedCurrentDomainDirectories = RequireNotNull(
+                assemblyScopedCurrentDomainDirectories,
+                nameof(assemblyScopedCurrentDomainDirectories));
+            AssemblyScopedCurrentFirstPartyToolsDirectories = RequireNotNull(
+                assemblyScopedCurrentFirstPartyToolsDirectories,
+                nameof(assemblyScopedCurrentFirstPartyToolsDirectories));
+            AssemblyScopedLegacyAliasesByDirectory = RequireNotNull(
+                assemblyScopedLegacyAliasesByDirectory,
+                nameof(assemblyScopedLegacyAliasesByDirectory));
+            AssemblyScopedLegacyToolInfoAliasesByDirectory = RequireNotNull(
+                assemblyScopedLegacyToolInfoAliasesByDirectory,
+                nameof(assemblyScopedLegacyToolInfoAliasesByDirectory));
+            AssemblyScopedCurrentApplicationAliasesByDirectory = RequireNotNull(
+                assemblyScopedCurrentApplicationAliasesByDirectory,
+                nameof(assemblyScopedCurrentApplicationAliasesByDirectory));
+            AssemblyScopedCurrentDomainAliasesByDirectory = RequireNotNull(
+                assemblyScopedCurrentDomainAliasesByDirectory,
+                nameof(assemblyScopedCurrentDomainAliasesByDirectory));
+            AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory = RequireNotNull(
+                assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
+                nameof(assemblyScopedCurrentFirstPartyToolsAliasesByDirectory));
+            AssemblyDeclaredTypeNamesByDirectory =
+                RequireNotNull(assemblyDeclaredTypeNamesByDirectory, nameof(assemblyDeclaredTypeNamesByDirectory));
+            ToolContractsReferenceAssemblyDirectories = RequireNotNull(
+                toolContractsReferenceAssemblyDirectories,
+                nameof(toolContractsReferenceAssemblyDirectories));
+            ApplicationReferenceAssemblyDirectories =
+                RequireNotNull(applicationReferenceAssemblyDirectories, nameof(applicationReferenceAssemblyDirectories));
+            DomainReferenceAssemblyDirectories =
+                RequireNotNull(domainReferenceAssemblyDirectories, nameof(domainReferenceAssemblyDirectories));
+            FirstPartyScreenshotReferenceAssemblyDirectories = RequireNotNull(
+                firstPartyScreenshotReferenceAssemblyDirectories,
+                nameof(firstPartyScreenshotReferenceAssemblyDirectories));
+        }
 
-            AsmdefDirectories = asmdefDirectories ??
-                throw new ArgumentNullException(nameof(asmdefDirectories));
-            AssemblyReferenceDirectories = assemblyReferenceDirectories ??
-                throw new ArgumentNullException(nameof(assemblyReferenceDirectories));
-            LegacyAssemblyDirectories = legacyAssemblyDirectories ??
-                throw new ArgumentNullException(nameof(legacyAssemblyDirectories));
-            AssemblyScopedLegacyDirectories = assemblyScopedLegacyDirectories ??
-                throw new ArgumentNullException(nameof(assemblyScopedLegacyDirectories));
-            AssemblyScopedCurrentToolContractsDirectories = assemblyScopedCurrentToolContractsDirectories ??
-                throw new ArgumentNullException(nameof(assemblyScopedCurrentToolContractsDirectories));
-            AssemblyScopedCurrentApplicationDirectories = assemblyScopedCurrentApplicationDirectories ??
-                throw new ArgumentNullException(nameof(assemblyScopedCurrentApplicationDirectories));
-            AssemblyScopedCurrentDomainDirectories = assemblyScopedCurrentDomainDirectories ??
-                throw new ArgumentNullException(nameof(assemblyScopedCurrentDomainDirectories));
-            AssemblyScopedCurrentFirstPartyToolsDirectories = assemblyScopedCurrentFirstPartyToolsDirectories ??
-                throw new ArgumentNullException(nameof(assemblyScopedCurrentFirstPartyToolsDirectories));
-            AssemblyScopedLegacyAliasesByDirectory = assemblyScopedLegacyAliasesByDirectory ??
-                throw new ArgumentNullException(nameof(assemblyScopedLegacyAliasesByDirectory));
-            AssemblyScopedLegacyToolInfoAliasesByDirectory = assemblyScopedLegacyToolInfoAliasesByDirectory ??
-                throw new ArgumentNullException(nameof(assemblyScopedLegacyToolInfoAliasesByDirectory));
-            AssemblyScopedCurrentApplicationAliasesByDirectory =
-                assemblyScopedCurrentApplicationAliasesByDirectory ??
-                throw new ArgumentNullException(nameof(assemblyScopedCurrentApplicationAliasesByDirectory));
-            AssemblyScopedCurrentDomainAliasesByDirectory =
-                assemblyScopedCurrentDomainAliasesByDirectory ??
-                throw new ArgumentNullException(nameof(assemblyScopedCurrentDomainAliasesByDirectory));
-            AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory =
-                assemblyScopedCurrentFirstPartyToolsAliasesByDirectory ??
-                throw new ArgumentNullException(nameof(assemblyScopedCurrentFirstPartyToolsAliasesByDirectory));
-            AssemblyDeclaredTypeNamesByDirectory = assemblyDeclaredTypeNamesByDirectory ??
-                throw new ArgumentNullException(nameof(assemblyDeclaredTypeNamesByDirectory));
-            ToolContractsReferenceAssemblyDirectories = toolContractsReferenceAssemblyDirectories ??
-                throw new ArgumentNullException(nameof(toolContractsReferenceAssemblyDirectories));
-            ApplicationReferenceAssemblyDirectories = applicationReferenceAssemblyDirectories ??
-                throw new ArgumentNullException(nameof(applicationReferenceAssemblyDirectories));
-            DomainReferenceAssemblyDirectories = domainReferenceAssemblyDirectories ??
-                throw new ArgumentNullException(nameof(domainReferenceAssemblyDirectories));
-            FirstPartyScreenshotReferenceAssemblyDirectories = firstPartyScreenshotReferenceAssemblyDirectories ??
-                throw new ArgumentNullException(nameof(firstPartyScreenshotReferenceAssemblyDirectories));
+        private static T RequireNotNull<T>(T value, string parameterName)
+            where T : class
+        {
+            Debug.Assert(value != null, $"{parameterName} must not be null");
+            if (value == null)
+            {
+                throw new ArgumentNullException(parameterName);
+            }
+
+            return value;
         }
 
         public List<string> AsmdefDirectories { get; }

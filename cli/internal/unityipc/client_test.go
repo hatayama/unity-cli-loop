@@ -56,35 +56,7 @@ func TestSendIncludesCliVersionWithoutProjectIdentityMetadata(t *testing.T) {
 
 	captured := make(chan map[string]any, 1)
 	serverErr := make(chan error, 1)
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			serverErr <- err
-			return
-		}
-		defer func() {
-			_ = conn.Close()
-		}()
-
-		payload, err := Read(bufio.NewReader(conn))
-		if err != nil {
-			serverErr <- err
-			return
-		}
-
-		var request map[string]any
-		if err := json.Unmarshal(payload, &request); err != nil {
-			serverErr <- err
-			return
-		}
-		captured <- request
-
-		response := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
-		if err := Write(conn, response); err != nil {
-			serverErr <- err
-			return
-		}
-	}()
+	go captureClientMetadataRequest(listener, captured, serverErr)
 
 	connection := Connection{
 		Endpoint: Endpoint{
@@ -102,25 +74,65 @@ func TestSendIncludesCliVersionWithoutProjectIdentityMetadata(t *testing.T) {
 	case err := <-serverErr:
 		t.Fatalf("server failed: %v", err)
 	case request := <-captured:
-		if _, ok := request["x-uloop"]; ok {
-			t.Fatalf("request should not include x-uloop metadata: %#v", request["x-uloop"])
-		}
-		metadata, ok := request["uloop"].(map[string]any)
-		if !ok {
-			t.Fatalf("request should include uloop metadata: %#v", request)
-		}
-		if metadata["cliVersion"] != "3.0.0-beta.6" {
-			t.Fatalf("cli version metadata mismatch: %#v", metadata)
-		}
-		if metadata["protocolVersion"] != float64(clicontract.Current.ProtocolVersion) {
-			t.Fatalf("protocol version metadata mismatch: %#v", metadata)
-		}
-		if metadata["acceptsDispatchAck"] != true {
-			t.Fatalf("dispatch ack metadata mismatch: %#v", metadata)
-		}
-		if metadata["acceptsHeartbeat"] != true {
-			t.Fatalf("heartbeat metadata mismatch: %#v", metadata)
-		}
+		assertClientMetadataRequest(t, request)
+	}
+}
+
+func captureClientMetadataRequest(
+	listener net.Listener,
+	captured chan<- map[string]any,
+	serverErr chan<- error,
+) {
+	conn, err := listener.Accept()
+	if err != nil {
+		serverErr <- err
+		return
+	}
+	defer func() {
+		_ = conn.Close()
+	}()
+
+	payload, err := Read(bufio.NewReader(conn))
+	if err != nil {
+		serverErr <- err
+		return
+	}
+
+	var request map[string]any
+	if err := json.Unmarshal(payload, &request); err != nil {
+		serverErr <- err
+		return
+	}
+	captured <- request
+
+	response := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
+	if err := Write(conn, response); err != nil {
+		serverErr <- err
+		return
+	}
+}
+
+func assertClientMetadataRequest(t *testing.T, request map[string]any) {
+	t.Helper()
+
+	if _, ok := request["x-uloop"]; ok {
+		t.Fatalf("request should not include x-uloop metadata: %#v", request["x-uloop"])
+	}
+	metadata, ok := request["uloop"].(map[string]any)
+	if !ok {
+		t.Fatalf("request should include uloop metadata: %#v", request)
+	}
+	if metadata["cliVersion"] != "3.0.0-beta.6" {
+		t.Fatalf("cli version metadata mismatch: %#v", metadata)
+	}
+	if metadata["protocolVersion"] != float64(clicontract.Current.ProtocolVersion) {
+		t.Fatalf("protocol version metadata mismatch: %#v", metadata)
+	}
+	if metadata["acceptsDispatchAck"] != true {
+		t.Fatalf("dispatch ack metadata mismatch: %#v", metadata)
+	}
+	if metadata["acceptsHeartbeat"] != true {
+		t.Fatalf("heartbeat metadata mismatch: %#v", metadata)
 	}
 }
 

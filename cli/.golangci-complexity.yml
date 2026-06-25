@@ -6,7 +6,7 @@ linters:
     - cyclop
   settings:
     cyclop:
-      max-complexity: 25
+      max-complexity: 15
 
 formatters:
   enable:

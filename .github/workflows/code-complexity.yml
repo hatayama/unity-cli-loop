@@ -57,7 +57,7 @@ jobs:
           (cd cli && golangci-lint run --config .golangci-complexity.yml --issues-exit-code=0 --show-stats=false --output.json.path ../artifacts/go-code-complexity.json ./...)
           dotnet run --project tools/UnityCliLoop.CodeComplexity/UnityCliLoop.CodeComplexity.csproj -- \
             --root . \
-            --max-complexity 25 \
+            --max-complexity 15 \
             --format json \
             --fail-on-exceeded false > artifacts/csharp-code-complexity.json
 

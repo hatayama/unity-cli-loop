@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.Domain;
 
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationAssemblyReferenceResolver;
-using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationAssemblyScopedNameMap;
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationAsmdefMigrationRequirementResolver;
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationFastAssemblyRequirementCollector;
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationFastSourceTargetDetector;
@@ -46,179 +45,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            List<string> asmdefDirectories = inventory.AsmdefFilePaths
-                .Select(path => Path.GetDirectoryName(path) ?? string.Empty)
-                .Where(path => !string.IsNullOrEmpty(path))
-                .OrderByDescending(path => path.Length)
-                .ToList();
-            List<AssemblyReferenceDirectory> assemblyReferenceDirectories = inventory.AsmrefFilePaths.Count == 0
-                ? new List<AssemblyReferenceDirectory>()
-                : CreateAssemblyReferenceDirectories(inventory.AsmdefFilePaths, inventory.AsmrefFilePaths);
-            HashSet<string> legacyAssemblyDirectories = new(StringComparer.Ordinal);
-            HashSet<string> assemblyScopedLegacyDirectories = new(StringComparer.Ordinal);
-            HashSet<string> assemblyScopedCurrentToolContractsDirectories = new(StringComparer.Ordinal);
-            HashSet<string> assemblyScopedCurrentDomainDirectories = new(StringComparer.Ordinal);
-            HashSet<string> assemblyScopedCurrentApplicationDirectories = new(StringComparer.Ordinal);
-            HashSet<string> assemblyScopedCurrentFirstPartyToolsDirectories = new(StringComparer.Ordinal);
-            Dictionary<string, HashSet<string>> assemblyScopedLegacyAliasesByDirectory =
-                new(StringComparer.Ordinal);
-            Dictionary<string, HashSet<string>> assemblyScopedLegacyToolInfoAliasesByDirectory =
-                new(StringComparer.Ordinal);
-            Dictionary<string, HashSet<string>> assemblyScopedCurrentApplicationAliasesByDirectory =
-                new(StringComparer.Ordinal);
-            Dictionary<string, HashSet<string>> assemblyScopedCurrentDomainAliasesByDirectory =
-                new(StringComparer.Ordinal);
-            Dictionary<string, HashSet<string>> assemblyScopedCurrentFirstPartyToolsAliasesByDirectory =
-                new(StringComparer.Ordinal);
-            HashSet<string> toolContractsReferenceAssemblyDirectories = new(StringComparer.Ordinal);
-            HashSet<string> applicationReferenceAssemblyDirectories = new(StringComparer.Ordinal);
-            HashSet<string> domainReferenceAssemblyDirectories = new(StringComparer.Ordinal);
-            HashSet<string> firstPartyScreenshotReferenceAssemblyDirectories = new(StringComparer.Ordinal);
-            Dictionary<string, HashSet<string>> assemblyDeclaredTypeNamesByDirectory =
-                new(StringComparer.Ordinal);
-            int inspectedEntryCount = 0;
-            foreach (string csharpFilePath in inventory.CSharpFilePaths)
+            ThirdPartyToolMigrationAssemblyUsageScanState scanState =
+                CreateScanState(projectRoot, inventory);
+            (bool hasInitialCSharpTarget, int inspectedEntryCount) =
+                await ScanInitialCSharpSourcesAsync(inventory, scanState, ct);
+            if (ct.IsCancellationRequested)
             {
-                if (ct.IsCancellationRequested)
-                {
-                    return false;
-                }
-
-                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
-                if (ContainsFastCSharpMigrationTarget(source))
-                {
-                    return true;
-                }
-
-                if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source))
-                {
-                    inspectedEntryCount++;
-                    if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
-                    {
-                        await Task.Yield();
-                    }
-
-                    continue;
-                }
-
-                string assemblyDirectory = FindNearestAssemblyDirectory(
-                    csharpFilePath,
-                    asmdefDirectories,
-                    assemblyReferenceDirectories,
-                    projectRoot);
-                string[] declaredTypeNames = ThirdPartyToolMigrationRules.GetDeclaredTypeNames(source);
-                AddAssemblyScopedNames(
-                    assemblyDeclaredTypeNamesByDirectory,
-                    assemblyDirectory,
-                    declaredTypeNames);
-                if (ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source))
-                {
-                    legacyAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalUsing(source))
-                {
-                    legacyAssemblyDirectories.Add(assemblyDirectory);
-                    assemblyScopedLegacyDirectories.Add(assemblyDirectory);
-                    AddAssemblyScopedLegacyAliases(
-                        assemblyScopedLegacyAliasesByDirectory,
-                        assemblyDirectory,
-                        ThirdPartyToolMigrationRules.GetLegacyGlobalNamespaceAliases(source));
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsLegacyGlobalToolInfoTypeAlias(source))
-                {
-                    AddAssemblyScopedLegacyAliases(
-                        assemblyScopedLegacyToolInfoAliasesByDirectory,
-                        assemblyDirectory,
-                        ThirdPartyToolMigrationRules.GetLegacyGlobalToolInfoTypeAliases(source));
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainGlobalUsing(source))
-                {
-                    assemblyScopedCurrentDomainDirectories.Add(assemblyDirectory);
-                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainUsing(source))
-                {
-                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsCurrentDomainNamespaceAlias(source))
-                {
-                    domainReferenceAssemblyDirectories.Add(assemblyDirectory);
-                    AddAssemblyScopedNames(
-                        assemblyScopedCurrentDomainAliasesByDirectory,
-                        assemblyDirectory,
-                        ThirdPartyToolMigrationRules.GetCurrentDomainGlobalNamespaceAliases(source));
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsCurrentToolContractsGlobalUsing(source))
-                {
-                    assemblyScopedCurrentToolContractsDirectories.Add(assemblyDirectory);
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationGlobalUsing(source))
-                {
-                    assemblyScopedCurrentApplicationDirectories.Add(assemblyDirectory);
-                    applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationUsing(source))
-                {
-                    applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsCurrentApplicationNamespaceAlias(source))
-                {
-                    applicationReferenceAssemblyDirectories.Add(assemblyDirectory);
-                    AddAssemblyScopedNames(
-                        assemblyScopedCurrentApplicationAliasesByDirectory,
-                        assemblyDirectory,
-                        ThirdPartyToolMigrationRules.GetCurrentApplicationGlobalNamespaceAliases(source));
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyToolsGlobalUsing(source))
-                {
-                    assemblyScopedCurrentFirstPartyToolsDirectories.Add(assemblyDirectory);
-                    firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
-                }
-
-                if (ThirdPartyToolMigrationRules.ContainsCurrentFirstPartyToolsNamespaceAlias(source))
-                {
-                    firstPartyScreenshotReferenceAssemblyDirectories.Add(assemblyDirectory);
-                    AddAssemblyScopedNames(
-                        assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
-                        assemblyDirectory,
-                        ThirdPartyToolMigrationRules.GetCurrentFirstPartyToolsGlobalNamespaceAliases(source));
-                }
-
-                inspectedEntryCount++;
-                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
-                {
-                    await Task.Yield();
-                }
+                return false;
             }
 
-            bool hasCSharpSourceTarget = await ContainsFastCSharpSourceMigrationTargetAsync(
-                inventory.CSharpFilePaths,
-                asmdefDirectories,
-                assemblyReferenceDirectories,
-                projectRoot,
-                legacyAssemblyDirectories,
-                assemblyScopedLegacyDirectories,
-                assemblyScopedLegacyAliasesByDirectory,
-                assemblyScopedLegacyToolInfoAliasesByDirectory,
-                assemblyScopedCurrentToolContractsDirectories,
-                assemblyScopedCurrentApplicationDirectories,
-                assemblyScopedCurrentDomainDirectories,
-                assemblyScopedCurrentFirstPartyToolsDirectories,
-                assemblyScopedCurrentApplicationAliasesByDirectory,
-                assemblyScopedCurrentDomainAliasesByDirectory,
-                assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
-                assemblyDeclaredTypeNamesByDirectory,
-                ct);
+            if (hasInitialCSharpTarget)
+            {
+                return true;
+            }
+
+            bool hasCSharpSourceTarget =
+                await ContainsFastCSharpSourceTargetAsync(inventory, scanState, projectRoot, ct);
             if (ct.IsCancellationRequested)
             {
                 return false;
@@ -229,90 +71,217 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return true;
             }
 
-            await CollectFastAssemblyReferenceRequirementsAsync(
-                inventory.CSharpFilePaths,
-                asmdefDirectories,
-                assemblyReferenceDirectories,
-                projectRoot,
-                assemblyScopedCurrentToolContractsDirectories,
-                assemblyScopedCurrentDomainDirectories,
-                assemblyScopedCurrentApplicationDirectories,
-                assemblyScopedCurrentApplicationAliasesByDirectory,
-                assemblyScopedCurrentDomainAliasesByDirectory,
-                assemblyDeclaredTypeNamesByDirectory,
-                legacyAssemblyDirectories,
-                toolContractsReferenceAssemblyDirectories,
-                applicationReferenceAssemblyDirectories,
-                domainReferenceAssemblyDirectories,
-                ct);
+            bool hasReferenceSourceTarget =
+                await CollectCSharpReferenceRequirementsAsync(inventory, scanState, projectRoot, ct);
             if (ct.IsCancellationRequested)
             {
                 return false;
             }
 
-            if (assemblyScopedCurrentToolContractsDirectories.Count > 0)
-            {
-                await CollectFastAssemblyScopedCurrentToolContractsRequirementsAsync(
-                    inventory.CSharpFilePaths,
-                    asmdefDirectories,
-                    assemblyReferenceDirectories,
-                    projectRoot,
-                    assemblyScopedCurrentToolContractsDirectories,
-                    assemblyScopedCurrentDomainDirectories,
-                    assemblyScopedCurrentApplicationDirectories,
-                    assemblyScopedCurrentApplicationAliasesByDirectory,
-                    assemblyScopedCurrentDomainAliasesByDirectory,
-                    assemblyDeclaredTypeNamesByDirectory,
-                    legacyAssemblyDirectories,
-                    toolContractsReferenceAssemblyDirectories,
-                    applicationReferenceAssemblyDirectories,
-                    domainReferenceAssemblyDirectories,
-                    ct);
-                if (ct.IsCancellationRequested)
-                {
-                    return false;
-                }
-            }
-
-            if (assemblyScopedCurrentDomainDirectories.Count > 0)
-            {
-                await CollectFastAssemblyScopedCurrentDomainRequirementsAsync(
-                    inventory.CSharpFilePaths,
-                    asmdefDirectories,
-                    assemblyReferenceDirectories,
-                    projectRoot,
-                    assemblyScopedCurrentDomainDirectories,
-                    domainReferenceAssemblyDirectories,
-                    ct);
-                if (ct.IsCancellationRequested)
-                {
-                    return false;
-                }
-            }
-
-            bool hasFirstPartyScreenshotSourceTarget = await CollectFastFirstPartyScreenshotRequirementsAsync(
-                inventory.CSharpFilePaths,
-                asmdefDirectories,
-                assemblyReferenceDirectories,
-                projectRoot,
-                legacyAssemblyDirectories,
-                assemblyScopedCurrentToolContractsDirectories,
-                assemblyScopedCurrentFirstPartyToolsDirectories,
-                assemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
-                assemblyDeclaredTypeNamesByDirectory,
-                toolContractsReferenceAssemblyDirectories,
-                firstPartyScreenshotReferenceAssemblyDirectories,
-                ct);
-            if (ct.IsCancellationRequested)
-            {
-                return false;
-            }
-
-            if (hasFirstPartyScreenshotSourceTarget)
+            if (hasReferenceSourceTarget)
             {
                 return true;
             }
 
+            bool hasAsmdefSourceTarget = await ContainsFastAsmdefSourceTargetAsync(
+                inventory,
+                inspectedEntryCount,
+                ct);
+            if (ct.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            if (hasAsmdefSourceTarget)
+            {
+                return true;
+            }
+
+            if (!scanState.HasReferenceRequirements)
+            {
+                return false;
+            }
+
+            MigrationAssemblyUsage assemblyUsage = scanState.CreateReferenceRequirementUsage();
+            return ContainsAsmdefReferenceTarget(inventory, projectRoot, assemblyUsage, ct);
+        }
+
+        private static ThirdPartyToolMigrationAssemblyUsageScanState CreateScanState(
+            string projectRoot,
+            ProjectFileInventory inventory)
+        {
+            List<string> asmdefDirectories = inventory.AsmdefFilePaths
+                .Select(path => Path.GetDirectoryName(path) ?? string.Empty)
+                .Where(path => !string.IsNullOrEmpty(path))
+                .OrderByDescending(path => path.Length)
+                .ToList();
+            List<AssemblyReferenceDirectory> assemblyReferenceDirectories = inventory.AsmrefFilePaths.Count == 0
+                ? new List<AssemblyReferenceDirectory>()
+                : CreateAssemblyReferenceDirectories(inventory.AsmdefFilePaths, inventory.AsmrefFilePaths);
+            return new ThirdPartyToolMigrationAssemblyUsageScanState(
+                projectRoot,
+                asmdefDirectories,
+                assemblyReferenceDirectories);
+        }
+
+        private static async Task<(bool hasTarget, int inspectedEntryCount)> ScanInitialCSharpSourcesAsync(
+            ProjectFileInventory inventory,
+            ThirdPartyToolMigrationAssemblyUsageScanState scanState,
+            CancellationToken ct)
+        {
+            int inspectedEntryCount = 0;
+            foreach (string csharpFilePath in inventory.CSharpFilePaths)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return (false, inspectedEntryCount);
+                }
+
+                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
+                if (ContainsFastCSharpMigrationTarget(source))
+                {
+                    return (true, inspectedEntryCount);
+                }
+
+                scanState.RecordTargetScanInitialSourceFacts(source, csharpFilePath);
+                inspectedEntryCount++;
+                await YieldPreviewProgressAsync(inspectedEntryCount);
+            }
+
+            return (false, inspectedEntryCount);
+        }
+
+        private static async Task<bool> ContainsFastCSharpSourceTargetAsync(
+            ProjectFileInventory inventory,
+            ThirdPartyToolMigrationAssemblyUsageScanState scanState,
+            string projectRoot,
+            CancellationToken ct)
+        {
+            return await ContainsFastCSharpSourceMigrationTargetAsync(
+                inventory.CSharpFilePaths,
+                scanState.AsmdefDirectories,
+                scanState.AssemblyReferenceDirectories,
+                projectRoot,
+                scanState.LegacyAssemblyDirectories,
+                scanState.AssemblyScopedLegacyDirectories,
+                scanState.AssemblyScopedLegacyAliasesByDirectory,
+                scanState.AssemblyScopedLegacyToolInfoAliasesByDirectory,
+                scanState.AssemblyScopedCurrentToolContractsDirectories,
+                scanState.AssemblyScopedCurrentApplicationDirectories,
+                scanState.AssemblyScopedCurrentDomainDirectories,
+                scanState.AssemblyScopedCurrentFirstPartyToolsDirectories,
+                scanState.AssemblyScopedCurrentApplicationAliasesByDirectory,
+                scanState.AssemblyScopedCurrentDomainAliasesByDirectory,
+                scanState.AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
+                scanState.AssemblyDeclaredTypeNamesByDirectory,
+                ct);
+        }
+
+        private static async Task<bool> CollectCSharpReferenceRequirementsAsync(
+            ProjectFileInventory inventory,
+            ThirdPartyToolMigrationAssemblyUsageScanState scanState,
+            string projectRoot,
+            CancellationToken ct)
+        {
+            await CollectBaseReferenceRequirementsAsync(inventory, scanState, projectRoot, ct);
+            if (ct.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            await CollectAssemblyScopedReferenceRequirementsAsync(inventory, scanState, projectRoot, ct);
+            if (ct.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            return await CollectFastFirstPartyScreenshotRequirementsAsync(
+                inventory.CSharpFilePaths,
+                scanState.AsmdefDirectories,
+                scanState.AssemblyReferenceDirectories,
+                projectRoot,
+                scanState.LegacyAssemblyDirectories,
+                scanState.AssemblyScopedLegacyAliasesByDirectory,
+                scanState.AssemblyScopedCurrentToolContractsDirectories,
+                scanState.AssemblyScopedCurrentFirstPartyToolsDirectories,
+                scanState.AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
+                scanState.AssemblyDeclaredTypeNamesByDirectory,
+                scanState.ToolContractsReferenceAssemblyDirectories,
+                scanState.FirstPartyScreenshotReferenceAssemblyDirectories,
+                ct);
+        }
+
+        private static async Task CollectBaseReferenceRequirementsAsync(
+            ProjectFileInventory inventory,
+            ThirdPartyToolMigrationAssemblyUsageScanState scanState,
+            string projectRoot,
+            CancellationToken ct)
+        {
+            await CollectFastAssemblyReferenceRequirementsAsync(
+                inventory.CSharpFilePaths,
+                scanState.AsmdefDirectories,
+                scanState.AssemblyReferenceDirectories,
+                projectRoot,
+                scanState.AssemblyScopedCurrentToolContractsDirectories,
+                scanState.AssemblyScopedCurrentDomainDirectories,
+                scanState.AssemblyScopedCurrentApplicationDirectories,
+                scanState.AssemblyScopedCurrentApplicationAliasesByDirectory,
+                scanState.AssemblyScopedCurrentDomainAliasesByDirectory,
+                scanState.AssemblyDeclaredTypeNamesByDirectory,
+                scanState.LegacyAssemblyDirectories,
+                scanState.ToolContractsReferenceAssemblyDirectories,
+                scanState.ApplicationReferenceAssemblyDirectories,
+                scanState.DomainReferenceAssemblyDirectories,
+                ct);
+        }
+
+        private static async Task CollectAssemblyScopedReferenceRequirementsAsync(
+            ProjectFileInventory inventory,
+            ThirdPartyToolMigrationAssemblyUsageScanState scanState,
+            string projectRoot,
+            CancellationToken ct)
+        {
+            if (scanState.AssemblyScopedCurrentToolContractsDirectories.Count > 0)
+            {
+                await CollectFastAssemblyScopedCurrentToolContractsRequirementsAsync(
+                    inventory.CSharpFilePaths,
+                    scanState.AsmdefDirectories,
+                    scanState.AssemblyReferenceDirectories,
+                    projectRoot,
+                    scanState.AssemblyScopedCurrentToolContractsDirectories,
+                    scanState.AssemblyScopedCurrentDomainDirectories,
+                    scanState.AssemblyScopedCurrentApplicationDirectories,
+                    scanState.AssemblyScopedCurrentApplicationAliasesByDirectory,
+                    scanState.AssemblyScopedCurrentDomainAliasesByDirectory,
+                    scanState.AssemblyDeclaredTypeNamesByDirectory,
+                    scanState.LegacyAssemblyDirectories,
+                    scanState.ToolContractsReferenceAssemblyDirectories,
+                    scanState.ApplicationReferenceAssemblyDirectories,
+                    scanState.DomainReferenceAssemblyDirectories,
+                    ct);
+            }
+
+            if (scanState.AssemblyScopedCurrentDomainDirectories.Count == 0)
+            {
+                return;
+            }
+
+            await CollectFastAssemblyScopedCurrentDomainRequirementsAsync(
+                inventory.CSharpFilePaths,
+                scanState.AsmdefDirectories,
+                scanState.AssemblyReferenceDirectories,
+                projectRoot,
+                scanState.AssemblyScopedCurrentDomainDirectories,
+                scanState.DomainReferenceAssemblyDirectories,
+                ct);
+        }
+
+        private static async Task<bool> ContainsFastAsmdefSourceTargetAsync(
+            ProjectFileInventory inventory,
+            int inspectedEntryCount,
+            CancellationToken ct)
+        {
+            int currentInspectedEntryCount = inspectedEntryCount;
             foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
             {
                 if (ct.IsCancellationRequested)
@@ -326,41 +295,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return true;
                 }
 
-                inspectedEntryCount++;
-                if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
-                {
-                    await Task.Yield();
-                }
+                currentInspectedEntryCount++;
+                await YieldPreviewProgressAsync(currentInspectedEntryCount);
             }
 
-            if (toolContractsReferenceAssemblyDirectories.Count == 0 &&
-                applicationReferenceAssemblyDirectories.Count == 0 &&
-                domainReferenceAssemblyDirectories.Count == 0 &&
-                firstPartyScreenshotReferenceAssemblyDirectories.Count == 0)
-            {
-                return false;
-            }
+            return false;
+        }
 
-            MigrationAssemblyUsage assemblyUsage = new(
-                asmdefDirectories,
-                assemblyReferenceDirectories,
-                legacyAssemblyDirectories,
-                assemblyScopedLegacyDirectories,
-                new HashSet<string>(StringComparer.Ordinal),
-                new HashSet<string>(StringComparer.Ordinal),
-                new HashSet<string>(StringComparer.Ordinal),
-                new HashSet<string>(StringComparer.Ordinal),
-                CreateAssemblyScopedLegacyAliasesByDirectory(assemblyScopedLegacyAliasesByDirectory),
-                CreateAssemblyScopedLegacyAliasesByDirectory(assemblyScopedLegacyToolInfoAliasesByDirectory),
-                CreateAssemblyScopedNamesByDirectory(assemblyScopedCurrentApplicationAliasesByDirectory),
-                CreateAssemblyScopedNamesByDirectory(assemblyScopedCurrentDomainAliasesByDirectory),
-                CreateAssemblyScopedNamesByDirectory(assemblyScopedCurrentFirstPartyToolsAliasesByDirectory),
-                CreateAssemblyScopedNamesByDirectory(assemblyDeclaredTypeNamesByDirectory),
-                toolContractsReferenceAssemblyDirectories,
-                applicationReferenceAssemblyDirectories,
-                domainReferenceAssemblyDirectories,
-                firstPartyScreenshotReferenceAssemblyDirectories);
-
+        private static bool ContainsAsmdefReferenceTarget(
+            ProjectFileInventory inventory,
+            string projectRoot,
+            MigrationAssemblyUsage assemblyUsage,
+            CancellationToken ct)
+        {
             foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
             {
                 if (ct.IsCancellationRequested)
@@ -375,6 +322,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return false;
+        }
+
+        private static async Task YieldPreviewProgressAsync(int inspectedEntryCount)
+        {
+            if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize != 0)
+            {
+                return;
+            }
+
+            await Task.Yield();
         }
     }
 }

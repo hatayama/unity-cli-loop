@@ -34,158 +34,32 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 inventory.CSharpFilePaths,
                 inventory.AsmdefFilePaths,
                 inventory.AsmrefFilePaths);
-            List<MigrationFileChange> changes = new();
-            int replacementCount = 0;
+            MigrationPlanAccumulator accumulator = new();
             string[] legacyToolInfoAliases = GetAllAssemblyScopedLegacyToolInfoAliases(assemblyUsage);
-            Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
-                removedPlayerLoopTimingSignaturesByAssemblyDirectory = new(StringComparer.Ordinal);
-
-            foreach (string csharpFilePath in inventory.CSharpFilePaths)
-            {
-                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(csharpFilePath);
-                if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source) &&
-                    !ThirdPartyToolMigrationRules.ContainsLegacyTypeAliasReference(source, legacyToolInfoAliases))
-                {
-                    continue;
-                }
-
-                string assemblyDirectory = FindNearestAssemblyDirectory(
-                    csharpFilePath,
-                    assemblyUsage.AsmdefDirectories,
-                    assemblyUsage.AssemblyReferenceDirectories,
-                    projectRoot);
-                string[] legacyAssemblyAliases;
-                if (!assemblyUsage.AssemblyScopedLegacyAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out legacyAssemblyAliases))
-                {
-                    legacyAssemblyAliases = Array.Empty<string>();
-                }
-                string[] legacyAssemblyToolInfoAliases;
-                if (!assemblyUsage.AssemblyScopedLegacyToolInfoAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out legacyAssemblyToolInfoAliases))
-                {
-                    legacyAssemblyToolInfoAliases = Array.Empty<string>();
-                }
-                string[] currentApplicationAssemblyAliases;
-                if (!assemblyUsage.AssemblyScopedCurrentApplicationAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out currentApplicationAssemblyAliases))
-                {
-                    currentApplicationAssemblyAliases = Array.Empty<string>();
-                }
-                string[] currentDomainAssemblyAliases;
-                if (!assemblyUsage.AssemblyScopedCurrentDomainAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out currentDomainAssemblyAliases))
-                {
-                    currentDomainAssemblyAliases = Array.Empty<string>();
-                }
-                string[] currentFirstPartyToolsAssemblyAliases;
-                if (!assemblyUsage.AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out currentFirstPartyToolsAssemblyAliases))
-                {
-                    currentFirstPartyToolsAssemblyAliases = Array.Empty<string>();
-                }
-                string[] assemblyDeclaredTypeNames;
-                if (!assemblyUsage.AssemblyDeclaredTypeNamesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out assemblyDeclaredTypeNames))
-                {
-                    assemblyDeclaredTypeNames = Array.Empty<string>();
-                }
-                bool hasAssemblyScopedCurrentToolContractsUsing =
-                    assemblyUsage.AssemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory);
-                bool hasAssemblyScopedCurrentApplicationUsing =
-                    assemblyUsage.AssemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory);
-                bool hasAssemblyScopedCurrentDomainUsing =
-                    assemblyUsage.AssemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory);
-                bool hasAssemblyScopedCurrentFirstPartyToolsUsing =
-                    assemblyUsage.AssemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory);
-                bool hasLegacyAssemblySource =
-                    assemblyUsage.AssemblyScopedLegacyDirectories.Contains(assemblyDirectory) &&
-                    ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(source, legacyAssemblyAliases);
-                ThirdPartyToolMigrationContentResult result =
-                    ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
-                        source,
-                        hasLegacyAssemblySource,
-                        hasAssemblyScopedCurrentToolContractsUsing,
-                        hasAssemblyScopedCurrentApplicationUsing,
-                        hasAssemblyScopedCurrentDomainUsing,
-                        hasAssemblyScopedCurrentFirstPartyToolsUsing,
-                        legacyAssemblyAliases,
-                        legacyAssemblyToolInfoAliases,
-                        currentApplicationAssemblyAliases,
-                        currentDomainAssemblyAliases,
-                        currentFirstPartyToolsAssemblyAliases,
-                        assemblyDeclaredTypeNames);
-                if (!result.Changed)
-                {
-                    continue;
-                }
-
-                replacementCount += result.ReplacementCount;
-                changes.Add(new MigrationFileChange(csharpFilePath, result.Content));
-                AddRemovedPlayerLoopTimingSignatures(
-                    removedPlayerLoopTimingSignaturesByAssemblyDirectory,
-                    assemblyDirectory,
-                    result.RemovedPlayerLoopTimingSignatures);
-            }
-
-            replacementCount += ApplyCrossFilePlayerLoopTimingCallerArgumentMigrations(
+            ProcessCSharpMigrationFiles(
                 inventory.CSharpFilePaths,
                 projectRoot,
                 assemblyUsage,
-                changes,
-                removedPlayerLoopTimingSignaturesByAssemblyDirectory,
-                ThirdPartyToolMigrationFileAccess.ReadAllText);
+                legacyToolInfoAliases,
+                ThirdPartyToolMigrationFileAccess.ReadAllText,
+                accumulator);
 
-            foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
-            {
-                bool hasLegacyCSharpSource;
-                bool requiresToolContractsReference;
-                bool requiresApplicationReference;
-                bool requiresDomainReference;
-                bool requiresFirstPartyScreenshotReference;
-                bool hasAssemblyMigrationRequirement = TryGetAsmdefMigrationRequirements(
-                    asmdefFilePath,
-                    projectRoot,
-                    assemblyUsage,
-                    out hasLegacyCSharpSource,
-                    out requiresToolContractsReference,
-                    out requiresApplicationReference,
-                    out requiresDomainReference,
-                    out requiresFirstPartyScreenshotReference);
-                string source = ThirdPartyToolMigrationFileAccess.ReadAllText(asmdefFilePath);
-                if (!hasAssemblyMigrationRequirement &&
-                    !ThirdPartyToolMigrationRules.ContainsLegacyMigrationCandidateText(source))
-                {
-                    continue;
-                }
+            accumulator.AddReplacementCount(ApplyCrossFilePlayerLoopTimingCallerArgumentMigrations(
+                inventory.CSharpFilePaths,
+                projectRoot,
+                assemblyUsage,
+                accumulator.Changes,
+                accumulator.RemovedPlayerLoopTimingSignaturesByAssemblyDirectory,
+                ThirdPartyToolMigrationFileAccess.ReadAllText));
 
-                ThirdPartyToolMigrationContentResult result =
-                    ThirdPartyToolMigrationRules.MigrateAsmdefSource(
-                        source,
-                        hasLegacyCSharpSource,
-                        requiresToolContractsReference,
-                        requiresApplicationReference,
-                        requiresDomainReference,
-                        requiresFirstPartyScreenshotReference);
-                if (!result.Changed)
-                {
-                    continue;
-                }
+            ProcessAsmdefMigrationFiles(
+                inventory.AsmdefFilePaths,
+                projectRoot,
+                assemblyUsage,
+                ThirdPartyToolMigrationFileAccess.ReadAllText,
+                accumulator);
 
-                replacementCount += result.ReplacementCount;
-                changes.Add(new MigrationFileChange(asmdefFilePath, result.Content));
-            }
-
-            return new MigrationPlan(
-                changes,
-                replacementCount,
-                projectFingerprint);
+            return accumulator.ToMigrationPlan(projectFingerprint);
         }
 
         internal static async Task<MigrationPlan> CreateAsync(
@@ -224,11 +98,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return MigrationPlan.Empty;
             }
 
-            List<MigrationFileChange> changes = new();
-            int replacementCount = 0;
+            MigrationPlanAccumulator accumulator = new();
             string[] legacyToolInfoAliases = GetAllAssemblyScopedLegacyToolInfoAliases(assemblyUsage);
-            Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
-                removedPlayerLoopTimingSignaturesByAssemblyDirectory = new(StringComparer.Ordinal);
 
             foreach (string csharpFilePath in inventory.CSharpFilePaths)
             {
@@ -239,95 +110,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 string source = sourceFileCache.ReadAllText(csharpFilePath);
                 await progressCounter.ReportProcessedItemAsync(ct);
-                if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source) &&
-                    !ThirdPartyToolMigrationRules.ContainsLegacyTypeAliasReference(source, legacyToolInfoAliases))
-                {
-                    continue;
-                }
-
-                string assemblyDirectory = FindNearestAssemblyDirectory(
+                CSharpMigrationFileResult? csharpResult = CreateCSharpMigrationFileResult(
                     csharpFilePath,
-                    assemblyUsage.AsmdefDirectories,
-                    assemblyUsage.AssemblyReferenceDirectories,
-                    projectRoot);
-                string[] legacyAssemblyAliases;
-                if (!assemblyUsage.AssemblyScopedLegacyAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out legacyAssemblyAliases))
-                {
-                    legacyAssemblyAliases = Array.Empty<string>();
-                }
-                string[] legacyAssemblyToolInfoAliases;
-                if (!assemblyUsage.AssemblyScopedLegacyToolInfoAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out legacyAssemblyToolInfoAliases))
-                {
-                    legacyAssemblyToolInfoAliases = Array.Empty<string>();
-                }
-                string[] currentApplicationAssemblyAliases;
-                if (!assemblyUsage.AssemblyScopedCurrentApplicationAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out currentApplicationAssemblyAliases))
-                {
-                    currentApplicationAssemblyAliases = Array.Empty<string>();
-                }
-                string[] currentDomainAssemblyAliases;
-                if (!assemblyUsage.AssemblyScopedCurrentDomainAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out currentDomainAssemblyAliases))
-                {
-                    currentDomainAssemblyAliases = Array.Empty<string>();
-                }
-                string[] currentFirstPartyToolsAssemblyAliases;
-                if (!assemblyUsage.AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out currentFirstPartyToolsAssemblyAliases))
-                {
-                    currentFirstPartyToolsAssemblyAliases = Array.Empty<string>();
-                }
-                string[] assemblyDeclaredTypeNames;
-                if (!assemblyUsage.AssemblyDeclaredTypeNamesByDirectory.TryGetValue(
-                        assemblyDirectory,
-                        out assemblyDeclaredTypeNames))
-                {
-                    assemblyDeclaredTypeNames = Array.Empty<string>();
-                }
-                bool hasAssemblyScopedCurrentToolContractsUsing =
-                    assemblyUsage.AssemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory);
-                bool hasAssemblyScopedCurrentApplicationUsing =
-                    assemblyUsage.AssemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory);
-                bool hasAssemblyScopedCurrentDomainUsing =
-                    assemblyUsage.AssemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory);
-                bool hasAssemblyScopedCurrentFirstPartyToolsUsing =
-                    assemblyUsage.AssemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory);
-                bool hasLegacyAssemblySource =
-                    assemblyUsage.AssemblyScopedLegacyDirectories.Contains(assemblyDirectory) &&
-                    ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(source, legacyAssemblyAliases);
-                ThirdPartyToolMigrationContentResult result =
-                    ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
-                        source,
-                        hasLegacyAssemblySource,
-                        hasAssemblyScopedCurrentToolContractsUsing,
-                        hasAssemblyScopedCurrentApplicationUsing,
-                        hasAssemblyScopedCurrentDomainUsing,
-                        hasAssemblyScopedCurrentFirstPartyToolsUsing,
-                        legacyAssemblyAliases,
-                        legacyAssemblyToolInfoAliases,
-                        currentApplicationAssemblyAliases,
-                        currentDomainAssemblyAliases,
-                        currentFirstPartyToolsAssemblyAliases,
-                        assemblyDeclaredTypeNames);
-                if (!result.Changed)
-                {
-                    continue;
-                }
-
-                replacementCount += result.ReplacementCount;
-                changes.Add(new MigrationFileChange(csharpFilePath, result.Content));
-                AddRemovedPlayerLoopTimingSignatures(
-                    removedPlayerLoopTimingSignaturesByAssemblyDirectory,
-                    assemblyDirectory,
-                    result.RemovedPlayerLoopTimingSignatures);
+                    source,
+                    projectRoot,
+                    assemblyUsage,
+                    legacyToolInfoAliases);
+                accumulator.AddCSharpResult(csharpResult);
             }
 
             if (ct.IsCancellationRequested)
@@ -335,13 +124,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return MigrationPlan.Empty;
             }
 
-            replacementCount += ApplyCrossFilePlayerLoopTimingCallerArgumentMigrations(
+            accumulator.AddReplacementCount(ApplyCrossFilePlayerLoopTimingCallerArgumentMigrations(
                 inventory.CSharpFilePaths,
                 projectRoot,
                 assemblyUsage,
-                changes,
-                removedPlayerLoopTimingSignaturesByAssemblyDirectory,
-                sourceFileCache.ReadAllText);
+                accumulator.Changes,
+                accumulator.RemovedPlayerLoopTimingSignaturesByAssemblyDirectory,
+                sourceFileCache.ReadAllText));
 
             foreach (string asmdefFilePath in inventory.AsmdefFilePaths)
             {
@@ -350,52 +139,165 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return MigrationPlan.Empty;
                 }
 
-                bool hasLegacyCSharpSource;
-                bool requiresToolContractsReference;
-                bool requiresApplicationReference;
-                bool requiresDomainReference;
-                bool requiresFirstPartyScreenshotReference;
-                bool hasAssemblyMigrationRequirement = TryGetAsmdefMigrationRequirements(
-                    asmdefFilePath,
-                    projectRoot,
-                    assemblyUsage,
-                    out hasLegacyCSharpSource,
-                    out requiresToolContractsReference,
-                    out requiresApplicationReference,
-                    out requiresDomainReference,
-                    out requiresFirstPartyScreenshotReference);
                 string source = sourceFileCache.ReadAllText(asmdefFilePath);
                 await progressCounter.ReportProcessedItemAsync(ct);
-                if (!hasAssemblyMigrationRequirement &&
-                    !ThirdPartyToolMigrationRules.ContainsLegacyMigrationCandidateText(source))
-                {
-                    continue;
-                }
-
-                ThirdPartyToolMigrationContentResult result =
-                    ThirdPartyToolMigrationRules.MigrateAsmdefSource(
-                        source,
-                        hasLegacyCSharpSource,
-                        requiresToolContractsReference,
-                        requiresApplicationReference,
-                        requiresDomainReference,
-                        requiresFirstPartyScreenshotReference);
-                if (!result.Changed)
-                {
-                    continue;
-                }
-
-                replacementCount += result.ReplacementCount;
-                changes.Add(new MigrationFileChange(asmdefFilePath, result.Content));
+                MigrationFileResult? asmdefResult = CreateAsmdefMigrationFileResult(
+                    asmdefFilePath,
+                    source,
+                    projectRoot,
+                    assemblyUsage);
+                accumulator.AddFileResult(asmdefResult);
             }
 
             progressCounter.ReportComplete();
-            return new MigrationPlan(
-                changes,
-                replacementCount,
-                projectFingerprint);
+            return accumulator.ToMigrationPlan(projectFingerprint);
         }
 
+        private static void ProcessCSharpMigrationFiles(
+            List<string> csharpFilePaths,
+            string projectRoot,
+            MigrationAssemblyUsage assemblyUsage,
+            string[] legacyToolInfoAliases,
+            Func<string, string> readAllText,
+            MigrationPlanAccumulator accumulator)
+        {
+            foreach (string csharpFilePath in csharpFilePaths)
+            {
+                string source = readAllText(csharpFilePath);
+                CSharpMigrationFileResult? result = CreateCSharpMigrationFileResult(
+                    csharpFilePath,
+                    source,
+                    projectRoot,
+                    assemblyUsage,
+                    legacyToolInfoAliases);
+                accumulator.AddCSharpResult(result);
+            }
+        }
+
+        private static CSharpMigrationFileResult? CreateCSharpMigrationFileResult(
+            string csharpFilePath,
+            string source,
+            string projectRoot,
+            MigrationAssemblyUsage assemblyUsage,
+            string[] legacyToolInfoAliases)
+        {
+            if (!ThirdPartyToolMigrationRules.ContainsMigrationCandidateText(source) &&
+                !ThirdPartyToolMigrationRules.ContainsLegacyTypeAliasReference(source, legacyToolInfoAliases))
+            {
+                return null;
+            }
+
+            string assemblyDirectory = FindNearestAssemblyDirectory(
+                csharpFilePath,
+                assemblyUsage.AsmdefDirectories,
+                assemblyUsage.AssemblyReferenceDirectories,
+                projectRoot);
+            ThirdPartyToolMigrationContentResult result = MigrateCSharpFileSource(
+                source,
+                assemblyDirectory,
+                assemblyUsage);
+            return result.Changed
+                ? new CSharpMigrationFileResult(csharpFilePath, assemblyDirectory, result)
+                : null;
+        }
+
+        private static ThirdPartyToolMigrationContentResult MigrateCSharpFileSource(
+            string source,
+            string assemblyDirectory,
+            MigrationAssemblyUsage assemblyUsage)
+        {
+            string[] legacyAssemblyAliases =
+                GetStringArrayFromDirectoryMap(assemblyUsage.AssemblyScopedLegacyAliasesByDirectory, assemblyDirectory);
+            bool hasLegacyAssemblySource =
+                assemblyUsage.AssemblyScopedLegacyDirectories.Contains(assemblyDirectory) &&
+                ThirdPartyToolMigrationRules.ContainsLegacyAssemblyScopedApi(source, legacyAssemblyAliases);
+
+            return ThirdPartyToolMigrationRules.MigrateCSharpSourceForLegacyAssembly(
+                source,
+                hasLegacyAssemblySource,
+                assemblyUsage.AssemblyScopedCurrentToolContractsDirectories.Contains(assemblyDirectory),
+                assemblyUsage.AssemblyScopedCurrentApplicationDirectories.Contains(assemblyDirectory),
+                assemblyUsage.AssemblyScopedCurrentDomainDirectories.Contains(assemblyDirectory),
+                assemblyUsage.AssemblyScopedCurrentFirstPartyToolsDirectories.Contains(assemblyDirectory),
+                legacyAssemblyAliases,
+                GetStringArrayFromDirectoryMap(
+                    assemblyUsage.AssemblyScopedLegacyToolInfoAliasesByDirectory,
+                    assemblyDirectory),
+                GetStringArrayFromDirectoryMap(
+                    assemblyUsage.AssemblyScopedCurrentApplicationAliasesByDirectory,
+                    assemblyDirectory),
+                GetStringArrayFromDirectoryMap(
+                    assemblyUsage.AssemblyScopedCurrentDomainAliasesByDirectory,
+                    assemblyDirectory),
+                GetStringArrayFromDirectoryMap(
+                    assemblyUsage.AssemblyScopedCurrentFirstPartyToolsAliasesByDirectory,
+                    assemblyDirectory),
+                GetStringArrayFromDirectoryMap(
+                    assemblyUsage.AssemblyDeclaredTypeNamesByDirectory,
+                    assemblyDirectory));
+        }
+
+        private static string[] GetStringArrayFromDirectoryMap(
+            Dictionary<string, string[]> namesByDirectory,
+            string assemblyDirectory)
+        {
+            return namesByDirectory.TryGetValue(assemblyDirectory, out string[] names)
+                ? names
+                : Array.Empty<string>();
+        }
+
+        private static void ProcessAsmdefMigrationFiles(
+            List<string> asmdefFilePaths,
+            string projectRoot,
+            MigrationAssemblyUsage assemblyUsage,
+            Func<string, string> readAllText,
+            MigrationPlanAccumulator accumulator)
+        {
+            foreach (string asmdefFilePath in asmdefFilePaths)
+            {
+                string source = readAllText(asmdefFilePath);
+                MigrationFileResult? result = CreateAsmdefMigrationFileResult(
+                    asmdefFilePath,
+                    source,
+                    projectRoot,
+                    assemblyUsage);
+                accumulator.AddFileResult(result);
+            }
+        }
+
+        private static MigrationFileResult? CreateAsmdefMigrationFileResult(
+            string asmdefFilePath,
+            string source,
+            string projectRoot,
+            MigrationAssemblyUsage assemblyUsage)
+        {
+            bool hasAssemblyMigrationRequirement = TryGetAsmdefMigrationRequirements(
+                asmdefFilePath,
+                projectRoot,
+                assemblyUsage,
+                out bool hasLegacyCSharpSource,
+                out bool requiresToolContractsReference,
+                out bool requiresApplicationReference,
+                out bool requiresDomainReference,
+                out bool requiresFirstPartyScreenshotReference);
+            if (!hasAssemblyMigrationRequirement &&
+                !ThirdPartyToolMigrationRules.ContainsLegacyMigrationCandidateText(source))
+            {
+                return null;
+            }
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationRules.MigrateAsmdefSource(
+                    source,
+                    hasLegacyCSharpSource,
+                    requiresToolContractsReference,
+                    requiresApplicationReference,
+                    requiresDomainReference,
+                    requiresFirstPartyScreenshotReference);
+            return result.Changed
+                ? new MigrationFileResult(asmdefFilePath, result.Content, result.ReplacementCount)
+                : null;
+        }
 
         internal static int GetPreviewWorkItemCount(ProjectFileInventory inventory)
         {
@@ -404,6 +306,83 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return (inventory.CSharpFilePaths.Count * 3) +
                 (inventory.AsmdefFilePaths.Count * 2) +
                 inventory.AsmrefFilePaths.Count;
+        }
+
+        private sealed class MigrationPlanAccumulator
+        {
+            public List<MigrationFileChange> Changes { get; } = new();
+
+            public Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+                RemovedPlayerLoopTimingSignaturesByAssemblyDirectory { get; } = new(StringComparer.Ordinal);
+
+            private int ReplacementCount { get; set; }
+
+            public void AddCSharpResult(CSharpMigrationFileResult? result)
+            {
+                if (!result.HasValue)
+                {
+                    return;
+                }
+
+                AddReplacementCount(result.Value.Result.ReplacementCount);
+                Changes.Add(new MigrationFileChange(result.Value.FilePath, result.Value.Result.Content));
+                AddRemovedPlayerLoopTimingSignatures(
+                    RemovedPlayerLoopTimingSignaturesByAssemblyDirectory,
+                    result.Value.AssemblyDirectory,
+                    result.Value.Result.RemovedPlayerLoopTimingSignatures);
+            }
+
+            public void AddFileResult(MigrationFileResult? result)
+            {
+                if (!result.HasValue)
+                {
+                    return;
+                }
+
+                AddReplacementCount(result.Value.ReplacementCount);
+                Changes.Add(new MigrationFileChange(result.Value.FilePath, result.Value.Content));
+            }
+
+            public void AddReplacementCount(int replacementCount)
+            {
+                ReplacementCount += replacementCount;
+            }
+
+            public MigrationPlan ToMigrationPlan(MigrationProjectFingerprint projectFingerprint)
+            {
+                return new MigrationPlan(Changes, ReplacementCount, projectFingerprint);
+            }
+        }
+
+        private readonly struct CSharpMigrationFileResult
+        {
+            public CSharpMigrationFileResult(
+                string filePath,
+                string assemblyDirectory,
+                ThirdPartyToolMigrationContentResult result)
+            {
+                FilePath = filePath;
+                AssemblyDirectory = assemblyDirectory;
+                Result = result;
+            }
+
+            public string FilePath { get; }
+            public string AssemblyDirectory { get; }
+            public ThirdPartyToolMigrationContentResult Result { get; }
+        }
+
+        private readonly struct MigrationFileResult
+        {
+            public MigrationFileResult(string filePath, string content, int replacementCount)
+            {
+                FilePath = filePath;
+                Content = content;
+                ReplacementCount = replacementCount;
+            }
+
+            public string FilePath { get; }
+            public string Content { get; }
+            public int ReplacementCount { get; }
         }
     }
 }

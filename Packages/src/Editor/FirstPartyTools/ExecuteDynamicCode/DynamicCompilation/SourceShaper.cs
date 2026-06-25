@@ -26,99 +26,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (braceDepth == 0)
                 {
-                    if (TryMatchLineComment(source, pos, out int afterComment))
-                    {
-                        pos = afterComment;
-                        continue;
-                    }
-
-                    if (TryMatchBlockComment(source, pos, out int afterBlock))
-                    {
-                        pos = afterBlock;
-                        continue;
-                    }
-
-                    if (StartsWithKeyword(source, pos, "using"))
-                    {
-                        int segmentStart = pos;
-                        int afterUsing = pos + 5;
-                        afterUsing = SkipWhitespace(source, afterUsing);
-
-                        if (StartsWithKeyword(source, afterUsing, "static"))
-                        {
-                            int end = FindSemicolon(source, segmentStart);
-                            result.UsingDirectives.Add(source.Substring(segmentStart, end - segmentStart + 1).TrimEnd());
-                            pos = end + 1;
-                            continue;
-                        }
-
-                        // "using var" and "using (" are using-statements, not using-directives
-                        if (afterUsing < length && (StartsWithKeyword(source, afterUsing, "var") || source[afterUsing] == '('))
-                        {
-                            result.HasTopLevelStatements = true;
-                            int end = FindStatementEnd(source, segmentStart, ref braceDepth);
-                            result.TopLevelBodyBuilder.AppendLine(source.Substring(segmentStart, end - segmentStart + 1).TrimEnd());
-                            pos = end + 1;
-                            continue;
-                        }
-
-                        int semiEnd = FindSemicolon(source, segmentStart);
-                        result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
-                        pos = semiEnd + 1;
-                        continue;
-                    }
-
-                    if (StartsWithKeyword(source, pos, "namespace"))
-                    {
-                        result.HasNamespaceDeclaration = true;
-                        pos = SkipBlock(source, pos, ref braceDepth);
-                        continue;
-                    }
-
-                    if (IsTypeDeclarationKeyword(source, pos))
-                    {
-                        result.HasTypeDeclaration = true;
-                        pos = SkipBlock(source, pos, ref braceDepth);
-                        continue;
-                    }
-
-                    if (StartsWithKeyword(source, pos, "global") && StartsWithKeyword(source, SkipWhitespace(source, pos + 6), "using"))
-                    {
-                        int segmentStart = pos;
-                        int semiEnd = FindSemicolon(source, segmentStart);
-                        result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
-                        pos = semiEnd + 1;
-                        continue;
-                    }
-
-                    if (pos < length && source[pos] == '[')
-                    {
-                        int afterAttr = SkipAttributeBlock(source, pos);
-                        int nextNonWs = SkipWhitespace(source, afterAttr);
-                        if (nextNonWs < length && IsTypeDeclarationKeyword(source, nextNonWs))
-                        {
-                            result.HasTypeDeclaration = true;
-                            pos = SkipBlock(source, nextNonWs, ref braceDepth);
-                            continue;
-                        }
-                    }
-
-                    if (IsAccessModifier(source, pos))
-                    {
-                        int afterMod = SkipAccessModifiers(source, pos);
-                        if (IsTypeDeclarationKeyword(source, afterMod))
-                        {
-                            result.HasTypeDeclaration = true;
-                            pos = SkipBlock(source, afterMod, ref braceDepth);
-                            continue;
-                        }
-                    }
-
-                    result.HasTopLevelStatements = true;
-                    int stmtStart = pos;
-                    int stmtEnd = FindStatementEnd(source, stmtStart, ref braceDepth);
-                    result.TopLevelBodyBuilder.AppendLine(source.Substring(stmtStart, stmtEnd - stmtStart + 1).TrimEnd());
-                    pos = stmtEnd + 1;
+                    SourceTopLevelStep topLevelStep = AnalyzeTopLevelSourceStep(
+                        source,
+                        pos,
+                        braceDepth,
+                        result);
+                    pos = topLevelStep.Position;
+                    braceDepth = topLevelStep.BraceDepth;
                 }
                 else
                 {
@@ -127,6 +41,190 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return result;
+        }
+
+        private static SourceTopLevelStep AnalyzeTopLevelSourceStep(
+            string source,
+            int pos,
+            int braceDepth,
+            SourceShapeResult result)
+        {
+            SourceTopLevelStep? commentStep = TryAnalyzeTopLevelComment(source, pos, braceDepth);
+            if (commentStep.HasValue)
+            {
+                return commentStep.Value;
+            }
+
+            SourceTopLevelStep? usingStep = TryAnalyzeTopLevelUsing(source, pos, braceDepth, result);
+            if (usingStep.HasValue)
+            {
+                return usingStep.Value;
+            }
+
+            SourceTopLevelStep? declarationStep = TryAnalyzeTopLevelDeclaration(source, pos, braceDepth, result);
+            return declarationStep ?? AnalyzeTopLevelStatement(source, pos, braceDepth, result);
+        }
+
+        private static SourceTopLevelStep? TryAnalyzeTopLevelComment(
+            string source,
+            int pos,
+            int braceDepth)
+        {
+            if (TryMatchLineComment(source, pos, out int afterComment))
+            {
+                return new SourceTopLevelStep(afterComment, braceDepth);
+            }
+
+            if (TryMatchBlockComment(source, pos, out int afterBlock))
+            {
+                return new SourceTopLevelStep(afterBlock, braceDepth);
+            }
+
+            return null;
+        }
+
+        private static SourceTopLevelStep? TryAnalyzeTopLevelUsing(
+            string source,
+            int pos,
+            int braceDepth,
+            SourceShapeResult result)
+        {
+            if (StartsWithKeyword(source, pos, "global"))
+            {
+                return TryAnalyzeGlobalUsingDirective(source, pos, braceDepth, result);
+            }
+
+            if (!StartsWithKeyword(source, pos, "using"))
+            {
+                return null;
+            }
+
+            int segmentStart = pos;
+            int afterUsing = SkipWhitespace(source, pos + 5);
+            if (StartsWithKeyword(source, afterUsing, "static"))
+            {
+                return AddUsingDirectiveStep(source, segmentStart, braceDepth, result);
+            }
+
+            // "using var" and "using (" are using-statements, not using-directives
+            if (afterUsing < source.Length && (StartsWithKeyword(source, afterUsing, "var") || source[afterUsing] == '('))
+            {
+                return AnalyzeTopLevelStatement(source, segmentStart, braceDepth, result);
+            }
+
+            return AddUsingDirectiveStep(source, segmentStart, braceDepth, result);
+        }
+
+        private static SourceTopLevelStep? TryAnalyzeGlobalUsingDirective(
+            string source,
+            int pos,
+            int braceDepth,
+            SourceShapeResult result)
+        {
+            int usingPos = SkipWhitespace(source, pos + 6);
+            if (!StartsWithKeyword(source, usingPos, "using"))
+            {
+                return null;
+            }
+
+            return AddUsingDirectiveStep(source, pos, braceDepth, result);
+        }
+
+        private static SourceTopLevelStep AddUsingDirectiveStep(
+            string source,
+            int segmentStart,
+            int braceDepth,
+            SourceShapeResult result)
+        {
+            int semiEnd = FindSemicolon(source, segmentStart);
+            result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
+            return new SourceTopLevelStep(semiEnd + 1, braceDepth);
+        }
+
+        private static SourceTopLevelStep? TryAnalyzeTopLevelDeclaration(
+            string source,
+            int pos,
+            int braceDepth,
+            SourceShapeResult result)
+        {
+            if (StartsWithKeyword(source, pos, "namespace"))
+            {
+                result.HasNamespaceDeclaration = true;
+                return SkipTopLevelBlock(source, pos, braceDepth);
+            }
+
+            if (IsTypeDeclarationKeyword(source, pos))
+            {
+                result.HasTypeDeclaration = true;
+                return SkipTopLevelBlock(source, pos, braceDepth);
+            }
+
+            SourceTopLevelStep? attributedStep = TryAnalyzeAttributedTypeDeclaration(source, pos, braceDepth, result);
+            return attributedStep ?? TryAnalyzeModifiedTypeDeclaration(source, pos, braceDepth, result);
+        }
+
+        private static SourceTopLevelStep? TryAnalyzeAttributedTypeDeclaration(
+            string source,
+            int pos,
+            int braceDepth,
+            SourceShapeResult result)
+        {
+            if (pos >= source.Length || source[pos] != '[')
+            {
+                return null;
+            }
+
+            int afterAttr = SkipAttributeBlock(source, pos);
+            int nextNonWs = SkipWhitespace(source, afterAttr);
+            int declarationStart = SkipAccessModifiers(source, nextNonWs);
+            if (declarationStart >= source.Length || !IsTypeDeclarationKeyword(source, declarationStart))
+            {
+                return null;
+            }
+
+            result.HasTypeDeclaration = true;
+            return SkipTopLevelBlock(source, declarationStart, braceDepth);
+        }
+
+        private static SourceTopLevelStep? TryAnalyzeModifiedTypeDeclaration(
+            string source,
+            int pos,
+            int braceDepth,
+            SourceShapeResult result)
+        {
+            if (!IsAccessModifier(source, pos))
+            {
+                return null;
+            }
+
+            int afterMod = SkipAccessModifiers(source, pos);
+            if (!IsTypeDeclarationKeyword(source, afterMod))
+            {
+                return null;
+            }
+
+            result.HasTypeDeclaration = true;
+            return SkipTopLevelBlock(source, afterMod, braceDepth);
+        }
+
+        private static SourceTopLevelStep AnalyzeTopLevelStatement(
+            string source,
+            int pos,
+            int braceDepth,
+            SourceShapeResult result)
+        {
+            result.HasTopLevelStatements = true;
+            int nextBraceDepth = braceDepth;
+            int stmtEnd = FindStatementEnd(source, pos, ref nextBraceDepth);
+            result.TopLevelBodyBuilder.AppendLine(source.Substring(pos, stmtEnd - pos + 1).TrimEnd());
+            return new SourceTopLevelStep(stmtEnd + 1, nextBraceDepth);
+        }
+
+        private static SourceTopLevelStep SkipTopLevelBlock(string source, int pos, int braceDepth)
+        {
+            int nextBraceDepth = braceDepth;
+            int nextPosition = SkipBlock(source, pos, ref nextBraceDepth);
+            return new SourceTopLevelStep(nextPosition, nextBraceDepth);
         }
 
         public static string WrapIfNeeded(string source, string namespaceName, string className)
@@ -327,83 +425,97 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static int AdvanceOneToken(string s, int pos)
         {
             if (pos >= s.Length) return s.Length;
-            char c = s[pos];
 
-            // Line comment
-            if (c == '/' && pos + 1 < s.Length && s[pos + 1] == '/')
-            {
-                int end = pos + 2;
-                while (end < s.Length && s[end] != '\n') end++;
-                return end < s.Length ? end + 1 : s.Length;
-            }
-
-            // Block comment
-            if (c == '/' && pos + 1 < s.Length && s[pos + 1] == '*')
-            {
-                int end = pos + 2;
-                while (end + 1 < s.Length && !(s[end] == '*' && s[end + 1] == '/')) end++;
-                return end + 2 < s.Length ? end + 2 : s.Length;
-            }
-
-            // Verbatim string (@"...")
-            if (c == '@' && pos + 1 < s.Length && s[pos + 1] == '"')
-            {
-                int end = pos + 2;
-                while (end < s.Length)
-                {
-                    if (s[end] == '"')
-                    {
-                        if (end + 1 < s.Length && s[end + 1] == '"') { end += 2; continue; }
-                        return end + 1;
-                    }
-                    end++;
-                }
-                return s.Length;
-            }
-
-            // Raw string literal (""" ... """)
-            if (c == '"' && pos + 2 < s.Length && s[pos + 1] == '"' && s[pos + 2] == '"')
-            {
-                int end = pos + 3;
-                while (end + 2 < s.Length)
-                {
-                    if (s[end] == '"' && s[end + 1] == '"' && s[end + 2] == '"') return end + 3;
-                    end++;
-                }
-                return s.Length;
-            }
-
-            // Regular string literal ("...")
-            if (c == '"')
-            {
-                int end = pos + 1;
-                while (end < s.Length && s[end] != '"')
-                {
-                    if (s[end] == '\\') end++; // skip escaped char
-                    end++;
-                }
-                return end < s.Length ? end + 1 : s.Length;
-            }
-
-            // Char literal ('x')
-            if (c == '\'')
-            {
-                int end = pos + 1;
-                while (end < s.Length && s[end] != '\'')
-                {
-                    if (s[end] == '\\') end++;
-                    end++;
-                }
-                return end < s.Length ? end + 1 : s.Length;
-            }
-
-            // Interpolated string ($"...")
-            if (c == '$' && pos + 1 < s.Length && s[pos + 1] == '"')
-            {
-                return SkipInterpolatedString(s, pos + 2);
-            }
+            (bool matched, int nextPosition) = TryAdvanceLineComment(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceBlockComment(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceVerbatimString(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceRawString(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceRegularString(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceCharLiteral(s, pos);
+            if (matched) return nextPosition;
+            (matched, nextPosition) = TryAdvanceInterpolatedString(s, pos);
+            if (matched) return nextPosition;
 
             return pos + 1;
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceLineComment(string s, int pos)
+        {
+            if (pos + 1 >= s.Length || s[pos] != '/' || s[pos + 1] != '/')
+            {
+                return (false, pos);
+            }
+
+            int end = pos + 2;
+            while (end < s.Length && s[end] != '\n') end++;
+            return (true, end < s.Length ? end + 1 : s.Length);
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceBlockComment(string s, int pos)
+        {
+            if (pos + 1 >= s.Length || s[pos] != '/' || s[pos + 1] != '*')
+            {
+                return (false, pos);
+            }
+
+            int end = pos + 2;
+            while (end + 1 < s.Length && !(s[end] == '*' && s[end + 1] == '/')) end++;
+            return (true, end + 2 < s.Length ? end + 2 : s.Length);
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceVerbatimString(string s, int pos)
+        {
+            if (pos + 1 >= s.Length || s[pos] != '@' || s[pos + 1] != '"')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipVerbatimString(s, pos + 2));
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceRawString(string s, int pos)
+        {
+            if (pos + 2 >= s.Length || s[pos] != '"' || s[pos + 1] != '"' || s[pos + 2] != '"')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipRawString(s, pos + 3));
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceRegularString(string s, int pos)
+        {
+            if (s[pos] != '"')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipRegularString(s, pos + 1));
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceCharLiteral(string s, int pos)
+        {
+            if (s[pos] != '\'')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipCharLiteral(s, pos + 1));
+        }
+
+        private static (bool Matched, int NextPosition) TryAdvanceInterpolatedString(string s, int pos)
+        {
+            if (pos + 1 >= s.Length || s[pos] != '$' || s[pos + 1] != '"')
+            {
+                return (false, pos);
+            }
+
+            return (true, SkipInterpolatedString(s, pos + 2));
         }
 
         private static int SkipInterpolatedString(string s, int pos)
@@ -453,39 +565,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             while (end < s.Length && depth > 0)
             {
-                if (s[end] == '\\')
+                int afterLiteral = SkipInterpolationHoleLiteral(s, end);
+                if (afterLiteral != end)
                 {
-                    end += 2;
-                    continue;
-                }
-
-                if (s[end] == '@' && end + 1 < s.Length && s[end + 1] == '"')
-                {
-                    end = SkipVerbatimString(s, end + 2);
-                    continue;
-                }
-
-                if (s[end] == '$' && end + 1 < s.Length && s[end + 1] == '"')
-                {
-                    end = SkipInterpolatedString(s, end + 2);
-                    continue;
-                }
-
-                if (s[end] == '"' && end + 2 < s.Length && s[end + 1] == '"' && s[end + 2] == '"')
-                {
-                    end = SkipRawString(s, end + 3);
-                    continue;
-                }
-
-                if (s[end] == '"')
-                {
-                    end = SkipRegularString(s, end + 1);
-                    continue;
-                }
-
-                if (s[end] == '\'')
-                {
-                    end = SkipCharLiteral(s, end + 1);
+                    end = afterLiteral;
                     continue;
                 }
 
@@ -507,6 +590,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return end;
+        }
+
+        private static int SkipInterpolationHoleLiteral(string s, int end)
+        {
+            if (s[end] == '\\')
+            {
+                return end + 2;
+            }
+
+            if (s[end] == '@' && end + 1 < s.Length && s[end + 1] == '"')
+            {
+                return SkipVerbatimString(s, end + 2);
+            }
+
+            if (s[end] == '$' && end + 1 < s.Length && s[end + 1] == '"')
+            {
+                return SkipInterpolatedString(s, end + 2);
+            }
+
+            if (s[end] == '"' && end + 2 < s.Length && s[end + 1] == '"' && s[end + 2] == '"')
+            {
+                return SkipRawString(s, end + 3);
+            }
+
+            if (s[end] == '"')
+            {
+                return SkipRegularString(s, end + 1);
+            }
+
+            return s[end] == '\'' ? SkipCharLiteral(s, end + 1) : end;
         }
 
         private static int SkipRegularString(string s, int pos)
@@ -577,6 +690,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return end < s.Length ? end + 1 : s.Length;
+        }
+
+        private readonly struct SourceTopLevelStep
+        {
+            public SourceTopLevelStep(int position, int braceDepth)
+            {
+                Position = position;
+                BraceDepth = braceDepth;
+            }
+
+            public int Position { get; }
+            public int BraceDepth { get; }
         }
     }
 

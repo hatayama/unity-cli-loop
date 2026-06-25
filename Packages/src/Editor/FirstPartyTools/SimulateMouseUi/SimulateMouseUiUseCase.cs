@@ -33,82 +33,122 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
+            EventSystem? eventSystem = EventSystem.current;
+            UnityCliLoopMouseUiSimulationResult? validationFailure = ValidateSimulationStart(parameters, eventSystem);
+            if (validationFailure != null)
+            {
+                return validationFailure;
+            }
+            Debug.Assert(eventSystem != null, "ValidateSimulationStart must reject a missing EventSystem.");
+            EventSystem activeEventSystem = eventSystem!;
+
+            LogSimulationStart(parameters, correlationId);
+            EnsureOverlayExists();
+
+            UnityCliLoopMouseUiSimulationResult? dragStateFailure = ValidateActiveDragState(parameters);
+            if (dragStateFailure != null)
+            {
+                return dragStateFailure;
+            }
+
+            UnityCliLoopMouseUiSimulationResult response =
+                await ExecuteMouseAction(parameters, activeEventSystem, ct).ConfigureAwait(false);
+            LogSimulationComplete(parameters, response, correlationId);
+
+            return response;
+        }
+
+        private static UnityCliLoopMouseUiSimulationResult? ValidateSimulationStart(
+            MouseUiSimulationCommand parameters,
+            EventSystem? eventSystem)
+        {
             if (!EditorApplication.isPlaying)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "PlayMode is not active. Use control-play-mode tool to start PlayMode first.",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(
+                    parameters,
+                    "PlayMode is not active. Use control-play-mode tool to start PlayMode first.");
             }
 
-            EventSystem? eventSystem = EventSystem.current;
             if (eventSystem == null)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "No EventSystem found in the scene. Ensure an EventSystem GameObject exists.",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(
+                    parameters,
+                    "No EventSystem found in the scene. Ensure an EventSystem GameObject exists.");
             }
 
+            return ValidateSimulationRequestOptions(parameters);
+        }
+
+        private static UnityCliLoopMouseUiSimulationResult? ValidateSimulationRequestOptions(
+            MouseUiSimulationCommand parameters)
+        {
             if (parameters.Action != MouseAction.Click && parameters.Action != MouseAction.LongPress && parameters.DragSpeed < 0f)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = $"DragSpeed must be non-negative, got: {parameters.DragSpeed}",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(parameters, $"DragSpeed must be non-negative, got: {parameters.DragSpeed}");
             }
 
-            // uGUI drag controls (ScrollRect, Slider) only respond to left-button drags
             if (IsDragAction(parameters.Action) && parameters.Button != MouseButton.Left)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = $"Drag actions only support Left button (uGUI ignores non-left drags), got: {parameters.Button}",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(
+                    parameters,
+                    $"Drag actions only support Left button (uGUI ignores non-left drags), got: {parameters.Button}");
             }
 
             if (parameters.BypassRaycast && !SupportsBypassRaycast(parameters.Action))
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "BypassRaycast is not supported for this action.",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(parameters, "BypassRaycast is not supported for this action.");
             }
 
             if (parameters.BypassRaycast &&
                 RequiresBypassTargetPath(parameters.Action) &&
                 string.IsNullOrWhiteSpace(parameters.TargetPath))
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart.",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(
+                    parameters,
+                    "TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart.");
             }
 
             if (!string.IsNullOrWhiteSpace(parameters.DropTargetPath) &&
                 parameters.Action != MouseAction.Drag &&
                 parameters.Action != MouseAction.DragEnd)
             {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = "DropTargetPath supports Drag and DragEnd only.",
-                    Action = parameters.Action.ToString()
-                };
+                return CreateFailure(parameters, "DropTargetPath supports Drag and DragEnd only.");
             }
 
+            return null;
+        }
+
+        private static UnityCliLoopMouseUiSimulationResult? ValidateActiveDragState(MouseUiSimulationCommand parameters)
+        {
+            if (!MouseDragState.IsDragging || !RequiresIdlePointer(parameters.Action))
+            {
+                return null;
+            }
+
+            return CreateFailure(
+                parameters,
+                $"Cannot {parameters.Action.ToString()} while a split drag is active. Call DragEnd first.");
+        }
+
+        private static bool RequiresIdlePointer(MouseAction action)
+        {
+            return action == MouseAction.Click || action == MouseAction.Drag || action == MouseAction.LongPress;
+        }
+
+        private static UnityCliLoopMouseUiSimulationResult CreateFailure(
+            MouseUiSimulationCommand parameters,
+            string message)
+        {
+            return new UnityCliLoopMouseUiSimulationResult
+            {
+                Success = false,
+                Message = message,
+                Action = parameters.Action.ToString()
+            };
+        }
+
+        private static void LogSimulationStart(MouseUiSimulationCommand parameters, string correlationId)
+        {
             VibeLogger.LogInfo(
                 "simulate_mouse_start",
                 "Mouse simulation started",
@@ -123,61 +163,49 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 },
                 correlationId: correlationId
             );
+        }
 
-            EnsureOverlayExists();
-
-            // Single-pointer model: Click, one-shot Drag, and LongPress are invalid while a split drag is held
-            if (MouseDragState.IsDragging &&
-                (parameters.Action == MouseAction.Click || parameters.Action == MouseAction.Drag || parameters.Action == MouseAction.LongPress))
-            {
-                return new UnityCliLoopMouseUiSimulationResult
-                {
-                    Success = false,
-                    Message = $"Cannot {parameters.Action.ToString()} while a split drag is active. Call DragEnd first.",
-                    Action = parameters.Action.ToString()
-                };
-            }
-
-            UnityCliLoopMouseUiSimulationResult response;
-
-            switch (parameters.Action)
-            {
-                case MouseAction.Click:
-                    response = await ExecuteClick(parameters, eventSystem, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.Drag:
-                    response = await ExecuteDragOneShot(parameters, eventSystem, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.DragStart:
-                    response = await ExecuteDragStart(parameters, eventSystem, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.DragMove:
-                    response = await ExecuteDragMove(parameters, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.DragEnd:
-                    response = await ExecuteDragEnd(parameters, ct).ConfigureAwait(false);
-                    break;
-
-                case MouseAction.LongPress:
-                    response = await ExecuteLongPress(parameters, eventSystem, ct).ConfigureAwait(false);
-                    break;
-
-                default:
-                    throw new ArgumentException($"Unknown mouse action: {parameters.Action}");
-            }
-
+        private static void LogSimulationComplete(
+            MouseUiSimulationCommand parameters,
+            UnityCliLoopMouseUiSimulationResult response,
+            string correlationId)
+        {
             VibeLogger.LogInfo(
                 "simulate_mouse_complete",
                 $"Mouse simulation completed: {response.Message}",
                 new { Action = parameters.Action.ToString(), Success = response.Success },
                 correlationId: correlationId
             );
+        }
 
-            return response;
+        private async Task<UnityCliLoopMouseUiSimulationResult> ExecuteMouseAction(
+            MouseUiSimulationCommand parameters,
+            EventSystem eventSystem,
+            CancellationToken ct)
+        {
+            switch (parameters.Action)
+            {
+                case MouseAction.Click:
+                    return await ExecuteClick(parameters, eventSystem, ct).ConfigureAwait(false);
+
+                case MouseAction.Drag:
+                    return await ExecuteDragOneShot(parameters, eventSystem, ct).ConfigureAwait(false);
+
+                case MouseAction.DragStart:
+                    return await ExecuteDragStart(parameters, eventSystem, ct).ConfigureAwait(false);
+
+                case MouseAction.DragMove:
+                    return await ExecuteDragMove(parameters, ct).ConfigureAwait(false);
+
+                case MouseAction.DragEnd:
+                    return await ExecuteDragEnd(parameters, ct).ConfigureAwait(false);
+
+                case MouseAction.LongPress:
+                    return await ExecuteLongPress(parameters, eventSystem, ct).ConfigureAwait(false);
+
+                default:
+                    throw new ArgumentException($"Unknown mouse action: {parameters.Action}");
+            }
         }
 
         private static void EnsureOverlayExists()
@@ -218,67 +246,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = InputToScreen(inputPos);
-            RaycastResult? hit = parameters.BypassRaycast ? null : RaycastUI(screenPos, eventSystem);
-
-            PointerEventData.InputButton inputButton = ToInputButton(parameters.Button);
-            PointerEventData pointerData = new(eventSystem)
+            PointerEventData pointerData = CreatePointerPressData(eventSystem, screenPos, parameters.Button);
+            ResolvedPointerTargets resolvedTargets =
+                ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.Click);
+            if (resolvedTargets.FailureResponse != null)
             {
-                position = screenPos,
-                pressPosition = screenPos,
-                button = inputButton
-            };
-
-            GameObject? target = null;
-            GameObject? pressTarget = null;
-            GameObject? clickTarget = null;
-            GameObject? rawTarget = null;
-
-            if (parameters.BypassRaycast)
-            {
-                if (!TryResolveGameObjectPath(
-                    parameters.TargetPath,
-                    "TargetPath",
-                    MouseAction.Click,
-                    inputPos,
-                    out rawTarget,
-                    out UnityCliLoopMouseUiSimulationResult? failureResponse))
-                {
-                    return failureResponse!;
-                }
-
-                RaycastResult directRaycast = CreateDirectRaycastResult(rawTarget!);
-                pointerData.pointerCurrentRaycast = directRaycast;
-                pointerData.pointerPressRaycast = directRaycast;
-
-                pressTarget = ExecuteEvents.GetEventHandler<IPointerDownHandler>(rawTarget!);
-                clickTarget = ExecuteEvents.GetEventHandler<IPointerClickHandler>(rawTarget!);
-                target = pressTarget ?? clickTarget;
-
-                if (target != null)
-                {
-                    pointerData.pointerPress = target;
-                    pointerData.rawPointerPress = rawTarget;
-                }
-            }
-            else if (hit != null)
-            {
-                rawTarget = hit.Value.gameObject;
-                pointerData.pointerCurrentRaycast = hit.Value;
-                pointerData.pointerPressRaycast = hit.Value;
-
-                // Execute dispatches only to the exact target; composite controls (Button with Text child) need hierarchy traversal
-                pressTarget = ExecuteEvents.GetEventHandler<IPointerDownHandler>(rawTarget);
-                clickTarget = ExecuteEvents.GetEventHandler<IPointerClickHandler>(rawTarget);
-                target = pressTarget ?? clickTarget;
-
-                if (target != null)
-                {
-                    pointerData.pointerPress = target;
-                    pointerData.rawPointerPress = rawTarget;
-                }
+                return resolvedTargets.FailureResponse;
             }
 
-            if (parameters.BypassRaycast && target == null)
+            if (parameters.BypassRaycast && resolvedTargets.Target == null)
             {
                 return new UnityCliLoopMouseUiSimulationResult
                 {
@@ -290,8 +266,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
-            string? targetName = target?.name;
-            bool hitTarget = target != null;
+            string? targetName = resolvedTargets.Target?.name;
+            bool hitTarget = resolvedTargets.Target != null;
             SimulateMouseUiOverlayState.Update(
                 MouseAction.Click, inputPos, null,
                 targetName, Handles.GetMainGameViewSize());
@@ -305,20 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
             // Fire click events after expand animation so the user sees where the click lands
-            if (rawTarget != null)
-            {
-                if (pressTarget != null)
-                {
-                    ExecuteEvents.ExecuteHierarchy(
-                        rawTarget, pointerData, ExecuteEvents.pointerDownHandler);
-                    ExecuteEvents.Execute(pressTarget, pointerData, ExecuteEvents.pointerUpHandler);
-                }
-
-                if (clickTarget != null)
-                {
-                    ExecuteEvents.Execute(clickTarget, pointerData, ExecuteEvents.pointerClickHandler);
-                }
-            }
+            ExecutePointerClickEvents(resolvedTargets, pointerData);
 
             bool dissipateCompleted = await PlayDissipateAnimation(ct).ConfigureAwait(false);
             if (!dissipateCompleted)
@@ -346,62 +309,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = InputToScreen(inputPos);
-            RaycastResult? hit = parameters.BypassRaycast ? null : RaycastUI(screenPos, eventSystem);
-
-            PointerEventData.InputButton inputButton = ToInputButton(parameters.Button);
-            PointerEventData pointerData = new(eventSystem)
+            PointerEventData pointerData = CreatePointerPressData(eventSystem, screenPos, parameters.Button);
+            ResolvedPointerTargets resolvedTargets =
+                ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.LongPress);
+            if (resolvedTargets.FailureResponse != null)
             {
-                position = screenPos,
-                pressPosition = screenPos,
-                button = inputButton
-            };
-
-            GameObject? target = null;
-            GameObject? rawTarget = null;
-
-            if (parameters.BypassRaycast)
-            {
-                if (!TryResolveGameObjectPath(
-                    parameters.TargetPath,
-                    "TargetPath",
-                    MouseAction.LongPress,
-                    inputPos,
-                    out rawTarget,
-                    out UnityCliLoopMouseUiSimulationResult? failureResponse))
-                {
-                    return failureResponse!;
-                }
-
-                RaycastResult directRaycast = CreateDirectRaycastResult(rawTarget!);
-                pointerData.pointerCurrentRaycast = directRaycast;
-                pointerData.pointerPressRaycast = directRaycast;
-
-                target = ExecuteEvents.GetEventHandler<IPointerDownHandler>(rawTarget!)
-                         ?? ExecuteEvents.GetEventHandler<IPointerClickHandler>(rawTarget!);
-
-                if (target != null)
-                {
-                    pointerData.pointerPress = target;
-                    pointerData.rawPointerPress = rawTarget;
-                }
-            }
-            else if (hit != null)
-            {
-                rawTarget = hit.Value.gameObject;
-                pointerData.pointerCurrentRaycast = hit.Value;
-                pointerData.pointerPressRaycast = hit.Value;
-
-                target = ExecuteEvents.GetEventHandler<IPointerDownHandler>(rawTarget)
-                         ?? ExecuteEvents.GetEventHandler<IPointerClickHandler>(rawTarget);
-
-                if (target != null)
-                {
-                    pointerData.pointerPress = target;
-                    pointerData.rawPointerPress = rawTarget;
-                }
+                return resolvedTargets.FailureResponse;
             }
 
-            if (parameters.BypassRaycast && target == null)
+            if (parameters.BypassRaycast && resolvedTargets.Target == null)
             {
                 return new UnityCliLoopMouseUiSimulationResult
                 {
@@ -413,9 +329,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
-            string? targetName = target?.name;
-            bool hitTarget = target != null;
-            bool shouldReleasePointer = rawTarget != null && target != null;
+            string? targetName = resolvedTargets.Target?.name;
+            bool hitTarget = resolvedTargets.Target != null;
+            bool shouldReleasePointer = resolvedTargets.RawTarget != null && resolvedTargets.Target != null;
             SimulateMouseUiOverlayState.Update(
                 MouseAction.LongPress, inputPos, null,
                 targetName, Handles.GetMainGameViewSize());
@@ -428,11 +344,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
-            if (rawTarget != null && target != null)
-            {
-                ExecuteEvents.ExecuteHierarchy(
-                    rawTarget, pointerData, ExecuteEvents.pointerDownHandler);
-            }
+            ExecuteLongPressPointerDown(resolvedTargets, pointerData);
 
             try
             {
@@ -459,7 +371,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (shouldReleasePointer)
                 {
                     ExecuteCleanupOnMainThread(
-                        () => ExecuteEvents.Execute(target!, pointerData, ExecuteEvents.pointerUpHandler));
+                        () => ExecuteEvents.Execute(resolvedTargets.Target!, pointerData, ExecuteEvents.pointerUpHandler));
                 }
             }
 
@@ -472,6 +384,142 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
             return CreateLongPressResult(parameters, inputPos, targetName, hitTarget);
+        }
+
+        private static PointerEventData CreatePointerPressData(
+            EventSystem eventSystem,
+            Vector2 screenPos,
+            MouseButton button)
+        {
+            return new PointerEventData(eventSystem)
+            {
+                position = screenPos,
+                pressPosition = screenPos,
+                button = ToInputButton(button)
+            };
+        }
+
+        private static ResolvedPointerTargets ResolvePressablePointerTargets(
+            MouseUiSimulationCommand parameters,
+            EventSystem eventSystem,
+            Vector2 inputPos,
+            Vector2 screenPos,
+            PointerEventData pointerData,
+            MouseAction action)
+        {
+            if (parameters.BypassRaycast)
+            {
+                return ResolveBypassPressablePointerTargets(parameters, inputPos, pointerData, action);
+            }
+
+            RaycastResult? hit = RaycastUI(screenPos, eventSystem);
+            if (hit == null)
+            {
+                return ResolvedPointerTargets.Empty;
+            }
+
+            return ResolveRaycastPressablePointerTargets(hit.Value, pointerData);
+        }
+
+        private static ResolvedPointerTargets ResolveBypassPressablePointerTargets(
+            MouseUiSimulationCommand parameters,
+            Vector2 inputPos,
+            PointerEventData pointerData,
+            MouseAction action)
+        {
+            if (!TryResolveGameObjectPath(
+                parameters.TargetPath,
+                "TargetPath",
+                action,
+                inputPos,
+                out GameObject? rawTarget,
+                out UnityCliLoopMouseUiSimulationResult? failureResponse))
+            {
+                return ResolvedPointerTargets.Failure(failureResponse);
+            }
+
+            RaycastResult directRaycast = CreateDirectRaycastResult(rawTarget!);
+            pointerData.pointerCurrentRaycast = directRaycast;
+            pointerData.pointerPressRaycast = directRaycast;
+
+            return CreateResolvedPressablePointerTargets(rawTarget!, pointerData);
+        }
+
+        private static ResolvedPointerTargets ResolveRaycastPressablePointerTargets(
+            RaycastResult hit,
+            PointerEventData pointerData)
+        {
+            GameObject rawTarget = hit.gameObject;
+            pointerData.pointerCurrentRaycast = hit;
+            pointerData.pointerPressRaycast = hit;
+
+            return CreateResolvedPressablePointerTargets(rawTarget, pointerData);
+        }
+
+        private static ResolvedPointerTargets CreateResolvedPressablePointerTargets(
+            GameObject rawTarget,
+            PointerEventData pointerData)
+        {
+            // Execute dispatches only to the exact target; composite controls need hierarchy traversal.
+            GameObject? pressTarget = ExecuteEvents.GetEventHandler<IPointerDownHandler>(rawTarget);
+            GameObject? clickTarget = ExecuteEvents.GetEventHandler<IPointerClickHandler>(rawTarget);
+            GameObject? target = pressTarget ?? clickTarget;
+            if (target != null)
+            {
+                pointerData.pointerPress = target;
+                pointerData.rawPointerPress = rawTarget;
+            }
+
+            return ResolvedPointerTargets.Success(rawTarget, pressTarget, clickTarget, target);
+        }
+
+        private static void ExecutePointerClickEvents(
+            ResolvedPointerTargets resolvedTargets,
+            PointerEventData pointerData)
+        {
+            if (resolvedTargets.RawTarget == null)
+            {
+                return;
+            }
+
+            if (resolvedTargets.PressTarget != null)
+            {
+                ExecuteEvents.ExecuteHierarchy(
+                    resolvedTargets.RawTarget,
+                    pointerData,
+                    ExecuteEvents.pointerDownHandler);
+            }
+
+            if (resolvedTargets.Target != null)
+            {
+                ExecuteEvents.Execute(
+                    resolvedTargets.Target,
+                    pointerData,
+                    ExecuteEvents.pointerUpHandler);
+            }
+
+            if (resolvedTargets.ClickTarget != null)
+            {
+                ExecuteEvents.Execute(
+                    resolvedTargets.ClickTarget,
+                    pointerData,
+                    ExecuteEvents.pointerClickHandler);
+            }
+        }
+
+        private static void ExecuteLongPressPointerDown(
+            ResolvedPointerTargets resolvedTargets,
+            PointerEventData pointerData)
+        {
+            if (resolvedTargets.RawTarget == null || resolvedTargets.Target == null)
+            {
+                return;
+            }
+
+            ExecuteEvents.ExecuteHierarchy(
+                resolvedTargets.RawTarget,
+                pointerData,
+                ExecuteEvents.pointerDownHandler);
         }
 
         private PointerEventData InitiateDrag(
@@ -1461,6 +1509,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             public GameObject? Target { get; }
             public int MatchCount { get; }
+        }
+
+        private readonly struct ResolvedPointerTargets
+        {
+            private ResolvedPointerTargets(
+                GameObject? rawTarget,
+                GameObject? pressTarget,
+                GameObject? clickTarget,
+                GameObject? target,
+                UnityCliLoopMouseUiSimulationResult? failureResponse)
+            {
+                RawTarget = rawTarget;
+                PressTarget = pressTarget;
+                ClickTarget = clickTarget;
+                Target = target;
+                FailureResponse = failureResponse;
+            }
+
+            public static ResolvedPointerTargets Empty { get; } =
+                new(null, null, null, null, null);
+
+            public GameObject? RawTarget { get; }
+            public GameObject? PressTarget { get; }
+            public GameObject? ClickTarget { get; }
+            public GameObject? Target { get; }
+            public UnityCliLoopMouseUiSimulationResult? FailureResponse { get; }
+
+            public static ResolvedPointerTargets Success(
+                GameObject rawTarget,
+                GameObject? pressTarget,
+                GameObject? clickTarget,
+                GameObject? target)
+            {
+                return new ResolvedPointerTargets(rawTarget, pressTarget, clickTarget, target, null);
+            }
+
+            public static ResolvedPointerTargets Failure(
+                UnityCliLoopMouseUiSimulationResult? failureResponse)
+            {
+                Debug.Assert(failureResponse != null, "Failure response must exist when target resolution fails.");
+                return new ResolvedPointerTargets(null, null, null, null, failureResponse);
+            }
         }
 
         private static bool IsDragAction(MouseAction action)

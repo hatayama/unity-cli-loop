@@ -11,6 +11,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class DynamicCodeLiteralHoister
     {
         private const string LiteralParameterPrefix = "__uloop_literal_";
+        private static readonly Dictionary<char, char> RegularStringEscapes = new()
+        {
+            { '\'', '\'' },
+            { '"', '"' },
+            { '\\', '\\' },
+            { '0', '\0' },
+            { 'a', '\a' },
+            { 'b', '\b' },
+            { 'f', '\f' },
+            { 'n', '\n' },
+            { 'r', '\r' },
+            { 't', '\t' },
+            { 'v', '\v' }
+        };
 
         public static HoistedLiteralRewriteResult Rewrite(string source)
         {
@@ -192,79 +206,92 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (interpolationDepth > 0)
                 {
-                    if (TryAdvanceInterpolatedExpressionToken(source, ref index))
-                    {
-                        continue;
-                    }
-
-                    char expressionCharacter = source[index];
-                    if (expressionCharacter == '{')
-                    {
-                        interpolationDepth++;
-                        index++;
-                        continue;
-                    }
-
-                    if (expressionCharacter == '}')
-                    {
-                        interpolationDepth--;
-                        index++;
-                        continue;
-                    }
-
-                    index++;
+                    interpolationDepth = AdvanceInterpolatedExpressionSegment(
+                        source,
+                        ref index,
+                        interpolationDepth);
                     continue;
                 }
 
-                char current = source[index];
-                if (current == '{')
+                InterpolatedStringAdvanceResult advanceResult =
+                    AdvanceInterpolatedStringContentSegment(source, index, isVerbatim);
+                index = advanceResult.Index;
+                interpolationDepth = advanceResult.InterpolationDepth;
+                if (advanceResult.Completed)
                 {
-                    if (index + 1 < source.Length && source[index + 1] == '{')
-                    {
-                        index += 2;
-                        continue;
-                    }
-
-                    interpolationDepth = 1;
-                    index++;
-                    continue;
-                }
-
-                if (current == '}')
-                {
-                    if (index + 1 < source.Length && source[index + 1] == '}')
-                    {
-                        index += 2;
-                        continue;
-                    }
-
-                    index++;
-                    continue;
-                }
-
-                if (!isVerbatim && current == '\\')
-                {
-                    AdvanceEscapedLiteralSequence(source, ref index);
-                    continue;
-                }
-
-                if (current == '"')
-                {
-                    if (isVerbatim && index + 1 < source.Length && source[index + 1] == '"')
-                    {
-                        index += 2;
-                        continue;
-                    }
-
-                    index++;
                     return true;
                 }
-
-                index++;
             }
 
             index = start;
             return false;
+        }
+
+        private static int AdvanceInterpolatedExpressionSegment(
+            string source,
+            ref int index,
+            int interpolationDepth)
+        {
+            if (TryAdvanceInterpolatedExpressionToken(source, ref index))
+            {
+                return interpolationDepth;
+            }
+
+            char expressionCharacter = source[index];
+            if (expressionCharacter == '{')
+            {
+                index++;
+                return interpolationDepth + 1;
+            }
+
+            if (expressionCharacter == '}')
+            {
+                index++;
+                return interpolationDepth - 1;
+            }
+
+            index++;
+            return interpolationDepth;
+        }
+
+        private static InterpolatedStringAdvanceResult AdvanceInterpolatedStringContentSegment(
+            string source,
+            int index,
+            bool isVerbatim)
+        {
+            char current = source[index];
+            if (current == '{')
+            {
+                return index + 1 < source.Length && source[index + 1] == '{'
+                    ? new InterpolatedStringAdvanceResult(index + 2, 0, false)
+                    : new InterpolatedStringAdvanceResult(index + 1, 1, false);
+            }
+
+            if (current == '}')
+            {
+                return index + 1 < source.Length && source[index + 1] == '}'
+                    ? new InterpolatedStringAdvanceResult(index + 2, 0, false)
+                    : new InterpolatedStringAdvanceResult(index + 1, 0, false);
+            }
+
+            if (!isVerbatim && current == '\\')
+            {
+                int escapedIndex = index;
+                AdvanceEscapedLiteralSequence(source, ref escapedIndex);
+                return new InterpolatedStringAdvanceResult(escapedIndex, 0, false);
+            }
+
+            if (current != '"')
+            {
+                return new InterpolatedStringAdvanceResult(index + 1, 0, false);
+            }
+
+            if (isVerbatim && index + 1 < source.Length && source[index + 1] == '"')
+            {
+                return new InterpolatedStringAdvanceResult(index + 2, 0, false);
+            }
+
+            return new InterpolatedStringAdvanceResult(index + 1, 0, true);
         }
 
         private static bool TryMatchInterpolatedStringStart(
@@ -712,84 +739,97 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (index + 1 >= inner.Length)
+                if (!TryAppendRegularStringEscape(inner, ref index, unescaped))
                 {
                     value = null;
                     return false;
                 }
-
-                index++;
-                char escape = inner[index];
-                switch (escape)
-                {
-                    case '\'':
-                        unescaped.Append('\'');
-                        break;
-                    case '"':
-                        unescaped.Append('"');
-                        break;
-                    case '\\':
-                        unescaped.Append('\\');
-                        break;
-                    case '0':
-                        unescaped.Append('\0');
-                        break;
-                    case 'a':
-                        unescaped.Append('\a');
-                        break;
-                    case 'b':
-                        unescaped.Append('\b');
-                        break;
-                    case 'f':
-                        unescaped.Append('\f');
-                        break;
-                    case 'n':
-                        unescaped.Append('\n');
-                        break;
-                    case 'r':
-                        unescaped.Append('\r');
-                        break;
-                    case 't':
-                        unescaped.Append('\t');
-                        break;
-                    case 'v':
-                        unescaped.Append('\v');
-                        break;
-                    case 'u':
-                        if (!TryParseHexDigits(inner, ref index, 4, out int unicodeValue))
-                        {
-                            value = null;
-                            return false;
-                        }
-
-                        unescaped.Append((char)unicodeValue);
-                        break;
-                    case 'U':
-                        if (!TryParseHexDigits(inner, ref index, 8, out int codePoint) ||
-                            !IsValidUtf32CodePoint(codePoint))
-                        {
-                            value = null;
-                            return false;
-                        }
-
-                        unescaped.Append(char.ConvertFromUtf32(codePoint));
-                        break;
-                    case 'x':
-                        if (!TryParseVariableLengthHexDigits(inner, ref index, out int variableLengthValue))
-                        {
-                            value = null;
-                            return false;
-                        }
-
-                        unescaped.Append((char)variableLengthValue);
-                        break;
-                    default:
-                        value = null;
-                        return false;
-                }
             }
 
             value = unescaped.ToString();
+            return true;
+        }
+
+        private static bool TryAppendRegularStringEscape(
+            string inner,
+            ref int index,
+            StringBuilder unescaped)
+        {
+            if (index + 1 >= inner.Length)
+            {
+                return false;
+            }
+
+            index++;
+            char escape = inner[index];
+            if (RegularStringEscapes.ContainsKey(escape))
+            {
+                unescaped.Append(RegularStringEscapes[escape]);
+                return true;
+            }
+
+            return TryAppendComplexRegularStringEscape(inner, ref index, unescaped, escape);
+        }
+
+        private static bool TryAppendComplexRegularStringEscape(
+            string inner,
+            ref int index,
+            StringBuilder unescaped,
+            char escape)
+        {
+            switch (escape)
+            {
+                case 'u':
+                    return TryAppendUnicodeEscape(inner, ref index, unescaped);
+                case 'U':
+                    return TryAppendUtf32Escape(inner, ref index, unescaped);
+                case 'x':
+                    return TryAppendVariableLengthHexEscape(inner, ref index, unescaped);
+                default:
+                    return false;
+            }
+        }
+
+        private static bool TryAppendUnicodeEscape(
+            string inner,
+            ref int index,
+            StringBuilder unescaped)
+        {
+            if (!TryParseHexDigits(inner, ref index, 4, out int unicodeValue))
+            {
+                return false;
+            }
+
+            unescaped.Append((char)unicodeValue);
+            return true;
+        }
+
+        private static bool TryAppendUtf32Escape(
+            string inner,
+            ref int index,
+            StringBuilder unescaped)
+        {
+            if (!TryParseHexDigits(inner, ref index, 8, out int codePoint) ||
+                !IsValidUtf32CodePoint(codePoint))
+            {
+                return false;
+            }
+
+            unescaped.Append(char.ConvertFromUtf32(codePoint));
+            return true;
+        }
+
+        private static bool TryAppendVariableLengthHexEscape(
+            string inner,
+            ref int index,
+            StringBuilder unescaped)
+        {
+            if (!TryParseVariableLengthHexDigits(inner, ref index, out int variableLengthValue))
+            {
+                return false;
+            }
+
+            unescaped.Append((char)variableLengthValue);
             return true;
         }
 
@@ -844,6 +884,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (value >= '0' && value <= '9')
                 || (value >= 'a' && value <= 'f')
                 || (value >= 'A' && value <= 'F');
+        }
+
+        private readonly struct InterpolatedStringAdvanceResult
+        {
+            public InterpolatedStringAdvanceResult(int index, int interpolationDepth, bool completed)
+            {
+                Index = index;
+                InterpolationDepth = interpolationDepth;
+                Completed = completed;
+            }
+
+            public int Index { get; }
+            public int InterpolationDepth { get; }
+            public bool Completed { get; }
         }
     }
 
