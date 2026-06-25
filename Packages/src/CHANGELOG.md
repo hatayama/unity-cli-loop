@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/hatayama/unity-cli-loop/compare/v2.1.10...v2.2.0) (2026-06-25)
+
+
+### Features
+
+* Skills use the project-matched CLI by default ([#1404](https://github.com/hatayama/unity-cli-loop/issues/1404)) ([5bb9d49](https://github.com/hatayama/unity-cli-loop/commit/5bb9d49c59e4b6166a5bb926a7c6e7be690e230f))
+
 ## [2.1.10](https://github.com/hatayama/unity-cli-loop/compare/v2.1.9...v2.1.10) (2026-06-20)
 
 
