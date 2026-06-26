@@ -18,8 +18,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static bool SyncProjectPinFile(string packageRoot, string projectRoot)
         {
-            Debug.Assert(!string.IsNullOrWhiteSpace(packageRoot), "packageRoot must not be null or empty");
-            Debug.Assert(!string.IsNullOrWhiteSpace(projectRoot), "projectRoot must not be null or empty");
+            if (string.IsNullOrWhiteSpace(packageRoot))
+            {
+                Debug.LogWarning(
+                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_CLI_PIN_FILE_NAME} synchronization because the package root is empty.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(projectRoot))
+            {
+                Debug.LogWarning(
+                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_CLI_PIN_FILE_NAME} synchronization because the project root is empty.");
+                return false;
+            }
 
             string sourcePath = Path.Combine(packageRoot, UnityCliLoopConstants.ULOOP_CLI_PIN_FILE_NAME);
             string destinationPath = Path.Combine(
@@ -45,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             AtomicFileWriter.Write(destinationPath, sourceContent);
-            AtomicFileWriter.CleanupBackup(destinationPath + ".bak");
+            AtomicFileWriter.CleanupBackup(destinationPath + AtomicFileWriter.BackupFileSuffix);
             return true;
         }
     }

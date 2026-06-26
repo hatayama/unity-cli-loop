@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -169,6 +170,37 @@ func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t 
 	}
 }
 
+func TestEnforceDispatcherFreshnessDoesNotMarkFailedOptionalUpdateChecked(t *testing.T) {
+	// Verifies transient optional update failures stay retryable on the next command.
+	cacheRoot := t.TempDir()
+	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
+
+	previousRunner := dispatcherRunUpdate
+	defer func() {
+		dispatcherRunUpdate = previousRunner
+	}()
+	dispatcherRunUpdate = func(context.Context) error {
+		return errors.New("network unavailable")
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshness(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: version},
+		&stderr)
+
+	if handled || code != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("dispatcher self-update skipped")) {
+		t.Fatalf("freshness output mismatch: %s", stderr.String())
+	}
+	statePath := filepath.Join(cacheRoot, dispatcherUpdateStateFileName)
+	if _, err := os.Stat(statePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no update state after failed optional update, got err=%v", err)
+	}
+}
+
 func TestExtractDispatcherRealCLIFromTarPrefersRealCLI(t *testing.T) {
 	// Verifies release archives that contain dispatcher first still extract the real CLI binary.
 	tempDir := t.TempDir()
@@ -217,6 +249,28 @@ func TestLoadDispatcherPinFallsBackToPackagePin(t *testing.T) {
 		t.Fatalf("loadDispatcherPin failed: %v", err)
 	}
 	if pin.CLIVersion != "3.0.0-beta.55" {
+		t.Fatalf("cliVersion mismatch: %s", pin.CLIVersion)
+	}
+}
+
+func TestLoadDispatcherPinSkipsInvalidPackageCandidate(t *testing.T) {
+	// Verifies stale package pins do not block a valid PackageCache pin during first startup.
+	projectRoot := createDispatcherUnityProject(t)
+	sourcePackageRoot := filepath.Join(projectRoot, "Packages", "src")
+	cachePackageRoot := filepath.Join(projectRoot, "Library", "PackageCache", dispatcherUnityPackageName+"@3.0.0-beta.57")
+	if err := os.MkdirAll(sourcePackageRoot, 0o755); err != nil {
+		t.Fatalf("failed to create source package root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourcePackageRoot, dispatcherPackagePinFileName), []byte("{"), 0o644); err != nil {
+		t.Fatalf("failed to write invalid package pin: %v", err)
+	}
+	writeDispatcherPinFile(t, filepath.Join(cachePackageRoot, dispatcherPackagePinFileName), "3.0.0-beta.57")
+
+	pin, err := loadDispatcherPin(projectRoot)
+	if err != nil {
+		t.Fatalf("loadDispatcherPin failed: %v", err)
+	}
+	if pin.CLIVersion != "3.0.0-beta.57" {
 		t.Fatalf("cliVersion mismatch: %s", pin.CLIVersion)
 	}
 }

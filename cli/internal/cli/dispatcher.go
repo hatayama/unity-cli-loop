@@ -145,8 +145,8 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 	}
 
 	err := dispatcherRunUpdate(ctx)
-	markDispatcherSelfUpdateChecked()
 	if err == nil {
+		markDispatcherSelfUpdateChecked()
 		if updateRequired {
 			writeErrorEnvelope(stderr, cliError{
 				ErrorCode:   errorCodeCLIUpdateRequired,

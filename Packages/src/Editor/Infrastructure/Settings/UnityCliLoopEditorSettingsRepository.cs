@@ -97,8 +97,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             AtomicFileWriter.Write(SettingsFilePath, json);
             _cachedSettings = settings;
 
-            // Best-effort cleanup: even if this fails, .bak is overwritten on next save
-            AtomicFileWriter.CleanupBackup(SettingsFilePath + ".bak");
+            // Best-effort cleanup: even if this fails, the backup sidecar is overwritten on next save.
+            AtomicFileWriter.CleanupBackup(SettingsFilePath + AtomicFileWriter.BackupFileSuffix);
         }
 
         /// <summary>

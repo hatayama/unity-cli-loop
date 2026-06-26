@@ -21,8 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
         private static readonly string LegacySettingsFilePath =
             Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.LEGACY_SETTINGS_FILE_NAME);
-        private static readonly string BackupFilePath = SettingsFilePath + ".bak";
-        private static readonly string TempFilePath = SettingsFilePath + ".tmp";
+        private static readonly string BackupFilePath = SettingsFilePath + AtomicFileWriter.BackupFileSuffix;
+        private static readonly string TempFilePath = SettingsFilePath + AtomicFileWriter.CompletedTempFileSuffix;
 
         private bool _settingsFileExisted;
         private string _settingsFileContent;

@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             AtomicFileWriter.Write(SettingsFilePath, json);
             _cachedSettings = settings;
 
-            AtomicFileWriter.CleanupBackup(SettingsFilePath + ".bak");
+            AtomicFileWriter.CleanupBackup(SettingsFilePath + AtomicFileWriter.BackupFileSuffix);
         }
 
         public bool IsToolEnabled(string toolName)

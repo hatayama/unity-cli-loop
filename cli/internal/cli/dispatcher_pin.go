@@ -26,14 +26,27 @@ type dispatcherPin struct {
 	SourcePath               string `json:"-"`
 }
 
+type dispatcherPinCandidatePath struct {
+	Path     string
+	Required bool
+}
+
 func loadDispatcherPin(projectRoot string) (dispatcherPin, error) {
-	for _, pinPath := range dispatcherPinCandidatePaths(projectRoot) {
-		pin, err := readDispatcherPin(pinPath)
+	var invalidPackagePinError error
+	for _, candidate := range dispatcherPinCandidatePaths(projectRoot) {
+		pin, err := readDispatcherPin(candidate.Path)
 		if err == nil {
 			return pin, nil
 		}
-		if !errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if candidate.Required {
 			return dispatcherPin{}, err
+		}
+		// Why: source package paths can contain stale pins during upgrades; PackageCache may still hold the resolved package pin.
+		if invalidPackagePinError == nil {
+			invalidPackagePinError = err
 		}
 	}
 
@@ -47,14 +60,17 @@ func loadDispatcherPin(projectRoot string) (dispatcherPin, error) {
 		}
 	}
 
+	if invalidPackagePinError != nil {
+		return dispatcherPin{}, invalidPackagePinError
+	}
 	return dispatcherPin{}, fmt.Errorf("cli pin not found under %s", projectRoot)
 }
 
-func dispatcherPinCandidatePaths(projectRoot string) []string {
-	paths := []string{
-		filepath.Join(projectRoot, dispatcherProjectPinRelativePath),
-		filepath.Join(projectRoot, "Packages", "src", dispatcherPackagePinFileName),
-		filepath.Join(projectRoot, "Packages", dispatcherUnityPackageName, dispatcherPackagePinFileName),
+func dispatcherPinCandidatePaths(projectRoot string) []dispatcherPinCandidatePath {
+	paths := []dispatcherPinCandidatePath{
+		{Path: filepath.Join(projectRoot, dispatcherProjectPinRelativePath), Required: true},
+		{Path: filepath.Join(projectRoot, "Packages", "src", dispatcherPackagePinFileName)},
+		{Path: filepath.Join(projectRoot, "Packages", dispatcherUnityPackageName, dispatcherPackagePinFileName)},
 	}
 	packageCachePattern := filepath.Join(
 		projectRoot,
@@ -64,7 +80,9 @@ func dispatcherPinCandidatePaths(projectRoot string) []string {
 		dispatcherPackagePinFileName)
 	matches, err := filepath.Glob(packageCachePattern)
 	if err == nil {
-		paths = append(paths, matches...)
+		for _, match := range matches {
+			paths = append(paths, dispatcherPinCandidatePath{Path: match})
+		}
 	}
 	return paths
 }

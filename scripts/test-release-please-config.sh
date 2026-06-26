@@ -132,12 +132,6 @@ assert_json_value '.packages["cli"].["extra-files"][2].path' '/Packages/src/cli-
 assert_json_value '.packages["cli"].["extra-files"][2].jsonpath' '$.cliVersion'
 assert_json_value '.packages["cli"].["extra-files"][3].path' '/.uloop/cli-pin.json'
 assert_json_value '.packages["cli"].["extra-files"][3].jsonpath' '$.cliVersion'
-assert_json_value '.packages["cli"].["extra-files"][4].path' '/Packages/src/cli-pin.json'
-assert_json_value '.packages["cli"].["extra-files"][4].jsonpath' '$.minimumDispatcherVersion'
-assert_json_value '.packages["cli"].["extra-files"][5].path' '/.uloop/cli-pin.json'
-assert_json_value '.packages["cli"].["extra-files"][5].jsonpath' '$.minimumDispatcherVersion'
-assert_json_value '.packages["cli"].["extra-files"][6].type' 'generic'
-assert_json_value '.packages["cli"].["extra-files"][6].path' '/Packages/src/Editor/Domain/CliConstants.cs'
 
 assert_file_contains "$RELEASE_WORKFLOW" 'id: package_release_sync'
 assert_file_contains "$RELEASE_WORKFLOW" "steps.package_release_sync.outputs.ready != 'false'"

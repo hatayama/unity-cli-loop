@@ -2,6 +2,8 @@ using System;
 using System.IO;
 
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 
@@ -87,6 +89,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(changed, Is.True);
                 Assert.That(File.ReadAllText(destinationPath), Is.EqualTo("{\"schemaVersion\":2}"));
+            }
+            finally
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+
+        [Test]
+        public void SyncProjectPinFile_WhenPackageRootMissing_ShouldSkipWrite()
+        {
+            // Tests that startup skips pin synchronization while Unity package resolution is incomplete.
+            string root = CreateTestRoot();
+            string projectRoot = Path.Combine(root, "project");
+
+            try
+            {
+                Directory.CreateDirectory(projectRoot);
+                LogAssert.Expect(
+                    LogType.Warning,
+                    "Unity CLI Loop skipped cli-pin.json synchronization because the package root is empty.");
+
+                bool changed = CliPinSynchronizer.SyncProjectPinFile(string.Empty, projectRoot);
+
+                Assert.That(changed, Is.False);
+                Assert.That(File.Exists(Path.Combine(projectRoot, ".uloop", "cli-pin.json")), Is.False);
             }
             finally
             {
