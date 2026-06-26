@@ -78,7 +78,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             IReadOnlyDictionary<string, string> descriptions =
                 _toolSkillDescriptionProvider.GetSkillDescriptionsByToolName();
             ToolCatalogItem[] registryTools = registry.GetToolSettingsCatalog()
-                .Where(item => ToolSettingsToolLinkPolicy.IsUserFacingToolSettingsTool(item.Name))
                 .Select(item => new ToolCatalogItem(
                     item.Name,
                     item.DisplayDevelopmentOnly,
