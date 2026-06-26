@@ -37,6 +37,7 @@ jobs:
           scripts/test-is-release-please-release-commit.sh
           scripts/test-release-please-config.sh
           scripts/test-protocol-minimum-version-workflow.sh
+          scripts/test-verify-native-cli-release-assets.sh
           scripts/test-mark-release-pr-tagged.sh
           scripts/test-sync-published-release-pr-labels.sh
           scripts/test-sync-release-please-package-releases.sh
@@ -50,7 +51,7 @@ jobs:
         run: go run ./cmd/check-ipc-protocol-reminder --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Check protocol minimum version bump
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && !(startsWith(github.head_ref, 'release-please--branches--') && (github.event.pull_request.user.login == 'github-actions[bot]' || github.event.pull_request.user.login == 'release-please[bot]'))
         working-directory: cli
         env:
           GH_TOKEN: ${{ github.token }}

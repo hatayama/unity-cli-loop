@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private static readonly string SettingsFilePath =
             Path.Combine(UnityCliLoopConstants.ULOOP_DIR, UnityCliLoopConstants.ULOOP_TOOL_SETTINGS_FILE_NAME);
-        private static readonly string SettingsBackupPath = SettingsFilePath + ".bak";
+        private static readonly string SettingsBackupPath = SettingsFilePath + AtomicFileWriter.BackupFileSuffix;
 
         private bool _settingsFileExisted;
         private string _settingsFileContent;

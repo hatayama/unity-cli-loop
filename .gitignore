@@ -95,7 +95,8 @@ memo.md
 Packages/src/Docs/**
 
 # uloop CLI cache and outputs
-**/.uloop/
+**/.uloop/*
+!**/.uloop/cli-pin.json
 
 # Node.js / TypeScript
 **/node_modules/
