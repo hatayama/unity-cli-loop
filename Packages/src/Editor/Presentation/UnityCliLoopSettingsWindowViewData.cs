@@ -40,12 +40,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public readonly string ToolName;
         public readonly bool IsEnabled;
         public readonly bool IsThirdParty;
+        public readonly string SkillDescription;
 
-        public ToolToggleItem(string toolName, bool isEnabled, bool isThirdParty)
+        public ToolToggleItem(
+            string toolName,
+            bool isEnabled,
+            bool isThirdParty,
+            string skillDescription)
         {
             ToolName = toolName;
             IsEnabled = isEnabled;
             IsThirdParty = isThirdParty;
+            SkillDescription = skillDescription;
         }
     }
 

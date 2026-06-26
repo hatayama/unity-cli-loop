@@ -823,29 +823,40 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _isInstallingCli,
                 isChecking: false);
 
-            if (cliInstalled && cliVersionMatched)
-            {
-                _cliStatusLabel.text = $"v{cliVersion}";
-                ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", true);
-                ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", false);
-                _installCliButton.SetEnabled(buttonEnabled);
-                _installCliButton.text = buttonText;
-                return;
-            }
-
-            if (cliInstalled)
-            {
-                _cliStatusLabel.text = $"v{cliVersion} (requires v{requiredCliVersion})";
-            }
-            else
-            {
-                _cliStatusLabel.text = "Not installed";
-            }
-
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", false);
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", true);
+            bool cliCompatible = cliInstalled && cliVersionMatched;
+            _cliStatusLabel.text = GetCliStatusTextForSetupWizard(
+                cliInstalled,
+                cliCompatible,
+                cliVersion,
+                requiredCliVersion);
+            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", cliCompatible);
+            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", !cliCompatible);
             _installCliButton.SetEnabled(buttonEnabled);
             _installCliButton.text = buttonText;
+        }
+
+        internal static string GetCliStatusTextForSetupWizard(
+            bool cliInstalled,
+            bool cliCompatible,
+            string cliVersion,
+            string requiredCliVersion)
+        {
+            if (!cliInstalled)
+            {
+                return "Not installed";
+            }
+
+            if (cliCompatible)
+            {
+                return $"v{cliVersion}";
+            }
+
+            if (CliSetupLabelFormatter.ShouldShowProtocolCompatibilityText(cliVersion, requiredCliVersion))
+            {
+                return $"v{cliVersion} (requires protocol v{CliConstants.REQUIRED_CLI_PROTOCOL_VERSION})";
+            }
+
+            return $"v{cliVersion} (requires v{requiredCliVersion})";
         }
 
         internal static string GetCliButtonTextForSetupWizard(
@@ -875,12 +886,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (needsUpdate)
             {
-                return $"Update CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+                return CliSetupLabelFormatter.GetCliReplacementButtonText("Update", cliVersion, requiredCliVersion);
             }
 
             if (needsDowngrade)
             {
-                return $"Downgrade CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+                return CliSetupLabelFormatter.GetCliReplacementButtonText("Downgrade", cliVersion, requiredCliVersion);
             }
 
             if (needsCliPathSetup)

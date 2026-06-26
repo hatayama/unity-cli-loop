@@ -232,12 +232,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (needsUpdate)
             {
-                return $"Update CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+                return CliSetupLabelFormatter.GetCliReplacementButtonText("Update", cliVersion, requiredCliVersion);
             }
 
             if (needsDowngrade)
             {
-                return $"Downgrade CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+                return CliSetupLabelFormatter.GetCliReplacementButtonText("Downgrade", cliVersion, requiredCliVersion);
             }
 
             if (needsCliPathSetup)

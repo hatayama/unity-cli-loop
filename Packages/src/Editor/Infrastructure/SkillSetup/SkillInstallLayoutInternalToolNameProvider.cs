@@ -5,7 +5,6 @@ using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
-    // Infrastructure adapter that resolves hidden tool names from installed skill metadata.
     /// <summary>
     /// Provides Skill Install Layout Internal Tool Name dependencies to callers without exposing construction details.
     /// </summary>
