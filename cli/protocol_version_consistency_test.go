@@ -15,6 +15,7 @@ const (
 	unityProtocolConstantPath = "../Packages/src/Editor/Domain/CliConstants.cs"
 	unityPackageManifestPath  = "../Packages/src/package.json"
 	unityPackageCliPinPath    = "../Packages/src/cli-pin.json"
+	unityProjectCliPinPath    = "../.uloop/cli-pin.json"
 )
 
 var (
@@ -82,6 +83,17 @@ func TestUnityPackageCliPinMatchesReleaseContracts(t *testing.T) {
 	}
 	if pin.MinimumDispatcherVersion != readUnityMinimumRequiredCLIVersion(t) {
 		t.Fatalf("expected %s minimumDispatcherVersion to match %s MINIMUM_REQUIRED_CLI_VERSION", unityPackageCliPinPath, unityProtocolConstantPath)
+	}
+}
+
+// TestUnityProjectCliPinMatchesPackageCliPin verifies the committed project pin does not
+// shadow the package pin with stale dispatcher metadata.
+func TestUnityProjectCliPinMatchesPackageCliPin(t *testing.T) {
+	packagePin := readJSONFile[unityPackageCliPin](t, unityPackageCliPinPath)
+	projectPin := readJSONFile[unityPackageCliPin](t, unityProjectCliPinPath)
+
+	if projectPin != packagePin {
+		t.Fatalf("expected %s to match %s", unityProjectCliPinPath, unityPackageCliPinPath)
 	}
 }
 

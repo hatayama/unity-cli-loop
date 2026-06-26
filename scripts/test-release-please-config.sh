@@ -120,6 +120,8 @@ assert_json_value '.packages["."].["exclude-paths"][0]' 'cli'
 assert_json_value '.packages["."].["extra-files"][0].path' 'Packages/src/package.json'
 assert_json_value '.packages["."].["extra-files"][1].path' 'Packages/src/cli-pin.json'
 assert_json_value '.packages["."].["extra-files"][1].jsonpath' '$.packageVersion'
+assert_json_value '.packages["."].["extra-files"][2].path' '.uloop/cli-pin.json'
+assert_json_value '.packages["."].["extra-files"][2].jsonpath' '$.packageVersion'
 
 assert_json_value '.packages["cli"].component' 'cli'
 assert_json_value '.packages["cli"].["include-component-in-tag"]' 'true'
@@ -128,6 +130,8 @@ assert_json_value '.packages["cli"].["extra-files"][0].path' 'internal/tools/def
 assert_json_value '.packages["cli"].["extra-files"][1].path' 'contract.json'
 assert_json_value '.packages["cli"].["extra-files"][2].path' '/Packages/src/cli-pin.json'
 assert_json_value '.packages["cli"].["extra-files"][2].jsonpath' '$.cliVersion'
+assert_json_value '.packages["cli"].["extra-files"][3].path' '/.uloop/cli-pin.json'
+assert_json_value '.packages["cli"].["extra-files"][3].jsonpath' '$.cliVersion'
 
 assert_file_contains "$RELEASE_WORKFLOW" 'id: package_release_sync'
 assert_file_contains "$RELEASE_WORKFLOW" "steps.package_release_sync.outputs.ready != 'false'"
