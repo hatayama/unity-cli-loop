@@ -3,14 +3,20 @@ package main
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/cli/internal/automation"
 )
 
+const dispatcherMinimumVersionCheckTimeout = 2 * time.Minute
+
 func main() {
-	os.Exit(automation.RunDispatcherMinimumVersionCheck(
-		context.Background(),
+	ctx, cancel := context.WithTimeout(context.Background(), dispatcherMinimumVersionCheckTimeout)
+	exitCode := automation.RunDispatcherMinimumVersionCheck(
+		ctx,
 		os.Stdout,
 		os.Stderr,
-		""))
+		"")
+	cancel()
+	os.Exit(exitCode)
 }
