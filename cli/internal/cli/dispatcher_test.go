@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"io"
 	"os"
@@ -9,6 +12,11 @@ import (
 	"runtime"
 	"testing"
 )
+
+type dispatcherArchiveTestEntry struct {
+	Name    string
+	Content string
+}
 
 func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
 	// Verifies dispatcher reads the project pin and executes the cached real CLI.
@@ -73,6 +81,72 @@ func TestRunDispatcherPreservesExplicitProjectPathForRealCLI(t *testing.T) {
 		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
 	}
 	assertStringSliceEqual(t, actualArgs, []string{"compile", "--project-path", projectRoot})
+}
+
+func TestRunDispatcherCommandHelpDoesNotRequireProjectPin(t *testing.T) {
+	// Verifies dispatcher handles command help before project and pin resolution.
+	t.Chdir(t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(context.Background(), []string{"compile", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("dispatcher command help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !bytes.Contains(stdout.Bytes(), []byte("uloop compile")) {
+		t.Fatalf("compile help output mismatch: %s", stdout.String())
+	}
+}
+
+func TestRunDispatcherUnknownLeadingOptionDoesNotRequireProjectPin(t *testing.T) {
+	// Verifies dispatcher reports leading option mistakes before project and pin resolution.
+	t.Chdir(t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(context.Background(), []string{"--project-pathology"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("dispatcher unknown option code mismatch: code=%d stdout=%s", code, stdout.String())
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("Unknown global option")) {
+		t.Fatalf("dispatcher unknown option output mismatch: %s", stderr.String())
+	}
+}
+
+func TestExtractDispatcherRealCLIFromTarPrefersRealCLI(t *testing.T) {
+	// Verifies release archives that contain dispatcher first still extract the real CLI binary.
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "uloop-darwin-arm64.tar.gz")
+	writeDispatcherTarGzArchive(t, archivePath, []dispatcherArchiveTestEntry{
+		{Name: "uloop", Content: "dispatcher"},
+		{Name: "uloop-cli", Content: "real"},
+	})
+	destinationPath := filepath.Join(tempDir, "uloop-cli")
+
+	err := extractDispatcherRealCLI(archivePath, filepath.Base(archivePath), destinationPath, "darwin")
+	if err != nil {
+		t.Fatalf("extractDispatcherRealCLI failed: %v", err)
+	}
+	assertFileContent(t, destinationPath, "real")
+}
+
+func TestExtractDispatcherRealCLIFromZipPrefersRealCLI(t *testing.T) {
+	// Verifies Windows release archives that contain dispatcher first still extract the real CLI binary.
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "uloop-windows-amd64.zip")
+	writeDispatcherZipArchive(t, archivePath, []dispatcherArchiveTestEntry{
+		{Name: "uloop.exe", Content: "dispatcher"},
+		{Name: "uloop-cli.exe", Content: "real"},
+	})
+	destinationPath := filepath.Join(tempDir, "uloop-cli.exe")
+
+	err := extractDispatcherRealCLI(archivePath, filepath.Base(archivePath), destinationPath, "windows")
+	if err != nil {
+		t.Fatalf("extractDispatcherRealCLI failed: %v", err)
+	}
+	assertFileContent(t, destinationPath, "real")
 }
 
 func TestLoadDispatcherPinFallsBackToPackagePin(t *testing.T) {
@@ -169,6 +243,79 @@ func writeCachedDispatcherRealCLI(t *testing.T, cacheRoot string, cliVersion str
 		t.Fatalf("failed to write cached CLI: %v", err)
 	}
 	return realCLIPath
+}
+
+func writeDispatcherTarGzArchive(t *testing.T, archivePath string, entries []dispatcherArchiveTestEntry) {
+	t.Helper()
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("failed to create tar archive: %v", err)
+	}
+	gzipWriter := gzip.NewWriter(file)
+	tarWriter := tar.NewWriter(gzipWriter)
+	for _, entry := range entries {
+		content := []byte(entry.Content)
+		header := &tar.Header{
+			Name: entry.Name,
+			Mode: 0o755,
+			Size: int64(len(content)),
+		}
+		if err := tarWriter.WriteHeader(header); err != nil {
+			t.Fatalf("failed to write tar header: %v", err)
+		}
+		if _, err := tarWriter.Write(content); err != nil {
+			t.Fatalf("failed to write tar content: %v", err)
+		}
+	}
+	closeErr := tarWriter.Close()
+	gzipCloseErr := gzipWriter.Close()
+	fileCloseErr := file.Close()
+	if closeErr != nil {
+		t.Fatalf("failed to close tar archive: %v", closeErr)
+	}
+	if gzipCloseErr != nil {
+		t.Fatalf("failed to close gzip archive: %v", gzipCloseErr)
+	}
+	if fileCloseErr != nil {
+		t.Fatalf("failed to close tar file: %v", fileCloseErr)
+	}
+}
+
+func writeDispatcherZipArchive(t *testing.T, archivePath string, entries []dispatcherArchiveTestEntry) {
+	t.Helper()
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("failed to create zip archive: %v", err)
+	}
+	zipWriter := zip.NewWriter(file)
+	for _, entry := range entries {
+		writer, err := zipWriter.Create(entry.Name)
+		if err != nil {
+			t.Fatalf("failed to write zip header: %v", err)
+		}
+		if _, err := writer.Write([]byte(entry.Content)); err != nil {
+			t.Fatalf("failed to write zip content: %v", err)
+		}
+	}
+	closeErr := zipWriter.Close()
+	fileCloseErr := file.Close()
+	if closeErr != nil {
+		t.Fatalf("failed to close zip archive: %v", closeErr)
+	}
+	if fileCloseErr != nil {
+		t.Fatalf("failed to close zip file: %v", fileCloseErr)
+	}
+}
+
+func assertFileContent(t *testing.T, filePath string, expected string) {
+	t.Helper()
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", filePath, err)
+	}
+	if string(content) != expected {
+		t.Fatalf("file content mismatch: %q", string(content))
+	}
 }
 
 func assertStringSliceEqual(t *testing.T, actual []string, expected []string) {

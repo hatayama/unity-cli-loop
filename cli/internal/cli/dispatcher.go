@@ -89,7 +89,10 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 }
 
 func shouldRunInDispatcherProcess(args []string) bool {
-	if len(args) == 0 || isHelpRequest(args) || isVersionRequest(args) || isVersionJSONRequest(args) {
+	if len(args) == 0 || isHelpRequest(args) || containsHelpRequest(args) || isVersionRequest(args) || isVersionJSONRequest(args) {
+		return true
+	}
+	if isUnknownLeadingOption(args[0]) {
 		return true
 	}
 	if shouldHandleCompletionRequest(args) {

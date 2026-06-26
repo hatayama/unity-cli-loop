@@ -257,16 +257,28 @@ func extractDispatcherRealCLI(archivePath string, assetName string, destinationP
 }
 
 func extractDispatcherRealCLIFromTarGz(archivePath string, destinationPath string, goos string) error {
+	found, err := extractDispatcherCLIFromTarGzEntry(archivePath, destinationPath, dispatcherRealCLIFileName(goos))
+	if err != nil || found {
+		return err
+	}
+	found, err = extractDispatcherCLIFromTarGzEntry(archivePath, destinationPath, dispatcherLegacyCLIFileName(goos))
+	if err != nil || found {
+		return err
+	}
+	return fmt.Errorf("archive does not contain %s", dispatcherRealCLIFileName(goos))
+}
+
+func extractDispatcherCLIFromTarGzEntry(archivePath string, destinationPath string, entryFileName string) (bool, error) {
 	file, err := os.Open(archivePath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() {
 		_ = file.Close()
 	}()
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() {
 		_ = gzipReader.Close()
@@ -278,17 +290,17 @@ func extractDispatcherRealCLIFromTarGz(archivePath string, destinationPath strin
 			break
 		}
 		if err != nil {
-			return err
+			return false, err
 		}
 		if header.Typeflag != tar.TypeReg {
 			continue
 		}
-		if !dispatcherArchiveEntryMatchesCLI(header.Name, goos) {
+		if !dispatcherArchiveEntryMatchesFileName(header.Name, entryFileName) {
 			continue
 		}
-		return writeDispatcherExtractedCLI(destinationPath, tarReader)
+		return true, writeDispatcherExtractedCLI(destinationPath, tarReader)
 	}
-	return fmt.Errorf("archive does not contain %s", dispatcherRealCLIFileName(goos))
+	return false, nil
 }
 
 func extractDispatcherRealCLIFromZip(archivePath string, destinationPath string, goos string) error {
@@ -299,28 +311,40 @@ func extractDispatcherRealCLIFromZip(archivePath string, destinationPath string,
 	defer func() {
 		_ = reader.Close()
 	}()
-	for _, entry := range reader.File {
-		if entry.FileInfo().IsDir() || !dispatcherArchiveEntryMatchesCLI(entry.Name, goos) {
-			continue
-		}
-		entryReader, err := entry.Open()
-		if err != nil {
-			return err
-		}
-		writeErr := writeDispatcherExtractedCLI(destinationPath, entryReader)
-		closeErr := entryReader.Close()
-		if writeErr != nil {
-			return writeErr
-		}
-		return closeErr
+	found, err := extractDispatcherCLIFromZipEntry(reader, destinationPath, dispatcherRealCLIFileName(goos))
+	if err != nil || found {
+		return err
+	}
+	found, err = extractDispatcherCLIFromZipEntry(reader, destinationPath, dispatcherLegacyCLIFileName(goos))
+	if err != nil || found {
+		return err
 	}
 	return fmt.Errorf("archive does not contain %s", dispatcherRealCLIFileName(goos))
 }
 
-func dispatcherArchiveEntryMatchesCLI(entryName string, goos string) bool {
+func extractDispatcherCLIFromZipEntry(reader *zip.ReadCloser, destinationPath string, entryFileName string) (bool, error) {
+	for _, entry := range reader.File {
+		if entry.FileInfo().IsDir() || !dispatcherArchiveEntryMatchesFileName(entry.Name, entryFileName) {
+			continue
+		}
+		entryReader, err := entry.Open()
+		if err != nil {
+			return false, err
+		}
+		writeErr := writeDispatcherExtractedCLI(destinationPath, entryReader)
+		closeErr := entryReader.Close()
+		if writeErr != nil {
+			return false, writeErr
+		}
+		return true, closeErr
+	}
+	return false, nil
+}
+
+func dispatcherArchiveEntryMatchesFileName(entryName string, fileName string) bool {
 	normalizedEntryName := strings.ReplaceAll(entryName, `\`, "/")
 	baseName := path.Base(normalizedEntryName)
-	return baseName == dispatcherRealCLIFileName(goos) || baseName == dispatcherLegacyCLIFileName(goos)
+	return baseName == fileName
 }
 
 func writeDispatcherExtractedCLI(destinationPath string, reader io.Reader) error {
