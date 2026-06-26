@@ -17,8 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private static readonly string[] NativeToolNames =
         {
-            UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT,
-            UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS
+            UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT
         };
 
         private readonly ToolSettingsService _toolSettingsService;
@@ -42,12 +41,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         internal bool IsToolEnabled(string toolName)
         {
-            return _toolSettingsService.IsToolEnabled(toolName);
+            return ToolSettingsToolLinkPolicy.IsToolEnabled(toolName, _toolSettingsService);
         }
 
         internal void SetToolEnabled(string toolName, bool enabled)
         {
-            _toolSettingsService.SetToolEnabled(toolName, enabled);
+            string settingsToolName = ToolSettingsToolLinkPolicy.GetSettingsToolName(toolName);
+            _toolSettingsService.SetToolEnabled(settingsToolName, enabled);
             _toolRegistrarService.NotifyToolChanges();
         }
 
