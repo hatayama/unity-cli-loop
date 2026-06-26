@@ -50,7 +50,7 @@ jobs:
         run: go run ./cmd/check-ipc-protocol-reminder --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Check protocol minimum version bump
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-please--branches--')
         working-directory: cli
         env:
           GH_TOKEN: ${{ github.token }}
