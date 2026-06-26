@@ -33,7 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             ToolContractsRegistrar.RegisterService(toolRegistrarService);
             ToolSettingsUseCaseRegistry.Register(new ToolSettingsUseCase(
                 toolSettingsService,
-                toolRegistrarService));
+                toolRegistrarService,
+                new SkillInstallLayoutToolSkillDescriptionProvider()));
             SkillSetupUseCase skillSetupUseCase = new(new SkillSetupService(new ToolSkillSetupService(toolSettingsService)));
             SkillSetupUseCaseRegistry.Register(skillSetupUseCase);
             ThirdPartyToolMigrationUseCaseRegistry.Register(
