@@ -151,6 +151,24 @@ func TestResolveDispatcherRealCLIRejectsInvalidCLIVersion(t *testing.T) {
 	}
 }
 
+func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t *testing.T) {
+	// Verifies disabling mutation does not disable the minimum dispatcher version contract.
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshness(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
+		&stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte(errorCodeCLIUpdateRequired)) {
+		t.Fatalf("freshness output mismatch: %s", stderr.String())
+	}
+}
+
 func TestExtractDispatcherRealCLIFromTarPrefersRealCLI(t *testing.T) {
 	// Verifies release archives that contain dispatcher first still extract the real CLI binary.
 	tempDir := t.TempDir()

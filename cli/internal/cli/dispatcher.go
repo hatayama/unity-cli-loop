@@ -125,15 +125,21 @@ func resolveDispatcherProjectRoot(startPath string, explicitProjectPath string, 
 
 func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr io.Writer) (bool, int) {
 	minimumVersion := strings.TrimSpace(pin.MinimumDispatcherVersion)
-	if minimumVersion == "" || dispatcherSelfUpdateDisabled() {
+	if minimumVersion == "" {
 		return false, 0
 	}
-	if _, ok := dispatcherSiblingRealCLIPath(pin); ok {
-		return false, 0
+	updateRequired := sharedversion.IsLessThan(version, minimumVersion)
+	if updateRequired && dispatcherSelfUpdateDisabled() {
+		writeDispatcherManualUpdateRequiredError(stderr, minimumVersion, "Automatic update is disabled.")
+		return true, 1
+	}
+	if !updateRequired {
+		if _, ok := dispatcherSiblingRealCLIPath(pin); ok {
+			return false, 0
+		}
 	}
 
-	updateRequired := sharedversion.IsLessThan(version, minimumVersion)
-	updateDue := dispatcherSelfUpdateDue()
+	updateDue := !dispatcherSelfUpdateDisabled() && dispatcherSelfUpdateDue()
 	if !updateRequired && !updateDue {
 		return false, 0
 	}
@@ -156,23 +162,27 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 	}
 
 	if updateRequired {
-		writeErrorEnvelope(stderr, cliError{
-			ErrorCode:   errorCodeCLIUpdateRequired,
-			Phase:       errorPhaseExecution,
-			Message:     "This project requires uloop dispatcher >= " + minimumVersion + ". Automatic update failed: " + err.Error(),
-			Retryable:   true,
-			SafeToRetry: true,
-			NextActions: []string{"Run `uloop update` and retry the command."},
-			Details: map[string]any{
-				"CurrentDispatcherVersion": version,
-				"MinimumDispatcherVersion": minimumVersion,
-			},
-		})
+		writeDispatcherManualUpdateRequiredError(stderr, minimumVersion, "Automatic update failed: "+err.Error())
 		return true, 1
 	}
 
 	writeFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
 	return false, 0
+}
+
+func writeDispatcherManualUpdateRequiredError(stderr io.Writer, minimumVersion string, reason string) {
+	writeErrorEnvelope(stderr, cliError{
+		ErrorCode:   errorCodeCLIUpdateRequired,
+		Phase:       errorPhaseExecution,
+		Message:     "This project requires uloop dispatcher >= " + minimumVersion + ". " + reason,
+		Retryable:   true,
+		SafeToRetry: true,
+		NextActions: []string{"Run `uloop update` and retry the command."},
+		Details: map[string]any{
+			"CurrentDispatcherVersion": version,
+			"MinimumDispatcherVersion": minimumVersion,
+		},
+	})
 }
 
 func dispatcherSelfUpdateDisabled() bool {
