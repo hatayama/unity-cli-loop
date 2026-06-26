@@ -11,11 +11,15 @@ import (
 )
 
 type releasePRCheckRunResult struct {
-	exitCode int
-	stdout   string
-	stderr   string
-	ghLog    string
-	sleeps   []time.Duration
+	exitCode         int
+	stdout           string
+	stderr           string
+	ghLog            string
+	gitLog           string
+	constantsContent string
+	packagePin       string
+	projectPin       string
+	sleeps           []time.Duration
 }
 
 // Verifies that missing release PRs skip without dispatching checks.
@@ -56,6 +60,76 @@ func TestReleasePRChecksDispatchAndMarkReady(t *testing.T) {
 	assertReleasePRCheckLogContains(t, result.ghLog, "run list --repo owner/repository --workflow build-and-test.yml --branch release-please--branches--v3-beta --event workflow_dispatch --json databaseId,status,conclusion,headSha,createdAt,url --limit 20")
 	assertReleasePRCheckLogContains(t, result.ghLog, "run watch 4242 --repo owner/repository --exit-status --compact --interval 1")
 	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
+}
+
+// Verifies stale release PR dispatcher minimums are synced before checks are dispatched.
+func TestReleasePRChecksSyncDispatcherMinimumBeforeDispatch(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:           `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"stale123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSONAfterWatch: `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"synced456","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		runListJSON:          `[{"databaseId":4242,"headSha":"synced456","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		runWatchStatus:       "0",
+		dispatcherSync: releasePRDispatcherSyncCase{
+			currentCliVersion:        "3.0.0-beta.40",
+			minimumDispatcherVersion: "3.0.0-beta.39",
+			releaseContract:          `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.39"}`,
+		},
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertReleasePRCheckLogContains(t, result.stdout, "Updated release PR #1043 dispatcher minimum version to 3.0.0-beta.40.")
+	assertReleasePRCheckLogContains(t, result.gitLog, "commit -m "+releasePRDispatcherMinimumCommitMessage)
+	assertReleasePRCheckLogContains(t, result.gitLog, "push origin HEAD:refs/heads/release-please--branches--v3-beta")
+	assertReleasePRCheckLogContains(t, result.constantsContent, `MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.40"`)
+	assertReleasePRCheckLogContains(t, result.packagePin, `"minimumDispatcherVersion": "3.0.0-beta.40"`)
+	assertReleasePRCheckLogContains(t, result.projectPin, `"minimumDispatcherVersion": "3.0.0-beta.40"`)
+	assertReleasePRCheckLogContains(t, result.stdout, "Watching build-and-test.yml run 4242 for release PR #1043.")
+}
+
+// Verifies dispatcher-capable minimum releases are not bumped on ordinary CLI releases.
+func TestReleasePRChecksKeepDispatcherMinimumWhenReleaseIsCapable(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		runWatchStatus: "0",
+		dispatcherSync: releasePRDispatcherSyncCase{
+			currentCliVersion:        "3.0.0-beta.41",
+			minimumDispatcherVersion: "3.0.0-beta.40",
+			releaseContract:          `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.40","dispatcherContractVersion":1}`,
+		},
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertReleasePRCheckLogDoesNotContain(t, result.stdout, "Updated release PR #1043 dispatcher minimum version")
+	assertReleasePRCheckLogDoesNotContain(t, result.gitLog, "commit -m "+releasePRDispatcherMinimumCommitMessage)
+	assertReleasePRCheckLogContains(t, result.constantsContent, `MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.40"`)
+	assertReleasePRCheckLogContains(t, result.packagePin, `"minimumDispatcherVersion":"3.0.0-beta.40"`)
+}
+
+// Verifies structural release contract errors are reported instead of being hidden by auto-sync.
+func TestReleasePRChecksFailWhenMinimumReleaseContractVersionDiffers(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		runWatchStatus: "0",
+		dispatcherSync: releasePRDispatcherSyncCase{
+			currentCliVersion:        "3.0.0-beta.40",
+			minimumDispatcherVersion: "3.0.0-beta.39",
+			releaseContract:          `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.38","dispatcherContractVersion":1}`,
+		},
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertReleasePRCheckLogContains(t, result.stderr, `contract declares cliVersion "3.0.0-beta.38"`)
+	assertReleasePRCheckLogDoesNotContain(t, result.stdout, "Updated release PR #1043 dispatcher minimum version")
+	assertReleasePRCheckLogDoesNotContain(t, result.gitLog, "commit -m "+releasePRDispatcherMinimumCommitMessage)
+	assertReleasePRCheckLogDoesNotContain(t, result.ghLog, "workflow run")
 }
 
 // Verifies that same-second workflow runs are accepted when GitHub rounds createdAt timestamps.
@@ -163,6 +237,13 @@ type releasePRCheckCase struct {
 	runListJSON          string
 	runWatchStatus       string
 	now                  time.Time
+	dispatcherSync       releasePRDispatcherSyncCase
+}
+
+type releasePRDispatcherSyncCase struct {
+	currentCliVersion        string
+	minimumDispatcherVersion string
+	releaseContract          string
 }
 
 func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRCheckRunResult {
@@ -176,12 +257,16 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	}
 
 	ghLogPath := filepath.Join(workDir, "gh.log")
+	gitLogPath := filepath.Join(workDir, "git.log")
 	prListCountPath := filepath.Join(workDir, "pr-list-count")
 	writeReleasePRCheckMockGH(t, filepath.Join(mockBin, "gh"))
+	writeReleasePRCheckMockGit(t, filepath.Join(mockBin, "git"))
+	prepareReleasePRDispatcherSyncFiles(t, workDir, testCase.dispatcherSync)
 
 	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GITHUB_REPOSITORY", "owner/repository")
 	t.Setenv("TARGET_BRANCH", "v3-beta")
+	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
 	t.Setenv("RELEASE_PR_CHECK_LOOKUP_ATTEMPTS", "1")
 	t.Setenv("RELEASE_PR_CHECK_LOOKUP_INTERVAL_SECONDS", "1")
 	t.Setenv("RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS", "1")
@@ -191,6 +276,12 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	t.Setenv("GH_RUN_LIST_JSON", testCase.runListJSON)
 	t.Setenv("GH_RUN_WATCH_STATUS", testCase.runWatchStatus)
 	t.Setenv("GH_LOG", ghLogPath)
+	t.Setenv("GIT_LOG", gitLogPath)
+	if testCase.dispatcherSync.releaseContract != "" {
+		releaseContractPath := filepath.Join(workDir, "release-contract.json")
+		writeFile(t, releaseContractPath, testCase.dispatcherSync.releaseContract)
+		t.Setenv("GIT_RELEASE_CONTRACT", releaseContractPath)
+	}
 
 	originalNow := releasePRCheckNow
 	originalSleep := releasePRCheckSleep
@@ -217,14 +308,45 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	if err != nil {
 		t.Fatalf("failed to read gh log: %v", err)
 	}
+	gitLog := readOptionalFile(t, gitLogPath)
 
 	return releasePRCheckRunResult{
-		exitCode: exitCode,
-		stdout:   stdout.String(),
-		stderr:   stderr.String(),
-		ghLog:    string(ghLogBytes),
-		sleeps:   sleeps,
+		exitCode:         exitCode,
+		stdout:           stdout.String(),
+		stderr:           stderr.String(),
+		ghLog:            string(ghLogBytes),
+		gitLog:           gitLog,
+		constantsContent: readFile(t, filepath.Join(workDir, protocolMinimumVersionFile)),
+		packagePin:       readFile(t, filepath.Join(workDir, unityPackageCliPinFile)),
+		projectPin:       readFile(t, filepath.Join(workDir, unityProjectCliPinFile)),
+		sleeps:           sleeps,
 	}
+}
+
+func prepareReleasePRDispatcherSyncFiles(t *testing.T, workDir string, testCase releasePRDispatcherSyncCase) {
+	t.Helper()
+
+	currentCliVersion := testCase.currentCliVersion
+	if currentCliVersion == "" {
+		currentCliVersion = "3.0.0-beta.40"
+	}
+	minimumDispatcherVersion := testCase.minimumDispatcherVersion
+	if minimumDispatcherVersion == "" {
+		minimumDispatcherVersion = currentCliVersion
+	}
+
+	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, "cli/contract.json"), buildDispatcherMinimumVersionContract(
+		currentCliVersion,
+		1))
+	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, protocolMinimumVersionFile), buildProtocolMinimumVersionConstants(
+		2,
+		minimumDispatcherVersion))
+	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, unityPackageCliPinFile), buildDispatcherMinimumVersionPin(
+		currentCliVersion,
+		minimumDispatcherVersion))
+	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, unityProjectCliPinFile), buildDispatcherMinimumVersionPin(
+		currentCliVersion,
+		minimumDispatcherVersion))
 }
 
 func writeReleasePRCheckMockGH(t *testing.T, path string) {
@@ -276,6 +398,84 @@ exit 1
 	if err != nil {
 		t.Fatalf("failed to write mock gh command: %v", err)
 	}
+}
+
+func writeReleasePRCheckMockGit(t *testing.T, path string) {
+	t.Helper()
+
+	content := `#!/bin/sh
+set -eu
+
+printf '%s\n' "$*" >> "$GIT_LOG"
+
+if [ "$1" = "rev-parse" ] && [ "$2" = "--show-toplevel" ]; then
+  printf '%s\n' "$ULOOP_REPOSITORY_ROOT"
+  exit 0
+fi
+
+if [ "$1" = "-C" ]; then
+  shift 2
+fi
+
+if [ "$1" = "fetch" ] && [ "$2" = "origin" ]; then
+  exit 0
+fi
+
+if [ "$1" = "switch" ] && [ "$2" = "--detach" ] && [ "$3" = "FETCH_HEAD" ]; then
+  exit 0
+fi
+
+if [ "$1" = "show" ]; then
+  case "$2" in
+    cli-v*:cli/contract.json)
+      if [ -n "${GIT_RELEASE_CONTRACT:-}" ]; then
+        cat "$GIT_RELEASE_CONTRACT"
+      else
+        echo "release not found" >&2
+        exit 1
+      fi
+      ;;
+    *) echo "unexpected git show ref: $2" >&2; exit 1 ;;
+  esac
+  exit 0
+fi
+
+if [ "$1" = "config" ]; then
+  exit 0
+fi
+
+if [ "$1" = "add" ]; then
+  exit 0
+fi
+
+if [ "$1" = "commit" ]; then
+  exit 0
+fi
+
+if [ "$1" = "push" ]; then
+  exit 0
+fi
+
+echo "unexpected git command: $*" >&2
+exit 1
+`
+	writeFile(t, path, content)
+	err := os.Chmod(path, 0o755)
+	if err != nil {
+		t.Fatalf("failed to chmod mock git: %v", err)
+	}
+}
+
+func readOptionalFile(t *testing.T, path string) string {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return ""
+	}
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+	return string(content)
 }
 
 func assertReleasePRCheckLogContains(t *testing.T, actual string, expected string) {
