@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.0.0-beta.41](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.40...v3.0.0-beta.41) (2026-06-26)
+
+
+### Features
+
+* Projects can run pinned CLI versions ([#1411](https://github.com/hatayama/unity-cli-loop/issues/1411)) ([1637a34](https://github.com/hatayama/unity-cli-loop/commit/1637a34ac47a31025d37db511ef5736baa745f57))
+* Settings now shows selectable tool details ([#1408](https://github.com/hatayama/unity-cli-loop/issues/1408)) ([07b8401](https://github.com/hatayama/unity-cli-loop/commit/07b84013a87d4ef5ca9a6c14af95339e22248699))
+
+
+### Bug Fixes
+
+* Keep release PRs compatible with the CLI launcher ([cce7e15](https://github.com/hatayama/unity-cli-loop/commit/cce7e15e0c3d35b320bd81df366247102d8f8b91))
+* Tool Settings now hides pause point helper tools ([#1410](https://github.com/hatayama/unity-cli-loop/issues/1410)) ([7a7057d](https://github.com/hatayama/unity-cli-loop/commit/7a7057d3f3861accc20f31b1b31f00606f07feb7))
+
 ## [3.0.0-beta.40](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.39...v3.0.0-beta.40) (2026-06-25)
 
 
