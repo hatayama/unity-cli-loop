@@ -13,7 +13,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         internal static void SyncCurrentProjectPin()
         {
-            SyncProjectPinFile(UnityCliLoopConstants.PackageResolvedPath, Directory.GetCurrentDirectory());
+            SyncProjectPinFile(UnityCliLoopConstants.PackageResolvedPath, ResolveCurrentProjectRoot(UnityEngine.Application.dataPath));
+        }
+
+        internal static string ResolveCurrentProjectRoot(string assetsPath)
+        {
+            if (string.IsNullOrWhiteSpace(assetsPath))
+            {
+                return string.Empty;
+            }
+
+            DirectoryInfo assetsDirectory = Directory.GetParent(assetsPath);
+            if (assetsDirectory == null)
+            {
+                return string.Empty;
+            }
+
+            return assetsDirectory.FullName;
         }
 
         internal static bool SyncProjectPinFile(string packageRoot, string projectRoot)

@@ -24,7 +24,7 @@ assert_file_exists() {
 
 test_pull_request_guard_fails_on_minimum_version_omission() {
   assert_contains "$BUILD_WORKFLOW" "      - name: Check protocol minimum version bump"
-  assert_contains "$BUILD_WORKFLOW" "        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-please--branches--')"
+  assert_contains "$BUILD_WORKFLOW" "        if: github.event_name == 'pull_request' && !(startsWith(github.head_ref, 'release-please--branches--') && (github.event.pull_request.user.login == 'github-actions[bot]' || github.event.pull_request.user.login == 'release-please[bot]'))"
   assert_contains "$BUILD_WORKFLOW" "          GH_TOKEN: \${{ github.token }}"
   assert_contains "$BUILD_WORKFLOW" '        run: go run ./cmd/check-protocol-minimum-version --base "origin/${{ github.base_ref }}" --head HEAD'
 }

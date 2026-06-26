@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 type dispatcherArchiveTestEntry struct {
@@ -235,6 +236,35 @@ func TestExtractDispatcherRealCLIFromZipPrefersRealCLI(t *testing.T) {
 	assertFileContent(t, destinationPath, "real")
 }
 
+func TestDispatcherHTTPClientHasDownloadTimeout(t *testing.T) {
+	// Verifies dispatcher release downloads cannot hang indefinitely.
+	if dispatcherHTTPClient.Timeout != 2*time.Minute {
+		t.Fatalf("dispatcher HTTP timeout mismatch: %s", dispatcherHTTPClient.Timeout)
+	}
+}
+
+func TestInstallDownloadedDispatcherRealCLIKeepsExistingExecutable(t *testing.T) {
+	// Verifies concurrent downloads do not delete an executable another dispatcher already cached.
+	tempDir := t.TempDir()
+	realCLIPath := filepath.Join(tempDir, dispatcherRealCLIFileName(runtime.GOOS))
+	tempRealCLIPath := filepath.Join(tempDir, "downloaded-"+dispatcherRealCLIFileName(runtime.GOOS))
+	if err := os.WriteFile(realCLIPath, []byte("existing"), 0o755); err != nil {
+		t.Fatalf("failed to write existing real CLI: %v", err)
+	}
+	if err := os.WriteFile(tempRealCLIPath, []byte("downloaded"), 0o755); err != nil {
+		t.Fatalf("failed to write temp real CLI: %v", err)
+	}
+
+	path, err := installDownloadedDispatcherRealCLI(tempRealCLIPath, realCLIPath)
+	if err != nil {
+		t.Fatalf("installDownloadedDispatcherRealCLI failed: %v", err)
+	}
+	if path != realCLIPath {
+		t.Fatalf("real CLI path mismatch: %s", path)
+	}
+	assertFileContent(t, realCLIPath, "existing")
+}
+
 func TestLoadDispatcherPinFallsBackToPackagePin(t *testing.T) {
 	// Verifies dispatcher can read the package-level pin when the project copy is missing.
 	projectRoot := createDispatcherUnityProject(t)
@@ -275,6 +305,24 @@ func TestLoadDispatcherPinSkipsInvalidPackageCandidate(t *testing.T) {
 	}
 }
 
+func TestLoadDispatcherPinNormalizesVersionPrefixes(t *testing.T) {
+	// Verifies v-prefixed pin versions are normalized before semantic-version validation.
+	projectRoot := createDispatcherUnityProject(t)
+	pinPath := filepath.Join(projectRoot, dispatcherProjectPinRelativePath)
+	writeDispatcherPinFileWithMinimum(t, pinPath, "v3.0.0-beta.58", "V3.0.0-beta.39")
+
+	pin, err := loadDispatcherPin(projectRoot)
+	if err != nil {
+		t.Fatalf("loadDispatcherPin failed: %v", err)
+	}
+	if pin.CLIVersion != "3.0.0-beta.58" {
+		t.Fatalf("cliVersion mismatch: %s", pin.CLIVersion)
+	}
+	if pin.MinimumDispatcherVersion != "3.0.0-beta.39" {
+		t.Fatalf("minimumDispatcherVersion mismatch: %s", pin.MinimumDispatcherVersion)
+	}
+}
+
 func TestLoadDispatcherPinRejectsInvalidCLIVersion(t *testing.T) {
 	// Verifies project pin cliVersion must be a release version, not a filesystem path.
 	projectRoot := createDispatcherUnityProject(t)
@@ -291,6 +339,19 @@ func TestLoadDispatcherPinRejectsInvalidCLIVersion(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected invalid cliVersion error")
+	}
+}
+
+func TestLoadDispatcherPinRejectsInvalidMinimumDispatcherVersion(t *testing.T) {
+	// Verifies malformed dispatcher minimums fail closed instead of bypassing freshness checks.
+	projectRoot := createDispatcherUnityProject(t)
+	pinPath := filepath.Join(projectRoot, dispatcherProjectPinRelativePath)
+	writeDispatcherPinFileWithMinimum(t, pinPath, "3.0.0-beta.58", "../../payload")
+
+	_, err := loadDispatcherPin(projectRoot)
+
+	if err == nil {
+		t.Fatal("expected invalid minimumDispatcherVersion error")
 	}
 }
 
@@ -316,6 +377,31 @@ public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.56";`
 	}
 	if pin.RequiredProtocolVersion != 3 {
 		t.Fatalf("protocol mismatch: %d", pin.RequiredProtocolVersion)
+	}
+}
+
+func TestLoadDispatcherPinFromCliConstantsNormalizesVersionPrefix(t *testing.T) {
+	// Verifies v-prefixed fallback constants are normalized before dispatcher resolution.
+	projectRoot := createDispatcherUnityProject(t)
+	constantsPath := filepath.Join(projectRoot, "Packages", "src", "Editor", "Domain", "CliConstants.cs")
+	if err := os.MkdirAll(filepath.Dir(constantsPath), 0o755); err != nil {
+		t.Fatalf("failed to create constants directory: %v", err)
+	}
+	content := `public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
+public const string MINIMUM_REQUIRED_CLI_VERSION = "v3.0.0-beta.59";`
+	if err := os.WriteFile(constantsPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write constants: %v", err)
+	}
+
+	pin, err := loadDispatcherPin(projectRoot)
+	if err != nil {
+		t.Fatalf("loadDispatcherPin failed: %v", err)
+	}
+	if pin.CLIVersion != "3.0.0-beta.59" {
+		t.Fatalf("cliVersion mismatch: %s", pin.CLIVersion)
+	}
+	if pin.MinimumDispatcherVersion != "3.0.0-beta.59" {
+		t.Fatalf("minimumDispatcherVersion mismatch: %s", pin.MinimumDispatcherVersion)
 	}
 }
 
@@ -347,13 +433,18 @@ func writeDispatcherProjectPin(t *testing.T, projectRoot string, cliVersion stri
 
 func writeDispatcherPinFile(t *testing.T, pinPath string, cliVersion string) {
 	t.Helper()
+	writeDispatcherPinFileWithMinimum(t, pinPath, cliVersion, version)
+}
+
+func writeDispatcherPinFileWithMinimum(t *testing.T, pinPath string, cliVersion string, minimumDispatcherVersion string) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(pinPath), 0o755); err != nil {
 		t.Fatalf("failed to create pin directory: %v", err)
 	}
 	content := `{"schemaVersion":1,"packageName":"io.github.hatayama.uloopmcp","packageVersion":"3.0.0-beta.1","cliVersion":"` +
 		cliVersion +
 		`","requiredProtocolVersion":2,"minimumDispatcherVersion":"` +
-		version +
+		minimumDispatcherVersion +
 		`"}`
 	if err := os.WriteFile(pinPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write pin: %v", err)

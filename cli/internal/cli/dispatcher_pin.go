@@ -117,12 +117,18 @@ func readDispatcherPin(pinPath string) (dispatcherPin, error) {
 	if err := json.Unmarshal(content, &pin); err != nil {
 		return dispatcherPin{}, fmt.Errorf("failed to parse %s: %w", pinPath, err)
 	}
-	pin.CLIVersion = strings.TrimSpace(pin.CLIVersion)
+	pin.CLIVersion = normalizeDispatcherVersion(pin.CLIVersion)
 	if pin.CLIVersion == "" {
 		return dispatcherPin{}, fmt.Errorf("%s does not define cliVersion", pinPath)
 	}
 	if err := validateDispatcherCLIVersion(pin.CLIVersion); err != nil {
 		return dispatcherPin{}, fmt.Errorf("%s defines invalid cliVersion: %w", pinPath, err)
+	}
+	pin.MinimumDispatcherVersion = normalizeDispatcherVersion(pin.MinimumDispatcherVersion)
+	if pin.MinimumDispatcherVersion != "" {
+		if err := validateDispatcherCLIVersion(pin.MinimumDispatcherVersion); err != nil {
+			return dispatcherPin{}, fmt.Errorf("%s defines invalid minimumDispatcherVersion: %w", pinPath, err)
+		}
 	}
 	if pin.SchemaVersion == 0 {
 		return dispatcherPin{}, fmt.Errorf("%s does not define schemaVersion", pinPath)
@@ -141,7 +147,7 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 	if len(versionMatch) != 2 {
 		return dispatcherPin{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_CLI_VERSION", constantsPath)
 	}
-	cliVersion := strings.TrimSpace(versionMatch[1])
+	cliVersion := normalizeDispatcherVersion(versionMatch[1])
 	if err := validateDispatcherCLIVersion(cliVersion); err != nil {
 		return dispatcherPin{}, fmt.Errorf("%s defines invalid MINIMUM_REQUIRED_CLI_VERSION: %w", constantsPath, err)
 	}
@@ -159,6 +165,14 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 		MinimumDispatcherVersion: cliVersion,
 		SourcePath:               constantsPath,
 	}, nil
+}
+
+func normalizeDispatcherVersion(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "v") || strings.HasPrefix(trimmed, "V") {
+		return trimmed[1:]
+	}
+	return trimmed
 }
 
 func validateDispatcherCLIVersion(cliVersion string) error {

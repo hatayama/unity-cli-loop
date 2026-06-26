@@ -118,6 +118,7 @@ assert_json_value '.packages["."].["changelog-path"]' 'Packages/src/CHANGELOG.md
 assert_json_value '.packages["."].["include-component-in-tag"]' 'false'
 assert_json_value '.packages["."].["exclude-paths"][0]' 'cli'
 assert_json_value '.packages["."].["extra-files"][0].path' 'Packages/src/package.json'
+assert_json_value '.packages["."].["extra-files"][0].jsonpath' '$.version'
 assert_json_value '.packages["."].["extra-files"][1].path' 'Packages/src/cli-pin.json'
 assert_json_value '.packages["."].["extra-files"][1].jsonpath' '$.packageVersion'
 assert_json_value '.packages["."].["extra-files"][2].path' '.uloop/cli-pin.json'

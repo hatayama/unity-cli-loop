@@ -16,11 +16,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	sharedupdate "github.com/hatayama/unity-cli-loop/cli/internal/update"
 )
 
-var dispatcherHTTPClient = http.DefaultClient
+var dispatcherHTTPClient = &http.Client{Timeout: 2 * time.Minute}
 
 func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin) (string, error) {
 	pin.CLIVersion = strings.TrimSpace(pin.CLIVersion)
@@ -165,6 +166,19 @@ func downloadDispatcherRealCLI(ctx context.Context, cacheRoot string, cliVersion
 	}
 	if err := os.Chmod(tempRealCLIPath, 0o755); err != nil {
 		return "", err
+	}
+	return installDownloadedDispatcherRealCLI(tempRealCLIPath, realCLIPath)
+}
+
+func installDownloadedDispatcherRealCLI(tempRealCLIPath string, realCLIPath string) (string, error) {
+	if isExecutableFile(realCLIPath) {
+		return realCLIPath, nil
+	}
+	if err := os.Rename(tempRealCLIPath, realCLIPath); err == nil {
+		return realCLIPath, nil
+	}
+	if isExecutableFile(realCLIPath) {
+		return realCLIPath, nil
 	}
 	if err := os.Remove(realCLIPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", err

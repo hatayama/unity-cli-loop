@@ -74,7 +74,7 @@ require_tar_entry() {
   archive_name="$1"
   entry_name="$2"
 
-  if ! tar -tzf "$RELEASE_DIR/$archive_name" | grep -Fx "$entry_name" >/dev/null; then
+  if ! tar -tzf "$RELEASE_DIR/$archive_name" | sed 's#^\./##' | grep -Fx "$entry_name" >/dev/null; then
     fail "Native CLI release asset $archive_name does not contain $entry_name"
   fi
 }

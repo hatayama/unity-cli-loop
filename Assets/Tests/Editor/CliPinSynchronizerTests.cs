@@ -121,6 +121,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        [Test]
+        public void ResolveCurrentProjectRoot_WhenAssetsPathProvided_ShouldReturnUnityProjectRoot()
+        {
+            // Tests that startup derives the Unity project root from Application.dataPath semantics.
+            string projectRoot = Path.Combine(CreateTestRoot(), "UnityProject");
+            string assetsPath = Path.Combine(projectRoot, "Assets");
+
+            string resolvedProjectRoot = CliPinSynchronizer.ResolveCurrentProjectRoot(assetsPath);
+
+            Assert.That(resolvedProjectRoot, Is.EqualTo(projectRoot));
+        }
+
         private static string CreateTestRoot()
         {
             return Path.Combine(
