@@ -57,6 +57,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: go run ./cmd/check-protocol-minimum-version --base "origin/${{ github.base_ref }}" --head HEAD
 
+      - name: Check dispatcher minimum version
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        working-directory: cli
+        run: go run ./cmd/check-dispatcher-minimum-version
+
       - name: Install golangci-lint
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0

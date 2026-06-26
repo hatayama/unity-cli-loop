@@ -18,6 +18,13 @@ func TestCliContractProvidesProtocolVersion(t *testing.T) {
 	}
 }
 
+func TestCliContractProvidesDispatcherContractVersion(t *testing.T) {
+	// Verifies that the contract declares which dispatcher capability generation the binary provides.
+	if Current.DispatcherContractVersion < 1 {
+		t.Fatalf("dispatcherContractVersion must be at least 1, got %d", Current.DispatcherContractVersion)
+	}
+}
+
 func requireValidContractVersion(t *testing.T, label string, value string) {
 	t.Helper()
 
