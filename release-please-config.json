@@ -16,6 +16,16 @@
           "type": "json",
           "path": "Packages/src/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "Packages/src/cli-pin.json",
+          "jsonpath": "$.packageVersion"
+        },
+        {
+          "type": "json",
+          "path": ".uloop/cli-pin.json",
+          "jsonpath": "$.packageVersion"
         }
       ]
     },
@@ -37,6 +47,16 @@
         {
           "type": "json",
           "path": "contract.json",
+          "jsonpath": "$.cliVersion"
+        },
+        {
+          "type": "json",
+          "path": "/Packages/src/cli-pin.json",
+          "jsonpath": "$.cliVersion"
+        },
+        {
+          "type": "json",
+          "path": "/.uloop/cli-pin.json",
           "jsonpath": "$.cliVersion"
         }
       ]
