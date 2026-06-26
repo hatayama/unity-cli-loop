@@ -12,9 +12,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         [TestCase(null, null, true, false)]
         [TestCase("2.9.0", null, true, false)]
-        [TestCase("3.1.0", 1, true, true)]
-        [TestCase("3.1.0", 2, true, false)]
-        [TestCase("3.0.0", 1, true, true)]
+        [TestCase("3.1.0", 1, true, false)]
+        [TestCase("3.1.0", 2, true, true)]
+        [TestCase("3.0.0", 1, true, false)]
         [TestCase("3.0.0", 1, false, false)]
         public void ShouldUninstallCliFromPrimaryButton_ReturnsExpectedAction(
             string cliVersion,
@@ -50,14 +50,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(true, "3.0.0", 1, true, "RepairPath")]
+        [TestCase(true, "3.0.0", 1, true, "InstallOrUpdate")]
         [TestCase(true, "2.9.0", null, true, "InstallOrUpdate")]
-        [TestCase(true, "3.1.0", 1, true, "RepairPath")]
-        [TestCase(true, "3.1.0", 2, true, "InstallOrUpdate")]
-        [TestCase(false, "3.0.0", 1, true, "Uninstall")]
+        [TestCase(true, "3.1.0", 1, true, "InstallOrUpdate")]
+        [TestCase(true, "3.1.0", 2, true, "RepairPath")]
+        [TestCase(false, "3.0.0", 1, true, "InstallOrUpdate")]
         [TestCase(false, "2.9.0", null, true, "InstallOrUpdate")]
-        [TestCase(false, "3.1.0", 1, true, "Uninstall")]
-        [TestCase(false, "3.1.0", 2, true, "InstallOrUpdate")]
+        [TestCase(false, "3.1.0", 1, true, "InstallOrUpdate")]
+        [TestCase(false, "3.1.0", 2, true, "Uninstall")]
         [TestCase(false, null, null, true, "InstallOrUpdate")]
         public void ResolveCliPrimaryButtonAction_ReturnsClickedPrimaryAction(
             bool needsCliPathSetup,
@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [TestCase(null, null, false)]
-        [TestCase("3.0.0-beta.32", 1, false)]
+        [TestCase("3.0.0-beta.32", 1, true)]
         [TestCase("3.0.0-beta.0", null, true)]
         [TestCase("3.0.0-beta.0", 0, true)]
         [TestCase("3.0.0-beta.0", 2, false)]
@@ -134,7 +134,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(null, false)]
         [TestCase(0, false)]
         [TestCase(1, false)]
-        [TestCase(2, true)]
+        [TestCase(2, false)]
+        [TestCase(3, true)]
         public void IsCliDowngradeNeeded_UsesProtocolVersion(
             int? cliProtocolVersion,
             bool expected)

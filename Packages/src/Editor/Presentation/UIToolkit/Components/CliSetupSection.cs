@@ -232,12 +232,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (needsUpdate)
             {
-                return $"Update CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+                return GetCliReplacementButtonText("Update", cliVersion, requiredCliVersion);
             }
 
             if (needsDowngrade)
             {
-                return $"Downgrade CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+                return GetCliReplacementButtonText("Downgrade", cliVersion, requiredCliVersion);
             }
 
             if (needsCliPathSetup)
@@ -251,6 +251,26 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return canUninstallCli ? "Uninstall CLI" : "Install CLI";
+        }
+
+        private static string GetCliReplacementButtonText(string action, string cliVersion, string requiredCliVersion)
+        {
+            if (ShouldShowProtocolCompatibilityText(cliVersion, requiredCliVersion))
+            {
+                return $"{action} CLI (protocol v{CliConstants.REQUIRED_CLI_PROTOCOL_VERSION})";
+            }
+
+            return $"{action} CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+        }
+
+        private static bool ShouldShowProtocolCompatibilityText(string cliVersion, string requiredCliVersion)
+        {
+            if (string.IsNullOrEmpty(cliVersion) || string.IsNullOrEmpty(requiredCliVersion))
+            {
+                return false;
+            }
+
+            return CliVersionComparer.IsVersionEqual(cliVersion, requiredCliVersion);
         }
 
         internal static bool IsInstallCliButtonEnabled(
