@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const int ToolListRowHeight = 24;
         private const int ToolDetailsRowHeight = 132;
         private const int InlineToolRowLimit = 40;
+        private const string ToolSettingsInfoText = "Enable or disable tools. Disabled tools are hidden from AI agents.";
 
         private readonly Foldout _foldout;
         private readonly VisualElement _toolSettingsInfoContainer;
@@ -41,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _toolListContainer = root.Q<VisualElement>("tool-list-container");
             Debug.Assert(_toolListContainer != null, "tool-list-container must not be null");
 
+            SetupToolSettingsInfoText();
             _toolListStatusLabel = CreateToolListStatusLabel();
             _toolListView = CreateToolListView();
             _toolListContainer.Add(_toolListStatusLabel);
@@ -176,6 +178,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             ViewDataBinder.SetVisible(_toolSettingsInfoContainer, visible);
+        }
+
+        private void SetupToolSettingsInfoText()
+        {
+            if (_toolSettingsInfoContainer == null)
+            {
+                return;
+            }
+
+            _toolSettingsInfoContainer.Clear();
+
+            TextField infoText = new();
+            infoText.name = "tool-settings-info-text";
+            infoText.isReadOnly = true;
+            infoText.multiline = true;
+            infoText.SetValueWithoutNotify(ToolSettingsInfoText);
+            infoText.AddToClassList("unity-cli-loop-tool-settings-info");
+
+            _toolSettingsInfoContainer.Add(infoText);
         }
 
         private void UpdateToolList(ToolSettingsSectionData data)

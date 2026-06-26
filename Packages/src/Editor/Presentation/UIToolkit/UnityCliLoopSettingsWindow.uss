@@ -320,6 +320,15 @@
     white-space: normal;
     margin-top: 14px;
     margin-bottom: 4px;
+    padding: 0;
+    background-color: transparent;
+    border-width: 0;
+}
+
+.unity-cli-loop-tool-settings-info .unity-text-field__input {
+    background-color: transparent;
+    border-width: 0;
+    white-space: normal;
 }
 
 .unity-cli-loop-tool-settings-note {

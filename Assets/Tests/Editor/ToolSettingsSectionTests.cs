@@ -16,6 +16,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const int ToolDetailsRowHeight = 132;
 
         [Test]
+        public void Constructor_CreatesSelectableToolSettingsInfoText()
+        {
+            // Tests that the tool settings info text can be selected without being edited.
+            VisualElement root = CreateRootElement();
+            _ = new ToolSettingsSection(root);
+
+            TextField infoText = root.Q<TextField>("tool-settings-info-text");
+            Assert.IsNotNull(infoText);
+            Assert.AreEqual("Enable or disable tools. Disabled tools are hidden from AI agents.", infoText.value);
+            Assert.IsTrue(infoText.isReadOnly);
+            Assert.IsTrue(infoText.multiline);
+        }
+
+        [Test]
         public void Update_ClosedWithoutToolListData_DoesNotCreateToolRows()
         {
             VisualElement root = CreateRootElement();
