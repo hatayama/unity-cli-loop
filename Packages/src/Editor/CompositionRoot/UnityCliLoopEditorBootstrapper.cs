@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 
         internal void Initialize()
         {
+            CliPinSynchronizer.SyncCurrentProjectPin();
             UnityCliLoopApplicationServices applicationServices = _applicationRegistration.Register();
             ApplicationEditorStartup.Initialize(applicationServices.DomainReloadDetectionService);
             FirstPartyToolsEditorStartup.Initialize();

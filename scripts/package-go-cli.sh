@@ -14,10 +14,12 @@ package_unix() {
   tmp_dir="$RELEASE_DIR/tmp-$platform"
   mkdir -p "$tmp_dir"
   cp "$DIST_DIR/$platform/uloop" "$tmp_dir/uloop"
+  cp "$DIST_DIR/$platform/uloop-cli" "$tmp_dir/uloop-cli"
   chmod +x "$tmp_dir/uloop"
+  chmod +x "$tmp_dir/uloop-cli"
   (
     cd "$tmp_dir"
-    tar -czf "$RELEASE_DIR/uloop-$platform.tar.gz" uloop
+    tar -czf "$RELEASE_DIR/uloop-$platform.tar.gz" uloop uloop-cli
   )
   rm -rf "$tmp_dir"
 }
@@ -27,9 +29,10 @@ package_windows() {
   tmp_dir="$RELEASE_DIR/tmp-$platform"
   mkdir -p "$tmp_dir"
   cp "$DIST_DIR/$platform/uloop.exe" "$tmp_dir/uloop.exe"
+  cp "$DIST_DIR/$platform/uloop-cli.exe" "$tmp_dir/uloop-cli.exe"
   (
     cd "$tmp_dir"
-    zip -q "$RELEASE_DIR/uloop-$platform.zip" uloop.exe
+    zip -q "$RELEASE_DIR/uloop-$platform.zip" uloop.exe uloop-cli.exe
   )
   rm -rf "$tmp_dir"
 }

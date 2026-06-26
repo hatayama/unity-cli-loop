@@ -70,6 +70,28 @@ verify_checksum() {
   fi
 }
 
+require_tar_entry() {
+  archive_name="$1"
+  entry_name="$2"
+
+  if ! tar -tzf "$RELEASE_DIR/$archive_name" | grep -Fx "$entry_name" >/dev/null; then
+    fail "Native CLI release asset $archive_name does not contain $entry_name"
+  fi
+}
+
+require_zip_entry() {
+  archive_name="$1"
+  entry_name="$2"
+
+  if ! command -v unzip >/dev/null 2>&1; then
+    fail "unzip is required to inspect $archive_name"
+  fi
+
+  if ! unzip -Z1 "$RELEASE_DIR/$archive_name" | grep -Fx "$entry_name" >/dev/null; then
+    fail "Native CLI release asset $archive_name does not contain $entry_name"
+  fi
+}
+
 if [ ! -d "$RELEASE_DIR" ]; then
   fail "Native CLI release asset directory does not exist: $RELEASE_DIR"
 fi
@@ -81,5 +103,12 @@ done
 verify_checksum "uloop-darwin-amd64.tar.gz"
 verify_checksum "uloop-darwin-arm64.tar.gz"
 verify_checksum "uloop-windows-amd64.zip"
+
+require_tar_entry "uloop-darwin-amd64.tar.gz" "uloop"
+require_tar_entry "uloop-darwin-amd64.tar.gz" "uloop-cli"
+require_tar_entry "uloop-darwin-arm64.tar.gz" "uloop"
+require_tar_entry "uloop-darwin-arm64.tar.gz" "uloop-cli"
+require_zip_entry "uloop-windows-amd64.zip" "uloop.exe"
+require_zip_entry "uloop-windows-amd64.zip" "uloop-cli.exe"
 
 echo "Native CLI release assets are complete."

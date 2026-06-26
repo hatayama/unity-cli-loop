@@ -29,5 +29,8 @@ build_binary() {
 }
 
 build_binary darwin arm64 uloop "$CLI_DIR" ./cmd/uloop
+build_binary darwin arm64 uloop-cli "$CLI_DIR" ./cmd/uloop-cli
 build_binary darwin amd64 uloop "$CLI_DIR" ./cmd/uloop
+build_binary darwin amd64 uloop-cli "$CLI_DIR" ./cmd/uloop-cli
 build_binary windows amd64 uloop "$CLI_DIR" ./cmd/uloop
+build_binary windows amd64 uloop-cli "$CLI_DIR" ./cmd/uloop-cli
