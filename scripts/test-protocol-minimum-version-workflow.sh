@@ -29,6 +29,12 @@ test_pull_request_guard_fails_on_minimum_version_omission() {
   assert_contains "$BUILD_WORKFLOW" '        run: go run ./cmd/check-protocol-minimum-version --base "origin/${{ github.base_ref }}" --head HEAD'
 }
 
+test_release_pr_guard_fails_on_stale_dispatcher_minimum() {
+  assert_contains "$BUILD_WORKFLOW" "      - name: Check dispatcher minimum version"
+  assert_contains "$BUILD_WORKFLOW" "        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'"
+  assert_contains "$BUILD_WORKFLOW" "        run: go run ./cmd/check-dispatcher-minimum-version"
+}
+
 test_pull_request_target_comment_workflow_is_trusted() {
   assert_file_exists "$COMMENT_WORKFLOW"
   assert_contains "$COMMENT_WORKFLOW" "name: Protocol Minimum Version Warning"
@@ -46,4 +52,5 @@ test_pull_request_target_comment_workflow_is_trusted() {
 }
 
 test_pull_request_guard_fails_on_minimum_version_omission
+test_release_pr_guard_fails_on_stale_dispatcher_minimum
 test_pull_request_target_comment_workflow_is_trusted

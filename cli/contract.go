@@ -20,8 +20,11 @@ type Contract struct {
 	SchemaVersion int `json:"schemaVersion"`
 	// ProtocolVersion is the C# IPC contract generation this binary speaks. It moves only
 	// when the Unity package and the CLI can no longer interoperate, never per release.
-	ProtocolVersion int    `json:"protocolVersion"`
-	CliVersion      string `json:"cliVersion"`
+	ProtocolVersion int `json:"protocolVersion"`
+	// DispatcherContractVersion is the minimum launcher capability generation this binary
+	// provides. It moves only when project pins need a newer dispatcher contract.
+	DispatcherContractVersion int    `json:"dispatcherContractVersion"`
+	CliVersion                string `json:"cliVersion"`
 }
 
 func mustLoad() Contract {
@@ -40,6 +43,9 @@ func mustLoad() Contract {
 	requireString(contract.CliVersion, "cliVersion")
 	if contract.ProtocolVersion < 1 {
 		panic(fmt.Sprintf("CLI contract protocolVersion must be at least 1, got %d", contract.ProtocolVersion))
+	}
+	if contract.DispatcherContractVersion < 1 {
+		panic(fmt.Sprintf("CLI contract dispatcherContractVersion must be at least 1, got %d", contract.DispatcherContractVersion))
 	}
 	return contract
 }

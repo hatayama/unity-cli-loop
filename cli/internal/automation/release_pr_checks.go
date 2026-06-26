@@ -72,6 +72,12 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 	}
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Marked release PR #%d as draft while checks run.", releasePR.Number))
 
+	releasePR, err = syncReleasePRDispatcherMinimum(ctx, stdout, config, releasePR)
+	if err != nil {
+		writeReleasePRCheckLine(stderr, err)
+		return 1
+	}
+
 	dispatchedAt := releasePRCheckNow().UTC().Truncate(time.Second)
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Dispatching %s for release PR #%d: %s", config.workflow, releasePR.Number, releasePR.URL))
 	err = dispatchReleasePRCheckWorkflow(ctx, config, releasePR)
