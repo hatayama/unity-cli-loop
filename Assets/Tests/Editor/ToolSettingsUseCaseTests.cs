@@ -16,10 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class ToolSettingsUseCaseTests
     {
         [Test]
-        public void TryGetToolCatalog_WhenRegistryAvailable_IncludesNativePausePointCommands()
+        public void TryGetToolCatalog_WhenRegistryAvailable_ShowsOnlyWaitForPausePointCommand()
         {
-            // Verifies CLI-native pause point commands are user-toggleable built-in tools.
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            // Verifies Tool Settings exposes only the parent pause point command.
+            ToolSettingsService toolSettingsService = new(new InMemoryToolSettingsPort());
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -35,14 +35,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(isAvailable, Is.True);
             Assert.That(toolNames, Does.Contain(UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT));
-            Assert.That(toolNames, Does.Contain(UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS));
+            Assert.That(toolNames, Does.Not.Contain(UnityCliLoopConstants.TOOL_NAME_ENABLE_PAUSE_POINT));
+            Assert.That(toolNames, Does.Not.Contain(UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT));
+            Assert.That(toolNames, Does.Not.Contain(UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS));
+        }
+
+        [Test]
+        public void IsToolEnabled_WhenWaitForPausePointDisabled_DisablesPausePointAuxiliaryTools()
+        {
+            // Verifies pause point auxiliary tools follow the wait-for-pause-point setting.
+            ToolSettingsService toolSettingsService = new(new InMemoryToolSettingsPort());
+            UnityCliLoopToolRegistrarService toolRegistrarService = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsService,
+                new UnityCliLoopToolExecutionService());
+            ToolSettingsUseCase useCase = new(
+                toolSettingsService,
+                toolRegistrarService,
+                new StaticToolSkillDescriptionProvider(new Dictionary<string, string>()));
+
+            useCase.SetToolEnabled(UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT, false);
+
+            Assert.That(useCase.IsToolEnabled(UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT), Is.False);
+            Assert.That(useCase.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_ENABLE_PAUSE_POINT), Is.False);
+            Assert.That(useCase.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT), Is.False);
+            Assert.That(useCase.IsToolEnabled(UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS), Is.False);
         }
 
         [Test]
         public void TryGetToolCatalog_WhenSkillDescriptionExists_IncludesDescription()
         {
             // Verifies Tool Settings can show source skill descriptions without changing public tool metadata.
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            ToolSettingsService toolSettingsService = new(new InMemoryToolSettingsPort());
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -77,6 +101,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public IReadOnlyDictionary<string, string> GetSkillDescriptionsByToolName()
             {
                 return _descriptions;
+            }
+        }
+
+        private sealed class InMemoryToolSettingsPort : IToolSettingsPort
+        {
+            private readonly HashSet<string> _disabledTools = new();
+
+            public bool IsToolEnabled(string toolName)
+            {
+                return !_disabledTools.Contains(toolName);
+            }
+
+            public void SetToolEnabled(string toolName, bool enabled)
+            {
+                if (enabled)
+                {
+                    _disabledTools.Remove(toolName);
+                    return;
+                }
+
+                _disabledTools.Add(toolName);
+            }
+
+            public string[] GetDisabledTools()
+            {
+                return _disabledTools.ToArray();
+            }
+
+            public void InvalidateCache()
+            {
             }
         }
     }

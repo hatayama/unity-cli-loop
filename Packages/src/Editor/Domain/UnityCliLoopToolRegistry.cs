@@ -114,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
         public bool IsToolEnabled(string toolName)
         {
-            return _toolSettingsService.IsToolEnabled(toolName);
+            return ToolSettingsToolLinkPolicy.IsToolEnabled(toolName, _toolSettingsService);
         }
 
         public ToolInfo[] GetRegisteredTools()
@@ -128,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return _tools.Values
                 .Where(tool => ToolExecutionAvailability.ShouldExposeInRegisteredTools(
                     tool.ToolName,
-                    _toolSettingsService.IsToolEnabled(tool.ToolName)))
+                    ToolSettingsToolLinkPolicy.IsToolEnabled(tool.ToolName, _toolSettingsService)))
                 .Where(tool => !internalToolNames.Contains(tool.ToolName))
                 .Select(tool =>
             {
@@ -152,6 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         {
             HashSet<string> internalToolNames = _internalToolNameProvider.GetInternalToolNames(projectRoot);
             return _tools.Values
+                .Where(tool => ToolSettingsToolLinkPolicy.IsUserFacingToolSettingsTool(tool.ToolName))
                 .Where(tool => !internalToolNames.Contains(tool.ToolName))
                 .Select(tool =>
             {
