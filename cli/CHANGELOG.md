@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.0-beta.40](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.39...cli-v3.0.0-beta.40) (2026-06-26)
+
+
+### Features
+
+* Projects can run pinned CLI versions ([#1411](https://github.com/hatayama/unity-cli-loop/issues/1411)) ([1637a34](https://github.com/hatayama/unity-cli-loop/commit/1637a34ac47a31025d37db511ef5736baa745f57))
+
+
+### Bug Fixes
+
+* Keep release PRs compatible with the CLI launcher ([cce7e15](https://github.com/hatayama/unity-cli-loop/commit/cce7e15e0c3d35b320bd81df366247102d8f8b91))
+
 ## [3.0.0-beta.39](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.38...cli-v3.0.0-beta.39) (2026-06-25)
 
 
