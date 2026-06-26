@@ -115,6 +115,42 @@ func TestRunDispatcherUnknownLeadingOptionDoesNotRequireProjectPin(t *testing.T)
 	}
 }
 
+func TestRunDispatcherLaunchQuitDoesNotRequireProjectPin(t *testing.T) {
+	// Verifies launch can bootstrap a project before Unity has generated the dispatcher pin.
+	projectRoot := createDispatcherUnityProject(t)
+	t.Chdir(t.TempDir())
+
+	previousFinder := findRunningUnityProcessForLaunch
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return nil, nil
+	}
+	defer func() {
+		findRunningUnityProcessForLaunch = previousFinder
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(context.Background(), []string{"launch", projectRoot, "--quit"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("dispatcher launch failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !bytes.Contains(stdout.Bytes(), []byte(`"Quit": true`)) {
+		t.Fatalf("dispatcher launch output mismatch: %s", stdout.String())
+	}
+}
+
+func TestResolveDispatcherRealCLIRejectsInvalidCLIVersion(t *testing.T) {
+	// Verifies project pins cannot escape the dispatcher cache through cliVersion path segments.
+	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
+
+	_, err := resolveDispatcherRealCLI(context.Background(), dispatcherPin{CLIVersion: "../../../../payload"})
+
+	if err == nil {
+		t.Fatal("expected invalid cliVersion error")
+	}
+}
+
 func TestExtractDispatcherRealCLIFromTarPrefersRealCLI(t *testing.T) {
 	// Verifies release archives that contain dispatcher first still extract the real CLI binary.
 	tempDir := t.TempDir()
@@ -164,6 +200,25 @@ func TestLoadDispatcherPinFallsBackToPackagePin(t *testing.T) {
 	}
 	if pin.CLIVersion != "3.0.0-beta.55" {
 		t.Fatalf("cliVersion mismatch: %s", pin.CLIVersion)
+	}
+}
+
+func TestLoadDispatcherPinRejectsInvalidCLIVersion(t *testing.T) {
+	// Verifies project pin cliVersion must be a release version, not a filesystem path.
+	projectRoot := createDispatcherUnityProject(t)
+	pinPath := filepath.Join(projectRoot, dispatcherProjectPinRelativePath)
+	if err := os.MkdirAll(filepath.Dir(pinPath), 0o755); err != nil {
+		t.Fatalf("failed to create pin directory: %v", err)
+	}
+	content := `{"schemaVersion":1,"packageName":"io.github.hatayama.uloopmcp","packageVersion":"3.0.0-beta.1","cliVersion":"../../payload","requiredProtocolVersion":2,"minimumDispatcherVersion":"3.0.0-beta.39"}`
+	if err := os.WriteFile(pinPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write pin: %v", err)
+	}
+
+	_, err := loadDispatcherPin(projectRoot)
+
+	if err == nil {
+		t.Fatal("expected invalid cliVersion error")
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 var (
 	dispatcherMinimumCliVersionPattern       = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
 	dispatcherRequiredProtocolVersionPattern = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
+	dispatcherCLIVersionPattern              = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
 )
 
 type dispatcherPin struct {
@@ -98,8 +99,12 @@ func readDispatcherPin(pinPath string) (dispatcherPin, error) {
 	if err := json.Unmarshal(content, &pin); err != nil {
 		return dispatcherPin{}, fmt.Errorf("failed to parse %s: %w", pinPath, err)
 	}
-	if strings.TrimSpace(pin.CLIVersion) == "" {
+	pin.CLIVersion = strings.TrimSpace(pin.CLIVersion)
+	if pin.CLIVersion == "" {
 		return dispatcherPin{}, fmt.Errorf("%s does not define cliVersion", pinPath)
+	}
+	if err := validateDispatcherCLIVersion(pin.CLIVersion); err != nil {
+		return dispatcherPin{}, fmt.Errorf("%s defines invalid cliVersion: %w", pinPath, err)
 	}
 	if pin.SchemaVersion == 0 {
 		return dispatcherPin{}, fmt.Errorf("%s does not define schemaVersion", pinPath)
@@ -118,6 +123,10 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 	if len(versionMatch) != 2 {
 		return dispatcherPin{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_CLI_VERSION", constantsPath)
 	}
+	cliVersion := strings.TrimSpace(versionMatch[1])
+	if err := validateDispatcherCLIVersion(cliVersion); err != nil {
+		return dispatcherPin{}, fmt.Errorf("%s defines invalid MINIMUM_REQUIRED_CLI_VERSION: %w", constantsPath, err)
+	}
 	protocolVersion := 0
 	protocolMatch := dispatcherRequiredProtocolVersionPattern.FindStringSubmatch(text)
 	if len(protocolMatch) == 2 {
@@ -127,9 +136,16 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 	return dispatcherPin{
 		SchemaVersion:            1,
 		PackageName:              dispatcherUnityPackageName,
-		CLIVersion:               versionMatch[1],
+		CLIVersion:               cliVersion,
 		RequiredProtocolVersion:  protocolVersion,
-		MinimumDispatcherVersion: versionMatch[1],
+		MinimumDispatcherVersion: cliVersion,
 		SourcePath:               constantsPath,
 	}, nil
+}
+
+func validateDispatcherCLIVersion(cliVersion string) error {
+	if !dispatcherCLIVersionPattern.MatchString(cliVersion) {
+		return fmt.Errorf("expected semantic version, got %q", cliVersion)
+	}
+	return nil
 }

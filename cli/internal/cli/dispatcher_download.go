@@ -23,6 +23,10 @@ import (
 var dispatcherHTTPClient = http.DefaultClient
 
 func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin) (string, error) {
+	pin.CLIVersion = strings.TrimSpace(pin.CLIVersion)
+	if err := validateDispatcherCLIVersion(pin.CLIVersion); err != nil {
+		return "", err
+	}
 	if siblingPath, ok := dispatcherSiblingRealCLIPath(pin); ok {
 		return siblingPath, nil
 	}

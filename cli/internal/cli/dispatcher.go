@@ -100,7 +100,7 @@ func shouldRunInDispatcherProcess(args []string) bool {
 	}
 
 	switch args[0] {
-	case installCommandName, updateCommandName, uninstallCommandName, skillsCommandName:
+	case launchCommandName, installCommandName, updateCommandName, uninstallCommandName, skillsCommandName:
 		return true
 	default:
 		return false
