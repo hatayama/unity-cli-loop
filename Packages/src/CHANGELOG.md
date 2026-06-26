@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.40](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.39...v3.0.0-beta.40) (2026-06-25)
+
+
+### Bug Fixes
+
+* Keep Go and C# complexity checks under fifteen ([#1403](https://github.com/hatayama/unity-cli-loop/issues/1403)) ([e77d893](https://github.com/hatayama/unity-cli-loop/commit/e77d8938a1ebea3439236c91753677cb0074aa27))
+* Migration handles deeply nested Windows project files ([#1396](https://github.com/hatayama/unity-cli-loop/issues/1396)) ([bd3d7ed](https://github.com/hatayama/unity-cli-loop/commit/bd3d7ed7f55e81664ab911523acd32bc2da5a75c))
+
 ## [3.0.0-beta.39](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.38...v3.0.0-beta.39) (2026-06-22)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.39](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.38...cli-v3.0.0-beta.39) (2026-06-25)
+
+
+### Bug Fixes
+
+* Keep Go and C# complexity checks under fifteen ([#1403](https://github.com/hatayama/unity-cli-loop/issues/1403)) ([e77d893](https://github.com/hatayama/unity-cli-loop/commit/e77d8938a1ebea3439236c91753677cb0074aa27))
+
 ## [3.0.0-beta.38](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.37...cli-v3.0.0-beta.38) (2026-06-22)
 
 
