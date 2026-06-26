@@ -40,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _foldout = root.Q<Foldout>("tool-settings-foldout");
             _toolSettingsInfoContainer = root.Q<VisualElement>("tool-settings-info-container");
             _toolListContainer = root.Q<VisualElement>("tool-list-container");
+            Debug.Assert(_toolSettingsInfoContainer != null, "tool-settings-info-container must not be null");
             Debug.Assert(_toolListContainer != null, "tool-list-container must not be null");
 
             SetupToolSettingsInfoText();
@@ -172,21 +173,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void SetToolSettingsInfoVisible(bool visible)
         {
-            if (_toolSettingsInfoContainer == null)
-            {
-                return;
-            }
-
             ViewDataBinder.SetVisible(_toolSettingsInfoContainer, visible);
         }
 
         private void SetupToolSettingsInfoText()
         {
-            if (_toolSettingsInfoContainer == null)
-            {
-                return;
-            }
-
             _toolSettingsInfoContainer.Clear();
 
             TextField infoText = new();
