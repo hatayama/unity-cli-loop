@@ -3,6 +3,7 @@ package automation
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,6 +55,57 @@ func TestRunDispatcherMinimumVersionCheck_WhenProjectPinDiffersFromPackagePin_Fa
 		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
 	}
 	assertDispatcherMinimumVersionLogContains(t, result.stderr, ".uloop/cli-pin.json minimumDispatcherVersion")
+}
+
+// Verifies invalid dispatcher contract metadata reports the actual bad value.
+func TestRunDispatcherMinimumVersionCheck_WhenCurrentDispatcherContractIsInvalid_FailsWithValue(t *testing.T) {
+	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
+		currentCliVersion:                "3.0.0-beta.40",
+		currentDispatcherContractVersion: 0,
+		minimumDispatcherVersion:         "3.0.0-beta.40",
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertDispatcherMinimumVersionLogContains(t, result.stderr, "dispatcherContractVersion must be at least 1, got 0")
+}
+
+// Verifies release PR sync only edits minimumDispatcherVersion and keeps future schema fields.
+func TestSyncDispatcherMinimumVersionPinPreservesUnknownFields(t *testing.T) {
+	workDir := t.TempDir()
+	path := filepath.Join(workDir, "cli-pin.json")
+	writeFile(t, path, `{"schemaVersion":1,"cliVersion":"3.0.0-beta.40","minimumDispatcherVersion":"3.0.0-beta.39","futureField":{"enabled":true}}`)
+
+	changed, err := syncDispatcherMinimumVersionPin(path, "3.0.0-beta.40")
+	if err != nil {
+		t.Fatalf("expected pin sync to pass, got %v", err)
+	}
+	if !changed {
+		t.Fatal("expected pin sync to report a change")
+	}
+
+	updatedContent := readFile(t, path)
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal([]byte(updatedContent), &fields); err != nil {
+		t.Fatalf("failed to parse updated pin: %v", err)
+	}
+	futureField := struct {
+		Enabled bool `json:"enabled"`
+	}{}
+	if err := json.Unmarshal(fields["futureField"], &futureField); err != nil {
+		t.Fatalf("failed to parse futureField: %v", err)
+	}
+	if !futureField.Enabled {
+		t.Fatalf("expected futureField to be preserved, got %s", fields["futureField"])
+	}
+	minimumDispatcherVersion := ""
+	if err := json.Unmarshal(fields["minimumDispatcherVersion"], &minimumDispatcherVersion); err != nil {
+		t.Fatalf("failed to parse minimumDispatcherVersion: %v", err)
+	}
+	if minimumDispatcherVersion != "3.0.0-beta.40" {
+		t.Fatalf("expected minimumDispatcherVersion to be updated, got %q", minimumDispatcherVersion)
+	}
 }
 
 type dispatcherMinimumVersionCase struct {

@@ -110,6 +110,28 @@ func TestReleasePRChecksKeepDispatcherMinimumWhenReleaseIsCapable(t *testing.T) 
 	assertReleasePRCheckLogContains(t, result.packagePin, `"minimumDispatcherVersion":"3.0.0-beta.40"`)
 }
 
+// Verifies structural release contract errors are reported instead of being hidden by auto-sync.
+func TestReleasePRChecksFailWhenMinimumReleaseContractVersionDiffers(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		runWatchStatus: "0",
+		dispatcherSync: releasePRDispatcherSyncCase{
+			currentCliVersion:        "3.0.0-beta.40",
+			minimumDispatcherVersion: "3.0.0-beta.39",
+			releaseContract:          `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.38","dispatcherContractVersion":1}`,
+		},
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertReleasePRCheckLogContains(t, result.stderr, `contract declares cliVersion "3.0.0-beta.38"`)
+	assertReleasePRCheckLogDoesNotContain(t, result.stdout, "Updated release PR #1043 dispatcher minimum version")
+	assertReleasePRCheckLogDoesNotContain(t, result.gitLog, "commit -m "+releasePRDispatcherMinimumCommitMessage)
+	assertReleasePRCheckLogDoesNotContain(t, result.ghLog, "workflow run")
+}
+
 // Verifies that same-second workflow runs are accepted when GitHub rounds createdAt timestamps.
 func TestReleasePRChecksAcceptSameSecondRunAfterDispatch(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{

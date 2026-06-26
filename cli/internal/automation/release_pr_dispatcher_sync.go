@@ -26,7 +26,10 @@ func syncReleasePRDispatcherMinimum(
 	if err != nil {
 		return releasePullRequest{}, err
 	}
-	targetVersion, needsSync := dispatcherMinimumVersionSyncTarget(ctx, repoRoot, values)
+	targetVersion, needsSync, err := dispatcherMinimumVersionSyncTarget(ctx, repoRoot, values)
+	if err != nil {
+		return releasePullRequest{}, err
+	}
 	if !needsSync {
 		return releasePR, nil
 	}
@@ -65,12 +68,15 @@ func dispatcherMinimumVersionSyncTarget(
 	ctx context.Context,
 	repoRoot string,
 	values dispatcherMinimumVersionValues,
-) (string, bool) {
+) (string, bool, error) {
 	err := verifyDispatcherMinimumVersionAtRef(ctx, repoRoot, values)
 	if err == nil {
-		return "", false
+		return "", false, nil
 	}
-	return values.CurrentCliVersion, true
+	if !isDispatcherMinimumVersionSyncableError(err) {
+		return "", false, err
+	}
+	return values.CurrentCliVersion, true, nil
 }
 
 func checkoutReleasePRBranch(ctx context.Context, repoRoot string, releasePR releasePullRequest) error {
