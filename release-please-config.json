@@ -58,6 +58,20 @@
           "type": "json",
           "path": "/.uloop/cli-pin.json",
           "jsonpath": "$.cliVersion"
+        },
+        {
+          "type": "json",
+          "path": "/Packages/src/cli-pin.json",
+          "jsonpath": "$.minimumDispatcherVersion"
+        },
+        {
+          "type": "json",
+          "path": "/.uloop/cli-pin.json",
+          "jsonpath": "$.minimumDispatcherVersion"
+        },
+        {
+          "type": "generic",
+          "path": "/Packages/src/Editor/Domain/CliConstants.cs"
         }
       ]
     }
