@@ -25,6 +25,14 @@ if [ "$1" = "rev-parse" ]; then
   exit 0
 fi
 
+if [ "$1" = "rev-list" ] && [ "$2" = "-n" ] && [ "$3" = "1" ]; then
+  if [ -n "${DISPATCHER_TAG_SHA_VALUE:-}" ]; then
+    printf '%s\n' "$DISPATCHER_TAG_SHA_VALUE"
+    exit 0
+  fi
+  exit 1
+fi
+
 echo "unexpected git command: $*" >&2
 exit 1
 MOCK_GIT
@@ -79,6 +87,7 @@ run_case() {
   name=$1
   release_state=$2
   has_assets=$3
+  tag_sha=${4:-}
   work_dir="$TMP_DIR/$name"
   mkdir -p "$work_dir"
   (
@@ -91,6 +100,7 @@ run_case() {
       EVENT_REF_NAME=v3-beta \
       DISPATCHER_RELEASE_STATE="$release_state" \
       DISPATCHER_RELEASE_HAS_ASSETS="$has_assets" \
+      DISPATCHER_TAG_SHA_VALUE="$tag_sha" \
       "$SCRIPT"
   )
 }
@@ -124,6 +134,14 @@ test_published_release_with_missing_assets_uploads_assets() {
   assert_contains "$output" "release=false"
 }
 
+test_published_release_with_missing_assets_uses_existing_tag_sha() {
+  output=$(run_case missing-assets-followup published false release-sha)
+  assert_contains "$output" "publish=true"
+  assert_contains "$output" "release=false"
+  assert_contains "$output" "sha=release-sha"
+}
+
 test_missing_release_publishes
 test_complete_release_skips
 test_published_release_with_missing_assets_uploads_assets
+test_published_release_with_missing_assets_uses_existing_tag_sha

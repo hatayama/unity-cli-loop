@@ -22,6 +22,10 @@ permissions:
   attestations: write
   artifact-metadata: write
 
+concurrency:
+  group: dispatcher-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -138,8 +142,9 @@ jobs:
             git push origin "refs/tags/${RELEASE_TAG}"
           fi
 
-          if gh release view "${RELEASE_TAG}" --json isDraft --jq '.isDraft' >/tmp/dispatcher-release-draft 2>/dev/null; then
-            IS_DRAFT=$(cat /tmp/dispatcher-release-draft)
+          DRAFT_STATE_PATH="${RUNNER_TEMP}/dispatcher-release-draft-${GITHUB_RUN_ID}"
+          if gh release view "${RELEASE_TAG}" --json isDraft --jq '.isDraft' >"${DRAFT_STATE_PATH}" 2>/dev/null; then
+            IS_DRAFT=$(cat "${DRAFT_STATE_PATH}")
             if [ "${IS_DRAFT}" != "true" ]; then
               echo "release_published=true" >> "$GITHUB_OUTPUT"
               echo "Dispatcher release ${RELEASE_TAG} is already published; verifying existing assets."

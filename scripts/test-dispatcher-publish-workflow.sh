@@ -13,6 +13,15 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  file=$1
+  unexpected=$2
+  if grep -F -- "$unexpected" "$file" >/dev/null 2>&1; then
+    echo "Expected $file not to contain: $unexpected" >&2
+    exit 1
+  fi
+}
+
 line_number() {
   file=$1
   text=$2
@@ -34,6 +43,12 @@ assert_before() {
 test_dispatcher_resolver_is_used() {
   assert_contains "$WORKFLOW" "      - name: Resolve dispatcher release target"
   assert_contains "$WORKFLOW" '          scripts/resolve-dispatcher-release-target.sh >> "$GITHUB_OUTPUT"'
+}
+
+test_dispatcher_publish_is_serialized_by_branch() {
+  assert_contains "$WORKFLOW" "concurrency:"
+  assert_contains "$WORKFLOW" '  group: dispatcher-publish-${{ github.ref }}'
+  assert_contains "$WORKFLOW" "  cancel-in-progress: false"
 }
 
 test_dispatcher_assets_are_packaged_and_verified() {
@@ -58,6 +73,13 @@ test_existing_dispatcher_tag_target_is_checked() {
   assert_before "$WORKFLOW" '          EXISTING_TAG_SHA=$(git rev-list -n 1 "${RELEASE_TAG}" 2>/dev/null || true)' '      - name: Verify release-tagged installer scripts'
 }
 
+test_dispatcher_draft_state_uses_runner_temp() {
+  assert_contains "$WORKFLOW" '          DRAFT_STATE_PATH="${RUNNER_TEMP}/dispatcher-release-draft-${GITHUB_RUN_ID}"'
+  assert_contains "$WORKFLOW" '          if gh release view "${RELEASE_TAG}" --json isDraft --jq '"'"'.isDraft'"'"' >"${DRAFT_STATE_PATH}" 2>/dev/null; then'
+  assert_contains "$WORKFLOW" '            IS_DRAFT=$(cat "${DRAFT_STATE_PATH}")'
+  assert_not_contains "$WORKFLOW" "/tmp/dispatcher-release-draft"
+}
+
 test_dispatcher_beta_releases_are_marked_prerelease() {
   assert_contains "$WORKFLOW" '          PRERELEASE_FLAG=""'
   assert_contains "$WORKFLOW" '              PRERELEASE_FLAG="--prerelease"'
@@ -72,8 +94,10 @@ test_package_release_sync_runs_after_dispatcher_publish() {
 }
 
 test_dispatcher_resolver_is_used
+test_dispatcher_publish_is_serialized_by_branch
 test_dispatcher_assets_are_packaged_and_verified
 test_installer_scripts_are_verified_before_upload
 test_existing_dispatcher_tag_target_is_checked
+test_dispatcher_draft_state_uses_runner_temp
 test_dispatcher_beta_releases_are_marked_prerelease
 test_package_release_sync_runs_after_dispatcher_publish

@@ -98,6 +98,18 @@ release_is_published() {
   [ "$is_draft" = "false" ]
 }
 
+dispatcher_release_target_sha() {
+  release_tag=$1
+
+  tag_sha=$(git rev-list -n 1 "$release_tag" 2>/dev/null || true)
+  if [ -n "$tag_sha" ]; then
+    printf '%s\n' "$tag_sha"
+    return
+  fi
+
+  git rev-parse HEAD
+}
+
 VERSION=$(jq -r '.dispatcherVersion' cli/dispatcher-contract.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
   echo "Could not resolve dispatcherVersion from cli/dispatcher-contract.json." >&2
@@ -135,7 +147,7 @@ if [ "$EVENT_NAME" = "push" ]; then
   esac
 fi
 
-TARGET_SHA=$(git rev-parse HEAD)
+TARGET_SHA=$(dispatcher_release_target_sha "$RELEASE_TAG")
 
 if [ "$CAN_EVALUATE_DISPATCHER_RELEASE" != "true" ]; then
   SHOULD_PUBLISH=false
