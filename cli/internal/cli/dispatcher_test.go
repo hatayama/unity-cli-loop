@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -142,6 +143,22 @@ func TestRunDispatcherLaunchQuitDoesNotRequireProjectPin(t *testing.T) {
 	}
 }
 
+func TestRunDispatcherVersionUsesDispatcherVersion(t *testing.T) {
+	// Verifies the global launcher reports its own dispatcher release version.
+	t.Chdir(t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(context.Background(), []string{"--version"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("dispatcher version failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != dispatcherVersion {
+		t.Fatalf("dispatcher version mismatch: %s", stdout.String())
+	}
+}
+
 func TestResolveDispatcherRealCLIRejectsInvalidCLIVersion(t *testing.T) {
 	// Verifies project pins cannot escape the dispatcher cache through cliVersion path segments.
 	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
@@ -187,7 +204,7 @@ func TestEnforceDispatcherFreshnessDoesNotMarkFailedOptionalUpdateChecked(t *tes
 	var stderr bytes.Buffer
 	handled, code := enforceDispatcherFreshness(
 		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: version},
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
 		&stderr)
 
 	if handled || code != 0 {
@@ -203,7 +220,7 @@ func TestEnforceDispatcherFreshnessDoesNotMarkFailedOptionalUpdateChecked(t *tes
 }
 
 func TestExtractDispatcherRealCLIFromTarPrefersRealCLI(t *testing.T) {
-	// Verifies release archives that contain dispatcher first still extract the real CLI binary.
+	// Verifies legacy bridge archives that contain dispatcher first still extract the real CLI binary.
 	tempDir := t.TempDir()
 	archivePath := filepath.Join(tempDir, "uloop-darwin-arm64.tar.gz")
 	writeDispatcherTarGzArchive(t, archivePath, []dispatcherArchiveTestEntry{
@@ -220,11 +237,43 @@ func TestExtractDispatcherRealCLIFromTarPrefersRealCLI(t *testing.T) {
 }
 
 func TestExtractDispatcherRealCLIFromZipPrefersRealCLI(t *testing.T) {
-	// Verifies Windows release archives that contain dispatcher first still extract the real CLI binary.
+	// Verifies Windows legacy bridge archives that contain dispatcher first still extract the real CLI binary.
 	tempDir := t.TempDir()
 	archivePath := filepath.Join(tempDir, "uloop-windows-amd64.zip")
 	writeDispatcherZipArchive(t, archivePath, []dispatcherArchiveTestEntry{
 		{Name: "uloop.exe", Content: "dispatcher"},
+		{Name: "uloop-cli.exe", Content: "real"},
+	})
+	destinationPath := filepath.Join(tempDir, "uloop-cli.exe")
+
+	err := extractDispatcherRealCLI(archivePath, filepath.Base(archivePath), destinationPath, "windows")
+	if err != nil {
+		t.Fatalf("extractDispatcherRealCLI failed: %v", err)
+	}
+	assertFileContent(t, destinationPath, "real")
+}
+
+func TestExtractDispatcherRealCLIFromTarRequiresRealCLIAsset(t *testing.T) {
+	// Verifies CLI release archives extract the real CLI binary without dispatcher payloads.
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "uloop-cli-darwin-arm64.tar.gz")
+	writeDispatcherTarGzArchive(t, archivePath, []dispatcherArchiveTestEntry{
+		{Name: "uloop-cli", Content: "real"},
+	})
+	destinationPath := filepath.Join(tempDir, "uloop-cli")
+
+	err := extractDispatcherRealCLI(archivePath, filepath.Base(archivePath), destinationPath, "darwin")
+	if err != nil {
+		t.Fatalf("extractDispatcherRealCLI failed: %v", err)
+	}
+	assertFileContent(t, destinationPath, "real")
+}
+
+func TestExtractDispatcherRealCLIFromZipRequiresRealCLIAsset(t *testing.T) {
+	// Verifies Windows CLI release archives extract the real CLI binary without dispatcher payloads.
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "uloop-cli-windows-amd64.zip")
+	writeDispatcherZipArchive(t, archivePath, []dispatcherArchiveTestEntry{
 		{Name: "uloop-cli.exe", Content: "real"},
 	})
 	destinationPath := filepath.Join(tempDir, "uloop-cli.exe")
@@ -363,7 +412,8 @@ func TestLoadDispatcherPinFallsBackToCliConstants(t *testing.T) {
 		t.Fatalf("failed to create constants directory: %v", err)
 	}
 	content := `public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
-public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.56";`
+public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.56";
+public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "1.0.0";`
 	if err := os.WriteFile(constantsPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write constants: %v", err)
 	}
@@ -378,6 +428,9 @@ public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.56";`
 	if pin.RequiredProtocolVersion != 3 {
 		t.Fatalf("protocol mismatch: %d", pin.RequiredProtocolVersion)
 	}
+	if pin.MinimumDispatcherVersion != "1.0.0" {
+		t.Fatalf("minimumDispatcherVersion mismatch: %s", pin.MinimumDispatcherVersion)
+	}
 }
 
 func TestLoadDispatcherPinFromCliConstantsNormalizesVersionPrefix(t *testing.T) {
@@ -388,7 +441,8 @@ func TestLoadDispatcherPinFromCliConstantsNormalizesVersionPrefix(t *testing.T) 
 		t.Fatalf("failed to create constants directory: %v", err)
 	}
 	content := `public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
-public const string MINIMUM_REQUIRED_CLI_VERSION = "v3.0.0-beta.59";`
+public const string MINIMUM_REQUIRED_CLI_VERSION = "v3.0.0-beta.59";
+public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "v1.0.0";`
 	if err := os.WriteFile(constantsPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write constants: %v", err)
 	}
@@ -400,7 +454,7 @@ public const string MINIMUM_REQUIRED_CLI_VERSION = "v3.0.0-beta.59";`
 	if pin.CLIVersion != "3.0.0-beta.59" {
 		t.Fatalf("cliVersion mismatch: %s", pin.CLIVersion)
 	}
-	if pin.MinimumDispatcherVersion != "3.0.0-beta.59" {
+	if pin.MinimumDispatcherVersion != "1.0.0" {
 		t.Fatalf("minimumDispatcherVersion mismatch: %s", pin.MinimumDispatcherVersion)
 	}
 }
@@ -433,7 +487,7 @@ func writeDispatcherProjectPin(t *testing.T, projectRoot string, cliVersion stri
 
 func writeDispatcherPinFile(t *testing.T, pinPath string, cliVersion string) {
 	t.Helper()
-	writeDispatcherPinFileWithMinimum(t, pinPath, cliVersion, version)
+	writeDispatcherPinFileWithMinimum(t, pinPath, cliVersion, dispatcherVersion)
 }
 
 func writeDispatcherPinFileWithMinimum(t *testing.T, pinPath string, cliVersion string, minimumDispatcherVersion string) {

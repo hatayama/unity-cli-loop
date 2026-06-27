@@ -16,16 +16,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     internal readonly struct CliInstallationDetection
     {
-        public CliInstallationDetection(string version, int? protocolVersion, string executablePath)
+        public CliInstallationDetection(string version, int? protocolVersion, string executablePath, bool isDispatcher = false)
         {
             Version = version;
             ProtocolVersion = protocolVersion;
             ExecutablePath = executablePath;
+            IsDispatcher = isDispatcher;
         }
 
         public string Version { get; }
         public int? ProtocolVersion { get; }
         public string ExecutablePath { get; }
+        public bool IsDispatcher { get; }
     }
 
     /// <summary>
@@ -46,7 +48,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string SHELL_CONTRACT_STATUS_END_MARKER = "__ULOOP_CONTRACT_STATUS_END__";
         private const string SHELL_SUCCESS_EXIT_CODE = "0";
         private const string VERSION_JSON_CLI_VERSION_PROPERTY = "CliVersion";
-        private const string VERSION_JSON_PROTOCOL_VERSION_PROPERTY = "ProtocolVersion";
+        private const string VERSION_JSON_DISPATCHER_VERSION_PROPERTY = "DispatcherVersion";
+        private const string VERSION_JSON_DISPATCHER_CONTRACT_VERSION_PROPERTY = "DispatcherContractVersion";
 
         private string _cachedCliVersion;
         private int? _cachedCliProtocolVersion;
@@ -249,9 +252,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return true;
             }
 
+            if (!detection.IsDispatcher)
+            {
+                return false;
+            }
+
             return CliVersionComparer.IsVersionGreaterThanOrEqual(
                 detection.Version,
-                CliConstants.MINIMUM_REQUIRED_CLI_VERSION);
+                CliConstants.MINIMUM_REQUIRED_DISPATCHER_VERSION);
         }
 
         internal static string BuildShellCliDetectionCommandForShell(
@@ -364,15 +372,43 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             try
             {
                 JObject parsed = JObject.Parse(jsonLine);
+                CliInstallationDetection dispatcherDetection = ParseDispatcherContract(parsed, executablePath);
+                if (!string.IsNullOrEmpty(dispatcherDetection.Version))
+                {
+                    return dispatcherDetection;
+                }
+
                 string version = parsed[VERSION_JSON_CLI_VERSION_PROPERTY]?.ToString();
-                JToken protocolVersionToken = parsed[VERSION_JSON_PROTOCOL_VERSION_PROPERTY];
-                int? protocolVersion = ReadProtocolVersion(protocolVersionToken);
-                return new CliInstallationDetection(version, protocolVersion, executablePath);
+                return new CliInstallationDetection(version, null, executablePath);
             }
             catch (JsonException)
             {
                 return new CliInstallationDetection(null, null, executablePath);
             }
+        }
+
+        private static CliInstallationDetection ParseDispatcherContract(JObject parsed, string executablePath)
+        {
+            string dispatcherVersion = parsed[VERSION_JSON_DISPATCHER_VERSION_PROPERTY]?.ToString();
+            JToken dispatcherContractVersionToken = parsed[VERSION_JSON_DISPATCHER_CONTRACT_VERSION_PROPERTY];
+            int? dispatcherContractVersion = ReadProtocolVersion(dispatcherContractVersionToken);
+            if (string.IsNullOrEmpty(dispatcherVersion) || dispatcherContractVersion == null)
+            {
+                return new CliInstallationDetection(null, null, executablePath);
+            }
+
+            if (dispatcherContractVersion.Value != CliConstants.REQUIRED_DISPATCHER_CONTRACT_VERSION)
+            {
+                return new CliInstallationDetection(null, null, executablePath);
+            }
+
+            // Why: the cached protocol slot drives existing setup UI compatibility. It is safe to mark
+            // compatible only after the dispatcher-specific contract generation matched exactly above.
+            return new CliInstallationDetection(
+                dispatcherVersion,
+                CliConstants.REQUIRED_CLI_PROTOCOL_VERSION,
+                executablePath,
+                true);
         }
 
         private static int? ReadProtocolVersion(JToken protocolVersionToken)

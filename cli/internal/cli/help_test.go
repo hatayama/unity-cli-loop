@@ -16,6 +16,7 @@ func TestPrintLauncherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T) {
 
 	output := stdout.String()
 	for _, expected := range []string{
+		"Dispatcher launcher. Finds the Unity project, then dispatches live Unity tool commands.",
 		"Native commands:",
 		"  launch",
 		"  focus-window",

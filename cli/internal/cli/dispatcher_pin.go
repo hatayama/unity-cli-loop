@@ -12,6 +12,7 @@ import (
 
 var (
 	dispatcherMinimumCliVersionPattern       = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
+	dispatcherMinimumVersionPattern          = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
 	dispatcherRequiredProtocolVersionPattern = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
 	dispatcherCLIVersionPattern              = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
 )
@@ -151,6 +152,14 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 	if err := validateDispatcherCLIVersion(cliVersion); err != nil {
 		return dispatcherPin{}, fmt.Errorf("%s defines invalid MINIMUM_REQUIRED_CLI_VERSION: %w", constantsPath, err)
 	}
+	dispatcherVersionMatch := dispatcherMinimumVersionPattern.FindStringSubmatch(text)
+	if len(dispatcherVersionMatch) != 2 {
+		return dispatcherPin{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_DISPATCHER_VERSION", constantsPath)
+	}
+	minimumDispatcherVersion := normalizeDispatcherVersion(dispatcherVersionMatch[1])
+	if err := validateDispatcherCLIVersion(minimumDispatcherVersion); err != nil {
+		return dispatcherPin{}, fmt.Errorf("%s defines invalid MINIMUM_REQUIRED_DISPATCHER_VERSION: %w", constantsPath, err)
+	}
 	protocolVersion := 0
 	protocolMatch := dispatcherRequiredProtocolVersionPattern.FindStringSubmatch(text)
 	if len(protocolMatch) == 2 {
@@ -162,7 +171,7 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 		PackageName:              dispatcherUnityPackageName,
 		CLIVersion:               cliVersion,
 		RequiredProtocolVersion:  protocolVersion,
-		MinimumDispatcherVersion: cliVersion,
+		MinimumDispatcherVersion: minimumDispatcherVersion,
 		SourcePath:               constantsPath,
 	}, nil
 }

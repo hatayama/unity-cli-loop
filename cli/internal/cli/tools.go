@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	version         = clicontract.Current.CliVersion
-	protocolVersion = clicontract.Current.ProtocolVersion
+	version                   = clicontract.Current.CliVersion
+	protocolVersion           = clicontract.Current.ProtocolVersion
+	dispatcherVersion         = clicontract.DispatcherCurrent.DispatcherVersion
+	dispatcherContractVersion = clicontract.DispatcherCurrent.DispatcherContractVersion
 )
 
 const (

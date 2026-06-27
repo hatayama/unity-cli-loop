@@ -3,8 +3,12 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 EXPECTED_ASSETS="
-install.sh
-install.ps1
+uloop-cli-darwin-amd64.tar.gz
+uloop-cli-darwin-amd64.tar.gz.sha256
+uloop-cli-darwin-arm64.tar.gz
+uloop-cli-darwin-arm64.tar.gz.sha256
+uloop-cli-windows-amd64.zip
+uloop-cli-windows-amd64.zip.sha256
 uloop-darwin-amd64.tar.gz
 uloop-darwin-amd64.tar.gz.sha256
 uloop-darwin-arm64.tar.gz
@@ -100,10 +104,16 @@ for asset_name in $EXPECTED_ASSETS; do
   require_file "$asset_name"
 done
 
+verify_checksum "uloop-cli-darwin-amd64.tar.gz"
+verify_checksum "uloop-cli-darwin-arm64.tar.gz"
+verify_checksum "uloop-cli-windows-amd64.zip"
 verify_checksum "uloop-darwin-amd64.tar.gz"
 verify_checksum "uloop-darwin-arm64.tar.gz"
 verify_checksum "uloop-windows-amd64.zip"
 
+require_tar_entry "uloop-cli-darwin-amd64.tar.gz" "uloop-cli"
+require_tar_entry "uloop-cli-darwin-arm64.tar.gz" "uloop-cli"
+require_zip_entry "uloop-cli-windows-amd64.zip" "uloop-cli.exe"
 require_tar_entry "uloop-darwin-amd64.tar.gz" "uloop"
 require_tar_entry "uloop-darwin-amd64.tar.gz" "uloop-cli"
 require_tar_entry "uloop-darwin-arm64.tar.gz" "uloop"
