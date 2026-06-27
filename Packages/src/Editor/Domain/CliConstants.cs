@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         // Why: global uloop is a dispatcher; project-local CLI versions are downloaded separately.
         public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "3.0.0";
         public const string MINIMUM_REQUIRED_DISPATCHER_RELEASE_TAG = DISPATCHER_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_DISPATCHER_VERSION;
+        // Why: dispatcher setup compatibility is a launcher contract generation, not the IPC protocol generation.
+        public const int REQUIRED_DISPATCHER_CONTRACT_VERSION = 1;
         public const string VERSION_FLAG = "--version";
         public const string SHORT_VERSION_FLAG = "-v";
         public const string JSON_FLAG = "--json";

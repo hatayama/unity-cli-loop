@@ -286,7 +286,8 @@ create_package_release() {
 release_has_all_cli_assets() {
   release_data=$1
 
-  for asset_name in $("${ROOT_DIR}/scripts/verify-native-cli-release-assets.sh" --list); do
+  asset_names=$("${ROOT_DIR}/scripts/verify-native-cli-release-assets.sh" --list) || return 1
+  for asset_name in $asset_names; do
     asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length')
     if [ "$asset_count" -eq 0 ]; then
       return 1
@@ -297,7 +298,8 @@ release_has_all_cli_assets() {
 release_has_all_dispatcher_assets() {
   release_data=$1
 
-  for asset_name in $("${ROOT_DIR}/scripts/verify-dispatcher-release-assets.sh" --list); do
+  asset_names=$("${ROOT_DIR}/scripts/verify-dispatcher-release-assets.sh" --list) || return 1
+  for asset_name in $asset_names; do
     asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length')
     if [ "$asset_count" -eq 0 ]; then
       return 1

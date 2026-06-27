@@ -106,16 +106,38 @@ func AnalyzeDispatcherVersionBumpGuardForRefs(
 		return DispatcherVersionBumpGuardResult{}, fmt.Errorf("failed to read head %s: %w", dispatcherContractFile, err)
 	}
 
-	baseValues := DispatcherVersionBumpValues{}
 	baseContent, baseContentErr := protocolMinimumVersionFileAtRef(ctx, repoRoot, config.BaseRef, dispatcherContractFile)
-	if baseContentErr == nil {
-		baseValues, err = ParseDispatcherVersionBumpValues([]byte(baseContent))
-		if err != nil {
-			return DispatcherVersionBumpGuardResult{}, fmt.Errorf("failed to parse base %s: %w", dispatcherContractFile, err)
-		}
+	baseValues, err := parseDispatcherVersionBumpBaseValues(baseContent, baseContentErr)
+	if err != nil {
+		return DispatcherVersionBumpGuardResult{}, err
 	}
 
 	return AnalyzeDispatcherVersionBumpGuard(changedFiles, baseValues, headValues), nil
+}
+
+func parseDispatcherVersionBumpBaseValues(
+	content string,
+	readErr error,
+) (DispatcherVersionBumpValues, error) {
+	if readErr != nil {
+		if isMissingDispatcherContractAtRefError(readErr) {
+			return DispatcherVersionBumpValues{}, nil
+		}
+		return DispatcherVersionBumpValues{}, fmt.Errorf("failed to read base %s: %w", dispatcherContractFile, readErr)
+	}
+
+	values, err := ParseDispatcherVersionBumpValues([]byte(content))
+	if err != nil {
+		return DispatcherVersionBumpValues{}, fmt.Errorf("failed to parse base %s: %w", dispatcherContractFile, err)
+	}
+	return values, nil
+}
+
+func isMissingDispatcherContractAtRefError(err error) bool {
+	message := err.Error()
+	quotedPath := "'" + dispatcherContractFile + "'"
+	return strings.Contains(message, "path "+quotedPath+" exists on disk, but not in") ||
+		strings.Contains(message, "Path "+quotedPath+" does not exist in")
 }
 
 func AnalyzeDispatcherVersionBumpGuard(

@@ -64,7 +64,7 @@ func printLauncherHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
 		dispatcherVersion,
-		"Native CLI. Finds the Unity project, then dispatches live Unity tool commands.",
+		"Dispatcher launcher. Finds the Unity project, then dispatches live Unity tool commands.",
 		toolsCache{},
 		false)
 }

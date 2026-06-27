@@ -254,6 +254,10 @@ EOF_VERIFY
 #!/bin/sh
 set -eu
 
+if [ "${DISPATCHER_ASSET_LIST_FAIL:-false}" = "true" ]; then
+  exit 1
+fi
+
 if [ "${1:-}" = "--list" ]; then
   printf '%s\n' \
     install.sh \
@@ -372,6 +376,7 @@ run_sync() {
     CLI_RELEASE_READY_AFTER_ATTEMPTS="$cli_release_ready_after_attempts" \
     DISPATCHER_RELEASE_STATE="$dispatcher_release_state" \
     DISPATCHER_RELEASE_ASSETS="$dispatcher_release_assets" \
+    DISPATCHER_ASSET_LIST_FAIL="${DISPATCHER_ASSET_LIST_FAIL:-false}" \
     CREATE_RELEASE_RACE_TAG="${CREATE_RELEASE_RACE_TAG:-}" \
     CREATE_RELEASE_RACE_TARGET="${CREATE_RELEASE_RACE_TARGET:-}" \
     GITHUB_OUTPUT="$work_dir/github-output.txt" \
@@ -479,6 +484,17 @@ test_waits_for_dispatcher_assets_before_creating_root_release() {
   assert_contains "$work_dir/github-output.txt" "ready=false"
 }
 
+# Verifies dispatcher asset-list failures cannot make the package release look ready.
+test_waits_when_dispatcher_asset_list_fails() {
+  work_dir=$(create_release_repo waits-for-dispatcher-asset-list)
+
+  DISPATCHER_ASSET_LIST_FAIL=true run_sync "$work_dir" "" false "" published complete 0 0 "" published complete
+
+  assert_contains "$work_dir/output.txt" "Dispatcher release dispatcher-v3.0.0 is not published with complete assets; package release sync will wait."
+  assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
+  assert_contains "$work_dir/github-output.txt" "ready=false"
+}
+
 # Verifies the release sync waits for a concurrently publishing CLI release before creating package releases.
 test_retries_until_cli_assets_are_ready() {
   work_dir=$(create_release_repo retries-until-cli-ready)
@@ -516,5 +532,6 @@ test_existing_draft_root_release_without_release_commit_fails
 test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release
 test_waits_for_dispatcher_assets_before_creating_root_release
+test_waits_when_dispatcher_asset_list_fails
 test_retries_until_cli_assets_are_ready
 test_concurrent_root_release_creation_is_reused
