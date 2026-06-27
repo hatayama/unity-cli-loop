@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.42](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.41...cli-v3.0.0-beta.42) (2026-06-27)
+
+
+### Bug Fixes
+
+* Dispatcher releases no longer look stable during v3 beta ([#1418](https://github.com/hatayama/unity-cli-loop/issues/1418)) ([bebb5cd](https://github.com/hatayama/unity-cli-loop/commit/bebb5cda7583a66969dcf4183316ec1d658014bd))
+* First dispatcher commands now show CLI download status ([#1419](https://github.com/hatayama/unity-cli-loop/issues/1419)) ([722d799](https://github.com/hatayama/unity-cli-loop/commit/722d799ff12db5cdffea370939328c00a34aa461))
+
 ## [3.0.0-beta.41](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.40...cli-v3.0.0-beta.41) (2026-06-27)
 
 
