@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.42](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.41...v3.0.0-beta.42) (2026-06-27)
+
+
+### Features
+
+* Let uloop launchers use project-pinned CLI versions ([#1413](https://github.com/hatayama/unity-cli-loop/issues/1413)) ([3e39bed](https://github.com/hatayama/unity-cli-loop/commit/3e39bed15f6b65ea54e68ca36ea2c4be898f4c7a))
+
 ## [3.0.0-beta.41](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.40...v3.0.0-beta.41) (2026-06-26)
 
 
