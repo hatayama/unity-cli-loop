@@ -481,9 +481,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(true, false, false, false, false, true, "3.0.0", "3.0.0", "Fix PATH")]
         [TestCase(true, false, false, true, false, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
         [TestCase(true, false, false, true, false, true, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
-        [TestCase(true, false, false, true, false, false, "3.0.0", "3.0.0", "Update CLI (protocol v2)")]
+        [TestCase(true, false, false, true, false, false, "3.0.0", "3.0.0", "Update CLI (v3.0.0 required)")]
         [TestCase(true, false, false, false, true, false, "3.1.0", "3.0.0", "Downgrade CLI (v3.1.0 \u2192 v3.0.0)")]
-        [TestCase(true, false, false, false, true, false, "3.0.0", "3.0.0", "Downgrade CLI (protocol v2)")]
+        [TestCase(true, false, false, false, true, false, "3.0.0", "3.0.0", "Downgrade CLI (v3.0.0 required)")]
         [TestCase(true, true, false, false, false, false, "3.0.0", "3.0.0", "Installing...")]
         [TestCase(true, true, false, false, false, true, "3.0.0", "3.0.0", "Fixing PATH...")]
         [TestCase(true, true, false, false, true, true, "3.1.0", "3.0.0", "Installing...")]
@@ -515,7 +515,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(false, false, null, "3.0.0", "Not installed")]
         [TestCase(true, true, "3.0.0", "3.0.0", "v3.0.0")]
         [TestCase(true, false, "2.9.0", "3.0.0", "v2.9.0 (requires v3.0.0)")]
-        [TestCase(true, false, "3.0.0", "3.0.0", "v3.0.0 (requires protocol v2)")]
+        [TestCase(true, false, "3.0.0", "3.0.0", "v3.0.0 (update required)")]
         public void GetCliStatusTextForSetupWizard_ReturnsExpectedLabel(
             bool cliInstalled,
             bool cliCompatible,
@@ -523,7 +523,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string requiredCliVersion,
             string expectedLabel)
         {
-            // Verifies that protocol mismatches do not render as same-version release updates.
+            // Verifies that same-version replacement prompts do not expose dispatcher internals.
             string label = SetupWizardWindow.GetCliStatusTextForSetupWizard(
                 cliInstalled,
                 cliCompatible,

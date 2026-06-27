@@ -53,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private string _cachedCliVersion;
         private int? _cachedCliProtocolVersion;
+        private bool _cachedCliIsDispatcher;
         private string _cachedCliExecutablePath;
         private bool _cacheInitialized;
         private bool _isRefreshing;
@@ -70,6 +71,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public int? GetCachedCliProtocolVersion()
         {
             return _cacheInitialized ? _cachedCliProtocolVersion : null;
+        }
+
+        public bool GetCachedCliIsDispatcher()
+        {
+            return _cacheInitialized && _cachedCliIsDispatcher;
         }
 
         public string GetCachedCliExecutablePath()
@@ -95,6 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CliInstallationDetection detection = await DetectCliInstallationAsync(ct);
                 _cachedCliVersion = detection.Version;
                 _cachedCliProtocolVersion = detection.ProtocolVersion;
+                _cachedCliIsDispatcher = detection.IsDispatcher;
                 _cachedCliExecutablePath = detection.ExecutablePath;
                 _cacheInitialized = true;
             }
@@ -109,6 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CliInstallationDetection detection = await DetectCliInstallationAsync(ct);
             _cachedCliVersion = detection.Version;
             _cachedCliProtocolVersion = detection.ProtocolVersion;
+            _cachedCliIsDispatcher = detection.IsDispatcher;
             _cachedCliExecutablePath = detection.ExecutablePath;
             _cacheInitialized = true;
         }
@@ -136,6 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             _cachedCliVersion = null;
             _cachedCliProtocolVersion = null;
+            _cachedCliIsDispatcher = false;
             _cachedCliExecutablePath = null;
             _cacheInitialized = false;
             _isRefreshing = false;
@@ -402,11 +411,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return new CliInstallationDetection(null, null, executablePath);
             }
 
-            // Why: the cached protocol slot drives existing setup UI compatibility. It is safe to mark
-            // compatible only after the dispatcher-specific contract generation matched exactly above.
             return new CliInstallationDetection(
                 dispatcherVersion,
-                CliConstants.REQUIRED_CLI_PROTOCOL_VERSION,
+                null,
                 executablePath,
                 true);
         }

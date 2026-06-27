@@ -34,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         bool IsCliInstalled();
         string GetCachedCliVersion();
         int? GetCachedCliProtocolVersion();
+        bool GetCachedCliIsDispatcher();
         string GetCachedCliExecutablePath();
         bool IsCheckCompleted();
         Task RefreshCliVersionAsync(CancellationToken ct);
@@ -96,6 +97,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public int? GetCachedCliProtocolVersion()
         {
             return _cliInstallationDetector.GetCachedCliProtocolVersion();
+        }
+
+        public bool GetCachedCliIsDispatcher()
+        {
+            return _cliInstallationDetector.GetCachedCliIsDispatcher();
         }
 
         public string GetCachedCliExecutablePath()
@@ -290,6 +296,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public static int? GetCachedCliProtocolVersion()
         {
             return GetService().GetCachedCliProtocolVersion();
+        }
+
+        public static bool GetCachedCliIsDispatcher()
+        {
+            return GetService().GetCachedCliIsDispatcher();
         }
 
         public static string GetCachedCliExecutablePath()

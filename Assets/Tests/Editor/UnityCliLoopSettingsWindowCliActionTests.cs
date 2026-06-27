@@ -10,22 +10,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class UnityCliLoopSettingsWindowCliActionTests
     {
-        [TestCase(null, null, true, false)]
-        [TestCase("2.9.0", null, true, false)]
-        [TestCase("3.1.0", 1, true, false)]
-        [TestCase("3.1.0", 2, true, true)]
-        [TestCase("3.0.0", 1, true, false)]
-        [TestCase("3.0.0", 1, false, false)]
+        [TestCase(null, false, true, false)]
+        [TestCase("2.9.0", false, true, false)]
+        [TestCase("3.0.0", false, true, false)]
+        [TestCase("2.9.0", true, true, false)]
+        [TestCase("3.0.0", true, true, true)]
+        [TestCase("3.0.1", true, true, true)]
+        [TestCase("3.0.0", true, false, false)]
         public void ShouldUninstallCliFromPrimaryButton_ReturnsExpectedAction(
             string cliVersion,
-            int? cliProtocolVersion,
+            bool cliIsDispatcher,
             bool canUninstallCli,
             bool expected)
         {
-            // Verifies that package-owned installs route to uninstall only when the CLI protocol matches the package.
+            // Verifies that package-owned installs route to uninstall only when the dispatcher minimum is satisfied.
             bool result = UnityCliLoopSettingsWindow.ShouldUninstallCliFromPrimaryButton(
                 cliVersion,
-                cliProtocolVersion,
+                cliIsDispatcher,
                 canUninstallCli);
 
             Assert.That(result, Is.EqualTo(expected));
@@ -50,28 +51,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(true, "3.0.0", 1, true, "InstallOrUpdate")]
-        [TestCase(true, "2.9.0", null, true, "InstallOrUpdate")]
-        [TestCase(true, "3.1.0", 1, true, "InstallOrUpdate")]
-        [TestCase(true, "3.1.0", 2, true, "RepairPath")]
-        [TestCase(false, "3.0.0", 1, true, "InstallOrUpdate")]
-        [TestCase(false, "2.9.0", null, true, "InstallOrUpdate")]
-        [TestCase(false, "3.1.0", 1, true, "InstallOrUpdate")]
-        [TestCase(false, "3.1.0", 2, true, "Uninstall")]
-        [TestCase(false, null, null, true, "InstallOrUpdate")]
+        [TestCase(true, "3.0.0", true, true, "RepairPath")]
+        [TestCase(true, "3.0.1", true, true, "RepairPath")]
+        [TestCase(true, "3.0.0", false, true, "InstallOrUpdate")]
+        [TestCase(true, "2.9.0", true, true, "InstallOrUpdate")]
+        [TestCase(false, "3.0.0", true, true, "Uninstall")]
+        [TestCase(false, "3.0.1", true, true, "Uninstall")]
+        [TestCase(false, "3.0.0", false, true, "InstallOrUpdate")]
+        [TestCase(false, "3.0.0", true, false, "InstallOrUpdate")]
+        [TestCase(false, null, false, true, "InstallOrUpdate")]
         public void ResolveCliPrimaryButtonAction_ReturnsClickedPrimaryAction(
             bool needsCliPathSetup,
             string cliVersion,
-            int? cliProtocolVersion,
+            bool cliIsDispatcher,
             bool canUninstallCli,
             string expected)
         {
-            // Verifies that the Settings window chooses repair only when protocol replacement is unnecessary.
+            // Verifies that the Settings window chooses repair only when dispatcher replacement is unnecessary.
             UnityCliLoopSettingsWindow.CliPrimaryButtonAction result =
                 UnityCliLoopSettingsWindow.ResolveCliPrimaryButtonAction(
                     needsCliPathSetup,
                     cliVersion,
-                    cliProtocolVersion,
+                    cliIsDispatcher,
                     canUninstallCli);
 
             Assert.That(result.ToString(), Is.EqualTo(expected));
@@ -115,33 +116,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(null, null, false)]
-        [TestCase("3.0.0-beta.32", 1, true)]
-        [TestCase("3.0.0-beta.0", null, true)]
-        [TestCase("3.0.0-beta.0", 0, true)]
-        [TestCase("3.0.0-beta.0", 2, false)]
-        public void IsCliUpdateNeeded_UsesProtocolVersion(
+        [TestCase(null, false, false)]
+        [TestCase("2.1.10", false, true)]
+        [TestCase("3.0.0", false, true)]
+        [TestCase("2.1.10", true, true)]
+        [TestCase("3.0.0", true, false)]
+        [TestCase("3.0.1", true, false)]
+        [TestCase("not-a-version", true, true)]
+        public void IsCliUpdateNeeded_UsesDispatcherMinimumVersion(
             string cliVersion,
-            int? cliProtocolVersion,
+            bool cliIsDispatcher,
             bool expected)
         {
-            // Verifies that the settings UI updates missing or older CLI protocol generations.
-            bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, cliProtocolVersion);
+            // Verifies that the settings UI updates non-dispatcher or older dispatcher installs.
+            bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
 
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(null, false)]
-        [TestCase(0, false)]
-        [TestCase(1, false)]
-        [TestCase(2, false)]
-        [TestCase(3, true)]
-        public void IsCliDowngradeNeeded_UsesProtocolVersion(
-            int? cliProtocolVersion,
+        [TestCase(null, false, false)]
+        [TestCase("3.0.0", false, false)]
+        [TestCase("2.1.10", true, false)]
+        [TestCase("3.0.1", true, false)]
+        public void IsCliDowngradeNeeded_UsesDispatcherMinimumVersion(
+            string cliVersion,
+            bool cliIsDispatcher,
             bool expected)
         {
-            // Verifies that the settings UI replaces CLIs newer than the package protocol generation.
-            bool result = UnityCliLoopSettingsWindow.IsCliDowngradeNeeded(cliProtocolVersion);
+            // Verifies that dispatcher setup never downgrades a newer global launcher.
+            bool result = UnityCliLoopSettingsWindow.IsCliDowngradeNeeded(cliVersion, cliIsDispatcher);
 
             Assert.That(result, Is.EqualTo(expected));
         }
