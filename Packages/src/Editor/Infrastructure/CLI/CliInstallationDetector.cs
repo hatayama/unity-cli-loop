@@ -251,7 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return CliVersionComparer.IsVersionGreaterThanOrEqual(
                 detection.Version,
-                CliConstants.MINIMUM_REQUIRED_CLI_VERSION);
+                CliConstants.MINIMUM_REQUIRED_DISPATCHER_VERSION);
         }
 
         internal static string BuildShellCliDetectionCommandForShell(

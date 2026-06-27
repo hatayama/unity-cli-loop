@@ -24,14 +24,12 @@ var (
 	requiredProtocolVersionPattern  = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
 	minimumCliVersionPattern        = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
 	requiredMinimumCliReleaseAssets = []string{
-		"install.sh",
-		"install.ps1",
-		"uloop-darwin-amd64.tar.gz",
-		"uloop-darwin-amd64.tar.gz.sha256",
-		"uloop-darwin-arm64.tar.gz",
-		"uloop-darwin-arm64.tar.gz.sha256",
-		"uloop-windows-amd64.zip",
-		"uloop-windows-amd64.zip.sha256",
+		"uloop-cli-darwin-amd64.tar.gz",
+		"uloop-cli-darwin-amd64.tar.gz.sha256",
+		"uloop-cli-darwin-arm64.tar.gz",
+		"uloop-cli-darwin-arm64.tar.gz.sha256",
+		"uloop-cli-windows-amd64.zip",
+		"uloop-cli-windows-amd64.zip.sha256",
 	}
 )
 

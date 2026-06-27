@@ -4,7 +4,7 @@ set -eu
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 CLI_DIR="$ROOT_DIR/cli"
 DIST_DIR="$CLI_DIR/dist"
-RELEASE_DIR="$DIST_DIR/release"
+RELEASE_DIR="$CLI_DIR/dist/dispatcher-release"
 
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
@@ -13,11 +13,11 @@ package_unix() {
   platform="$1"
   tmp_dir="$RELEASE_DIR/tmp-$platform"
   mkdir -p "$tmp_dir"
-  cp "$DIST_DIR/$platform/uloop-cli" "$tmp_dir/uloop-cli"
-  chmod +x "$tmp_dir/uloop-cli"
+  cp "$DIST_DIR/$platform/uloop" "$tmp_dir/uloop"
+  chmod +x "$tmp_dir/uloop"
   (
     cd "$tmp_dir"
-    tar -czf "$RELEASE_DIR/uloop-cli-$platform.tar.gz" uloop-cli
+    tar -czf "$RELEASE_DIR/uloop-dispatcher-$platform.tar.gz" uloop
   )
   rm -rf "$tmp_dir"
 }
@@ -26,12 +26,17 @@ package_windows() {
   platform="windows-amd64"
   tmp_dir="$RELEASE_DIR/tmp-$platform"
   mkdir -p "$tmp_dir"
-  cp "$DIST_DIR/$platform/uloop-cli.exe" "$tmp_dir/uloop-cli.exe"
+  cp "$DIST_DIR/$platform/uloop.exe" "$tmp_dir/uloop.exe"
   (
     cd "$tmp_dir"
-    zip -q "$RELEASE_DIR/uloop-cli-$platform.zip" uloop-cli.exe
+    zip -q "$RELEASE_DIR/uloop-dispatcher-$platform.zip" uloop.exe
   )
   rm -rf "$tmp_dir"
+}
+
+package_installers() {
+  cp "$ROOT_DIR/scripts/install.sh" "$RELEASE_DIR/install.sh"
+  cp "$ROOT_DIR/scripts/install.ps1" "$RELEASE_DIR/install.ps1"
 }
 
 create_checksum() {
@@ -53,6 +58,7 @@ create_checksum() {
 package_unix darwin-arm64
 package_unix darwin-amd64
 package_windows
+package_installers
 
 for asset_path in "$RELEASE_DIR"/*.tar.gz "$RELEASE_DIR"/*.zip; do
   create_checksum "$asset_path"

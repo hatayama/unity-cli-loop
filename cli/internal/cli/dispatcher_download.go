@@ -111,13 +111,6 @@ func dispatcherRealCLIFileName(goos string) string {
 	return dispatcherRealCLIUnixFileName
 }
 
-func dispatcherLegacyCLIFileName(goos string) string {
-	if goos == "windows" {
-		return dispatcherLegacyWindowsFileName
-	}
-	return dispatcherLegacyUnixFileName
-}
-
 func isExecutableFile(filePath string) bool {
 	info, err := os.Stat(filePath)
 	if err != nil || info.IsDir() {
@@ -195,19 +188,19 @@ func dispatcherReleaseAssetName(goos string, goarch string) (string, error) {
 		if goarch != "arm64" && goarch != "amd64" {
 			return "", fmt.Errorf("unsupported darwin architecture: %s", goarch)
 		}
-		return "uloop-darwin-" + goarch + ".tar.gz", nil
+		return "uloop-cli-darwin-" + goarch + ".tar.gz", nil
 	case "windows":
 		if goarch != "amd64" {
 			return "", fmt.Errorf("unsupported windows architecture: %s", goarch)
 		}
-		return "uloop-windows-amd64.zip", nil
+		return "uloop-cli-windows-amd64.zip", nil
 	default:
 		return "", fmt.Errorf("unsupported platform: %s-%s", goos, goarch)
 	}
 }
 
 func dispatcherReleaseAssetURL(cliVersion string, assetName string) string {
-	return dispatcherReleaseBaseURL + "/" + sharedupdate.ReleaseTag(cliVersion) + "/" + assetName
+	return dispatcherReleaseBaseURL + "/" + sharedupdate.CLIReleaseTag(cliVersion) + "/" + assetName
 }
 
 func downloadDispatcherFile(ctx context.Context, url string, destinationPath string) error {
@@ -279,10 +272,6 @@ func extractDispatcherRealCLIFromTarGz(archivePath string, destinationPath strin
 	if err != nil || found {
 		return err
 	}
-	found, err = extractDispatcherCLIFromTarGzEntry(archivePath, destinationPath, dispatcherLegacyCLIFileName(goos))
-	if err != nil || found {
-		return err
-	}
 	return fmt.Errorf("archive does not contain %s", dispatcherRealCLIFileName(goos))
 }
 
@@ -330,10 +319,6 @@ func extractDispatcherRealCLIFromZip(archivePath string, destinationPath string,
 		_ = reader.Close()
 	}()
 	found, err := extractDispatcherCLIFromZipEntry(reader, destinationPath, dispatcherRealCLIFileName(goos))
-	if err != nil || found {
-		return err
-	}
-	found, err = extractDispatcherCLIFromZipEntry(reader, destinationPath, dispatcherLegacyCLIFileName(goos))
 	if err != nil || found {
 		return err
 	}

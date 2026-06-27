@@ -28,8 +28,6 @@ const (
 	dispatcherUnityPackageName             = "io.github.hatayama.uloopmcp"
 	dispatcherRealCLIUnixFileName          = "uloop-cli"
 	dispatcherRealCLIWindowsFileName       = "uloop-cli.exe"
-	dispatcherLegacyUnixFileName           = "uloop"
-	dispatcherLegacyWindowsFileName        = "uloop.exe"
 	dispatcherReleaseRepository            = "hatayama/unity-cli-loop"
 	dispatcherReleaseBaseURL               = "https://github.com/" + dispatcherReleaseRepository + "/releases/download"
 	dispatcherSelfUpdateInterval           = 24 * time.Hour
@@ -47,6 +45,10 @@ type dispatcherUpdateState struct {
 }
 
 func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
+	if handled, code := tryHandleDispatcherInfoRequest(args, stdout); handled {
+		return code
+	}
+
 	remainingArgs, projectPath, err := parseGlobalProjectPath(args)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{})
@@ -128,7 +130,7 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 	if minimumVersion == "" {
 		return false, 0
 	}
-	updateRequired := sharedversion.IsLessThan(version, minimumVersion)
+	updateRequired := sharedversion.IsLessThan(dispatcherVersion, minimumVersion)
 	if updateRequired && dispatcherSelfUpdateDisabled() {
 		writeDispatcherManualUpdateRequiredError(stderr, minimumVersion, "Automatic update is disabled.")
 		return true, 1
@@ -179,7 +181,7 @@ func writeDispatcherManualUpdateRequiredError(stderr io.Writer, minimumVersion s
 		SafeToRetry: true,
 		NextActions: []string{"Run `uloop update` and retry the command."},
 		Details: map[string]any{
-			"CurrentDispatcherVersion": version,
+			"CurrentDispatcherVersion": dispatcherVersion,
 			"MinimumDispatcherVersion": minimumVersion,
 		},
 	})
@@ -224,7 +226,7 @@ func markDispatcherSelfUpdateChecked() {
 
 func runDispatcherUpdateCommand(ctx context.Context) error {
 	command, err := sharedupdate.CommandForOS(runtime.GOOS, sharedupdate.Options{
-		CurrentVersion: version,
+		CurrentVersion: dispatcherVersion,
 	})
 	if err != nil {
 		return err

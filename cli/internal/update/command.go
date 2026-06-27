@@ -66,7 +66,7 @@ func ScriptVersion(options Options) string {
 
 func Selector(options Options) string {
 	if options.TargetVersion != "" {
-		return ReleaseTag(NormalizeTargetVersion(options.TargetVersion))
+		return DispatcherReleaseTag(NormalizeTargetVersion(options.TargetVersion))
 	}
 	return UpdateSelectorForVersion(options.CurrentVersion)
 }

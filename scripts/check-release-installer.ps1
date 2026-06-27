@@ -13,21 +13,21 @@ $InstallerScripts = @(
     "install.sh"
 )
 
-function Get-UloopCliReleaseTag {
+function Get-UloopDispatcherReleaseTag {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Version
     )
 
-    if ($Version.StartsWith("cli-v", [System.StringComparison]::Ordinal)) {
+    if ($Version.StartsWith("dispatcher-v", [System.StringComparison]::Ordinal)) {
         return $Version
     }
 
     if ($Version.StartsWith("v", [System.StringComparison]::Ordinal)) {
-        return "cli-$Version"
+        return "dispatcher-$Version"
     }
 
-    return "cli-v$Version"
+    return "dispatcher-v$Version"
 }
 
 function Get-ReleaseInstallerScriptUrl {
@@ -58,7 +58,7 @@ function Assert-RemoteInstallerScriptExists {
     Write-Host "Verified release installer script: $Uri"
 }
 
-$ReleaseTag = Get-UloopCliReleaseTag -Version $Version
+$ReleaseTag = Get-UloopDispatcherReleaseTag -Version $Version
 
 foreach ($InstallerScript in $InstallerScripts) {
     $Uri = Get-ReleaseInstallerScriptUrl -ReleaseTag $ReleaseTag -ScriptName $InstallerScript

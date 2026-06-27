@@ -954,12 +954,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static string BuildReleaseTag(string cliReleaseTag)
         {
-            if (cliReleaseTag.StartsWith(CliConstants.RELEASE_TAG_PREFIX, StringComparison.Ordinal)
-                || cliReleaseTag.StartsWith(CliConstants.CLI_RELEASE_TAG_PREFIX, StringComparison.Ordinal))
+            if (cliReleaseTag.StartsWith(CliConstants.DISPATCHER_RELEASE_TAG_PREFIX, StringComparison.Ordinal))
             {
                 return cliReleaseTag;
             }
-            return $"{CliConstants.CLI_RELEASE_TAG_PREFIX}{cliReleaseTag}";
+            if (cliReleaseTag.StartsWith(CliConstants.RELEASE_TAG_PREFIX, StringComparison.Ordinal))
+            {
+                return $"{CliConstants.DISPATCHER_RELEASE_TAG_PREFIX}{cliReleaseTag.Substring(CliConstants.RELEASE_TAG_PREFIX.Length)}";
+            }
+            return $"{CliConstants.DISPATCHER_RELEASE_TAG_PREFIX}{cliReleaseTag}";
         }
 
         internal static string BuildInstallerScriptUrl(string releaseTag, string assetName)

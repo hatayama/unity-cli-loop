@@ -37,6 +37,7 @@ func containsHelpRequest(args []string) bool {
 func printHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
+		version,
 		nativeCLIDescription,
 		toolsCache{},
 		false)
@@ -56,19 +57,20 @@ func printHelpForResolvedProject(stdout io.Writer, explicitProjectPath string) {
 	}
 
 	cache, ok := loadProjectToolCache(connection.ProjectRoot)
-	printMainHelp(stdout, nativeCLIDescription, cache, ok)
+	printMainHelp(stdout, version, nativeCLIDescription, cache, ok)
 }
 
 func printLauncherHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
+		dispatcherVersion,
 		"Native CLI. Finds the Unity project, then dispatches live Unity tool commands.",
 		toolsCache{},
 		false)
 }
 
-func printMainHelp(stdout io.Writer, description string, cache toolsCache, hasProjectToolCache bool) {
-	writeFormat(stdout, "uloop %s\n\n", version)
+func printMainHelp(stdout io.Writer, displayVersion string, description string, cache toolsCache, hasProjectToolCache bool) {
+	writeFormat(stdout, "uloop %s\n\n", displayVersion)
 	writeLine(stdout, "Usage:")
 	writeLine(stdout, "  uloop <command> [options]")
 	writeLine(stdout, "")

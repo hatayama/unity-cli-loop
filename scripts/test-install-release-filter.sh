@@ -50,32 +50,32 @@ write_releases_json() {
   cat > "$output_path" <<'JSON'
 [
   {
-    "tag_name": "v3.0.0-beta.2",
+    "tag_name": "dispatcher-v3.0.0-beta.2",
     "draft": false,
     "prerelease": true,
     "assets": [
       {
-        "name": "uloop-darwin-arm64.tar.gz",
-        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/v3.0.0-beta.2/uloop-darwin-arm64.tar.gz"
+        "name": "uloop-dispatcher-darwin-arm64.tar.gz",
+        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/dispatcher-v3.0.0-beta.2/uloop-dispatcher-darwin-arm64.tar.gz"
       },
       {
-        "name": "uloop-windows-amd64.zip",
-        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/v3.0.0-beta.2/uloop-windows-amd64.zip"
+        "name": "uloop-dispatcher-windows-amd64.zip",
+        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/dispatcher-v3.0.0-beta.2/uloop-dispatcher-windows-amd64.zip"
       }
     ]
   },
   {
-    "tag_name": "v2.0.0",
+    "tag_name": "dispatcher-v2.0.0",
     "draft": false,
     "prerelease": false,
     "assets": [
       {
-        "name": "uloop-darwin-arm64.tar.gz",
-        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/v2.0.0/uloop-darwin-arm64.tar.gz"
+        "name": "uloop-dispatcher-darwin-arm64.tar.gz",
+        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/dispatcher-v2.0.0/uloop-dispatcher-darwin-arm64.tar.gz"
       },
       {
-        "name": "uloop-windows-amd64.zip",
-        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/v2.0.0/uloop-windows-amd64.zip"
+        "name": "uloop-dispatcher-windows-amd64.zip",
+        "browser_download_url": "https://github.com/hatayama/unity-cli-loop/releases/download/dispatcher-v2.0.0/uloop-dispatcher-windows-amd64.zip"
       }
     ]
   }
@@ -136,45 +136,45 @@ esac
 printf '%s\n' "$url" >> "$CURL_LOG"
 
 case "$url" in
-  *v2.0.0/uloop-darwin-arm64.tar.gz)
+  *dispatcher-v2.0.0/uloop-dispatcher-darwin-arm64.tar.gz)
     : > "$output_file"
     ;;
-  *v2.0.0/uloop-darwin-arm64.tar.gz.sha256)
-    printf 'fakehash  uloop-darwin-arm64.tar.gz\n' > "$output_file"
+  *dispatcher-v2.0.0/uloop-dispatcher-darwin-arm64.tar.gz.sha256)
+    printf 'fakehash  uloop-dispatcher-darwin-arm64.tar.gz\n' > "$output_file"
     ;;
-  *v2.0.0/uloop-windows-amd64.zip)
+  *dispatcher-v2.0.0/uloop-dispatcher-windows-amd64.zip)
     : > "$output_file"
     ;;
-  *v2.0.0/uloop-windows-amd64.zip.sha256)
-    printf 'fakehash  uloop-windows-amd64.zip\n' > "$output_file"
+  *dispatcher-v2.0.0/uloop-dispatcher-windows-amd64.zip.sha256)
+    printf 'fakehash  uloop-dispatcher-windows-amd64.zip\n' > "$output_file"
     ;;
-  *v3.0.0-beta.2/uloop-darwin-arm64.tar.gz)
+  *dispatcher-v3.0.0-beta.2/uloop-dispatcher-darwin-arm64.tar.gz)
     if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
       echo "Prerelease asset should not be downloaded: $url" >&2
       exit 1
     fi
     : > "$output_file"
     ;;
-  *v3.0.0-beta.2/uloop-darwin-arm64.tar.gz.sha256)
+  *dispatcher-v3.0.0-beta.2/uloop-dispatcher-darwin-arm64.tar.gz.sha256)
     if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
       echo "Prerelease checksum should not be downloaded: $url" >&2
       exit 1
     fi
-    printf 'fakehash  uloop-darwin-arm64.tar.gz\n' > "$output_file"
+    printf 'fakehash  uloop-dispatcher-darwin-arm64.tar.gz\n' > "$output_file"
     ;;
-  *v3.0.0-beta.2/uloop-windows-amd64.zip)
+  *dispatcher-v3.0.0-beta.2/uloop-dispatcher-windows-amd64.zip)
     if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
       echo "Prerelease asset should not be downloaded: $url" >&2
       exit 1
     fi
     : > "$output_file"
     ;;
-  *v3.0.0-beta.2/uloop-windows-amd64.zip.sha256)
+  *dispatcher-v3.0.0-beta.2/uloop-dispatcher-windows-amd64.zip.sha256)
     if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
       echo "Prerelease checksum should not be downloaded: $url" >&2
       exit 1
     fi
-    printf 'fakehash  uloop-windows-amd64.zip\n' > "$output_file"
+    printf 'fakehash  uloop-dispatcher-windows-amd64.zip\n' > "$output_file"
     ;;
   *)
     echo "unexpected curl url: $url" >&2
@@ -375,9 +375,9 @@ test_posix_latest_skips_prerelease_assets() {
     LEGACY_ULOOP="$legacy_uloop" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
-  assert_contains "$curl_log" "v2.0.0/uloop-darwin-arm64.tar.gz"
-  assert_contains "$curl_log" "v2.0.0/uloop-darwin-arm64.tar.gz.sha256"
-  assert_not_contains "$curl_log" "v3.0.0-beta.2"
+  assert_contains "$curl_log" "dispatcher-v2.0.0/uloop-dispatcher-darwin-arm64.tar.gz"
+  assert_contains "$curl_log" "dispatcher-v2.0.0/uloop-dispatcher-darwin-arm64.tar.gz.sha256"
+  assert_not_contains "$curl_log" "dispatcher-v3.0.0-beta.2"
   assert_contains "$npm_log" "uninstall -g --prefix $work_dir/npm-global uloop-cli"
   if [ -e "$legacy_uloop" ]; then
     echo "Expected mocked npm uninstall to remove the legacy Node uloop shim: $legacy_uloop" >&2
@@ -408,9 +408,9 @@ test_posix_latest_beta_selects_prerelease_assets() {
     LEGACY_ULOOP="" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
-  assert_contains "$curl_log" "v3.0.0-beta.2/uloop-darwin-arm64.tar.gz"
-  assert_contains "$curl_log" "v3.0.0-beta.2/uloop-darwin-arm64.tar.gz.sha256"
-  assert_not_contains "$curl_log" "v2.0.0/uloop-darwin-arm64.tar.gz"
+  assert_contains "$curl_log" "dispatcher-v3.0.0-beta.2/uloop-dispatcher-darwin-arm64.tar.gz"
+  assert_contains "$curl_log" "dispatcher-v3.0.0-beta.2/uloop-dispatcher-darwin-arm64.tar.gz.sha256"
+  assert_not_contains "$curl_log" "dispatcher-v2.0.0/uloop-dispatcher-darwin-arm64.tar.gz"
   assert_not_contains "$npm_log" "uninstall -g uloop-cli"
 }
 
@@ -917,9 +917,9 @@ test_git_bash_latest_installs_windows_zip_asset() {
     LEGACY_ULOOP="" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
-  assert_contains "$curl_log" "v2.0.0/uloop-windows-amd64.zip"
-  assert_contains "$curl_log" "v2.0.0/uloop-windows-amd64.zip.sha256"
-  assert_not_contains "$curl_log" "uloop-darwin-arm64.tar.gz"
+  assert_contains "$curl_log" "dispatcher-v2.0.0/uloop-dispatcher-windows-amd64.zip"
+  assert_contains "$curl_log" "dispatcher-v2.0.0/uloop-dispatcher-windows-amd64.zip.sha256"
+  assert_not_contains "$curl_log" "uloop-dispatcher-darwin-arm64.tar.gz"
   if [ ! -x "$install_dir/uloop.exe" ]; then
     echo "Expected Git Bash install to create executable uloop.exe: $install_dir/uloop.exe" >&2
     exit 1

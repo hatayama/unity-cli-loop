@@ -9,7 +9,7 @@ $InstallDir = if ($env:ULOOP_INSTALL_DIR) {
 } else {
     Join-Path $env:LOCALAPPDATA "Programs\uloop\bin"
 }
-$AssetName = "uloop-windows-amd64.zip"
+$AssetName = "uloop-dispatcher-windows-amd64.zip"
 
 function Find-LatestAssetUrl {
     param(

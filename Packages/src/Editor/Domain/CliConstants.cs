@@ -14,6 +14,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         // the matching CLI tag is published.
         public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.40";
         public const string MINIMUM_REQUIRED_CLI_RELEASE_TAG = CLI_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_CLI_VERSION;
+        // Why: global uloop is a dispatcher; project-local CLI versions are downloaded separately.
+        public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "1.0.0";
+        public const string MINIMUM_REQUIRED_DISPATCHER_RELEASE_TAG = DISPATCHER_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_DISPATCHER_VERSION;
         public const string VERSION_FLAG = "--version";
         public const string SHORT_VERSION_FLAG = "-v";
         public const string JSON_FLAG = "--json";
@@ -36,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string WINDOWS_PATH_SEPARATOR = ";";
         public const string RELEASE_TAG_PREFIX = "v";
         public const string CLI_RELEASE_TAG_PREFIX = "cli-v";
+        public const string DISPATCHER_RELEASE_TAG_PREFIX = "dispatcher-v";
         public const string BETA_VERSION_MARKER = "-beta.";
         public const string SKILL_DIR_PREFIX = "uloop-";
         public const string TEMPORARY_SKILLS_DIR_NAME = "TemporarySkills~";

@@ -26,13 +26,24 @@ printf '%s\n' "$*" >> "$GH_LOG"
 asset_json() {
   case "${CLI_RELEASE_ASSETS:-complete}" in
     complete)
-      printf '[{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]'
+      printf '[{"name":"uloop-cli-darwin-amd64.tar.gz","size":1},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1}]'
       ;;
     missing)
       printf '[]'
       ;;
     empty)
-      printf '[{"name":"uloop-darwin-amd64.tar.gz","size":0},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]'
+      printf '[{"name":"uloop-cli-darwin-amd64.tar.gz","size":0},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1}]'
+      ;;
+  esac
+}
+
+dispatcher_asset_json() {
+  case "${DISPATCHER_RELEASE_ASSETS:-complete}" in
+    complete)
+      printf '[{"name":"install.sh","size":1},{"name":"install.ps1","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-windows-amd64.zip","size":1},{"name":"uloop-dispatcher-windows-amd64.zip.sha256","size":1}]'
+      ;;
+    missing)
+      printf '[]'
       ;;
   esac
 }
@@ -63,6 +74,27 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
       draft)
         printf '{"isDraft":true,"targetCommitish":"%s","assets":' "${CLI_RELEASE_TARGET:-cli-release-sha}"
         asset_json
+        printf '}\n'
+        exit 0
+        ;;
+      missing)
+        echo "release not found" >&2
+        exit 1
+        ;;
+    esac
+  fi
+
+  if [ "$tag" = "${DISPATCHER_RELEASE_TAG:-dispatcher-v1.0.0}" ]; then
+    case "${DISPATCHER_RELEASE_STATE:-published}" in
+      published)
+        printf '{"isDraft":false,"targetCommitish":"%s","assets":' "${DISPATCHER_RELEASE_TARGET:-dispatcher-release-sha}"
+        dispatcher_asset_json
+        printf '}\n'
+        exit 0
+        ;;
+      draft)
+        printf '{"isDraft":true,"targetCommitish":"%s","assets":' "${DISPATCHER_RELEASE_TARGET:-dispatcher-release-sha}"
+        dispatcher_asset_json
         printf '}\n'
         exit 0
         ;;
@@ -162,6 +194,17 @@ EOF_CONFIG
 }
 EOF_MANIFEST
 
+  cat > Packages/src/cli-pin.json <<EOF_PIN
+{
+  "schemaVersion": 1,
+  "packageName": "test.package",
+  "packageVersion": "$version",
+  "cliVersion": "$version",
+  "requiredProtocolVersion": 2,
+  "minimumDispatcherVersion": "1.0.0"
+}
+EOF_PIN
+
   cat > Packages/src/CHANGELOG.md <<EOF_CHANGELOG
 # Changelog
 
@@ -188,18 +231,39 @@ set -eu
 
 if [ "${1:-}" = "--list" ]; then
   printf '%s\n' \
-    uloop-darwin-amd64.tar.gz \
-    uloop-darwin-amd64.tar.gz.sha256 \
-    uloop-darwin-arm64.tar.gz \
-    uloop-darwin-arm64.tar.gz.sha256 \
-    uloop-windows-amd64.zip \
-    uloop-windows-amd64.zip.sha256
+    uloop-cli-darwin-amd64.tar.gz \
+    uloop-cli-darwin-amd64.tar.gz.sha256 \
+    uloop-cli-darwin-arm64.tar.gz \
+    uloop-cli-darwin-arm64.tar.gz.sha256 \
+    uloop-cli-windows-amd64.zip \
+    uloop-cli-windows-amd64.zip.sha256
   exit 0
 fi
 
 exit 1
 EOF_VERIFY
   chmod +x scripts/verify-native-cli-release-assets.sh
+
+  cat > scripts/verify-dispatcher-release-assets.sh <<'EOF_VERIFY_DISPATCHER'
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "--list" ]; then
+  printf '%s\n' \
+    install.sh \
+    install.ps1 \
+    uloop-dispatcher-darwin-amd64.tar.gz \
+    uloop-dispatcher-darwin-amd64.tar.gz.sha256 \
+    uloop-dispatcher-darwin-arm64.tar.gz \
+    uloop-dispatcher-darwin-arm64.tar.gz.sha256 \
+    uloop-dispatcher-windows-amd64.zip \
+    uloop-dispatcher-windows-amd64.zip.sha256
+  exit 0
+fi
+
+exit 1
+EOF_VERIFY_DISPATCHER
+  chmod +x scripts/verify-dispatcher-release-assets.sh
 }
 
 create_release_repo() {
@@ -277,6 +341,8 @@ run_sync() {
   cli_release_wait_timeout=${7:-0}
   cli_release_wait_interval=${8:-0}
   cli_release_ready_after_attempts=${9:-}
+  dispatcher_release_state=${10:-published}
+  dispatcher_release_assets=${11:-complete}
 
   touch "$work_dir/gh.log"
   touch "$work_dir/go.log"
@@ -298,6 +364,8 @@ run_sync() {
     CLI_RELEASE_WAIT_TIMEOUT_SECONDS="$cli_release_wait_timeout" \
     CLI_RELEASE_WAIT_INTERVAL_SECONDS="$cli_release_wait_interval" \
     CLI_RELEASE_READY_AFTER_ATTEMPTS="$cli_release_ready_after_attempts" \
+    DISPATCHER_RELEASE_STATE="$dispatcher_release_state" \
+    DISPATCHER_RELEASE_ASSETS="$dispatcher_release_assets" \
     CREATE_RELEASE_RACE_TAG="${CREATE_RELEASE_RACE_TAG:-}" \
     CREATE_RELEASE_RACE_TARGET="${CREATE_RELEASE_RACE_TARGET:-}" \
     GITHUB_OUTPUT="$work_dir/github-output.txt" \
@@ -394,6 +462,17 @@ test_waits_for_cli_assets_before_creating_root_release() {
   assert_contains "$work_dir/github-output.txt" "ready=false"
 }
 
+# Verifies package releases wait until the minimum dispatcher release has all dispatcher assets.
+test_waits_for_dispatcher_assets_before_creating_root_release() {
+  work_dir=$(create_release_repo waits-for-dispatcher-assets)
+
+  run_sync "$work_dir" "" false "" published complete 0 0 "" published missing
+
+  assert_contains "$work_dir/output.txt" "Dispatcher release dispatcher-v1.0.0 is not published with complete assets; package release sync will wait."
+  assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
+  assert_contains "$work_dir/github-output.txt" "ready=false"
+}
+
 # Verifies the release sync waits for a concurrently publishing CLI release before creating package releases.
 test_retries_until_cli_assets_are_ready() {
   work_dir=$(create_release_repo retries-until-cli-ready)
@@ -430,5 +509,6 @@ test_existing_draft_root_release_is_published
 test_existing_draft_root_release_without_release_commit_fails
 test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release
+test_waits_for_dispatcher_assets_before_creating_root_release
 test_retries_until_cli_assets_are_ready
 test_concurrent_root_release_creation_is_reused

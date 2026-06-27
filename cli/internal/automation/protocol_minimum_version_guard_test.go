@@ -493,7 +493,7 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   if [ -n "${GH_RELEASE_VIEW:-}" ]; then
     printf '%s\n' "$GH_RELEASE_VIEW"
   else
-    printf '%s\n' '{"isDraft":false,"assets":[{"name":"install.sh","size":1},{"name":"install.ps1","size":1},{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]}'
+    printf '%s\n' '{"isDraft":false,"assets":[{"name":"uloop-cli-darwin-amd64.tar.gz","size":1},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1}]}'
   fi
   exit 0
 fi

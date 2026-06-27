@@ -25,6 +25,22 @@ func tryHandleGlobalInfoRequest(args []string, projectPath string, stdout io.Wri
 	return false, 0
 }
 
+func tryHandleDispatcherInfoRequest(args []string, stdout io.Writer) (bool, int) {
+	if len(args) == 0 || isHelpRequest(args) {
+		printLauncherHelp(stdout)
+		return true, 0
+	}
+	if isVersionJSONRequest(args) {
+		writeDispatcherVersionJSON(stdout)
+		return true, 0
+	}
+	if isVersionRequest(args) {
+		writeLine(stdout, dispatcherVersion)
+		return true, 0
+	}
+	return false, 0
+}
+
 func tryHandlePreConnectionRequest(
 	ctx context.Context,
 	remainingArgs []string,

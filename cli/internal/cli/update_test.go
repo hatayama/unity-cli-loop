@@ -9,7 +9,7 @@ import (
 )
 
 func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
-	// Verifies CLI update downloads the shared installer before running it on the matching channel.
+	// Verifies dispatcher update downloads the shared installer before running it on the matching channel.
 	commandName, args, err := updateCommandForOS("darwin")
 	if err != nil {
 		t.Fatalf("updateCommandForOS failed: %v", err)
@@ -19,8 +19,8 @@ func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	expectedScriptURL := update.ScriptURL(clicontract.Current.CliVersion, update.PosixScriptName)
-	expectedReleaseTag := update.UpdateSelectorForVersion(clicontract.Current.CliVersion)
+	expectedScriptURL := update.ScriptURL(clicontract.DispatcherCurrent.DispatcherVersion, update.PosixScriptName)
+	expectedReleaseTag := update.UpdateSelectorForVersion(clicontract.DispatcherCurrent.DispatcherVersion)
 	if !strings.Contains(joinedArgs, expectedScriptURL) {
 		t.Fatalf("installer URL missing: %s", joinedArgs)
 	}
@@ -36,7 +36,7 @@ func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
 }
 
 func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
-	// Verifies CLI update calls the same Windows installer script on the matching channel.
+	// Verifies dispatcher update calls the same Windows installer script on the matching channel.
 	commandName, args, err := updateCommandForOS("windows")
 	if err != nil {
 		t.Fatalf("updateCommandForOS failed: %v", err)
@@ -46,8 +46,8 @@ func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	expectedScriptURL := update.ScriptURL(clicontract.Current.CliVersion, update.WindowsScriptName)
-	expectedReleaseTag := update.UpdateSelectorForVersion(clicontract.Current.CliVersion)
+	expectedScriptURL := update.ScriptURL(clicontract.DispatcherCurrent.DispatcherVersion, update.WindowsScriptName)
+	expectedReleaseTag := update.UpdateSelectorForVersion(clicontract.DispatcherCurrent.DispatcherVersion)
 	if !strings.Contains(joinedArgs, expectedScriptURL) {
 		t.Fatalf("installer URL missing: %s", joinedArgs)
 	}
@@ -60,7 +60,7 @@ func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
 }
 
 func TestUpdateCommandForDarwinUsesRequestedVersion(t *testing.T) {
-	// Verifies CLI update can target the minimum release version requested by Unity.
+	// Verifies dispatcher update can target the minimum release version requested by Unity.
 	commandName, args, err := updateCommandForOSWithOptions("darwin", updateOptions{
 		targetVersion: "3.0.0-beta.6",
 	})
@@ -72,16 +72,16 @@ func TestUpdateCommandForDarwinUsesRequestedVersion(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	if !strings.Contains(joinedArgs, "cli-v3.0.0-beta.6/scripts/install.sh") {
+	if !strings.Contains(joinedArgs, "dispatcher-v3.0.0-beta.6/scripts/install.sh") {
 		t.Fatalf("installer URL mismatch: %s", joinedArgs)
 	}
-	if !strings.Contains(joinedArgs, "ULOOP_VERSION='cli-v3.0.0-beta.6'") {
+	if !strings.Contains(joinedArgs, "ULOOP_VERSION='dispatcher-v3.0.0-beta.6'") {
 		t.Fatalf("installer version missing: %s", joinedArgs)
 	}
 }
 
 func TestUpdateCommandForDarwinNormalizesRequestedVersionPrefix(t *testing.T) {
-	// Verifies accepted v-prefixed semantic versions still resolve to valid CLI release tags.
+	// Verifies accepted v-prefixed semantic versions still resolve to valid dispatcher release tags.
 	commandName, args, err := updateCommandForOSWithOptions("darwin", updateOptions{
 		targetVersion: "v3.0.0-beta.6",
 	})
@@ -93,16 +93,16 @@ func TestUpdateCommandForDarwinNormalizesRequestedVersionPrefix(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	if !strings.Contains(joinedArgs, "ULOOP_VERSION='cli-v3.0.0-beta.6'") {
+	if !strings.Contains(joinedArgs, "ULOOP_VERSION='dispatcher-v3.0.0-beta.6'") {
 		t.Fatalf("installer version should not contain a doubled v prefix: %s", joinedArgs)
 	}
-	if strings.Contains(joinedArgs, "cli-vv3.0.0-beta.6") {
+	if strings.Contains(joinedArgs, "dispatcher-vv3.0.0-beta.6") {
 		t.Fatalf("installer version contains doubled v prefix: %s", joinedArgs)
 	}
 }
 
 func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
-	// Verifies Windows CLI update can target the minimum release version requested by Unity.
+	// Verifies Windows dispatcher update can target the minimum release version requested by Unity.
 	commandName, args, err := updateCommandForOSWithOptions("windows", updateOptions{
 		targetVersion: "3.0.0",
 	})
@@ -114,10 +114,10 @@ func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	if !strings.Contains(joinedArgs, "cli-v3.0.0/scripts/install.ps1") {
+	if !strings.Contains(joinedArgs, "dispatcher-v3.0.0/scripts/install.ps1") {
 		t.Fatalf("installer URL mismatch: %s", joinedArgs)
 	}
-	if !strings.Contains(joinedArgs, "$env:ULOOP_VERSION='cli-v3.0.0'") {
+	if !strings.Contains(joinedArgs, "$env:ULOOP_VERSION='dispatcher-v3.0.0'") {
 		t.Fatalf("installer version missing: %s", joinedArgs)
 	}
 }

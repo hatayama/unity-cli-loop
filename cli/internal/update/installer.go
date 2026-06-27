@@ -9,20 +9,29 @@ const (
 	LatestBeta        = "latest-beta"
 
 	repositoryRawBaseURL = "https://raw.githubusercontent.com/hatayama/unity-cli-loop"
-	releaseTagPrefix     = "cli-v"
+	cliReleaseTagPrefix  = "cli-v"
+	dispatcherTagPrefix  = "dispatcher-v"
 	betaVersionMarker    = "-beta."
 )
 
 func ScriptURL(version string, scriptName string) string {
-	return repositoryRawBaseURL + "/" + ReleaseTag(version) + "/scripts/" + scriptName
+	return repositoryRawBaseURL + "/" + DispatcherReleaseTag(version) + "/scripts/" + scriptName
 }
 
-func ReleaseTag(version string) string {
-	if strings.HasPrefix(version, releaseTagPrefix) || strings.HasPrefix(version, strings.ToUpper(releaseTagPrefix)) {
+func CLIReleaseTag(version string) string {
+	if strings.HasPrefix(version, cliReleaseTagPrefix) || strings.HasPrefix(version, strings.ToUpper(cliReleaseTagPrefix)) {
 		return version
 	}
 
-	return releaseTagPrefix + version
+	return cliReleaseTagPrefix + version
+}
+
+func DispatcherReleaseTag(version string) string {
+	if strings.HasPrefix(version, dispatcherTagPrefix) || strings.HasPrefix(version, strings.ToUpper(dispatcherTagPrefix)) {
+		return version
+	}
+
+	return dispatcherTagPrefix + version
 }
 
 func UpdateSelectorForVersion(version string) string {

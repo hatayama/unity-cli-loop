@@ -20,8 +20,20 @@ func TestCliContractProvidesProtocolVersion(t *testing.T) {
 
 func TestCliContractProvidesDispatcherContractVersion(t *testing.T) {
 	// Verifies that the contract declares which dispatcher capability generation the binary provides.
-	if Current.DispatcherContractVersion < 1 {
-		t.Fatalf("dispatcherContractVersion must be at least 1, got %d", Current.DispatcherContractVersion)
+	if DispatcherCurrent.DispatcherContractVersion < 1 {
+		t.Fatalf("dispatcherContractVersion must be at least 1, got %d", DispatcherCurrent.DispatcherContractVersion)
+	}
+}
+
+func TestDispatcherContractProvidesRuntimeVersion(t *testing.T) {
+	// Verifies that the launcher owns a release version independent from project-local CLI releases.
+	requireValidContractVersion(t, "dispatcherVersion", DispatcherCurrent.DispatcherVersion)
+}
+
+func TestCliContractDoesNotOwnDispatcherReleaseVersion(t *testing.T) {
+	// Verifies release-please CLI version stamping cannot accidentally move dispatcher release metadata.
+	if Current.CliVersion == DispatcherCurrent.DispatcherVersion {
+		t.Fatalf("cliVersion and dispatcherVersion should be independently owned: %q", Current.CliVersion)
 	}
 }
 

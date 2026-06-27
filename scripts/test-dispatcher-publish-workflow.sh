@@ -1,0 +1,62 @@
+#!/bin/sh
+set -eu
+
+ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+WORKFLOW="$ROOT_DIR/.github/workflows/dispatcher-publish.yml"
+
+assert_contains() {
+  file=$1
+  expected=$2
+  if ! grep -F -- "$expected" "$file" >/dev/null 2>&1; then
+    echo "Expected $file to contain: $expected" >&2
+    exit 1
+  fi
+}
+
+line_number() {
+  file=$1
+  text=$2
+  grep -nF -- "$text" "$file" | head -n 1 | cut -d: -f 1
+}
+
+assert_before() {
+  file=$1
+  earlier=$2
+  later=$3
+  earlier_line=$(line_number "$file" "$earlier")
+  later_line=$(line_number "$file" "$later")
+  if [ -z "$earlier_line" ] || [ -z "$later_line" ] || [ "$earlier_line" -ge "$later_line" ]; then
+    echo "Expected '$earlier' to appear before '$later' in $file." >&2
+    exit 1
+  fi
+}
+
+test_dispatcher_resolver_is_used() {
+  assert_contains "$WORKFLOW" "      - name: Resolve dispatcher release target"
+  assert_contains "$WORKFLOW" '          scripts/resolve-dispatcher-release-target.sh >> "$GITHUB_OUTPUT"'
+}
+
+test_dispatcher_assets_are_packaged_and_verified() {
+  assert_contains "$WORKFLOW" "      - name: Package dispatcher release assets"
+  assert_contains "$WORKFLOW" "        run: scripts/package-dispatcher.sh"
+  assert_contains "$WORKFLOW" "      - name: Verify packaged dispatcher release assets"
+  assert_contains "$WORKFLOW" "        run: scripts/verify-dispatcher-release-assets.sh"
+  assert_before "$WORKFLOW" "      - name: Package dispatcher release assets" "      - name: Verify packaged dispatcher release assets"
+}
+
+test_installer_scripts_are_verified_before_upload() {
+  assert_contains "$WORKFLOW" "      - name: Verify release-tagged installer scripts"
+  assert_contains "$WORKFLOW" "          ./scripts/check-release-installer.ps1 -Version \$env:RELEASE_TAG"
+  assert_before "$WORKFLOW" "      - name: Create or reuse draft dispatcher release" "      - name: Verify release-tagged installer scripts"
+  assert_before "$WORKFLOW" "      - name: Verify release-tagged installer scripts" "      - name: Upload dispatcher assets"
+}
+
+test_package_release_sync_runs_after_dispatcher_publish() {
+  assert_contains "$WORKFLOW" "      - name: Sync release-please package releases"
+  assert_before "$WORKFLOW" "      - name: Publish draft dispatcher release" "      - name: Sync release-please package releases"
+}
+
+test_dispatcher_resolver_is_used
+test_dispatcher_assets_are_packaged_and_verified
+test_installer_scripts_are_verified_before_upload
+test_package_release_sync_runs_after_dispatcher_publish
