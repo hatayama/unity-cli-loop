@@ -125,7 +125,9 @@ jobs:
         if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
           TARGET_SHA: ${{ steps.release.outputs.sha }}
         run: |
           set -eu
@@ -146,6 +148,11 @@ jobs:
           if gh release view "${RELEASE_TAG}" --json isDraft --jq '.isDraft' >"${DRAFT_STATE_PATH}" 2>/dev/null; then
             IS_DRAFT=$(cat "${DRAFT_STATE_PATH}")
             if [ "${IS_DRAFT}" != "true" ]; then
+              if [ "${RELEASE_PRERELEASE}" = "true" ]; then
+                RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
+                gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F prerelease=true -F make_latest=false >/dev/null
+              fi
+
               echo "release_published=true" >> "$GITHUB_OUTPUT"
               echo "Dispatcher release ${RELEASE_TAG} is already published; verifying existing assets."
               exit 0
@@ -157,18 +164,19 @@ jobs:
           fi
 
           PRERELEASE_FLAG=""
-          case "${RELEASE_TAG}" in
-            *-beta.*)
-              PRERELEASE_FLAG="--prerelease"
-              ;;
-          esac
+          LATEST_FLAG=""
+          if [ "${RELEASE_PRERELEASE}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+            LATEST_FLAG="--latest=false"
+          fi
 
           gh release create "${RELEASE_TAG}" \
             --draft \
             --title "${RELEASE_TAG}" \
             --notes "Dispatcher release ${RELEASE_TAG}." \
             --target "${TARGET_SHA}" \
-            ${PRERELEASE_FLAG}
+            ${PRERELEASE_FLAG} \
+            ${LATEST_FLAG}
 
           echo "release_published=false" >> "$GITHUB_OUTPUT"
 
@@ -214,17 +222,18 @@ jobs:
         if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true' && steps.draft.outputs.release_published != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
           set -eu
-          case "${RELEASE_TAG}" in
-            *-beta.*)
-              gh release edit "${RELEASE_TAG}" --draft=false --prerelease
-              ;;
-            *)
-              gh release edit "${RELEASE_TAG}" --draft=false
-              ;;
-          esac
+          if [ "${RELEASE_PRERELEASE}" = "true" ]; then
+            gh release edit "${RELEASE_TAG}" --draft=false --prerelease
+            RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F prerelease=true -F make_latest=false >/dev/null
+          else
+            gh release edit "${RELEASE_TAG}" --draft=false
+          fi
 
       - name: Sync release-please package releases
         id: package_release_sync
