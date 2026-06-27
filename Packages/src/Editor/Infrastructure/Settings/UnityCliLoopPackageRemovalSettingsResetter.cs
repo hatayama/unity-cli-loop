@@ -62,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return settings with
             {
                 lastSeenSetupWizardVersion = string.Empty,
+                lastSeenSetupWizardMinimumDispatcherVersion = string.Empty,
                 suppressSetupWizardAutoShow = false
             };
         }

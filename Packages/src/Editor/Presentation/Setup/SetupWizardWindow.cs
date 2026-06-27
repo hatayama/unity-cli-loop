@@ -65,17 +65,23 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool ShouldAutoShowForVersion(
             string currentVersion,
             string lastSeenVersion,
+            string currentMinimumDispatcherVersion,
+            string lastSeenMinimumDispatcherVersion,
             bool suppressAutoShow,
             bool needsCliUpdate,
             bool hasSkillUpdate)
         {
             bool versionChanged = !string.Equals(currentVersion, lastSeenVersion, System.StringComparison.Ordinal);
-            if (!versionChanged) return false;
+            bool minimumDispatcherVersionChanged = !string.Equals(
+                currentMinimumDispatcherVersion,
+                lastSeenMinimumDispatcherVersion,
+                System.StringComparison.Ordinal);
+            if (!versionChanged && !minimumDispatcherVersionChanged) return false;
             if (suppressAutoShow) return false;
 
             return string.IsNullOrEmpty(lastSeenVersion)
                 || needsCliUpdate
-                || hasSkillUpdate;
+                || (versionChanged && hasSkillUpdate);
         }
 
         internal static bool ShouldAutoScanThirdPartyToolMigration(string currentVersion, string lastSeenVersion)
@@ -108,20 +114,33 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             GetSessionStateService().SetShouldAutoScanThirdPartyToolMigration(true);
         }
 
-        internal static void MaybeRecordLastSeenVersion(bool shouldRecordVersion, string version)
+        internal static void MaybeRecordLastSeenSetupWizardState(
+            bool shouldRecordState,
+            string version,
+            string minimumDispatcherVersion)
         {
-            if (!shouldRecordVersion) return;
+            if (!shouldRecordState) return;
 
             Debug.Assert(!string.IsNullOrEmpty(version), "version must not be null or empty");
-            GetEditorSettingsService().SetLastSeenSetupWizardVersion(version);
+            Debug.Assert(
+                !string.IsNullOrEmpty(minimumDispatcherVersion),
+                "minimumDispatcherVersion must not be null or empty");
+
+            GetEditorSettingsService().UpdateSettings((UnityCliLoopEditorSettingsData settings) => settings with
+            {
+                lastSeenSetupWizardVersion = version,
+                lastSeenSetupWizardMinimumDispatcherVersion = minimumDispatcherVersion
+            });
         }
 
-        internal static void MaybeRecordSuppressedVersion(bool suppressAutoShow, string version)
+        internal static void MaybeRecordSuppressedSetupWizardState(
+            bool suppressAutoShow,
+            string version,
+            string minimumDispatcherVersion)
         {
             if (!suppressAutoShow) return;
 
-            Debug.Assert(!string.IsNullOrEmpty(version), "version must not be null or empty");
-            GetEditorSettingsService().SetLastSeenSetupWizardVersion(version);
+            MaybeRecordLastSeenSetupWizardState(true, version, minimumDispatcherVersion);
         }
 
         private static void TryShowOnVersionChange()
@@ -132,9 +151,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static async void EvaluateVersionChange(CancellationToken ct)
         {
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
+            string currentMinimumDispatcherVersion = GetMinimumRequiredCliVersion();
             UnityCliLoopEditorSettingsService editorSettingsService = GetEditorSettingsService();
-            bool suppressAutoShow = editorSettingsService.GetSuppressSetupWizardAutoShow();
-            string lastSeenVersion = editorSettingsService.GetLastSeenSetupWizardVersion();
+            UnityCliLoopEditorSettingsData settings = editorSettingsService.GetSettings();
+            bool suppressAutoShow = settings.suppressSetupWizardAutoShow;
+            string lastSeenVersion = settings.lastSeenSetupWizardVersion ?? string.Empty;
+            string lastSeenMinimumDispatcherVersion =
+                settings.lastSeenSetupWizardMinimumDispatcherVersion ?? string.Empty;
             if (ct.IsCancellationRequested)
             {
                 return;
@@ -149,9 +172,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 currentVersion,
                 lastSeenVersion,
                 System.StringComparison.Ordinal);
-            if (!versionChanged || suppressAutoShow)
+            bool minimumDispatcherVersionChanged = !string.Equals(
+                currentMinimumDispatcherVersion,
+                lastSeenMinimumDispatcherVersion,
+                System.StringComparison.Ordinal);
+            if (suppressAutoShow)
             {
-                MaybeRecordSuppressedVersion(suppressAutoShow, currentVersion);
+                MaybeRecordSuppressedSetupWizardState(
+                    suppressAutoShow,
+                    currentVersion,
+                    currentMinimumDispatcherVersion);
+                return;
+            }
+
+            if (!versionChanged && !minimumDispatcherVersionChanged)
+            {
                 return;
             }
 
@@ -165,7 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     return;
                 }
 
-                if (!needsCliUpdate)
+                if (versionChanged && !needsCliUpdate)
                 {
                     hasSkillUpdate = await HasSkillUpdateForSetupWizardAsync(ct);
                     if (ct.IsCancellationRequested)
@@ -178,13 +213,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool shouldAutoShow = ShouldAutoShowForVersion(
                 currentVersion,
                 lastSeenVersion,
+                currentMinimumDispatcherVersion,
+                lastSeenMinimumDispatcherVersion,
                 suppressAutoShow,
                 needsCliUpdate,
                 hasSkillUpdate);
 
             if (!shouldAutoShow)
             {
-                MaybeRecordLastSeenVersion(true, currentVersion);
+                MaybeRecordLastSeenSetupWizardState(
+                    true,
+                    currentVersion,
+                    currentMinimumDispatcherVersion);
                 return;
             }
 
@@ -232,10 +272,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static void ShowWindowInternal(bool shouldRecordVersion)
         {
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
+            string currentMinimumDispatcherVersion = GetMinimumRequiredCliVersion();
             if (TryReuseOpenWindow(
                 HasOpenInstances<SetupWizardWindow>(),
                 shouldRecordVersion,
                 currentVersion,
+                currentMinimumDispatcherVersion,
                 FocusExistingWindow))
             {
                 return;
@@ -279,14 +321,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool hasOpenWindow,
             bool shouldRecordVersion,
             string currentVersion,
+            string currentMinimumDispatcherVersion,
             System.Action focusExistingWindow)
         {
             if (!hasOpenWindow) return false;
 
             Debug.Assert(focusExistingWindow != null, "focusExistingWindow must not be null");
             Debug.Assert(!string.IsNullOrEmpty(currentVersion), "currentVersion must not be null or empty");
+            Debug.Assert(
+                !string.IsNullOrEmpty(currentMinimumDispatcherVersion),
+                "currentMinimumDispatcherVersion must not be null or empty");
             focusExistingWindow();
-            MaybeRecordLastSeenVersion(shouldRecordVersion, currentVersion);
+            MaybeRecordLastSeenSetupWizardState(
+                shouldRecordVersion,
+                currentVersion,
+                currentMinimumDispatcherVersion);
             return true;
         }
 
@@ -416,7 +465,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ApplyInitialCheckingState();
             ScheduleInitialRefresh();
             ScheduleResizeToContent();
-            RecordLastSeenVersionAfterSuccessfulCreateGui();
+            RecordLastSeenSetupWizardStateAfterSuccessfulCreateGui();
         }
 
         private void InitializeApplicationServices()
@@ -431,11 +480,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _lastSeenSetupWizardVersionBeforeOpen);
         }
 
-        private void RecordLastSeenVersionAfterSuccessfulCreateGui()
+        private void RecordLastSeenSetupWizardStateAfterSuccessfulCreateGui()
         {
-            MaybeRecordLastSeenVersion(
+            MaybeRecordLastSeenSetupWizardState(
                 _shouldRecordLastSeenVersionAfterCreateGui,
-                UnityCliLoopConstants.PackageInfo.version);
+                UnityCliLoopConstants.PackageInfo.version,
+                GetMinimumRequiredCliVersion());
             _shouldRecordLastSeenVersionAfterCreateGui = false;
         }
 
@@ -1292,7 +1342,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void HandleSuppressAutoShowChanged(bool suppressAutoShow)
         {
             _editorSettingsService.SetSuppressSetupWizardAutoShow(suppressAutoShow);
-            MaybeRecordSuppressedVersion(suppressAutoShow, UnityCliLoopConstants.PackageInfo.version);
+            MaybeRecordSuppressedSetupWizardState(
+                suppressAutoShow,
+                UnityCliLoopConstants.PackageInfo.version,
+                GetMinimumRequiredCliVersion());
             ScheduleResizeToContent();
         }
 

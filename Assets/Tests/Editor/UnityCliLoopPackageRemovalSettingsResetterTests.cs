@@ -96,6 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopPackageRemovalSettingsResetter.ResetSetupWizardState(settings);
 
             Assert.That(resetSettings.lastSeenSetupWizardVersion, Is.Empty);
+            Assert.That(resetSettings.lastSeenSetupWizardMinimumDispatcherVersion, Is.Empty);
             Assert.That(resetSettings.suppressSetupWizardAutoShow, Is.False);
             Assert.That(resetSettings.showDeveloperTools, Is.EqualTo(settings.showDeveloperTools));
             Assert.That(resetSettings.showToolSettings, Is.EqualTo(settings.showToolSettings));
@@ -116,6 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             UnityCliLoopEditorSettingsData updatedSettings = _editorSettingsService.GetSettings();
             Assert.That(updatedSettings.lastSeenSetupWizardVersion, Is.Empty);
+            Assert.That(updatedSettings.lastSeenSetupWizardMinimumDispatcherVersion, Is.Empty);
             Assert.That(updatedSettings.suppressSetupWizardAutoShow, Is.False);
             Assert.That(updatedSettings.showDeveloperTools, Is.EqualTo(settings.showDeveloperTools));
             Assert.That(updatedSettings.showToolSettings, Is.EqualTo(settings.showToolSettings));
@@ -128,6 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 showDeveloperTools = true,
                 lastSeenSetupWizardVersion = "3.0.0-beta.7",
+                lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1-beta.1",
                 suppressSetupWizardAutoShow = true,
                 showUnityCliLoopSecuritySetting = false,
                 showToolSettings = false,
