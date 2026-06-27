@@ -6,8 +6,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,6 +22,12 @@ import (
 type dispatcherArchiveTestEntry struct {
 	Name    string
 	Content string
+}
+
+type dispatcherRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (roundTrip dispatcherRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
 }
 
 func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
@@ -52,6 +61,9 @@ func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
 	}
 	if actualPath != expectedCLIPath {
 		t.Fatalf("real CLI path mismatch: %s", actualPath)
+	}
+	if stderr.String() != "" {
+		t.Fatalf("cached CLI should not write dispatcher download status: %s", stderr.String())
 	}
 	assertStringSliceEqual(t, actualArgs, []string{"compile", "--force-recompile"})
 }
@@ -163,7 +175,7 @@ func TestResolveDispatcherRealCLIRejectsInvalidCLIVersion(t *testing.T) {
 	// Verifies project pins cannot escape the dispatcher cache through cliVersion path segments.
 	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
 
-	_, err := resolveDispatcherRealCLI(context.Background(), dispatcherPin{CLIVersion: "../../../../payload"})
+	_, err := resolveDispatcherRealCLI(context.Background(), dispatcherPin{CLIVersion: "../../../../payload"}, io.Discard)
 
 	if err == nil {
 		t.Fatal("expected invalid cliVersion error")
@@ -290,6 +302,62 @@ func TestDispatcherHTTPClientHasDownloadTimeout(t *testing.T) {
 	if dispatcherHTTPClient.Timeout != 2*time.Minute {
 		t.Fatalf("dispatcher HTTP timeout mismatch: %s", dispatcherHTTPClient.Timeout)
 	}
+}
+
+func TestDownloadDispatcherRealCLIWritesDownloadStatus(t *testing.T) {
+	// Verifies cache misses tell callers that dispatcher is downloading the pinned CLI.
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "uloop-cli-darwin-arm64.tar.gz")
+	writeDispatcherTarGzArchive(t, archivePath, []dispatcherArchiveTestEntry{
+		{Name: "uloop-cli", Content: "real"},
+	})
+	archiveContent, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("failed to read archive: %v", err)
+	}
+	checksum := sha256.Sum256(archiveContent)
+	checksumContent := []byte(hex.EncodeToString(checksum[:]) + "  " + filepath.Base(archivePath) + "\n")
+
+	previousHTTPClient := dispatcherHTTPClient
+	defer func() {
+		dispatcherHTTPClient = previousHTTPClient
+	}()
+	dispatcherHTTPClient = &http.Client{
+		Transport: dispatcherRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+			content := []byte{}
+			statusCode := http.StatusNotFound
+			if strings.HasSuffix(request.URL.Path, "/uloop-cli-darwin-arm64.tar.gz") {
+				content = archiveContent
+				statusCode = http.StatusOK
+			}
+			if strings.HasSuffix(request.URL.Path, "/uloop-cli-darwin-arm64.tar.gz.sha256") {
+				content = checksumContent
+				statusCode = http.StatusOK
+			}
+			return &http.Response{
+				StatusCode: statusCode,
+				Status:     http.StatusText(statusCode),
+				Body:       io.NopCloser(bytes.NewReader(content)),
+			}, nil
+		}),
+	}
+
+	var stderr bytes.Buffer
+	realCLIPath, err := downloadDispatcherRealCLI(
+		context.Background(),
+		t.TempDir(),
+		"3.0.0-beta.88",
+		"darwin",
+		"arm64",
+		&stderr)
+	if err != nil {
+		t.Fatalf("downloadDispatcherRealCLI failed: %v", err)
+	}
+	expectedStatus := "uloop: downloading pinned CLI 3.0.0-beta.88 for darwin-arm64...\n"
+	if stderr.String() != expectedStatus {
+		t.Fatalf("download status mismatch: %q", stderr.String())
+	}
+	assertFileContent(t, realCLIPath, "real")
 }
 
 func TestInstallDownloadedDispatcherRealCLIKeepsExistingExecutable(t *testing.T) {
