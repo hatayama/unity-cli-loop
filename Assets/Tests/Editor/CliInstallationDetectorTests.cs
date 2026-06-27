@@ -210,13 +210,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             + "/Users/ExampleUser/.local/bin/uloop\n"
                             + "__ULOOP_PATH_END__\n"
                             + "__ULOOP_CONTRACT_START__\n"
-                            + "{\"DispatcherVersion\":\"1.0.0\",\"DispatcherContractVersion\":1}\n"
+                            + "{\"DispatcherVersion\":\"3.0.0\",\"DispatcherContractVersion\":1}\n"
                             + "__ULOOP_CONTRACT_END__\n"
                             + "__ULOOP_CONTRACT_STATUS_START__\n"
                             + "0\n"
                             + "__ULOOP_CONTRACT_STATUS_END__\n"
                             + "__ULOOP_VERSION_START__\n"
-                            + "1.0.0\n"
+                            + "3.0.0\n"
                             + "__ULOOP_VERSION_END__\n"
                             + "__ULOOP_VERSION_STATUS_START__\n"
                             + "0\n"
@@ -225,7 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliInstallationDetection detection =
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
 
-            Assert.That(detection.Version, Is.EqualTo("1.0.0"));
+            Assert.That(detection.Version, Is.EqualTo("3.0.0"));
             Assert.That(detection.ProtocolVersion, Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION));
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.local/bin/uloop"));
         }

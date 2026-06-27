@@ -84,7 +84,7 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
     esac
   fi
 
-  if [ "$tag" = "${DISPATCHER_RELEASE_TAG:-dispatcher-v1.0.0}" ]; then
+  if [ "$tag" = "${DISPATCHER_RELEASE_TAG:-dispatcher-v3.0.0}" ]; then
     case "${DISPATCHER_RELEASE_STATE:-published}" in
       published)
         printf '{"isDraft":false,"targetCommitish":"%s","assets":' "${DISPATCHER_RELEASE_TARGET:-dispatcher-release-sha}"
@@ -201,7 +201,7 @@ EOF_MANIFEST
   "packageVersion": "$version",
   "cliVersion": "$version",
   "requiredProtocolVersion": 2,
-  "minimumDispatcherVersion": "1.0.0"
+  "minimumDispatcherVersion": "3.0.0"
 }
 EOF_PIN
 
@@ -468,7 +468,7 @@ test_waits_for_dispatcher_assets_before_creating_root_release() {
 
   run_sync "$work_dir" "" false "" published complete 0 0 "" published missing
 
-  assert_contains "$work_dir/output.txt" "Dispatcher release dispatcher-v1.0.0 is not published with complete assets; package release sync will wait."
+  assert_contains "$work_dir/output.txt" "Dispatcher release dispatcher-v3.0.0 is not published with complete assets; package release sync will wait."
   assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
   assert_contains "$work_dir/github-output.txt" "ready=false"
 }

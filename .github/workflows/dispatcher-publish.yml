@@ -125,8 +125,15 @@ jobs:
           TARGET_SHA: ${{ steps.release.outputs.sha }}
         run: |
           set -eu
+          git fetch --force --tags origin
 
-          if ! git rev-parse "${RELEASE_TAG}^{tag}" >/dev/null 2>&1 && ! git rev-parse "${RELEASE_TAG}^{commit}" >/dev/null 2>&1; then
+          EXISTING_TAG_SHA=$(git rev-list -n 1 "${RELEASE_TAG}" 2>/dev/null || true)
+          if [ -n "${EXISTING_TAG_SHA}" ] && [ "${EXISTING_TAG_SHA}" != "${TARGET_SHA}" ]; then
+            echo "Dispatcher release tag ${RELEASE_TAG} points at ${EXISTING_TAG_SHA}, expected ${TARGET_SHA}." >&2
+            exit 1
+          fi
+
+          if [ -z "${EXISTING_TAG_SHA}" ]; then
             git tag "${RELEASE_TAG}" "${TARGET_SHA}"
             git push origin "refs/tags/${RELEASE_TAG}"
           fi

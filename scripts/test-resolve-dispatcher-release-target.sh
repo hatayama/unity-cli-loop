@@ -83,7 +83,7 @@ run_case() {
   mkdir -p "$work_dir"
   (
     cd "$work_dir"
-    write_contract "1.0.0"
+    write_contract "3.0.0"
     mock_bin="$work_dir/bin"
     write_mock_commands "$mock_bin"
     PATH="$mock_bin:$ORIGINAL_PATH" \
@@ -109,7 +109,7 @@ test_missing_release_publishes() {
   output=$(run_case missing-release missing false)
   assert_contains "$output" "publish=true"
   assert_contains "$output" "release=true"
-  assert_contains "$output" "tag=dispatcher-v1.0.0"
+  assert_contains "$output" "tag=dispatcher-v3.0.0"
 }
 
 test_complete_release_skips() {
