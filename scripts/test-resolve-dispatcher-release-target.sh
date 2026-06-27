@@ -88,6 +88,7 @@ run_case() {
   release_state=$2
   has_assets=$3
   tag_sha=${4:-}
+  ref_name=${5:-v3-beta}
   work_dir="$TMP_DIR/$name"
   mkdir -p "$work_dir"
   (
@@ -97,7 +98,7 @@ run_case() {
     write_mock_commands "$mock_bin"
     PATH="$mock_bin:$ORIGINAL_PATH" \
       EVENT_NAME=push \
-      EVENT_REF_NAME=v3-beta \
+      EVENT_REF_NAME="$ref_name" \
       DISPATCHER_RELEASE_STATE="$release_state" \
       DISPATCHER_RELEASE_HAS_ASSETS="$has_assets" \
       DISPATCHER_TAG_SHA_VALUE="$tag_sha" \
@@ -120,6 +121,7 @@ test_missing_release_publishes() {
   assert_contains "$output" "publish=true"
   assert_contains "$output" "release=true"
   assert_contains "$output" "tag=dispatcher-v3.0.0"
+  assert_contains "$output" "prerelease=true"
 }
 
 test_complete_release_skips() {
@@ -141,7 +143,15 @@ test_published_release_with_missing_assets_uses_existing_tag_sha() {
   assert_contains "$output" "sha=release-sha"
 }
 
+test_main_branch_release_is_not_prerelease() {
+  output=$(run_case main-missing-release missing false "" main)
+  assert_contains "$output" "publish=true"
+  assert_contains "$output" "release=true"
+  assert_contains "$output" "prerelease=false"
+}
+
 test_missing_release_publishes
 test_complete_release_skips
 test_published_release_with_missing_assets_uploads_assets
 test_published_release_with_missing_assets_uses_existing_tag_sha
+test_main_branch_release_is_not_prerelease

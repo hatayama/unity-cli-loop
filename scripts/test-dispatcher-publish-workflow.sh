@@ -81,11 +81,20 @@ test_dispatcher_draft_state_uses_runner_temp() {
 }
 
 test_dispatcher_beta_releases_are_marked_prerelease() {
+  assert_contains "$WORKFLOW" '          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}'
+  assert_contains "$WORKFLOW" '          GITHUB_REPOSITORY: ${{ github.repository }}'
   assert_contains "$WORKFLOW" '          PRERELEASE_FLAG=""'
-  assert_contains "$WORKFLOW" '              PRERELEASE_FLAG="--prerelease"'
-  assert_contains "$WORKFLOW" '              gh release edit "${RELEASE_TAG}" --draft=false --prerelease'
-  assert_before "$WORKFLOW" '              PRERELEASE_FLAG="--prerelease"' '          gh release create "${RELEASE_TAG}" \'
-  assert_before "$WORKFLOW" '              gh release edit "${RELEASE_TAG}" --draft=false --prerelease' '      - name: Sync release-please package releases'
+  assert_contains "$WORKFLOW" '          LATEST_FLAG=""'
+  assert_contains "$WORKFLOW" '          if [ "${RELEASE_PRERELEASE}" = "true" ]; then'
+  assert_contains "$WORKFLOW" '            PRERELEASE_FLAG="--prerelease"'
+  assert_contains "$WORKFLOW" '            LATEST_FLAG="--latest=false"'
+  assert_contains "$WORKFLOW" '            ${PRERELEASE_FLAG} \'
+  assert_contains "$WORKFLOW" '            ${LATEST_FLAG}'
+  assert_contains "$WORKFLOW" '            gh release edit "${RELEASE_TAG}" --draft=false --prerelease'
+  assert_contains "$WORKFLOW" '            RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '"'"'.id'"'"')'
+  assert_contains "$WORKFLOW" '            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F prerelease=true -F make_latest=false >/dev/null'
+  assert_before "$WORKFLOW" '            PRERELEASE_FLAG="--prerelease"' '          gh release create "${RELEASE_TAG}" \'
+  assert_before "$WORKFLOW" '            gh release edit "${RELEASE_TAG}" --draft=false --prerelease' '      - name: Sync release-please package releases'
 }
 
 test_package_release_sync_runs_after_dispatcher_publish() {
