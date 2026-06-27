@@ -58,6 +58,14 @@ test_existing_dispatcher_tag_target_is_checked() {
   assert_before "$WORKFLOW" '          EXISTING_TAG_SHA=$(git rev-list -n 1 "${RELEASE_TAG}" 2>/dev/null || true)' '      - name: Verify release-tagged installer scripts'
 }
 
+test_dispatcher_beta_releases_are_marked_prerelease() {
+  assert_contains "$WORKFLOW" '          PRERELEASE_FLAG=""'
+  assert_contains "$WORKFLOW" '              PRERELEASE_FLAG="--prerelease"'
+  assert_contains "$WORKFLOW" '              gh release edit "${RELEASE_TAG}" --draft=false --prerelease'
+  assert_before "$WORKFLOW" '              PRERELEASE_FLAG="--prerelease"' '          gh release create "${RELEASE_TAG}" \'
+  assert_before "$WORKFLOW" '              gh release edit "${RELEASE_TAG}" --draft=false --prerelease' '      - name: Sync release-please package releases'
+}
+
 test_package_release_sync_runs_after_dispatcher_publish() {
   assert_contains "$WORKFLOW" "      - name: Sync release-please package releases"
   assert_before "$WORKFLOW" "      - name: Publish draft dispatcher release" "      - name: Sync release-please package releases"
@@ -67,4 +75,5 @@ test_dispatcher_resolver_is_used
 test_dispatcher_assets_are_packaged_and_verified
 test_installer_scripts_are_verified_before_upload
 test_existing_dispatcher_tag_target_is_checked
+test_dispatcher_beta_releases_are_marked_prerelease
 test_package_release_sync_runs_after_dispatcher_publish

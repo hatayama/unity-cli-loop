@@ -151,11 +151,19 @@ jobs:
             exit 0
           fi
 
+          PRERELEASE_FLAG=""
+          case "${RELEASE_TAG}" in
+            *-beta.*)
+              PRERELEASE_FLAG="--prerelease"
+              ;;
+          esac
+
           gh release create "${RELEASE_TAG}" \
             --draft \
             --title "${RELEASE_TAG}" \
             --notes "Dispatcher release ${RELEASE_TAG}." \
-            --target "${TARGET_SHA}"
+            --target "${TARGET_SHA}" \
+            ${PRERELEASE_FLAG}
 
           echo "release_published=false" >> "$GITHUB_OUTPUT"
 
@@ -203,7 +211,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          gh release edit "${RELEASE_TAG}" --draft=false
+          set -eu
+          case "${RELEASE_TAG}" in
+            *-beta.*)
+              gh release edit "${RELEASE_TAG}" --draft=false --prerelease
+              ;;
+            *)
+              gh release edit "${RELEASE_TAG}" --draft=false
+              ;;
+          esac
 
       - name: Sync release-please package releases
         id: package_release_sync
