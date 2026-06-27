@@ -30,16 +30,16 @@ function Assert-Contains {
     }
 }
 
-# Verifies plain CLI versions are normalized to release tags before checking raw installer scripts.
+# Verifies plain dispatcher versions are normalized to release tags before checking raw installer scripts.
 . $ScriptPath -Version "3.0.0-beta.99" -Repository "owner/repo" -RawBaseUrl "https://raw.example.test/"
-Assert-Contains -Values $script:RequestedUris -Expected "https://raw.example.test/owner/repo/cli-v3.0.0-beta.99/scripts/install.ps1"
-Assert-Contains -Values $script:RequestedUris -Expected "https://raw.example.test/owner/repo/cli-v3.0.0-beta.99/scripts/install.sh"
+Assert-Contains -Values $script:RequestedUris -Expected "https://raw.example.test/owner/repo/dispatcher-v3.0.0-beta.99/scripts/install.ps1"
+Assert-Contains -Values $script:RequestedUris -Expected "https://raw.example.test/owner/repo/dispatcher-v3.0.0-beta.99/scripts/install.sh"
 
 $script:RequestedUris = @()
 
-# Verifies explicit CLI release tags are not prefixed twice.
-. $ScriptPath -Version "cli-v3.0.0" -Repository "owner/repo" -RawBaseUrl "https://raw.example.test/"
-Assert-Contains -Values $script:RequestedUris -Expected "https://raw.example.test/owner/repo/cli-v3.0.0/scripts/install.ps1"
-Assert-Contains -Values $script:RequestedUris -Expected "https://raw.example.test/owner/repo/cli-v3.0.0/scripts/install.sh"
+# Verifies explicit dispatcher release tags are not prefixed twice.
+. $ScriptPath -Version "dispatcher-v3.0.0" -Repository "owner/repo" -RawBaseUrl "https://raw.example.test/"
+Assert-Contains -Values $script:RequestedUris -Expected "https://raw.example.test/owner/repo/dispatcher-v3.0.0/scripts/install.ps1"
+Assert-Contains -Values $script:RequestedUris -Expected "https://raw.example.test/owner/repo/dispatcher-v3.0.0/scripts/install.sh"
 
 Write-Host "check-release-installer tests passed."

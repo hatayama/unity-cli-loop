@@ -16,13 +16,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class NativeCliInstallerTests
     {
         private const string TestBetaCliVersion = "3.0.0-beta.3";
-        private const string TestBetaReleaseTag = "cli-v3.0.0-beta.3";
-        private const string TestStableReleaseTag = "cli-v3.0.0";
+        private const string TestBetaReleaseTag = "dispatcher-v3.0.0-beta.3";
+        private const string TestStableReleaseTag = "dispatcher-v3.0.0";
 
         [Test]
-        public void GetInstallCommand_OnMacKeepsCliOnlyCurlInstallerAvailable()
+        public void GetInstallCommand_OnMacKeepsDispatcherCurlInstallerAvailable()
         {
-            // Verifies that editor and CLI installs use the same channel installer script, not npm.
+            // Verifies that editor installs use the dispatcher installer script, not npm.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.OSXEditor,
                 TestBetaCliVersion,
@@ -74,9 +74,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetInstallCommand_OnWindowsKeepsCliOnlyPowerShellInstallerAvailable()
+        public void GetInstallCommand_OnWindowsKeepsDispatcherPowerShellInstallerAvailable()
         {
-            // Verifies that editor and CLI installs use the same channel PowerShell installer script.
+            // Verifies that editor installs use the dispatcher PowerShell installer script.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
                 RuntimePlatform.WindowsEditor,
                 TestBetaCliVersion,
@@ -92,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetInstallCommand_OnMacCliOnlyInstallerDoesNotAdvertiseWindowsLegacyCleanup()
+        public void GetInstallCommand_OnMacDispatcherInstallerDoesNotAdvertiseWindowsLegacyCleanup()
         {
             // Verifies that macOS manual commands do not expose old cleanup flags.
             NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
@@ -117,6 +117,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
+        }
+
+        [Test]
+        public void GetInstallCommand_WhenVPrefixedVersionUsesDispatcherReleaseTag()
+        {
+            // Verifies root release tags are normalized to dispatcher releases for installer scripts.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
+                RuntimePlatform.OSXEditor,
+                "v3.0.0",
+                false,
+                "/bin/zsh");
+
+            Assert.That(command.Arguments, Does.Contain("dispatcher-v3.0.0"));
+            Assert.That(
+                command.Arguments,
+                Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/dispatcher-v3.0.0/scripts/install.sh"));
+        }
+
+        [Test]
+        public void GetInstallCommand_WhenCliPrefixedVersionUsesDispatcherReleaseTag()
+        {
+            // Verifies legacy CLI release tags are normalized before selecting dispatcher installer assets.
+            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
+                RuntimePlatform.OSXEditor,
+                "cli-v3.0.0-beta.40",
+                false,
+                "/bin/zsh");
+
+            Assert.That(command.Arguments, Does.Contain("dispatcher-v3.0.0-beta.40"));
+            Assert.That(command.Arguments, Does.Not.Contain("dispatcher-vcli-v3.0.0-beta.40"));
         }
 
         [Test]
@@ -211,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildInstallerScriptUrl_WhenBetaVersionUsesReleaseInstallerScript()
         {
-            // Verifies that beta editor installs use the script shipped with the selected CLI release.
+            // Verifies that beta editor installs use the script shipped with the selected dispatcher release.
             string url = NativeCliInstaller.BuildInstallerScriptUrl(
                 TestBetaReleaseTag,
                 CliConstants.POSIX_INSTALL_SCRIPT_NAME);
@@ -222,7 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildInstallerScriptUrl_WhenStableVersionUsesReleaseInstallerScript()
         {
-            // Verifies that stable editor installs use the script shipped with the selected CLI release.
+            // Verifies that stable editor installs use the script shipped with the selected dispatcher release.
             string url = NativeCliInstaller.BuildInstallerScriptUrl(
                 TestStableReleaseTag,
                 CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);

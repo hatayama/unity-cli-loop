@@ -5,6 +5,7 @@ ROOT_DIR=${ULOOP_REPO_ROOT:-$(CDPATH= cd "$(dirname "$0")/.." && pwd)}
 CONFIG="$ROOT_DIR/release-please-config.json"
 MANIFEST="$ROOT_DIR/.release-please-manifest.json"
 CLI_PACKAGE_PATH="cli"
+UNITY_PACKAGE_CLI_PIN_FILE="Packages/src/cli-pin.json"
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 TMP_DIR=$(mktemp -d)
 
@@ -285,7 +286,20 @@ create_package_release() {
 release_has_all_cli_assets() {
   release_data=$1
 
-  for asset_name in $("${ROOT_DIR}/scripts/verify-native-cli-release-assets.sh" --list); do
+  asset_names=$("${ROOT_DIR}/scripts/verify-native-cli-release-assets.sh" --list) || return 1
+  for asset_name in $asset_names; do
+    asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length')
+    if [ "$asset_count" -eq 0 ]; then
+      return 1
+    fi
+  done
+}
+
+release_has_all_dispatcher_assets() {
+  release_data=$1
+
+  asset_names=$("${ROOT_DIR}/scripts/verify-dispatcher-release-assets.sh" --list) || return 1
+  for asset_name in $asset_names; do
     asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length')
     if [ "$asset_count" -eq 0 ]; then
       return 1
@@ -309,6 +323,32 @@ cli_release_is_ready() {
       fi
 
       release_has_all_cli_assets "$release_data"
+      ;;
+    1)
+      return 1
+      ;;
+    *)
+      exit "$release_status"
+      ;;
+  esac
+}
+
+dispatcher_release_is_ready() {
+  release_tag=$1
+
+  set +e
+  release_data=$(release_json "$release_tag")
+  release_status=$?
+  set -e
+
+  case "$release_status" in
+    0)
+      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
+      if [ "$is_draft" != "false" ]; then
+        return 1
+      fi
+
+      release_has_all_dispatcher_assets "$release_data"
       ;;
     1)
       return 1
@@ -350,6 +390,44 @@ wait_for_cli_release_ready() {
     fi
 
     echo "CLI release $release_tag is not published with complete assets yet; waiting ${delay_seconds}s before retry."
+    if [ "$sleep_seconds" -gt 0 ]; then
+      sleep "$sleep_seconds"
+    fi
+    elapsed_seconds=$((elapsed_seconds + delay_seconds))
+  done
+}
+
+wait_for_dispatcher_release_ready() {
+  release_tag=$1
+  timeout_seconds=${DISPATCHER_RELEASE_WAIT_TIMEOUT_SECONDS:-600}
+  interval_seconds=${DISPATCHER_RELEASE_WAIT_INTERVAL_SECONDS:-30}
+  elapsed_seconds=0
+
+  while :; do
+    if dispatcher_release_is_ready "$release_tag"; then
+      if [ "$elapsed_seconds" -gt 0 ]; then
+        echo "Dispatcher release $release_tag is now published with complete assets."
+      fi
+      return 0
+    fi
+
+    if [ "$elapsed_seconds" -ge "$timeout_seconds" ]; then
+      return 1
+    fi
+
+    remaining_seconds=$((timeout_seconds - elapsed_seconds))
+    delay_seconds=$interval_seconds
+    sleep_seconds=$delay_seconds
+    if [ "$delay_seconds" -le 0 ]; then
+      delay_seconds=1
+      sleep_seconds=1
+    fi
+    if [ "$delay_seconds" -gt "$remaining_seconds" ]; then
+      delay_seconds=$remaining_seconds
+      sleep_seconds=$delay_seconds
+    fi
+
+    echo "Dispatcher release $release_tag is not published with complete assets yet; waiting ${delay_seconds}s before retry."
     if [ "$sleep_seconds" -gt 0 ]; then
       sleep "$sleep_seconds"
     fi
@@ -402,6 +480,16 @@ if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packa
     exit 0
   fi
   fetch_cli_release_tag "$cli_release_tag"
+fi
+
+minimum_dispatcher_version=$(jq -r '.minimumDispatcherVersion // empty' "$ROOT_DIR/$UNITY_PACKAGE_CLI_PIN_FILE")
+if [ -n "$minimum_dispatcher_version" ]; then
+  dispatcher_release_tag="dispatcher-v$minimum_dispatcher_version"
+  if ! wait_for_dispatcher_release_ready "$dispatcher_release_tag"; then
+    mark_package_release_sync_ready false
+    echo "Dispatcher release $dispatcher_release_tag is not published with complete assets; package release sync will wait."
+    exit 0
+  fi
 fi
 
 jq -r --arg skip "$CLI_PACKAGE_PATH" '

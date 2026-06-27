@@ -51,7 +51,14 @@ func IsValidTargetVersion(value string) bool {
 
 func NormalizeTargetVersion(value string) string {
 	trimmed := strings.TrimSpace(value)
-	if strings.HasPrefix(trimmed, "v") || strings.HasPrefix(trimmed, "V") {
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(lower, dispatcherTagPrefix) {
+		return trimmed[len(dispatcherTagPrefix):]
+	}
+	if strings.HasPrefix(lower, cliReleaseTagPrefix) {
+		return trimmed[len(cliReleaseTagPrefix):]
+	}
+	if strings.HasPrefix(lower, "v") {
 		return trimmed[1:]
 	}
 	return trimmed
@@ -66,7 +73,7 @@ func ScriptVersion(options Options) string {
 
 func Selector(options Options) string {
 	if options.TargetVersion != "" {
-		return ReleaseTag(NormalizeTargetVersion(options.TargetVersion))
+		return DispatcherReleaseTag(NormalizeTargetVersion(options.TargetVersion))
 	}
 	return UpdateSelectorForVersion(options.CurrentVersion)
 }

@@ -15,9 +15,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class CliSetupApplicationServiceTests
     {
         [Test]
-        public async Task InstallGlobalCliAsync_UsesMinimumRequiredCliReleaseTag()
+        public async Task InstallGlobalCliAsync_UsesMinimumRequiredDispatcherReleaseTag()
         {
-            // Verifies that manual installs target the independent CLI release stream.
+            // Verifies that manual installs target the independent dispatcher release stream.
             FakeNativeCliInstaller nativeCliInstaller = new();
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
@@ -27,35 +27,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 nativeCliInstaller.InstalledVersion,
-                Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_RELEASE_TAG));
+                Is.EqualTo(CliConstants.MINIMUM_REQUIRED_DISPATCHER_RELEASE_TAG));
         }
 
         [Test]
-        public void GetMinimumRequiredCliVersion_UsesCliContractVersion()
+        public void GetMinimumRequiredCliVersion_UsesDispatcherVersion()
         {
-            // Verifies setup reports the minimum CLI contract required by the package.
+            // Verifies setup reports the minimum dispatcher required by the package.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_VERSION));
+            Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_DISPATCHER_VERSION));
         }
 
         [Test]
-        public void GetMinimumRequiredCliReleaseTag_UsesCliContractReleaseTag()
+        public void GetMinimumRequiredCliReleaseTag_UsesDispatcherReleaseTag()
         {
-            // Verifies setup reports the prefixed release tag for the required CLI contract.
+            // Verifies setup reports the prefixed release tag for the required dispatcher.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
                 new FakeNativeCliInstaller());
 
-            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_CLI_RELEASE_TAG));
+            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo(CliConstants.MINIMUM_REQUIRED_DISPATCHER_RELEASE_TAG));
         }
 
         [Test]
-        public void GetGlobalCliInstallCommand_UsesMinimumRequiredCliReleaseTag()
+        public void GetGlobalCliInstallCommand_UsesMinimumRequiredDispatcherReleaseTag()
         {
-            // Verifies that fallback manual commands point at the independent CLI release stream.
+            // Verifies that fallback manual commands point at the independent dispatcher release stream.
             FakeNativeCliInstaller nativeCliInstaller = new();
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
@@ -67,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 command.ManualCommand,
-                Is.EqualTo("install " + CliConstants.MINIMUM_REQUIRED_CLI_RELEASE_TAG));
+                Is.EqualTo("install " + CliConstants.MINIMUM_REQUIRED_DISPATCHER_RELEASE_TAG));
         }
 
         private sealed class FakeCliInstallationDetector : ICliInstallationDetector

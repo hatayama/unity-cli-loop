@@ -35,7 +35,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 	}
 
 	updateCommand, err := update.CommandForOS(runtime.GOOS, update.Options{
-		CurrentVersion: clicontract.Current.CliVersion,
+		CurrentVersion: clicontract.DispatcherCurrent.DispatcherVersion,
 		TargetVersion:  options.targetVersion,
 	})
 	if err != nil {
@@ -72,7 +72,7 @@ func updateCommandForOS(goos string) (string, []string, error) {
 
 func updateCommandForOSWithOptions(goos string, options updateOptions) (string, []string, error) {
 	command, err := update.CommandForOS(goos, update.Options{
-		CurrentVersion: clicontract.Current.CliVersion,
+		CurrentVersion: clicontract.DispatcherCurrent.DispatcherVersion,
 		TargetVersion:  options.targetVersion,
 	})
 	if err != nil {

@@ -2,7 +2,7 @@ name: Build and Test Unity CLI Loop
 
 on:
   push:
-    tags: ["v*", "cli-v*"]
+    tags: ["v*", "cli-v*", "dispatcher-v*"]
   pull_request:
     branches: [main, v3-beta]
   workflow_dispatch:
@@ -34,15 +34,18 @@ jobs:
         run: |
           scripts/test-go-cli-toolchain.sh
           scripts/test-resolve-native-cli-release-target.sh
+          scripts/test-resolve-dispatcher-release-target.sh
           scripts/test-is-release-please-release-commit.sh
           scripts/test-release-please-config.sh
           scripts/test-protocol-minimum-version-workflow.sh
           scripts/test-verify-native-cli-release-assets.sh
+          scripts/test-verify-dispatcher-release-assets.sh
           scripts/test-mark-release-pr-tagged.sh
           scripts/test-sync-published-release-pr-labels.sh
           scripts/test-sync-release-please-package-releases.sh
           scripts/test-notify-release-workflow-failure.sh
           scripts/test-native-cli-publish-workflow.sh
+          scripts/test-dispatcher-publish-workflow.sh
           scripts/test-install-release-filter.sh
 
       - name: Check IPC protocol reminder
@@ -61,6 +64,11 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         working-directory: cli
         run: go run ./cmd/check-dispatcher-minimum-version
+
+      - name: Check dispatcher version bump
+        if: github.event_name == 'pull_request'
+        working-directory: cli
+        run: go run ./cmd/check-dispatcher-version-bump --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Install golangci-lint
         run: |

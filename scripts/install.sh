@@ -47,11 +47,11 @@ detect_asset_name() {
       echo "Unsupported Windows architecture: $arch" >&2
       exit 1
     fi
-    echo "uloop-windows-amd64.zip"
+    echo "uloop-dispatcher-windows-amd64.zip"
     return
   fi
 
-  echo "uloop-$os_name-$arch_name.tar.gz"
+  echo "uloop-dispatcher-$os_name-$arch_name.tar.gz"
 }
 
 detect_installed_command_name() {

@@ -21,8 +21,6 @@ cli/go.sum
 cli/internal
 scripts/build-go-cli.sh
 scripts/go-cli-toolchain.sh
-scripts/install.sh
-scripts/install.ps1
 scripts/package-go-cli.sh
 scripts/verify-native-cli-release-assets.sh
 "

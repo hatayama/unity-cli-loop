@@ -19,8 +19,8 @@ const (
 )
 
 var (
-	unityRequiredProtocolVersionPattern = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
-	unityMinimumCLIVersionPattern       = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
+	unityRequiredProtocolVersionPattern  = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
+	unityMinimumDispatcherVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
 )
 
 type unityPackageManifest struct {
@@ -81,8 +81,8 @@ func TestUnityPackageCliPinMatchesReleaseContracts(t *testing.T) {
 	if pin.MinimumDispatcherVersion == "" {
 		t.Fatalf("expected %s minimumDispatcherVersion to be set", unityPackageCliPinPath)
 	}
-	if pin.MinimumDispatcherVersion != readUnityMinimumRequiredCLIVersion(t) {
-		t.Fatalf("expected %s minimumDispatcherVersion to match %s MINIMUM_REQUIRED_CLI_VERSION", unityPackageCliPinPath, unityProtocolConstantPath)
+	if pin.MinimumDispatcherVersion != readUnityMinimumRequiredDispatcherVersion(t) {
+		t.Fatalf("expected %s minimumDispatcherVersion to match %s MINIMUM_REQUIRED_DISPATCHER_VERSION", unityPackageCliPinPath, unityProtocolConstantPath)
 	}
 }
 
@@ -118,17 +118,17 @@ func readUnityRequiredProtocolVersion(t *testing.T) int {
 	return unityProtocolVersion
 }
 
-func readUnityMinimumRequiredCLIVersion(t *testing.T) string {
+func readUnityMinimumRequiredDispatcherVersion(t *testing.T) string {
 	t.Helper()
 
 	content, err := os.ReadFile(filepath.Clean(unityProtocolConstantPath))
 	if err != nil {
-		t.Fatalf("failed to read Unity CLI version constant from %s: %v", unityProtocolConstantPath, err)
+		t.Fatalf("failed to read Unity dispatcher version constant from %s: %v", unityProtocolConstantPath, err)
 	}
 
-	matches := unityMinimumCLIVersionPattern.FindStringSubmatch(string(content))
+	matches := unityMinimumDispatcherVersionPattern.FindStringSubmatch(string(content))
 	if len(matches) != 2 {
-		t.Fatalf("%s does not define MINIMUM_REQUIRED_CLI_VERSION", unityProtocolConstantPath)
+		t.Fatalf("%s does not define MINIMUM_REQUIRED_DISPATCHER_VERSION", unityProtocolConstantPath)
 	}
 
 	return matches[1]
