@@ -81,7 +81,7 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 		return code
 	}
 
-	realCLIPath, err := resolveDispatcherRealCLI(ctx, pin)
+	realCLIPath, err := resolveDispatcherRealCLI(ctx, pin, stderr)
 	if err != nil {
 		writeErrorEnvelope(stderr, dispatcherRealCLIResolutionError(projectRoot, pin, err))
 		return 1

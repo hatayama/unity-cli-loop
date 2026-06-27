@@ -23,7 +23,7 @@ import (
 
 var dispatcherHTTPClient = &http.Client{Timeout: 2 * time.Minute}
 
-func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin) (string, error) {
+func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.Writer) (string, error) {
 	pin.CLIVersion = strings.TrimSpace(pin.CLIVersion)
 	if err := validateDispatcherCLIVersion(pin.CLIVersion); err != nil {
 		return "", err
@@ -41,7 +41,7 @@ func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin) (string, e
 		return realCLIPath, nil
 	}
 
-	return downloadDispatcherRealCLI(ctx, cacheRoot, pin.CLIVersion, runtime.GOOS, runtime.GOARCH)
+	return downloadDispatcherRealCLI(ctx, cacheRoot, pin.CLIVersion, runtime.GOOS, runtime.GOARCH, stderr)
 }
 
 func dispatcherSiblingRealCLIPath(pin dispatcherPin) (string, bool) {
@@ -122,7 +122,7 @@ func isExecutableFile(filePath string) bool {
 	return info.Mode()&0o111 != 0
 }
 
-func downloadDispatcherRealCLI(ctx context.Context, cacheRoot string, cliVersion string, goos string, goarch string) (string, error) {
+func downloadDispatcherRealCLI(ctx context.Context, cacheRoot string, cliVersion string, goos string, goarch string, stderr io.Writer) (string, error) {
 	assetName, err := dispatcherReleaseAssetName(goos, goarch)
 	if err != nil {
 		return "", err
@@ -143,6 +143,7 @@ func downloadDispatcherRealCLI(ctx context.Context, cacheRoot string, cliVersion
 	archivePath := filepath.Join(tempDir, assetName)
 	checksumPath := archivePath + ".sha256"
 	assetURL := dispatcherReleaseAssetURL(cliVersion, assetName)
+	writeFormat(stderr, "uloop: downloading pinned CLI %s for %s...\n", cliVersion, dispatcherPlatformName(goos, goarch))
 	if err := downloadDispatcherFile(ctx, assetURL, archivePath); err != nil {
 		return "", err
 	}
