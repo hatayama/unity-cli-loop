@@ -125,11 +125,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         public string GetMinimumRequiredCliVersion()
         {
+            // Why: v3 setup installs the global dispatcher; project-local CLI versions are pinned separately.
             return CliConstants.MINIMUM_REQUIRED_DISPATCHER_VERSION;
         }
 
         public string GetMinimumRequiredCliReleaseTag()
         {
+            // Why: v3 setup installs the global dispatcher; project-local CLI versions are pinned separately.
             return CliConstants.MINIMUM_REQUIRED_DISPATCHER_RELEASE_TAG;
         }
 

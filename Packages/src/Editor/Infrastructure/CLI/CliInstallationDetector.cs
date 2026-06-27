@@ -397,6 +397,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return new CliInstallationDetection(null, null, executablePath);
             }
 
+            // Why: setup compatibility still uses the CLI protocol slot; dispatcher
+            // contract compatibility is enforced by the pinned minimum dispatcher release.
             return new CliInstallationDetection(
                 dispatcherVersion,
                 CliConstants.REQUIRED_CLI_PROTOCOL_VERSION,

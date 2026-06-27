@@ -219,6 +219,40 @@ func TestEnforceDispatcherFreshnessDoesNotMarkFailedOptionalUpdateChecked(t *tes
 	}
 }
 
+func TestExtractDispatcherRealCLIFromTarPrefersRealCLI(t *testing.T) {
+	// Verifies legacy bridge archives that contain dispatcher first still extract the real CLI binary.
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "uloop-darwin-arm64.tar.gz")
+	writeDispatcherTarGzArchive(t, archivePath, []dispatcherArchiveTestEntry{
+		{Name: "uloop", Content: "dispatcher"},
+		{Name: "uloop-cli", Content: "real"},
+	})
+	destinationPath := filepath.Join(tempDir, "uloop-cli")
+
+	err := extractDispatcherRealCLI(archivePath, filepath.Base(archivePath), destinationPath, "darwin")
+	if err != nil {
+		t.Fatalf("extractDispatcherRealCLI failed: %v", err)
+	}
+	assertFileContent(t, destinationPath, "real")
+}
+
+func TestExtractDispatcherRealCLIFromZipPrefersRealCLI(t *testing.T) {
+	// Verifies Windows legacy bridge archives that contain dispatcher first still extract the real CLI binary.
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "uloop-windows-amd64.zip")
+	writeDispatcherZipArchive(t, archivePath, []dispatcherArchiveTestEntry{
+		{Name: "uloop.exe", Content: "dispatcher"},
+		{Name: "uloop-cli.exe", Content: "real"},
+	})
+	destinationPath := filepath.Join(tempDir, "uloop-cli.exe")
+
+	err := extractDispatcherRealCLI(archivePath, filepath.Base(archivePath), destinationPath, "windows")
+	if err != nil {
+		t.Fatalf("extractDispatcherRealCLI failed: %v", err)
+	}
+	assertFileContent(t, destinationPath, "real")
+}
+
 func TestExtractDispatcherRealCLIFromTarRequiresRealCLIAsset(t *testing.T) {
 	// Verifies CLI release archives extract the real CLI binary without dispatcher payloads.
 	tempDir := t.TempDir()

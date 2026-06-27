@@ -1,6 +1,7 @@
 package clicontract
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/cli/internal/version"
@@ -30,11 +31,18 @@ func TestDispatcherContractProvidesRuntimeVersion(t *testing.T) {
 	requireValidContractVersion(t, "dispatcherVersion", DispatcherCurrent.DispatcherVersion)
 }
 
-func TestCliContractDoesNotOwnDispatcherReleaseVersion(t *testing.T) {
+func TestCliContractDoesNotDeclareDispatcherReleaseFields(t *testing.T) {
 	// Verifies release-please CLI version stamping cannot accidentally move dispatcher release metadata.
-	if Current.CliVersion == DispatcherCurrent.DispatcherVersion {
-		t.Fatalf("cliVersion and dispatcherVersion should be independently owned: %q", Current.CliVersion)
-	}
+	fields := requireContractFieldMap(t, contractFileName)
+	requireContractFieldMissing(t, fields, "dispatcherVersion")
+	requireContractFieldMissing(t, fields, "dispatcherContractVersion")
+}
+
+func TestDispatcherContractDoesNotDeclareCliReleaseFields(t *testing.T) {
+	// Verifies dispatcher releases stay independent from project-local CLI release metadata.
+	fields := requireContractFieldMap(t, dispatcherContractFileName)
+	requireContractFieldMissing(t, fields, "cliVersion")
+	requireContractFieldMissing(t, fields, "protocolVersion")
 }
 
 func requireValidContractVersion(t *testing.T, label string, value string) {
@@ -46,5 +54,27 @@ func requireValidContractVersion(t *testing.T, label string, value string) {
 	_, ok := version.Compare(value, value)
 	if !ok {
 		t.Fatalf("%s must be valid semver: %s", label, value)
+	}
+}
+
+func requireContractFieldMap(t *testing.T, fileName string) map[string]any {
+	t.Helper()
+
+	content, err := contractFiles.ReadFile(fileName)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", fileName, err)
+	}
+	fields := map[string]any{}
+	if err := json.Unmarshal(content, &fields); err != nil {
+		t.Fatalf("%s is invalid JSON: %v", fileName, err)
+	}
+	return fields
+}
+
+func requireContractFieldMissing(t *testing.T, fields map[string]any, fieldName string) {
+	t.Helper()
+
+	if _, ok := fields[fieldName]; ok {
+		t.Fatalf("contract must not declare %s", fieldName)
 	}
 }
