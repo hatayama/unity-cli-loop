@@ -116,7 +116,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 data.IsInstallingCli,
                 data.IsChecking,
                 data.NeedsUpdate,
-                data.NeedsDowngrade,
                 data.CanUninstallCli,
                 data.NeedsCliPathSetup,
                 data.CliVersion,
@@ -127,7 +126,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isUninstallStyle = !data.NeedsCliPathSetup && IsUninstallCliAction(
                 data.IsCliInstalled,
                 data.NeedsUpdate,
-                data.NeedsDowngrade,
                 data.CanUninstallCli);
             bool useDisabledStyle = !enabled || isUninstallStyle;
             SetCliButton(label, enabled, useDisabledStyle);
@@ -208,7 +206,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isInstallingCli,
             bool isChecking,
             bool needsUpdate,
-            bool needsDowngrade,
             bool canUninstallCli,
             bool needsCliPathSetup,
             string cliVersion,
@@ -219,10 +216,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
-            bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade, canUninstallCli);
+            bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, canUninstallCli);
             if (isInstallingCli)
             {
-                if (needsCliPathSetup && !needsUpdate && !needsDowngrade)
+                if (needsCliPathSetup && !needsUpdate)
                 {
                     return "Fixing PATH...";
                 }
@@ -233,11 +230,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (needsUpdate)
             {
                 return CliSetupLabelFormatter.GetCliReplacementButtonText("Update", cliVersion, requiredCliVersion);
-            }
-
-            if (needsDowngrade)
-            {
-                return CliSetupLabelFormatter.GetCliReplacementButtonText("Downgrade", cliVersion, requiredCliVersion);
             }
 
             if (needsCliPathSetup)
@@ -263,10 +255,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool IsUninstallCliAction(
             bool isCliInstalled,
             bool needsUpdate,
-            bool needsDowngrade,
             bool canUninstallCli)
         {
-            return canUninstallCli && isCliInstalled && !needsUpdate && !needsDowngrade;
+            return canUninstallCli && isCliInstalled && !needsUpdate;
         }
 
         internal static string GetInstallSkillsButtonText(

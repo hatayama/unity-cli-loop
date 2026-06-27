@@ -9,15 +9,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     internal readonly struct CliSetupCompatibilityState
     {
-        public CliSetupCompatibilityState(bool needsUpdate, bool needsDowngrade, bool isCompatible)
+        public CliSetupCompatibilityState(bool needsUpdate, bool isCompatible)
         {
             NeedsUpdate = needsUpdate;
-            NeedsDowngrade = needsDowngrade;
             IsCompatible = isCompatible;
         }
 
         public bool NeedsUpdate { get; }
-        public bool NeedsDowngrade { get; }
         public bool IsCompatible { get; }
     }
 
@@ -35,18 +33,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (string.IsNullOrEmpty(cliVersion))
             {
-                return new CliSetupCompatibilityState(false, false, false);
+                return new CliSetupCompatibilityState(false, false);
             }
 
             if (!isDispatcher)
             {
-                return new CliSetupCompatibilityState(true, false, false);
+                return new CliSetupCompatibilityState(true, false);
             }
 
             bool isMinimumSatisfied = CliVersionComparer.IsVersionGreaterThanOrEqual(
                 cliVersion,
                 minimumRequiredDispatcherVersion);
-            return new CliSetupCompatibilityState(!isMinimumSatisfied, false, isMinimumSatisfied);
+            return new CliSetupCompatibilityState(!isMinimumSatisfied, isMinimumSatisfied);
         }
     }
 }

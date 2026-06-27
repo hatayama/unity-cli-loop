@@ -10,17 +10,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class CliSetupCompatibilityTests
     {
-        [TestCase(null, false, false, false, false)]
-        [TestCase("2.1.10", false, true, false, false)]
-        [TestCase("3.0.0", false, true, false, false)]
-        [TestCase("2.1.10", true, true, false, false)]
-        [TestCase("3.0.0", true, false, false, true)]
-        [TestCase("3.0.1", true, false, false, true)]
+        [TestCase(null, false, false, false)]
+        [TestCase("2.1.10", false, true, false)]
+        [TestCase("3.0.0", false, true, false)]
+        [TestCase("2.1.10", true, true, false)]
+        [TestCase("3.0.0", true, false, true)]
+        [TestCase("3.0.1", true, false, true)]
         public void Evaluate_ReturnsExpectedDispatcherSetupState(
             string cliVersion,
             bool isDispatcher,
             bool expectedNeedsUpdate,
-            bool expectedNeedsDowngrade,
             bool expectedCompatible)
         {
             // Verifies setup prompts are based on dispatcher identity and minimum dispatcher version.
@@ -30,8 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliConstants.MINIMUM_REQUIRED_DISPATCHER_VERSION);
 
             Assert.That(state.NeedsUpdate, Is.EqualTo(expectedNeedsUpdate));
-            Assert.That(state.NeedsDowngrade, Is.EqualTo(expectedNeedsDowngrade));
             Assert.That(state.IsCompatible, Is.EqualTo(expectedCompatible));
+            Assert.That(state.NeedsUpdate && state.IsCompatible, Is.False);
         }
 
         [Test]

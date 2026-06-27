@@ -204,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             CliSetupCompatibilityState state = EvaluateCliSetupCompatibilityForSetupWizard(
                 cliVersion,
                 cliIsDispatcher);
-            return state.NeedsUpdate || state.NeedsDowngrade;
+            return state.NeedsUpdate;
         }
 
         private static async Task<bool> HasSkillUpdateForSetupWizardAsync(CancellationToken ct)
@@ -815,7 +815,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _isInstallingCli,
                 false,
                 state.NeedsUpdate,
-                state.NeedsDowngrade,
                 _needsCliPathSetup,
                 cliVersion,
                 requiredCliVersion);
@@ -868,7 +867,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isInstallingCli,
             bool isChecking,
             bool needsUpdate,
-            bool needsDowngrade,
             bool needsCliPathSetup,
             string cliVersion,
             string requiredCliVersion)
@@ -880,7 +878,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (isInstallingCli)
             {
-                if (needsCliPathSetup && !needsUpdate && !needsDowngrade)
+                if (needsCliPathSetup && !needsUpdate)
                 {
                     return "Fixing PATH...";
                 }
@@ -891,11 +889,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (needsUpdate)
             {
                 return CliSetupLabelFormatter.GetCliReplacementButtonText("Update", cliVersion, requiredCliVersion);
-            }
-
-            if (needsDowngrade)
-            {
-                return CliSetupLabelFormatter.GetCliReplacementButtonText("Downgrade", cliVersion, requiredCliVersion);
             }
 
             if (needsCliPathSetup)
@@ -1165,7 +1158,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             CliSetupCompatibilityState state = EvaluateCliSetupCompatibilityForSetupWizard(
                 cliVersion,
                 cliIsDispatcher);
-            if (ShouldRepairCliPathFromPrimaryButton(_needsCliPathSetup, state.NeedsUpdate, state.NeedsDowngrade))
+            if (ShouldRepairCliPathFromPrimaryButton(_needsCliPathSetup, state.NeedsUpdate))
             {
                 await HandleRepairCliPathSetup();
                 return;
@@ -1235,10 +1228,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(
             bool needsCliPathSetup,
-            bool needsUpdate,
-            bool needsDowngrade)
+            bool needsUpdate)
         {
-            return needsCliPathSetup && !needsUpdate && !needsDowngrade;
+            return needsCliPathSetup && !needsUpdate;
         }
 
         private async Task HandleRepairCliPathSetup()

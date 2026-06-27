@@ -32,21 +32,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(false, false, false, false)]
-        [TestCase(true, false, false, true)]
-        [TestCase(true, true, false, false)]
-        [TestCase(true, false, true, false)]
+        [TestCase(false, false, false)]
+        [TestCase(true, false, true)]
+        [TestCase(true, true, false)]
         public void ShouldRepairCliPathFromPrimaryButton_ReturnsExpectedAction(
             bool needsCliPathSetup,
             bool needsUpdate,
-            bool needsDowngrade,
             bool expected)
         {
             // Verifies that stale terminal PATH state routes to repair only when CLI replacement is not needed.
             bool result = UnityCliLoopSettingsWindow.ShouldRepairCliPathFromPrimaryButton(
                 needsCliPathSetup,
-                needsUpdate,
-                needsDowngrade);
+                needsUpdate);
 
             Assert.That(result, Is.EqualTo(expected));
         }
@@ -130,21 +127,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that the settings UI updates non-dispatcher or older dispatcher installs.
             bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
-
-            Assert.That(result, Is.EqualTo(expected));
-        }
-
-        [TestCase(null, false, false)]
-        [TestCase("3.0.0", false, false)]
-        [TestCase("2.1.10", true, false)]
-        [TestCase("3.0.1", true, false)]
-        public void IsCliDowngradeNeeded_UsesDispatcherMinimumVersion(
-            string cliVersion,
-            bool cliIsDispatcher,
-            bool expected)
-        {
-            // Verifies that dispatcher setup never downgrades a newer global launcher.
-            bool result = UnityCliLoopSettingsWindow.IsCliDowngradeNeeded(cliVersion, cliIsDispatcher);
 
             Assert.That(result, Is.EqualTo(expected));
         }

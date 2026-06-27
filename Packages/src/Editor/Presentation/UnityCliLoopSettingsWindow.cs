@@ -638,7 +638,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliVersion,
                 requiredCliVersion,
                 state.NeedsUpdate,
-                state.NeedsDowngrade,
                 canUninstallCli,
                 _needsCliPathSetup,
                 _isInstallingCli,
@@ -863,8 +862,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             bool isCliInstalled = cliVersion != null;
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
-            bool needsDowngrade = IsCliDowngradeNeeded(cliVersion, cliIsDispatcher);
-            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, needsDowngrade, canUninstallCli);
+            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, canUninstallCli);
         }
 
         internal static CliPrimaryButtonAction ResolveCliPrimaryButtonAction(
@@ -874,11 +872,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canUninstallCli)
         {
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
-            bool needsDowngrade = IsCliDowngradeNeeded(cliVersion, cliIsDispatcher);
             if (ShouldRepairCliPathFromPrimaryButton(
                     needsCliPathSetup,
-                    needsUpdate,
-                    needsDowngrade))
+                    needsUpdate))
             {
                 return CliPrimaryButtonAction.RepairPath;
             }
@@ -911,10 +907,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(
             bool needsCliPathSetup,
-            bool needsUpdate,
-            bool needsDowngrade)
+            bool needsUpdate)
         {
-            return needsCliPathSetup && !needsUpdate && !needsDowngrade;
+            return needsCliPathSetup && !needsUpdate;
         }
 
         private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)
@@ -970,11 +965,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool IsCliUpdateNeeded(string cliVersion, bool cliIsDispatcher)
         {
             return EvaluateCliSetupCompatibility(cliVersion, cliIsDispatcher).NeedsUpdate;
-        }
-
-        internal static bool IsCliDowngradeNeeded(string cliVersion, bool cliIsDispatcher)
-        {
-            return EvaluateCliSetupCompatibility(cliVersion, cliIsDispatcher).NeedsDowngrade;
         }
 
         private static CliSetupCompatibilityState EvaluateCliSetupCompatibility(
