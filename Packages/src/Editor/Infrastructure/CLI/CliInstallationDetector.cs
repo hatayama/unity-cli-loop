@@ -16,16 +16,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     internal readonly struct CliInstallationDetection
     {
-        public CliInstallationDetection(string version, int? protocolVersion, string executablePath, bool isDispatcher = false)
+        public CliInstallationDetection(string version, string executablePath, bool isDispatcher = false)
         {
             Version = version;
-            ProtocolVersion = protocolVersion;
             ExecutablePath = executablePath;
             IsDispatcher = isDispatcher;
         }
 
         public string Version { get; }
-        public int? ProtocolVersion { get; }
         public string ExecutablePath { get; }
         public bool IsDispatcher { get; }
     }
@@ -52,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string VERSION_JSON_DISPATCHER_CONTRACT_VERSION_PROPERTY = "DispatcherContractVersion";
 
         private string _cachedCliVersion;
-        private int? _cachedCliProtocolVersion;
+        private bool _cachedCliIsDispatcher;
         private string _cachedCliExecutablePath;
         private bool _cacheInitialized;
         private bool _isRefreshing;
@@ -67,9 +65,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return _cacheInitialized ? _cachedCliVersion : null;
         }
 
-        public int? GetCachedCliProtocolVersion()
+        public bool GetCachedCliIsDispatcher()
         {
-            return _cacheInitialized ? _cachedCliProtocolVersion : null;
+            return _cacheInitialized && _cachedCliIsDispatcher;
         }
 
         public string GetCachedCliExecutablePath()
@@ -94,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 CliInstallationDetection detection = await DetectCliInstallationAsync(ct);
                 _cachedCliVersion = detection.Version;
-                _cachedCliProtocolVersion = detection.ProtocolVersion;
+                _cachedCliIsDispatcher = detection.IsDispatcher;
                 _cachedCliExecutablePath = detection.ExecutablePath;
                 _cacheInitialized = true;
             }
@@ -108,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             CliInstallationDetection detection = await DetectCliInstallationAsync(ct);
             _cachedCliVersion = detection.Version;
-            _cachedCliProtocolVersion = detection.ProtocolVersion;
+            _cachedCliIsDispatcher = detection.IsDispatcher;
             _cachedCliExecutablePath = detection.ExecutablePath;
             _cacheInitialized = true;
         }
@@ -135,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void InvalidateCache()
         {
             _cachedCliVersion = null;
-            _cachedCliProtocolVersion = null;
+            _cachedCliIsDispatcher = false;
             _cachedCliExecutablePath = null;
             _cacheInitialized = false;
             _isRefreshing = false;
@@ -176,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string executablePath = NativeCliInstaller.GetCurrentUserGlobalCliInstallPath(platform);
             if (string.IsNullOrEmpty(executablePath) || !File.Exists(executablePath))
             {
-                return new CliInstallationDetection(null, null, executablePath);
+                return new CliInstallationDetection(null, executablePath);
             }
 
             return DetectCliInstallationAtExecutablePath(executablePath, ct);
@@ -358,7 +356,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string version = IsSuccessfulShellStatus(versionStatusBlock)
                 ? ExtractFirstNonEmptyLine(versionBlock)
                 : null;
-            return new CliInstallationDetection(version, null, executablePath);
+            return new CliInstallationDetection(version, executablePath);
         }
 
         private static CliInstallationDetection ParseCliContractOutput(string output, string executablePath)
@@ -366,7 +364,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string jsonLine = ExtractFirstNonEmptyLine(output);
             if (string.IsNullOrEmpty(jsonLine))
             {
-                return new CliInstallationDetection(null, null, executablePath);
+                return new CliInstallationDetection(null, executablePath);
             }
 
             try
@@ -379,11 +377,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string version = parsed[VERSION_JSON_CLI_VERSION_PROPERTY]?.ToString();
-                return new CliInstallationDetection(version, null, executablePath);
+                return new CliInstallationDetection(version, executablePath);
             }
             catch (JsonException)
             {
-                return new CliInstallationDetection(null, null, executablePath);
+                return new CliInstallationDetection(null, executablePath);
             }
         }
 
@@ -391,51 +389,48 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             string dispatcherVersion = parsed[VERSION_JSON_DISPATCHER_VERSION_PROPERTY]?.ToString();
             JToken dispatcherContractVersionToken = parsed[VERSION_JSON_DISPATCHER_CONTRACT_VERSION_PROPERTY];
-            int? dispatcherContractVersion = ReadProtocolVersion(dispatcherContractVersionToken);
+            int? dispatcherContractVersion = ReadIntegerToken(dispatcherContractVersionToken);
             if (string.IsNullOrEmpty(dispatcherVersion) || dispatcherContractVersion == null)
             {
-                return new CliInstallationDetection(null, null, executablePath);
+                return new CliInstallationDetection(null, executablePath);
             }
 
             if (dispatcherContractVersion.Value != CliConstants.REQUIRED_DISPATCHER_CONTRACT_VERSION)
             {
-                return new CliInstallationDetection(null, null, executablePath);
+                return new CliInstallationDetection(null, executablePath);
             }
 
-            // Why: the cached protocol slot drives existing setup UI compatibility. It is safe to mark
-            // compatible only after the dispatcher-specific contract generation matched exactly above.
             return new CliInstallationDetection(
                 dispatcherVersion,
-                CliConstants.REQUIRED_CLI_PROTOCOL_VERSION,
                 executablePath,
                 true);
         }
 
-        private static int? ReadProtocolVersion(JToken protocolVersionToken)
+        private static int? ReadIntegerToken(JToken integerToken)
         {
-            if (protocolVersionToken == null || protocolVersionToken.Type != JTokenType.Integer)
+            if (integerToken == null || integerToken.Type != JTokenType.Integer)
             {
                 return null;
             }
 
-            JValue protocolVersionValue = protocolVersionToken as JValue;
-            object rawProtocolVersion = protocolVersionValue?.Value;
-            if (rawProtocolVersion is int protocolVersion)
+            JValue integerValue = integerToken as JValue;
+            object rawInteger = integerValue?.Value;
+            if (rawInteger is int integer)
             {
-                return protocolVersion;
+                return integer;
             }
 
-            if (!(rawProtocolVersion is long longProtocolVersion))
-            {
-                return null;
-            }
-
-            if (longProtocolVersion < int.MinValue || longProtocolVersion > int.MaxValue)
+            if (!(rawInteger is long longInteger))
             {
                 return null;
             }
 
-            return (int)longProtocolVersion;
+            if (longInteger < int.MinValue || longInteger > int.MaxValue)
+            {
+                return null;
+            }
+
+            return (int)longInteger;
         }
 
         private static string ExecuteAndGetOutput(ProcessStartInfo startInfo, CancellationToken ct)
@@ -539,7 +534,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string versionOutput = ExecuteCliVersionCommand(fileName, CliConstants.VERSION_FLAG, ct);
             string version = string.IsNullOrEmpty(versionOutput) ? null : versionOutput;
-            return new CliInstallationDetection(version, null, executablePath);
+            return new CliInstallationDetection(version, executablePath);
         }
 
         private static string ExecuteCliVersionCommand(

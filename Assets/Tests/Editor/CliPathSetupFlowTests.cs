@@ -134,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public bool IsCliInstalled() => true;
             public string GetCachedCliVersion() => "3.0.0-beta.14";
-            public int? GetCachedCliProtocolVersion() => 1;
+            public bool GetCachedCliIsDispatcher() => true;
             public string GetCachedCliExecutablePath() => "/Users/ExampleUser/.local/bin/uloop";
             public bool IsCheckCompleted() => true;
             public Task RefreshCliVersionAsync(CancellationToken ct) => Task.CompletedTask;
