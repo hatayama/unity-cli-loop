@@ -110,6 +110,19 @@ dispatcher_release_target_sha() {
   git rev-parse HEAD
 }
 
+dispatcher_release_is_prerelease() {
+  version=$1
+  ref_name=$2
+
+  case "$version" in
+    *-*)
+      return 0
+      ;;
+  esac
+
+  [ "$ref_name" = "v3-beta" ]
+}
+
 VERSION=$(jq -r '.dispatcherVersion' cli/dispatcher-contract.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
   echo "Could not resolve dispatcherVersion from cli/dispatcher-contract.json." >&2
@@ -148,6 +161,10 @@ if [ "$EVENT_NAME" = "push" ]; then
 fi
 
 TARGET_SHA=$(dispatcher_release_target_sha "$RELEASE_TAG")
+IS_PRERELEASE=false
+if dispatcher_release_is_prerelease "$VERSION" "$EVENT_REF_NAME"; then
+  IS_PRERELEASE=true
+fi
 
 if [ "$CAN_EVALUATE_DISPATCHER_RELEASE" != "true" ]; then
   SHOULD_PUBLISH=false
@@ -174,6 +191,7 @@ printf 'release=%s\n' "$SHOULD_RELEASE"
 printf 'tag=%s\n' "$RELEASE_TAG"
 printf 'version=%s\n' "$VERSION"
 printf 'sha=%s\n' "$TARGET_SHA"
+printf 'prerelease=%s\n' "$IS_PRERELEASE"
 printf 'dry_run=%s\n' "$DRY_RUN"
 
 echo "Dispatcher publish: $SHOULD_PUBLISH" >&2
