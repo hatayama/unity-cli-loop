@@ -22,6 +22,22 @@ package_unix() {
   rm -rf "$tmp_dir"
 }
 
+# Legacy beta launchers still self-update from cli-v* releases and look for uloop-* assets.
+package_legacy_dispatcher_unix() {
+  platform="$1"
+  tmp_dir="$RELEASE_DIR/tmp-legacy-$platform"
+  mkdir -p "$tmp_dir"
+  cp "$DIST_DIR/$platform/uloop" "$tmp_dir/uloop"
+  cp "$DIST_DIR/$platform/uloop-cli" "$tmp_dir/uloop-cli"
+  chmod +x "$tmp_dir/uloop"
+  chmod +x "$tmp_dir/uloop-cli"
+  (
+    cd "$tmp_dir"
+    tar -czf "$RELEASE_DIR/uloop-$platform.tar.gz" uloop uloop-cli
+  )
+  rm -rf "$tmp_dir"
+}
+
 package_windows() {
   platform="windows-amd64"
   tmp_dir="$RELEASE_DIR/tmp-$platform"
@@ -30,6 +46,20 @@ package_windows() {
   (
     cd "$tmp_dir"
     zip -q "$RELEASE_DIR/uloop-cli-$platform.zip" uloop-cli.exe
+  )
+  rm -rf "$tmp_dir"
+}
+
+# Legacy beta launchers install uloop.exe globally, while their dispatcher cache reads uloop-cli.exe.
+package_legacy_dispatcher_windows() {
+  platform="windows-amd64"
+  tmp_dir="$RELEASE_DIR/tmp-legacy-$platform"
+  mkdir -p "$tmp_dir"
+  cp "$DIST_DIR/$platform/uloop.exe" "$tmp_dir/uloop.exe"
+  cp "$DIST_DIR/$platform/uloop-cli.exe" "$tmp_dir/uloop-cli.exe"
+  (
+    cd "$tmp_dir"
+    zip -q "$RELEASE_DIR/uloop-$platform.zip" uloop.exe uloop-cli.exe
   )
   rm -rf "$tmp_dir"
 }
@@ -53,6 +83,9 @@ create_checksum() {
 package_unix darwin-arm64
 package_unix darwin-amd64
 package_windows
+package_legacy_dispatcher_unix darwin-arm64
+package_legacy_dispatcher_unix darwin-amd64
+package_legacy_dispatcher_windows
 
 for asset_path in "$RELEASE_DIR"/*.tar.gz "$RELEASE_DIR"/*.zip; do
   create_checksum "$asset_path"

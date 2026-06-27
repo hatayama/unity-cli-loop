@@ -30,6 +30,12 @@ var (
 		"uloop-cli-darwin-arm64.tar.gz.sha256",
 		"uloop-cli-windows-amd64.zip",
 		"uloop-cli-windows-amd64.zip.sha256",
+		"uloop-darwin-amd64.tar.gz",
+		"uloop-darwin-amd64.tar.gz.sha256",
+		"uloop-darwin-arm64.tar.gz",
+		"uloop-darwin-arm64.tar.gz.sha256",
+		"uloop-windows-amd64.zip",
+		"uloop-windows-amd64.zip.sha256",
 	}
 )
 

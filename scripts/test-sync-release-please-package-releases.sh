@@ -26,13 +26,13 @@ printf '%s\n' "$*" >> "$GH_LOG"
 asset_json() {
   case "${CLI_RELEASE_ASSETS:-complete}" in
     complete)
-      printf '[{"name":"uloop-cli-darwin-amd64.tar.gz","size":1},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1}]'
+      printf '[{"name":"uloop-cli-darwin-amd64.tar.gz","size":1},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1},{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]'
       ;;
     missing)
       printf '[]'
       ;;
     empty)
-      printf '[{"name":"uloop-cli-darwin-amd64.tar.gz","size":0},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1}]'
+      printf '[{"name":"uloop-cli-darwin-amd64.tar.gz","size":0},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1},{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]'
       ;;
   esac
 }
@@ -236,7 +236,13 @@ if [ "${1:-}" = "--list" ]; then
     uloop-cli-darwin-arm64.tar.gz \
     uloop-cli-darwin-arm64.tar.gz.sha256 \
     uloop-cli-windows-amd64.zip \
-    uloop-cli-windows-amd64.zip.sha256
+    uloop-cli-windows-amd64.zip.sha256 \
+    uloop-darwin-amd64.tar.gz \
+    uloop-darwin-amd64.tar.gz.sha256 \
+    uloop-darwin-arm64.tar.gz \
+    uloop-darwin-arm64.tar.gz.sha256 \
+    uloop-windows-amd64.zip \
+    uloop-windows-amd64.zip.sha256
   exit 0
 fi
 
