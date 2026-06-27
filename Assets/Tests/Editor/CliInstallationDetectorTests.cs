@@ -2,7 +2,6 @@ using System.Diagnostics;
 
 using NUnit.Framework;
 
-using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -18,11 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that the settings UI reports the same CLI command the user's terminal runs.
             CliInstallationDetection packageOwnedDetection = new(
                 "3.0.0-beta.3",
-                1,
                 "/Users/ExampleUser/.local/bin/uloop");
             CliInstallationDetection shellDetection = new(
                 "2.1.0",
-                null,
                 "/Users/ExampleUser/.npm-global/bin/uloop");
 
             CliInstallationDetection result = CliInstallationDetector.SelectPreferredDetection(
@@ -39,10 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that package-owned installs still count when the shell cannot resolve uloop.
             CliInstallationDetection packageOwnedDetection = new(
                 "3.0.0-beta.3",
-                1,
                 "/Users/ExampleUser/.local/bin/uloop");
             CliInstallationDetection shellDetection = new(
-                null,
                 null,
                 null);
 
@@ -60,10 +55,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that a broken PATH command is surfaced instead of hidden by the package-owned binary.
             CliInstallationDetection packageOwnedDetection = new(
                 "3.0.0-beta.3",
-                1,
                 "/Users/ExampleUser/.local/bin/uloop");
             CliInstallationDetection shellDetection = new(
-                null,
                 null,
                 "/Users/ExampleUser/.npm-global/bin/uloop");
 
@@ -81,11 +74,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that legacy CLI installs still surface as update candidates.
             CliInstallationDetection packageOwnedDetection = new(
                 null,
-                null,
                 "/Users/ExampleUser/.local/bin/uloop");
             CliInstallationDetection shellDetection = new(
                 "2.1.0",
-                null,
                 "/Users/ExampleUser/.npm-global/bin/uloop");
 
             CliInstallationDetection result = CliInstallationDetector.SelectPreferredDetection(
@@ -102,11 +93,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that installed state does not depend on command path availability.
             CliInstallationDetection packageOwnedDetection = new(
                 "3.0.0-beta.3",
-                1,
                 "/Users/ExampleUser/.local/bin/uloop");
             CliInstallationDetection shellDetection = new(
                 "2.1.0",
-                null,
                 null);
 
             CliInstallationDetection result = CliInstallationDetector.SelectPreferredDetection(
@@ -170,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("2.1.1"));
-            Assert.That(detection.ProtocolVersion, Is.Null);
+            Assert.That(detection.IsDispatcher, Is.False);
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.npm-global/bin/uloop"));
         }
 
@@ -198,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("3.0.0-beta.31"));
-            Assert.That(detection.ProtocolVersion, Is.Null);
+            Assert.That(detection.IsDispatcher, Is.False);
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.npm-global/bin/uloop"));
         }
 
@@ -226,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("3.0.0"));
-            Assert.That(detection.ProtocolVersion, Is.EqualTo(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION));
+            Assert.That(detection.IsDispatcher, Is.True);
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.local/bin/uloop"));
         }
 
@@ -254,7 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("3.0.0"));
-            Assert.That(detection.ProtocolVersion, Is.Null);
+            Assert.That(detection.IsDispatcher, Is.False);
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.local/bin/uloop"));
         }
 
@@ -264,7 +253,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies old pre-dispatcher global CLIs cannot satisfy dispatcher path setup.
             CliInstallationDetection detection = new(
                 "3.0.0-beta.40",
-                CliConstants.REQUIRED_CLI_PROTOCOL_VERSION,
                 "/Users/ExampleUser/.npm-global/bin/uloop");
 
             bool result = CliInstallationDetector.IsShellDetectionUsableForPathSetup(
@@ -299,7 +287,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("3.0.0-beta.31"));
-            Assert.That(detection.ProtocolVersion, Is.Null);
             Assert.That(detection.ExecutablePath, Is.EqualTo("/tmp/uloop"));
         }
 
@@ -320,7 +307,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("2.1.1"));
-            Assert.That(detection.ProtocolVersion, Is.Null);
             Assert.That(detection.ExecutablePath, Is.Null);
         }
 
@@ -342,7 +328,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliInstallationDetector.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.Null);
-            Assert.That(detection.ProtocolVersion, Is.Null);
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.npm-global/bin/uloop"));
         }
 

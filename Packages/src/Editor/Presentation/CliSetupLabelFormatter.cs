@@ -9,15 +9,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         public static string GetCliReplacementButtonText(string action, string cliVersion, string requiredCliVersion)
         {
-            if (ShouldShowProtocolCompatibilityText(cliVersion, requiredCliVersion))
+            if (ShouldShowRequiredVersionText(cliVersion, requiredCliVersion))
             {
-                return $"{action} CLI (protocol v{CliConstants.REQUIRED_CLI_PROTOCOL_VERSION})";
+                return $"{action} CLI (v{requiredCliVersion} required)";
             }
 
             return $"{action} CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
         }
 
-        public static bool ShouldShowProtocolCompatibilityText(string cliVersion, string requiredCliVersion)
+        public static bool ShouldShowRequiredVersionText(string cliVersion, string requiredCliVersion)
         {
             if (string.IsNullOrEmpty(cliVersion) || string.IsNullOrEmpty(requiredCliVersion))
             {
