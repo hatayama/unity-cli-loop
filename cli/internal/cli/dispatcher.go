@@ -18,20 +18,19 @@ import (
 )
 
 const (
-	dispatcherCacheDirEnvName              = "ULOOP_CACHE_DIR"
-	dispatcherDisableSelfUpdateEnvName     = "ULOOP_DISABLE_SELF_UPDATE"
-	dispatcherCacheDirectoryName           = "uloop"
-	dispatcherVersionsDirectoryName        = "versions"
-	dispatcherUpdateStateFileName          = "dispatcher-update.json"
-	dispatcherProjectPinRelativePath       = ".uloop/cli-pin.json"
-	dispatcherPackagePinFileName           = "cli-pin.json"
-	dispatcherUnityPackageName             = "io.github.hatayama.uloopmcp"
-	dispatcherRealCLIUnixFileName          = "uloop-cli"
-	dispatcherRealCLIWindowsFileName       = "uloop-cli.exe"
-	dispatcherReleaseRepository            = "hatayama/unity-cli-loop"
-	dispatcherReleaseBaseURL               = "https://github.com/" + dispatcherReleaseRepository + "/releases/download"
-	dispatcherSelfUpdateInterval           = 24 * time.Hour
-	dispatcherSelfUpdateRequiredRetryError = "Dispatcher update completed. Retry the command so the updated dispatcher can run."
+	dispatcherCacheDirEnvName          = "ULOOP_CACHE_DIR"
+	dispatcherDisableSelfUpdateEnvName = "ULOOP_DISABLE_SELF_UPDATE"
+	dispatcherCacheDirectoryName       = "uloop"
+	dispatcherVersionsDirectoryName    = "versions"
+	dispatcherUpdateStateFileName      = "dispatcher-update.json"
+	dispatcherProjectPinRelativePath   = ".uloop/cli-pin.json"
+	dispatcherPackagePinFileName       = "cli-pin.json"
+	dispatcherUnityPackageName         = "io.github.hatayama.uloopmcp"
+	dispatcherRealCLIUnixFileName      = "uloop-cli"
+	dispatcherRealCLIWindowsFileName   = "uloop-cli.exe"
+	dispatcherReleaseRepository        = "hatayama/unity-cli-loop"
+	dispatcherReleaseBaseURL           = "https://github.com/" + dispatcherReleaseRepository + "/releases/download"
+	dispatcherSelfUpdateInterval       = 24 * time.Hour
 )
 
 var (
@@ -149,17 +148,12 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 	err := dispatcherRunUpdate(ctx)
 	if err == nil {
 		markDispatcherSelfUpdateChecked()
+		updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
 		if updateRequired {
-			writeErrorEnvelope(stderr, cliError{
-				ErrorCode:   errorCodeCLIUpdateRequired,
-				Phase:       errorPhaseExecution,
-				Message:     dispatcherSelfUpdateRequiredRetryError,
-				Retryable:   true,
-				SafeToRetry: true,
-				NextActions: []string{"Retry the same uloop command."},
-			})
+			writeDispatcherSelfUpdateRequiredError(stderr, updatedVersion)
 			return true, 1
 		}
+		writeOptionalDispatcherUpdateCompletion(stderr, dispatcherVersion, updatedVersion)
 		return false, 0
 	}
 
@@ -170,6 +164,29 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 
 	writeFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
 	return false, 0
+}
+
+func writeDispatcherSelfUpdateRequiredError(stderr io.Writer, updatedVersion string) {
+	currentVersion, nextVersion, changed := normalizedDispatcherUpdateVersions(dispatcherVersion, updatedVersion)
+	message := "Dispatcher update completed. Retry the command so the updated dispatcher can run."
+	if changed {
+		message = "Dispatcher updated from " + currentVersion + " to " + nextVersion + ". Retry the command so the updated dispatcher can run."
+	}
+	details := map[string]any{
+		"CurrentDispatcherVersion": currentVersion,
+	}
+	if nextVersion != "" {
+		details["UpdatedDispatcherVersion"] = nextVersion
+	}
+	writeErrorEnvelope(stderr, cliError{
+		ErrorCode:   errorCodeCLIUpdateRequired,
+		Phase:       errorPhaseExecution,
+		Message:     message,
+		Retryable:   true,
+		SafeToRetry: true,
+		NextActions: []string{"Retry the same uloop command."},
+		Details:     details,
+	})
 }
 
 func writeDispatcherManualUpdateRequiredError(stderr io.Writer, minimumVersion string, reason string) {

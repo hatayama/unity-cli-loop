@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"runtime"
 
-	clicontract "github.com/hatayama/unity-cli-loop/cli"
 	"github.com/hatayama/unity-cli-loop/cli/internal/update"
 )
 
@@ -15,6 +14,8 @@ const (
 	updateUnsupportedOSMessage = update.UnsupportedOSMessage
 	updateToVersionFlagName    = "to-version"
 )
+
+var updateRunCommand = runUpdateCommand
 
 type updateOptions struct {
 	targetVersion string
@@ -35,7 +36,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 	}
 
 	updateCommand, err := update.CommandForOS(runtime.GOOS, update.Options{
-		CurrentVersion: clicontract.DispatcherCurrent.DispatcherVersion,
+		CurrentVersion: dispatcherVersion,
 		TargetVersion:  options.targetVersion,
 	})
 	if err != nil {
@@ -44,10 +45,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 	}
 
 	writeLine(stdout, "Updating global uloop launcher...")
-	command := exec.CommandContext(ctx, updateCommand.Name, updateCommand.Args...)
-	command.Stdout = stdout
-	command.Stderr = stderr
-	if err := command.Run(); err != nil {
+	if err := updateRunCommand(ctx, updateCommand, stdout, stderr); err != nil {
 		writeErrorEnvelope(stderr, cliError{
 			ErrorCode:   errorCodeInternalError,
 			Phase:       errorPhaseExecution,
@@ -62,7 +60,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		})
 		return true, 1
 	}
-	writeLine(stdout, "uloop launcher update completed.")
+	writeManualDispatcherUpdateCompletion(stdout, dispatcherVersion, dispatcherInstalledVersionOrEmpty(ctx))
 	return true, 0
 }
 
@@ -72,13 +70,20 @@ func updateCommandForOS(goos string) (string, []string, error) {
 
 func updateCommandForOSWithOptions(goos string, options updateOptions) (string, []string, error) {
 	command, err := update.CommandForOS(goos, update.Options{
-		CurrentVersion: clicontract.DispatcherCurrent.DispatcherVersion,
+		CurrentVersion: dispatcherVersion,
 		TargetVersion:  options.targetVersion,
 	})
 	if err != nil {
 		return "", nil, err
 	}
 	return command.Name, command.Args, nil
+}
+
+func runUpdateCommand(ctx context.Context, updateCommand update.Command, stdout io.Writer, stderr io.Writer) error {
+	command := exec.CommandContext(ctx, updateCommand.Name, updateCommand.Args...)
+	command.Stdout = stdout
+	command.Stderr = stderr
+	return command.Run()
 }
 
 func printUpdateHelp(stdout io.Writer) {
