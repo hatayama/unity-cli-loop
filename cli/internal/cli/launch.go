@@ -179,6 +179,10 @@ func handleExistingLaunchProcess(
 	stderr io.Writer,
 ) (bool, int) {
 	if !options.restart && !options.quit {
+		if options.editorVersion != "" {
+			writeClassifiedError(stderr, launchEditorVersionRequiresRestartError(options.editorVersion), errorContext{projectRoot: projectRoot, command: launchCommandName})
+			return true, 1
+		}
 		return true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.pid, stdout, stderr)
 	}
 	if err := killUnityProcessForLaunch(runningProcess.pid); err != nil {
@@ -193,6 +197,18 @@ func handleExistingLaunchProcess(
 		return true, writeLaunchQuitResponse(stdout, stderr, projectRoot, &runningProcess.pid, launchStoppedMessage)
 	}
 	return false, 0
+}
+
+func launchEditorVersionRequiresRestartError(editorVersion string) error {
+	return &argumentError{
+		message:  "--editor-version requires --restart when Unity is already running for this project.",
+		option:   "--editor-version",
+		received: editorVersion,
+		command:  launchCommandName,
+		nextActions: []string{
+			fmt.Sprintf("Run `uloop launch --restart --editor-version %s` to relaunch Unity with the requested Editor version.", editorVersion),
+		},
+	}
 }
 
 func waitForExistingLaunchReadiness(ctx context.Context, projectRoot string, pid int, stdout io.Writer, stderr io.Writer) int {

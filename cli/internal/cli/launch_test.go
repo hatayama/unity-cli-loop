@@ -460,6 +460,46 @@ func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) 
 	}
 }
 
+func TestRunLaunchRequiresRestartForEditorVersionWithExistingUnityProcess(t *testing.T) {
+	// Verifies --editor-version cannot silently reuse an already running Editor process.
+	originalFinder := findRunningUnityProcessForLaunch
+	originalReadinessWait := waitForToolReadinessForLaunch
+	readinessChecked := false
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 222}, nil
+	}
+	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
+		readinessChecked = true
+		return nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 1 {
+		t.Fatalf("exit code mismatch: %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if readinessChecked {
+		t.Fatal("launch should not report an existing process as ready for a different requested Editor version")
+	}
+	if !strings.Contains(stderr.String(), "`uloop launch --restart --editor-version 6000.0.0f1`") {
+		t.Fatalf("stderr should guide restart with the requested version:\n%s", stderr.String())
+	}
+}
+
 func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	// Verifies restart reports both the stopped process and the newly launched process.
 	originalFinder := findRunningUnityProcessForLaunch
