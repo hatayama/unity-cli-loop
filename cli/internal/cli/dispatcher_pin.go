@@ -12,6 +12,7 @@ import (
 
 var (
 	dispatcherMinimumProjectRunnerVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION\s*=\s*"([^"]+)"`)
+	dispatcherLegacyMinimumCliVersionPattern     = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
 	dispatcherMinimumVersionPattern              = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
 	dispatcherRequiredProtocolVersionPattern     = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
 	dispatcherProjectRunnerVersionPattern        = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
@@ -22,8 +23,10 @@ type dispatcherPin struct {
 	PackageName              string `json:"packageName"`
 	PackageVersion           string `json:"packageVersion"`
 	ProjectRunnerVersion     string `json:"projectRunnerVersion"`
+	LegacyCliVersion         string `json:"cliVersion"`
 	RequiredProtocolVersion  int    `json:"requiredProtocolVersion"`
 	MinimumDispatcherVersion string `json:"minimumDispatcherVersion"`
+	LegacyRelease            bool   `json:"-"`
 	SourcePath               string `json:"-"`
 }
 
@@ -70,19 +73,24 @@ func loadDispatcherPin(projectRoot string) (dispatcherPin, error) {
 func dispatcherPinCandidatePaths(projectRoot string) []dispatcherPinCandidatePath {
 	paths := []dispatcherPinCandidatePath{
 		{Path: filepath.Join(projectRoot, dispatcherProjectPinRelativePath), Required: true},
+		{Path: filepath.Join(projectRoot, dispatcherLegacyProjectPinRelativePath), Required: true},
 		{Path: filepath.Join(projectRoot, "Packages", "src", dispatcherPackagePinFileName)},
+		{Path: filepath.Join(projectRoot, "Packages", "src", dispatcherLegacyPackagePinFileName)},
 		{Path: filepath.Join(projectRoot, "Packages", dispatcherUnityPackageName, dispatcherPackagePinFileName)},
+		{Path: filepath.Join(projectRoot, "Packages", dispatcherUnityPackageName, dispatcherLegacyPackagePinFileName)},
 	}
-	packageCachePattern := filepath.Join(
-		projectRoot,
-		"Library",
-		"PackageCache",
-		dispatcherUnityPackageName+"@*",
-		dispatcherPackagePinFileName)
-	matches, err := filepath.Glob(packageCachePattern)
-	if err == nil {
-		for _, match := range matches {
-			paths = append(paths, dispatcherPinCandidatePath{Path: match})
+	for _, packagePinFileName := range []string{dispatcherPackagePinFileName, dispatcherLegacyPackagePinFileName} {
+		packageCachePattern := filepath.Join(
+			projectRoot,
+			"Library",
+			"PackageCache",
+			dispatcherUnityPackageName+"@*",
+			packagePinFileName)
+		matches, err := filepath.Glob(packageCachePattern)
+		if err == nil {
+			for _, match := range matches {
+				paths = append(paths, dispatcherPinCandidatePath{Path: match})
+			}
 		}
 	}
 	return paths
@@ -118,6 +126,10 @@ func readDispatcherPin(pinPath string) (dispatcherPin, error) {
 	if err := json.Unmarshal(content, &pin); err != nil {
 		return dispatcherPin{}, fmt.Errorf("failed to parse %s: %w", pinPath, err)
 	}
+	if strings.TrimSpace(pin.ProjectRunnerVersion) == "" && strings.TrimSpace(pin.LegacyCliVersion) != "" {
+		pin.ProjectRunnerVersion = pin.LegacyCliVersion
+		pin.LegacyRelease = true
+	}
 	pin.ProjectRunnerVersion = normalizeDispatcherVersion(pin.ProjectRunnerVersion)
 	if pin.ProjectRunnerVersion == "" {
 		return dispatcherPin{}, fmt.Errorf("%s does not define projectRunnerVersion", pinPath)
@@ -144,7 +156,7 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 		return dispatcherPin{}, err
 	}
 	text := string(content)
-	versionMatch := dispatcherMinimumProjectRunnerVersionPattern.FindStringSubmatch(text)
+	versionMatch, legacyRelease := dispatcherMinimumProjectRunnerVersionMatch(text)
 	if len(versionMatch) != 2 {
 		return dispatcherPin{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION", constantsPath)
 	}
@@ -172,8 +184,17 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 		ProjectRunnerVersion:     projectRunnerVersion,
 		RequiredProtocolVersion:  protocolVersion,
 		MinimumDispatcherVersion: minimumDispatcherVersion,
+		LegacyRelease:            legacyRelease,
 		SourcePath:               constantsPath,
 	}, nil
+}
+
+func dispatcherMinimumProjectRunnerVersionMatch(text string) ([]string, bool) {
+	versionMatch := dispatcherMinimumProjectRunnerVersionPattern.FindStringSubmatch(text)
+	if len(versionMatch) == 2 {
+		return versionMatch, false
+	}
+	return dispatcherLegacyMinimumCliVersionPattern.FindStringSubmatch(text), true
 }
 
 func normalizeDispatcherVersion(value string) string {
