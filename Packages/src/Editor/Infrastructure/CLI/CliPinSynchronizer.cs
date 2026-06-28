@@ -48,11 +48,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            string sourcePath = Path.Combine(packageRoot, UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
-            string destinationPath = Path.Combine(
+            bool projectRunnerPinChanged = SyncProjectPinFileByName(
+                packageRoot,
                 projectRoot,
-                UnityCliLoopConstants.ULOOP_DIR,
                 UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
+            bool legacyCliPinChanged = SyncProjectPinFileByName(
+                packageRoot,
+                projectRoot,
+                UnityCliLoopConstants.ULOOP_LEGACY_CLI_PIN_FILE_NAME);
+            return projectRunnerPinChanged || legacyCliPinChanged;
+        }
+
+        private static bool SyncProjectPinFileByName(string packageRoot, string projectRoot, string pinFileName)
+        {
+            string sourcePath = Path.Combine(packageRoot, pinFileName);
+            string destinationPath = Path.Combine(projectRoot, UnityCliLoopConstants.ULOOP_DIR, pinFileName);
 
             if (!File.Exists(sourcePath))
             {

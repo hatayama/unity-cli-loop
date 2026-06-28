@@ -80,6 +80,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void SyncProjectPinFile_WhenLegacyPinExists_ShouldCopyLegacyPin()
+        {
+            // Tests that existing dispatchers can still bootstrap from the legacy project CLI pin.
+            string root = CreateTestRoot();
+            string packageRoot = Path.Combine(root, "package");
+            string projectRoot = Path.Combine(root, "project");
+
+            try
+            {
+                Directory.CreateDirectory(packageRoot);
+                Directory.CreateDirectory(projectRoot);
+                File.WriteAllText(
+                    Path.Combine(packageRoot, UnityCliLoopConstants.ULOOP_LEGACY_CLI_PIN_FILE_NAME),
+                    "{\"schemaVersion\":1,\"cliVersion\":\"3.0.0-beta.43\"}");
+
+                bool changed = CliPinSynchronizer.SyncProjectPinFile(packageRoot, projectRoot);
+
+                Assert.That(changed, Is.True);
+                Assert.That(
+                    File.ReadAllText(
+                        Path.Combine(
+                            projectRoot,
+                            UnityCliLoopConstants.ULOOP_DIR,
+                            UnityCliLoopConstants.ULOOP_LEGACY_CLI_PIN_FILE_NAME)),
+                    Is.EqualTo("{\"schemaVersion\":1,\"cliVersion\":\"3.0.0-beta.43\"}"));
+            }
+            finally
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+
+        [Test]
         public void SyncProjectPinFile_WhenPackagePinChanges_ShouldUpdateProjectPin()
         {
             // Tests that package upgrades update the project runner pin contract.
