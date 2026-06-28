@@ -82,6 +82,19 @@ func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseMatches_Passes(t *test
 	assertProtocolMinimumVersionLogContains(t, result.gitLog, "uloop-project-runner-v3.0.0-beta.33:cli/contract.json")
 }
 
+func TestRunProtocolMinimumVersionGuard_WhenBaseUsesLegacyMinimumConstant_Passes(t *testing.T) {
+	// Verifies rename PRs can compare against base branches that still use the old CLI minimum constant name.
+	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
+		baseContent: buildLegacyProtocolMinimumVersionConstants(2, "3.0.0-beta.40"),
+		headContent: buildProtocolMinimumVersionConstants(2, "3.0.0-beta.40"),
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
+}
+
 func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseProtocolDiffers_Fails(t *testing.T) {
 	// Verifies changing the minimum version text is not enough when the release uses the old protocol.
 	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
@@ -247,6 +260,48 @@ func TestRunMinimumCliReleaseProtocolCheck_WhenRefIsProvided_ReadsValuesAtRef(t 
 	assertProtocolMinimumVersionLogContains(t, readFile(t, ghLogPath), "release view uloop-project-runner-v3.0.0-beta.33")
 }
 
+func TestRunMinimumCliReleaseProtocolCheck_WhenOnlyLegacyReleaseExists_Passes(t *testing.T) {
+	// Verifies release backfill checks can validate minimum releases published before the project runner tag rename.
+	workDir := t.TempDir()
+	mockBin := filepath.Join(workDir, "bin")
+	err := os.MkdirAll(mockBin, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create mock bin: %v", err)
+	}
+
+	gitLogPath := filepath.Join(workDir, "git.log")
+	ghLogPath := filepath.Join(workDir, "gh.log")
+	writeProtocolMinimumVersionMockGit(t, filepath.Join(mockBin, "git"))
+	writeProtocolMinimumVersionMockGH(t, filepath.Join(mockBin, "gh"))
+	prepareProtocolMinimumVersionGitContents(t, workDir, protocolMinimumVersionRefCase{
+		headContent:          buildProtocolMinimumVersionConstants(2, "3.0.0-beta.40"),
+		releaseContent:       `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.40"}`,
+		releaseContentPrefix: "cli-v",
+	})
+
+	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
+	t.Setenv("GIT_LOG", gitLogPath)
+	t.Setenv("GH_LOG", ghLogPath)
+	t.Setenv("GH_RELEASE_VIEW", `{"isDraft":false,"assets":[{"name":"uloop-cli-darwin-amd64.tar.gz","size":1},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1}]}`)
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := RunMinimumCliReleaseProtocolCheck(
+		context.Background(),
+		&stdout,
+		&stderr,
+		"protocol-release")
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr.String())
+	}
+	assertProtocolMinimumVersionLogContains(t, stdout.String(), "Minimum project runner release cli-v3.0.0-beta.40 advertises protocol 2.")
+	assertProtocolMinimumVersionLogContains(t, readFile(t, gitLogPath), "uloop-project-runner-v3.0.0-beta.40:cli/contract.json")
+	assertProtocolMinimumVersionLogContains(t, readFile(t, gitLogPath), "cli-v3.0.0-beta.40:cli/contract.json")
+	assertProtocolMinimumVersionLogContains(t, readFile(t, ghLogPath), "release view cli-v3.0.0-beta.40")
+}
+
 func TestRunProtocolMinimumVersionComment_WhenWarningExists_UpsertsComment(t *testing.T) {
 	// Verifies PR comments explain protocol bump installer target omissions.
 	result := runProtocolMinimumVersionCommentCase(t, protocolMinimumVersionCommentCase{
@@ -296,10 +351,11 @@ func TestRunProtocolMinimumVersionComment_WhenMinimumReleaseProtocolDiffers_Upse
 }
 
 type protocolMinimumVersionRefCase struct {
-	baseContent    string
-	headContent    string
-	releaseContent string
-	releaseView    string
+	baseContent          string
+	headContent          string
+	releaseContent       string
+	releaseContentPrefix string
+	releaseView          string
 }
 
 type protocolMinimumVersionGuardRunResult struct {
@@ -421,6 +477,9 @@ func prepareProtocolMinimumVersionGitContents(t *testing.T, workDir string, test
 		writeFile(t, releaseContentPath, testCase.releaseContent)
 		t.Setenv("GIT_RELEASE_CONTENT", releaseContentPath)
 	}
+	if testCase.releaseContentPrefix != "" {
+		t.Setenv("GIT_RELEASE_CONTENT_PREFIX", testCase.releaseContentPrefix)
+	}
 	t.Setenv("GIT_BASE_CONTENT", baseContentPath)
 	t.Setenv("GIT_HEAD_CONTENT", headContentPath)
 }
@@ -432,6 +491,17 @@ public const int REQUIRED_CLI_PROTOCOL_VERSION = ` +
 		strconv.Itoa(requiredProtocolVersion) +
 		`;
 public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "` + minimumProjectRunnerVersion + `";
+}
+	}`
+}
+
+func buildLegacyProtocolMinimumVersionConstants(requiredProtocolVersion int, minimumCliVersion string) string {
+	return `namespace Tests {
+public static class CliConstants {
+public const int REQUIRED_CLI_PROTOCOL_VERSION = ` +
+		strconv.Itoa(requiredProtocolVersion) +
+		`;
+public const string MINIMUM_REQUIRED_CLI_VERSION = "` + minimumCliVersion + `";
 }
 }`
 }
@@ -453,21 +523,37 @@ if [ "$1" = "-C" ]; then
   shift 2
 fi
 
-if [ "$1" = "show" ]; then
-  case "$2" in
-    origin/v3-beta:*) cat "$GIT_BASE_CONTENT" ;;
-    protocol-pr-head:*) cat "$GIT_HEAD_CONTENT" ;;
-    protocol-release:*) cat "$GIT_HEAD_CONTENT" ;;
-	    uloop-project-runner-v*:cli/contract.json)
-      if [ -n "${GIT_RELEASE_CONTENT:-}" ]; then
-        cat "$GIT_RELEASE_CONTENT"
-      else
-        echo "release not found" >&2
-        exit 1
-      fi
-      ;;
-    *) echo "unexpected git show ref: $2" >&2; exit 1 ;;
-  esac
+	if [ "$1" = "show" ]; then
+	  case "$2" in
+	    origin/v3-beta:*) cat "$GIT_BASE_CONTENT" ;;
+	    protocol-pr-head:*) cat "$GIT_HEAD_CONTENT" ;;
+	    protocol-release:*) cat "$GIT_HEAD_CONTENT" ;;
+		    uloop-project-runner-v*:cli/contract.json)
+	      if [ -n "${GIT_RELEASE_CONTENT:-}" ]; then
+	        if [ "${GIT_RELEASE_CONTENT_PREFIX:-uloop-project-runner-v}" != "uloop-project-runner-v" ]; then
+	          echo "release not found" >&2
+	          exit 1
+	        fi
+	        cat "$GIT_RELEASE_CONTENT"
+	      else
+	        echo "release not found" >&2
+	        exit 1
+	      fi
+	      ;;
+		    cli-v*:cli/contract.json)
+	      if [ -n "${GIT_RELEASE_CONTENT:-}" ]; then
+	        if [ "${GIT_RELEASE_CONTENT_PREFIX:-uloop-project-runner-v}" != "cli-v" ]; then
+	          echo "release not found" >&2
+	          exit 1
+	        fi
+	        cat "$GIT_RELEASE_CONTENT"
+	      else
+	        echo "release not found" >&2
+	        exit 1
+	      fi
+	      ;;
+	    *) echo "unexpected git show ref: $2" >&2; exit 1 ;;
+	  esac
   exit 0
 fi
 

@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "3.0.0-beta.40";
         public const string MINIMUM_REQUIRED_PROJECT_RUNNER_RELEASE_TAG = PROJECT_RUNNER_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION;
         // Why: global uloop is a dispatcher; project-local CLI versions are downloaded separately.
-        public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "3.0.1-beta.2";
+        public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "3.0.1-beta.6";
         public const string MINIMUM_REQUIRED_DISPATCHER_RELEASE_TAG = DISPATCHER_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_DISPATCHER_VERSION;
         // Why: dispatcher setup compatibility is a launcher contract generation, not the IPC protocol generation.
         public const int REQUIRED_DISPATCHER_CONTRACT_VERSION = 1;
