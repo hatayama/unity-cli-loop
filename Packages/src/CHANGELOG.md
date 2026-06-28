@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.45](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.44...v3.0.0-beta.45) (2026-06-28)
+
+
+### Features
+
+* Launch Unity with compiler errors or a chosen Editor version ([#1423](https://github.com/hatayama/unity-cli-loop/issues/1423)) ([5ce43fa](https://github.com/hatayama/unity-cli-loop/commit/5ce43fa5e5ad5d02a338fb315ecd575cefa77f3c))
+
 ## [3.0.0-beta.44](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.43...v3.0.0-beta.44) (2026-06-28)
 
 
