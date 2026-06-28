@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -14,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SyncProjectPinFile_WhenDestinationMissing_ShouldCopyPackagePin()
         {
-            // Tests that the dispatcher pin contract is published into the project .uloop directory.
+            // Tests that the project runner pin contract is published into the project .uloop directory.
             string root = CreateTestRoot();
             string packageRoot = Path.Combine(root, "package");
             string projectRoot = Path.Combine(root, "project");
@@ -23,13 +24,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 Directory.CreateDirectory(packageRoot);
                 Directory.CreateDirectory(projectRoot);
-                File.WriteAllText(Path.Combine(packageRoot, "cli-pin.json"), "{\"schemaVersion\":1}");
+                File.WriteAllText(
+                    Path.Combine(packageRoot, UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME),
+                    "{\"schemaVersion\":1}");
 
                 bool changed = CliPinSynchronizer.SyncProjectPinFile(packageRoot, projectRoot);
 
                 Assert.That(changed, Is.True);
                 Assert.That(
-                    File.ReadAllText(Path.Combine(projectRoot, ".uloop", "cli-pin.json")),
+                    File.ReadAllText(
+                        Path.Combine(
+                            projectRoot,
+                            UnityCliLoopConstants.ULOOP_DIR,
+                            UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME)),
                     Is.EqualTo("{\"schemaVersion\":1}"));
             }
             finally
@@ -45,14 +52,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string root = CreateTestRoot();
             string packageRoot = Path.Combine(root, "package");
             string projectRoot = Path.Combine(root, "project");
-            string projectUloopRoot = Path.Combine(projectRoot, ".uloop");
+            string projectUloopRoot = Path.Combine(projectRoot, UnityCliLoopConstants.ULOOP_DIR);
 
             try
             {
                 Directory.CreateDirectory(packageRoot);
                 Directory.CreateDirectory(projectUloopRoot);
-                string sourcePath = Path.Combine(packageRoot, "cli-pin.json");
-                string destinationPath = Path.Combine(projectUloopRoot, "cli-pin.json");
+                string sourcePath = Path.Combine(
+                    packageRoot,
+                    UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
+                string destinationPath = Path.Combine(
+                    projectUloopRoot,
+                    UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
                 File.WriteAllText(sourcePath, "{\"schemaVersion\":1}");
                 File.WriteAllText(destinationPath, "{\"schemaVersion\":1}");
                 DateTime previousWriteTime = File.GetLastWriteTimeUtc(destinationPath);
@@ -71,18 +82,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SyncProjectPinFile_WhenPackagePinChanges_ShouldUpdateProjectPin()
         {
-            // Tests that package upgrades update the project dispatcher pin contract.
+            // Tests that package upgrades update the project runner pin contract.
             string root = CreateTestRoot();
             string packageRoot = Path.Combine(root, "package");
             string projectRoot = Path.Combine(root, "project");
-            string projectUloopRoot = Path.Combine(projectRoot, ".uloop");
+            string projectUloopRoot = Path.Combine(projectRoot, UnityCliLoopConstants.ULOOP_DIR);
 
             try
             {
                 Directory.CreateDirectory(packageRoot);
                 Directory.CreateDirectory(projectUloopRoot);
-                File.WriteAllText(Path.Combine(packageRoot, "cli-pin.json"), "{\"schemaVersion\":2}");
-                string destinationPath = Path.Combine(projectUloopRoot, "cli-pin.json");
+                File.WriteAllText(
+                    Path.Combine(packageRoot, UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME),
+                    "{\"schemaVersion\":2}");
+                string destinationPath = Path.Combine(
+                    projectUloopRoot,
+                    UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
                 File.WriteAllText(destinationPath, "{\"schemaVersion\":1}");
 
                 bool changed = CliPinSynchronizer.SyncProjectPinFile(packageRoot, projectRoot);
@@ -106,14 +121,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             try
             {
                 Directory.CreateDirectory(projectRoot);
+                string expectedWarning =
+                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package root is empty.";
                 LogAssert.Expect(
                     LogType.Warning,
-                    "Unity CLI Loop skipped cli-pin.json synchronization because the package root is empty.");
+                    expectedWarning);
 
                 bool changed = CliPinSynchronizer.SyncProjectPinFile(string.Empty, projectRoot);
 
                 Assert.That(changed, Is.False);
-                Assert.That(File.Exists(Path.Combine(projectRoot, ".uloop", "cli-pin.json")), Is.False);
+                Assert.That(
+                    File.Exists(
+                        Path.Combine(
+                            projectRoot,
+                            UnityCliLoopConstants.ULOOP_DIR,
+                            UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME)),
+                    Is.False);
             }
             finally
             {

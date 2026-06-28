@@ -41,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string WINDOWS_PATH_SEPARATOR = ";";
         public const string RELEASE_TAG_PREFIX = "v";
         public const string PROJECT_RUNNER_RELEASE_TAG_PREFIX = "uloop-project-runner-v";
+        public const string LEGACY_CLI_RELEASE_TAG_PREFIX = "cli-v";
         public const string DISPATCHER_RELEASE_TAG_PREFIX = "dispatcher-v";
         public const string BETA_VERSION_MARKER = "-beta.";
         public const string SKILL_DIR_PREFIX = "uloop-";
