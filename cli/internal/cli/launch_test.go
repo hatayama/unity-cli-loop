@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,10 +17,13 @@ import (
 )
 
 func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
+	// Verifies launch parses every supported core flag without dropping the project path.
 	options, err := parseLaunchOptions(
 		[]string{
 			"--restart",
 			"--delete-recovery",
+			"--ignore-compiler-errors",
+			"--editor-version", "6000.0.0f1",
 			"--platform", "Android",
 			"--max-depth", "-1",
 			"/tmp/project",
@@ -36,6 +40,12 @@ func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
 	if !options.deleteRecovery {
 		t.Fatal("delete recovery flag was not parsed")
 	}
+	if !options.ignoreCompilerErrors {
+		t.Fatal("ignore compiler errors flag was not parsed")
+	}
+	if options.editorVersion != "6000.0.0f1" {
+		t.Fatalf("editor version mismatch: %s", options.editorVersion)
+	}
 	if options.platform != "Android" {
 		t.Fatalf("platform mismatch: %s", options.platform)
 	}
@@ -44,6 +54,80 @@ func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
 	}
 	if options.projectPath != "/tmp/project" {
 		t.Fatalf("project path mismatch: %s", options.projectPath)
+	}
+}
+
+func TestParseLaunchOptionsSupportsShortIgnoreCompilerErrorsFlag(t *testing.T) {
+	// Verifies -i is the short alias for --ignore-compiler-errors.
+	options, err := parseLaunchOptions([]string{"-i", "/tmp/project"}, "")
+	if err != nil {
+		t.Fatalf("parseLaunchOptions failed: %v", err)
+	}
+
+	if !options.ignoreCompilerErrors {
+		t.Fatal("short ignore compiler errors flag was not parsed")
+	}
+}
+
+func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrors(t *testing.T) {
+	// Verifies launch maps --ignore-compiler-errors to Unity Editor's native startup argument.
+	args := buildUnityLaunchArgs(
+		"/tmp/project",
+		launchOptions{platform: "Android", ignoreCompilerErrors: true},
+	)
+	expectedArgs := []string{
+		"-projectPath",
+		"/tmp/project",
+		"-buildTarget",
+		"Android",
+		"-ignorecompilererrors",
+	}
+
+	if !slices.Equal(args, expectedArgs) {
+		t.Fatalf("Unity launch args mismatch: got %#v want %#v", args, expectedArgs)
+	}
+}
+
+func TestParseLaunchOptionsSupportsEditorVersionEqualsValue(t *testing.T) {
+	// Verifies --editor-version=value matches Unity CLI's value form.
+	options, err := parseLaunchOptions([]string{"--editor-version=6000.0.1f1", "/tmp/project"}, "")
+	if err != nil {
+		t.Fatalf("parseLaunchOptions failed: %v", err)
+	}
+
+	if options.editorVersion != "6000.0.1f1" {
+		t.Fatalf("editor version mismatch: %s", options.editorVersion)
+	}
+}
+
+func TestParseLaunchOptionsRejectsEmptyEditorVersionEqualsValue(t *testing.T) {
+	// Verifies --editor-version= cannot silently fall back to ProjectVersion.txt.
+	_, err := parseLaunchOptions([]string{"--editor-version="}, "")
+
+	if err == nil {
+		t.Fatal("expected empty editor version value error")
+	}
+}
+
+func TestParseLaunchOptionsRejectsMissingEditorVersionValue(t *testing.T) {
+	// Verifies --editor-version requires an explicit Editor version.
+	_, err := parseLaunchOptions([]string{"--editor-version"}, "")
+
+	if err == nil {
+		t.Fatal("expected missing editor version value error")
+	}
+}
+
+func TestResolveLaunchEditorVersionUsesOptionBeforeProjectVersion(t *testing.T) {
+	// Verifies --editor-version does not require or mutate ProjectVersion.txt.
+	projectRoot := createLaunchTestProject(t)
+
+	version, err := resolveLaunchEditorVersion(projectRoot, launchOptions{editorVersion: "6000.0.2f1"})
+	if err != nil {
+		t.Fatalf("resolveLaunchEditorVersion failed: %v", err)
+	}
+	if version != "6000.0.2f1" {
+		t.Fatalf("editor version mismatch: %s", version)
 	}
 }
 
@@ -182,7 +266,7 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 
 	code := runLaunch(
 		context.Background(),
-		launchOptions{projectPath: projectRoot},
+		launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"},
 		projectRoot,
 		&stdout,
 		&stderr,
@@ -376,6 +460,46 @@ func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) 
 	}
 }
 
+func TestRunLaunchRequiresRestartForEditorVersionWithExistingUnityProcess(t *testing.T) {
+	// Verifies --editor-version cannot silently reuse an already running Editor process.
+	originalFinder := findRunningUnityProcessForLaunch
+	originalReadinessWait := waitForToolReadinessForLaunch
+	readinessChecked := false
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return &unityProcess{pid: 222}, nil
+	}
+	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
+		readinessChecked = true
+		return nil
+	}
+	t.Cleanup(func() {
+		findRunningUnityProcessForLaunch = originalFinder
+		waitForToolReadinessForLaunch = originalReadinessWait
+	})
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunch(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 1 {
+		t.Fatalf("exit code mismatch: %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if readinessChecked {
+		t.Fatal("launch should not report an existing process as ready for a different requested Editor version")
+	}
+	if !strings.Contains(stderr.String(), "`uloop launch --restart --editor-version 6000.0.0f1`") {
+		t.Fatalf("stderr should guide restart with the requested version:\n%s", stderr.String())
+	}
+}
+
 func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	// Verifies restart reports both the stopped process and the newly launched process.
 	originalFinder := findRunningUnityProcessForLaunch
@@ -421,7 +545,7 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 
 	code := runLaunch(
 		context.Background(),
-		launchOptions{projectPath: projectRoot, restart: true},
+		launchOptions{projectPath: projectRoot, restart: true, editorVersion: "6000.0.0f1"},
 		projectRoot,
 		&stdout,
 		&stderr,
