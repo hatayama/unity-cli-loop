@@ -48,6 +48,7 @@ type launchOptions struct {
 	quit                 bool
 	deleteRecovery       bool
 	ignoreCompilerErrors bool
+	editorVersion        string
 	platform             string
 	maxDepth             int
 }
@@ -228,7 +229,13 @@ func startUnityAndWaitForReadiness(
 		writeLine(stdout, "")
 	}
 
-	unityPath, err := resolveUnityExecutablePathForLaunch(projectRoot)
+	unityVersion, err := resolveLaunchEditorVersion(projectRoot, options)
+	if err != nil {
+		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		return 1
+	}
+
+	unityPath, err := resolveUnityExecutablePathForLaunch(unityVersion)
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
@@ -239,7 +246,7 @@ func startUnityAndWaitForReadiness(
 
 	writeLine(stdout, "Opening Unity...")
 	writeFormat(stdout, "Project Path: %s\n", projectRoot)
-	writeFormat(stdout, "Detected Unity version: %s\n", readUnityVersionForLog(projectRoot))
+	writeFormat(stdout, "Detected Unity version: %s\n", unityVersion)
 	writeLine(stdout, "Unity Hub launch options: none")
 
 	command := newUnityLaunchCommand(unityPath, buildUnityLaunchArgs(projectRoot, options))
@@ -372,14 +379,16 @@ func resolveLaunchProjectRoot(startPath string, options launchOptions) (string, 
 	return project.FindUnityProjectRootWithin(startPath, options.maxDepth)
 }
 
-func resolveUnityExecutablePath(projectRoot string) (string, error) {
-	version, err := readUnityEditorVersion(projectRoot)
-	if err != nil {
-		return "", err
-	}
-
+func resolveUnityExecutablePath(version string) (string, error) {
 	candidates := unityExecutableCandidates(version)
 	return resolveExistingUnityExecutablePath(version, candidates)
+}
+
+func resolveLaunchEditorVersion(projectRoot string, options launchOptions) (string, error) {
+	if options.editorVersion != "" {
+		return options.editorVersion, nil
+	}
+	return readUnityEditorVersion(projectRoot)
 }
 
 func resolveExistingUnityExecutablePath(version string, candidates []string) (string, error) {
@@ -437,14 +446,6 @@ func readUnityEditorVersion(projectRoot string) (string, error) {
 	return version, nil
 }
 
-func readUnityVersionForLog(projectRoot string) string {
-	version, err := readUnityEditorVersion(projectRoot)
-	if err != nil {
-		return "unknown"
-	}
-	return version
-}
-
 func killUnityProcess(pid int) error {
 	process, err := os.FindProcess(pid)
 	if err != nil {
@@ -463,6 +464,8 @@ func printLaunchHelp(stdout io.Writer) {
 	writeLine(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
 	writeLine(stdout, "  -i, --ignore-compiler-errors")
 	writeLine(stdout, "                          Continue opening Unity even when the project has compiler errors")
+	writeLine(stdout, "      --editor-version <version>")
+	writeLine(stdout, "                          Use this Unity Editor version instead of ProjectVersion.txt")
 	writeLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
 	writeLine(stdout, "      --max-depth <n>    Accepted for compatibility when searching from the current directory")
 	writeLine(stdout, "")

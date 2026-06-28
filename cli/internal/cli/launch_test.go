@@ -23,6 +23,7 @@ func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
 			"--restart",
 			"--delete-recovery",
 			"--ignore-compiler-errors",
+			"--editor-version", "6000.0.0f1",
 			"--platform", "Android",
 			"--max-depth", "-1",
 			"/tmp/project",
@@ -41,6 +42,9 @@ func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
 	}
 	if !options.ignoreCompilerErrors {
 		t.Fatal("ignore compiler errors flag was not parsed")
+	}
+	if options.editorVersion != "6000.0.0f1" {
+		t.Fatalf("editor version mismatch: %s", options.editorVersion)
 	}
 	if options.platform != "Android" {
 		t.Fatalf("platform mismatch: %s", options.platform)
@@ -81,6 +85,49 @@ func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrors(t *testing.T) {
 
 	if !slices.Equal(args, expectedArgs) {
 		t.Fatalf("Unity launch args mismatch: got %#v want %#v", args, expectedArgs)
+	}
+}
+
+func TestParseLaunchOptionsSupportsEditorVersionEqualsValue(t *testing.T) {
+	// Verifies --editor-version=value matches Unity CLI's value form.
+	options, err := parseLaunchOptions([]string{"--editor-version=6000.0.1f1", "/tmp/project"}, "")
+	if err != nil {
+		t.Fatalf("parseLaunchOptions failed: %v", err)
+	}
+
+	if options.editorVersion != "6000.0.1f1" {
+		t.Fatalf("editor version mismatch: %s", options.editorVersion)
+	}
+}
+
+func TestParseLaunchOptionsRejectsEmptyEditorVersionEqualsValue(t *testing.T) {
+	// Verifies --editor-version= cannot silently fall back to ProjectVersion.txt.
+	_, err := parseLaunchOptions([]string{"--editor-version="}, "")
+
+	if err == nil {
+		t.Fatal("expected empty editor version value error")
+	}
+}
+
+func TestParseLaunchOptionsRejectsMissingEditorVersionValue(t *testing.T) {
+	// Verifies --editor-version requires an explicit Editor version.
+	_, err := parseLaunchOptions([]string{"--editor-version"}, "")
+
+	if err == nil {
+		t.Fatal("expected missing editor version value error")
+	}
+}
+
+func TestResolveLaunchEditorVersionUsesOptionBeforeProjectVersion(t *testing.T) {
+	// Verifies --editor-version does not require or mutate ProjectVersion.txt.
+	projectRoot := createLaunchTestProject(t)
+
+	version, err := resolveLaunchEditorVersion(projectRoot, launchOptions{editorVersion: "6000.0.2f1"})
+	if err != nil {
+		t.Fatalf("resolveLaunchEditorVersion failed: %v", err)
+	}
+	if version != "6000.0.2f1" {
+		t.Fatalf("editor version mismatch: %s", version)
 	}
 }
 
@@ -219,7 +266,7 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 
 	code := runLaunch(
 		context.Background(),
-		launchOptions{projectPath: projectRoot},
+		launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"},
 		projectRoot,
 		&stdout,
 		&stderr,
@@ -458,7 +505,7 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 
 	code := runLaunch(
 		context.Background(),
-		launchOptions{projectPath: projectRoot, restart: true},
+		launchOptions{projectPath: projectRoot, restart: true, editorVersion: "6000.0.0f1"},
 		projectRoot,
 		&stdout,
 		&stderr,

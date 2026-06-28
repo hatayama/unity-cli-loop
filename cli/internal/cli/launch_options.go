@@ -20,6 +20,8 @@ func applyLaunchOption(options *launchOptions, args []string, index int) (int, e
 	case arg == "-i" || arg == "--ignore-compiler-errors":
 		options.ignoreCompilerErrors = true
 		return index, nil
+	case arg == "--editor-version" || strings.HasPrefix(arg, "--editor-version="):
+		return applyLaunchEditorVersionOption(options, args, index)
 	case isUnsupportedLaunchHubOption(arg):
 		return index, unsupportedLaunchHubOptionError(arg)
 	case arg == "-p" || arg == "--platform" || strings.HasPrefix(arg, "--platform="):
@@ -69,6 +71,15 @@ func applyLaunchPlatformOption(options *launchOptions, args []string, index int)
 		return index, err
 	}
 	options.platform = value
+	return nextLaunchOptionIndex(index, consumed), nil
+}
+
+func applyLaunchEditorVersionOption(options *launchOptions, args []string, index int) (int, error) {
+	value, consumed, err := readLaunchOptionValue(args[index], args, index)
+	if err != nil {
+		return index, err
+	}
+	options.editorVersion = value
 	return nextLaunchOptionIndex(index, consumed), nil
 }
 
