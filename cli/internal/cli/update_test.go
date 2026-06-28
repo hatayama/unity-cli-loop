@@ -1,6 +1,10 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"io"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -187,6 +191,44 @@ func TestParseUpdateOptionsRejectsInvalidVersion(t *testing.T) {
 	}
 }
 
+func TestTryHandleUpdateRequestReportsVersionChange(t *testing.T) {
+	// Verifies manual dispatcher updates tell users which launcher version was installed.
+	skipWhenNativeUpdateIsUnsupported(t)
+	restoreUpdateHooks := stubManualUpdateHooks(t, "9.9.9")
+	defer restoreUpdateHooks()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{updateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	expected := "uloop launcher updated from " + dispatcherVersion + " to 9.9.9."
+	if !bytes.Contains(stdout.Bytes(), []byte(expected)) {
+		t.Fatalf("update output mismatch: %s", stdout.String())
+	}
+}
+
+func TestTryHandleUpdateRequestReportsAlreadyCurrentVersion(t *testing.T) {
+	// Verifies manual dispatcher updates explain when the selected release matches the installed launcher.
+	skipWhenNativeUpdateIsUnsupported(t)
+	restoreUpdateHooks := stubManualUpdateHooks(t, dispatcherVersion)
+	defer restoreUpdateHooks()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{updateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	expected := "uloop launcher is already up to date at " + dispatcherVersion + "."
+	if !bytes.Contains(stdout.Bytes(), []byte(expected)) {
+		t.Fatalf("update output mismatch: %s", stdout.String())
+	}
+}
+
 func TestUpdateCommandForLinuxIsUnsupported(t *testing.T) {
 	// Verifies Linux update fails before trying to run a platform-specific update.
 	_, _, err := updateCommandForOS("linux")
@@ -203,5 +245,29 @@ func TestUpdateCommandRejectsUnsupportedOS(t *testing.T) {
 	_, _, err := updateCommandForOS("plan9")
 	if err == nil {
 		t.Fatal("expected unsupported OS error")
+	}
+}
+
+func skipWhenNativeUpdateIsUnsupported(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		return
+	}
+	t.Skip("native update is supported only on macOS and Windows")
+}
+
+func stubManualUpdateHooks(t *testing.T, updatedVersion string) func() {
+	t.Helper()
+	previousRunner := updateRunCommand
+	previousReader := dispatcherReadInstalledVersion
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		return nil
+	}
+	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
+		return updatedVersion, nil
+	}
+	return func() {
+		updateRunCommand = previousRunner
+		dispatcherReadInstalledVersion = previousReader
 	}
 }
