@@ -106,7 +106,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             string projectRunnerVersion = metadata["projectRunnerVersion"]?.ToString();
-            return string.IsNullOrWhiteSpace(projectRunnerVersion) ? null : projectRunnerVersion;
+            if (!string.IsNullOrWhiteSpace(projectRunnerVersion))
+            {
+                return projectRunnerVersion;
+            }
+
+            string legacyCliVersion = metadata["cliVersion"]?.ToString();
+            return string.IsNullOrWhiteSpace(legacyCliVersion) ? null : legacyCliVersion;
         }
 
         private static int? ReadClientProtocolVersion(JObject request)
