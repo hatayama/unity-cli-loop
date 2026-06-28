@@ -48,7 +48,7 @@ func TestCliFeaturePackagesDoNotImportCli(t *testing.T) {
 	for _, goPackage := range packages {
 		if goPackage.ImportPath == cliModulePath+"/internal/cli" ||
 			goPackage.ImportPath == cliModulePath+"/internal/dispatcher" ||
-			goPackage.ImportPath == cliModulePath+"/internal/projectcli" ||
+			goPackage.ImportPath == cliModulePath+"/internal/projectrunner" ||
 			strings.HasPrefix(goPackage.ImportPath, cliModulePath+"/cmd/") {
 			continue
 		}
@@ -71,7 +71,7 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 		if goPackage.ImportPath == cliModulePath+"/internal/architecture" {
 			continue
 		}
-		for _, boundary := range []string{"/internal/automation", "/internal/cli", "/internal/dispatcher", "/internal/install", "/internal/project", "/internal/projectcli", "/internal/skills", "/internal/tools", "/internal/uninstall", "/internal/unityipc", "/internal/update", "/internal/version"} {
+		for _, boundary := range []string{"/internal/automation", "/internal/cli", "/internal/dispatcher", "/internal/install", "/internal/project", "/internal/projectrunner", "/internal/skills", "/internal/tools", "/internal/uninstall", "/internal/unityipc", "/internal/update", "/internal/version"} {
 			if strings.Contains(goPackage.ImportPath, boundary) {
 				goto nextPackage
 			}
@@ -83,12 +83,12 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 
 // Tests that the dispatcher command only enters the dispatcher package.
 func TestDispatcherCommandOnlyDependsOnDispatcherEntrypoint(t *testing.T) {
-	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/uloop", cliModulePath+"/internal/dispatcher")
+	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/dispatcher", cliModulePath+"/internal/dispatcher")
 }
 
 // Tests that the project-local CLI command only enters the project CLI package.
 func TestProjectCliCommandOnlyDependsOnProjectCliEntrypoint(t *testing.T) {
-	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/uloop-cli", cliModulePath+"/internal/projectcli")
+	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/project-runner", cliModulePath+"/internal/projectrunner")
 }
 
 func assertCommandOnlyDependsOnInternalEntrypoint(t *testing.T, commandPath string, expectedEntrypoint string) {

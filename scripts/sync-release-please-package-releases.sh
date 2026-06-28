@@ -5,7 +5,7 @@ ROOT_DIR=${ULOOP_REPO_ROOT:-$(CDPATH= cd "$(dirname "$0")/.." && pwd)}
 CONFIG="$ROOT_DIR/release-please-config.json"
 MANIFEST="$ROOT_DIR/.release-please-manifest.json"
 CLI_PACKAGE_PATH="cli"
-UNITY_PACKAGE_CLI_PIN_FILE="Packages/src/cli-pin.json"
+UNITY_PACKAGE_CLI_PIN_FILE="Packages/src/project-runner-pin.json"
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 TMP_DIR=$(mktemp -d)
 
@@ -368,7 +368,7 @@ wait_for_cli_release_ready() {
   while :; do
     if cli_release_is_ready "$release_tag"; then
       if [ "$elapsed_seconds" -gt 0 ]; then
-        echo "CLI release $release_tag is now published with complete assets."
+        echo "Project runner release $release_tag is now published with complete assets."
       fi
       return 0
     fi
@@ -389,7 +389,7 @@ wait_for_cli_release_ready() {
       sleep_seconds=$delay_seconds
     fi
 
-    echo "CLI release $release_tag is not published with complete assets yet; waiting ${delay_seconds}s before retry."
+    echo "Project runner release $release_tag is not published with complete assets yet; waiting ${delay_seconds}s before retry."
     if [ "$sleep_seconds" -gt 0 ]; then
       sleep "$sleep_seconds"
     fi
@@ -476,7 +476,7 @@ if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packa
   cli_release_tag=$(release_tag_from_config "$CLI_PACKAGE_PATH" "$cli_version")
   if ! wait_for_cli_release_ready "$cli_release_tag"; then
     mark_package_release_sync_ready false
-    echo "CLI release $cli_release_tag is not published with complete assets; package release sync will wait."
+    echo "Project runner release $cli_release_tag is not published with complete assets; package release sync will wait."
     exit 0
   fi
   fetch_cli_release_tag "$cli_release_tag"

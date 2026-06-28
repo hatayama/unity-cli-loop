@@ -11,17 +11,17 @@ import (
 )
 
 func TestAnalyzeProtocolMinimumVersionGuard_WhenProtocolChangesWithoutMinimumVersionChange_Warns(t *testing.T) {
-	// Verifies protocol bumps cannot leave the installer target on the old CLI release.
+	// Verifies protocol bumps cannot leave the installer target on the old project runner release.
 	result := AnalyzeProtocolMinimumVersionGuard(
 		ProtocolMinimumVersionValues{
-			RequiredProtocolVersion: 1,
-			HasRequiredProtocol:     true,
-			MinimumCliVersion:       "3.0.0-beta.32",
+			RequiredProtocolVersion:     1,
+			HasRequiredProtocol:         true,
+			MinimumProjectRunnerVersion: "3.0.0-beta.32",
 		},
 		ProtocolMinimumVersionValues{
-			RequiredProtocolVersion: 2,
-			HasRequiredProtocol:     true,
-			MinimumCliVersion:       "3.0.0-beta.32",
+			RequiredProtocolVersion:     2,
+			HasRequiredProtocol:         true,
+			MinimumProjectRunnerVersion: "3.0.0-beta.32",
 		})
 
 	if !result.NeedsMinimumVersionUpdate {
@@ -33,14 +33,14 @@ func TestAnalyzeProtocolMinimumVersionGuard_WhenProtocolAndMinimumVersionChange_
 	// Verifies paired protocol and installer target updates clear the update-omission warning.
 	result := AnalyzeProtocolMinimumVersionGuard(
 		ProtocolMinimumVersionValues{
-			RequiredProtocolVersion: 1,
-			HasRequiredProtocol:     true,
-			MinimumCliVersion:       "3.0.0-beta.32",
+			RequiredProtocolVersion:     1,
+			HasRequiredProtocol:         true,
+			MinimumProjectRunnerVersion: "3.0.0-beta.32",
 		},
 		ProtocolMinimumVersionValues{
-			RequiredProtocolVersion: 2,
-			HasRequiredProtocol:     true,
-			MinimumCliVersion:       "3.0.0-beta.33",
+			RequiredProtocolVersion:     2,
+			HasRequiredProtocol:         true,
+			MinimumProjectRunnerVersion: "3.0.0-beta.33",
 		})
 
 	if result.NeedsMinimumVersionUpdate {
@@ -52,14 +52,14 @@ func TestAnalyzeProtocolMinimumVersionGuard_WhenProtocolDoesNotChange_DoesNotWar
 	// Verifies ordinary package edits do not force a CLI installer target bump.
 	result := AnalyzeProtocolMinimumVersionGuard(
 		ProtocolMinimumVersionValues{
-			RequiredProtocolVersion: 2,
-			HasRequiredProtocol:     true,
-			MinimumCliVersion:       "3.0.0-beta.32",
+			RequiredProtocolVersion:     2,
+			HasRequiredProtocol:         true,
+			MinimumProjectRunnerVersion: "3.0.0-beta.32",
 		},
 		ProtocolMinimumVersionValues{
-			RequiredProtocolVersion: 2,
-			HasRequiredProtocol:     true,
-			MinimumCliVersion:       "3.0.0-beta.32",
+			RequiredProtocolVersion:     2,
+			HasRequiredProtocol:         true,
+			MinimumProjectRunnerVersion: "3.0.0-beta.32",
 		})
 
 	if result.NeedsMinimumVersionUpdate {
@@ -68,18 +68,18 @@ func TestAnalyzeProtocolMinimumVersionGuard_WhenProtocolDoesNotChange_DoesNotWar
 }
 
 func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseMatches_Passes(t *testing.T) {
-	// Verifies protocol bump PRs pass only after the selected CLI release advertises the new protocol.
+	// Verifies protocol bump PRs pass only after the selected project runner release advertises the new protocol.
 	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
 		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
 		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
-		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`,
 	})
 
 	if result.exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
 	}
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
-	assertProtocolMinimumVersionLogContains(t, result.gitLog, "cli-v3.0.0-beta.33:cli/contract.json")
+	assertProtocolMinimumVersionLogContains(t, result.gitLog, "uloop-project-runner-v3.0.0-beta.33:cli/contract.json")
 }
 
 func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseProtocolDiffers_Fails(t *testing.T) {
@@ -87,45 +87,45 @@ func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseProtocolDiffers_Fails(
 	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
 		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
 		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
-		releaseContent: `{"schemaVersion":1,"protocolVersion":1,"cliVersion":"3.0.0-beta.33"}`,
+		releaseContent: `{"schemaVersion":1,"protocolVersion":1,"projectRunnerVersion":"3.0.0-beta.33"}`,
 	})
 
 	if result.exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
 	}
-	assertProtocolMinimumVersionLogContains(t, result.stderr, "does not point to a published CLI release")
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "does not point to a published project runner release")
 	assertProtocolMinimumVersionLogContains(t, result.stderr, "advertises protocol 1")
 }
 
 func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseIsDraft_Fails(t *testing.T) {
-	// Verifies protocol bump PRs wait for a published CLI release, not only a git tag.
+	// Verifies protocol bump PRs wait for a published project runner release, not only a git tag.
 	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
 		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
 		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
-		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`,
 		releaseView:    `{"isDraft":true,"assets":[]}`,
 	})
 
 	if result.exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
 	}
-	assertProtocolMinimumVersionLogContains(t, result.stderr, "does not point to a published CLI release")
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "does not point to a published project runner release")
 	assertProtocolMinimumVersionLogContains(t, result.stderr, "is still draft")
 }
 
 func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseAssetsAreMissing_Fails(t *testing.T) {
-	// Verifies protocol bump PRs wait for installable native CLI release assets.
+	// Verifies protocol bump PRs wait for installable native project runner release assets.
 	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
 		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
 		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
-		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`,
 		releaseView:    `{"isDraft":false,"assets":[]}`,
 	})
 
 	if result.exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
 	}
-	assertProtocolMinimumVersionLogContains(t, result.stderr, "does not point to a published CLI release")
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "does not point to a published project runner release")
 	assertProtocolMinimumVersionLogContains(t, result.stderr, "is missing release asset")
 }
 
@@ -134,35 +134,35 @@ func TestRunProtocolMinimumVersionGuard_WhenOnlyMinimumReleaseProtocolDiffers_Fa
 	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
 		baseContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.32"),
 		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
-		releaseContent: `{"schemaVersion":1,"protocolVersion":1,"cliVersion":"3.0.0-beta.33"}`,
+		releaseContent: `{"schemaVersion":1,"protocolVersion":1,"projectRunnerVersion":"3.0.0-beta.33"}`,
 	})
 
 	if result.exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
 	}
-	assertProtocolMinimumVersionLogContains(t, result.stderr, "`MINIMUM_REQUIRED_CLI_VERSION` changed")
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "`MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` changed")
 	assertProtocolMinimumVersionLogContains(t, result.stderr, "advertises protocol 1")
 }
 
 func TestVerifyMinimumCliReleaseProtocol_WhenTagProtocolMatches_Passes(t *testing.T) {
-	// Verifies release validation accepts a CLI tag that advertises the required protocol.
+	// Verifies release validation accepts a project runner tag that advertises the required protocol.
 	err := VerifyMinimumCliReleaseProtocol(ProtocolMinimumVersionValues{
-		RequiredProtocolVersion: 2,
-		HasRequiredProtocol:     true,
-		MinimumCliVersion:       "3.0.0-beta.33",
-	}, []byte(`{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`))
+		RequiredProtocolVersion:     2,
+		HasRequiredProtocol:         true,
+		MinimumProjectRunnerVersion: "3.0.0-beta.33",
+	}, []byte(`{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`))
 	if err != nil {
 		t.Fatalf("expected matching release protocol, got %v", err)
 	}
 }
 
 func TestVerifyMinimumCliReleaseProtocol_WhenTagProtocolIsMissing_Fails(t *testing.T) {
-	// Verifies release validation rejects CLI tags that predate protocol metadata.
+	// Verifies release validation rejects project runner tags that predate protocol metadata.
 	err := VerifyMinimumCliReleaseProtocol(ProtocolMinimumVersionValues{
-		RequiredProtocolVersion: 2,
-		HasRequiredProtocol:     true,
-		MinimumCliVersion:       "3.0.0-beta.32",
-	}, []byte(`{"schemaVersion":1,"cliVersion":"3.0.0-beta.32"}`))
+		RequiredProtocolVersion:     2,
+		HasRequiredProtocol:         true,
+		MinimumProjectRunnerVersion: "3.0.0-beta.32",
+	}, []byte(`{"schemaVersion":1,"projectRunnerVersion":"3.0.0-beta.32"}`))
 
 	if err == nil {
 		t.Fatal("expected missing protocolVersion to fail")
@@ -175,10 +175,10 @@ func TestVerifyMinimumCliReleaseProtocol_WhenTagProtocolIsMissing_Fails(t *testi
 func TestVerifyMinimumCliReleaseProtocol_WhenProtocolVersionIsOutOfRange_FailsAsMissingMetadata(t *testing.T) {
 	// Verifies malformed protocol metadata is reported consistently with missing metadata.
 	err := VerifyMinimumCliReleaseProtocol(ProtocolMinimumVersionValues{
-		RequiredProtocolVersion: 2,
-		HasRequiredProtocol:     true,
-		MinimumCliVersion:       "3.0.0-beta.33",
-	}, []byte(`{"schemaVersion":1,"protocolVersion":999999999999999999999999999999,"cliVersion":"3.0.0-beta.33"}`))
+		RequiredProtocolVersion:     2,
+		HasRequiredProtocol:         true,
+		MinimumProjectRunnerVersion: "3.0.0-beta.33",
+	}, []byte(`{"schemaVersion":1,"protocolVersion":999999999999999999999999999999,"projectRunnerVersion":"3.0.0-beta.33"}`))
 
 	if err == nil {
 		t.Fatal("expected out-of-range protocolVersion to fail")
@@ -192,12 +192,12 @@ func TestVerifyMinimumCliReleaseProtocol_WhenProtocolVersionIsOutOfRange_FailsAs
 }
 
 func TestVerifyMinimumCliReleaseProtocol_WhenTagProtocolDiffers_Fails(t *testing.T) {
-	// Verifies release validation rejects published CLIs from a different protocol generation.
+	// Verifies release validation rejects published project runners from a different protocol generation.
 	err := VerifyMinimumCliReleaseProtocol(ProtocolMinimumVersionValues{
-		RequiredProtocolVersion: 3,
-		HasRequiredProtocol:     true,
-		MinimumCliVersion:       "3.0.0-beta.33",
-	}, []byte(`{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`))
+		RequiredProtocolVersion:     3,
+		HasRequiredProtocol:         true,
+		MinimumProjectRunnerVersion: "3.0.0-beta.33",
+	}, []byte(`{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`))
 
 	if err == nil {
 		t.Fatal("expected mismatched protocolVersion to fail")
@@ -223,7 +223,7 @@ func TestRunMinimumCliReleaseProtocolCheck_WhenRefIsProvided_ReadsValuesAtRef(t 
 	prepareProtocolMinimumVersionGitContents(t, workDir, protocolMinimumVersionRefCase{
 		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
 		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
-		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`,
 	})
 
 	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -242,9 +242,9 @@ func TestRunMinimumCliReleaseProtocolCheck_WhenRefIsProvided_ReadsValuesAtRef(t 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr.String())
 	}
-	assertProtocolMinimumVersionLogContains(t, stdout.String(), "Minimum CLI release cli-v3.0.0-beta.33 advertises protocol 2.")
+	assertProtocolMinimumVersionLogContains(t, stdout.String(), "Minimum project runner release uloop-project-runner-v3.0.0-beta.33 advertises protocol 2.")
 	assertProtocolMinimumVersionLogContains(t, readFile(t, gitLogPath), "protocol-release:"+protocolMinimumVersionFile)
-	assertProtocolMinimumVersionLogContains(t, readFile(t, ghLogPath), "release view cli-v3.0.0-beta.33")
+	assertProtocolMinimumVersionLogContains(t, readFile(t, ghLogPath), "release view uloop-project-runner-v3.0.0-beta.33")
 }
 
 func TestRunProtocolMinimumVersionComment_WhenWarningExists_UpsertsComment(t *testing.T) {
@@ -268,7 +268,7 @@ func TestRunProtocolMinimumVersionComment_WhenWarningIsResolved_DeletesComment(t
 	result := runProtocolMinimumVersionCommentCase(t, protocolMinimumVersionCommentCase{
 		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
 		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
-		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"3.0.0-beta.33"}`,
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`,
 		commentIDs:     "123",
 	})
 
@@ -284,7 +284,7 @@ func TestRunProtocolMinimumVersionComment_WhenMinimumReleaseProtocolDiffers_Upse
 	result := runProtocolMinimumVersionCommentCase(t, protocolMinimumVersionCommentCase{
 		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
 		headContent:    buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
-		releaseContent: `{"schemaVersion":1,"protocolVersion":1,"cliVersion":"3.0.0-beta.33"}`,
+		releaseContent: `{"schemaVersion":1,"protocolVersion":1,"projectRunnerVersion":"3.0.0-beta.33"}`,
 		commentIDs:     "123",
 	})
 
@@ -425,13 +425,13 @@ func prepareProtocolMinimumVersionGitContents(t *testing.T, workDir string, test
 	t.Setenv("GIT_HEAD_CONTENT", headContentPath)
 }
 
-func buildProtocolMinimumVersionConstants(requiredProtocolVersion int, minimumCliVersion string) string {
+func buildProtocolMinimumVersionConstants(requiredProtocolVersion int, minimumProjectRunnerVersion string) string {
 	return `namespace Tests {
 public static class CliConstants {
 public const int REQUIRED_CLI_PROTOCOL_VERSION = ` +
 		strconv.Itoa(requiredProtocolVersion) +
 		`;
-public const string MINIMUM_REQUIRED_CLI_VERSION = "` + minimumCliVersion + `";
+public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "` + minimumProjectRunnerVersion + `";
 }
 }`
 }
@@ -458,7 +458,7 @@ if [ "$1" = "show" ]; then
     origin/v3-beta:*) cat "$GIT_BASE_CONTENT" ;;
     protocol-pr-head:*) cat "$GIT_HEAD_CONTENT" ;;
     protocol-release:*) cat "$GIT_HEAD_CONTENT" ;;
-    cli-v*:cli/contract.json)
+	    uloop-project-runner-v*:cli/contract.json)
       if [ -n "${GIT_RELEASE_CONTENT:-}" ]; then
         cat "$GIT_RELEASE_CONTENT"
       else
@@ -493,7 +493,7 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   if [ -n "${GH_RELEASE_VIEW:-}" ]; then
     printf '%s\n' "$GH_RELEASE_VIEW"
   else
-    printf '%s\n' '{"isDraft":false,"assets":[{"name":"uloop-cli-darwin-amd64.tar.gz","size":1},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1},{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]}'
+	    printf '%s\n' '{"isDraft":false,"assets":[{"name":"uloop-project-runner-darwin-amd64.tar.gz","size":1},{"name":"uloop-project-runner-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-windows-amd64.zip","size":1},{"name":"uloop-project-runner-windows-amd64.zip.sha256","size":1}]}'
   fi
   exit 0
 fi

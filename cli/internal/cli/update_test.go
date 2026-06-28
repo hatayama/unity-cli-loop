@@ -105,10 +105,10 @@ func TestUpdateCommandForDarwinNormalizesRequestedVersionPrefix(t *testing.T) {
 	}
 }
 
-func TestUpdateCommandForDarwinNormalizesLegacyCliReleaseTag(t *testing.T) {
-	// Verifies migrated CLI release tags resolve to the matching dispatcher release.
+func TestUpdateCommandForDarwinNormalizesProjectRunnerReleaseTag(t *testing.T) {
+	// Verifies project runner release tags resolve to the matching dispatcher release.
 	commandName, args, err := updateCommandForOSWithOptions("darwin", updateOptions{
-		targetVersion: "cli-v3.0.0-beta.6",
+		targetVersion: "uloop-project-runner-v3.0.0-beta.6",
 	})
 	if err != nil {
 		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
@@ -121,8 +121,8 @@ func TestUpdateCommandForDarwinNormalizesLegacyCliReleaseTag(t *testing.T) {
 	if !strings.Contains(joinedArgs, "dispatcher-v3.0.0-beta.6/scripts/install.sh") {
 		t.Fatalf("installer URL mismatch: %s", joinedArgs)
 	}
-	if strings.Contains(joinedArgs, "dispatcher-vcli-v3.0.0-beta.6") {
-		t.Fatalf("installer version contains legacy CLI prefix: %s", joinedArgs)
+	if strings.Contains(joinedArgs, "dispatcher-vuloop-project-runner-v3.0.0-beta.6") {
+		t.Fatalf("installer version contains project runner prefix: %s", joinedArgs)
 	}
 }
 
@@ -159,9 +159,9 @@ func TestParseUpdateOptionsNormalizesVersionPrefix(t *testing.T) {
 	}
 }
 
-func TestParseUpdateOptionsNormalizesLegacyCliReleaseTag(t *testing.T) {
-	// Verifies parsed legacy CLI release tags are normalized before dispatcher tag selection.
-	options, err := parseUpdateOptions([]string{"--to-version", "cli-v3.0.0-beta.6"})
+func TestParseUpdateOptionsNormalizesProjectRunnerReleaseTag(t *testing.T) {
+	// Verifies parsed project runner release tags are normalized before dispatcher tag selection.
+	options, err := parseUpdateOptions([]string{"--to-version", "uloop-project-runner-v3.0.0-beta.6"})
 	if err != nil {
 		t.Fatalf("parseUpdateOptions failed: %v", err)
 	}

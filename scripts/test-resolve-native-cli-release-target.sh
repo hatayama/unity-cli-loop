@@ -72,7 +72,7 @@ set -eu
 asset_json() {
   has_assets=$1
   if [ "$has_assets" = "true" ]; then
-    printf '[{"name":"uloop-cli-darwin-amd64.tar.gz","size":1},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1},{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]'
+    printf '[{"name":"uloop-project-runner-darwin-amd64.tar.gz","size":1},{"name":"uloop-project-runner-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-windows-amd64.zip","size":1},{"name":"uloop-project-runner-windows-amd64.zip.sha256","size":1}]'
     return
   fi
   printf '[]'
@@ -103,7 +103,7 @@ release_json() {
 
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
-  if [ "$tag" = "cli-v$CURRENT_VERSION" ]; then
+  if [ "$tag" = "uloop-project-runner-v$CURRENT_VERSION" ]; then
     release_json "$CURRENT_RELEASE_STATE" "$CURRENT_RELEASE_HAS_ASSETS"
     exit 0
   fi
@@ -223,7 +223,7 @@ run_success_case() {
 
     assert_contains output.txt "publish=$expected_publish"
     assert_contains output.txt "release=$expected_release"
-    assert_contains output.txt "tag=cli-v$current_version"
+    assert_contains output.txt "tag=uloop-project-runner-v$current_version"
     assert_contains output.txt "version=$current_version"
     assert_contains output.txt "sha=$expected_sha"
     assert_contains output.txt "build_sha=$build_sha_value"
@@ -256,7 +256,7 @@ run_failure_case() {
       BUILD_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
       RELEASE_COMMIT_SHA=target-sha \
       RELEASE_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
-      PREVIOUS_RELEASE_TAG=cli-v3.0.0-beta.1 \
+      PREVIOUS_RELEASE_TAG=uloop-project-runner-v3.0.0-beta.1 \
       PREVIOUS_RELEASE_HAS_ASSETS=true \
       CLI_SOURCE_CHANGED=false \
       CONTRACT_CHANGED=false \
@@ -279,79 +279,79 @@ run_failure_case() {
   )
 }
 
-# Verifies already published complete CLI assets are not rebuilt.
+# Verifies already published complete Project runner assets are not rebuilt.
 test_complete_current_release_skips() {
-  run_success_case current-complete 3.0.0-beta.2 push v3-beta published true cli-v3.0.0-beta.1 true true false false false false
+  run_success_case current-complete 3.0.0-beta.2 push v3-beta published true uloop-project-runner-v3.0.0-beta.1 true true false false false false
 }
 
-# Verifies package-only version changes do not publish CLI assets.
+# Verifies package-only version changes do not publish Project runner assets.
 test_package_version_change_without_cli_change_skips() {
-  run_success_case package-only 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false false false true
+  run_success_case package-only 3.0.0-beta.3 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true false false false false true
 }
 
 # Verifies CLI source changes publish assets on the current release tag.
 test_cli_change_publishes() {
-  run_success_case cli-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true
+  run_success_case cli-change 3.0.0-beta.3 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true
 }
 
-# Verifies missing CLI assets can be uploaded to an already published package release.
+# Verifies missing Project runner assets can be uploaded to an already published package release.
 test_published_current_release_can_receive_cli_assets() {
-  run_success_case published-missing-assets 3.0.0-beta.3 push v3-beta published false cli-v3.0.0-beta.1 true true false false true false
+  run_success_case published-missing-assets 3.0.0-beta.3 push v3-beta published false uloop-project-runner-v3.0.0-beta.1 true true false false true false
 }
 
 # Verifies non-version CLI contract changes publish assets.
 test_cli_contract_change_publishes() {
-  run_success_case contract-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false true false true true
+  run_success_case contract-change 3.0.0-beta.3 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true false true false true true
 }
 
 # Verifies CLI requirement version bumps publish assets for that required tag.
 test_cli_requirement_change_publishes() {
-  run_success_case cli-requirement-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false true true true
+  run_success_case cli-requirement-change 3.0.0-beta.3 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true false false true true true
 }
 
-# Verifies CLI release metadata-only release commits still publish native CLI assets.
+# Verifies Project runner release metadata-only release commits still publish native Project runner assets.
 test_cli_release_metadata_change_publishes() {
-  run_success_case cli-release-metadata-change 3.0.0-beta.3 push v3-beta missing false cli-v3.0.0-beta.1 true false false false true true target-sha target-sha target-sha "chore: release v3-beta" "chore: release v3-beta" true false
+  run_success_case cli-release-metadata-change 3.0.0-beta.3 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true false false false true true target-sha target-sha target-sha "chore: release v3-beta" "chore: release v3-beta" true false
 }
 
-# Verifies the first CLI asset release is published when no previous asset tag exists.
+# Verifies the first Project runner asset release is published when no previous asset tag exists.
 test_missing_previous_cli_release_publishes() {
   run_success_case bootstrap 3.0.0-beta.0 push v3-beta missing false "" false false false false true true
 }
 
 # Verifies a recovered release still tags the original release PR merge commit.
 test_recovery_targets_release_commit() {
-  run_success_case recovery-target 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: follow-up change"
+  run_success_case recovery-target 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: follow-up change"
 }
 
 # Verifies grouped manifest release commits remain the recovery target.
 test_recovery_targets_grouped_release_commit() {
-  run_success_case recovery-grouped-target 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore: release v3-beta" "fix: follow-up change" false true
+  run_success_case recovery-grouped-target 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore: release v3-beta" "fix: follow-up change" false true
 }
 
-# Verifies package-only grouped release commits do not steal the CLI release target.
+# Verifies package-only grouped release commits do not steal the Project runner release target.
 test_recovery_ignores_grouped_package_only_release_commit() {
-  run_success_case recovery-grouped-package-only-target 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore: release v3-beta" false false
+  run_success_case recovery-grouped-package-only-target 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore: release v3-beta" false false
 }
 
 # Verifies recovery ignores follow-up commits that only mention the release version.
 test_recovery_ignores_non_release_subject_mentions() {
-  run_success_case recovery-non-release-subject 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: keep release 3.0.0-beta.2 on the release commit"
+  run_success_case recovery-non-release-subject 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: keep release 3.0.0-beta.2 on the release commit"
 }
 
 # Verifies recovery ignores metadata-touching commits unless their subject is a release commit.
 test_recovery_ignores_non_release_metadata_commit() {
-  run_success_case recovery-non-release-metadata 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: repair release metadata" true false
+  run_success_case recovery-non-release-metadata 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: repair release metadata" true false
 }
 
 # Verifies recovery ignores non-release subjects with a later release marker.
 test_recovery_requires_release_marker_after_scope() {
-  run_success_case recovery-scoped-marker 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta) follow-up): release 3.0.0-beta.2"
+  run_success_case recovery-scoped-marker 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta) follow-up): release 3.0.0-beta.2"
 }
 
 # Verifies version matching does not confuse beta.2 with beta.20.
 test_recovery_target_uses_exact_version_boundary() {
-  run_success_case recovery-boundary 3.0.0-beta.2 push v3-beta missing false cli-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta): release 3.0.0-beta.20"
+  run_success_case recovery-boundary 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta): release 3.0.0-beta.20"
 }
 
 # Verifies main refuses prerelease versions.

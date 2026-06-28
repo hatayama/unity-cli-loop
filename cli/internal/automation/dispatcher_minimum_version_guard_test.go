@@ -13,7 +13,7 @@ import (
 // Verifies release PRs cannot point minimumDispatcherVersion at a dispatcher tag without contract metadata.
 func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseLacksDispatcherContract_Fails(t *testing.T) {
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentCliVersion:                "3.0.0-beta.40",
+		currentProjectRunnerVersion:      "3.0.0-beta.40",
 		currentDispatcherVersion:         "1.0.1",
 		currentDispatcherContractVersion: 1,
 		minimumDispatcherVersion:         "1.0.0",
@@ -30,7 +30,7 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseLacksDispatcherContr
 // Verifies release PRs pass when the current dispatcher release itself is the minimum dispatcher version.
 func TestRunDispatcherMinimumVersionCheck_WhenMinimumIsCurrentRelease_Passes(t *testing.T) {
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentCliVersion:                "3.0.0-beta.40",
+		currentProjectRunnerVersion:      "3.0.0-beta.40",
 		currentDispatcherVersion:         "1.0.0",
 		currentDispatcherContractVersion: 1,
 		minimumDispatcherVersion:         "1.0.0",
@@ -46,7 +46,7 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumIsCurrentRelease_Passes(t *
 // Verifies committed pin files cannot drift from the C# minimum dispatcher version.
 func TestRunDispatcherMinimumVersionCheck_WhenProjectPinDiffersFromPackagePin_Fails(t *testing.T) {
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentCliVersion:                  "3.0.0-beta.40",
+		currentProjectRunnerVersion:        "3.0.0-beta.40",
 		currentDispatcherVersion:           "1.0.0",
 		currentDispatcherContractVersion:   1,
 		minimumDispatcherVersion:           "1.0.0",
@@ -56,13 +56,13 @@ func TestRunDispatcherMinimumVersionCheck_WhenProjectPinDiffersFromPackagePin_Fa
 	if result.exitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
 	}
-	assertDispatcherMinimumVersionLogContains(t, result.stderr, ".uloop/cli-pin.json minimumDispatcherVersion")
+	assertDispatcherMinimumVersionLogContains(t, result.stderr, ".uloop/project-runner-pin.json minimumDispatcherVersion")
 }
 
 // Verifies invalid dispatcher contract metadata reports the actual bad value.
 func TestRunDispatcherMinimumVersionCheck_WhenCurrentDispatcherContractIsInvalid_FailsWithValue(t *testing.T) {
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentCliVersion:                "3.0.0-beta.40",
+		currentProjectRunnerVersion:      "3.0.0-beta.40",
 		currentDispatcherVersion:         "1.0.0",
 		currentDispatcherContractVersion: 0,
 		minimumDispatcherVersion:         "1.0.0",
@@ -75,7 +75,7 @@ func TestRunDispatcherMinimumVersionCheck_WhenCurrentDispatcherContractIsInvalid
 }
 
 type dispatcherMinimumVersionCase struct {
-	currentCliVersion                  string
+	currentProjectRunnerVersion        string
 	currentDispatcherVersion           string
 	currentDispatcherContractVersion   int
 	minimumDispatcherVersion           string
@@ -138,19 +138,19 @@ func prepareDispatcherMinimumVersionFiles(t *testing.T, workDir string, testCase
 	}
 
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, cliContractFile), buildDispatcherMinimumVersionCliContract(
-		testCase.currentCliVersion))
+		testCase.currentProjectRunnerVersion))
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, dispatcherContractFile), buildDispatcherMinimumVersionContract(
 		currentDispatcherVersion,
 		testCase.currentDispatcherContractVersion))
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, protocolMinimumVersionFile), buildDispatcherMinimumVersionConstants(
 		2,
-		testCase.currentCliVersion,
+		testCase.currentProjectRunnerVersion,
 		testCase.minimumDispatcherVersion))
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, unityPackageCliPinFile), buildDispatcherMinimumVersionPin(
-		testCase.currentCliVersion,
+		testCase.currentProjectRunnerVersion,
 		testCase.minimumDispatcherVersion))
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, unityProjectCliPinFile), buildDispatcherMinimumVersionPin(
-		testCase.currentCliVersion,
+		testCase.currentProjectRunnerVersion,
 		projectMinimumDispatcherVersion))
 }
 
@@ -163,8 +163,8 @@ func writeDispatcherMinimumVersionFile(t *testing.T, path string, content string
 	writeFile(t, path, content)
 }
 
-func buildDispatcherMinimumVersionCliContract(cliVersion string) string {
-	return `{"schemaVersion":1,"protocolVersion":2,"cliVersion":"` + cliVersion + `"}`
+func buildDispatcherMinimumVersionCliContract(projectRunnerVersion string) string {
+	return `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"` + projectRunnerVersion + `"}`
 }
 
 func buildDispatcherMinimumVersionContract(dispatcherVersion string, dispatcherContractVersion int) string {
@@ -175,7 +175,7 @@ func buildDispatcherMinimumVersionContract(dispatcherVersion string, dispatcherC
 
 func buildDispatcherMinimumVersionConstants(
 	requiredProtocolVersion int,
-	minimumCliVersion string,
+	minimumProjectRunnerVersion string,
 	minimumDispatcherVersion string,
 ) string {
 	return `namespace Tests {
@@ -183,15 +183,15 @@ public static class CliConstants {
 public const int REQUIRED_CLI_PROTOCOL_VERSION = ` +
 		strconv.Itoa(requiredProtocolVersion) +
 		`;
-public const string MINIMUM_REQUIRED_CLI_VERSION = "` + minimumCliVersion + `";
+public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "` + minimumProjectRunnerVersion + `";
 public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "` + minimumDispatcherVersion + `";
 }
 }`
 }
 
-func buildDispatcherMinimumVersionPin(cliVersion string, minimumDispatcherVersion string) string {
-	return `{"schemaVersion":1,"packageName":"test.package","packageVersion":"3.0.0-beta.40","cliVersion":"` +
-		cliVersion +
+func buildDispatcherMinimumVersionPin(projectRunnerVersion string, minimumDispatcherVersion string) string {
+	return `{"schemaVersion":1,"packageName":"test.package","packageVersion":"3.0.0-beta.40","projectRunnerVersion":"` +
+		projectRunnerVersion +
 		`","requiredProtocolVersion":2,"minimumDispatcherVersion":"` +
 		minimumDispatcherVersion +
 		`"}`

@@ -958,9 +958,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 return cliReleaseTag;
             }
-            if (cliReleaseTag.StartsWith(CliConstants.CLI_RELEASE_TAG_PREFIX, StringComparison.Ordinal))
+            if (cliReleaseTag.StartsWith(CliConstants.PROJECT_RUNNER_RELEASE_TAG_PREFIX, StringComparison.Ordinal))
             {
-                return $"{CliConstants.DISPATCHER_RELEASE_TAG_PREFIX}{cliReleaseTag.Substring(CliConstants.CLI_RELEASE_TAG_PREFIX.Length)}";
+                return $"{CliConstants.DISPATCHER_RELEASE_TAG_PREFIX}{cliReleaseTag.Substring(CliConstants.PROJECT_RUNNER_RELEASE_TAG_PREFIX.Length)}";
             }
             if (cliReleaseTag.StartsWith(CliConstants.RELEASE_TAG_PREFIX, StringComparison.Ordinal))
             {

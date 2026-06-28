@@ -55,8 +55,8 @@ func NormalizeTargetVersion(value string) string {
 	if strings.HasPrefix(lower, dispatcherTagPrefix) {
 		return trimmed[len(dispatcherTagPrefix):]
 	}
-	if strings.HasPrefix(lower, cliReleaseTagPrefix) {
-		return trimmed[len(cliReleaseTagPrefix):]
+	if strings.HasPrefix(lower, projectRunnerReleaseTagPrefix) {
+		return trimmed[len(projectRunnerReleaseTagPrefix):]
 	}
 	if strings.HasPrefix(lower, "v") {
 		return trimmed[1:]

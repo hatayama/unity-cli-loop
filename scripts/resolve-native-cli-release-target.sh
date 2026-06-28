@@ -247,13 +247,13 @@ release_commit_sha_for_version() {
 
 VERSION=$(jq -r '.["cli"]' .release-please-manifest.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
-  echo "Could not resolve CLI release version from .release-please-manifest.json." >&2
+  echo "Could not resolve project runner release version from .release-please-manifest.json." >&2
   exit 1
 fi
 
-RELEASE_TAG="${INPUT_RELEASE_TAG:-cli-v$VERSION}"
+RELEASE_TAG="${INPUT_RELEASE_TAG:-uloop-project-runner-v$VERSION}"
 case "$RELEASE_TAG" in
-  cli-v[0-9]*)
+  uloop-project-runner-v[0-9]*)
     ;;
   *)
     echo "Invalid release tag: $RELEASE_TAG" >&2
@@ -322,16 +322,16 @@ elif release_is_published_with_cli_assets "$RELEASE_TAG"; then
 else
   PREVIOUS_CLI_RELEASE_TAG=$(latest_cli_asset_release_tag "$RELEASE_TAG")
   if [ -z "$PREVIOUS_CLI_RELEASE_TAG" ]; then
-    echo "No previous CLI asset release found; publishing native CLI assets." >&2
+    echo "No previous project runner asset release found; publishing native project runner assets." >&2
     SHOULD_PUBLISH=true
   elif release_commit_updates_cli_version "$RELEASE_TARGET_SHA" "$VERSION"; then
-    echo "CLI release metadata changed in $RELEASE_TARGET_SHA; publishing native CLI assets." >&2
+    echo "Project runner release metadata changed in $RELEASE_TARGET_SHA; publishing native project runner assets." >&2
     SHOULD_PUBLISH=true
   elif cli_release_inputs_changed "$PREVIOUS_CLI_RELEASE_TAG" "$TARGET_SHA"; then
-    echo "CLI release inputs changed since $PREVIOUS_CLI_RELEASE_TAG; publishing native CLI assets." >&2
+    echo "Project runner release inputs changed since $PREVIOUS_CLI_RELEASE_TAG; publishing native project runner assets." >&2
     SHOULD_PUBLISH=true
   else
-    echo "CLI release inputs are unchanged since $PREVIOUS_CLI_RELEASE_TAG; skipping native CLI publish." >&2
+    echo "Project runner release inputs are unchanged since $PREVIOUS_CLI_RELEASE_TAG; skipping native CLI publish." >&2
   fi
 fi
 

@@ -36,7 +36,7 @@ func readInstalledDispatcherVersion(ctx context.Context) (string, error) {
 	if updatedVersion == "" {
 		return "", errors.New("updated dispatcher version is empty")
 	}
-	if err := validateDispatcherCLIVersion(updatedVersion); err != nil {
+	if err := validateDispatcherProjectRunnerVersion(updatedVersion); err != nil {
 		return "", err
 	}
 	return updatedVersion, nil

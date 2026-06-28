@@ -8,8 +8,8 @@ import (
 )
 
 func TestCliContractProvidesRuntimeVersion(t *testing.T) {
-	// Verifies that the native CLI owns its runtime version from the single CLI module.
-	requireValidContractVersion(t, "cliVersion", Current.CliVersion)
+	// Verifies that the project runner owns its runtime version from the single CLI module.
+	requireValidContractVersion(t, "projectRunnerVersion", Current.ProjectRunnerVersion)
 }
 
 func TestCliContractProvidesProtocolVersion(t *testing.T) {
@@ -41,7 +41,7 @@ func TestCliContractDoesNotDeclareDispatcherReleaseFields(t *testing.T) {
 func TestDispatcherContractDoesNotDeclareCliReleaseFields(t *testing.T) {
 	// Verifies dispatcher releases stay independent from project-local CLI release metadata.
 	fields := requireContractFieldMap(t, dispatcherContractFileName)
-	requireContractFieldMissing(t, fields, "cliVersion")
+	requireContractFieldMissing(t, fields, "projectRunnerVersion")
 	requireContractFieldMissing(t, fields, "protocolVersion")
 }
 

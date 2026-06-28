@@ -26,13 +26,13 @@ printf '%s\n' "$*" >> "$GH_LOG"
 asset_json() {
   case "${CLI_RELEASE_ASSETS:-complete}" in
     complete)
-      printf '[{"name":"uloop-cli-darwin-amd64.tar.gz","size":1},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1},{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]'
+      printf '[{"name":"uloop-project-runner-darwin-amd64.tar.gz","size":1},{"name":"uloop-project-runner-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-windows-amd64.zip","size":1},{"name":"uloop-project-runner-windows-amd64.zip.sha256","size":1}]'
       ;;
     missing)
       printf '[]'
       ;;
     empty)
-      printf '[{"name":"uloop-cli-darwin-amd64.tar.gz","size":0},{"name":"uloop-cli-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz","size":1},{"name":"uloop-cli-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-cli-windows-amd64.zip","size":1},{"name":"uloop-cli-windows-amd64.zip.sha256","size":1},{"name":"uloop-darwin-amd64.tar.gz","size":1},{"name":"uloop-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-darwin-arm64.tar.gz","size":1},{"name":"uloop-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-windows-amd64.zip","size":1},{"name":"uloop-windows-amd64.zip.sha256","size":1}]'
+      printf '[{"name":"uloop-project-runner-darwin-amd64.tar.gz","size":0},{"name":"uloop-project-runner-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz","size":1},{"name":"uloop-project-runner-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-project-runner-windows-amd64.zip","size":1},{"name":"uloop-project-runner-windows-amd64.zip.sha256","size":1}]'
       ;;
   esac
 }
@@ -50,7 +50,7 @@ dispatcher_asset_json() {
 
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
-  if [ "$tag" = "${CLI_RELEASE_TAG:-cli-v3.0.0-beta.6}" ]; then
+  if [ "$tag" = "${CLI_RELEASE_TAG:-uloop-project-runner-v3.0.0-beta.6}" ]; then
     if [ -n "${CLI_RELEASE_READY_AFTER_ATTEMPTS:-}" ]; then
       attempt_file="$GH_LOG.cli-release-attempts"
       attempt=1
@@ -177,7 +177,7 @@ write_release_files() {
       "changelog-path": "Packages/src/CHANGELOG.md"
     },
     "cli": {
-      "component": "cli",
+      "component": "uloop-project-runner",
       "release-type": "go",
       "include-v-in-tag": true,
       "include-component-in-tag": true,
@@ -194,12 +194,12 @@ EOF_CONFIG
 }
 EOF_MANIFEST
 
-  cat > Packages/src/cli-pin.json <<EOF_PIN
+  cat > Packages/src/project-runner-pin.json <<EOF_PIN
 {
   "schemaVersion": 1,
   "packageName": "test.package",
   "packageVersion": "$version",
-  "cliVersion": "$version",
+  "projectRunnerVersion": "$version",
   "requiredProtocolVersion": 2,
   "minimumDispatcherVersion": "3.0.0"
 }
@@ -222,7 +222,7 @@ EOF_CHANGELOG
 
 ### Bug Fixes
 
-* keep the CLI release baseline available
+* keep the Project runner release baseline available
 EOF_CLI_CHANGELOG
 
   cat > scripts/verify-native-cli-release-assets.sh <<'EOF_VERIFY'
@@ -231,18 +231,12 @@ set -eu
 
 if [ "${1:-}" = "--list" ]; then
   printf '%s\n' \
-    uloop-cli-darwin-amd64.tar.gz \
-    uloop-cli-darwin-amd64.tar.gz.sha256 \
-    uloop-cli-darwin-arm64.tar.gz \
-    uloop-cli-darwin-arm64.tar.gz.sha256 \
-    uloop-cli-windows-amd64.zip \
-    uloop-cli-windows-amd64.zip.sha256 \
-    uloop-darwin-amd64.tar.gz \
-    uloop-darwin-amd64.tar.gz.sha256 \
-    uloop-darwin-arm64.tar.gz \
-    uloop-darwin-arm64.tar.gz.sha256 \
-    uloop-windows-amd64.zip \
-    uloop-windows-amd64.zip.sha256
+    uloop-project-runner-darwin-amd64.tar.gz \
+    uloop-project-runner-darwin-amd64.tar.gz.sha256 \
+    uloop-project-runner-darwin-arm64.tar.gz \
+    uloop-project-runner-darwin-arm64.tar.gz.sha256 \
+    uloop-project-runner-windows-amd64.zip \
+    uloop-project-runner-windows-amd64.zip.sha256
   exit 0
 fi
 
@@ -294,7 +288,7 @@ create_release_repo() {
     write_release_files 3.0.0-beta.6
     git add .
     git commit -q -m "chore: release v3-beta"
-    git tag cli-v3.0.0-beta.6
+    git tag uloop-project-runner-v3.0.0-beta.6
     git rev-parse HEAD > "$work_dir/release-sha.txt"
 
     printf '%s\n' "follow-up" > follow-up.txt
@@ -315,7 +309,7 @@ prepare_origin_branch() {
   (
     cd "$work_dir"
     git remote add origin "$remote_dir"
-    git push -q origin "$commit_sha:refs/heads/$branch_name" refs/tags/cli-v3.0.0-beta.6
+    git push -q origin "$commit_sha:refs/heads/$branch_name" refs/tags/uloop-project-runner-v3.0.0-beta.6
   )
 }
 
@@ -370,7 +364,7 @@ run_sync() {
     EXISTING_RELEASE_TARGET="$existing_target" \
     CLI_RELEASE_STATE="$cli_release_state" \
     CLI_RELEASE_ASSETS="$cli_release_assets" \
-    CLI_RELEASE_TAG="${CLI_RELEASE_TAG:-cli-v3.0.0-beta.6}" \
+    CLI_RELEASE_TAG="${CLI_RELEASE_TAG:-uloop-project-runner-v3.0.0-beta.6}" \
     CLI_RELEASE_WAIT_TIMEOUT_SECONDS="$cli_release_wait_timeout" \
     CLI_RELEASE_WAIT_INTERVAL_SECONDS="$cli_release_wait_interval" \
     CLI_RELEASE_READY_AFTER_ATTEMPTS="$cli_release_ready_after_attempts" \
@@ -395,7 +389,7 @@ test_creates_missing_root_release_from_release_commit() {
   assert_contains "$work_dir/gh.log" "release view v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
   assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
   assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
-  assert_contains "$work_dir/gh.log" "release view cli-v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish,assets"
+  assert_contains "$work_dir/gh.log" "release view uloop-project-runner-v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish,assets"
   assert_contains "$work_dir/go.log" "run ./cmd/check-protocol-minimum-version --verify-release --ref $release_sha"
   assert_contains "$work_dir/github-output.txt" "ready=true"
 }
@@ -442,7 +436,7 @@ test_existing_draft_root_release_without_release_commit_fails() {
     write_release_files 3.0.0-beta.7
   )
 
-  if CLI_RELEASE_TAG=cli-v3.0.0-beta.7 run_sync "$work_dir" v3.0.0-beta.7 true "manual-release-target"; then
+  if CLI_RELEASE_TAG=uloop-project-runner-v3.0.0-beta.7 run_sync "$work_dir" v3.0.0-beta.7 true "manual-release-target"; then
     echo "Expected draft release without a release commit to fail." >&2
     exit 1
   fi
@@ -451,24 +445,24 @@ test_existing_draft_root_release_without_release_commit_fails() {
   assert_not_contains "$work_dir/gh.log" "release edit v3.0.0-beta.7"
 }
 
-# Verifies package releases wait until the matching CLI release is public.
+# Verifies package releases wait until the matching Project runner release is public.
 test_waits_for_cli_release_before_creating_root_release() {
   work_dir=$(create_release_repo waits-for-cli)
 
   run_sync "$work_dir" "" false "" missing
 
-  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published with complete assets; package release sync will wait."
+  assert_contains "$work_dir/output.txt" "Project runner release uloop-project-runner-v3.0.0-beta.6 is not published with complete assets; package release sync will wait."
   assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
   assert_contains "$work_dir/github-output.txt" "ready=false"
 }
 
-# Verifies package releases wait until the matching CLI release has all native assets.
+# Verifies package releases wait until the matching Project runner release has all native assets.
 test_waits_for_cli_assets_before_creating_root_release() {
   work_dir=$(create_release_repo waits-for-cli-assets)
 
   run_sync "$work_dir" "" false "" published missing
 
-  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published with complete assets; package release sync will wait."
+  assert_contains "$work_dir/output.txt" "Project runner release uloop-project-runner-v3.0.0-beta.6 is not published with complete assets; package release sync will wait."
   assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
   assert_contains "$work_dir/github-output.txt" "ready=false"
 }
@@ -495,16 +489,16 @@ test_waits_when_dispatcher_asset_list_fails() {
   assert_contains "$work_dir/github-output.txt" "ready=false"
 }
 
-# Verifies the release sync waits for a concurrently publishing CLI release before creating package releases.
+# Verifies the release sync waits for a concurrently publishing Project runner release before creating package releases.
 test_retries_until_cli_assets_are_ready() {
   work_dir=$(create_release_repo retries-until-cli-ready)
   release_sha=$(cat "$work_dir/release-sha.txt")
 
   run_sync "$work_dir" "" false "" published complete 3 0 3
 
-  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is not published with complete assets yet; waiting 1s before retry."
+  assert_contains "$work_dir/output.txt" "Project runner release uloop-project-runner-v3.0.0-beta.6 is not published with complete assets yet; waiting 1s before retry."
   assert_contains "$work_dir/sleep.log" "1"
-  assert_contains "$work_dir/output.txt" "CLI release cli-v3.0.0-beta.6 is now published with complete assets."
+  assert_contains "$work_dir/output.txt" "Project runner release uloop-project-runner-v3.0.0-beta.6 is now published with complete assets."
   assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
   assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
   assert_contains "$work_dir/github-output.txt" "ready=true"

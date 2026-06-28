@@ -24,8 +24,8 @@ import (
 var dispatcherHTTPClient = &http.Client{Timeout: 2 * time.Minute}
 
 func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.Writer) (string, error) {
-	pin.CLIVersion = strings.TrimSpace(pin.CLIVersion)
-	if err := validateDispatcherCLIVersion(pin.CLIVersion); err != nil {
+	pin.ProjectRunnerVersion = strings.TrimSpace(pin.ProjectRunnerVersion)
+	if err := validateDispatcherProjectRunnerVersion(pin.ProjectRunnerVersion); err != nil {
 		return "", err
 	}
 	if siblingPath, ok := dispatcherSiblingRealCLIPath(pin); ok {
@@ -36,16 +36,16 @@ func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.
 	if err != nil {
 		return "", err
 	}
-	realCLIPath := dispatcherCachedRealCLIPath(cacheRoot, pin.CLIVersion, runtime.GOOS, runtime.GOARCH)
+	realCLIPath := dispatcherCachedRealCLIPath(cacheRoot, pin.ProjectRunnerVersion, runtime.GOOS, runtime.GOARCH)
 	if isExecutableFile(realCLIPath) {
 		return realCLIPath, nil
 	}
 
-	return downloadDispatcherRealCLI(ctx, cacheRoot, pin.CLIVersion, runtime.GOOS, runtime.GOARCH, stderr)
+	return downloadDispatcherRealCLI(ctx, cacheRoot, pin.ProjectRunnerVersion, runtime.GOOS, runtime.GOARCH, stderr)
 }
 
 func dispatcherSiblingRealCLIPath(pin dispatcherPin) (string, bool) {
-	if pin.CLIVersion != version {
+	if pin.ProjectRunnerVersion != version {
 		return "", false
 	}
 	executablePath, err := os.Executable()
@@ -91,11 +91,11 @@ func dispatcherCacheRoot(goos string) (string, error) {
 	}
 }
 
-func dispatcherCachedRealCLIPath(cacheRoot string, cliVersion string, goos string, goarch string) string {
+func dispatcherCachedRealCLIPath(cacheRoot string, projectRunnerVersion string, goos string, goarch string) string {
 	return filepath.Join(
 		cacheRoot,
 		dispatcherVersionsDirectoryName,
-		cliVersion,
+		projectRunnerVersion,
 		dispatcherPlatformName(goos, goarch),
 		dispatcherRealCLIFileName(goos))
 }
@@ -122,12 +122,12 @@ func isExecutableFile(filePath string) bool {
 	return info.Mode()&0o111 != 0
 }
 
-func downloadDispatcherRealCLI(ctx context.Context, cacheRoot string, cliVersion string, goos string, goarch string, stderr io.Writer) (string, error) {
+func downloadDispatcherRealCLI(ctx context.Context, cacheRoot string, projectRunnerVersion string, goos string, goarch string, stderr io.Writer) (string, error) {
 	assetName, err := dispatcherReleaseAssetName(goos, goarch)
 	if err != nil {
 		return "", err
 	}
-	realCLIPath := dispatcherCachedRealCLIPath(cacheRoot, cliVersion, goos, goarch)
+	realCLIPath := dispatcherCachedRealCLIPath(cacheRoot, projectRunnerVersion, goos, goarch)
 	if err := os.MkdirAll(filepath.Dir(realCLIPath), 0o755); err != nil {
 		return "", err
 	}
@@ -142,8 +142,8 @@ func downloadDispatcherRealCLI(ctx context.Context, cacheRoot string, cliVersion
 
 	archivePath := filepath.Join(tempDir, assetName)
 	checksumPath := archivePath + ".sha256"
-	assetURL := dispatcherReleaseAssetURL(cliVersion, assetName)
-	writeFormat(stderr, "uloop: downloading pinned CLI %s for %s...\n", cliVersion, dispatcherPlatformName(goos, goarch))
+	assetURL := dispatcherReleaseAssetURL(projectRunnerVersion, assetName)
+	writeFormat(stderr, "uloop: downloading pinned project runner %s for %s...\n", projectRunnerVersion, dispatcherPlatformName(goos, goarch))
 	if err := downloadDispatcherFile(ctx, assetURL, archivePath); err != nil {
 		return "", err
 	}
@@ -189,19 +189,19 @@ func dispatcherReleaseAssetName(goos string, goarch string) (string, error) {
 		if goarch != "arm64" && goarch != "amd64" {
 			return "", fmt.Errorf("unsupported darwin architecture: %s", goarch)
 		}
-		return "uloop-cli-darwin-" + goarch + ".tar.gz", nil
+		return "uloop-project-runner-darwin-" + goarch + ".tar.gz", nil
 	case "windows":
 		if goarch != "amd64" {
 			return "", fmt.Errorf("unsupported windows architecture: %s", goarch)
 		}
-		return "uloop-cli-windows-amd64.zip", nil
+		return "uloop-project-runner-windows-amd64.zip", nil
 	default:
 		return "", fmt.Errorf("unsupported platform: %s-%s", goos, goarch)
 	}
 }
 
-func dispatcherReleaseAssetURL(cliVersion string, assetName string) string {
-	return dispatcherReleaseBaseURL + "/" + sharedupdate.CLIReleaseTag(cliVersion) + "/" + assetName
+func dispatcherReleaseAssetURL(projectRunnerVersion string, assetName string) string {
+	return dispatcherReleaseBaseURL + "/" + sharedupdate.ProjectRunnerReleaseTag(projectRunnerVersion) + "/" + assetName
 }
 
 func downloadDispatcherFile(ctx context.Context, url string, destinationPath string) error {
