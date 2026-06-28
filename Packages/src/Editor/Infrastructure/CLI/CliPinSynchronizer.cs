@@ -48,15 +48,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            bool projectRunnerPinChanged = SyncProjectPinFileByName(
+            return SyncProjectPinFileByName(
                 packageRoot,
                 projectRoot,
                 UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
-            bool legacyCliPinChanged = SyncProjectPinFileByName(
-                packageRoot,
-                projectRoot,
-                UnityCliLoopConstants.ULOOP_LEGACY_CLI_PIN_FILE_NAME);
-            return projectRunnerPinChanged || legacyCliPinChanged;
         }
 
         private static bool SyncProjectPinFileByName(string packageRoot, string projectRoot, string pinFileName)

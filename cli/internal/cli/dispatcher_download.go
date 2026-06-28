@@ -36,7 +36,7 @@ func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.
 	if err != nil {
 		return "", err
 	}
-	realCLIPath := dispatcherCachedRealCLIPathForPin(cacheRoot, pin, runtime.GOOS, runtime.GOARCH)
+	realCLIPath := dispatcherCachedRealCLIPath(cacheRoot, pin.ProjectRunnerVersion, runtime.GOOS, runtime.GOARCH)
 	if isExecutableFile(realCLIPath) {
 		return realCLIPath, nil
 	}
@@ -45,9 +45,6 @@ func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.
 }
 
 func dispatcherSiblingRealCLIPath(pin dispatcherPin) (string, bool) {
-	if pin.LegacyRelease {
-		return "", false
-	}
 	if pin.ProjectRunnerVersion != version {
 		return "", false
 	}
@@ -95,23 +92,12 @@ func dispatcherCacheRoot(goos string) (string, error) {
 }
 
 func dispatcherCachedRealCLIPath(cacheRoot string, projectRunnerVersion string, goos string, goarch string) string {
-	return dispatcherCachedRealCLIPathForPin(cacheRoot, dispatcherPin{ProjectRunnerVersion: projectRunnerVersion}, goos, goarch)
-}
-
-func dispatcherCachedRealCLIPathForPin(cacheRoot string, pin dispatcherPin, goos string, goarch string) string {
 	return filepath.Join(
 		cacheRoot,
 		dispatcherVersionsDirectoryName,
-		dispatcherCacheVersionDirectoryName(pin),
+		projectRunnerVersion,
 		dispatcherPlatformName(goos, goarch),
 		dispatcherRealCLIFileName(goos))
-}
-
-func dispatcherCacheVersionDirectoryName(pin dispatcherPin) string {
-	if pin.LegacyRelease {
-		return dispatcherLegacyReleaseTagPrefix + pin.ProjectRunnerVersion
-	}
-	return pin.ProjectRunnerVersion
 }
 
 func dispatcherPlatformName(goos string, goarch string) string {
@@ -147,11 +133,11 @@ func downloadDispatcherRealCLI(ctx context.Context, cacheRoot string, projectRun
 }
 
 func downloadDispatcherRealCLIForPin(ctx context.Context, cacheRoot string, pin dispatcherPin, goos string, goarch string, stderr io.Writer) (string, error) {
-	assetName, err := dispatcherReleaseAssetNameForPin(goos, goarch, pin)
+	assetName, err := dispatcherReleaseAssetName(goos, goarch)
 	if err != nil {
 		return "", err
 	}
-	realCLIPath := dispatcherCachedRealCLIPathForPin(cacheRoot, pin, goos, goarch)
+	realCLIPath := dispatcherCachedRealCLIPath(cacheRoot, pin.ProjectRunnerVersion, goos, goarch)
 	if err := os.MkdirAll(filepath.Dir(realCLIPath), 0o755); err != nil {
 		return "", err
 	}
@@ -166,7 +152,7 @@ func downloadDispatcherRealCLIForPin(ctx context.Context, cacheRoot string, pin 
 
 	archivePath := filepath.Join(tempDir, assetName)
 	checksumPath := archivePath + ".sha256"
-	assetURL := dispatcherReleaseAssetURLForPin(pin, assetName)
+	assetURL := dispatcherReleaseAssetURL(pin.ProjectRunnerVersion, assetName)
 	writeFormat(stderr, "uloop: downloading pinned project runner %s for %s...\n", pin.ProjectRunnerVersion, dispatcherPlatformName(goos, goarch))
 	if err := downloadDispatcherFile(ctx, assetURL, archivePath); err != nil {
 		return "", err
@@ -179,7 +165,7 @@ func downloadDispatcherRealCLIForPin(ctx context.Context, cacheRoot string, pin 
 	}
 
 	tempRealCLIPath := filepath.Join(tempDir, dispatcherRealCLIFileName(goos))
-	if err := extractDispatcherRealCLIForPin(archivePath, assetName, tempRealCLIPath, goos, pin); err != nil {
+	if err := extractDispatcherRealCLI(archivePath, assetName, tempRealCLIPath, goos); err != nil {
 		return "", err
 	}
 	if err := os.Chmod(tempRealCLIPath, 0o755); err != nil {
@@ -208,14 +194,7 @@ func installDownloadedDispatcherRealCLI(tempRealCLIPath string, realCLIPath stri
 }
 
 func dispatcherReleaseAssetName(goos string, goarch string) (string, error) {
-	return dispatcherReleaseAssetNameForPin(goos, goarch, dispatcherPin{})
-}
-
-func dispatcherReleaseAssetNameForPin(goos string, goarch string, pin dispatcherPin) (string, error) {
 	assetPrefix := "uloop-project-runner"
-	if pin.LegacyRelease {
-		assetPrefix = "uloop-cli"
-	}
 	switch goos {
 	case "darwin":
 		if goarch != "arm64" && goarch != "amd64" {
@@ -234,13 +213,6 @@ func dispatcherReleaseAssetNameForPin(goos string, goarch string, pin dispatcher
 
 func dispatcherReleaseAssetURL(projectRunnerVersion string, assetName string) string {
 	return dispatcherReleaseBaseURL + "/" + sharedupdate.ProjectRunnerReleaseTag(projectRunnerVersion) + "/" + assetName
-}
-
-func dispatcherReleaseAssetURLForPin(pin dispatcherPin, assetName string) string {
-	if pin.LegacyRelease {
-		return dispatcherReleaseBaseURL + "/" + dispatcherLegacyReleaseTagPrefix + pin.ProjectRunnerVersion + "/" + assetName
-	}
-	return dispatcherReleaseAssetURL(pin.ProjectRunnerVersion, assetName)
 }
 
 func downloadDispatcherFile(ctx context.Context, url string, destinationPath string) error {
@@ -301,18 +273,14 @@ func verifyDispatcherChecksum(assetPath string, checksumPath string) error {
 }
 
 func extractDispatcherRealCLI(archivePath string, assetName string, destinationPath string, goos string) error {
-	return extractDispatcherRealCLIForPin(archivePath, assetName, destinationPath, goos, dispatcherPin{})
-}
-
-func extractDispatcherRealCLIForPin(archivePath string, assetName string, destinationPath string, goos string, pin dispatcherPin) error {
 	if strings.HasSuffix(assetName, ".zip") {
-		return extractDispatcherRealCLIFromZipForPin(archivePath, destinationPath, goos, pin)
+		return extractDispatcherRealCLIFromZip(archivePath, destinationPath, goos)
 	}
-	return extractDispatcherRealCLIFromTarGzForPin(archivePath, destinationPath, goos, pin)
+	return extractDispatcherRealCLIFromTarGz(archivePath, destinationPath, goos)
 }
 
-func extractDispatcherRealCLIFromTarGzForPin(archivePath string, destinationPath string, goos string, pin dispatcherPin) error {
-	entryFileName := dispatcherArchiveCLIFileName(goos, pin)
+func extractDispatcherRealCLIFromTarGz(archivePath string, destinationPath string, goos string) error {
+	entryFileName := dispatcherRealCLIFileName(goos)
 	found, err := extractDispatcherCLIFromTarGzEntry(archivePath, destinationPath, entryFileName)
 	if err != nil || found {
 		return err
@@ -355,7 +323,7 @@ func extractDispatcherCLIFromTarGzEntry(archivePath string, destinationPath stri
 	return false, nil
 }
 
-func extractDispatcherRealCLIFromZipForPin(archivePath string, destinationPath string, goos string, pin dispatcherPin) error {
+func extractDispatcherRealCLIFromZip(archivePath string, destinationPath string, goos string) error {
 	reader, err := zip.OpenReader(archivePath)
 	if err != nil {
 		return err
@@ -363,22 +331,12 @@ func extractDispatcherRealCLIFromZipForPin(archivePath string, destinationPath s
 	defer func() {
 		_ = reader.Close()
 	}()
-	entryFileName := dispatcherArchiveCLIFileName(goos, pin)
+	entryFileName := dispatcherRealCLIFileName(goos)
 	found, err := extractDispatcherCLIFromZipEntry(reader, destinationPath, entryFileName)
 	if err != nil || found {
 		return err
 	}
 	return fmt.Errorf("archive does not contain %s", entryFileName)
-}
-
-func dispatcherArchiveCLIFileName(goos string, pin dispatcherPin) string {
-	if pin.LegacyRelease {
-		if goos == "windows" {
-			return dispatcherLegacyCLIWindowsFileName
-		}
-		return dispatcherLegacyCLIUnixFileName
-	}
-	return dispatcherRealCLIFileName(goos)
 }
 
 func extractDispatcherCLIFromZipEntry(reader *zip.ReadCloser, destinationPath string, entryFileName string) (bool, error) {

@@ -436,67 +436,6 @@ func TestDownloadDispatcherRealCLIWritesDownloadStatus(t *testing.T) {
 	assertFileContent(t, realCLIPath, "real")
 }
 
-func TestDownloadDispatcherRealCLIUsesLegacyReleaseAssets(t *testing.T) {
-	// Verifies legacy project pins download the old cli-v release assets and install them under the runner cache path.
-	tempDir := t.TempDir()
-	archivePath := filepath.Join(tempDir, "uloop-cli-darwin-arm64.tar.gz")
-	writeDispatcherTarGzArchive(t, archivePath, []dispatcherArchiveTestEntry{
-		{Name: "uloop-cli", Content: "legacy real"},
-	})
-	archiveContent, err := os.ReadFile(archivePath)
-	if err != nil {
-		t.Fatalf("failed to read archive: %v", err)
-	}
-	checksum := sha256.Sum256(archiveContent)
-	checksumContent := []byte(hex.EncodeToString(checksum[:]) + "  " + filepath.Base(archivePath) + "\n")
-
-	previousHTTPClient := dispatcherHTTPClient
-	defer func() {
-		dispatcherHTTPClient = previousHTTPClient
-	}()
-	requestPaths := []string{}
-	dispatcherHTTPClient = &http.Client{
-		Transport: dispatcherRoundTripFunc(func(request *http.Request) (*http.Response, error) {
-			requestPaths = append(requestPaths, request.URL.Path)
-			content := []byte{}
-			statusCode := http.StatusNotFound
-			if strings.HasSuffix(request.URL.Path, "/cli-v3.0.0-beta.88/uloop-cli-darwin-arm64.tar.gz") {
-				content = archiveContent
-				statusCode = http.StatusOK
-			}
-			if strings.HasSuffix(request.URL.Path, "/cli-v3.0.0-beta.88/uloop-cli-darwin-arm64.tar.gz.sha256") {
-				content = checksumContent
-				statusCode = http.StatusOK
-			}
-			return &http.Response{
-				StatusCode: statusCode,
-				Status:     http.StatusText(statusCode),
-				Body:       io.NopCloser(bytes.NewReader(content)),
-			}, nil
-		}),
-	}
-
-	var stderr bytes.Buffer
-	pin := dispatcherPin{ProjectRunnerVersion: "3.0.0-beta.88", LegacyRelease: true}
-	realCLIPath, err := downloadDispatcherRealCLIForPin(
-		context.Background(),
-		t.TempDir(),
-		pin,
-		"darwin",
-		"arm64",
-		&stderr)
-	if err != nil {
-		t.Fatalf("downloadDispatcherRealCLIForPin failed: %v", err)
-	}
-	if !strings.Contains(strings.Join(requestPaths, "\n"), "/cli-v3.0.0-beta.88/uloop-cli-darwin-arm64.tar.gz") {
-		t.Fatalf("legacy asset URL was not requested: %v", requestPaths)
-	}
-	if !strings.Contains(realCLIPath, filepath.Join(dispatcherVersionsDirectoryName, "cli-v3.0.0-beta.88")) {
-		t.Fatalf("legacy cache path should include tag namespace: %s", realCLIPath)
-	}
-	assertFileContent(t, realCLIPath, "legacy real")
-}
-
 func TestInstallDownloadedDispatcherRealCLIKeepsExistingExecutable(t *testing.T) {
 	// Verifies concurrent downloads do not delete an executable another dispatcher already cached.
 	tempDir := t.TempDir()
@@ -534,30 +473,6 @@ func TestLoadDispatcherPinFallsBackToPackagePin(t *testing.T) {
 	}
 	if pin.ProjectRunnerVersion != "3.0.0-beta.55" {
 		t.Fatalf("projectRunnerVersion mismatch: %s", pin.ProjectRunnerVersion)
-	}
-}
-
-func TestLoadDispatcherPinReadsLegacyProjectPin(t *testing.T) {
-	// Verifies existing v3-beta project pins remain readable after the project runner pin rename.
-	projectRoot := createDispatcherUnityProject(t)
-	pinPath := filepath.Join(projectRoot, dispatcherLegacyProjectPinRelativePath)
-	if err := os.MkdirAll(filepath.Dir(pinPath), 0o755); err != nil {
-		t.Fatalf("failed to create pin directory: %v", err)
-	}
-	content := `{"schemaVersion":1,"packageName":"io.github.hatayama.uloopmcp","packageVersion":"3.0.0-beta.1","cliVersion":"3.0.0-beta.55","requiredProtocolVersion":2,"minimumDispatcherVersion":"3.0.1-beta.2"}`
-	if err := os.WriteFile(pinPath, []byte(content), 0o644); err != nil {
-		t.Fatalf("failed to write legacy pin: %v", err)
-	}
-
-	pin, err := loadDispatcherPin(projectRoot)
-	if err != nil {
-		t.Fatalf("loadDispatcherPin failed: %v", err)
-	}
-	if pin.ProjectRunnerVersion != "3.0.0-beta.55" {
-		t.Fatalf("projectRunnerVersion mismatch: %s", pin.ProjectRunnerVersion)
-	}
-	if !pin.LegacyRelease {
-		t.Fatal("expected legacy release pin")
 	}
 }
 
@@ -659,32 +574,6 @@ public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "1.0.0";`
 	}
 	if pin.MinimumDispatcherVersion != "1.0.0" {
 		t.Fatalf("minimumDispatcherVersion mismatch: %s", pin.MinimumDispatcherVersion)
-	}
-}
-
-func TestLoadDispatcherPinFallsBackToLegacyCliConstants(t *testing.T) {
-	// Verifies package constants from before the project runner rename still resolve the pinned release.
-	projectRoot := createDispatcherUnityProject(t)
-	constantsPath := filepath.Join(projectRoot, "Packages", "src", "Editor", "Domain", "CliConstants.cs")
-	if err := os.MkdirAll(filepath.Dir(constantsPath), 0o755); err != nil {
-		t.Fatalf("failed to create constants directory: %v", err)
-	}
-	content := `public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
-public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.56";
-public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "1.0.0";`
-	if err := os.WriteFile(constantsPath, []byte(content), 0o644); err != nil {
-		t.Fatalf("failed to write constants: %v", err)
-	}
-
-	pin, err := loadDispatcherPin(projectRoot)
-	if err != nil {
-		t.Fatalf("loadDispatcherPin failed: %v", err)
-	}
-	if pin.ProjectRunnerVersion != "3.0.0-beta.56" {
-		t.Fatalf("projectRunnerVersion mismatch: %s", pin.ProjectRunnerVersion)
-	}
-	if !pin.LegacyRelease {
-		t.Fatal("expected legacy release constants")
 	}
 }
 

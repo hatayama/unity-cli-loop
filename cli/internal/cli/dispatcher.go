@@ -18,24 +18,19 @@ import (
 )
 
 const (
-	dispatcherCacheDirEnvName              = "ULOOP_CACHE_DIR"
-	dispatcherDisableSelfUpdateEnvName     = "ULOOP_DISABLE_SELF_UPDATE"
-	dispatcherCacheDirectoryName           = "uloop"
-	dispatcherVersionsDirectoryName        = "versions"
-	dispatcherUpdateStateFileName          = "dispatcher-update.json"
-	dispatcherProjectPinRelativePath       = ".uloop/project-runner-pin.json"
-	dispatcherLegacyProjectPinRelativePath = ".uloop/cli-pin.json"
-	dispatcherPackagePinFileName           = "project-runner-pin.json"
-	dispatcherLegacyPackagePinFileName     = "cli-pin.json"
-	dispatcherUnityPackageName             = "io.github.hatayama.uloopmcp"
-	dispatcherRealCLIUnixFileName          = "uloop-project-runner"
-	dispatcherRealCLIWindowsFileName       = "uloop-project-runner.exe"
-	dispatcherLegacyCLIUnixFileName        = "uloop-cli"
-	dispatcherLegacyCLIWindowsFileName     = "uloop-cli.exe"
-	dispatcherLegacyReleaseTagPrefix       = "cli-v"
-	dispatcherReleaseRepository            = "hatayama/unity-cli-loop"
-	dispatcherReleaseBaseURL               = "https://github.com/" + dispatcherReleaseRepository + "/releases/download"
-	dispatcherSelfUpdateInterval           = 24 * time.Hour
+	dispatcherCacheDirEnvName          = "ULOOP_CACHE_DIR"
+	dispatcherDisableSelfUpdateEnvName = "ULOOP_DISABLE_SELF_UPDATE"
+	dispatcherCacheDirectoryName       = "uloop"
+	dispatcherVersionsDirectoryName    = "versions"
+	dispatcherUpdateStateFileName      = "dispatcher-update.json"
+	dispatcherProjectPinRelativePath   = ".uloop/project-runner-pin.json"
+	dispatcherPackagePinFileName       = "project-runner-pin.json"
+	dispatcherUnityPackageName         = "io.github.hatayama.uloopmcp"
+	dispatcherRealCLIUnixFileName      = "uloop-project-runner"
+	dispatcherRealCLIWindowsFileName   = "uloop-project-runner.exe"
+	dispatcherReleaseRepository        = "hatayama/unity-cli-loop"
+	dispatcherReleaseBaseURL           = "https://github.com/" + dispatcherReleaseRepository + "/releases/download"
+	dispatcherSelfUpdateInterval       = 24 * time.Hour
 )
 
 var (

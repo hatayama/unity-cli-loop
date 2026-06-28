@@ -15,31 +15,22 @@ import (
 )
 
 const (
-	protocolMinimumVersionFile          = "Packages/src/Editor/Domain/CliConstants.cs"
-	protocolMinimumVersionMarker        = "<!-- uloop-protocol-minimum-version-warning -->"
-	projectRunnerReleaseTagPrefix       = "uloop-project-runner-v"
-	legacyProjectRunnerReleaseTagPrefix = "cli-v"
+	protocolMinimumVersionFile    = "Packages/src/Editor/Domain/CliConstants.cs"
+	protocolMinimumVersionMarker  = "<!-- uloop-protocol-minimum-version-warning -->"
+	projectRunnerReleaseTagPrefix = "uloop-project-runner-v"
 )
 
 var (
-	requiredProtocolVersionPattern           = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
-	minimumProjectRunnerVersionPattern       = regexp.MustCompile(`MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION\s*=\s*"([^"]+)"`)
-	legacyMinimumProjectRunnerVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
-	requiredMinimumProjectRunnerAssets       = []string{
+	requiredProtocolVersionPattern              = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
+	minimumProjectRunnerVersionPattern          = regexp.MustCompile(`MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION\s*=\s*"([^"]+)"`)
+	preRenameMinimumProjectRunnerVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
+	requiredMinimumProjectRunnerAssets          = []string{
 		"uloop-project-runner-darwin-amd64.tar.gz",
 		"uloop-project-runner-darwin-amd64.tar.gz.sha256",
 		"uloop-project-runner-darwin-arm64.tar.gz",
 		"uloop-project-runner-darwin-arm64.tar.gz.sha256",
 		"uloop-project-runner-windows-amd64.zip",
 		"uloop-project-runner-windows-amd64.zip.sha256",
-	}
-	requiredLegacyMinimumProjectRunnerAssets = []string{
-		"uloop-cli-darwin-amd64.tar.gz",
-		"uloop-cli-darwin-amd64.tar.gz.sha256",
-		"uloop-cli-darwin-arm64.tar.gz",
-		"uloop-cli-darwin-arm64.tar.gz.sha256",
-		"uloop-cli-windows-amd64.zip",
-		"uloop-cli-windows-amd64.zip.sha256",
 	}
 )
 
@@ -227,9 +218,9 @@ func parseMinimumProjectRunnerVersion(text string) (string, bool) {
 		return minimumMatches[1], true
 	}
 
-	legacyMinimumMatches := legacyMinimumProjectRunnerVersionPattern.FindStringSubmatch(text)
-	if len(legacyMinimumMatches) == 2 {
-		return legacyMinimumMatches[1], true
+	preRenameMinimumMatches := preRenameMinimumProjectRunnerVersionPattern.FindStringSubmatch(text)
+	if len(preRenameMinimumMatches) == 2 {
+		return preRenameMinimumMatches[1], true
 	}
 	return "", false
 }
@@ -281,36 +272,18 @@ func verifyMinimumCliReleaseProtocolAtRef(
 	repoRoot string,
 	values ProtocolMinimumVersionValues,
 ) (string, error) {
-	releases := minimumProjectRunnerReleases(values.MinimumProjectRunnerVersion)
-	unavailableReleases := []string{}
-	for _, release := range releases {
-		contractContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, release.Tag, "cli/contract.json")
-		if err != nil {
-			unavailableReleases = append(unavailableReleases, release.Tag)
-			continue
-		}
-		if err := verifyMinimumProjectRunnerReleaseProtocol(release.Tag, values, []byte(contractContent)); err != nil {
-			return "", err
-		}
-		return verifyMinimumCliReleaseIsPublished(ctx, repoRoot, release)
+	release := minimumProjectRunnerRelease{
+		Tag:            projectRunnerReleaseTagPrefix + values.MinimumProjectRunnerVersion,
+		RequiredAssets: requiredMinimumProjectRunnerAssets,
 	}
-
-	return "", fmt.Errorf(
-		"project runner release %s does not provide cli/contract.json",
-		strings.Join(unavailableReleases, " or "))
-}
-
-func minimumProjectRunnerReleases(version string) []minimumProjectRunnerRelease {
-	return []minimumProjectRunnerRelease{
-		{
-			Tag:            projectRunnerReleaseTagPrefix + version,
-			RequiredAssets: requiredMinimumProjectRunnerAssets,
-		},
-		{
-			Tag:            legacyProjectRunnerReleaseTagPrefix + version,
-			RequiredAssets: requiredLegacyMinimumProjectRunnerAssets,
-		},
+	contractContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, release.Tag, "cli/contract.json")
+	if err != nil {
+		return "", fmt.Errorf("project runner release %s does not provide cli/contract.json", release.Tag)
 	}
+	if err := verifyMinimumProjectRunnerReleaseProtocol(release.Tag, values, []byte(contractContent)); err != nil {
+		return "", err
+	}
+	return verifyMinimumCliReleaseIsPublished(ctx, repoRoot, release)
 }
 
 func minimumCliReleaseProtocolFile(ctx context.Context, repoRoot string, ref string) ([]byte, error) {

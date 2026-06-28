@@ -136,20 +136,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetInstallCommand_WhenCliPrefixedVersionUsesDispatcherReleaseTag()
-        {
-            // Verifies legacy CLI release tags are normalized before selecting dispatcher installer assets.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommand(
-                RuntimePlatform.OSXEditor,
-                "cli-v3.0.0-beta.40",
-                false,
-                "/bin/zsh");
-
-            Assert.That(command.Arguments, Does.Contain("dispatcher-v3.0.0-beta.40"));
-            Assert.That(command.Arguments, Does.Not.Contain("dispatcher-vcli-v3.0.0-beta.40"));
-        }
-
-        [Test]
         public void GetInstallCommand_WhenLocalPackageOnMacUsesPackageLocalInstaller()
         {
             // Verifies that local package development tests exercise the checked-out installer script.

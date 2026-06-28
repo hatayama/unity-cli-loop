@@ -123,22 +123,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ProcessRequest_WhenClientSendsOnlySemverVersion_ReturnsCliUpdateRequiredError()
-        {
-            // Verifies CLIs released before the protocol handshake are treated as outdated.
-            string response = await JsonRpcProcessor.ProcessRequest(
-                "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1," +
-                "\"uloop\":{\"cliVersion\":\"3.0.0-beta.24\"}}",
-                CancellationToken.None);
-            JObject data = ParseErrorData(response);
-
-            Assert.That(data["type"]?.ToString(), Is.EqualTo("cli_update_required"));
-            Assert.That(data["currentProtocolVersion"]?.Type, Is.EqualTo(JTokenType.Null));
-            Assert.That(data["currentCliVersion"]?.ToString(), Is.EqualTo("3.0.0-beta.24"));
-            Assert.That(data["updateCommand"]?.ToString(), Is.EqualTo(ExpectedCliUpdateCommand()));
-        }
-
-        [Test]
         public async Task ProcessRequest_WhenProtocolVersionIsNotAnInteger_ReturnsCliUpdateRequiredError()
         {
             // Verifies malformed protocol values cannot bypass the compatibility gate.

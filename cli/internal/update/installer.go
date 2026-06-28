@@ -10,7 +10,6 @@ const (
 
 	repositoryRawBaseURL          = "https://raw.githubusercontent.com/hatayama/unity-cli-loop"
 	projectRunnerReleaseTagPrefix = "uloop-project-runner-v"
-	legacyCliReleaseTagPrefix     = "cli-v"
 	dispatcherTagPrefix           = "dispatcher-v"
 	betaVersionMarker             = "-beta."
 )
