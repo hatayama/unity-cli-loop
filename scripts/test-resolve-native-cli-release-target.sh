@@ -257,6 +257,7 @@ run_failure_case() {
   branch_name=$4
   expected_error=$5
   current_release_state=${6:-missing}
+  input_release_tag=${7:-}
 
   work_dir="$TMP_DIR/$name"
   mock_bin="$work_dir/bin"
@@ -284,7 +285,7 @@ run_failure_case() {
       EVENT_NAME="$event_name" \
       EVENT_REF_NAME="$branch_name" \
       BEFORE_SHA=before \
-      INPUT_RELEASE_TAG= \
+      INPUT_RELEASE_TAG="$input_release_tag" \
       INPUT_DRY_RUN=false \
       "$SCRIPT" > output.txt 2> stderr.txt
     status=$?
@@ -394,6 +395,11 @@ test_release_lookup_error_fails() {
   run_failure_case release-lookup-error 3.0.0-beta.3 push v3-beta "gh auth failed" error
 }
 
+# Verifies explicit project runner tags must use a full SemVer suffix.
+test_invalid_release_tag_version_fails() {
+  run_failure_case invalid-release-tag-version 3.0.0-beta.3 push v3-beta "Invalid release tag: uloop-project-runner-v3-beta" missing uloop-project-runner-v3-beta
+}
+
 assert_script_contains "cli/contract.json"
 test_complete_current_release_skips
 test_package_version_change_without_cli_change_skips
@@ -414,3 +420,4 @@ test_recovery_target_uses_exact_version_boundary
 test_main_prerelease_fails
 test_v3_beta_stable_fails
 test_release_lookup_error_fails
+test_invalid_release_tag_version_fails

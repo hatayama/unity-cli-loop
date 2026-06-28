@@ -26,6 +26,11 @@ scripts/package-go-cli.sh
 scripts/verify-native-cli-release-assets.sh
 "
 
+is_semver_version() {
+  version=$1
+  printf '%s\n' "$version" | grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?([+][0-9A-Za-z][0-9A-Za-z.-]*)?$'
+}
+
 release_json() {
   release_tag=$1
   release_error_file=$(mktemp)
@@ -254,7 +259,7 @@ fi
 
 RELEASE_TAG="${INPUT_RELEASE_TAG:-uloop-project-runner-v$VERSION}"
 case "$RELEASE_TAG" in
-  uloop-project-runner-v[0-9]*)
+  uloop-project-runner-v*)
     ;;
   *)
     echo "Invalid release tag: $RELEASE_TAG" >&2
@@ -262,8 +267,14 @@ case "$RELEASE_TAG" in
     ;;
 esac
 
+RELEASE_TAG_VERSION=${RELEASE_TAG#uloop-project-runner-v}
+if ! is_semver_version "$RELEASE_TAG_VERSION"; then
+  echo "Invalid release tag: $RELEASE_TAG" >&2
+  exit 1
+fi
+
 case "$RELEASE_TAG" in
-  *[!A-Za-z0-9._-]*)
+  *[!A-Za-z0-9._+-]*)
     echo "Invalid release tag: $RELEASE_TAG" >&2
     exit 1
     ;;

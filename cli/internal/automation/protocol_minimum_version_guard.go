@@ -207,7 +207,7 @@ func ParseProtocolMinimumVersionValues(content []byte) (ProtocolMinimumVersionVa
 
 func VerifyMinimumCliReleaseProtocol(values ProtocolMinimumVersionValues, contractContent []byte) error {
 	return verifyMinimumProjectRunnerReleaseProtocol(
-		projectRunnerReleaseTagPrefix+values.MinimumProjectRunnerVersion,
+		minimumProjectRunnerReleaseTag(values.MinimumProjectRunnerVersion),
 		values,
 		contractContent)
 }
@@ -215,14 +215,26 @@ func VerifyMinimumCliReleaseProtocol(values ProtocolMinimumVersionValues, contra
 func parseMinimumProjectRunnerVersion(text string) (string, bool) {
 	minimumMatches := minimumProjectRunnerVersionPattern.FindStringSubmatch(text)
 	if len(minimumMatches) == 2 {
-		return minimumMatches[1], true
+		return normalizeProjectRunnerVersion(minimumMatches[1]), true
 	}
 
 	preRenameMinimumMatches := preRenameMinimumProjectRunnerVersionPattern.FindStringSubmatch(text)
 	if len(preRenameMinimumMatches) == 2 {
-		return preRenameMinimumMatches[1], true
+		return normalizeProjectRunnerVersion(preRenameMinimumMatches[1]), true
 	}
 	return "", false
+}
+
+func minimumProjectRunnerReleaseTag(version string) string {
+	return projectRunnerReleaseTagPrefix + normalizeProjectRunnerVersion(version)
+}
+
+func normalizeProjectRunnerVersion(version string) string {
+	trimmedVersion := strings.TrimSpace(version)
+	if strings.HasPrefix(trimmedVersion, "v") || strings.HasPrefix(trimmedVersion, "V") {
+		return trimmedVersion[1:]
+	}
+	return trimmedVersion
 }
 
 func verifyMinimumProjectRunnerReleaseProtocol(
@@ -273,7 +285,7 @@ func verifyMinimumCliReleaseProtocolAtRef(
 	values ProtocolMinimumVersionValues,
 ) (string, error) {
 	release := minimumProjectRunnerRelease{
-		Tag:            projectRunnerReleaseTagPrefix + values.MinimumProjectRunnerVersion,
+		Tag:            minimumProjectRunnerReleaseTag(values.MinimumProjectRunnerVersion),
 		RequiredAssets: requiredMinimumProjectRunnerAssets,
 	}
 	contractContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, release.Tag, "cli/contract.json")

@@ -86,8 +86,8 @@ func TestDispatcherCommandOnlyDependsOnDispatcherEntrypoint(t *testing.T) {
 	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/dispatcher", cliModulePath+"/internal/dispatcher")
 }
 
-// Tests that the project-local CLI command only enters the project CLI package.
-func TestProjectCliCommandOnlyDependsOnProjectCliEntrypoint(t *testing.T) {
+// Tests that the project runner command only enters the project runner package.
+func TestProjectRunnerCommandOnlyDependsOnProjectRunnerEntrypoint(t *testing.T) {
 	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/project-runner", cliModulePath+"/internal/projectrunner")
 }
 

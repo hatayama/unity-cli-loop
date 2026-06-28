@@ -42,6 +42,7 @@ func TestDispatcherContractDoesNotDeclareCliReleaseFields(t *testing.T) {
 	// Verifies dispatcher releases stay independent from project-local CLI release metadata.
 	fields := requireContractFieldMap(t, dispatcherContractFileName)
 	requireContractFieldMissing(t, fields, "projectRunnerVersion")
+	requireContractFieldMissing(t, fields, "cliVersion")
 	requireContractFieldMissing(t, fields, "protocolVersion")
 }
 

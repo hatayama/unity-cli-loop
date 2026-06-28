@@ -260,6 +260,46 @@ func TestRunMinimumCliReleaseProtocolCheck_WhenRefIsProvided_ReadsValuesAtRef(t 
 	assertProtocolMinimumVersionLogContains(t, readFile(t, ghLogPath), "release view uloop-project-runner-v3.0.0-beta.33")
 }
 
+func TestRunMinimumCliReleaseProtocolCheck_WhenMinimumVersionHasPrefix_NormalizesReleaseTag(t *testing.T) {
+	// Verifies v-prefixed package constants map to a project runner tag with one prefix.
+	workDir := t.TempDir()
+	mockBin := filepath.Join(workDir, "bin")
+	err := os.MkdirAll(mockBin, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create mock bin: %v", err)
+	}
+
+	gitLogPath := filepath.Join(workDir, "git.log")
+	ghLogPath := filepath.Join(workDir, "gh.log")
+	writeProtocolMinimumVersionMockGit(t, filepath.Join(mockBin, "git"))
+	writeProtocolMinimumVersionMockGH(t, filepath.Join(mockBin, "gh"))
+	prepareProtocolMinimumVersionGitContents(t, workDir, protocolMinimumVersionRefCase{
+		baseContent:    buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
+		headContent:    buildProtocolMinimumVersionConstants(2, "v3.0.0-beta.33"),
+		releaseContent: `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`,
+	})
+
+	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
+	t.Setenv("GIT_LOG", gitLogPath)
+	t.Setenv("GH_LOG", ghLogPath)
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := RunMinimumCliReleaseProtocolCheck(
+		context.Background(),
+		&stdout,
+		&stderr,
+		"protocol-release")
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr.String())
+	}
+	assertProtocolMinimumVersionLogContains(t, stdout.String(), "Minimum project runner release uloop-project-runner-v3.0.0-beta.33 advertises protocol 2.")
+	assertProtocolMinimumVersionLogContains(t, readFile(t, gitLogPath), "uloop-project-runner-v3.0.0-beta.33:cli/contract.json")
+	assertProtocolMinimumVersionLogContains(t, readFile(t, ghLogPath), "release view uloop-project-runner-v3.0.0-beta.33")
+}
+
 func TestRunProtocolMinimumVersionComment_WhenWarningExists_UpsertsComment(t *testing.T) {
 	// Verifies PR comments explain protocol bump installer target omissions.
 	result := runProtocolMinimumVersionCommentCase(t, protocolMinimumVersionCommentCase{
