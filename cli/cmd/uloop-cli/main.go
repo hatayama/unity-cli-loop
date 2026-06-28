@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/cli"
+	"github.com/hatayama/unity-cli-loop/cli/internal/projectcli"
 )
 
 func main() {
-	os.Exit(cli.RunProjectLocal(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(projectcli.Run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }
