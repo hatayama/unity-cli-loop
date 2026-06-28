@@ -43,12 +43,13 @@ var (
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
 
 type launchOptions struct {
-	projectPath    string
-	restart        bool
-	quit           bool
-	deleteRecovery bool
-	platform       string
-	maxDepth       int
+	projectPath          string
+	restart              bool
+	quit                 bool
+	deleteRecovery       bool
+	ignoreCompilerErrors bool
+	platform             string
+	maxDepth             int
 }
 
 func tryHandleLaunchRequest(
@@ -241,12 +242,7 @@ func startUnityAndWaitForReadiness(
 	writeFormat(stdout, "Detected Unity version: %s\n", readUnityVersionForLog(projectRoot))
 	writeLine(stdout, "Unity Hub launch options: none")
 
-	launchArgs := []string{"-projectPath", projectRoot}
-	if options.platform != "" {
-		launchArgs = append(launchArgs, "-buildTarget", options.platform)
-	}
-
-	command := newUnityLaunchCommand(unityPath, launchArgs)
+	command := newUnityLaunchCommand(unityPath, buildUnityLaunchArgs(projectRoot, options))
 	if err := command.Start(); err != nil {
 		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
 		return 1
@@ -271,6 +267,17 @@ func startUnityAndWaitForReadiness(
 		previousPid = &runningProcess.pid
 	}
 	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, currentPid)
+}
+
+func buildUnityLaunchArgs(projectRoot string, options launchOptions) []string {
+	launchArgs := []string{"-projectPath", projectRoot}
+	if options.platform != "" {
+		launchArgs = append(launchArgs, "-buildTarget", options.platform)
+	}
+	if options.ignoreCompilerErrors {
+		launchArgs = append(launchArgs, "-ignorecompilererrors")
+	}
+	return launchArgs
 }
 
 func newUnityLaunchCommand(unityPath string, launchArgs []string) *exec.Cmd {
@@ -454,6 +461,8 @@ func printLaunchHelp(stdout io.Writer) {
 	writeLine(stdout, "  -r, --restart          Kill an existing Unity process for the project before launching")
 	writeLine(stdout, "  -q, --quit             Kill an existing Unity process for the project without launching")
 	writeLine(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
+	writeLine(stdout, "  -i, --ignore-compiler-errors")
+	writeLine(stdout, "                          Continue opening Unity even when the project has compiler errors")
 	writeLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
 	writeLine(stdout, "      --max-depth <n>    Accepted for compatibility when searching from the current directory")
 	writeLine(stdout, "")

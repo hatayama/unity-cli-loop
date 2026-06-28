@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,10 +17,12 @@ import (
 )
 
 func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
+	// Verifies launch parses every supported core flag without dropping the project path.
 	options, err := parseLaunchOptions(
 		[]string{
 			"--restart",
 			"--delete-recovery",
+			"--ignore-compiler-errors",
 			"--platform", "Android",
 			"--max-depth", "-1",
 			"/tmp/project",
@@ -36,6 +39,9 @@ func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
 	if !options.deleteRecovery {
 		t.Fatal("delete recovery flag was not parsed")
 	}
+	if !options.ignoreCompilerErrors {
+		t.Fatal("ignore compiler errors flag was not parsed")
+	}
 	if options.platform != "Android" {
 		t.Fatalf("platform mismatch: %s", options.platform)
 	}
@@ -44,6 +50,37 @@ func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
 	}
 	if options.projectPath != "/tmp/project" {
 		t.Fatalf("project path mismatch: %s", options.projectPath)
+	}
+}
+
+func TestParseLaunchOptionsSupportsShortIgnoreCompilerErrorsFlag(t *testing.T) {
+	// Verifies -i is the short alias for --ignore-compiler-errors.
+	options, err := parseLaunchOptions([]string{"-i", "/tmp/project"}, "")
+	if err != nil {
+		t.Fatalf("parseLaunchOptions failed: %v", err)
+	}
+
+	if !options.ignoreCompilerErrors {
+		t.Fatal("short ignore compiler errors flag was not parsed")
+	}
+}
+
+func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrors(t *testing.T) {
+	// Verifies launch maps --ignore-compiler-errors to Unity Editor's native startup argument.
+	args := buildUnityLaunchArgs(
+		"/tmp/project",
+		launchOptions{platform: "Android", ignoreCompilerErrors: true},
+	)
+	expectedArgs := []string{
+		"-projectPath",
+		"/tmp/project",
+		"-buildTarget",
+		"Android",
+		"-ignorecompilererrors",
+	}
+
+	if !slices.Equal(args, expectedArgs) {
+		t.Fatalf("Unity launch args mismatch: got %#v want %#v", args, expectedArgs)
 	}
 }
 

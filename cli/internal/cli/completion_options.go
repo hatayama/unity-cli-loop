@@ -5,10 +5,12 @@ var nativeCommandOptions = map[string][]string{
 	launchCommandName: {
 		"--" + projectPathFlagName,
 		"--delete-recovery",
+		"--ignore-compiler-errors",
 		"--max-depth",
 		"--platform",
 		"--quit",
 		"--restart",
+		"-i",
 	},
 	installCommandName: {"--" + installDirFlagName},
 	updateCommandName:  {"--" + updateToVersionFlagName},

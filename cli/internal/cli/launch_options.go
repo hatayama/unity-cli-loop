@@ -17,6 +17,9 @@ func applyLaunchOption(options *launchOptions, args []string, index int) (int, e
 	case arg == "-d" || arg == "--delete-recovery":
 		options.deleteRecovery = true
 		return index, nil
+	case arg == "-i" || arg == "--ignore-compiler-errors":
+		options.ignoreCompilerErrors = true
+		return index, nil
 	case isUnsupportedLaunchHubOption(arg):
 		return index, unsupportedLaunchHubOptionError(arg)
 	case arg == "-p" || arg == "--platform" || strings.HasPrefix(arg, "--platform="):
