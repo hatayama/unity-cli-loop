@@ -1,8 +1,8 @@
 {
-  "cliVersion": "3.0.0-beta.42",
+  "cliVersion": "3.0.0-beta.43",
   "minimumDispatcherVersion": "3.0.1-beta.2",
   "packageName": "io.github.hatayama.uloopmcp",
-  "packageVersion": "3.0.0-beta.43",
+  "packageVersion": "3.0.0-beta.44",
   "requiredProtocolVersion": 2,
   "schemaVersion": 1
 }
