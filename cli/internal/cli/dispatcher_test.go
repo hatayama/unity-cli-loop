@@ -231,6 +231,87 @@ func TestEnforceDispatcherFreshnessDoesNotMarkFailedOptionalUpdateChecked(t *tes
 	}
 }
 
+func TestEnforceDispatcherFreshnessReportsOptionalUpdateVersionChange(t *testing.T) {
+	// Verifies optional dispatcher self-updates tell users which launcher version will run next.
+	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
+	restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "9.9.9")
+	defer restoreDispatcherUpdateHooks()
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshness(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr)
+
+	if handled || code != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
+	}
+	expected := "uloop: dispatcher updated from " + dispatcherVersion + " to 9.9.9"
+	if !bytes.Contains(stderr.Bytes(), []byte(expected)) {
+		t.Fatalf("freshness output mismatch: %s", stderr.String())
+	}
+}
+
+func TestEnforceDispatcherFreshnessSkipsOptionalUpdateMessageWhenVersionDidNotChange(t *testing.T) {
+	// Verifies no-op optional dispatcher self-updates do not add noise before the real command output.
+	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
+	restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, dispatcherVersion)
+	defer restoreDispatcherUpdateHooks()
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshness(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr)
+
+	if handled || code != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no optional update output, got: %s", stderr.String())
+	}
+}
+
+func TestEnforceDispatcherFreshnessReportsRequiredUpdateVersionChange(t *testing.T) {
+	// Verifies required dispatcher self-updates include the version change before asking for a retry.
+	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
+	restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "999.0.0")
+	defer restoreDispatcherUpdateHooks()
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshness(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
+		&stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
+	}
+	expected := "Dispatcher updated from " + dispatcherVersion + " to 999.0.0"
+	if !bytes.Contains(stderr.Bytes(), []byte(expected)) {
+		t.Fatalf("freshness output mismatch: %s", stderr.String())
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("Retry the command")) {
+		t.Fatalf("retry guidance missing: %s", stderr.String())
+	}
+}
+
+func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) func() {
+	t.Helper()
+	previousRunner := dispatcherRunUpdate
+	previousReader := dispatcherReadInstalledVersion
+	dispatcherRunUpdate = func(context.Context) error {
+		return nil
+	}
+	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
+		return updatedVersion, nil
+	}
+	return func() {
+		dispatcherRunUpdate = previousRunner
+		dispatcherReadInstalledVersion = previousReader
+	}
+}
+
 func TestExtractDispatcherRealCLIFromTarPrefersRealCLI(t *testing.T) {
 	// Verifies legacy bridge archives that contain dispatcher first still extract the real CLI binary.
 	tempDir := t.TempDir()
