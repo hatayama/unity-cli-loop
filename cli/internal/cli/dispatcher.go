@@ -167,15 +167,16 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 }
 
 func writeDispatcherSelfUpdateRequiredError(stderr io.Writer, updatedVersion string) {
+	currentVersion, nextVersion, changed := normalizedDispatcherUpdateVersions(dispatcherVersion, updatedVersion)
 	message := "Dispatcher update completed. Retry the command so the updated dispatcher can run."
-	if dispatcherVersionChanged(dispatcherVersion, updatedVersion) {
-		message = "Dispatcher updated from " + dispatcherVersion + " to " + updatedVersion + ". Retry the command so the updated dispatcher can run."
+	if changed {
+		message = "Dispatcher updated from " + currentVersion + " to " + nextVersion + ". Retry the command so the updated dispatcher can run."
 	}
 	details := map[string]any{
-		"CurrentDispatcherVersion": dispatcherVersion,
+		"CurrentDispatcherVersion": currentVersion,
 	}
-	if updatedVersion != "" {
-		details["UpdatedDispatcherVersion"] = updatedVersion
+	if nextVersion != "" {
+		details["UpdatedDispatcherVersion"] = nextVersion
 	}
 	writeErrorEnvelope(stderr, cliError{
 		ErrorCode:   errorCodeCLIUpdateRequired,

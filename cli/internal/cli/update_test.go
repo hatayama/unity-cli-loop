@@ -208,6 +208,9 @@ func TestTryHandleUpdateRequestReportsVersionChange(t *testing.T) {
 	if !bytes.Contains(stdout.Bytes(), []byte(expected)) {
 		t.Fatalf("update output mismatch: %s", stdout.String())
 	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no stderr output, got: %s", stderr.String())
+	}
 }
 
 func TestTryHandleUpdateRequestReportsAlreadyCurrentVersion(t *testing.T) {
@@ -226,6 +229,9 @@ func TestTryHandleUpdateRequestReportsAlreadyCurrentVersion(t *testing.T) {
 	expected := "uloop launcher is already up to date at " + dispatcherVersion + "."
 	if !bytes.Contains(stdout.Bytes(), []byte(expected)) {
 		t.Fatalf("update output mismatch: %s", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no stderr output, got: %s", stderr.String())
 	}
 }
 

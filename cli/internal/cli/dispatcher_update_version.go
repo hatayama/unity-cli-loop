@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 var dispatcherReadInstalledVersion = readInstalledDispatcherVersion
@@ -52,20 +51,27 @@ func dispatcherInstalledVersionOrEmpty(ctx context.Context) string {
 }
 
 func dispatcherVersionChanged(fromVersion string, toVersion string) bool {
-	fromVersion = strings.TrimSpace(fromVersion)
-	toVersion = strings.TrimSpace(toVersion)
-	return fromVersion != "" && toVersion != "" && fromVersion != toVersion
+	_, _, changed := normalizedDispatcherUpdateVersions(fromVersion, toVersion)
+	return changed
+}
+
+func normalizedDispatcherUpdateVersions(fromVersion string, toVersion string) (string, string, bool) {
+	normalizedFromVersion := normalizeDispatcherVersion(fromVersion)
+	normalizedToVersion := normalizeDispatcherVersion(toVersion)
+	changed := normalizedFromVersion != "" && normalizedToVersion != "" && normalizedFromVersion != normalizedToVersion
+	return normalizedFromVersion, normalizedToVersion, changed
 }
 
 func writeOptionalDispatcherUpdateCompletion(stderr io.Writer, fromVersion string, toVersion string) {
-	if !dispatcherVersionChanged(fromVersion, toVersion) {
+	normalizedFromVersion, normalizedToVersion, changed := normalizedDispatcherUpdateVersions(fromVersion, toVersion)
+	if !changed {
 		return
 	}
 	writeFormat(
 		stderr,
 		"uloop: dispatcher updated from %s to %s. Future uloop commands will use the updated launcher.\n",
-		fromVersion,
-		toVersion)
+		normalizedFromVersion,
+		normalizedToVersion)
 }
 
 func writeManualDispatcherUpdateCompletion(stdout io.Writer, fromVersion string, toVersion string) {
@@ -73,9 +79,10 @@ func writeManualDispatcherUpdateCompletion(stdout io.Writer, fromVersion string,
 		writeLine(stdout, "uloop launcher update completed.")
 		return
 	}
-	if !dispatcherVersionChanged(fromVersion, toVersion) {
-		writeLine(stdout, "uloop launcher is already up to date at "+toVersion+".")
+	normalizedFromVersion, normalizedToVersion, changed := normalizedDispatcherUpdateVersions(fromVersion, toVersion)
+	if !changed {
+		writeLine(stdout, "uloop launcher is already up to date at "+normalizedToVersion+".")
 		return
 	}
-	writeLine(stdout, "uloop launcher updated from "+fromVersion+" to "+toVersion+".")
+	writeLine(stdout, "uloop launcher updated from "+normalizedFromVersion+" to "+normalizedToVersion+".")
 }
