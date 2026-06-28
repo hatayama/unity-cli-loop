@@ -46,7 +46,10 @@ func TestCliFeaturePackagesDoNotImportCli(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
 	packages := listPackages(t, moduleRoot)
 	for _, goPackage := range packages {
-		if goPackage.ImportPath == cliModulePath+"/internal/cli" || strings.HasPrefix(goPackage.ImportPath, cliModulePath+"/cmd/") {
+		if goPackage.ImportPath == cliModulePath+"/internal/cli" ||
+			goPackage.ImportPath == cliModulePath+"/internal/dispatcher" ||
+			goPackage.ImportPath == cliModulePath+"/internal/projectcli" ||
+			strings.HasPrefix(goPackage.ImportPath, cliModulePath+"/cmd/") {
 			continue
 		}
 		for _, importedPath := range goPackage.Imports {
@@ -68,7 +71,7 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 		if goPackage.ImportPath == cliModulePath+"/internal/architecture" {
 			continue
 		}
-		for _, boundary := range []string{"/internal/automation", "/internal/cli", "/internal/install", "/internal/project", "/internal/skills", "/internal/tools", "/internal/uninstall", "/internal/unityipc", "/internal/update", "/internal/version"} {
+		for _, boundary := range []string{"/internal/automation", "/internal/cli", "/internal/dispatcher", "/internal/install", "/internal/project", "/internal/projectcli", "/internal/skills", "/internal/tools", "/internal/uninstall", "/internal/unityipc", "/internal/update", "/internal/version"} {
 			if strings.Contains(goPackage.ImportPath, boundary) {
 				goto nextPackage
 			}
@@ -78,10 +81,20 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 	}
 }
 
-// Tests that the native CLI command only enters the CLI orchestration package.
-func TestCliCommandOnlyDependsOnCliEntrypoint(t *testing.T) {
+// Tests that the dispatcher command only enters the dispatcher package.
+func TestDispatcherCommandOnlyDependsOnDispatcherEntrypoint(t *testing.T) {
+	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/uloop", cliModulePath+"/internal/dispatcher")
+}
+
+// Tests that the project-local CLI command only enters the project CLI package.
+func TestProjectCliCommandOnlyDependsOnProjectCliEntrypoint(t *testing.T) {
+	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/uloop-cli", cliModulePath+"/internal/projectcli")
+}
+
+func assertCommandOnlyDependsOnInternalEntrypoint(t *testing.T, commandPath string, expectedEntrypoint string) {
+	t.Helper()
 	moduleRoot := findModuleRoot(t)
-	command := exec.Command("go", "list", "-json", "./cmd/uloop")
+	command := exec.Command("go", "list", "-json", commandPath)
 	command.Dir = moduleRoot
 	output, err := command.Output()
 	if err != nil {
@@ -101,8 +114,8 @@ func TestCliCommandOnlyDependsOnCliEntrypoint(t *testing.T) {
 		if !strings.HasPrefix(dependency, cliModulePath+"/internal/") {
 			continue
 		}
-		if dependency != cliModulePath+"/internal/cli" {
-			t.Fatalf("CLI command must enter internal code through internal/cli, got %s", dependency)
+		if dependency != expectedEntrypoint {
+			t.Fatalf("%s must enter internal code through %s, got %s", commandPath, expectedEntrypoint, dependency)
 		}
 	}
 }
