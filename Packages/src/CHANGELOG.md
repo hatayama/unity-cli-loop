@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.44](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.43...v3.0.0-beta.44) (2026-06-28)
+
+
+### Bug Fixes
+
+* Setup now prompts when dispatcher requirements change ([#1420](https://github.com/hatayama/unity-cli-loop/issues/1420)) ([1870ac4](https://github.com/hatayama/unity-cli-loop/commit/1870ac445db47a431966d4fcdeb017629af0662b))
+
 ## [3.0.0-beta.43](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.42...v3.0.0-beta.43) (2026-06-27)
 
 

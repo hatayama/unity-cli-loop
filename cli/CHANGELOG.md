@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.43](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.42...cli-v3.0.0-beta.43) (2026-06-28)
+
+
+### Bug Fixes
+
+* Dispatcher updates now show the installed version ([#1422](https://github.com/hatayama/unity-cli-loop/issues/1422)) ([954f4ad](https://github.com/hatayama/unity-cli-loop/commit/954f4adf7c861b80db0a5d9bfdc512bfe37b3393))
+
 ## [3.0.0-beta.42](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.41...cli-v3.0.0-beta.42) (2026-06-27)
 
 
