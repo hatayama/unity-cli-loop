@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -187,8 +188,9 @@ func TestCompletionListOptionsUsesNativeLaunchOptions(t *testing.T) {
 	}
 
 	output := stdout.String()
-	for _, option := range []string{"--project-path", "--restart", "--quit", "--delete-recovery", "--platform", "--max-depth"} {
-		if !strings.Contains(output, option) {
+	listedOptions := strings.Split(strings.TrimSpace(output), "\n")
+	for _, option := range []string{"--project-path", "--restart", "--quit", "--delete-recovery", "--platform", "--max-depth", "-i", "--ignore-compiler-errors", "--editor-version"} {
+		if !slices.Contains(listedOptions, option) {
 			t.Fatalf("launch option %s was not listed: %s", option, output)
 		}
 	}

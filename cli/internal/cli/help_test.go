@@ -241,6 +241,8 @@ func TestRunProjectLocalLaunchHelpShowsGlobalOptions(t *testing.T) {
 	for _, expected := range []string{
 		"Usage:",
 		"uloop launch [options] [project-path]",
+		"-i, --ignore-compiler-errors",
+		"--editor-version <version>",
 		"Global options:",
 		"--project-path <path>",
 	} {

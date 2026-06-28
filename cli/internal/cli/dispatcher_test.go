@@ -155,6 +155,35 @@ func TestRunDispatcherLaunchQuitDoesNotRequireProjectPin(t *testing.T) {
 	}
 }
 
+func TestRunDispatcherLaunchOptionsDoNotRequireProjectPin(t *testing.T) {
+	// Verifies dispatcher-owned launch flags are parsed before project pin resolution.
+	projectRoot := createDispatcherUnityProject(t)
+	t.Chdir(t.TempDir())
+
+	previousFinder := findRunningUnityProcessForLaunch
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+		return nil, nil
+	}
+	defer func() {
+		findRunningUnityProcessForLaunch = previousFinder
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(
+		context.Background(),
+		[]string{"launch", "-i", "--editor-version", "6000.0.0f1", projectRoot, "--quit"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("dispatcher launch failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !bytes.Contains(stdout.Bytes(), []byte(`"Quit": true`)) {
+		t.Fatalf("dispatcher launch output mismatch: %s", stdout.String())
+	}
+}
+
 func TestRunDispatcherVersionUsesDispatcherVersion(t *testing.T) {
 	// Verifies the global launcher reports its own dispatcher release version.
 	t.Chdir(t.TempDir())
