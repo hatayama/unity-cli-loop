@@ -7,6 +7,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         public bool showDeveloperTools = false;
         public string lastSeenSetupWizardVersion = "";
+        public string lastSeenSetupWizardMinimumDispatcherVersion = "";
         public bool suppressSetupWizardAutoShow = false;
         public bool legacySetupWizardStateMigrated = false;
         public bool showUnityCliLoopSecuritySetting = true;
