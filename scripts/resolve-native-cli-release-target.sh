@@ -2,6 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+LEGACY_CLI_RELEASE_TAG_PREFIX="cli-v"
 
 : "${EVENT_NAME:?EVENT_NAME is required}"
 
@@ -303,6 +304,13 @@ TARGET_SHA=$(git rev-parse HEAD)
 BUILD_SHA=$TARGET_SHA
 RELEASE_TARGET_SHA=$(release_commit_sha_for_version "$VERSION" "$BUILD_SHA")
 if [ -z "$RELEASE_TARGET_SHA" ]; then
+  RELEASE_TARGET_SHA=$BUILD_SHA
+fi
+LEGACY_CLI_RELEASE_TAG="$LEGACY_CLI_RELEASE_TAG_PREFIX$VERSION"
+if [ "$CAN_EVALUATE_CLI_RELEASE" = "true" ] &&
+   [ "$RELEASE_TARGET_SHA" != "$BUILD_SHA" ] &&
+   release_is_published "$LEGACY_CLI_RELEASE_TAG"; then
+  echo "Project runner release tag namespace changed for $VERSION; targeting build commit $BUILD_SHA instead of legacy release commit $RELEASE_TARGET_SHA." >&2
   RELEASE_TARGET_SHA=$BUILD_SHA
 fi
 

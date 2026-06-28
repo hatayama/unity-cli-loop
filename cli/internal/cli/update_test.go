@@ -126,6 +126,27 @@ func TestUpdateCommandForDarwinNormalizesProjectRunnerReleaseTag(t *testing.T) {
 	}
 }
 
+func TestUpdateCommandForDarwinNormalizesLegacyCliReleaseTag(t *testing.T) {
+	// Verifies legacy CLI release tags resolve to the matching dispatcher release.
+	commandName, args, err := updateCommandForOSWithOptions("darwin", updateOptions{
+		targetVersion: "cli-v3.0.0-beta.6",
+	})
+	if err != nil {
+		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
+	}
+
+	if commandName != "sh" {
+		t.Fatalf("command mismatch: %s", commandName)
+	}
+	joinedArgs := strings.Join(args, " ")
+	if !strings.Contains(joinedArgs, "dispatcher-v3.0.0-beta.6/scripts/install.sh") {
+		t.Fatalf("installer URL mismatch: %s", joinedArgs)
+	}
+	if strings.Contains(joinedArgs, "dispatcher-vcli-v3.0.0-beta.6") {
+		t.Fatalf("installer version contains legacy CLI prefix: %s", joinedArgs)
+	}
+}
+
 func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
 	// Verifies Windows dispatcher update can target the minimum release version requested by Unity.
 	commandName, args, err := updateCommandForOSWithOptions("windows", updateOptions{
@@ -162,6 +183,18 @@ func TestParseUpdateOptionsNormalizesVersionPrefix(t *testing.T) {
 func TestParseUpdateOptionsNormalizesProjectRunnerReleaseTag(t *testing.T) {
 	// Verifies parsed project runner release tags are normalized before dispatcher tag selection.
 	options, err := parseUpdateOptions([]string{"--to-version", "uloop-project-runner-v3.0.0-beta.6"})
+	if err != nil {
+		t.Fatalf("parseUpdateOptions failed: %v", err)
+	}
+
+	if options.targetVersion != "3.0.0-beta.6" {
+		t.Fatalf("target version mismatch: %#v", options)
+	}
+}
+
+func TestParseUpdateOptionsNormalizesLegacyCliReleaseTag(t *testing.T) {
+	// Verifies parsed legacy CLI release tags are normalized before dispatcher tag selection.
+	options, err := parseUpdateOptions([]string{"--to-version", "cli-v3.0.0-beta.6"})
 	if err != nil {
 		t.Fatalf("parseUpdateOptions failed: %v", err)
 	}

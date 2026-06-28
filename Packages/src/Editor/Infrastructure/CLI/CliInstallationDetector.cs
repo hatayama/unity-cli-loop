@@ -46,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string SHELL_CONTRACT_STATUS_END_MARKER = "__ULOOP_CONTRACT_STATUS_END__";
         private const string SHELL_SUCCESS_EXIT_CODE = "0";
         private const string VERSION_JSON_PROJECT_RUNNER_VERSION_PROPERTY = "ProjectRunnerVersion";
+        private const string VERSION_JSON_LEGACY_CLI_VERSION_PROPERTY = "CliVersion";
         private const string VERSION_JSON_DISPATCHER_VERSION_PROPERTY = "DispatcherVersion";
         private const string VERSION_JSON_DISPATCHER_CONTRACT_VERSION_PROPERTY = "DispatcherContractVersion";
 
@@ -377,6 +378,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string version = parsed[VERSION_JSON_PROJECT_RUNNER_VERSION_PROPERTY]?.ToString();
+                if (string.IsNullOrEmpty(version))
+                {
+                    version = parsed[VERSION_JSON_LEGACY_CLI_VERSION_PROPERTY]?.ToString();
+                }
                 return new CliInstallationDetection(version, executablePath);
             }
             catch (JsonException)

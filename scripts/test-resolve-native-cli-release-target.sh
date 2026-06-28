@@ -103,14 +103,19 @@ release_json() {
 
 if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
-  if [ "$tag" = "uloop-project-runner-v$CURRENT_VERSION" ]; then
-    release_json "$CURRENT_RELEASE_STATE" "$CURRENT_RELEASE_HAS_ASSETS"
-    exit 0
-  fi
-
-  if [ -n "$PREVIOUS_RELEASE_TAG" ] && [ "$tag" = "$PREVIOUS_RELEASE_TAG" ]; then
-    release_json published "$PREVIOUS_RELEASE_HAS_ASSETS"
-    exit 0
+	  if [ "$tag" = "uloop-project-runner-v$CURRENT_VERSION" ]; then
+	    release_json "$CURRENT_RELEASE_STATE" "$CURRENT_RELEASE_HAS_ASSETS"
+	    exit 0
+	  fi
+	
+	  if [ "$tag" = "cli-v$CURRENT_VERSION" ]; then
+	    release_json "$LEGACY_CURRENT_RELEASE_STATE" true
+	    exit 0
+	  fi
+	
+	  if [ -n "$PREVIOUS_RELEASE_TAG" ] && [ "$tag" = "$PREVIOUS_RELEASE_TAG" ]; then
+	    release_json published "$PREVIOUS_RELEASE_HAS_ASSETS"
+	    exit 0
   fi
 
   exit 1
@@ -154,6 +159,18 @@ assert_contains() {
   fi
 }
 
+assert_line_equals() {
+  file=$1
+  expected=$2
+
+  if ! grep -Fx "$expected" "$file" >/dev/null; then
+    echo "Expected $file to contain line: $expected" >&2
+    echo "Actual content:" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+}
+
 assert_script_contains() {
   expected=$1
 
@@ -181,12 +198,13 @@ run_success_case() {
   build_sha_value=${15:-target-sha}
   release_commit_sha=${16:-target-sha}
   release_commit_subject=${17:-}
-  build_commit_subject=${18:-}
-  build_commit_updates_cli=${19:-false}
-  release_commit_updates_cli=${20:-false}
-  if [ -z "$release_commit_subject" ]; then
-    release_commit_subject="chore(v3-beta): release $current_version"
-  fi
+	  build_commit_subject=${18:-}
+	  build_commit_updates_cli=${19:-false}
+	  release_commit_updates_cli=${20:-false}
+	  legacy_current_release_state=${21:-missing}
+	  if [ -z "$release_commit_subject" ]; then
+	    release_commit_subject="chore(v3-beta): release $current_version"
+	  fi
   if [ -z "$build_commit_subject" ]; then
     build_commit_subject=$release_commit_subject
   fi
@@ -206,11 +224,12 @@ run_success_case() {
       BUILD_SHA_VALUE="$build_sha_value" \
       BUILD_COMMIT_SUBJECT="$build_commit_subject" \
       BUILD_COMMIT_UPDATES_CLI="$build_commit_updates_cli" \
-      RELEASE_COMMIT_SHA="$release_commit_sha" \
-      RELEASE_COMMIT_SUBJECT="$release_commit_subject" \
-      RELEASE_COMMIT_UPDATES_CLI="$release_commit_updates_cli" \
-      PREVIOUS_RELEASE_TAG="$previous_release_tag" \
-      PREVIOUS_RELEASE_HAS_ASSETS="$previous_release_has_assets" \
+	      RELEASE_COMMIT_SHA="$release_commit_sha" \
+	      RELEASE_COMMIT_SUBJECT="$release_commit_subject" \
+	      RELEASE_COMMIT_UPDATES_CLI="$release_commit_updates_cli" \
+	      LEGACY_CURRENT_RELEASE_STATE="$legacy_current_release_state" \
+	      PREVIOUS_RELEASE_TAG="$previous_release_tag" \
+	      PREVIOUS_RELEASE_HAS_ASSETS="$previous_release_has_assets" \
       CLI_SOURCE_CHANGED="$cli_source_changed" \
       CONTRACT_CHANGED="$contract_changed" \
       CLI_REQUIREMENT_CHANGED="$cli_requirement_changed" \
@@ -221,13 +240,13 @@ run_success_case() {
       INPUT_DRY_RUN=false \
       "$SCRIPT" > output.txt 2> stderr.txt
 
-    assert_contains output.txt "publish=$expected_publish"
-    assert_contains output.txt "release=$expected_release"
-    assert_contains output.txt "tag=uloop-project-runner-v$current_version"
-    assert_contains output.txt "version=$current_version"
-    assert_contains output.txt "sha=$expected_sha"
-    assert_contains output.txt "build_sha=$build_sha_value"
-    assert_contains output.txt "dry_run=false"
+    assert_line_equals output.txt "publish=$expected_publish"
+    assert_line_equals output.txt "release=$expected_release"
+    assert_line_equals output.txt "tag=uloop-project-runner-v$current_version"
+    assert_line_equals output.txt "version=$current_version"
+    assert_line_equals output.txt "sha=$expected_sha"
+    assert_line_equals output.txt "build_sha=$build_sha_value"
+    assert_line_equals output.txt "dry_run=false"
   )
 }
 
@@ -254,9 +273,10 @@ run_failure_case() {
       CURRENT_RELEASE_HAS_ASSETS=false \
       BUILD_SHA_VALUE=target-sha \
       BUILD_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
-      RELEASE_COMMIT_SHA=target-sha \
-      RELEASE_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
-      PREVIOUS_RELEASE_TAG=uloop-project-runner-v3.0.0-beta.1 \
+	      RELEASE_COMMIT_SHA=target-sha \
+	      RELEASE_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
+	      LEGACY_CURRENT_RELEASE_STATE=missing \
+	      PREVIOUS_RELEASE_TAG=uloop-project-runner-v3.0.0-beta.1 \
       PREVIOUS_RELEASE_HAS_ASSETS=true \
       CLI_SOURCE_CHANGED=false \
       CONTRACT_CHANGED=false \
@@ -312,6 +332,11 @@ test_cli_requirement_change_publishes() {
 # Verifies Project runner release metadata-only release commits still publish native Project runner assets.
 test_cli_release_metadata_change_publishes() {
   run_success_case cli-release-metadata-change 3.0.0-beta.3 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true false false false true true target-sha target-sha target-sha "chore: release v3-beta" "chore: release v3-beta" true false
+}
+
+# Verifies the first renamed project runner tag targets the commit that contains the rename.
+test_renamed_tag_with_existing_legacy_release_targets_build_commit() {
+  run_success_case renamed-tag-targets-build 3.0.0-beta.43 push v3-beta missing false "" false true false false true true build-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.43" "refactor: rename project runner" false true published
 }
 
 # Verifies the first Project runner asset release is published when no previous asset tag exists.
@@ -377,6 +402,7 @@ test_published_current_release_can_receive_cli_assets
 test_cli_contract_change_publishes
 test_cli_requirement_change_publishes
 test_cli_release_metadata_change_publishes
+test_renamed_tag_with_existing_legacy_release_targets_build_commit
 test_missing_previous_cli_release_publishes
 test_recovery_targets_release_commit
 test_recovery_targets_grouped_release_commit
