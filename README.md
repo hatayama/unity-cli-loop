@@ -613,6 +613,7 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 | File | Purpose | Git-track? |
 |------|---------|------------|
 | `project-runner-pin.json` | Project runner version contract used by the global dispatcher | Yes |
+| `cli-pin.json` | Legacy dispatcher bootstrap contract during the project runner pin rename | Yes |
 | `settings.tools.json` | Per-tool enable/disable preferences | Optional |
 | `tools.json` | Auto-generated CLI tool registry | No |
 | `outputs/` | Runtime outputs (test results, screenshots, hierarchy dumps) | No |
@@ -623,6 +624,7 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 > ```gitignore
 > **/.uloop/*
 > !**/.uloop/project-runner-pin.json
+> !**/.uloop/cli-pin.json
 > !**/.uloop/settings.tools.json
 > ```
 >
