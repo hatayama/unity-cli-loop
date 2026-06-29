@@ -99,14 +99,29 @@ func TestRunProtocolMinimumVersionGuard_WhenBaseUsesPreRenameAndHeadMinimumMatch
 	// Verifies the project runner tag rename can bootstrap its first renamed release.
 	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
 		baseContent:         buildPreRenameProtocolMinimumVersionConstants(2, "3.0.0-beta.40"),
-		headContent:         buildProtocolMinimumVersionConstants(2, "3.0.0-beta.43"),
-		headContractContent: `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.43"}`,
+		headContent:         buildProtocolMinimumVersionConstants(3, "3.0.0-beta.43"),
+		headContractContent: `{"schemaVersion":1,"protocolVersion":3,"projectRunnerVersion":"3.0.0-beta.43"}`,
 	})
 
 	if result.exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
 	}
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
+}
+
+func TestRunProtocolMinimumVersionGuard_WhenBootstrapReleaseProtocolDiffers_Fails(t *testing.T) {
+	// Verifies bootstrap exemption does not hide readable release contract mismatches.
+	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
+		baseContent:         buildPreRenameProtocolMinimumVersionConstants(2, "3.0.0-beta.40"),
+		headContent:         buildProtocolMinimumVersionConstants(3, "3.0.0-beta.43"),
+		headContractContent: `{"schemaVersion":1,"protocolVersion":3,"projectRunnerVersion":"3.0.0-beta.43"}`,
+		releaseContent:      `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.43"}`,
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stderr, "advertises protocol 2")
 }
 
 func TestParseProtocolMinimumVersionValues_WhenPreRenameMinimumConstantIsUsed_Fails(t *testing.T) {

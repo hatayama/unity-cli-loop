@@ -155,7 +155,7 @@ func AnalyzeProtocolMinimumVersionGuardForRefs(
 	if protocolMinimumVersionGuardNeedsReleaseCheck(result) {
 		_, err = verifyMinimumCliReleaseProtocolAtRef(ctx, repoRoot, result.Head)
 		if err != nil {
-			if !protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(ctx, repoRoot, config.HeadRef, result) {
+			if !protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(ctx, repoRoot, config.HeadRef, result, err) {
 				result.MinimumCliReleaseProtocolError = err.Error()
 			}
 		}
@@ -361,11 +361,12 @@ func protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(
 	repoRoot string,
 	headRef string,
 	result ProtocolMinimumVersionGuardResult,
+	err error,
 ) bool {
-	if !result.Base.UsesPreRenameMinimumVersion {
+	if !protocolMinimumVersionReleaseContractIsMissing(err) {
 		return false
 	}
-	if result.RequiredProtocolChanged {
+	if !result.Base.UsesPreRenameMinimumVersion {
 		return false
 	}
 	if !result.MinimumProjectRunnerVersionChanged {
@@ -377,6 +378,10 @@ func protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(
 		return false
 	}
 	return result.Head.MinimumProjectRunnerVersion == headProjectRunnerVersion
+}
+
+func protocolMinimumVersionReleaseContractIsMissing(err error) bool {
+	return strings.Contains(err.Error(), "does not provide cli/contract.json")
 }
 
 func protocolMinimumVersionValueLabel(values ProtocolMinimumVersionValues) string {

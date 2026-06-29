@@ -9,7 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         // Why: the runtime IPC gate compares this contract generation, not release numbers.
         // Bump it together with cli/contract.json protocolVersion only when this package can
         // no longer interoperate with a different CLI protocol generation.
-        public const int REQUIRED_CLI_PROTOCOL_VERSION = 2;
+        public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
         // Why: setup installs this pinned project runner release; protocol bump PRs can advance it only after
         // the matching project runner tag is published.
         public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "3.0.0-beta.43";
