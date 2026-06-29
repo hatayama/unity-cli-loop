@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const int REQUIRED_CLI_PROTOCOL_VERSION = 2;
         // Why: setup installs this pinned project runner release; protocol bump PRs can advance it only after
         // the matching project runner tag is published.
-        public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "3.0.0-beta.40";
+        public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "3.0.0-beta.43";
         public const string MINIMUM_REQUIRED_PROJECT_RUNNER_RELEASE_TAG = PROJECT_RUNNER_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION;
         // Why: global uloop is a dispatcher; project-local CLI versions are downloaded separately.
         public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "3.0.1-beta.6";
