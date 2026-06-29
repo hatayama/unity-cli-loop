@@ -400,6 +400,16 @@ test_invalid_release_tag_version_fails() {
   run_failure_case invalid-release-tag-version 3.0.0-beta.3 push v3-beta "Invalid release tag: uloop-project-runner-v3-beta" missing uloop-project-runner-v3-beta
 }
 
+# Verifies numeric prerelease identifiers cannot have leading zeroes.
+test_invalid_release_tag_numeric_prerelease_fails() {
+  run_failure_case invalid-release-tag-numeric-prerelease 3.0.0-beta.3 push v3-beta "Invalid release tag: uloop-project-runner-v3.0.0-01" missing uloop-project-runner-v3.0.0-01
+}
+
+# Verifies prerelease identifiers cannot be empty.
+test_invalid_release_tag_empty_prerelease_identifier_fails() {
+  run_failure_case invalid-release-tag-empty-prerelease 3.0.0-beta.3 push v3-beta "Invalid release tag: uloop-project-runner-v3.0.0-alpha..1" missing uloop-project-runner-v3.0.0-alpha..1
+}
+
 assert_script_contains "cli/contract.json"
 test_complete_current_release_skips
 test_package_version_change_without_cli_change_skips
@@ -421,3 +431,5 @@ test_main_prerelease_fails
 test_v3_beta_stable_fails
 test_release_lookup_error_fails
 test_invalid_release_tag_version_fails
+test_invalid_release_tag_numeric_prerelease_fails
+test_invalid_release_tag_empty_prerelease_identifier_fails
