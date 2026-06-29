@@ -37,7 +37,7 @@ func CommandForOS(goos string, options Options) (Command, error) {
 			"-ExecutionPolicy",
 			"Bypass",
 			"-Command",
-			fmt.Sprintf("$env:ULOOP_VERSION=%s; irm %s | iex", shellQuote(updateSelector), shellQuote(scriptURL)),
+			fmt.Sprintf("$ProgressPreference='SilentlyContinue'; $env:ULOOP_VERSION=%s; irm %s | iex", shellQuote(updateSelector), shellQuote(scriptURL)),
 		}}, nil
 	default:
 		return Command{}, errors.New(UnsupportedOSMessage)
