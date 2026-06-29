@@ -25,6 +25,10 @@ mark_package_release_sync_ready() {
   fi
 }
 
+strip_carriage_returns() {
+  tr -d '\015'
+}
+
 resolve_package_path() {
   package_path=$1
   file_path=$2
@@ -194,7 +198,7 @@ ensure_release_points_to_commit() {
   expected_sha=$2
   release_data=$3
 
-  release_target=$(printf '%s\n' "$release_data" | jq -r '.targetCommitish')
+  release_target=$(printf '%s\n' "$release_data" | jq -r '.targetCommitish' | strip_carriage_returns)
   resolved_release_target=$(resolve_release_target_commit "$release_target")
   resolved_expected_sha=$(git rev-parse "$expected_sha^{commit}")
 
@@ -266,7 +270,7 @@ create_package_release() {
   case "$release_status" in
     0)
       ensure_release_points_to_commit "$release_tag" "$target_sha" "$release_data"
-      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
+      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft' | strip_carriage_returns)
       if [ "$is_draft" != "false" ]; then
         publish_existing_draft_release "$release_tag" "$version"
       else
@@ -288,7 +292,7 @@ release_has_all_cli_assets() {
 
   asset_names=$("${ROOT_DIR}/scripts/verify-native-cli-release-assets.sh" --list) || return 1
   for asset_name in $asset_names; do
-    asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length')
+    asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length' | strip_carriage_returns)
     if [ "$asset_count" -eq 0 ]; then
       return 1
     fi
@@ -300,7 +304,7 @@ release_has_all_dispatcher_assets() {
 
   asset_names=$("${ROOT_DIR}/scripts/verify-dispatcher-release-assets.sh" --list) || return 1
   for asset_name in $asset_names; do
-    asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length')
+    asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length' | strip_carriage_returns)
     if [ "$asset_count" -eq 0 ]; then
       return 1
     fi
@@ -317,7 +321,7 @@ cli_release_is_ready() {
 
   case "$release_status" in
     0)
-      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
+      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft' | strip_carriage_returns)
       if [ "$is_draft" != "false" ]; then
         return 1
       fi
@@ -343,7 +347,7 @@ dispatcher_release_is_ready() {
 
   case "$release_status" in
     0)
-      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
+      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft' | strip_carriage_returns)
       if [ "$is_draft" != "false" ]; then
         return 1
       fi
@@ -456,7 +460,7 @@ release_tag_from_config() {
         ($package["include-v-in-tag"] // false)
       ]
     | @tsv
-  ' "$CONFIG" |
+  ' "$CONFIG" | strip_carriage_returns |
   while IFS='	' read -r component include_component include_v; do
     if [ "$component" = "__ULOOP_EMPTY_COMPONENT__" ]; then
       component=""
@@ -471,7 +475,7 @@ mark_package_release_sync_ready true
 
 fetch_release_refs
 
-cli_version=$(jq -r --arg package_path "$CLI_PACKAGE_PATH" '.[$package_path] // empty' "$MANIFEST")
+cli_version=$(jq -r --arg package_path "$CLI_PACKAGE_PATH" '.[$package_path] // empty' "$MANIFEST" | strip_carriage_returns)
 if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packages[$package_path] != null' "$CONFIG" >/dev/null; then
   cli_release_tag=$(release_tag_from_config "$CLI_PACKAGE_PATH" "$cli_version")
   if ! wait_for_cli_release_ready "$cli_release_tag"; then
@@ -482,7 +486,7 @@ if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packa
   fetch_cli_release_tag "$cli_release_tag"
 fi
 
-minimum_dispatcher_version=$(jq -r '.minimumDispatcherVersion // empty' "$ROOT_DIR/$UNITY_PACKAGE_CLI_PIN_FILE")
+minimum_dispatcher_version=$(jq -r '.minimumDispatcherVersion // empty' "$ROOT_DIR/$UNITY_PACKAGE_CLI_PIN_FILE" | strip_carriage_returns)
 if [ -n "$minimum_dispatcher_version" ]; then
   dispatcher_release_tag="dispatcher-v$minimum_dispatcher_version"
   if ! wait_for_dispatcher_release_ready "$dispatcher_release_tag"; then
@@ -504,13 +508,13 @@ jq -r --arg skip "$CLI_PACKAGE_PATH" '
       (.value["include-v-in-tag"] // false)
     ]
   | @tsv
-' "$CONFIG" |
+' "$CONFIG" | strip_carriage_returns |
 while IFS='	' read -r package_path changelog_config_path component include_component include_v; do
   if [ "$component" = "__ULOOP_EMPTY_COMPONENT__" ]; then
     component=""
   fi
 
-  version=$(jq -r --arg package_path "$package_path" '.[$package_path] // empty' "$MANIFEST")
+  version=$(jq -r --arg package_path "$package_path" '.[$package_path] // empty' "$MANIFEST" | strip_carriage_returns)
   if [ -z "$version" ]; then
     echo "Skipping $package_path because it has no release-please manifest version."
     continue
@@ -540,7 +544,7 @@ while IFS='	' read -r package_path changelog_config_path component include_compo
         ensure_release_points_to_commit "$release_tag" "$release_commit_sha" "$release_data"
       fi
 
-      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft')
+      is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft' | strip_carriage_returns)
       if [ "$is_draft" != "false" ]; then
         if [ -z "$release_commit_sha" ]; then
           echo "Draft release $release_tag cannot be protocol-verified because no release-please commit for $package_path version $version was found." >&2

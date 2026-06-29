@@ -171,6 +171,7 @@ write_release_files() {
 {
   "packages": {
     ".": {
+      "component": "unity-package",
       "release-type": "go",
       "include-v-in-tag": true,
       "include-component-in-tag": false,
