@@ -779,6 +779,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                         || target.HasDifferentLayoutSkills));
         }
 
+        internal static bool ShouldShowSkillsInstalledDialog(
+            IEnumerable<SkillSetupTargetInfo> targets)
+        {
+            Debug.Assert(targets != null, "targets must not be null");
+            return targets.All(target => target.InstallState != SkillInstallState.Outdated);
+        }
+
         internal static bool ShouldUseFirstInstallSkillsUi(string lastSeenSetupWizardVersion)
         {
             return string.IsNullOrEmpty(lastSeenSetupWizardVersion);
@@ -1316,6 +1323,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 : FilterInstallableSkillTargets(targets);
             if (installableTargets.Count == 0) return;
 
+            bool shouldShowSkillsInstalledDialog = ShouldShowSkillsInstalledDialog(installableTargets);
             _isInstallingSkills = true;
             UpdateSkillsStep(true, targets);
 
@@ -1325,7 +1333,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     installableTargets,
                     !_installSkillsFlat,
                     CancellationToken.None);
-                EditorDialogHelper.ShowSkillsInstalledDialog();
+                if (shouldShowSkillsInstalledDialog)
+                {
+                    EditorDialogHelper.ShowSkillsInstalledDialog();
+                }
             }
             finally
             {

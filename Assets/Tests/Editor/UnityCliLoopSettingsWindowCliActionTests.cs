@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Presentation;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -127,6 +128,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that the settings UI updates non-dispatcher or older dispatcher installs.
             bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
+        [TestCase(SkillInstallState.Missing, true)]
+        [TestCase(SkillInstallState.Outdated, false)]
+        public void ShouldShowSkillsInstalledDialog_ReturnsExpectedValue(
+            SkillInstallState installState,
+            bool expected)
+        {
+            // Verifies that Settings keeps the success dialog for first install only.
+            bool result = UnityCliLoopSettingsWindow.ShouldShowSkillsInstalledDialog(installState);
 
             Assert.That(result, Is.EqualTo(expected));
         }

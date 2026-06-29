@@ -967,6 +967,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return EvaluateCliSetupCompatibility(cliVersion, cliIsDispatcher).NeedsUpdate;
         }
 
+        internal static bool ShouldShowSkillsInstalledDialog(SkillInstallState installState)
+        {
+            return installState != SkillInstallState.Outdated;
+        }
+
         private static CliSetupCompatibilityState EvaluateCliSetupCompatibility(
             string cliVersion,
             bool cliIsDispatcher)
@@ -1019,6 +1024,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
+            bool shouldShowSkillsInstalledDialog =
+                ShouldShowSkillsInstalledDialog(_selectedTargetInstallState);
             CancelSkillInstallStateRefresh();
             _isInstallingSkills = true;
             RefreshCliSetupSection();
@@ -1040,7 +1047,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     new List<SkillSetupTargetInfo> { target },
                     !_installSkillsFlat,
                     CancellationToken.None);
-                EditorDialogHelper.ShowSkillsInstalledDialog();
+                if (shouldShowSkillsInstalledDialog)
+                {
+                    EditorDialogHelper.ShowSkillsInstalledDialog();
+                }
             }
             finally
             {
