@@ -118,6 +118,9 @@ assert_changelog_exists() {
   assert_package_path_exists "$package_path" "$changelog_path"
 }
 
+assert_json_value '.["pull-request-header"] | contains("unity-package")' 'true'
+assert_json_value '.["pull-request-header"] | contains("uloop-project-runner")' 'true'
+assert_json_value '.["pull-request-header"] | contains("Dispatcher releases")' 'true'
 assert_json_value '.packages["."].["changelog-path"]' 'Packages/src/CHANGELOG.md'
 assert_json_value '.packages["."].component' 'unity-package'
 assert_json_value '.packages["."].["include-component-in-tag"]' 'false'
