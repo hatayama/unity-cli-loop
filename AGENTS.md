@@ -54,6 +54,26 @@ These files are generated copies. Update the source skill definitions instead, t
 Write GitHub Actions and release automation logic in Go when it needs JSON parsing, workflow polling, state transitions, or non-trivial branching.
 Shell scripts are acceptable only as thin wrappers or simple command sequences.
 
+## Dispatcher Release Inputs
+
+The global dispatcher has its own release version in `cli/dispatcher-contract.json`.
+When changing dispatcher release inputs, update `dispatcherVersion` in the same PR.
+Pull request CI runs `check-dispatcher-version-bump` and fails if dispatcher inputs changed
+without a dispatcher version increase.
+
+Dispatcher release inputs include:
+
+- `cli/cmd/dispatcher/main.go`
+- `cli/dispatcher-contract.json`
+- `cli/internal/cli/dispatcher*.go`
+- `cli/internal/update/*.go`
+- `scripts/install.ps1`
+
+Do not bump `dispatcherContractVersion` unless the dispatcher contract itself changes.
+Do not raise Unity package `MINIMUM_REQUIRED_DISPATCHER_VERSION` or pin-file
+`minimumDispatcherVersion` just because the dispatcher implementation changed; those should
+advance only when the package must require a newly published dispatcher.
+
 ## Windows Compatibility Guardrails
 
 Most day-to-day development happens on macOS, but this project must keep working on Windows.
