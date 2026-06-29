@@ -1,6 +1,7 @@
 {
   "packages": {
     ".": {
+      "component": "unity-package",
       "release-type": "go",
       "versioning": "prerelease",
       "prerelease": true,
