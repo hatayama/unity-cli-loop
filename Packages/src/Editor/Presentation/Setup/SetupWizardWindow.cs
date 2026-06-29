@@ -783,7 +783,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             IEnumerable<SkillSetupTargetInfo> targets)
         {
             Debug.Assert(targets != null, "targets must not be null");
-            return targets.All(target => target.InstallState != SkillInstallState.Outdated);
+            return targets.All(target =>
+                target.InstallState != SkillInstallState.Outdated
+                && !target.HasDifferentLayoutSkills);
         }
 
         internal static bool ShouldUseFirstInstallSkillsUi(string lastSeenSetupWizardVersion)
