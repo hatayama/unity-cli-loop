@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,8 @@ const (
 var (
 	releasePRCheckNow   = time.Now
 	releasePRCheckSleep = time.Sleep
+
+	releasePRCheckPlainUnityPackageSummary = regexp.MustCompile(`<details><summary>((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?)</summary>`)
 )
 
 type releasePRCheckConfig struct {
@@ -40,6 +43,10 @@ type releasePullRequest struct {
 	HeadRefOID  string `json:"headRefOid"`
 	Title       string `json:"title"`
 	URL         string `json:"url"`
+}
+
+type releasePullRequestBody struct {
+	Body string `json:"body"`
 }
 
 type releaseWorkflowRun struct {
@@ -63,6 +70,15 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 	if !found {
 		writeReleasePRCheckLine(stdout, "No pending release-please PR found for "+config.targetBranch+".")
 		return 0
+	}
+
+	bodyChanged, err := clarifyReleasePRCheckBody(ctx, config, releasePR)
+	if err != nil {
+		writeReleasePRCheckLine(stderr, err)
+		return 1
+	}
+	if bodyChanged {
+		writeReleasePRCheckLine(stdout, fmt.Sprintf("Updated release PR #%d body to label the Unity package summary.", releasePR.Number))
 	}
 
 	err = markReleasePRCheckDraft(ctx, config, releasePR)
@@ -240,6 +256,67 @@ func markReleasePRCheckReady(ctx context.Context, config releasePRCheckConfig, r
 func dispatchReleasePRCheckWorkflow(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest) error {
 	_, err := runReleasePRCheckOutput(ctx, "gh", "workflow", "run", config.workflow, "--repo", config.repository, "--ref", releasePR.HeadRefName)
 	return err
+}
+
+func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest) (bool, error) {
+	output, err := runReleasePRCheckOutput(ctx, "gh", "pr", "view", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--json", "body")
+	if err != nil {
+		return false, err
+	}
+
+	prBody := releasePullRequestBody{}
+	err = json.Unmarshal([]byte(output), &prBody)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse release PR body: %w", err)
+	}
+
+	clarifiedBody, changed := clarifyReleasePRCheckUnityPackageSummary(prBody.Body)
+	if !changed {
+		return false, nil
+	}
+
+	bodyFile, cleanup, err := writeReleasePRCheckBodyFile(clarifiedBody)
+	if err != nil {
+		return false, err
+	}
+	defer cleanup()
+
+	_, err = runReleasePRCheckOutput(ctx, "gh", "pr", "edit", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--body-file", bodyFile)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func clarifyReleasePRCheckUnityPackageSummary(body string) (string, bool) {
+	matches := releasePRCheckPlainUnityPackageSummary.FindStringSubmatchIndex(body)
+	if matches == nil {
+		return body, false
+	}
+
+	version := body[matches[2]:matches[3]]
+	replacement := "<details><summary>unity-package: " + version + "</summary>"
+	return body[:matches[0]] + replacement + body[matches[1]:], true
+}
+
+func writeReleasePRCheckBodyFile(body string) (string, func(), error) {
+	bodyFile, err := os.CreateTemp("", "uloop-release-pr-body-*.md")
+	if err != nil {
+		return "", func() {}, fmt.Errorf("failed to create release PR body file: %w", err)
+	}
+
+	cleanup := func() { _ = os.Remove(bodyFile.Name()) }
+	_, writeErr := bodyFile.WriteString(body)
+	closeErr := bodyFile.Close()
+	if writeErr != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("failed to write release PR body file: %w", writeErr)
+	}
+	if closeErr != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("failed to close release PR body file: %w", closeErr)
+	}
+	return bodyFile.Name(), cleanup, nil
 }
 
 func findDispatchedReleasePRCheckRun(
