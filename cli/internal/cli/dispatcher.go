@@ -162,6 +162,8 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 		return true, 1
 	}
 
+	// Why: optional update failures should not retry and redraw installer progress on every command.
+	markDispatcherSelfUpdateChecked()
 	writeFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
 	return false, 0
 }

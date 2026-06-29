@@ -40,7 +40,7 @@ func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
 }
 
 func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
-	// Verifies dispatcher update calls the same Windows installer script on the matching channel.
+	// Verifies dispatcher update calls the Windows installer script quietly on the matching channel.
 	commandName, args, err := updateCommandForOS("windows")
 	if err != nil {
 		t.Fatalf("updateCommandForOS failed: %v", err)
@@ -57,6 +57,9 @@ func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
 	}
 	if !strings.Contains(joinedArgs, "$env:ULOOP_VERSION='"+expectedReleaseTag+"'") {
 		t.Fatalf("installer version missing: %s", joinedArgs)
+	}
+	if !strings.Contains(joinedArgs, "$ProgressPreference='SilentlyContinue'") {
+		t.Fatalf("installer progress suppression missing: %s", joinedArgs)
 	}
 	if strings.Contains(joinedArgs, "npm") {
 		t.Fatalf("update command still references npm: %s", joinedArgs)
@@ -127,7 +130,7 @@ func TestUpdateCommandForDarwinNormalizesProjectRunnerReleaseTag(t *testing.T) {
 }
 
 func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
-	// Verifies Windows dispatcher update can target the minimum release version requested by Unity.
+	// Verifies Windows dispatcher update can quietly target the minimum release version requested by Unity.
 	commandName, args, err := updateCommandForOSWithOptions("windows", updateOptions{
 		targetVersion: "3.0.0",
 	})
@@ -144,6 +147,9 @@ func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
 	}
 	if !strings.Contains(joinedArgs, "$env:ULOOP_VERSION='dispatcher-v3.0.0'") {
 		t.Fatalf("installer version missing: %s", joinedArgs)
+	}
+	if !strings.Contains(joinedArgs, "$ProgressPreference='SilentlyContinue'") {
+		t.Fatalf("installer progress suppression missing: %s", joinedArgs)
 	}
 }
 

@@ -229,8 +229,8 @@ func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t 
 	}
 }
 
-func TestEnforceDispatcherFreshnessDoesNotMarkFailedOptionalUpdateChecked(t *testing.T) {
-	// Verifies transient optional update failures stay retryable on the next command.
+func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T) {
+	// Verifies transient optional update failures are throttled until the next check interval.
 	cacheRoot := t.TempDir()
 	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
 
@@ -238,7 +238,9 @@ func TestEnforceDispatcherFreshnessDoesNotMarkFailedOptionalUpdateChecked(t *tes
 	defer func() {
 		dispatcherRunUpdate = previousRunner
 	}()
+	runnerCalls := 0
 	dispatcherRunUpdate = func(context.Context) error {
+		runnerCalls++
 		return errors.New("network unavailable")
 	}
 
@@ -255,8 +257,24 @@ func TestEnforceDispatcherFreshnessDoesNotMarkFailedOptionalUpdateChecked(t *tes
 		t.Fatalf("freshness output mismatch: %s", stderr.String())
 	}
 	statePath := filepath.Join(cacheRoot, dispatcherUpdateStateFileName)
-	if _, err := os.Stat(statePath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected no update state after failed optional update, got err=%v", err)
+	if _, err := os.Stat(statePath); err != nil {
+		t.Fatalf("expected update state after failed optional update: %v", err)
+	}
+
+	stderr.Reset()
+	handled, code = enforceDispatcherFreshness(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr)
+
+	if handled || code != 0 {
+		t.Fatalf("second freshness result mismatch: handled=%t code=%d", handled, code)
+	}
+	if runnerCalls != 1 {
+		t.Fatalf("optional update should be throttled after failure, got %d calls", runnerCalls)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no throttled optional update output, got: %s", stderr.String())
 	}
 }
 
