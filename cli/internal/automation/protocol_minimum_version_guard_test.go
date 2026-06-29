@@ -95,6 +95,18 @@ func TestRunProtocolMinimumVersionGuard_WhenBaseUsesPreRenameMinimumConstant_Pas
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
 }
 
+func TestParseProtocolMinimumVersionValues_WhenPreRenameMinimumConstantIsUsed_Fails(t *testing.T) {
+	// Verifies current package constants must use the project runner minimum version name.
+	_, err := ParseProtocolMinimumVersionValues([]byte(buildPreRenameProtocolMinimumVersionConstants(2, "3.0.0-beta.40")))
+
+	if err == nil {
+		t.Fatal("expected pre-rename minimum version constant to fail")
+	}
+	if !strings.Contains(err.Error(), "does not define MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION") {
+		t.Fatalf("expected missing project runner minimum version error, got %v", err)
+	}
+}
+
 func TestParseProtocolMinimumVersionValues_WhenMinimumVersionIsInvalid_Fails(t *testing.T) {
 	// Verifies invalid minimum project runner versions fail before release tag construction.
 	_, err := ParseProtocolMinimumVersionValues([]byte(buildProtocolMinimumVersionConstants(2, "3.0.0-01")))

@@ -9,11 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
-
-	sharedversion "github.com/hatayama/unity-cli-loop/cli/internal/version"
 )
 
 const (
@@ -22,19 +19,14 @@ const (
 	projectRunnerReleaseTagPrefix = "uloop-project-runner-v"
 )
 
-var (
-	requiredProtocolVersionPattern              = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
-	minimumProjectRunnerVersionPattern          = regexp.MustCompile(`MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION\s*=\s*"([^"]+)"`)
-	preRenameMinimumProjectRunnerVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
-	requiredMinimumProjectRunnerAssets          = []string{
-		"uloop-project-runner-darwin-amd64.tar.gz",
-		"uloop-project-runner-darwin-amd64.tar.gz.sha256",
-		"uloop-project-runner-darwin-arm64.tar.gz",
-		"uloop-project-runner-darwin-arm64.tar.gz.sha256",
-		"uloop-project-runner-windows-amd64.zip",
-		"uloop-project-runner-windows-amd64.zip.sha256",
-	}
-)
+var requiredMinimumProjectRunnerAssets = []string{
+	"uloop-project-runner-darwin-amd64.tar.gz",
+	"uloop-project-runner-darwin-amd64.tar.gz.sha256",
+	"uloop-project-runner-darwin-arm64.tar.gz",
+	"uloop-project-runner-darwin-arm64.tar.gz.sha256",
+	"uloop-project-runner-windows-amd64.zip",
+	"uloop-project-runner-windows-amd64.zip.sha256",
+}
 
 type minimumProjectRunnerRelease struct {
 	Tag            string
@@ -149,7 +141,7 @@ func AnalyzeProtocolMinimumVersionGuardForRefs(
 		return ProtocolMinimumVersionGuardResult{}, fmt.Errorf("failed to resolve git repository root: %w", err)
 	}
 
-	baseValues, err := protocolMinimumVersionValuesAtRef(ctx, repoRoot, config.BaseRef)
+	baseValues, err := protocolMinimumVersionBaseValuesAtRef(ctx, repoRoot, config.BaseRef)
 	if err != nil {
 		return ProtocolMinimumVersionGuardResult{}, err
 	}
@@ -185,49 +177,11 @@ func AnalyzeProtocolMinimumVersionGuard(
 	}
 }
 
-func ParseProtocolMinimumVersionValues(content []byte) (ProtocolMinimumVersionValues, error) {
-	text := string(content)
-	values := ProtocolMinimumVersionValues{}
-
-	requiredMatches := requiredProtocolVersionPattern.FindStringSubmatch(text)
-	if len(requiredMatches) == 2 {
-		requiredProtocolVersion, err := strconv.Atoi(requiredMatches[1])
-		if err != nil {
-			return ProtocolMinimumVersionValues{}, fmt.Errorf("REQUIRED_CLI_PROTOCOL_VERSION is not an integer: %w", err)
-		}
-		values.RequiredProtocolVersion = requiredProtocolVersion
-		values.HasRequiredProtocol = true
-	}
-
-	minimumProjectRunnerVersion, ok := parseMinimumProjectRunnerVersion(text)
-	if !ok {
-		return ProtocolMinimumVersionValues{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION", protocolMinimumVersionFile)
-	}
-	if _, ok := sharedversion.Compare(minimumProjectRunnerVersion, minimumProjectRunnerVersion); !ok {
-		return ProtocolMinimumVersionValues{}, fmt.Errorf("%s MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION must be semver, got %q", protocolMinimumVersionFile, minimumProjectRunnerVersion)
-	}
-	values.MinimumProjectRunnerVersion = minimumProjectRunnerVersion
-	return values, nil
-}
-
 func VerifyMinimumCliReleaseProtocol(values ProtocolMinimumVersionValues, contractContent []byte) error {
 	return verifyMinimumProjectRunnerReleaseProtocol(
 		minimumProjectRunnerReleaseTag(values.MinimumProjectRunnerVersion),
 		values,
 		contractContent)
-}
-
-func parseMinimumProjectRunnerVersion(text string) (string, bool) {
-	minimumMatches := minimumProjectRunnerVersionPattern.FindStringSubmatch(text)
-	if len(minimumMatches) == 2 {
-		return normalizeProjectRunnerVersion(minimumMatches[1]), true
-	}
-
-	preRenameMinimumMatches := preRenameMinimumProjectRunnerVersionPattern.FindStringSubmatch(text)
-	if len(preRenameMinimumMatches) == 2 {
-		return normalizeProjectRunnerVersion(preRenameMinimumMatches[1]), true
-	}
-	return "", false
 }
 
 func minimumProjectRunnerReleaseTag(version string) string {
@@ -422,6 +376,18 @@ func protocolMinimumVersionValuesAtRef(
 		return ProtocolMinimumVersionValues{}, err
 	}
 	return ParseProtocolMinimumVersionValues([]byte(content))
+}
+
+func protocolMinimumVersionBaseValuesAtRef(
+	ctx context.Context,
+	repoRoot string,
+	ref string,
+) (ProtocolMinimumVersionValues, error) {
+	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, protocolMinimumVersionFile)
+	if err != nil {
+		return ProtocolMinimumVersionValues{}, err
+	}
+	return parseProtocolMinimumVersionBaseValues([]byte(content))
 }
 
 func protocolMinimumVersionFileAtRef(
