@@ -1014,7 +1014,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 EditorUtility.DisplayDialog(
                     "CLI Not Found",
-                    "uloop-cli is not installed. Please install the CLI first.",
+                    "uloop CLI is not installed. Please install the CLI first.",
                     "OK");
                 return;
             }

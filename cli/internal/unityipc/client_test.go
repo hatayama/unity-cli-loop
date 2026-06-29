@@ -40,8 +40,8 @@ func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t
 	}
 }
 
-func TestSendIncludesCliVersionWithoutProjectIdentityMetadata(t *testing.T) {
-	// Verifies that requests carry CLI compatibility metadata without reviving legacy project identity metadata.
+func TestSendIncludesProjectRunnerVersionWithoutProjectIdentityMetadata(t *testing.T) {
+	// Verifies that requests carry project runner compatibility metadata without reviving legacy project identity metadata.
 	if runtime.GOOS == "windows" {
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
@@ -122,8 +122,8 @@ func assertClientMetadataRequest(t *testing.T, request map[string]any) {
 	if !ok {
 		t.Fatalf("request should include uloop metadata: %#v", request)
 	}
-	if metadata["cliVersion"] != "3.0.0-beta.6" {
-		t.Fatalf("cli version metadata mismatch: %#v", metadata)
+	if metadata["projectRunnerVersion"] != "3.0.0-beta.6" {
+		t.Fatalf("project runner version metadata mismatch: %#v", metadata)
 	}
 	if metadata["protocolVersion"] != float64(clicontract.Current.ProtocolVersion) {
 		t.Fatalf("protocol version metadata mismatch: %#v", metadata)

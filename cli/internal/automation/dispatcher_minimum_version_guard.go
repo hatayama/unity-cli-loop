@@ -16,8 +16,8 @@ const (
 	cliContractFile                     = "cli/contract.json"
 	dispatcherContractFile              = "cli/dispatcher-contract.json"
 	dispatcherReleaseTagPrefix          = "dispatcher-v"
-	unityPackageCliPinFile              = "Packages/src/cli-pin.json"
-	unityProjectCliPinFile              = ".uloop/cli-pin.json"
+	unityPackageCliPinFile              = "Packages/src/project-runner-pin.json"
+	unityProjectCliPinFile              = ".uloop/project-runner-pin.json"
 	minimumDispatcherContractVersion    = 1
 	minimumDispatcherVersionDescription = "minimumDispatcherVersion"
 )
@@ -25,18 +25,18 @@ const (
 var minimumDispatcherVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
 
 type dispatcherMinimumVersionValues struct {
-	CurrentCliVersion                  string
+	CurrentProjectRunnerVersion        string
 	CurrentDispatcherVersion           string
 	CurrentDispatcherContractVersion   int
 	MinimumDispatcherVersion           string
-	PackagePinCliVersion               string
+	PackagePinProjectRunnerVersion     string
 	PackagePinMinimumDispatcherVersion string
-	ProjectPinCliVersion               string
+	ProjectPinProjectRunnerVersion     string
 	ProjectPinMinimumDispatcherVersion string
 }
 
 type dispatcherMinimumVersionCliContract struct {
-	CliVersion string `json:"cliVersion"`
+	ProjectRunnerVersion string `json:"projectRunnerVersion"`
 }
 
 type dispatcherMinimumVersionContract struct {
@@ -53,7 +53,7 @@ type dispatcherMinimumVersionCliPin struct {
 	SchemaVersion            int    `json:"schemaVersion"`
 	PackageName              string `json:"packageName"`
 	PackageVersion           string `json:"packageVersion"`
-	CliVersion               string `json:"cliVersion"`
+	ProjectRunnerVersion     string `json:"projectRunnerVersion"`
 	RequiredProtocolVersion  int    `json:"requiredProtocolVersion"`
 	MinimumDispatcherVersion string `json:"minimumDispatcherVersion"`
 }
@@ -159,13 +159,13 @@ func parseDispatcherMinimumVersionValues(
 	}
 
 	values := dispatcherMinimumVersionValues{
-		CurrentCliVersion:                  cliContract.CliVersion,
+		CurrentProjectRunnerVersion:        cliContract.ProjectRunnerVersion,
 		CurrentDispatcherVersion:           dispatcherContract.DispatcherVersion,
 		CurrentDispatcherContractVersion:   dispatcherContract.DispatcherContractVersion,
 		MinimumDispatcherVersion:           minimumDispatcherVersion,
-		PackagePinCliVersion:               packagePin.CliVersion,
+		PackagePinProjectRunnerVersion:     packagePin.ProjectRunnerVersion,
 		PackagePinMinimumDispatcherVersion: packagePin.MinimumDispatcherVersion,
-		ProjectPinCliVersion:               projectPin.CliVersion,
+		ProjectPinProjectRunnerVersion:     projectPin.ProjectRunnerVersion,
 		ProjectPinMinimumDispatcherVersion: projectPin.MinimumDispatcherVersion,
 	}
 	return values, validateDispatcherMinimumVersionValues(values)
@@ -176,8 +176,8 @@ func parseDispatcherMinimumVersionCliContract(content []byte) (dispatcherMinimum
 	if err := json.Unmarshal(content, &contract); err != nil {
 		return dispatcherMinimumVersionCliContract{}, fmt.Errorf("%s is invalid JSON: %w", cliContractFile, err)
 	}
-	if contract.CliVersion == "" {
-		return dispatcherMinimumVersionCliContract{}, fmt.Errorf("%s does not define cliVersion", cliContractFile)
+	if contract.ProjectRunnerVersion == "" {
+		return dispatcherMinimumVersionCliContract{}, fmt.Errorf("%s does not define projectRunnerVersion", cliContractFile)
 	}
 	return contract, nil
 }
@@ -211,8 +211,8 @@ func parseDispatcherMinimumVersionPin(path string, content []byte) (dispatcherMi
 	if err := json.Unmarshal(content, &pin); err != nil {
 		return dispatcherMinimumVersionCliPin{}, fmt.Errorf("%s is invalid JSON: %w", path, err)
 	}
-	if pin.CliVersion == "" {
-		return dispatcherMinimumVersionCliPin{}, fmt.Errorf("%s does not define cliVersion", path)
+	if pin.ProjectRunnerVersion == "" {
+		return dispatcherMinimumVersionCliPin{}, fmt.Errorf("%s does not define projectRunnerVersion", path)
 	}
 	if pin.MinimumDispatcherVersion == "" {
 		return dispatcherMinimumVersionCliPin{}, fmt.Errorf("%s does not define %s", path, minimumDispatcherVersionDescription)
@@ -221,19 +221,19 @@ func parseDispatcherMinimumVersionPin(path string, content []byte) (dispatcherMi
 }
 
 func validateDispatcherMinimumVersionValues(values dispatcherMinimumVersionValues) error {
-	if values.PackagePinCliVersion != values.CurrentCliVersion {
-		return fmt.Errorf("%s cliVersion %q does not match %s cliVersion %q",
+	if values.PackagePinProjectRunnerVersion != values.CurrentProjectRunnerVersion {
+		return fmt.Errorf("%s projectRunnerVersion %q does not match %s projectRunnerVersion %q",
 			unityPackageCliPinFile,
-			values.PackagePinCliVersion,
+			values.PackagePinProjectRunnerVersion,
 			cliContractFile,
-			values.CurrentCliVersion)
+			values.CurrentProjectRunnerVersion)
 	}
-	if values.ProjectPinCliVersion != values.PackagePinCliVersion {
-		return fmt.Errorf("%s cliVersion %q does not match %s cliVersion %q",
+	if values.ProjectPinProjectRunnerVersion != values.PackagePinProjectRunnerVersion {
+		return fmt.Errorf("%s projectRunnerVersion %q does not match %s projectRunnerVersion %q",
 			unityProjectCliPinFile,
-			values.ProjectPinCliVersion,
+			values.ProjectPinProjectRunnerVersion,
 			unityPackageCliPinFile,
-			values.PackagePinCliVersion)
+			values.PackagePinProjectRunnerVersion)
 	}
 	if values.PackagePinMinimumDispatcherVersion != values.MinimumDispatcherVersion {
 		return fmt.Errorf("%s %s %q does not match %s MINIMUM_REQUIRED_DISPATCHER_VERSION %q",

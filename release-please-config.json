@@ -19,18 +19,18 @@
         },
         {
           "type": "json",
-          "path": "Packages/src/cli-pin.json",
+          "path": "Packages/src/project-runner-pin.json",
           "jsonpath": "$.packageVersion"
         },
         {
           "type": "json",
-          "path": ".uloop/cli-pin.json",
+          "path": ".uloop/project-runner-pin.json",
           "jsonpath": "$.packageVersion"
         }
       ]
     },
     "cli": {
-      "component": "cli",
+      "component": "uloop-project-runner",
       "release-type": "go",
       "versioning": "prerelease",
       "prerelease": true,
@@ -47,17 +47,17 @@
         {
           "type": "json",
           "path": "contract.json",
-          "jsonpath": "$.cliVersion"
+          "jsonpath": "$.projectRunnerVersion"
         },
         {
           "type": "json",
-          "path": "/Packages/src/cli-pin.json",
-          "jsonpath": "$.cliVersion"
+          "path": "/Packages/src/project-runner-pin.json",
+          "jsonpath": "$.projectRunnerVersion"
         },
         {
           "type": "json",
-          "path": "/.uloop/cli-pin.json",
-          "jsonpath": "$.cliVersion"
+          "path": "/.uloop/project-runner-pin.json",
+          "jsonpath": "$.projectRunnerVersion"
         }
       ]
     }

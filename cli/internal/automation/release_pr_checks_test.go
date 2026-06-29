@@ -312,7 +312,7 @@ fi
 
 if [ "$1" = "show" ]; then
   case "$2" in
-    cli-v*:cli/contract.json)
+    uloop-project-runner-v*:cli/contract.json)
       if [ -n "${GIT_RELEASE_CONTRACT:-}" ]; then
         cat "$GIT_RELEASE_CONTRACT"
       else

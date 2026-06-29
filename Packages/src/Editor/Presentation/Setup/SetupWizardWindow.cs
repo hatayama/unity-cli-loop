@@ -1232,7 +1232,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                         true);
                     EditorUtility.DisplayDialog(
                         "Installation Failed",
-                        $"Failed to install uloop-cli.\n\n{result.ErrorOutput}\n\n"
+                        $"Failed to install uloop CLI.\n\n{result.ErrorOutput}\n\n"
                         + $"You can install manually:\n  {command.ManualCommand}",
                         "OK");
                     return;

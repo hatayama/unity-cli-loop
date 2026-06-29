@@ -56,8 +56,8 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 
 func writeVersionJSON(stdout io.Writer) {
 	content, err := json.Marshal(map[string]any{
-		"CliVersion":      version,
-		"ProtocolVersion": protocolVersion,
+		"ProjectRunnerVersion": version,
+		"ProtocolVersion":      protocolVersion,
 	})
 	if err != nil {
 		panic(err)

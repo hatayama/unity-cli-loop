@@ -37,22 +37,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (string.IsNullOrWhiteSpace(packageRoot))
             {
                 Debug.LogWarning(
-                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_CLI_PIN_FILE_NAME} synchronization because the package root is empty.");
+                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package root is empty.");
                 return false;
             }
 
             if (string.IsNullOrWhiteSpace(projectRoot))
             {
                 Debug.LogWarning(
-                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_CLI_PIN_FILE_NAME} synchronization because the project root is empty.");
+                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the project root is empty.");
                 return false;
             }
 
-            string sourcePath = Path.Combine(packageRoot, UnityCliLoopConstants.ULOOP_CLI_PIN_FILE_NAME);
-            string destinationPath = Path.Combine(
+            return SyncProjectPinFileByName(
+                packageRoot,
                 projectRoot,
-                UnityCliLoopConstants.ULOOP_DIR,
-                UnityCliLoopConstants.ULOOP_CLI_PIN_FILE_NAME);
+                UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
+        }
+
+        private static bool SyncProjectPinFileByName(string packageRoot, string projectRoot, string pinFileName)
+        {
+            string sourcePath = Path.Combine(packageRoot, pinFileName);
+            string destinationPath = Path.Combine(projectRoot, UnityCliLoopConstants.ULOOP_DIR, pinFileName);
 
             if (!File.Exists(sourcePath))
             {

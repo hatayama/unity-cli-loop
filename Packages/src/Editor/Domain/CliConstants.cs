@@ -9,13 +9,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         // Why: the runtime IPC gate compares this contract generation, not release numbers.
         // Bump it together with cli/contract.json protocolVersion only when this package can
         // no longer interoperate with a different CLI protocol generation.
-        public const int REQUIRED_CLI_PROTOCOL_VERSION = 2;
-        // Why: setup installs this pinned release; protocol bump PRs can advance it only after
-        // the matching CLI tag is published.
-        public const string MINIMUM_REQUIRED_CLI_VERSION = "3.0.0-beta.40";
-        public const string MINIMUM_REQUIRED_CLI_RELEASE_TAG = CLI_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_CLI_VERSION;
+        public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
+        // Why: setup installs this pinned project runner release; protocol bump PRs can advance it only after
+        // the matching project runner tag is published.
+        public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "3.0.0-beta.43";
+        public const string MINIMUM_REQUIRED_PROJECT_RUNNER_RELEASE_TAG = PROJECT_RUNNER_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION;
         // Why: global uloop is a dispatcher; project-local CLI versions are downloaded separately.
-        public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "3.0.1-beta.2";
+        public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "3.0.1-beta.6";
         public const string MINIMUM_REQUIRED_DISPATCHER_RELEASE_TAG = DISPATCHER_RELEASE_TAG_PREFIX + MINIMUM_REQUIRED_DISPATCHER_VERSION;
         // Why: dispatcher setup compatibility is a launcher contract generation, not the IPC protocol generation.
         public const int REQUIRED_DISPATCHER_CONTRACT_VERSION = 1;
@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string POSIX_PATH_SEPARATOR = ":";
         public const string WINDOWS_PATH_SEPARATOR = ";";
         public const string RELEASE_TAG_PREFIX = "v";
-        public const string CLI_RELEASE_TAG_PREFIX = "cli-v";
+        public const string PROJECT_RUNNER_RELEASE_TAG_PREFIX = "uloop-project-runner-v";
         public const string DISPATCHER_RELEASE_TAG_PREFIX = "dispatcher-v";
         public const string BETA_VERSION_MARKER = "-beta.";
         public const string SKILL_DIR_PREFIX = "uloop-";

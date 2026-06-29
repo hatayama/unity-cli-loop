@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         public JToken Params { get; set; }
 
-        public string ClientCliVersion { get; set; }
+        public string ClientProjectRunnerVersion { get; set; }
 
         /// <summary>
         /// IPC protocol generation the client speaks. Null when the client predates the

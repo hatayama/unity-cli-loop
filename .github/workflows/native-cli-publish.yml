@@ -12,7 +12,7 @@ on:
         required: false
         default: ""
       release-tag:
-        description: "CLI release tag to upload assets to. Defaults to cli-v{CLI version}."
+        description: "Project runner release tag to upload assets to. Defaults to uloop-project-runner-v{version}."
         required: false
         default: ""
       dry-run:

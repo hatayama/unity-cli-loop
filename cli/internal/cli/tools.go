@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	version                   = clicontract.Current.CliVersion
+	version                   = clicontract.Current.ProjectRunnerVersion
 	protocolVersion           = clicontract.Current.ProtocolVersion
 	dispatcherVersion         = clicontract.DispatcherCurrent.DispatcherVersion
 	dispatcherContractVersion = clicontract.DispatcherCurrent.DispatcherContractVersion
