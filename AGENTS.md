@@ -61,7 +61,9 @@ When changing dispatcher release inputs, update `dispatcherVersion` in the same 
 Pull request CI runs `check-dispatcher-version-bump` and fails if dispatcher inputs changed
 without a dispatcher version increase.
 
-Dispatcher release inputs include:
+The authoritative dispatcher release input list is `dispatcherReleaseInputPatterns` in
+`cli/internal/automation/dispatcher_version_bump_guard.go`.
+Dispatcher release inputs include these non-exhaustive examples:
 
 - `cli/cmd/dispatcher/main.go`
 - `cli/dispatcher-contract.json`
