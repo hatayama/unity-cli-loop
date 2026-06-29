@@ -96,7 +96,7 @@ Packages/src/Docs/**
 
 # uloop CLI cache and outputs
 **/.uloop/*
-!**/.uloop/cli-pin.json
+!**/.uloop/project-runner-pin.json
 
 # Node.js / TypeScript
 **/node_modules/

@@ -33,7 +33,12 @@ func parseProtocolMinimumVersionBaseValues(content []byte) (ProtocolMinimumVersi
 	if len(minimumMatches) != 2 {
 		return ParseProtocolMinimumVersionValues(content)
 	}
-	return parseProtocolMinimumVersionValues(text, normalizeProjectRunnerVersion(minimumMatches[1]), "MINIMUM_REQUIRED_CLI_VERSION")
+	values, err := parseProtocolMinimumVersionValues(text, normalizeProjectRunnerVersion(minimumMatches[1]), "MINIMUM_REQUIRED_CLI_VERSION")
+	if err != nil {
+		return ProtocolMinimumVersionValues{}, err
+	}
+	values.UsesPreRenameMinimumVersion = true
+	return values, nil
 }
 
 func parseProtocolMinimumVersionValuesWithMinimumVersion(text string) (ProtocolMinimumVersionValues, error) {

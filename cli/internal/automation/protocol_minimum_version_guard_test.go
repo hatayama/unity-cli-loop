@@ -95,6 +95,20 @@ func TestRunProtocolMinimumVersionGuard_WhenBaseUsesPreRenameMinimumConstant_Pas
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
 }
 
+func TestRunProtocolMinimumVersionGuard_WhenBaseUsesPreRenameAndHeadMinimumMatchesCurrentProjectRunner_Passes(t *testing.T) {
+	// Verifies the project runner tag rename can bootstrap its first renamed release.
+	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
+		baseContent:         buildPreRenameProtocolMinimumVersionConstants(2, "3.0.0-beta.40"),
+		headContent:         buildProtocolMinimumVersionConstants(2, "3.0.0-beta.43"),
+		headContractContent: `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.43"}`,
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
+}
+
 func TestParseProtocolMinimumVersionValues_WhenPreRenameMinimumConstantIsUsed_Fails(t *testing.T) {
 	// Verifies current package constants must use the project runner minimum version name.
 	_, err := ParseProtocolMinimumVersionValues([]byte(buildPreRenameProtocolMinimumVersionConstants(2, "3.0.0-beta.40")))
@@ -373,10 +387,11 @@ func TestRunProtocolMinimumVersionComment_WhenMinimumReleaseProtocolDiffers_Upse
 }
 
 type protocolMinimumVersionRefCase struct {
-	baseContent    string
-	headContent    string
-	releaseContent string
-	releaseView    string
+	baseContent         string
+	headContent         string
+	headContractContent string
+	releaseContent      string
+	releaseView         string
 }
 
 type protocolMinimumVersionGuardRunResult struct {
@@ -494,6 +509,11 @@ func prepareProtocolMinimumVersionGitContents(t *testing.T, workDir string, test
 	releaseContentPath := filepath.Join(workDir, "release-contract.json")
 	writeFile(t, baseContentPath, testCase.baseContent)
 	writeFile(t, headContentPath, testCase.headContent)
+	if testCase.headContractContent != "" {
+		headContractContentPath := filepath.Join(workDir, "head-contract.json")
+		writeFile(t, headContractContentPath, testCase.headContractContent)
+		t.Setenv("GIT_HEAD_CONTRACT_CONTENT", headContractContentPath)
+	}
 	if testCase.releaseContent != "" {
 		writeFile(t, releaseContentPath, testCase.releaseContent)
 		t.Setenv("GIT_RELEASE_CONTENT", releaseContentPath)
@@ -544,6 +564,13 @@ fi
 	if [ "$1" = "show" ]; then
 	  case "$2" in
 	    origin/v3-beta:*) cat "$GIT_BASE_CONTENT" ;;
+	    protocol-pr-head:cli/contract.json)
+	      if [ -n "${GIT_HEAD_CONTRACT_CONTENT:-}" ]; then
+	        cat "$GIT_HEAD_CONTRACT_CONTENT"
+	      else
+	        cat "$GIT_HEAD_CONTENT"
+	      fi
+	      ;;
 	    protocol-pr-head:*) cat "$GIT_HEAD_CONTENT" ;;
 	    protocol-release:*) cat "$GIT_HEAD_CONTENT" ;;
 		    uloop-project-runner-v*:cli/contract.json)

@@ -42,6 +42,7 @@ type ProtocolMinimumVersionValues struct {
 	RequiredProtocolVersion     int
 	HasRequiredProtocol         bool
 	MinimumProjectRunnerVersion string
+	UsesPreRenameMinimumVersion bool
 }
 
 type ProtocolMinimumVersionGuardResult struct {
@@ -154,7 +155,9 @@ func AnalyzeProtocolMinimumVersionGuardForRefs(
 	if protocolMinimumVersionGuardNeedsReleaseCheck(result) {
 		_, err = verifyMinimumCliReleaseProtocolAtRef(ctx, repoRoot, result.Head)
 		if err != nil {
-			result.MinimumCliReleaseProtocolError = err.Error()
+			if !protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(ctx, repoRoot, config.HeadRef, result) {
+				result.MinimumCliReleaseProtocolError = err.Error()
+			}
 		}
 	}
 	return result, nil
@@ -353,6 +356,29 @@ func protocolMinimumVersionGuardNeedsReleaseCheck(result ProtocolMinimumVersionG
 	return result.RequiredProtocolChanged || result.MinimumProjectRunnerVersionChanged
 }
 
+func protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(
+	ctx context.Context,
+	repoRoot string,
+	headRef string,
+	result ProtocolMinimumVersionGuardResult,
+) bool {
+	if !result.Base.UsesPreRenameMinimumVersion {
+		return false
+	}
+	if result.RequiredProtocolChanged {
+		return false
+	}
+	if !result.MinimumProjectRunnerVersionChanged {
+		return false
+	}
+
+	headProjectRunnerVersion, err := protocolMinimumProjectRunnerVersionAtRef(ctx, repoRoot, headRef)
+	if err != nil {
+		return false
+	}
+	return result.Head.MinimumProjectRunnerVersion == headProjectRunnerVersion
+}
+
 func protocolMinimumVersionValueLabel(values ProtocolMinimumVersionValues) string {
 	if !values.HasRequiredProtocol {
 		return "`<missing>`"
@@ -388,6 +414,26 @@ func protocolMinimumVersionBaseValuesAtRef(
 		return ProtocolMinimumVersionValues{}, err
 	}
 	return parseProtocolMinimumVersionBaseValues([]byte(content))
+}
+
+func protocolMinimumProjectRunnerVersionAtRef(
+	ctx context.Context,
+	repoRoot string,
+	ref string,
+) (string, error) {
+	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, cliContractFile)
+	if err != nil {
+		return "", err
+	}
+
+	contract := minimumCliReleaseContract{}
+	if err := json.Unmarshal([]byte(content), &contract); err != nil {
+		return "", fmt.Errorf("%s is invalid JSON: %w", cliContractFile, err)
+	}
+	if contract.ProjectRunnerVersion == "" {
+		return "", fmt.Errorf("%s does not define projectRunnerVersion", cliContractFile)
+	}
+	return contract.ProjectRunnerVersion, nil
 }
 
 func protocolMinimumVersionFileAtRef(
