@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Presentation;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -129,6 +130,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
 
             Assert.That(result, Is.EqualTo(expected));
+        }
+
+        [TestCase(SkillInstallState.Missing, false, true)]
+        [TestCase(SkillInstallState.Outdated, false, false)]
+        [TestCase(SkillInstallState.Missing, true, false)]
+        public void ShouldShowSkillsInstalledDialog_ReturnsExpectedValue(
+            SkillInstallState installState,
+            bool hasDifferentLayoutSkills,
+            bool expected)
+        {
+            // Verifies that Settings keeps the success dialog for first install only.
+            SkillSetupTargetInfo targetInfo = CreateSkillTarget(installState, hasDifferentLayoutSkills);
+
+            bool result = UnityCliLoopSettingsWindow.ShouldShowSkillsInstalledDialog(targetInfo);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
+        private static SkillSetupTargetInfo CreateSkillTarget(
+            SkillInstallState installState,
+            bool hasDifferentLayoutSkills)
+        {
+            return new SkillSetupTargetInfo(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true,
+                hasDifferentLayoutSkills,
+                installState);
         }
 
         private static UnityCliLoopSettingsWindow.CliPrimaryButtonAction ParseAction(string action)

@@ -779,6 +779,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
+        [Test]
+        public void ShouldShowSkillsInstalledDialog_WhenTargetsAreMissing_ReturnsTrue()
+        {
+            // Verifies that Setup Wizard keeps the success dialog for first install.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    SkillInstallState.Missing)
+            };
+
+            bool shouldShowDialog = SetupWizardWindow.ShouldShowSkillsInstalledDialog(targets);
+
+            Assert.That(shouldShowDialog, Is.True);
+        }
+
+        [Test]
+        public void ShouldShowSkillsInstalledDialog_WhenAnyTargetIsOutdated_ReturnsFalse()
+        {
+            // Verifies that Setup Wizard suppresses the success dialog for skill updates.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    SkillInstallState.Missing),
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    SkillInstallState.Outdated)
+            };
+
+            bool shouldShowDialog = SetupWizardWindow.ShouldShowSkillsInstalledDialog(targets);
+
+            Assert.That(shouldShowDialog, Is.False);
+        }
+
+        [Test]
+        public void ShouldShowSkillsInstalledDialog_WhenAnyTargetUsesDifferentLayout_ReturnsFalse()
+        {
+            // Verifies that Setup Wizard suppresses the success dialog for skill layout updates.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    SkillInstallState.Missing,
+                    hasDifferentLayoutSkills: true)
+            };
+
+            bool shouldShowDialog = SetupWizardWindow.ShouldShowSkillsInstalledDialog(targets);
+
+            Assert.That(shouldShowDialog, Is.False);
+        }
+
         [TestCase(SkillInstallState.Installed, false, true, "setup-target-item__status--installed")]
         [TestCase(SkillInstallState.Checking, false, true, "setup-target-item__status--checking")]
         [TestCase(SkillInstallState.Outdated, false, true, "setup-target-item__status--outdated")]
