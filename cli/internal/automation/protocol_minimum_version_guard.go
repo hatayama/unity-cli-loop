@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	sharedversion "github.com/hatayama/unity-cli-loop/cli/internal/version"
 )
 
 const (
@@ -200,6 +202,9 @@ func ParseProtocolMinimumVersionValues(content []byte) (ProtocolMinimumVersionVa
 	minimumProjectRunnerVersion, ok := parseMinimumProjectRunnerVersion(text)
 	if !ok {
 		return ProtocolMinimumVersionValues{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION", protocolMinimumVersionFile)
+	}
+	if _, ok := sharedversion.Compare(minimumProjectRunnerVersion, minimumProjectRunnerVersion); !ok {
+		return ProtocolMinimumVersionValues{}, fmt.Errorf("%s MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION must be semver, got %q", protocolMinimumVersionFile, minimumProjectRunnerVersion)
 	}
 	values.MinimumProjectRunnerVersion = minimumProjectRunnerVersion
 	return values, nil

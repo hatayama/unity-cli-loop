@@ -95,6 +95,18 @@ func TestRunProtocolMinimumVersionGuard_WhenBaseUsesPreRenameMinimumConstant_Pas
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
 }
 
+func TestParseProtocolMinimumVersionValues_WhenMinimumVersionIsInvalid_Fails(t *testing.T) {
+	// Verifies invalid minimum project runner versions fail before release tag construction.
+	_, err := ParseProtocolMinimumVersionValues([]byte(buildProtocolMinimumVersionConstants(2, "3.0.0-01")))
+
+	if err == nil {
+		t.Fatal("expected invalid minimum project runner version to fail")
+	}
+	if !strings.Contains(err.Error(), "MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION must be semver") {
+		t.Fatalf("expected semver error, got %v", err)
+	}
+}
+
 func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseProtocolDiffers_Fails(t *testing.T) {
 	// Verifies changing the minimum version text is not enough when the release uses the old protocol.
 	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
