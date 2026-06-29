@@ -11,17 +11,17 @@ import (
 )
 
 var (
-	dispatcherMinimumCliVersionPattern       = regexp.MustCompile(`MINIMUM_REQUIRED_CLI_VERSION\s*=\s*"([^"]+)"`)
-	dispatcherMinimumVersionPattern          = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
-	dispatcherRequiredProtocolVersionPattern = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
-	dispatcherCLIVersionPattern              = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
+	dispatcherMinimumProjectRunnerVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION\s*=\s*"([^"]+)"`)
+	dispatcherMinimumVersionPattern              = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
+	dispatcherRequiredProtocolVersionPattern     = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
+	dispatcherProjectRunnerVersionPattern        = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
 )
 
 type dispatcherPin struct {
 	SchemaVersion            int    `json:"schemaVersion"`
 	PackageName              string `json:"packageName"`
 	PackageVersion           string `json:"packageVersion"`
-	CLIVersion               string `json:"cliVersion"`
+	ProjectRunnerVersion     string `json:"projectRunnerVersion"`
 	RequiredProtocolVersion  int    `json:"requiredProtocolVersion"`
 	MinimumDispatcherVersion string `json:"minimumDispatcherVersion"`
 	SourcePath               string `json:"-"`
@@ -64,7 +64,7 @@ func loadDispatcherPin(projectRoot string) (dispatcherPin, error) {
 	if invalidPackagePinError != nil {
 		return dispatcherPin{}, invalidPackagePinError
 	}
-	return dispatcherPin{}, fmt.Errorf("cli pin not found under %s", projectRoot)
+	return dispatcherPin{}, fmt.Errorf("project runner pin not found under %s", projectRoot)
 }
 
 func dispatcherPinCandidatePaths(projectRoot string) []dispatcherPinCandidatePath {
@@ -118,16 +118,16 @@ func readDispatcherPin(pinPath string) (dispatcherPin, error) {
 	if err := json.Unmarshal(content, &pin); err != nil {
 		return dispatcherPin{}, fmt.Errorf("failed to parse %s: %w", pinPath, err)
 	}
-	pin.CLIVersion = normalizeDispatcherVersion(pin.CLIVersion)
-	if pin.CLIVersion == "" {
-		return dispatcherPin{}, fmt.Errorf("%s does not define cliVersion", pinPath)
+	pin.ProjectRunnerVersion = normalizeDispatcherVersion(pin.ProjectRunnerVersion)
+	if pin.ProjectRunnerVersion == "" {
+		return dispatcherPin{}, fmt.Errorf("%s does not define projectRunnerVersion", pinPath)
 	}
-	if err := validateDispatcherCLIVersion(pin.CLIVersion); err != nil {
-		return dispatcherPin{}, fmt.Errorf("%s defines invalid cliVersion: %w", pinPath, err)
+	if err := validateDispatcherProjectRunnerVersion(pin.ProjectRunnerVersion); err != nil {
+		return dispatcherPin{}, fmt.Errorf("%s defines invalid projectRunnerVersion: %w", pinPath, err)
 	}
 	pin.MinimumDispatcherVersion = normalizeDispatcherVersion(pin.MinimumDispatcherVersion)
 	if pin.MinimumDispatcherVersion != "" {
-		if err := validateDispatcherCLIVersion(pin.MinimumDispatcherVersion); err != nil {
+		if err := validateDispatcherProjectRunnerVersion(pin.MinimumDispatcherVersion); err != nil {
 			return dispatcherPin{}, fmt.Errorf("%s defines invalid minimumDispatcherVersion: %w", pinPath, err)
 		}
 	}
@@ -144,20 +144,20 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 		return dispatcherPin{}, err
 	}
 	text := string(content)
-	versionMatch := dispatcherMinimumCliVersionPattern.FindStringSubmatch(text)
+	versionMatch := dispatcherMinimumProjectRunnerVersionPattern.FindStringSubmatch(text)
 	if len(versionMatch) != 2 {
-		return dispatcherPin{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_CLI_VERSION", constantsPath)
+		return dispatcherPin{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION", constantsPath)
 	}
-	cliVersion := normalizeDispatcherVersion(versionMatch[1])
-	if err := validateDispatcherCLIVersion(cliVersion); err != nil {
-		return dispatcherPin{}, fmt.Errorf("%s defines invalid MINIMUM_REQUIRED_CLI_VERSION: %w", constantsPath, err)
+	projectRunnerVersion := normalizeDispatcherVersion(versionMatch[1])
+	if err := validateDispatcherProjectRunnerVersion(projectRunnerVersion); err != nil {
+		return dispatcherPin{}, fmt.Errorf("%s defines invalid MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION: %w", constantsPath, err)
 	}
 	dispatcherVersionMatch := dispatcherMinimumVersionPattern.FindStringSubmatch(text)
 	if len(dispatcherVersionMatch) != 2 {
 		return dispatcherPin{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_DISPATCHER_VERSION", constantsPath)
 	}
 	minimumDispatcherVersion := normalizeDispatcherVersion(dispatcherVersionMatch[1])
-	if err := validateDispatcherCLIVersion(minimumDispatcherVersion); err != nil {
+	if err := validateDispatcherProjectRunnerVersion(minimumDispatcherVersion); err != nil {
 		return dispatcherPin{}, fmt.Errorf("%s defines invalid MINIMUM_REQUIRED_DISPATCHER_VERSION: %w", constantsPath, err)
 	}
 	protocolVersion := 0
@@ -169,7 +169,7 @@ func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, err
 	return dispatcherPin{
 		SchemaVersion:            1,
 		PackageName:              dispatcherUnityPackageName,
-		CLIVersion:               cliVersion,
+		ProjectRunnerVersion:     projectRunnerVersion,
 		RequiredProtocolVersion:  protocolVersion,
 		MinimumDispatcherVersion: minimumDispatcherVersion,
 		SourcePath:               constantsPath,
@@ -184,9 +184,9 @@ func normalizeDispatcherVersion(value string) string {
 	return trimmed
 }
 
-func validateDispatcherCLIVersion(cliVersion string) error {
-	if !dispatcherCLIVersionPattern.MatchString(cliVersion) {
-		return fmt.Errorf("expected semantic version, got %q", cliVersion)
+func validateDispatcherProjectRunnerVersion(projectRunnerVersion string) error {
+	if !dispatcherProjectRunnerVersionPattern.MatchString(projectRunnerVersion) {
+		return fmt.Errorf("expected semantic version, got %q", projectRunnerVersion)
 	}
 	return nil
 }

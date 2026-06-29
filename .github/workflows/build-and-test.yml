@@ -2,7 +2,7 @@ name: Build and Test Unity CLI Loop
 
 on:
   push:
-    tags: ["v*", "cli-v*", "dispatcher-v*"]
+    tags: ["v*", "uloop-project-runner-v*", "dispatcher-v*"]
   pull_request:
     branches: [main, v3-beta]
   workflow_dispatch:

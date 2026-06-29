@@ -14,7 +14,7 @@ import (
 )
 
 var dispatcherReleaseInputPatterns = []string{
-	"cli/cmd/uloop/main.go",
+	"cli/cmd/dispatcher/main.go",
 	"cli/contract.go",
 	dispatcherContractFile,
 	"cli/internal/cli/completion*.go",

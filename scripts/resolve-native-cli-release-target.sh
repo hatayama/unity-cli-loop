@@ -2,6 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+LEGACY_CLI_RELEASE_TAG_PREFIX="cli-v"
 
 : "${EVENT_NAME:?EVENT_NAME is required}"
 
@@ -24,6 +25,11 @@ scripts/go-cli-toolchain.sh
 scripts/package-go-cli.sh
 scripts/verify-native-cli-release-assets.sh
 "
+
+is_semver_version() {
+  version=$1
+  printf '%s\n' "$version" | grep -Eq '^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)([.](0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?([+][0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?$'
+}
 
 release_json() {
   release_tag=$1
@@ -247,13 +253,13 @@ release_commit_sha_for_version() {
 
 VERSION=$(jq -r '.["cli"]' .release-please-manifest.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
-  echo "Could not resolve CLI release version from .release-please-manifest.json." >&2
+  echo "Could not resolve project runner release version from .release-please-manifest.json." >&2
   exit 1
 fi
 
-RELEASE_TAG="${INPUT_RELEASE_TAG:-cli-v$VERSION}"
+RELEASE_TAG="${INPUT_RELEASE_TAG:-uloop-project-runner-v$VERSION}"
 case "$RELEASE_TAG" in
-  cli-v[0-9]*)
+  uloop-project-runner-v*)
     ;;
   *)
     echo "Invalid release tag: $RELEASE_TAG" >&2
@@ -261,8 +267,14 @@ case "$RELEASE_TAG" in
     ;;
 esac
 
+RELEASE_TAG_VERSION=${RELEASE_TAG#uloop-project-runner-v}
+if ! is_semver_version "$RELEASE_TAG_VERSION"; then
+  echo "Invalid release tag: $RELEASE_TAG" >&2
+  exit 1
+fi
+
 case "$RELEASE_TAG" in
-  *[!A-Za-z0-9._-]*)
+  *[!A-Za-z0-9._+-]*)
     echo "Invalid release tag: $RELEASE_TAG" >&2
     exit 1
     ;;
@@ -305,6 +317,13 @@ RELEASE_TARGET_SHA=$(release_commit_sha_for_version "$VERSION" "$BUILD_SHA")
 if [ -z "$RELEASE_TARGET_SHA" ]; then
   RELEASE_TARGET_SHA=$BUILD_SHA
 fi
+LEGACY_CLI_RELEASE_TAG="$LEGACY_CLI_RELEASE_TAG_PREFIX$VERSION"
+if [ "$CAN_EVALUATE_CLI_RELEASE" = "true" ] &&
+   [ "$RELEASE_TARGET_SHA" != "$BUILD_SHA" ] &&
+   release_is_published "$LEGACY_CLI_RELEASE_TAG"; then
+  echo "Project runner release tag namespace changed for $VERSION; targeting build commit $BUILD_SHA instead of legacy release commit $RELEASE_TARGET_SHA." >&2
+  RELEASE_TARGET_SHA=$BUILD_SHA
+fi
 
 if [ "$CAN_EVALUATE_CLI_RELEASE" != "true" ]; then
   SHOULD_PUBLISH=false
@@ -322,16 +341,16 @@ elif release_is_published_with_cli_assets "$RELEASE_TAG"; then
 else
   PREVIOUS_CLI_RELEASE_TAG=$(latest_cli_asset_release_tag "$RELEASE_TAG")
   if [ -z "$PREVIOUS_CLI_RELEASE_TAG" ]; then
-    echo "No previous CLI asset release found; publishing native CLI assets." >&2
+    echo "No previous project runner asset release found; publishing native project runner assets." >&2
     SHOULD_PUBLISH=true
   elif release_commit_updates_cli_version "$RELEASE_TARGET_SHA" "$VERSION"; then
-    echo "CLI release metadata changed in $RELEASE_TARGET_SHA; publishing native CLI assets." >&2
+    echo "Project runner release metadata changed in $RELEASE_TARGET_SHA; publishing native project runner assets." >&2
     SHOULD_PUBLISH=true
   elif cli_release_inputs_changed "$PREVIOUS_CLI_RELEASE_TAG" "$TARGET_SHA"; then
-    echo "CLI release inputs changed since $PREVIOUS_CLI_RELEASE_TAG; publishing native CLI assets." >&2
+    echo "Project runner release inputs changed since $PREVIOUS_CLI_RELEASE_TAG; publishing native project runner assets." >&2
     SHOULD_PUBLISH=true
   else
-    echo "CLI release inputs are unchanged since $PREVIOUS_CLI_RELEASE_TAG; skipping native CLI publish." >&2
+    echo "Project runner release inputs are unchanged since $PREVIOUS_CLI_RELEASE_TAG; skipping native CLI publish." >&2
   fi
 fi
 

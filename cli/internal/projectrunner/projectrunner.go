@@ -1,4 +1,4 @@
-package projectcli
+package projectrunner
 
 import (
 	"context"

@@ -66,10 +66,10 @@ type rpcRequest struct {
 }
 
 type rpcClientMetadata struct {
-	CLIVersion         string `json:"cliVersion"`
-	ProtocolVersion    int    `json:"protocolVersion"`
-	AcceptsDispatchAck bool   `json:"acceptsDispatchAck"`
-	AcceptsHeartbeat   bool   `json:"acceptsHeartbeat"`
+	ProjectRunnerVersion string `json:"projectRunnerVersion"`
+	ProtocolVersion      int    `json:"protocolVersion"`
+	AcceptsDispatchAck   bool   `json:"acceptsDispatchAck"`
+	AcceptsHeartbeat     bool   `json:"acceptsHeartbeat"`
 }
 
 type rpcResponse struct {
@@ -189,10 +189,10 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 		Method:  method,
 		Params:  params,
 		ULoop: rpcClientMetadata{
-			CLIVersion:         client.clientVersion,
-			ProtocolVersion:    clicontract.Current.ProtocolVersion,
-			AcceptsDispatchAck: true,
-			AcceptsHeartbeat:   true,
+			ProjectRunnerVersion: client.clientVersion,
+			ProtocolVersion:      clicontract.Current.ProtocolVersion,
+			AcceptsDispatchAck:   true,
+			AcceptsHeartbeat:     true,
 		},
 		ID: client.requestID,
 	}

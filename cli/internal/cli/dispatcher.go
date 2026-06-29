@@ -23,11 +23,11 @@ const (
 	dispatcherCacheDirectoryName       = "uloop"
 	dispatcherVersionsDirectoryName    = "versions"
 	dispatcherUpdateStateFileName      = "dispatcher-update.json"
-	dispatcherProjectPinRelativePath   = ".uloop/cli-pin.json"
-	dispatcherPackagePinFileName       = "cli-pin.json"
+	dispatcherProjectPinRelativePath   = ".uloop/project-runner-pin.json"
+	dispatcherPackagePinFileName       = "project-runner-pin.json"
 	dispatcherUnityPackageName         = "io.github.hatayama.uloopmcp"
-	dispatcherRealCLIUnixFileName      = "uloop-cli"
-	dispatcherRealCLIWindowsFileName   = "uloop-cli.exe"
+	dispatcherRealCLIUnixFileName      = "uloop-project-runner"
+	dispatcherRealCLIWindowsFileName   = "uloop-project-runner.exe"
 	dispatcherReleaseRepository        = "hatayama/unity-cli-loop"
 	dispatcherReleaseBaseURL           = "https://github.com/" + dispatcherReleaseRepository + "/releases/download"
 	dispatcherSelfUpdateInterval       = 24 * time.Hour
@@ -285,12 +285,12 @@ func dispatcherPinResolutionError(projectRoot string, cause error) cliError {
 	return cliError{
 		ErrorCode:   errorCodeInternalError,
 		Phase:       errorPhaseProjectResolve,
-		Message:     "Could not resolve the required uloop CLI for this Unity project.",
+		Message:     "Could not resolve the required uloop project runner for this Unity project.",
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: projectRoot,
 		NextActions: []string{
-			"Open the Unity project once so Unity CLI Loop can write `.uloop/cli-pin.json`.",
+			"Open the Unity project once so Unity CLI Loop can write `.uloop/project-runner-pin.json`.",
 			"Run the CLI setup from Unity CLI Loop Settings if the pin file is still missing.",
 		},
 		Details: map[string]any{
@@ -303,15 +303,15 @@ func dispatcherRealCLIResolutionError(projectRoot string, pin dispatcherPin, cau
 	return cliError{
 		ErrorCode:   errorCodeInternalError,
 		Phase:       errorPhaseExecution,
-		Message:     "Could not prepare the pinned uloop CLI version.",
+		Message:     "Could not prepare the pinned uloop project runner version.",
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: projectRoot,
 		NextActions: []string{"Check network access to GitHub releases, then retry the command."},
 		Details: map[string]any{
-			"Cause":      cause.Error(),
-			"CliVersion": pin.CLIVersion,
-			"PinSource":  pin.SourcePath,
+			"Cause":                cause.Error(),
+			"ProjectRunnerVersion": pin.ProjectRunnerVersion,
+			"PinSource":            pin.SourcePath,
 		},
 	}
 }

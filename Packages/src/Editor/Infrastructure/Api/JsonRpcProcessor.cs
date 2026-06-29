@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 Method = request["method"]?.ToString(),
                 Params = request["params"],
-                ClientCliVersion = ReadClientCliVersion(request),
+                ClientProjectRunnerVersion = ReadClientProjectRunnerVersion(request),
                 ClientProtocolVersion = ReadClientProtocolVersion(request),
                 AcceptsDispatchAck = ReadAcceptsDispatchAck(request),
                 AcceptsHeartbeat = ReadAcceptsHeartbeat(request),
@@ -97,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             };
         }
 
-        private static string ReadClientCliVersion(JObject request)
+        private static string ReadClientProjectRunnerVersion(JObject request)
         {
             JObject metadata = request["uloop"] as JObject;
             if (metadata == null)
@@ -105,8 +105,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return null;
             }
 
-            string cliVersion = metadata["cliVersion"]?.ToString();
-            return string.IsNullOrWhiteSpace(cliVersion) ? null : cliVersion;
+            string projectRunnerVersion = metadata["projectRunnerVersion"]?.ToString();
+            return string.IsNullOrWhiteSpace(projectRunnerVersion) ? null : projectRunnerVersion;
         }
 
         private static int? ReadClientProtocolVersion(JObject request)
@@ -216,7 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     return CreateCliProtocolMismatchResponse(
                         request.Id,
-                        request.ClientCliVersion,
+                        request.ClientProjectRunnerVersion,
                         request.ClientProtocolVersion);
                 }
 

@@ -14,8 +14,8 @@ import (
 const (
 	unityProtocolConstantPath = "../Packages/src/Editor/Domain/CliConstants.cs"
 	unityPackageManifestPath  = "../Packages/src/package.json"
-	unityPackageCliPinPath    = "../Packages/src/cli-pin.json"
-	unityProjectCliPinPath    = "../.uloop/cli-pin.json"
+	unityPackageCliPinPath    = "../Packages/src/project-runner-pin.json"
+	unityProjectCliPinPath    = "../.uloop/project-runner-pin.json"
 )
 
 var (
@@ -32,7 +32,7 @@ type unityPackageCliPin struct {
 	SchemaVersion            int    `json:"schemaVersion"`
 	PackageName              string `json:"packageName"`
 	PackageVersion           string `json:"packageVersion"`
-	CLIVersion               string `json:"cliVersion"`
+	ProjectRunnerVersion     string `json:"projectRunnerVersion"`
 	RequiredProtocolVersion  int    `json:"requiredProtocolVersion"`
 	MinimumDispatcherVersion string `json:"minimumDispatcherVersion"`
 }
@@ -54,7 +54,7 @@ func TestProtocolVersionMatchesUnityPackage(t *testing.T) {
 }
 
 // TestUnityPackageCliPinMatchesReleaseContracts verifies the dispatcher pin copied into
-// projects points at the package release, CLI release, and protocol generation from their
+// projects points at the package release, project runner release, and protocol generation from their
 // canonical declarations.
 func TestUnityPackageCliPinMatchesReleaseContracts(t *testing.T) {
 	manifest := readJSONFile[unityPackageManifest](t, unityPackageManifestPath)
@@ -69,8 +69,8 @@ func TestUnityPackageCliPinMatchesReleaseContracts(t *testing.T) {
 	if pin.PackageVersion != manifest.Version {
 		t.Fatalf("expected %s packageVersion to match %s version: %q != %q", unityPackageCliPinPath, unityPackageManifestPath, pin.PackageVersion, manifest.Version)
 	}
-	if pin.CLIVersion != Current.CliVersion {
-		t.Fatalf("expected %s cliVersion to match cli/contract.json cliVersion: %q != %q", unityPackageCliPinPath, pin.CLIVersion, Current.CliVersion)
+	if pin.ProjectRunnerVersion != Current.ProjectRunnerVersion {
+		t.Fatalf("expected %s projectRunnerVersion to match cli/contract.json projectRunnerVersion: %q != %q", unityPackageCliPinPath, pin.ProjectRunnerVersion, Current.ProjectRunnerVersion)
 	}
 	if pin.RequiredProtocolVersion != Current.ProtocolVersion {
 		t.Fatalf("expected %s requiredProtocolVersion to match cli/contract.json protocolVersion: %d != %d", unityPackageCliPinPath, pin.RequiredProtocolVersion, Current.ProtocolVersion)

@@ -22,20 +22,20 @@ func TestScriptURLForStableVersionUsesReleaseInstaller(t *testing.T) {
 	}
 }
 
-func TestCLIReleaseTagAddsMissingPrefix(t *testing.T) {
-	// Verifies CLI downloads use the GitHub release tag format.
-	tag := CLIReleaseTag("3.0.0-beta.3")
+func TestProjectRunnerReleaseTagAddsMissingPrefix(t *testing.T) {
+	// Verifies project runner downloads use the GitHub release tag format.
+	tag := ProjectRunnerReleaseTag("3.0.0-beta.3")
 
-	if tag != "cli-v3.0.0-beta.3" {
+	if tag != "uloop-project-runner-v3.0.0-beta.3" {
 		t.Fatalf("release tag mismatch: %s", tag)
 	}
 }
 
-func TestCLIReleaseTagKeepsCliPrefix(t *testing.T) {
-	// Verifies exact CLI release tags are not rewritten.
-	tag := CLIReleaseTag("cli-v3.0.0-beta.3")
+func TestProjectRunnerReleaseTagKeepsProjectRunnerPrefix(t *testing.T) {
+	// Verifies exact project runner release tags are not rewritten.
+	tag := ProjectRunnerReleaseTag("uloop-project-runner-v3.0.0-beta.3")
 
-	if tag != "cli-v3.0.0-beta.3" {
+	if tag != "uloop-project-runner-v3.0.0-beta.3" {
 		t.Fatalf("release tag mismatch: %s", tag)
 	}
 }

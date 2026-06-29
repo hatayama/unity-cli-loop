@@ -73,7 +73,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 Select Window > Unity CLI Loop > Settings. A dedicated window will open. If the **CLI** button is not highlighted in blue, press **Install CLI**.
 
-The installer places the global `uloop` dispatcher on PATH. Project-specific `uloop-cli` binaries are downloaded into the user cache automatically from each project's `.uloop/cli-pin.json`.
+The installer places the global `uloop` dispatcher on PATH. Project-specific `uloop-project-runner` binaries are downloaded into the user cache automatically from each project's `.uloop/project-runner-pin.json`.
 
 To return to the v2 line, press **Uninstall CLI** in Settings, downgrade the U-LOOP package to a v2 version such as `2.1.1`, then press **Install CLI** again from Settings.
 
@@ -612,7 +612,7 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 
 | File | Purpose | Git-track? |
 |------|---------|------------|
-| `cli-pin.json` | Project CLI version contract used by the global dispatcher | Yes |
+| `project-runner-pin.json` | Project runner version contract used by the global dispatcher | Yes |
 | `settings.tools.json` | Per-tool enable/disable preferences | Optional |
 | `tools.json` | Auto-generated CLI tool registry | No |
 | `outputs/` | Runtime outputs (test results, screenshots, hierarchy dumps) | No |
@@ -622,7 +622,7 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 >
 > ```gitignore
 > **/.uloop/*
-> !**/.uloop/cli-pin.json
+> !**/.uloop/project-runner-pin.json
 > !**/.uloop/settings.tools.json
 > ```
 >

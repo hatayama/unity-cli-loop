@@ -3,18 +3,12 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 EXPECTED_ASSETS="
-uloop-cli-darwin-amd64.tar.gz
-uloop-cli-darwin-amd64.tar.gz.sha256
-uloop-cli-darwin-arm64.tar.gz
-uloop-cli-darwin-arm64.tar.gz.sha256
-uloop-cli-windows-amd64.zip
-uloop-cli-windows-amd64.zip.sha256
-uloop-darwin-amd64.tar.gz
-uloop-darwin-amd64.tar.gz.sha256
-uloop-darwin-arm64.tar.gz
-uloop-darwin-arm64.tar.gz.sha256
-uloop-windows-amd64.zip
-uloop-windows-amd64.zip.sha256
+uloop-project-runner-darwin-amd64.tar.gz
+uloop-project-runner-darwin-amd64.tar.gz.sha256
+uloop-project-runner-darwin-arm64.tar.gz
+uloop-project-runner-darwin-arm64.tar.gz.sha256
+uloop-project-runner-windows-amd64.zip
+uloop-project-runner-windows-amd64.zip.sha256
 "
 
 if [ "${1:-}" = "--list" ]; then
@@ -104,21 +98,12 @@ for asset_name in $EXPECTED_ASSETS; do
   require_file "$asset_name"
 done
 
-verify_checksum "uloop-cli-darwin-amd64.tar.gz"
-verify_checksum "uloop-cli-darwin-arm64.tar.gz"
-verify_checksum "uloop-cli-windows-amd64.zip"
-verify_checksum "uloop-darwin-amd64.tar.gz"
-verify_checksum "uloop-darwin-arm64.tar.gz"
-verify_checksum "uloop-windows-amd64.zip"
+verify_checksum "uloop-project-runner-darwin-amd64.tar.gz"
+verify_checksum "uloop-project-runner-darwin-arm64.tar.gz"
+verify_checksum "uloop-project-runner-windows-amd64.zip"
 
-require_tar_entry "uloop-cli-darwin-amd64.tar.gz" "uloop-cli"
-require_tar_entry "uloop-cli-darwin-arm64.tar.gz" "uloop-cli"
-require_zip_entry "uloop-cli-windows-amd64.zip" "uloop-cli.exe"
-require_tar_entry "uloop-darwin-amd64.tar.gz" "uloop"
-require_tar_entry "uloop-darwin-amd64.tar.gz" "uloop-cli"
-require_tar_entry "uloop-darwin-arm64.tar.gz" "uloop"
-require_tar_entry "uloop-darwin-arm64.tar.gz" "uloop-cli"
-require_zip_entry "uloop-windows-amd64.zip" "uloop.exe"
-require_zip_entry "uloop-windows-amd64.zip" "uloop-cli.exe"
+require_tar_entry "uloop-project-runner-darwin-amd64.tar.gz" "uloop-project-runner"
+require_tar_entry "uloop-project-runner-darwin-arm64.tar.gz" "uloop-project-runner"
+require_zip_entry "uloop-project-runner-windows-amd64.zip" "uloop-project-runner.exe"
 
 echo "Native CLI release assets are complete."
