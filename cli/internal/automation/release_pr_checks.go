@@ -23,7 +23,17 @@ const (
 
 var (
 	releasePRCheckNow   = time.Now
-	releasePRCheckSleep = time.Sleep
+	releasePRCheckSleep = func(ctx context.Context, duration time.Duration) error {
+		timer := time.NewTimer(duration)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return nil
+		}
+	}
 
 	releasePRCheckPlainUnityPackageSummary = regexp.MustCompile(`<details><summary>((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?)</summary>`)
 )
@@ -62,7 +72,7 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 		return 1
 	}
 
-	releasePR, found, err := findReleasePRCheckPullRequest(ctx, config)
+	releasePR, found, err := findReleasePRCheckPullRequestWithRetry(ctx, config)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
@@ -220,6 +230,22 @@ func findReleasePRCheckPullRequest(ctx context.Context, config releasePRCheckCon
 	return matchingPRs[0], true, nil
 }
 
+func findReleasePRCheckPullRequestWithRetry(ctx context.Context, config releasePRCheckConfig) (releasePullRequest, bool, error) {
+	for attempt := 0; attempt < config.lookupAttempts; attempt++ {
+		releasePR, found, err := findReleasePRCheckPullRequest(ctx, config)
+		if err != nil || found {
+			return releasePR, found, err
+		}
+		if attempt+1 < config.lookupAttempts {
+			err = releasePRCheckSleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
+			if err != nil {
+				return releasePullRequest{}, false, err
+			}
+		}
+	}
+	return releasePullRequest{}, false, nil
+}
+
 func releasePRCheckMatches(releasePR releasePullRequest, targetBranch string) bool {
 	releasePRBranch := "release-please--branches--" + targetBranch
 	if releasePR.HeadRefName != releasePRBranch && !strings.HasPrefix(releasePR.HeadRefName, releasePRBranch+"--components--") {
@@ -338,7 +364,10 @@ func findDispatchedReleasePRCheckRun(
 			return run, nil
 		}
 		if attempt+1 < config.lookupAttempts {
-			releasePRCheckSleep(time.Duration(config.lookupIntervalSeconds) * time.Second)
+			err = releasePRCheckSleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
+			if err != nil {
+				return releaseWorkflowRun{}, err
+			}
 		}
 	}
 	return releaseWorkflowRun{}, fmt.Errorf("could not find dispatched %s workflow run for %s", config.workflow, releasePR.HeadRefOID)

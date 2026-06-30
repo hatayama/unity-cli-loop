@@ -136,6 +136,8 @@ assert_json_value '.packages["."].["extra-files"][2].jsonpath' '$.packageVersion
 assert_json_value '.packages["cli"].component' 'uloop-project-runner'
 assert_json_value '.packages["cli"].["include-component-in-tag"]' 'true'
 assert_json_value '.packages["cli"].["changelog-path"]' 'CHANGELOG.md'
+assert_json_value '.packages["cli"].["exclude-paths"][0]' 'cli/cmd/dispatch-release-please-pr-checks'
+assert_json_value '.packages["cli"].["exclude-paths"][1]' 'cli/internal/automation'
 assert_json_value '.packages["cli"].["extra-files"] | length' '4'
 assert_json_value '.packages["cli"].["extra-files"][0].path' 'internal/tools/default-tools.json'
 assert_json_value '.packages["cli"].["extra-files"][1].path' 'contract.json'
@@ -153,8 +155,8 @@ assert_file_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR 
 assert_file_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks'
 assert_file_contains "$RELEASE_WORKFLOW" '        working-directory: cli'
 assert_file_contains "$RELEASE_WORKFLOW" '        run: go run ./cmd/dispatch-release-please-pr-checks'
-assert_step_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'"
-assert_step_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'"
+assert_step_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'"
+assert_step_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'"
 assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for package release sync' 'Sync release-please package releases'
 assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' '      - name: Dispatch release PR checks'
 
