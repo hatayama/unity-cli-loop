@@ -190,12 +190,105 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(reloadWasCalled, Is.False);
         }
 
+        [Test]
+        public void FocusReturnService_WhenFocusIsLost_HoldsAutoRefreshOnce()
+        {
+            // Verifies focus loss suspends Unity Auto Refresh only once per unfocused interval.
+            bool autoRefreshHeld = false;
+            int disallowCallCount = 0;
+            int allowCallCount = 0;
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => disallowCallCount++,
+                () => allowCallCount++,
+                () => { });
+
+            service.HandleFocusChanged(false);
+            service.HandleFocusChanged(false);
+
+            Assert.That(autoRefreshHeld, Is.True);
+            Assert.That(disallowCallCount, Is.EqualTo(1));
+            Assert.That(allowCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenFocusReturns_RunsPreflightBeforeReleasingAutoRefresh()
+        {
+            // Verifies focus return resolves editor state before Unity Auto Refresh resumes.
+            bool autoRefreshHeld = true;
+            List<string> events = new List<string>();
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => events.Add("disallow"),
+                () => events.Add("allow"),
+                () => events.Add("preflight"));
+
+            service.HandleFocusChanged(true);
+
+            Assert.That(autoRefreshHeld, Is.False);
+            Assert.That(events, Is.EqualTo(new[] { "preflight", "allow" }));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenStartupFindsHeldAutoRefresh_ReleasesIt()
+        {
+            // Verifies startup recovery clears an Auto Refresh hold that survived a reload.
+            bool autoRefreshHeld = true;
+            int allowCallCount = 0;
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => { },
+                () => allowCallCount++,
+                () => { });
+
+            service.RestoreAutoRefreshIfHeld();
+
+            Assert.That(autoRefreshHeld, Is.False);
+            Assert.That(allowCallCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenPreflightThrows_StillReleasesAutoRefresh()
+        {
+            // Verifies Auto Refresh is released even when focus-return preflight fails fast.
+            bool autoRefreshHeld = true;
+            int allowCallCount = 0;
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => { },
+                () => allowCallCount++,
+                () => throw new InvalidOperationException("preflight failed"));
+
+            Assert.Throws<InvalidOperationException>(() => service.HandleFocusChanged(true));
+            Assert.That(autoRefreshHeld, Is.False);
+            Assert.That(allowCallCount, Is.EqualTo(1));
+        }
+
         private static Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> CreateSnapshots()
         {
             Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots =
                 new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
             snapshots[ScenePath] = (true, SavedTime, 10);
             return snapshots;
+        }
+
+        private static ExternalAssetFocusReturnService CreateFocusReturnService(
+            Func<bool> getAutoRefreshHeld,
+            Action<bool> setAutoRefreshHeld,
+            Action disallowAutoRefresh,
+            Action allowAutoRefresh,
+            Action resolveFocusReturnChanges)
+        {
+            return new ExternalAssetFocusReturnService(
+                getAutoRefreshHeld,
+                setAutoRefreshHeld,
+                disallowAutoRefresh,
+                allowAutoRefresh,
+                resolveFocusReturnChanges);
         }
     }
 }

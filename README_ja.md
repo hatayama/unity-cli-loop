@@ -265,6 +265,8 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 
 # 主要機能
 ## 自律開発ループ系ツール
+別アプリでプロジェクトファイルが変更された後にUnityがフォーカスを取り戻すと、Unity CLI Loopは一時的にAuto Refreshを止め、dirtyなロード済みSceneと現在のPrefab Stageを保存してから、cleanな外部変更Scene/Prefabを再読み込みします。これにより、Git restoreやcheckout後の作業再開時にUnityの外部変更確認ダイアログで止まる状況を避けます。
+
 ### 1. compile - コンパイルの実行
 AssetDatabase.Refresh()をした後、Domain Reload完了まで待ってコンパイル結果を返却します。内蔵のLinterでは発見できないエラー・警告を見つける事ができます。
 差分コンパイルと強制全体コンパイルを選択できます。
