@@ -116,6 +116,46 @@ func TestReleasePRChecksClarifyUnityPackageSummaryBeforeDispatch(t *testing.T) {
 	assertReleasePRCheckLogContains(t, result.ghLog, "workflow run build-and-test.yml --repo owner/repository --ref release-please--branches--v3-beta")
 }
 
+// Verifies that release PR lookup is retried while GitHub exposes the newly opened PR and label.
+func TestReleasePRChecksRetryPendingReleasePRLookup(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:           `[]`,
+		prListJSONAfterWatch: `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		runListJSON:          `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		runWatchStatus:       "0",
+		lookupAttempts:       "2",
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	if len(result.sleeps) != 1 || result.sleeps[0] != time.Second {
+		t.Fatalf("expected one initial lookup sleep, got %v", result.sleeps)
+	}
+	assertReleasePRCheckLogContains(t, result.stdout, "Marked release PR #1043 as draft while checks run.")
+	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
+}
+
+// Verifies that release PR lookup stops when the caller cancels the command.
+func TestReleasePRChecksCancelPendingReleasePRLookup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		ctx:            ctx,
+		prListJSON:     `[]`,
+		runListJSON:    `[]`,
+		runWatchStatus: "0",
+		lookupAttempts: "2",
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", result.exitCode)
+	}
+	assertReleasePRCheckLogContains(t, result.stderr, "context canceled")
+	assertReleasePRCheckLogDoesNotContain(t, result.ghLog, "workflow run")
+}
+
 // Verifies that same-second workflow runs are accepted when GitHub rounds createdAt timestamps.
 func TestReleasePRChecksAcceptSameSecondRunAfterDispatch(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
@@ -216,11 +256,13 @@ func TestReleasePRChecksFailWhenHeadChangesBeforeReady(t *testing.T) {
 }
 
 type releasePRCheckCase struct {
+	ctx                  context.Context
 	prListJSON           string
 	prListJSONAfterWatch string
 	prViewJSON           string
 	runListJSON          string
 	runWatchStatus       string
+	lookupAttempts       string
 	now                  time.Time
 }
 
@@ -248,12 +290,16 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	if prListJSONAfterWatch == "" {
 		prListJSONAfterWatch = testCase.prListJSON
 	}
+	lookupAttempts := testCase.lookupAttempts
+	if lookupAttempts == "" {
+		lookupAttempts = "1"
+	}
 
 	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GITHUB_REPOSITORY", "owner/repository")
 	t.Setenv("TARGET_BRANCH", "v3-beta")
 	t.Setenv("ULOOP_REPOSITORY_ROOT", workDir)
-	t.Setenv("RELEASE_PR_CHECK_LOOKUP_ATTEMPTS", "1")
+	t.Setenv("RELEASE_PR_CHECK_LOOKUP_ATTEMPTS", lookupAttempts)
 	t.Setenv("RELEASE_PR_CHECK_LOOKUP_INTERVAL_SECONDS", "1")
 	t.Setenv("RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS", "1")
 	t.Setenv("GH_PR_LIST_JSON", testCase.prListJSON)
@@ -275,28 +321,31 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	releasePRCheckNow = func() time.Time {
 		return now
 	}
-	releasePRCheckSleep = func(duration time.Duration) {
+	releasePRCheckSleep = func(ctx context.Context, duration time.Duration) error {
 		sleeps = append(sleeps, duration)
+		return ctx.Err()
 	}
 	t.Cleanup(func() {
 		releasePRCheckNow = originalNow
 		releasePRCheckSleep = originalSleep
 	})
 
+	ctx := testCase.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
-	exitCode := RunReleasePleasePRChecks(context.Background(), &stdout, &stderr)
-	ghLogBytes, err := os.ReadFile(ghLogPath)
-	if err != nil {
-		t.Fatalf("failed to read gh log: %v", err)
-	}
+	exitCode := RunReleasePleasePRChecks(ctx, &stdout, &stderr)
+	ghLog := readOptionalFile(t, ghLogPath)
 	gitLog := readOptionalFile(t, gitLogPath)
 
 	return releasePRCheckRunResult{
 		exitCode: exitCode,
 		stdout:   stdout.String(),
 		stderr:   stderr.String(),
-		ghLog:    string(ghLogBytes),
+		ghLog:    ghLog,
 		gitLog:   gitLog,
 		sleeps:   sleeps,
 	}
