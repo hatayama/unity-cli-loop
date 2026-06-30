@@ -289,6 +289,10 @@ func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig,
 }
 
 func clarifyReleasePRCheckUnityPackageSummary(body string) (string, bool) {
+	if strings.Contains(body, "<details><summary>unity-package: ") {
+		return body, false
+	}
+
 	matches := releasePRCheckPlainUnityPackageSummary.FindStringSubmatchIndex(body)
 	if matches == nil {
 		return body, false

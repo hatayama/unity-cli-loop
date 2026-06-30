@@ -43,7 +43,10 @@ func TestReleasePRCheckUnityPackageSummaryIsClarified(t *testing.T) {
 
 // Verifies that already labeled release summaries are left unchanged.
 func TestReleasePRCheckUnityPackageSummaryAlreadyClarified(t *testing.T) {
-	body := "<details><summary>unity-package: 3.0.0-beta.46</summary>\n</details>\n"
+	body := "<details><summary>unity-package: 3.0.0-beta.46</summary>\n</details>\n" +
+		"<details><summary>1.2.3</summary>\n" +
+		"* Release note content that should not be relabeled.\n" +
+		"</details>\n"
 
 	clarifiedBody, changed := clarifyReleasePRCheckUnityPackageSummary(body)
 
