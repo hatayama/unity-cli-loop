@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.0.0-beta.46](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.45...v3.0.0-beta.46) (2026-06-30)
+
+
+### Bug Fixes
+
+* Release PRs explain release component roles ([#1437](https://github.com/hatayama/unity-cli-loop/issues/1437)) ([a2824fa](https://github.com/hatayama/unity-cli-loop/commit/a2824fafd88dc5b2e263f6cded15856fe61a31bd))
+* Skill updates no longer show a completion dialog ([#1432](https://github.com/hatayama/unity-cli-loop/issues/1432)) ([b99fb41](https://github.com/hatayama/unity-cli-loop/commit/b99fb41c1d78512804a4b71fe98b6eedef8575a1))
+* Windows update checks no longer interrupt routine commands ([#1434](https://github.com/hatayama/unity-cli-loop/issues/1434)) ([02ce6cc](https://github.com/hatayama/unity-cli-loop/commit/02ce6cc3dbeb92360ebcd5c5318eae6b9ca87c7c))
+
 ## [3.0.0-beta.45](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.44...v3.0.0-beta.45) (2026-06-29)
 
 
