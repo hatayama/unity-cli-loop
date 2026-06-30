@@ -39,6 +39,10 @@
       "prerelease-type": "beta",
       "include-v-in-tag": true,
       "include-component-in-tag": true,
+      "exclude-paths": [
+        "cmd/dispatch-release-please-pr-checks",
+        "internal/automation"
+      ],
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {

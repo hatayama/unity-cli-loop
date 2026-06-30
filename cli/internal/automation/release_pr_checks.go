@@ -62,7 +62,7 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 		return 1
 	}
 
-	releasePR, found, err := findReleasePRCheckPullRequest(ctx, config)
+	releasePR, found, err := findReleasePRCheckPullRequestWithRetry(ctx, config)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
@@ -218,6 +218,19 @@ func findReleasePRCheckPullRequest(ctx context.Context, config releasePRCheckCon
 		return releasePullRequest{}, false, fmt.Errorf("release PR #%d has no head SHA", matchingPRs[0].Number)
 	}
 	return matchingPRs[0], true, nil
+}
+
+func findReleasePRCheckPullRequestWithRetry(ctx context.Context, config releasePRCheckConfig) (releasePullRequest, bool, error) {
+	for attempt := 0; attempt < config.lookupAttempts; attempt++ {
+		releasePR, found, err := findReleasePRCheckPullRequest(ctx, config)
+		if err != nil || found {
+			return releasePR, found, err
+		}
+		if attempt+1 < config.lookupAttempts {
+			releasePRCheckSleep(time.Duration(config.lookupIntervalSeconds) * time.Second)
+		}
+	}
+	return releasePullRequest{}, false, nil
 }
 
 func releasePRCheckMatches(releasePR releasePullRequest, targetBranch string) bool {
