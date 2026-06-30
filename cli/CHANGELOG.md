@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.44](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.43...uloop-project-runner-v3.0.0-beta.44) (2026-06-30)
+
+
+### Bug Fixes
+
+* Release PRs label the Unity package summary ([#1438](https://github.com/hatayama/unity-cli-loop/issues/1438)) ([085c13f](https://github.com/hatayama/unity-cli-loop/commit/085c13f619c3ec03c7a9be44ff56c436a398956e))
+* Windows update checks no longer interrupt routine commands ([#1434](https://github.com/hatayama/unity-cli-loop/issues/1434)) ([02ce6cc](https://github.com/hatayama/unity-cli-loop/commit/02ce6cc3dbeb92360ebcd5c5318eae6b9ca87c7c))
+
 ## [3.0.0-beta.43](https://github.com/hatayama/unity-cli-loop/compare/cli-v3.0.0-beta.42...cli-v3.0.0-beta.43) (2026-06-28)
 
 
