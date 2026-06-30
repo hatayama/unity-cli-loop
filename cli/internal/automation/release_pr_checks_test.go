@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,44 @@ type releasePRCheckRunResult struct {
 	ghLog    string
 	gitLog   string
 	sleeps   []time.Duration
+}
+
+// Verifies that a plain root package release summary is labeled as the Unity package.
+func TestReleasePRCheckUnityPackageSummaryIsClarified(t *testing.T) {
+	body := "## Releases\n" +
+		"<details><summary>3.0.0-beta.46</summary>\n" +
+		"\n" +
+		"* Unity package notes\n" +
+		"</details>\n" +
+		"<details><summary>uloop-project-runner: 3.0.0-beta.44</summary>\n" +
+		"\n" +
+		"* Project runner notes\n" +
+		"</details>\n"
+
+	clarifiedBody, changed := clarifyReleasePRCheckUnityPackageSummary(body)
+
+	if !changed {
+		t.Fatal("expected plain Unity package summary to change")
+	}
+	assertReleasePRCheckLogContains(t, clarifiedBody, "<details><summary>unity-package: 3.0.0-beta.46</summary>")
+	assertReleasePRCheckLogContains(t, clarifiedBody, "<details><summary>uloop-project-runner: 3.0.0-beta.44</summary>")
+}
+
+// Verifies that already labeled release summaries are left unchanged.
+func TestReleasePRCheckUnityPackageSummaryAlreadyClarified(t *testing.T) {
+	body := "<details><summary>unity-package: 3.0.0-beta.46</summary>\n</details>\n" +
+		"<details><summary>1.2.3</summary>\n" +
+		"* Release note content that should not be relabeled.\n" +
+		"</details>\n"
+
+	clarifiedBody, changed := clarifyReleasePRCheckUnityPackageSummary(body)
+
+	if changed {
+		t.Fatal("expected labeled Unity package summary to stay unchanged")
+	}
+	if clarifiedBody != body {
+		t.Fatalf("expected body to stay unchanged, got:\n%s", clarifiedBody)
+	}
 }
 
 // Verifies that missing release PRs skip without dispatching checks.
@@ -57,6 +96,24 @@ func TestReleasePRChecksDispatchAndMarkReady(t *testing.T) {
 	assertReleasePRCheckLogContains(t, result.ghLog, "run list --repo owner/repository --workflow build-and-test.yml --branch release-please--branches--v3-beta --event workflow_dispatch --json databaseId,status,conclusion,headSha,createdAt,url --limit 20")
 	assertReleasePRCheckLogContains(t, result.ghLog, "run watch 4242 --repo owner/repository --exit-status --compact --interval 1")
 	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
+}
+
+// Verifies that matching release PRs are updated when the body has a plain Unity package summary.
+func TestReleasePRChecksClarifyUnityPackageSummaryBeforeDispatch(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.46","url":"https://example.test/pr/1043"}]`,
+		prViewJSON:     `{"body":"<details><summary>3.0.0-beta.46</summary>\n</details>\n<details><summary>uloop-project-runner: 3.0.0-beta.44</summary>\n</details>\n"}`,
+		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		runWatchStatus: "0",
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertReleasePRCheckLogContains(t, result.stdout, "Updated release PR #1043 body to label the Unity package summary.")
+	assertReleasePRCheckLogContains(t, result.ghLog, "pr view 1043 --repo owner/repository --json body")
+	assertReleasePRCheckLogContains(t, result.ghLog, "pr edit 1043 --repo owner/repository --body-file")
+	assertReleasePRCheckLogContains(t, result.ghLog, "workflow run build-and-test.yml --repo owner/repository --ref release-please--branches--v3-beta")
 }
 
 // Verifies that same-second workflow runs are accepted when GitHub rounds createdAt timestamps.
@@ -161,6 +218,7 @@ func TestReleasePRChecksFailWhenHeadChangesBeforeReady(t *testing.T) {
 type releasePRCheckCase struct {
 	prListJSON           string
 	prListJSONAfterWatch string
+	prViewJSON           string
 	runListJSON          string
 	runWatchStatus       string
 	now                  time.Time
@@ -182,6 +240,15 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	writeReleasePRCheckMockGH(t, filepath.Join(mockBin, "gh"))
 	writeReleasePRCheckMockGit(t, filepath.Join(mockBin, "git"))
 
+	prViewJSON := testCase.prViewJSON
+	if prViewJSON == "" {
+		prViewJSON = `{"body":""}`
+	}
+	prListJSONAfterWatch := testCase.prListJSONAfterWatch
+	if prListJSONAfterWatch == "" {
+		prListJSONAfterWatch = testCase.prListJSON
+	}
+
 	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GITHUB_REPOSITORY", "owner/repository")
 	t.Setenv("TARGET_BRANCH", "v3-beta")
@@ -190,8 +257,9 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	t.Setenv("RELEASE_PR_CHECK_LOOKUP_INTERVAL_SECONDS", "1")
 	t.Setenv("RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS", "1")
 	t.Setenv("GH_PR_LIST_JSON", testCase.prListJSON)
-	t.Setenv("GH_PR_LIST_JSON_AFTER_WATCH", testCase.prListJSONAfterWatch)
+	t.Setenv("GH_PR_LIST_JSON_AFTER_WATCH", prListJSONAfterWatch)
 	t.Setenv("GH_PR_LIST_COUNT_PATH", prListCountPath)
+	t.Setenv("GH_PR_VIEW_JSON", prViewJSON)
 	t.Setenv("GH_RUN_LIST_JSON", testCase.runListJSON)
 	t.Setenv("GH_RUN_WATCH_STATUS", testCase.runWatchStatus)
 	t.Setenv("GH_LOG", ghLogPath)
@@ -237,6 +305,11 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 func writeReleasePRCheckMockGH(t *testing.T, path string) {
 	t.Helper()
 
+	if runtime.GOOS == "windows" {
+		writeReleasePRCheckMockGHBatch(t, path+".cmd")
+		return
+	}
+
 	content := `#!/bin/sh
 set -eu
 
@@ -260,6 +333,15 @@ if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
 fi
 
 if [ "$1" = "pr" ] && [ "$2" = "ready" ]; then
+  exit 0
+fi
+
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+  printf '%s\n' "$GH_PR_VIEW_JSON"
+  exit 0
+fi
+
+if [ "$1" = "pr" ] && [ "$2" = "edit" ]; then
   exit 0
 fi
 
@@ -287,6 +369,11 @@ exit 1
 
 func writeReleasePRCheckMockGit(t *testing.T, path string) {
 	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		writeReleasePRCheckMockGitBatch(t, path+".cmd")
+		return
+	}
 
 	content := `#!/bin/sh
 set -eu
@@ -351,6 +438,93 @@ exit 1
 	}
 }
 
+func writeReleasePRCheckMockGHBatch(t *testing.T, path string) {
+	t.Helper()
+	content := `@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+>>"%GH_LOG%" echo %*
+
+if "%~1"=="pr" if "%~2"=="list" (
+  set "count=0"
+  if exist "%GH_PR_LIST_COUNT_PATH%" set /p count=<"%GH_PR_LIST_COUNT_PATH%"
+  set /a count+=1
+  >"%GH_PR_LIST_COUNT_PATH%" echo !count!
+  if !count! GTR 1 (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::Out.WriteLine($env:GH_PR_LIST_JSON_AFTER_WATCH)"
+    exit /b 0
+  )
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::Out.WriteLine($env:GH_PR_LIST_JSON)"
+  exit /b 0
+)
+
+if "%~1"=="pr" if "%~2"=="ready" exit /b 0
+
+if "%~1"=="pr" if "%~2"=="view" (
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::Out.WriteLine($env:GH_PR_VIEW_JSON)"
+  exit /b 0
+)
+
+if "%~1"=="pr" if "%~2"=="edit" exit /b 0
+
+if "%~1"=="workflow" if "%~2"=="run" exit /b 0
+
+if "%~1"=="run" if "%~2"=="list" (
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::Out.WriteLine($env:GH_RUN_LIST_JSON)"
+  exit /b 0
+)
+
+if "%~1"=="run" if "%~2"=="watch" exit /b %GH_RUN_WATCH_STATUS%
+
+echo unexpected gh command: %* 1>&2
+exit /b 1
+`
+	writeFile(t, path, content)
+}
+
+func writeReleasePRCheckMockGitBatch(t *testing.T, path string) {
+	t.Helper()
+	content := `@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+>>"%GIT_LOG%" echo %*
+
+if "%~1"=="rev-parse" if "%~2"=="--show-toplevel" (
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::Out.WriteLine($env:ULOOP_REPOSITORY_ROOT)"
+  exit /b 0
+)
+
+if "%~1"=="-C" (
+  shift
+  shift
+)
+
+if "%~1"=="fetch" if "%~2"=="origin" exit /b 0
+if "%~1"=="switch" if "%~2"=="--detach" if "%~3"=="FETCH_HEAD" exit /b 0
+
+if "%~1"=="show" (
+  echo %~2| findstr /r "^uloop-project-runner-v.*:cli/contract.json$" >nul
+  if not errorlevel 1 (
+    if not "%GIT_RELEASE_CONTRACT%"=="" (
+      type "%GIT_RELEASE_CONTRACT%"
+      exit /b 0
+    )
+    echo release not found 1>&2
+    exit /b 1
+  )
+  echo unexpected git show ref: %~2 1>&2
+  exit /b 1
+)
+
+if "%~1"=="config" exit /b 0
+if "%~1"=="add" exit /b 0
+if "%~1"=="commit" exit /b 0
+if "%~1"=="push" exit /b 0
+
+echo unexpected git command: %* 1>&2
+exit /b 1
+`
+	writeFile(t, path, content)
+}
+
 func readOptionalFile(t *testing.T, path string) string {
 	t.Helper()
 	content, err := os.ReadFile(path)
@@ -380,7 +554,7 @@ func assertReleasePRCheckLogDoesNotContain(t *testing.T, actual string, unexpect
 func assertReleasePRCheckLogContainsLine(t *testing.T, actual string, expected string) {
 	t.Helper()
 	for _, line := range strings.Split(actual, "\n") {
-		if line == expected {
+		if strings.TrimSuffix(line, "\r") == expected {
 			return
 		}
 	}
@@ -390,7 +564,7 @@ func assertReleasePRCheckLogContainsLine(t *testing.T, actual string, expected s
 func assertReleasePRCheckLogDoesNotContainLine(t *testing.T, actual string, unexpected string) {
 	t.Helper()
 	for _, line := range strings.Split(actual, "\n") {
-		if line == unexpected {
+		if strings.TrimSuffix(line, "\r") == unexpected {
 			t.Fatalf("expected log not to contain line %q, got:\n%s", unexpected, actual)
 		}
 	}
