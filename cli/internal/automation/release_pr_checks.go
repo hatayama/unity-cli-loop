@@ -23,7 +23,17 @@ const (
 
 var (
 	releasePRCheckNow   = time.Now
-	releasePRCheckSleep = time.Sleep
+	releasePRCheckSleep = func(ctx context.Context, duration time.Duration) error {
+		timer := time.NewTimer(duration)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return nil
+		}
+	}
 
 	releasePRCheckPlainUnityPackageSummary = regexp.MustCompile(`<details><summary>((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?)</summary>`)
 )
@@ -227,7 +237,10 @@ func findReleasePRCheckPullRequestWithRetry(ctx context.Context, config releaseP
 			return releasePR, found, err
 		}
 		if attempt+1 < config.lookupAttempts {
-			releasePRCheckSleep(time.Duration(config.lookupIntervalSeconds) * time.Second)
+			err = releasePRCheckSleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
+			if err != nil {
+				return releasePullRequest{}, false, err
+			}
 		}
 	}
 	return releasePullRequest{}, false, nil
@@ -351,7 +364,10 @@ func findDispatchedReleasePRCheckRun(
 			return run, nil
 		}
 		if attempt+1 < config.lookupAttempts {
-			releasePRCheckSleep(time.Duration(config.lookupIntervalSeconds) * time.Second)
+			err = releasePRCheckSleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
+			if err != nil {
+				return releaseWorkflowRun{}, err
+			}
 		}
 	}
 	return releaseWorkflowRun{}, fmt.Errorf("could not find dispatched %s workflow run for %s", config.workflow, releasePR.HeadRefOID)

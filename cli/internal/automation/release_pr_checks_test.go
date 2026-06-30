@@ -136,6 +136,26 @@ func TestReleasePRChecksRetryPendingReleasePRLookup(t *testing.T) {
 	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
 }
 
+// Verifies that release PR lookup stops when the caller cancels the command.
+func TestReleasePRChecksCancelPendingReleasePRLookup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		ctx:            ctx,
+		prListJSON:     `[]`,
+		runListJSON:    `[]`,
+		runWatchStatus: "0",
+		lookupAttempts: "2",
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", result.exitCode)
+	}
+	assertReleasePRCheckLogContains(t, result.stderr, "context canceled")
+	assertReleasePRCheckLogDoesNotContain(t, result.ghLog, "workflow run")
+}
+
 // Verifies that same-second workflow runs are accepted when GitHub rounds createdAt timestamps.
 func TestReleasePRChecksAcceptSameSecondRunAfterDispatch(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
@@ -236,6 +256,7 @@ func TestReleasePRChecksFailWhenHeadChangesBeforeReady(t *testing.T) {
 }
 
 type releasePRCheckCase struct {
+	ctx                  context.Context
 	prListJSON           string
 	prListJSONAfterWatch string
 	prViewJSON           string
@@ -300,28 +321,31 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	releasePRCheckNow = func() time.Time {
 		return now
 	}
-	releasePRCheckSleep = func(duration time.Duration) {
+	releasePRCheckSleep = func(ctx context.Context, duration time.Duration) error {
 		sleeps = append(sleeps, duration)
+		return ctx.Err()
 	}
 	t.Cleanup(func() {
 		releasePRCheckNow = originalNow
 		releasePRCheckSleep = originalSleep
 	})
 
+	ctx := testCase.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
-	exitCode := RunReleasePleasePRChecks(context.Background(), &stdout, &stderr)
-	ghLogBytes, err := os.ReadFile(ghLogPath)
-	if err != nil {
-		t.Fatalf("failed to read gh log: %v", err)
-	}
+	exitCode := RunReleasePleasePRChecks(ctx, &stdout, &stderr)
+	ghLog := readOptionalFile(t, ghLogPath)
 	gitLog := readOptionalFile(t, gitLogPath)
 
 	return releasePRCheckRunResult{
 		exitCode: exitCode,
 		stdout:   stdout.String(),
 		stderr:   stderr.String(),
-		ghLog:    string(ghLogBytes),
+		ghLog:    ghLog,
 		gitLog:   gitLog,
 		sleeps:   sleeps,
 	}
