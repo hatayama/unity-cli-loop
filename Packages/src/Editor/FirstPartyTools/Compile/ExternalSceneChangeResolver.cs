@@ -124,6 +124,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void ResolveForFocusReturn()
         {
+            // Focus return treats Unity's in-memory editor state as authoritative because source-control
+            // operations can replace files while Unity is unfocused and would otherwise trigger reload dialogs.
             string[] dirtySceneSaveFailures = SaveDirtyOpenScenesBeforeReload();
             LogFocusReturnFailures("save dirty Scene files", dirtySceneSaveFailures);
 
