@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -34,8 +33,6 @@ var (
 			return nil
 		}
 	}
-
-	releasePRCheckPlainUnityPackageSummary = regexp.MustCompile(`<details><summary>((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?)</summary>`)
 )
 
 type releasePRCheckConfig struct {
@@ -88,7 +85,7 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 		return 1
 	}
 	if bodyChanged {
-		writeReleasePRCheckLine(stdout, fmt.Sprintf("Updated release PR #%d body to label the Unity package summary.", releasePR.Number))
+		writeReleasePRCheckLine(stdout, fmt.Sprintf("Updated release PR #%d body to clarify release component labels.", releasePR.Number))
 	}
 
 	err = markReleasePRCheckDraft(ctx, config, releasePR)
@@ -296,7 +293,7 @@ func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig,
 		return false, fmt.Errorf("failed to parse release PR body: %w", err)
 	}
 
-	clarifiedBody, changed := clarifyReleasePRCheckUnityPackageSummary(prBody.Body)
+	clarifiedBody, changed := clarifyReleasePRCheckComponentLabels(prBody.Body)
 	if !changed {
 		return false, nil
 	}
@@ -312,21 +309,6 @@ func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig,
 		return false, err
 	}
 	return true, nil
-}
-
-func clarifyReleasePRCheckUnityPackageSummary(body string) (string, bool) {
-	if strings.Contains(body, "<details><summary>unity-package: ") {
-		return body, false
-	}
-
-	matches := releasePRCheckPlainUnityPackageSummary.FindStringSubmatchIndex(body)
-	if matches == nil {
-		return body, false
-	}
-
-	version := body[matches[2]:matches[3]]
-	replacement := "<details><summary>unity-package: " + version + "</summary>"
-	return body[:matches[0]] + replacement + body[matches[1]:], true
 }
 
 func writeReleasePRCheckBodyFile(body string) (string, func(), error) {

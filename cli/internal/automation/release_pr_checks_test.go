@@ -32,7 +32,7 @@ func TestReleasePRCheckUnityPackageSummaryIsClarified(t *testing.T) {
 		"* Project runner notes\n" +
 		"</details>\n"
 
-	clarifiedBody, changed := clarifyReleasePRCheckUnityPackageSummary(body)
+	clarifiedBody, changed := clarifyReleasePRCheckComponentLabels(body)
 
 	if !changed {
 		t.Fatal("expected plain Unity package summary to change")
@@ -48,7 +48,7 @@ func TestReleasePRCheckUnityPackageSummaryAlreadyClarified(t *testing.T) {
 		"* Release note content that should not be relabeled.\n" +
 		"</details>\n"
 
-	clarifiedBody, changed := clarifyReleasePRCheckUnityPackageSummary(body)
+	clarifiedBody, changed := clarifyReleasePRCheckComponentLabels(body)
 
 	if changed {
 		t.Fatal("expected labeled Unity package summary to stay unchanged")
@@ -56,6 +56,24 @@ func TestReleasePRCheckUnityPackageSummaryAlreadyClarified(t *testing.T) {
 	if clarifiedBody != body {
 		t.Fatalf("expected body to stay unchanged, got:\n%s", clarifiedBody)
 	}
+}
+
+// Verifies that component release headings show human-readable component names.
+func TestReleasePRCheckComponentHeadingsAreClarified(t *testing.T) {
+	body := "<details><summary>unity-package: 3.0.0-beta.48</summary>\n\n" +
+		"## [3.0.0-beta.48](https://example.test/compare/v3.0.0-beta.47...v3.0.0-beta.48) (2026-07-01)\n" +
+		"</details>\n" +
+		"<details><summary>uloop-project-runner: 3.0.0-beta.45</summary>\n\n" +
+		"## [3.0.0-beta.45](https://example.test/compare/uloop-project-runner-v3.0.0-beta.44...uloop-project-runner-v3.0.0-beta.45) (2026-07-01)\n" +
+		"</details>\n"
+
+	clarifiedBody, changed := clarifyReleasePRCheckComponentLabels(body)
+
+	if !changed {
+		t.Fatal("expected component release headings to change")
+	}
+	assertReleasePRCheckLogContains(t, clarifiedBody, "## [Unity Package 3.0.0-beta.48](https://example.test/compare/v3.0.0-beta.47...v3.0.0-beta.48) (2026-07-01)")
+	assertReleasePRCheckLogContains(t, clarifiedBody, "## [uloop Project Runner 3.0.0-beta.45](https://example.test/compare/uloop-project-runner-v3.0.0-beta.44...uloop-project-runner-v3.0.0-beta.45) (2026-07-01)")
 }
 
 // Verifies that missing release PRs skip without dispatching checks.
@@ -110,7 +128,7 @@ func TestReleasePRChecksClarifyUnityPackageSummaryBeforeDispatch(t *testing.T) {
 	if result.exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
 	}
-	assertReleasePRCheckLogContains(t, result.stdout, "Updated release PR #1043 body to label the Unity package summary.")
+	assertReleasePRCheckLogContains(t, result.stdout, "Updated release PR #1043 body to clarify release component labels.")
 	assertReleasePRCheckLogContains(t, result.ghLog, "pr view 1043 --repo owner/repository --json body")
 	assertReleasePRCheckLogContains(t, result.ghLog, "pr edit 1043 --repo owner/repository --body-file")
 	assertReleasePRCheckLogContains(t, result.ghLog, "workflow run build-and-test.yml --repo owner/repository --ref release-please--branches--v3-beta")
