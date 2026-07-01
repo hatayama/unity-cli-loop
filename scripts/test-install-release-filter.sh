@@ -769,7 +769,7 @@ test_posix_does_not_infer_npm_prefix_from_non_npm_command() {
   fi
 }
 
-test_posix_prints_prefix_manual_cleanup_when_npm_is_unavailable() {
+test_posix_silences_legacy_cleanup_when_npm_is_unavailable() {
   work_dir="$TMP_DIR/posix-no-npm"
   mock_bin="$work_dir/bin"
   tool_bin="$work_dir/tools"
@@ -801,11 +801,12 @@ test_posix_prints_prefix_manual_cleanup_when_npm_is_unavailable() {
     LEGACY_ULOOP="$legacy_uloop" \
     "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 
-  assert_contains "$work_dir/output.txt" "npm uninstall -g --prefix \"$work_dir/npm-global\" uloop-cli"
+  assert_not_contains "$work_dir/output.txt" "Could not remove the legacy npm package automatically."
+  assert_not_contains "$work_dir/output.txt" "npm uninstall -g --prefix \"$work_dir/npm-global\" uloop-cli"
   assert_not_contains "$work_dir/output.txt" "Run this manually if the old npm command still shadows the native CLI:"
 }
 
-test_posix_prints_manual_cleanup_when_npm_prefix_cannot_be_inferred() {
+test_posix_silences_legacy_cleanup_when_npm_prefix_cannot_be_inferred() {
   work_dir="$TMP_DIR/posix-unknown-npm-prefix"
   mock_bin="$work_dir/bin"
   legacy_bin="$work_dir/custom-shims"
@@ -834,9 +835,9 @@ test_posix_prints_manual_cleanup_when_npm_prefix_cannot_be_inferred() {
 
   assert_not_contains "$npm_log" "uninstall -g uloop-cli"
   assert_not_contains "$npm_log" "uninstall -g --prefix"
-  assert_contains "$work_dir/output.txt" "Could not remove the legacy npm package automatically."
-  assert_contains "$work_dir/output.txt" "Legacy uloop command: $legacy_uloop"
-  assert_contains "$work_dir/output.txt" "Run this manually if the old npm command still shadows the native CLI:"
+  assert_not_contains "$work_dir/output.txt" "Could not remove the legacy npm package automatically."
+  assert_not_contains "$work_dir/output.txt" "Legacy uloop command: $legacy_uloop"
+  assert_not_contains "$work_dir/output.txt" "Run this manually if the old npm command still shadows the native CLI:"
 }
 
 test_posix_removes_npm_package_before_replacing_same_bin_path() {
@@ -959,8 +960,8 @@ test_posix_prints_fish_path_guidance_without_writing_profile
 test_posix_prints_generic_path_guidance_for_unknown_shell
 test_posix_skips_default_npm_cleanup_when_native_command_is_first
 test_posix_does_not_infer_npm_prefix_from_non_npm_command
-test_posix_prints_prefix_manual_cleanup_when_npm_is_unavailable
-test_posix_prints_manual_cleanup_when_npm_prefix_cannot_be_inferred
+test_posix_silences_legacy_cleanup_when_npm_is_unavailable
+test_posix_silences_legacy_cleanup_when_npm_prefix_cannot_be_inferred
 test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets
 test_git_bash_latest_installs_windows_zip_asset

@@ -94,7 +94,7 @@ irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/insta
 ```
 
 native CLI のインストール後、installer は古い npm package を `npm uninstall -g uloop-cli` で自動削除しようとします。
-npm が見つからない場合や、古い command が別の Node prefix に属している場合は、手動で実行する command を表示します。
+古い npm command が native CLI より優先される場合は、手動で実行してください。
 
 ```bash
 npm uninstall -g uloop-cli

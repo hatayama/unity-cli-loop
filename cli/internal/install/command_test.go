@@ -33,12 +33,11 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 		"GetExtension($CommandPath), '.exe'",
 		"foreach ($ShimName in @('uloop', 'uloop.cmd', 'uloop.ps1'))",
 		"Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $ExpectedUloopPath",
-		"npm uninstall -g --prefix",
-		"npm uninstall -g uloop-cli",
+		"$NpmArgs = @('uninstall', '-g', '--prefix', $LegacyPrefix, 'uloop-cli')",
+		"$null = & $NpmCommand.Source @('uninstall', '-g', 'uloop-cli')",
 		"Report-PathShadowing",
 		"function Write-LegacyNpmMultilineArgumentWarning",
 		"if (Test-LegacyNpmUloopPath -CommandPath $ResolvedCommand.Source) {\n        Write-LegacyNpmMultilineArgumentWarning\n    }",
-		"foreach ($ShimName in @('uloop.exe', 'uloop.cmd', 'uloop.ps1', 'uloop'))",
 		"Legacy npm shims can alter multiline PowerShell arguments before the native CLI receives them.",
 	} {
 		if !strings.Contains(setupScript, expected) {
@@ -60,8 +59,11 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 	if count := strings.Count(setupScript, "Legacy npm shims can alter multiline PowerShell arguments before the native CLI receives them."); count != 1 {
 		t.Fatalf("legacy npm multiline warning should have one message definition, got %d", count)
 	}
-	if count := strings.Count(setupScript, "Write-LegacyNpmMultilineArgumentWarning"); count != 3 {
-		t.Fatalf("legacy npm multiline warning should be centralized and called from two sites, got %d occurrences", count)
+	if count := strings.Count(setupScript, "Write-LegacyNpmMultilineArgumentWarning"); count != 2 {
+		t.Fatalf("legacy npm multiline warning should be centralized and called from one site, got %d occurrences", count)
+	}
+	if strings.Contains(setupScript, "Failed to remove the legacy npm uloop-cli package.") {
+		t.Fatal("legacy npm cleanup failure should not fail installation")
 	}
 }
 
@@ -511,8 +513,8 @@ func TestPosixInstallScriptRemovesAbsoluteLegacyNpmShimBeforePrependingPath(t *t
 	}
 }
 
-func TestPosixInstallScriptReportsManualRemovalWhenLegacyShimRemains(t *testing.T) {
-	// Verifies macOS legacy cleanup does not report success when npm leaves the old shim behind.
+func TestPosixInstallScriptSilencesLegacyFailureWhenLegacyShimRemains(t *testing.T) {
+	// Verifies macOS legacy cleanup stays quiet when npm leaves the old shim behind.
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell setup is not available on Windows")
 	}
@@ -561,11 +563,11 @@ func TestPosixInstallScriptReportsManualRemovalWhenLegacyShimRemains(t *testing.
 	if strings.Contains(outputText, "Removed legacy npm package: uloop-cli") {
 		t.Fatalf("cleanup should not report success while the legacy shim remains:\n%s", outputText)
 	}
-	if !strings.Contains(outputText, "Could not remove the legacy npm package automatically.") {
-		t.Fatalf("cleanup should print manual removal guidance:\n%s", outputText)
+	if strings.Contains(outputText, "Could not remove the legacy npm package automatically.") {
+		t.Fatalf("cleanup should not report legacy npm removal failure:\n%s", outputText)
 	}
-	if !strings.Contains(outputText, "npm uninstall -g --prefix \""+legacyPrefix+"\" uloop-cli") {
-		t.Fatalf("manual removal guidance should include the inferred prefix:\n%s", outputText)
+	if strings.Contains(outputText, "npm uninstall -g --prefix \""+legacyPrefix+"\" uloop-cli") {
+		t.Fatalf("cleanup should not print manual removal guidance:\n%s", outputText)
 	}
 	if _, err := os.Stat(legacyUloop); err != nil {
 		t.Fatalf("legacy uloop should remain for this scenario: %v", err)

@@ -227,22 +227,6 @@ is_legacy_npm_uloop_path() {
     return 1
 }
 
-print_legacy_npm_manual_removal() {
-    legacy_uloop=$1
-    legacy_prefix=$2
-    echo "Could not remove the legacy npm package automatically."
-    if [ -n "$legacy_uloop" ]; then
-        echo "Legacy uloop command: $legacy_uloop"
-    fi
-    if [ -n "$legacy_prefix" ]; then
-        echo "Run this manually if that command still shadows the native CLI:"
-        echo "  npm uninstall -g --prefix \"$legacy_prefix\" uloop-cli"
-        return
-    fi
-    echo "Run this manually if the old npm command still shadows the native CLI:"
-    echo "  npm uninstall -g uloop-cli"
-}
-
 try_remove_legacy_npm_package() {
     legacy_uloop=$1
     legacy_prefix=""
@@ -251,11 +235,9 @@ try_remove_legacy_npm_package() {
     fi
     legacy_prefix=$(infer_npm_prefix_from_uloop_path "$legacy_uloop")
     if [ -z "$legacy_prefix" ]; then
-        print_legacy_npm_manual_removal "$legacy_uloop" ""
         return
     fi
     if ! command -v npm >/dev/null 2>&1; then
-        print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
         return
     fi
     if npm uninstall -g --prefix "$legacy_prefix" uloop-cli; then
@@ -264,7 +246,6 @@ try_remove_legacy_npm_package() {
             return
         fi
     fi
-    print_legacy_npm_manual_removal "$legacy_uloop" "$legacy_prefix"
 }
 
 try_remove_default_legacy_npm_package() {
