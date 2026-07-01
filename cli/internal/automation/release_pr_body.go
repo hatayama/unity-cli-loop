@@ -87,7 +87,7 @@ func releasePRCheckComponentDisplayName(component string) (string, bool) {
 	case "unity-package":
 		return "Unity Package", true
 	case "uloop-project-runner":
-		return "U-LOOP Project Runner", true
+		return "uloop Project Runner", true
 	default:
 		return "", false
 	}

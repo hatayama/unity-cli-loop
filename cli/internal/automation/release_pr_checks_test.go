@@ -73,7 +73,7 @@ func TestReleasePRCheckComponentHeadingsAreClarified(t *testing.T) {
 		t.Fatal("expected component release headings to change")
 	}
 	assertReleasePRCheckLogContains(t, clarifiedBody, "## [Unity Package 3.0.0-beta.48](https://example.test/compare/v3.0.0-beta.47...v3.0.0-beta.48) (2026-07-01)")
-	assertReleasePRCheckLogContains(t, clarifiedBody, "## [U-LOOP Project Runner 3.0.0-beta.45](https://example.test/compare/uloop-project-runner-v3.0.0-beta.44...uloop-project-runner-v3.0.0-beta.45) (2026-07-01)")
+	assertReleasePRCheckLogContains(t, clarifiedBody, "## [uloop Project Runner 3.0.0-beta.45](https://example.test/compare/uloop-project-runner-v3.0.0-beta.44...uloop-project-runner-v3.0.0-beta.45) (2026-07-01)")
 }
 
 // Verifies that missing release PRs skip without dispatching checks.
