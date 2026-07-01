@@ -38,14 +38,14 @@ release_tag_from_body() {
 release_tag_from_pr() {
   title=$1
   body=$2
-  release_tag=$(release_tag_from_title "$title")
+  release_tag=$(release_tag_from_body "$body")
 
   if [ -n "$release_tag" ]; then
     printf '%s\n' "$release_tag"
     return
   fi
 
-  release_tag_from_body "$body"
+  release_tag_from_title "$title"
 }
 
 release_is_published_at_sha() {

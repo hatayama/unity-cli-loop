@@ -164,6 +164,17 @@ test_marks_project_runner_component_summary_release_pr_from_body() {
   assert_contains "$TMP_DIR/project-runner-component-summary/output.txt" "Marked release PR #1450 as tagged for uloop-project-runner-v3.0.0-beta.45."
 }
 
+# Verifies component summaries take precedence over legacy numeric release titles.
+test_marks_project_runner_component_summary_release_pr_before_numeric_title() {
+  run_case project-runner-component-before-title \
+    '[{"number":1452,"title":"chore(v3-beta): release 3.0.0-beta.45","body":"<details><summary>uloop-project-runner: 3.0.0-beta.45</summary></details>","mergeCommit":{"oid":"abc123"}}]' \
+    '{"uloop-project-runner-v3.0.0-beta.45":{"isDraft":false,"targetCommitish":"abc123"}}'
+
+  assert_file_equals "$TMP_DIR/project-runner-component-before-title/status.txt" "0"
+  assert_contains "$TMP_DIR/project-runner-component-before-title/gh.log" "release view uloop-project-runner-v3.0.0-beta.45 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
+  assert_contains "$TMP_DIR/project-runner-component-before-title/output.txt" "Marked release PR #1452 as tagged for uloop-project-runner-v3.0.0-beta.45."
+}
+
 # Verifies draft releases remain pending so release completion is not hidden.
 test_keeps_draft_release_pending() {
   run_case draft-release \
@@ -211,6 +222,7 @@ test_marks_stale_pending_release_pr
 test_marks_branch_title_release_pr_from_body
 test_marks_component_summary_release_pr_from_body
 test_marks_project_runner_component_summary_release_pr_from_body
+test_marks_project_runner_component_summary_release_pr_before_numeric_title
 test_keeps_draft_release_pending
 test_keeps_mismatched_release_pending
 test_exits_when_no_pending_release_pr_exists
