@@ -172,6 +172,7 @@ test_marks_project_runner_component_summary_release_pr_before_numeric_title() {
 
   assert_file_equals "$TMP_DIR/project-runner-component-before-title/status.txt" "0"
   assert_contains "$TMP_DIR/project-runner-component-before-title/gh.log" "release view uloop-project-runner-v3.0.0-beta.45 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
+  assert_not_contains "$TMP_DIR/project-runner-component-before-title/gh.log" "release view v3.0.0-beta.45 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
   assert_contains "$TMP_DIR/project-runner-component-before-title/output.txt" "Marked release PR #1452 as tagged for uloop-project-runner-v3.0.0-beta.45."
 }
 
