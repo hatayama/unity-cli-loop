@@ -43,14 +43,13 @@ var (
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
 
 type launchOptions struct {
-	projectPath          string
-	restart              bool
-	quit                 bool
-	deleteRecovery       bool
-	ignoreCompilerErrors bool
-	editorVersion        string
-	platform             string
-	maxDepth             int
+	projectPath    string
+	restart        bool
+	quit           bool
+	deleteRecovery bool
+	editorVersion  string
+	platform       string
+	maxDepth       int
 }
 
 func tryHandleLaunchRequest(
@@ -297,9 +296,7 @@ func buildUnityLaunchArgs(projectRoot string, options launchOptions) []string {
 	if options.platform != "" {
 		launchArgs = append(launchArgs, "-buildTarget", options.platform)
 	}
-	if options.ignoreCompilerErrors {
-		launchArgs = append(launchArgs, "-ignorecompilererrors")
-	}
+	launchArgs = append(launchArgs, "-ignorecompilererrors")
 	return launchArgs
 }
 
@@ -478,12 +475,12 @@ func printLaunchHelp(stdout io.Writer) {
 	writeLine(stdout, "  -r, --restart          Kill an existing Unity process for the project before launching")
 	writeLine(stdout, "  -q, --quit             Kill an existing Unity process for the project without launching")
 	writeLine(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
-	writeLine(stdout, "  -i, --ignore-compiler-errors")
-	writeLine(stdout, "                          Continue opening Unity even when the project has compiler errors")
 	writeLine(stdout, "      --editor-version <version>")
 	writeLine(stdout, "                          Use this Unity Editor version instead of ProjectVersion.txt")
 	writeLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
 	writeLine(stdout, "      --max-depth <n>    Accepted for compatibility when searching from the current directory")
+	writeLine(stdout, "")
+	writeLine(stdout, "Compiler errors are ignored by default during Unity startup.")
 	writeLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
 }
