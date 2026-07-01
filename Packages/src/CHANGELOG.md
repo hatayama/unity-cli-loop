@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.47](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.46...v3.0.0-beta.47) (2026-07-01)
+
+
+### Bug Fixes
+
+* Unity no longer pauses on external change dialogs after focus return ([#1447](https://github.com/hatayama/unity-cli-loop/issues/1447)) ([5972b81](https://github.com/hatayama/unity-cli-loop/commit/5972b81ac8437a3cb867202177598371df854c4d))
+
 ## [3.0.0-beta.46](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.45...v3.0.0-beta.46) (2026-06-30)
 
 
