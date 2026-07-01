@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.49](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.48...v3.0.0-beta.49) (2026-07-01)
+
+
+### Bug Fixes
+
+* Setup no longer reports optional npm cleanup failures ([#1452](https://github.com/hatayama/unity-cli-loop/issues/1452)) ([4aa729d](https://github.com/hatayama/unity-cli-loop/commit/4aa729dd29e98b608b906f542a46ed5e333533f6))
+
 ## [3.0.0-beta.48](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.47...v3.0.0-beta.48) (2026-07-01)
 
 
