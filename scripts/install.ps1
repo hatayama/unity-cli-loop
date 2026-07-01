@@ -415,6 +415,9 @@ function Get-FirstUloopCommandFromPath {
         if (-not $NormalizedPathEntry) {
             continue
         }
+        if ($NormalizedPathEntry -match "^[A-Za-z]:$") {
+            $NormalizedPathEntry = $NormalizedPathEntry + "\"
+        }
 
         foreach ($ShimName in @("uloop.exe", "uloop.cmd", "uloop.ps1", "uloop")) {
             $CandidatePath = Join-Path $NormalizedPathEntry $ShimName

@@ -38,6 +38,7 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 		"Report-PathShadowing",
 		"function Get-FirstUloopCommandFromPath",
 		"$NormalizedPathEntry = & $NormalizePath $PathEntry",
+		"if ($NormalizedPathEntry -match '^[A-Za-z]:$') {\n            $NormalizedPathEntry = $NormalizedPathEntry + '\\'\n        }",
 		"$CandidatePath = Join-Path $NormalizedPathEntry $ShimName",
 		"$MachinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')",
 		"$ResolvedPath = Get-FirstUloopCommandFromPath -PathValue ([string]::Join(';', @($MachinePath, $UserPath)))",

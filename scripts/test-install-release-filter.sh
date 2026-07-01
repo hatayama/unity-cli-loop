@@ -951,6 +951,8 @@ test_powershell_native_probe_restores_error_action_preference() {
 test_powershell_reports_persisted_path_shadowing() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Get-FirstUloopCommandFromPath'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$NormalizedPathEntry = ConvertTo-NormalizedPath -Path $PathEntry'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($NormalizedPathEntry -match "^[A-Za-z]:$")'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$NormalizedPathEntry = $NormalizedPathEntry + "\"'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$CandidatePath = Join-Path $NormalizedPathEntry $ShimName'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '[Environment]::GetEnvironmentVariable("Path", "Machine")'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$ResolvedPath = Get-FirstUloopCommandFromPath -PathValue ([string]::Join(";", @($MachinePath, $UserPath)))'
