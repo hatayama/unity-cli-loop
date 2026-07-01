@@ -37,6 +37,8 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 		"$null = & $NpmCommand.Source @('uninstall', '-g', 'uloop-cli')",
 		"Report-PathShadowing",
 		"function Get-FirstUloopCommandFromPath",
+		"$NormalizedPathEntry = & $NormalizePath $PathEntry",
+		"$CandidatePath = Join-Path $NormalizedPathEntry $ShimName",
 		"$MachinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')",
 		"$ResolvedPath = Get-FirstUloopCommandFromPath -PathValue ([string]::Join(';', @($MachinePath, $UserPath)))",
 		"function Write-LegacyNpmMultilineArgumentWarning",
@@ -70,6 +72,9 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 	}
 	if strings.Contains(setupScript, "Get-Command uloop -ErrorAction SilentlyContinue") {
 		t.Fatal("Windows path shadowing should inspect persisted PATH instead of the current process PATH")
+	}
+	if strings.Contains(setupScript, "$RemovedAll") {
+		t.Fatal("legacy npm cleanup aggregate result should not be tracked when it is intentionally ignored")
 	}
 }
 

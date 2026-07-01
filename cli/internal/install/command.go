@@ -236,19 +236,10 @@ function Get-LegacyNpmUloopPathsFromPath {
 }
 function Invoke-AllLegacyNpmPackageRemoval {
     param([string]$ExpectedUloopPath)
-    $RemovedAll = $true
     foreach ($LegacyUloopPath in (Get-LegacyNpmUloopPathsFromPath)) {
-        if (-not (Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopPath -ExpectedUloopPath $ExpectedUloopPath)) {
-            $RemovedAll = $false
-        }
+        Invoke-LegacyNpmPackageRemoval -LegacyUloopPath $LegacyUloopPath -ExpectedUloopPath $ExpectedUloopPath | Out-Null
     }
     Invoke-DefaultLegacyNpmPackageRemoval
-    foreach ($LegacyUloopPath in (Get-LegacyNpmUloopPathsFromPath)) {
-        if (-not [string]::Equals($LegacyUloopPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $RemovedAll = $false
-        }
-    }
-    return $RemovedAll
 }
 function Set-UserPathWithInstallDirectoryFirst {
     param([string]$Directory)
@@ -278,11 +269,12 @@ function Get-FirstUloopCommandFromPath {
         return $null
     }
     foreach ($PathEntry in ($PathValue -split ';')) {
-        if (-not $PathEntry) {
+        $NormalizedPathEntry = & $NormalizePath $PathEntry
+        if (-not $NormalizedPathEntry) {
             continue
         }
         foreach ($ShimName in @('uloop.exe', 'uloop.cmd', 'uloop.ps1', 'uloop')) {
-            $CandidatePath = Join-Path $PathEntry $ShimName
+            $CandidatePath = Join-Path $NormalizedPathEntry $ShimName
             if (Test-Path $CandidatePath -PathType Leaf) {
                 return $CandidatePath
             }

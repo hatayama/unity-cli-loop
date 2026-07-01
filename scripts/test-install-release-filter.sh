@@ -950,9 +950,12 @@ test_powershell_native_probe_restores_error_action_preference() {
 
 test_powershell_reports_persisted_path_shadowing() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Get-FirstUloopCommandFromPath'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$NormalizedPathEntry = ConvertTo-NormalizedPath -Path $PathEntry'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$CandidatePath = Join-Path $NormalizedPathEntry $ShimName'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '[Environment]::GetEnvironmentVariable("Path", "Machine")'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '$ResolvedPath = Get-FirstUloopCommandFromPath -PathValue ([string]::Join(";", @($MachinePath, $UserPath)))'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" 'Get-Command uloop -ErrorAction SilentlyContinue'
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" '$RemovedAll'
 }
 
 test_posix_latest_skips_prerelease_assets
