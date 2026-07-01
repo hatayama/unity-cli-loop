@@ -284,8 +284,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            GameObject openedFromInstanceObject = prefabStage.openedFromInstanceObject;
+            PrefabStage.Mode prefabStageMode = prefabStage.mode;
             AssetDatabase.ImportAsset(assetPath);
-            PrefabStage reopenedStage = PrefabStageUtility.OpenPrefab(assetPath);
+            PrefabStage reopenedStage =
+                PrefabStageUtility.OpenPrefab(assetPath, openedFromInstanceObject, prefabStageMode);
             if (reopenedStage == null)
             {
                 Debug.LogWarning("Unity CLI Loop could not reopen externally changed Prefab asset on focus return. " +
