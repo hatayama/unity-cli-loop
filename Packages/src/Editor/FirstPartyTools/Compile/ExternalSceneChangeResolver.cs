@@ -37,12 +37,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            FocusReturnService.RestoreAutoRefreshIfHeld();
-
             if (_initialized)
             {
                 return;
             }
+
+            FocusReturnService.RestoreAutoRefreshIfHeld();
 
             _initialized = true;
             EditorSceneManager.sceneOpened -= HandleSceneOpened;
@@ -136,6 +136,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LogFocusReturnFailures("restore the missing Prefab asset from the Unity state", missingPrefabSaveFailures);
 
             ResolveSceneExternalChangesForFocusReturn();
+            if (dirtyPrefabSaveFailures.Length > 0 ||
+                missingPrefabSaveFailures.Length > 0 ||
+                IsCurrentPrefabStageDirty())
+            {
+                Debug.LogWarning(
+                    "Unity CLI Loop skipped Prefab Stage external-change reload because the current Prefab Stage is still dirty or could not be saved.");
+                return;
+            }
+
             ResolveCurrentPrefabStageExternalChangeForFocusReturn();
         }
 
@@ -376,6 +385,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new[] { GetPrefabStageDisplayPath(prefabStage) };
+        }
+
+        private static bool IsCurrentPrefabStageDirty()
+        {
+            PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
+            return IsTrackablePrefabStage(prefabStage) && prefabStage.scene.isDirty;
         }
 
         private static bool TrySavePrefabStage(PrefabStage prefabStage)
