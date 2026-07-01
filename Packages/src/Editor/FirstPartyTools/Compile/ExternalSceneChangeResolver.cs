@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             RestoreSnapshotsFromSessionState();
-            FocusReturnService.RestoreAutoRefreshIfHeld();
+            bool restoredHeldAutoRefresh = FocusReturnService.RestoreAutoRefreshIfHeld();
 
             _initialized = true;
             EditorSceneManager.sceneOpened -= HandleSceneOpened;
@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PrefabStage.prefabSaved += HandlePrefabSaved;
             EditorApplication.focusChanged -= HandleFocusChanged;
             EditorApplication.focusChanged += HandleFocusChanged;
-            if (!IsAutoRefreshHeld())
+            if (!restoredHeldAutoRefresh && !IsAutoRefreshHeld())
             {
                 RecordOpenSceneSnapshots();
                 RecordCurrentPrefabStageSnapshot();
@@ -173,14 +173,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void RecordSceneSnapshot(Scene scene)
         {
+            if (RecordSceneSnapshotIfTrackable(scene))
+            {
+                SaveSceneSnapshotsToSessionState();
+            }
+        }
+
+        private static bool RecordSceneSnapshotIfTrackable(Scene scene)
+        {
             if (!IsTrackableScene(scene))
             {
-                return;
+                return false;
             }
 
             string assetPath = NormalizeAssetPath(scene.path);
             SceneSnapshots[assetPath] = ReadAssetFileFingerprint(assetPath);
-            SaveSceneSnapshotsToSessionState();
+            return true;
         }
 
         private static void RecordCurrentPrefabStageSnapshot()
@@ -300,8 +308,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Debug.LogWarning("Unity CLI Loop could not reopen externally changed Prefab asset on focus return. " +
                                  "Prefab Stage: " + assetPath);
-                PrefabStageSnapshots[assetPath] = currentFingerprint;
-                SavePrefabStageSnapshotsToSessionState();
                 return;
             }
 
@@ -316,8 +322,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Debug.LogWarning("Unity CLI Loop could not reopen externally changed Prefab asset on focus return. " +
                                  "Prefab Stage: " + assetPath);
-                PrefabStageSnapshots[assetPath] = currentFingerprint;
-                SavePrefabStageSnapshotsToSessionState();
                 return;
             }
 
@@ -347,6 +351,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string[] SaveDirtyOpenScenesBeforeReload()
         {
             List<string> failedScenePaths = new List<string>();
+            bool hasRecordedSceneSnapshot = false;
             for (int i = 0; i < SceneManager.sceneCount; i++)
             {
                 Scene scene = SceneManager.GetSceneAt(i);
@@ -361,7 +366,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                RecordSceneSnapshot(scene);
+                hasRecordedSceneSnapshot = RecordSceneSnapshotIfTrackable(scene) || hasRecordedSceneSnapshot;
+            }
+
+            if (hasRecordedSceneSnapshot)
+            {
+                SaveSceneSnapshotsToSessionState();
             }
 
             return failedScenePaths.ToArray();
@@ -370,6 +380,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string[] SaveMissingOpenScenesFromUnity()
         {
             List<string> failedScenePaths = new List<string>();
+            bool hasRecordedSceneSnapshot = false;
             for (int i = 0; i < SceneManager.sceneCount; i++)
             {
                 Scene scene = SceneManager.GetSceneAt(i);
@@ -392,7 +403,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                RecordSceneSnapshot(scene);
+                hasRecordedSceneSnapshot = RecordSceneSnapshotIfTrackable(scene) || hasRecordedSceneSnapshot;
+            }
+
+            if (hasRecordedSceneSnapshot)
+            {
+                SaveSceneSnapshotsToSessionState();
             }
 
             return failedScenePaths.ToArray();
@@ -692,19 +708,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolveFocusReturnChanges ?? throw new ArgumentNullException(nameof(resolveFocusReturnChanges));
         }
 
-        internal void RestoreAutoRefreshIfHeld()
+        internal bool RestoreAutoRefreshIfHeld()
         {
             if (!_getAutoRefreshHeld())
             {
-                return;
+                return false;
             }
 
             if (!_isEditorFocused())
             {
-                return;
+                return false;
             }
 
             HandleFocusChanged(true);
+            return true;
         }
 
         internal void HandleFocusChanged(bool isFocused)

@@ -249,8 +249,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => events.Add("allow"),
                 () => events.Add("preflight"));
 
-            service.RestoreAutoRefreshIfHeld();
+            bool restoredHeldAutoRefresh = service.RestoreAutoRefreshIfHeld();
 
+            Assert.That(restoredHeldAutoRefresh, Is.True);
             Assert.That(autoRefreshHeld, Is.False);
             Assert.That(events, Is.EqualTo(new[] { "preflight", "allow" }));
         }
@@ -270,8 +271,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => allowCallCount++,
                 () => preflightCallCount++);
 
-            service.RestoreAutoRefreshIfHeld();
+            bool restoredHeldAutoRefresh = service.RestoreAutoRefreshIfHeld();
 
+            Assert.That(restoredHeldAutoRefresh, Is.False);
             Assert.That(autoRefreshHeld, Is.True);
             Assert.That(allowCallCount, Is.EqualTo(0));
             Assert.That(preflightCallCount, Is.EqualTo(0));
