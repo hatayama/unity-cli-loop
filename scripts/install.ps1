@@ -412,23 +412,50 @@ function Set-UserPathWithInstallDirectoryFirst {
     Set-CurrentPathWithInstallDirectoryFirst -Directory $Directory
 }
 
+function Get-FirstUloopCommandFromPath {
+    param(
+        [string]$PathValue
+    )
+
+    if (-not $PathValue) {
+        return $null
+    }
+
+    foreach ($PathEntry in ($PathValue -split ";")) {
+        if (-not $PathEntry) {
+            continue
+        }
+
+        foreach ($ShimName in @("uloop.exe", "uloop.cmd", "uloop.ps1", "uloop")) {
+            $CandidatePath = Join-Path $PathEntry $ShimName
+            if (Test-Path $CandidatePath -PathType Leaf) {
+                return $CandidatePath
+            }
+        }
+    }
+
+    return $null
+}
+
 function Report-PathShadowing {
     param(
         [string]$Directory,
         [string]$ExpectedUloopPath
     )
 
-    $ResolvedCommand = Get-Command uloop -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $ResolvedCommand) {
+    $MachinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $ResolvedPath = Get-FirstUloopCommandFromPath -PathValue ([string]::Join(";", @($MachinePath, $UserPath)))
+    if (-not $ResolvedPath) {
         return
     }
 
-    if ([string]::Equals($ResolvedCommand.Source, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if ([string]::Equals($ResolvedPath, $ExpectedUloopPath, [System.StringComparison]::OrdinalIgnoreCase)) {
         return
     }
 
     Write-Host "Installed uloop to $ExpectedUloopPath, but PATH resolves uloop to:"
-    Write-Host "  $($ResolvedCommand.Source)"
+    Write-Host "  $ResolvedPath"
     Write-Host "Move $Directory earlier in PATH, or remove the legacy installation if it owns that command."
 }
 

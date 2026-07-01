@@ -36,8 +36,11 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 		"$NpmArgs = @('uninstall', '-g', '--prefix', $LegacyPrefix, 'uloop-cli')",
 		"$null = & $NpmCommand.Source @('uninstall', '-g', 'uloop-cli')",
 		"Report-PathShadowing",
+		"function Get-FirstUloopCommandFromPath",
+		"$MachinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')",
+		"$ResolvedPath = Get-FirstUloopCommandFromPath -PathValue ([string]::Join(';', @($MachinePath, $UserPath)))",
 		"function Write-LegacyNpmMultilineArgumentWarning",
-		"if (Test-LegacyNpmUloopPath -CommandPath $ResolvedCommand.Source) {\n        Write-LegacyNpmMultilineArgumentWarning\n    }",
+		"if (Test-LegacyNpmUloopPath -CommandPath $ResolvedPath) {\n        Write-LegacyNpmMultilineArgumentWarning\n    }",
 		"Legacy npm shims can alter multiline PowerShell arguments before the native CLI receives them.",
 	} {
 		if !strings.Contains(setupScript, expected) {
@@ -64,6 +67,9 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 	}
 	if strings.Contains(setupScript, "Failed to remove the legacy npm uloop-cli package.") {
 		t.Fatal("legacy npm cleanup failure should not fail installation")
+	}
+	if strings.Contains(setupScript, "Get-Command uloop -ErrorAction SilentlyContinue") {
+		t.Fatal("Windows path shadowing should inspect persisted PATH instead of the current process PATH")
 	}
 }
 
