@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.48](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.47...v3.0.0-beta.48) (2026-07-01)
+
+
+### Features
+
+* Unity launch now opens projects with compiler errors by default ([#1449](https://github.com/hatayama/unity-cli-loop/issues/1449)) ([990b046](https://github.com/hatayama/unity-cli-loop/commit/990b04636b3e836a9ed73b8c4746c2e395cb5f47))
+
 ## [3.0.0-beta.47](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.46...v3.0.0-beta.47) (2026-07-01)
 
 
