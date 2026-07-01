@@ -266,8 +266,6 @@ Dedicated tools exist only for operations that dynamic code execution cannot han
 
 # Key Features
 ## Development Loop Tools
-When Unity regains focus after another app changes project files, Unity CLI Loop briefly holds Auto Refresh, saves dirty loaded Scenes and the current Prefab Stage, then reloads clean externally changed open Scenes and the current Prefab Stage asset. This avoids Unity's external-change confirmation dialogs during common Git restore or checkout workflows while preserving the Unity-side editor state.
-
 ### 1. compile - Execute Compilation
 Performs AssetDatabase.Refresh() and then compiles, returning the results after Domain Reload completes. Can detect errors and warnings that built-in linters cannot find.
 You can choose between incremental compilation and forced full compilation.
