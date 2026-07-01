@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using UnityEditor.SceneManagement;
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -292,6 +294,98 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.Throws<InvalidOperationException>(() => service.HandleFocusChanged(true));
             Assert.That(autoRefreshHeld, Is.False);
             Assert.That(allowCallCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void SnapshotSessionStore_WhenSnapshotsRoundTrip_PreservesFingerprints()
+        {
+            // Verifies focus-return snapshots survive a domain reload through JSON session storage.
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots =
+                new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
+            snapshots[ScenePath] = (true, SavedTime, 10);
+            const string MissingScenePath = "Assets/Scenes/MissingScene.unity";
+            snapshots[MissingScenePath] = (false, DateTime.MinValue, 0);
+
+            string json = ExternalAssetSnapshotSessionStore.SerializeSnapshots(snapshots);
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> restored =
+                new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
+
+            ExternalAssetSnapshotSessionStore.RestoreSnapshots(restored, json);
+
+            Assert.That(restored.Count, Is.EqualTo(2));
+            Assert.That(restored[ScenePath].Exists, Is.True);
+            Assert.That(restored[ScenePath].LastWriteTimeUtc, Is.EqualTo(SavedTime));
+            Assert.That(restored[ScenePath].Length, Is.EqualTo(10));
+            Assert.That(restored[MissingScenePath].Exists, Is.False);
+        }
+
+        [Test]
+        public void SnapshotSessionStore_WhenJsonIsEmpty_ClearsSnapshots()
+        {
+            // Verifies empty session data clears stale snapshots after normal startup.
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
+
+            ExternalAssetSnapshotSessionStore.RestoreSnapshots(snapshots, "");
+
+            Assert.That(snapshots, Is.Empty);
+        }
+
+        [Test]
+        public void CreatePrefabStageReopenContext_WhenInstanceIsValid_PreservesContext()
+        {
+            // Verifies valid in-context Prefab Stage reopen data is preserved.
+            GameObject openedFromInstanceObject = new GameObject("OpenedFromInstanceObject");
+            try
+            {
+                (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) context =
+                    ExternalSceneChangeTracker.CreatePrefabStageReopenContext(
+                        openedFromInstanceObject,
+                        PrefabStage.Mode.InContext,
+                        _ => true);
+
+                Assert.That(context.OpenedFromInstanceObject, Is.SameAs(openedFromInstanceObject));
+                Assert.That(context.Mode, Is.EqualTo(PrefabStage.Mode.InContext));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(openedFromInstanceObject);
+            }
+        }
+
+        [Test]
+        public void CreatePrefabStageReopenContext_WhenInstanceIsInvalid_FallsBackToIsolation()
+        {
+            // Verifies invalid in-context Prefab Stage reopen data cannot reach OpenPrefab.
+            GameObject openedFromInstanceObject = new GameObject("OpenedFromInstanceObject");
+            try
+            {
+                (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) context =
+                    ExternalSceneChangeTracker.CreatePrefabStageReopenContext(
+                        openedFromInstanceObject,
+                        PrefabStage.Mode.InContext,
+                        _ => false);
+
+                Assert.That(context.OpenedFromInstanceObject, Is.Null);
+                Assert.That(context.Mode, Is.EqualTo(PrefabStage.Mode.InIsolation));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(openedFromInstanceObject);
+            }
+        }
+
+        [Test]
+        public void CreatePrefabStageReopenContext_WhenInstanceIsMissing_UsesIsolation()
+        {
+            // Verifies missing Prefab Stage context reopens without invalid InContext arguments.
+            (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) context =
+                ExternalSceneChangeTracker.CreatePrefabStageReopenContext(
+                    null,
+                    PrefabStage.Mode.InContext,
+                    _ => true);
+
+            Assert.That(context.OpenedFromInstanceObject, Is.Null);
+            Assert.That(context.Mode, Is.EqualTo(PrefabStage.Mode.InIsolation));
         }
 
         private static Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> CreateSnapshots()

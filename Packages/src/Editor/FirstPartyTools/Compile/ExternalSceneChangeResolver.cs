@@ -17,14 +17,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const string AutoRefreshHeldSessionStateKey =
             "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.AutoRefreshHeld";
+        private const string SceneSnapshotsSessionStateKey =
+            "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.SceneSnapshots";
+        private const string PrefabStageSnapshotsSessionStateKey =
+            "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.PrefabStageSnapshots";
         private static readonly Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> SceneSnapshots =
             new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
         private static readonly Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> PrefabStageSnapshots =
             new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
         private static readonly ExternalAssetFocusReturnService FocusReturnService =
             new ExternalAssetFocusReturnService(
-                () => SessionState.GetBool(AutoRefreshHeldSessionStateKey, false),
-                isHeld => SessionState.SetBool(AutoRefreshHeldSessionStateKey, isHeld),
+                IsAutoRefreshHeld,
+                SetAutoRefreshHeld,
                 () => EditorApplication.isFocused,
                 AssetDatabase.DisallowAutoRefresh,
                 AssetDatabase.AllowAutoRefresh,
@@ -43,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            RestoreSnapshotsFromSessionState();
             FocusReturnService.RestoreAutoRefreshIfHeld();
 
             _initialized = true;
@@ -60,21 +65,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PrefabStage.prefabSaved += HandlePrefabSaved;
             EditorApplication.focusChanged -= HandleFocusChanged;
             EditorApplication.focusChanged += HandleFocusChanged;
-            RecordOpenSceneSnapshots();
-            RecordCurrentPrefabStageSnapshot();
+            if (!IsAutoRefreshHeld())
+            {
+                RecordOpenSceneSnapshots();
+                RecordCurrentPrefabStageSnapshot();
+            }
         }
 
         public static (bool CanProceed, string Message, string[] ScenePaths) ResolveForCompile(
             bool reloadExternalSceneChanges)
         {
             Initialize();
-            ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
-                SceneSnapshots,
-                GetOpenSceneStates,
-                ReadAssetFileFingerprint,
-                SaveDirtyOpenScenesBeforeReload,
-                ReloadOpenSceneSetup);
-            return resolver.ResolveExternalSceneChanges(reloadExternalSceneChanges);
+            ExternalSceneChangeResolver resolver = CreateSceneChangeResolver();
+            (bool CanProceed, string Message, string[] ScenePaths) result =
+                resolver.ResolveExternalSceneChanges(reloadExternalSceneChanges);
+            SaveSceneSnapshotsToSessionState();
+            return result;
         }
 
         private static void HandleFocusChanged(bool isFocused)
@@ -100,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SceneSnapshots.Remove(NormalizeAssetPath(scene.path));
+            SaveSceneSnapshotsToSessionState();
         }
 
         private static void HandlePrefabStageOpened(PrefabStage prefabStage)
@@ -115,6 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             PrefabStageSnapshots.Remove(NormalizeAssetPath(prefabStage.assetPath));
+            SavePrefabStageSnapshotsToSessionState();
         }
 
         private static void HandlePrefabSaved(GameObject prefabRoot)
@@ -153,11 +161,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void RecordOpenSceneSnapshots()
         {
+            SceneSnapshots.Clear();
             (string AssetPath, bool IsDirty)[] scenes = GetOpenSceneStates();
             for (int i = 0; i < scenes.Length; i++)
             {
                 SceneSnapshots[scenes[i].AssetPath] = ReadAssetFileFingerprint(scenes[i].AssetPath);
             }
+
+            SaveSceneSnapshotsToSessionState();
         }
 
         private static void RecordSceneSnapshot(Scene scene)
@@ -169,6 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string assetPath = NormalizeAssetPath(scene.path);
             SceneSnapshots[assetPath] = ReadAssetFileFingerprint(assetPath);
+            SaveSceneSnapshotsToSessionState();
         }
 
         private static void RecordCurrentPrefabStageSnapshot()
@@ -185,6 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string assetPath = NormalizeAssetPath(prefabStage.assetPath);
             PrefabStageSnapshots[assetPath] = ReadAssetFileFingerprint(assetPath);
+            SavePrefabStageSnapshotsToSessionState();
         }
 
         private static (string AssetPath, bool IsDirty)[] GetOpenSceneStates()
@@ -238,14 +251,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void ResolveSceneExternalChangesForFocusReturn()
         {
-            ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
-                SceneSnapshots,
-                GetOpenSceneStates,
-                ReadAssetFileFingerprint,
-                SaveDirtyOpenScenesBeforeReload,
-                ReloadOpenSceneSetup);
+            ExternalSceneChangeResolver resolver = CreateSceneChangeResolver();
             (bool CanProceed, string Message, string[] ScenePaths) result =
                 resolver.ResolveExternalSceneChanges(reloadExternalSceneChanges: true);
+            SaveSceneSnapshotsToSessionState();
             if (result.CanProceed)
             {
                 return;
@@ -269,6 +278,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!PrefabStageSnapshots.ContainsKey(assetPath))
             {
                 PrefabStageSnapshots[assetPath] = currentFingerprint;
+                SavePrefabStageSnapshotsToSessionState();
                 return;
             }
 
@@ -284,19 +294,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            GameObject openedFromInstanceObject = prefabStage.openedFromInstanceObject;
-            PrefabStage.Mode prefabStageMode = prefabStage.mode;
             AssetDatabase.ImportAsset(assetPath);
+            UnityEngine.Object prefabAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
+            if (prefabAsset == null)
+            {
+                Debug.LogWarning("Unity CLI Loop could not reopen externally changed Prefab asset on focus return. " +
+                                 "Prefab Stage: " + assetPath);
+                PrefabStageSnapshots[assetPath] = currentFingerprint;
+                SavePrefabStageSnapshotsToSessionState();
+                return;
+            }
+
+            (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) reopenContext =
+                CreatePrefabStageReopenContext(
+                    prefabStage.openedFromInstanceObject,
+                    prefabStage.mode,
+                    PrefabUtility.IsPartOfPrefabInstance);
             PrefabStage reopenedStage =
-                PrefabStageUtility.OpenPrefab(assetPath, openedFromInstanceObject, prefabStageMode);
+                PrefabStageUtility.OpenPrefab(assetPath, reopenContext.OpenedFromInstanceObject, reopenContext.Mode);
             if (reopenedStage == null)
             {
                 Debug.LogWarning("Unity CLI Loop could not reopen externally changed Prefab asset on focus return. " +
                                  "Prefab Stage: " + assetPath);
+                PrefabStageSnapshots[assetPath] = currentFingerprint;
+                SavePrefabStageSnapshotsToSessionState();
                 return;
             }
 
             RecordPrefabStageSnapshot(reopenedStage);
+        }
+
+        internal static (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) CreatePrefabStageReopenContext(
+            GameObject openedFromInstanceObject,
+            PrefabStage.Mode prefabStageMode,
+            Func<GameObject, bool> isPartOfPrefabInstance)
+        {
+            Debug.Assert(isPartOfPrefabInstance != null, "isPartOfPrefabInstance must not be null");
+
+            if (openedFromInstanceObject == null)
+            {
+                return (null, PrefabStage.Mode.InIsolation);
+            }
+
+            if (isPartOfPrefabInstance(openedFromInstanceObject))
+            {
+                return (openedFromInstanceObject, prefabStageMode);
+            }
+
+            return (null, PrefabStage.Mode.InIsolation);
         }
 
         private static string[] SaveDirtyOpenScenesBeforeReload()
@@ -433,6 +478,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        private static ExternalSceneChangeResolver CreateSceneChangeResolver()
+        {
+            return new ExternalSceneChangeResolver(
+                SceneSnapshots,
+                GetOpenSceneStates,
+                ReadAssetFileFingerprint,
+                SaveDirtyOpenScenesBeforeReload,
+                ReloadOpenSceneSetup);
+        }
+
+        private static bool IsAutoRefreshHeld()
+        {
+            return SessionState.GetBool(AutoRefreshHeldSessionStateKey, false);
+        }
+
+        private static void SetAutoRefreshHeld(bool isHeld)
+        {
+            SessionState.SetBool(AutoRefreshHeldSessionStateKey, isHeld);
+        }
+
+        private static void RestoreSnapshotsFromSessionState()
+        {
+            ExternalAssetSnapshotSessionStore.RestoreSnapshots(
+                SceneSnapshots,
+                SessionState.GetString(SceneSnapshotsSessionStateKey, ""));
+            ExternalAssetSnapshotSessionStore.RestoreSnapshots(
+                PrefabStageSnapshots,
+                SessionState.GetString(PrefabStageSnapshotsSessionStateKey, ""));
+        }
+
+        private static void SaveSceneSnapshotsToSessionState()
+        {
+            SessionState.SetString(
+                SceneSnapshotsSessionStateKey,
+                ExternalAssetSnapshotSessionStore.SerializeSnapshots(SceneSnapshots));
+        }
+
+        private static void SavePrefabStageSnapshotsToSessionState()
+        {
+            SessionState.SetString(
+                PrefabStageSnapshotsSessionStateKey,
+                ExternalAssetSnapshotSessionStore.SerializeSnapshots(PrefabStageSnapshots));
+        }
+
         private static string NormalizeAssetPath(string assetPath)
         {
             Debug.Assert(!string.IsNullOrEmpty(assetPath), "assetPath must not be empty");
@@ -487,6 +576,83 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return previousFingerprint.Exists == currentFingerprint.Exists &&
                    previousFingerprint.LastWriteTimeUtc == currentFingerprint.LastWriteTimeUtc &&
                    previousFingerprint.Length == currentFingerprint.Length;
+        }
+    }
+
+    /// <summary>
+    /// Serializes tracked asset fingerprints so focus-return recovery survives editor domain reloads.
+    /// </summary>
+    internal static class ExternalAssetSnapshotSessionStore
+    {
+        internal static string SerializeSnapshots(
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots)
+        {
+            Debug.Assert(snapshots != null, "snapshots must not be null");
+
+            AssetSnapshotSessionData data = new AssetSnapshotSessionData();
+            data.Entries = new AssetSnapshotEntry[snapshots.Count];
+            int index = 0;
+            foreach (KeyValuePair<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshot in snapshots)
+            {
+                data.Entries[index] = new AssetSnapshotEntry
+                {
+                    AssetPath = snapshot.Key,
+                    Exists = snapshot.Value.Exists,
+                    LastWriteTimeUtcTicks = snapshot.Value.LastWriteTimeUtc.Ticks,
+                    Length = snapshot.Value.Length
+                };
+                index++;
+            }
+
+            return JsonUtility.ToJson(data);
+        }
+
+        internal static void RestoreSnapshots(
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots,
+            string json)
+        {
+            Debug.Assert(snapshots != null, "snapshots must not be null");
+
+            snapshots.Clear();
+            if (string.IsNullOrEmpty(json))
+            {
+                return;
+            }
+
+            AssetSnapshotSessionData data = JsonUtility.FromJson<AssetSnapshotSessionData>(json);
+            if (data == null || data.Entries == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < data.Entries.Length; i++)
+            {
+                AssetSnapshotEntry entry = data.Entries[i];
+                if (entry == null || string.IsNullOrEmpty(entry.AssetPath))
+                {
+                    continue;
+                }
+
+                snapshots[entry.AssetPath] = (
+                    entry.Exists,
+                    new DateTime(entry.LastWriteTimeUtcTicks, DateTimeKind.Utc),
+                    entry.Length);
+            }
+        }
+
+        [Serializable]
+        private sealed class AssetSnapshotSessionData
+        {
+            public AssetSnapshotEntry[] Entries = new AssetSnapshotEntry[0];
+        }
+
+        [Serializable]
+        private sealed class AssetSnapshotEntry
+        {
+            public string AssetPath;
+            public bool Exists;
+            public long LastWriteTimeUtcTicks;
+            public long Length;
         }
     }
 
