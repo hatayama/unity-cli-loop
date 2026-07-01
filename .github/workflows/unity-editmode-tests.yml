@@ -17,7 +17,7 @@ jobs:
       HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           lfs: true
 
