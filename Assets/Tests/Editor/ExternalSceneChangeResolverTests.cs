@@ -200,6 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ExternalAssetFocusReturnService service = CreateFocusReturnService(
                 () => autoRefreshHeld,
                 isHeld => autoRefreshHeld = isHeld,
+                () => false,
                 () => disallowCallCount++,
                 () => allowCallCount++,
                 () => { });
@@ -221,6 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ExternalAssetFocusReturnService service = CreateFocusReturnService(
                 () => autoRefreshHeld,
                 isHeld => autoRefreshHeld = isHeld,
+                () => true,
                 () => events.Add("disallow"),
                 () => events.Add("allow"),
                 () => events.Add("preflight"));
@@ -232,22 +234,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void FocusReturnService_WhenStartupFindsHeldAutoRefresh_ReleasesIt()
+        public void FocusReturnService_WhenStartupFindsHeldAutoRefreshAndEditorIsFocused_RunsPreflightBeforeReleasingIt()
         {
-            // Verifies startup recovery clears an Auto Refresh hold that survived a reload.
+            // Verifies focused startup recovery resolves editor state before releasing a reload-surviving hold.
             bool autoRefreshHeld = true;
-            int allowCallCount = 0;
+            List<string> events = new List<string>();
             ExternalAssetFocusReturnService service = CreateFocusReturnService(
                 () => autoRefreshHeld,
                 isHeld => autoRefreshHeld = isHeld,
-                () => { },
-                () => allowCallCount++,
-                () => { });
+                () => true,
+                () => events.Add("disallow"),
+                () => events.Add("allow"),
+                () => events.Add("preflight"));
 
             service.RestoreAutoRefreshIfHeld();
 
             Assert.That(autoRefreshHeld, Is.False);
-            Assert.That(allowCallCount, Is.EqualTo(1));
+            Assert.That(events, Is.EqualTo(new[] { "preflight", "allow" }));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenStartupFindsHeldAutoRefreshAndEditorIsUnfocused_KeepsAutoRefreshHeld()
+        {
+            // Verifies unfocused startup recovery keeps Auto Refresh suspended until focus returns.
+            bool autoRefreshHeld = true;
+            int allowCallCount = 0;
+            int preflightCallCount = 0;
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => false,
+                () => { },
+                () => allowCallCount++,
+                () => preflightCallCount++);
+
+            service.RestoreAutoRefreshIfHeld();
+
+            Assert.That(autoRefreshHeld, Is.True);
+            Assert.That(allowCallCount, Is.EqualTo(0));
+            Assert.That(preflightCallCount, Is.EqualTo(0));
         }
 
         [Test]
@@ -259,6 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ExternalAssetFocusReturnService service = CreateFocusReturnService(
                 () => autoRefreshHeld,
                 isHeld => autoRefreshHeld = isHeld,
+                () => true,
                 () => { },
                 () => allowCallCount++,
                 () => throw new InvalidOperationException("preflight failed"));
@@ -279,6 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static ExternalAssetFocusReturnService CreateFocusReturnService(
             Func<bool> getAutoRefreshHeld,
             Action<bool> setAutoRefreshHeld,
+            Func<bool> isEditorFocused,
             Action disallowAutoRefresh,
             Action allowAutoRefresh,
             Action resolveFocusReturnChanges)
@@ -286,6 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new ExternalAssetFocusReturnService(
                 getAutoRefreshHeld,
                 setAutoRefreshHeld,
+                isEditorFocused,
                 disallowAutoRefresh,
                 allowAutoRefresh,
                 resolveFocusReturnChanges);

@@ -25,6 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             new ExternalAssetFocusReturnService(
                 () => SessionState.GetBool(AutoRefreshHeldSessionStateKey, false),
                 isHeld => SessionState.SetBool(AutoRefreshHeldSessionStateKey, isHeld),
+                () => EditorApplication.isFocused,
                 AssetDatabase.DisallowAutoRefresh,
                 AssetDatabase.AllowAutoRefresh,
                 ResolveForFocusReturn);
@@ -491,6 +492,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly Func<bool> _getAutoRefreshHeld;
         private readonly Action<bool> _setAutoRefreshHeld;
+        private readonly Func<bool> _isEditorFocused;
         private readonly Action _disallowAutoRefresh;
         private readonly Action _allowAutoRefresh;
         private readonly Action _resolveFocusReturnChanges;
@@ -498,18 +500,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal ExternalAssetFocusReturnService(
             Func<bool> getAutoRefreshHeld,
             Action<bool> setAutoRefreshHeld,
+            Func<bool> isEditorFocused,
             Action disallowAutoRefresh,
             Action allowAutoRefresh,
             Action resolveFocusReturnChanges)
         {
             Debug.Assert(getAutoRefreshHeld != null, "getAutoRefreshHeld must not be null");
             Debug.Assert(setAutoRefreshHeld != null, "setAutoRefreshHeld must not be null");
+            Debug.Assert(isEditorFocused != null, "isEditorFocused must not be null");
             Debug.Assert(disallowAutoRefresh != null, "disallowAutoRefresh must not be null");
             Debug.Assert(allowAutoRefresh != null, "allowAutoRefresh must not be null");
             Debug.Assert(resolveFocusReturnChanges != null, "resolveFocusReturnChanges must not be null");
 
             _getAutoRefreshHeld = getAutoRefreshHeld ?? throw new ArgumentNullException(nameof(getAutoRefreshHeld));
             _setAutoRefreshHeld = setAutoRefreshHeld ?? throw new ArgumentNullException(nameof(setAutoRefreshHeld));
+            _isEditorFocused = isEditorFocused ?? throw new ArgumentNullException(nameof(isEditorFocused));
             _disallowAutoRefresh = disallowAutoRefresh ?? throw new ArgumentNullException(nameof(disallowAutoRefresh));
             _allowAutoRefresh = allowAutoRefresh ?? throw new ArgumentNullException(nameof(allowAutoRefresh));
             _resolveFocusReturnChanges =
@@ -518,7 +523,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal void RestoreAutoRefreshIfHeld()
         {
-            ReleaseAutoRefreshIfHeld();
+            if (!_getAutoRefreshHeld())
+            {
+                return;
+            }
+
+            if (!_isEditorFocused())
+            {
+                return;
+            }
+
+            HandleFocusChanged(true);
         }
 
         internal void HandleFocusChanged(bool isFocused)
