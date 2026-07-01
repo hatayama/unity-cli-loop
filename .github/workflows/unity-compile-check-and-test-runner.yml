@@ -69,7 +69,7 @@ jobs:
 
       - name: Cache Library folder
         if: env.HAS_UNITY_LICENSE == 'true'
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: Library
           key: Library-2022.3.62f1-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
