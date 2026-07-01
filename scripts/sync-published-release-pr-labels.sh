@@ -19,7 +19,7 @@ release_version_from_body() {
   body=$1
 
   printf '%s\n' "$body" | jq -R -s -r '
-    try capture("<summary>(?<version>[0-9][A-Za-z0-9._-]*)</summary>").version catch ""
+    try capture("<summary>(?:[^<:]+:\\s*)?(?<version>[0-9][A-Za-z0-9._-]*)</summary>").version catch ""
   '
 }
 

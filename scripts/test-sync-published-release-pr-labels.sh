@@ -142,6 +142,17 @@ test_marks_branch_title_release_pr_from_body() {
   assert_contains "$TMP_DIR/branch-title/output.txt" "Marked release PR #1105 as tagged for v3.0.0-beta.7."
 }
 
+# Verifies component-prefixed release summaries still repair stale release PR labels.
+test_marks_component_summary_release_pr_from_body() {
+  run_case component-summary \
+    '[{"number":1448,"title":"chore: release v3-beta","body":"<details><summary>unity-package: 3.0.0-beta.47</summary></details>","mergeCommit":{"oid":"abc123"}}]' \
+    '{"v3.0.0-beta.47":{"isDraft":false,"targetCommitish":"abc123"}}'
+
+  assert_file_equals "$TMP_DIR/component-summary/status.txt" "0"
+  assert_contains "$TMP_DIR/component-summary/gh.log" "pr edit 1448 --repo hatayama/unity-cli-loop --remove-label autorelease: pending --add-label autorelease: tagged"
+  assert_contains "$TMP_DIR/component-summary/output.txt" "Marked release PR #1448 as tagged for v3.0.0-beta.47."
+}
+
 # Verifies draft releases remain pending so release completion is not hidden.
 test_keeps_draft_release_pending() {
   run_case draft-release \
@@ -187,6 +198,7 @@ test_fails_when_release_lookup_fails_unexpectedly() {
 
 test_marks_stale_pending_release_pr
 test_marks_branch_title_release_pr_from_body
+test_marks_component_summary_release_pr_from_body
 test_keeps_draft_release_pending
 test_keeps_mismatched_release_pending
 test_exits_when_no_pending_release_pr_exists
