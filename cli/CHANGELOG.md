@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.45](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.44...uloop-project-runner-v3.0.0-beta.45) (2026-07-01)
+
+
+### Features
+
+* Unity launch now opens projects with compiler errors by default ([#1449](https://github.com/hatayama/unity-cli-loop/issues/1449)) ([990b046](https://github.com/hatayama/unity-cli-loop/commit/990b04636b3e836a9ed73b8c4746c2e395cb5f47))
+
 ## [3.0.0-beta.44](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.43...uloop-project-runner-v3.0.0-beta.44) (2026-06-30)
 
 
