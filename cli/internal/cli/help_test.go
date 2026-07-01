@@ -241,13 +241,18 @@ func TestRunProjectLocalLaunchHelpShowsGlobalOptions(t *testing.T) {
 	for _, expected := range []string{
 		"Usage:",
 		"uloop launch [options] [project-path]",
-		"-i, --ignore-compiler-errors",
+		"Compiler errors are ignored by default during Unity startup.",
 		"--editor-version <version>",
 		"Global options:",
 		"--project-path <path>",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("launch help missing %q:\n%s", expected, output)
+		}
+	}
+	for _, removed := range []string{"-i, --ignore-compiler-errors", "--ignore-compiler-errors"} {
+		if strings.Contains(output, removed) {
+			t.Fatalf("launch help still includes removed option %q:\n%s", removed, output)
 		}
 	}
 }

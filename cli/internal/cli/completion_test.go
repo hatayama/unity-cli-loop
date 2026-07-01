@@ -189,9 +189,14 @@ func TestCompletionListOptionsUsesNativeLaunchOptions(t *testing.T) {
 
 	output := stdout.String()
 	listedOptions := strings.Split(strings.TrimSpace(output), "\n")
-	for _, option := range []string{"--project-path", "--restart", "--quit", "--delete-recovery", "--platform", "--max-depth", "-i", "--ignore-compiler-errors", "--editor-version"} {
+	for _, option := range []string{"--project-path", "--restart", "--quit", "--delete-recovery", "--platform", "--max-depth", "--editor-version"} {
 		if !slices.Contains(listedOptions, option) {
 			t.Fatalf("launch option %s was not listed: %s", option, output)
+		}
+	}
+	for _, option := range []string{"-i", "--ignore-compiler-errors"} {
+		if slices.Contains(listedOptions, option) {
+			t.Fatalf("removed launch option %s was listed: %s", option, output)
 		}
 	}
 }

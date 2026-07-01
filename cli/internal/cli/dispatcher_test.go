@@ -172,7 +172,7 @@ func TestRunDispatcherLaunchOptionsDoNotRequireProjectPin(t *testing.T) {
 	var stderr bytes.Buffer
 	code := RunDispatcher(
 		context.Background(),
-		[]string{"launch", "-i", "--editor-version", "6000.0.0f1", projectRoot, "--quit"},
+		[]string{"launch", "--editor-version", "6000.0.0f1", projectRoot, "--quit"},
 		&stdout,
 		&stderr)
 

@@ -22,7 +22,6 @@ func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
 		[]string{
 			"--restart",
 			"--delete-recovery",
-			"--ignore-compiler-errors",
 			"--editor-version", "6000.0.0f1",
 			"--platform", "Android",
 			"--max-depth", "-1",
@@ -40,9 +39,6 @@ func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
 	if !options.deleteRecovery {
 		t.Fatal("delete recovery flag was not parsed")
 	}
-	if !options.ignoreCompilerErrors {
-		t.Fatal("ignore compiler errors flag was not parsed")
-	}
 	if options.editorVersion != "6000.0.0f1" {
 		t.Fatalf("editor version mismatch: %s", options.editorVersion)
 	}
@@ -57,29 +53,52 @@ func TestParseLaunchOptionsSupportsCoreFlags(t *testing.T) {
 	}
 }
 
-func TestParseLaunchOptionsSupportsShortIgnoreCompilerErrorsFlag(t *testing.T) {
-	// Verifies -i is the short alias for --ignore-compiler-errors.
-	options, err := parseLaunchOptions([]string{"-i", "/tmp/project"}, "")
-	if err != nil {
-		t.Fatalf("parseLaunchOptions failed: %v", err)
-	}
+func TestParseLaunchOptionsRejectsRemovedIgnoreCompilerErrorsFlags(t *testing.T) {
+	// Verifies removed compiler-error ignore flags no longer remain in the launch API.
+	for _, arg := range []string{"-i", "--ignore-compiler-errors"} {
+		_, err := parseLaunchOptions([]string{arg}, "")
+		if err == nil {
+			t.Fatalf("expected removed ignore compiler errors flag error for %s", arg)
+		}
 
-	if !options.ignoreCompilerErrors {
-		t.Fatal("short ignore compiler errors flag was not parsed")
+		var argErr *argumentError
+		if !errors.As(err, &argErr) {
+			t.Fatalf("expected argumentError for %s, got %T", arg, err)
+		}
+		if argErr.option != arg {
+			t.Fatalf("option mismatch for %s: %s", arg, argErr.option)
+		}
 	}
 }
 
-func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrors(t *testing.T) {
-	// Verifies launch maps --ignore-compiler-errors to Unity Editor's native startup argument.
+func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrorsByDefault(t *testing.T) {
+	// Verifies every Unity launch ignores project compiler errors during Editor startup.
 	args := buildUnityLaunchArgs(
 		"/tmp/project",
-		launchOptions{platform: "Android", ignoreCompilerErrors: true},
+		launchOptions{platform: "Android"},
 	)
 	expectedArgs := []string{
 		"-projectPath",
 		"/tmp/project",
 		"-buildTarget",
 		"Android",
+		"-ignorecompilererrors",
+	}
+
+	if !slices.Equal(args, expectedArgs) {
+		t.Fatalf("Unity launch args mismatch: got %#v want %#v", args, expectedArgs)
+	}
+}
+
+func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrorsForRestart(t *testing.T) {
+	// Verifies restarted Unity launches use the same compiler-error ignore startup argument.
+	args := buildUnityLaunchArgs(
+		"/tmp/project",
+		launchOptions{restart: true},
+	)
+	expectedArgs := []string{
+		"-projectPath",
+		"/tmp/project",
 		"-ignorecompilererrors",
 	}
 

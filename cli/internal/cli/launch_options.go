@@ -17,9 +17,6 @@ func applyLaunchOption(options *launchOptions, args []string, index int) (int, e
 	case arg == "-d" || arg == "--delete-recovery":
 		options.deleteRecovery = true
 		return index, nil
-	case arg == "-i" || arg == "--ignore-compiler-errors":
-		options.ignoreCompilerErrors = true
-		return index, nil
 	case arg == "--editor-version" || strings.HasPrefix(arg, "--editor-version="):
 		return applyLaunchEditorVersionOption(options, args, index)
 	case isUnsupportedLaunchHubOption(arg):
