@@ -57,7 +57,10 @@ jobs:
         if: always()
         run: |
           mkdir -p artifacts
-          (cd project-runner && golangci-lint run --config ../.golangci-complexity.yml --issues-exit-code=0 --show-stats=false --output.json.path ../artifacts/go-code-complexity.json ./...)
+          for module_dir in common dispatcher project-runner tools/release-automation; do
+            artifact_name="go-code-complexity-$(printf '%s' "$module_dir" | tr '/' '-').json"
+            (cd "$module_dir" && golangci-lint run --config "$GITHUB_WORKSPACE/.golangci-complexity.yml" --issues-exit-code=0 --show-stats=false --output.json.path "$GITHUB_WORKSPACE/artifacts/$artifact_name" ./...)
+          done
           dotnet run --project tools/UnityCliLoop.CodeComplexity/UnityCliLoop.CodeComplexity.csproj -- \
             --root . \
             --max-complexity 15 \

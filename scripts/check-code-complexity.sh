@@ -33,10 +33,19 @@ if [ "$MAX_COMPLEXITY" != "15" ]; then
 fi
 
 echo "=== Go complexity (cyclop, max ${MAX_COMPLEXITY}) ==="
-(
-  cd "$ROOT_DIR/project-runner"
-  golangci-lint run --config "$GO_CONFIG" ./...
-) || GO_STATUS=$?
+for module_dir in common dispatcher project-runner tools/release-automation; do
+  (
+    cd "$ROOT_DIR/$module_dir"
+    golangci-lint run --config "$GO_CONFIG" ./...
+  ) || {
+    module_status=$?
+    # Keep a fatal status (anything but the findings exit code 1) from being
+    # masked by a later module that only reports findings.
+    if [ "$GO_STATUS" -eq 0 ] || [ "$module_status" -ne 1 ]; then
+      GO_STATUS=$module_status
+    fi
+  }
+done
 
 echo ""
 echo "=== C# complexity (CA1502, max ${MAX_COMPLEXITY}) ==="
