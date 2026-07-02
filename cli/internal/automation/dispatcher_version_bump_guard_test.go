@@ -69,6 +69,26 @@ func TestDispatcherVersionBumpGuardRequiresDispatcherVersionIncrease(t *testing.
 	}
 }
 
+// Verifies changes under the dispatcher entrypoint package require a new dispatcherVersion.
+func TestDispatcherVersionBumpGuardCoversDispatcherInternalPackage(t *testing.T) {
+	result := AnalyzeDispatcherVersionBumpGuard(
+		[]string{"cli/internal/dispatcher/dispatcher.go"},
+		DispatcherVersionBumpValues{
+			HasContract:               true,
+			DispatcherVersion:         "1.0.0",
+			DispatcherContractVersion: 1,
+		},
+		DispatcherVersionBumpValues{
+			HasContract:               true,
+			DispatcherVersion:         "1.0.0",
+			DispatcherContractVersion: 1,
+		})
+
+	if !dispatcherVersionBumpGuardNeedsAction(result) {
+		t.Fatal("expected dispatcher entrypoint package changes without a version increase to fail")
+	}
+}
+
 // Verifies the first dispatcher contract can be introduced without comparing against a missing base.
 func TestDispatcherVersionBumpGuardAcceptsInitialDispatcherContract(t *testing.T) {
 	result := AnalyzeDispatcherVersionBumpGuard(

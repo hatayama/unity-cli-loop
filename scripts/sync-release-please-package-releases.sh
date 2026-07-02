@@ -38,11 +38,6 @@ resolve_package_path() {
       printf '%s\n' "${file_path#/}"
       ;;
     *)
-      if [ "$package_path" = "." ]; then
-        printf '%s\n' "$file_path"
-        return
-      fi
-
       printf '%s/%s\n' "$package_path" "$file_path"
       ;;
   esac
@@ -91,16 +86,19 @@ release_commit_updates_package_version() {
   expected_manifest_entry="\"$package_path\": \"$version\""
   expected_changelog_heading="## [$version]"
 
+  # Require both the manifest entry and the changelog heading: a commit that only
+  # rewrites the manifest line (for example a package key rename at an unchanged
+  # version) must not be mistaken for the release-please release commit.
   git show --format= "$commit_sha" -- .release-please-manifest.json "$changelog_path" 2>/dev/null |
     awk -v manifest_entry="$expected_manifest_entry" -v changelog_heading="$expected_changelog_heading" '
       substr($0, 1, 1) == "+" && index($0, manifest_entry) > 0 {
-        found = 1
+        manifest_found = 1
       }
       substr($0, 1, 1) == "+" && index($0, changelog_heading) > 0 {
-        found = 1
+        changelog_found = 1
       }
       END {
-        exit found ? 0 : 1
+        exit (manifest_found && changelog_found) ? 0 : 1
       }
     '
 }
