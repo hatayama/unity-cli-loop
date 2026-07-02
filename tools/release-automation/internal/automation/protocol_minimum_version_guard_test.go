@@ -79,6 +79,23 @@ func TestRunProtocolMinimumVersionGuard_WhenMinimumReleaseMatches_Passes(t *test
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
 	}
 	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
+	assertProtocolMinimumVersionLogContains(t, result.gitLog, "uloop-project-runner-v3.0.0-beta.33:common/clicontract/contract.json")
+}
+
+func TestRunProtocolMinimumVersionGuard_WhenMinimumReleasePredatesDirectorySplit_FallsBackToLegacyContractPath(t *testing.T) {
+	// Verifies project runner releases published before the cli/ directory split are still
+	// readable through the legacy contract.json path when the new path is missing at the tag.
+	result := runProtocolMinimumVersionGuardCase(t, protocolMinimumVersionRefCase{
+		baseContent:          buildProtocolMinimumVersionConstants(1, "3.0.0-beta.32"),
+		headContent:          buildProtocolMinimumVersionConstants(2, "3.0.0-beta.33"),
+		legacyReleaseContent: `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"3.0.0-beta.33"}`,
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertProtocolMinimumVersionLogContains(t, result.stdout, "Protocol minimum version guard passed.")
+	assertProtocolMinimumVersionLogContains(t, result.gitLog, "uloop-project-runner-v3.0.0-beta.33:common/clicontract/contract.json")
 	assertProtocolMinimumVersionLogContains(t, result.gitLog, "uloop-project-runner-v3.0.0-beta.33:cli/contract.json")
 }
 
@@ -349,7 +366,7 @@ func TestRunMinimumCliReleaseProtocolCheck_WhenMinimumVersionHasPrefix_Normalize
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr.String())
 	}
 	assertProtocolMinimumVersionLogContains(t, stdout.String(), "Minimum project runner release uloop-project-runner-v3.0.0-beta.33 advertises protocol 2.")
-	assertProtocolMinimumVersionLogContains(t, readFile(t, gitLogPath), "uloop-project-runner-v3.0.0-beta.33:cli/contract.json")
+	assertProtocolMinimumVersionLogContains(t, readFile(t, gitLogPath), "uloop-project-runner-v3.0.0-beta.33:common/clicontract/contract.json")
 	assertProtocolMinimumVersionLogContains(t, readFile(t, ghLogPath), "release view uloop-project-runner-v3.0.0-beta.33")
 }
 
@@ -402,11 +419,12 @@ func TestRunProtocolMinimumVersionComment_WhenMinimumReleaseProtocolDiffers_Upse
 }
 
 type protocolMinimumVersionRefCase struct {
-	baseContent         string
-	headContent         string
-	headContractContent string
-	releaseContent      string
-	releaseView         string
+	baseContent          string
+	headContent          string
+	headContractContent  string
+	releaseContent       string
+	legacyReleaseContent string
+	releaseView          string
 }
 
 type protocolMinimumVersionGuardRunResult struct {
@@ -533,6 +551,11 @@ func prepareProtocolMinimumVersionGitContents(t *testing.T, workDir string, test
 		writeFile(t, releaseContentPath, testCase.releaseContent)
 		t.Setenv("GIT_RELEASE_CONTENT", releaseContentPath)
 	}
+	if testCase.legacyReleaseContent != "" {
+		legacyReleaseContentPath := filepath.Join(workDir, "legacy-release-contract.json")
+		writeFile(t, legacyReleaseContentPath, testCase.legacyReleaseContent)
+		t.Setenv("GIT_LEGACY_RELEASE_CONTENT", legacyReleaseContentPath)
+	}
 	t.Setenv("GIT_BASE_CONTENT", baseContentPath)
 	t.Setenv("GIT_HEAD_CONTENT", headContentPath)
 }
@@ -579,7 +602,7 @@ fi
 	if [ "$1" = "show" ]; then
 	  case "$2" in
 	    origin/v3-beta:*) cat "$GIT_BASE_CONTENT" ;;
-	    protocol-pr-head:cli/contract.json)
+	    protocol-pr-head:common/clicontract/contract.json)
 	      if [ -n "${GIT_HEAD_CONTRACT_CONTENT:-}" ]; then
 	        cat "$GIT_HEAD_CONTRACT_CONTENT"
 	      else
@@ -588,9 +611,17 @@ fi
 	      ;;
 	    protocol-pr-head:*) cat "$GIT_HEAD_CONTENT" ;;
 	    protocol-release:*) cat "$GIT_HEAD_CONTENT" ;;
-		    uloop-project-runner-v*:cli/contract.json)
+	    uloop-project-runner-v*:common/clicontract/contract.json)
 	      if [ -n "${GIT_RELEASE_CONTENT:-}" ]; then
 	        cat "$GIT_RELEASE_CONTENT"
+	      else
+	        echo "fatal: path 'common/clicontract/contract.json' exists on disk, but not in '$2'" >&2
+	        exit 1
+	      fi
+	      ;;
+	    uloop-project-runner-v*:cli/contract.json)
+	      if [ -n "${GIT_LEGACY_RELEASE_CONTENT:-}" ]; then
+	        cat "$GIT_LEGACY_RELEASE_CONTENT"
 	      else
 	        echo "release not found" >&2
 	        exit 1

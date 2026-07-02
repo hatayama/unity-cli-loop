@@ -5,7 +5,7 @@ import (
 	"flag"
 	"os"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/automation"
+	"github.com/hatayama/unity-cli-loop/tools/release-automation/internal/automation"
 )
 
 func main() {
@@ -13,13 +13,12 @@ func main() {
 	headRef := flag.String("head", "HEAD", "head git ref to compare to")
 	flag.Parse()
 
-	os.Exit(automation.RunIPCProtocolReminder(
+	os.Exit(automation.RunDispatcherVersionBumpGuard(
 		context.Background(),
 		os.Stdout,
 		os.Stderr,
-		automation.IPCProtocolReminderConfig{
-			BaseRef:         *baseRef,
-			HeadRef:         *headRef,
-			StepSummaryPath: os.Getenv("GITHUB_STEP_SUMMARY"),
+		automation.DispatcherVersionBumpGuardConfig{
+			BaseRef: *baseRef,
+			HeadRef: *headRef,
 		}))
 }

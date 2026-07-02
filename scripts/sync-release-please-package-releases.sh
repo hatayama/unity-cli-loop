@@ -451,7 +451,7 @@ verify_minimum_cli_release_protocol() {
   release_ref=$1
 
   (
-    cd "$ROOT_DIR/cli"
+    cd "$ROOT_DIR/tools/release-automation"
     go run ./cmd/check-protocol-minimum-version --verify-release --ref "$release_ref"
   )
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -250,14 +251,43 @@ func verifyMinimumCliReleaseProtocolAtRef(
 		Tag:            minimumProjectRunnerReleaseTag(values.MinimumProjectRunnerVersion),
 		RequiredAssets: requiredMinimumProjectRunnerAssets,
 	}
-	contractContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, release.Tag, "cli/contract.json")
+	contractContent, err := runnerContractFileAtRef(ctx, repoRoot, release.Tag)
 	if err != nil {
-		return "", fmt.Errorf("project runner release %s does not provide cli/contract.json", release.Tag)
+		return "", errors.New(runnerContractMissingAtReleaseMessage(release.Tag))
 	}
 	if err := verifyMinimumProjectRunnerReleaseProtocol(release.Tag, values, []byte(contractContent)); err != nil {
 		return "", err
 	}
 	return verifyMinimumCliReleaseIsPublished(ctx, repoRoot, release)
+}
+
+func runnerContractMissingAtReleaseMessage(releaseTag string) string {
+	return fmt.Sprintf("project runner release %s does not provide %s or %s", releaseTag, cliContractFile, legacyRunnerContractFile)
+}
+
+// runnerContractFileAtRef reads the CLI/runner IPC contract file at a git ref.
+// Release tags published before the cli/ directory split still provide the
+// contract at the pre-split path, so this falls back to it when the new path
+// is missing at the given ref.
+func runnerContractFileAtRef(ctx context.Context, repoRoot string, ref string) (string, error) {
+	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, cliContractFile)
+	if err == nil {
+		return content, nil
+	}
+	if !isMissingFileAtRefError(err, cliContractFile) {
+		return "", err
+	}
+	return protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, legacyRunnerContractFile)
+}
+
+// isMissingFileAtRefError reports whether err came from `git show ref:file`
+// failing because file does not exist at ref, as opposed to any other git
+// failure (auth, network, etc.) that must not be silently swallowed.
+func isMissingFileAtRefError(err error, file string) bool {
+	message := err.Error()
+	quotedPath := "'" + file + "'"
+	return strings.Contains(message, "path "+quotedPath+" exists on disk, but not in") ||
+		strings.Contains(message, "Path "+quotedPath+" does not exist in")
 }
 
 func minimumCliReleaseProtocolFile(ctx context.Context, repoRoot string, ref string) ([]byte, error) {
@@ -381,7 +411,7 @@ func protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(
 }
 
 func protocolMinimumVersionReleaseContractIsMissing(err error) bool {
-	return strings.Contains(err.Error(), "does not provide cli/contract.json")
+	return strings.Contains(err.Error(), fmt.Sprintf("does not provide %s or %s", cliContractFile, legacyRunnerContractFile))
 }
 
 func protocolMinimumVersionValueLabel(values ProtocolMinimumVersionValues) string {
@@ -426,7 +456,7 @@ func protocolMinimumProjectRunnerVersionAtRef(
 	repoRoot string,
 	ref string,
 ) (string, error) {
-	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, cliContractFile)
+	content, err := runnerContractFileAtRef(ctx, repoRoot, ref)
 	if err != nil {
 		return "", err
 	}

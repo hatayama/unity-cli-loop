@@ -113,7 +113,7 @@ jobs:
 
       - name: Dispatch release PR checks
         if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
-        working-directory: cli
+        working-directory: tools/release-automation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_BRANCH: ${{ steps.target.outputs.branch }}

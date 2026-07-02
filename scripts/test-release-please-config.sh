@@ -136,12 +136,10 @@ assert_json_value '.packages["Packages/src"].["extra-files"][2].jsonpath' '$.pac
 assert_json_value '.packages["cli"].component' 'uloop-project-runner'
 assert_json_value '.packages["cli"].["include-component-in-tag"]' 'true'
 assert_json_value '.packages["cli"].["changelog-path"]' 'CHANGELOG.md'
-# Dispatcher-owned paths must stay out of uloop-project-runner releases so a
-# dispatcher-only change cannot regenerate a project-runner release PR.
-# cli/dispatcher-contract.json cannot be listed here: release-please matches
-# exclude-paths as directory prefixes only, so a plain-file entry is a silent
-# no-op (see the directory check below).
-assert_json_value '.packages["cli"].["exclude-paths"] | sort | join(",")' 'cli/cmd/dispatch-release-please-pr-checks,cli/internal/automation'
+# The release automation cmd and internal packages that used to live under cli
+# moved to tools/release-automation, so there is nothing left under cli to
+# exclude from uloop-project-runner releases.
+assert_json_value '.packages["cli"] | has("exclude-paths")' 'false'
 assert_json_value '.packages["cli"].["extra-files"] | length' '4'
 assert_json_value '.packages["cli"].["extra-files"][0].path' '/common/tools/default-tools.json'
 assert_json_value '.packages["cli"].["extra-files"][1].path' '/common/clicontract/contract.json'
@@ -157,7 +155,7 @@ assert_file_contains "$RELEASE_WORKFLOW" '  checks: read'
 assert_file_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for package release sync'
 assert_file_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation'
 assert_file_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks'
-assert_file_contains "$RELEASE_WORKFLOW" '        working-directory: cli'
+assert_file_contains "$RELEASE_WORKFLOW" '        working-directory: tools/release-automation'
 assert_file_contains "$RELEASE_WORKFLOW" '        run: go run ./cmd/dispatch-release-please-pr-checks'
 assert_step_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'"
 assert_step_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks' "        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'"

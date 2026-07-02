@@ -50,24 +50,24 @@ jobs:
 
       - name: Check IPC protocol reminder
         if: github.event_name == 'pull_request'
-        working-directory: cli
+        working-directory: tools/release-automation
         run: go run ./cmd/check-ipc-protocol-reminder --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Check protocol minimum version bump
         if: github.event_name == 'pull_request' && !(startsWith(github.head_ref, 'release-please--branches--') && (github.event.pull_request.user.login == 'github-actions[bot]' || github.event.pull_request.user.login == 'release-please[bot]'))
-        working-directory: cli
+        working-directory: tools/release-automation
         env:
           GH_TOKEN: ${{ github.token }}
         run: go run ./cmd/check-protocol-minimum-version --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Check dispatcher minimum version
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-        working-directory: cli
+        working-directory: tools/release-automation
         run: go run ./cmd/check-dispatcher-minimum-version
 
       - name: Check dispatcher version bump
         if: github.event_name == 'pull_request'
-        working-directory: cli
+        working-directory: tools/release-automation
         run: go run ./cmd/check-dispatcher-version-bump --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Install golangci-lint

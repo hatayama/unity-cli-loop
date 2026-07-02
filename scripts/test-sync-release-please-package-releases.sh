@@ -168,7 +168,7 @@ write_release_files() {
   unity_package_key=${2:-Packages/src}
   unity_changelog_path=${3:-CHANGELOG.md}
 
-  mkdir -p Packages/src cli scripts
+  mkdir -p Packages/src cli scripts tools/release-automation
   cat > release-please-config.json <<EOF_CONFIG
 {
   "packages": {

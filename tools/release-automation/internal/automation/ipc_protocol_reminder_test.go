@@ -25,7 +25,7 @@ func TestAnalyzeIPCProtocolReminder_WhenNoIPCFilesChanged_DoesNotRemind(t *testi
 func TestAnalyzeIPCProtocolReminder_WhenIPCFilesChangedWithoutProtocolDeclarations_Reminds(t *testing.T) {
 	// Verifies IPC-facing changes surface a non-blocking protocol bump review reminder.
 	result := AnalyzeIPCProtocolReminder([]string{
-		"cli/internal/unityipc/client.go",
+		"common/unityipc/client.go",
 		"Packages/src/Editor/Infrastructure/Api/JsonRpcProcessor.cs",
 	})
 
@@ -40,8 +40,8 @@ func TestAnalyzeIPCProtocolReminder_WhenIPCFilesChangedWithoutProtocolDeclaratio
 func TestAnalyzeIPCProtocolReminder_WhenProtocolDeclarationsChanged_DoesNotRemind(t *testing.T) {
 	// Verifies explicit protocol declaration edits satisfy the reminder check.
 	result := AnalyzeIPCProtocolReminder([]string{
-		"cli/internal/unityipc/client.go",
-		"cli/contract.json",
+		"common/unityipc/client.go",
+		"common/clicontract/contract.json",
 		"Packages/src/Editor/Domain/CliConstants.cs",
 	})
 

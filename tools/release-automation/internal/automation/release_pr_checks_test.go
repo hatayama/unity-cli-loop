@@ -466,7 +466,7 @@ fi
 
 if [ "$1" = "show" ]; then
   case "$2" in
-    uloop-project-runner-v*:cli/contract.json)
+    uloop-project-runner-v*:common/clicontract/contract.json)
       if [ -n "${GIT_RELEASE_CONTRACT:-}" ]; then
         cat "$GIT_RELEASE_CONTRACT"
       else
@@ -568,7 +568,7 @@ if "%~1"=="fetch" if "%~2"=="origin" exit /b 0
 if "%~1"=="switch" if "%~2"=="--detach" if "%~3"=="FETCH_HEAD" exit /b 0
 
 if "%~1"=="show" (
-  echo %~2| findstr /r "^uloop-project-runner-v.*:cli/contract.json$" >nul
+  echo %~2| findstr /r "^uloop-project-runner-v.*:common/clicontract/contract.json$" >nul
   if not errorlevel 1 (
     if not "%GIT_RELEASE_CONTRACT%"=="" (
       type "%GIT_RELEASE_CONTRACT%"

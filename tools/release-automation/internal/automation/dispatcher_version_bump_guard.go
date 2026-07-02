@@ -14,14 +14,14 @@ import (
 )
 
 var dispatcherReleaseInputPatterns = []string{
-	"cli/cmd/dispatcher/main.go",
-	"cli/contract.go",
+	"dispatcher/cmd/dispatcher/main.go",
+	"dispatcher/contract.go",
 	dispatcherContractFile,
-	"cli/internal/clicore/*.go",
-	"cli/internal/dispatcher/*.go",
-	"cli/internal/install/*.go",
-	"cli/internal/uninstall/*.go",
-	"cli/internal/update/*.go",
+	"common/clicore/*.go",
+	"dispatcher/internal/dispatcher/*.go",
+	"dispatcher/internal/install/*.go",
+	"dispatcher/internal/uninstall/*.go",
+	"dispatcher/internal/update/*.go",
 	"scripts/install.ps1",
 	"scripts/install.sh",
 }
@@ -124,10 +124,7 @@ func parseDispatcherVersionBumpBaseValues(
 }
 
 func isMissingDispatcherContractAtRefError(err error) bool {
-	message := err.Error()
-	quotedPath := "'" + dispatcherContractFile + "'"
-	return strings.Contains(message, "path "+quotedPath+" exists on disk, but not in") ||
-		strings.Contains(message, "Path "+quotedPath+" does not exist in")
+	return isMissingFileAtRefError(err, dispatcherContractFile)
 }
 
 func AnalyzeDispatcherVersionBumpGuard(
@@ -204,7 +201,7 @@ func FormatDispatcherVersionBumpWarning(result DispatcherVersionBumpGuardResult)
 		builder.WriteString(changedInput)
 		builder.WriteString("`\n")
 	}
-	builder.WriteString("\nUpdate `cli/dispatcher-contract.json` `dispatcherVersion` before merging dispatcher release changes.")
+	builder.WriteString("\nUpdate `dispatcher/dispatcher-contract.json` `dispatcherVersion` before merging dispatcher release changes.")
 	return builder.String()
 }
 

@@ -11,11 +11,11 @@ import (
 )
 
 var ipcProtocolReminderPatterns = []string{
-	"cli/contract.json",
-	"cli/contract.go",
+	"common/clicontract/contract.json",
+	"common/clicontract/contract.go",
 	"cli/layout-contract.json",
-	"cli/internal/unityipc/**",
-	"cli/internal/tools/**",
+	"common/unityipc/**",
+	"common/tools/**",
 	"Packages/src/Editor/CompositionRoot/UnityCliLoopFirstPartyServerLifecycleBinding.cs",
 	"Packages/src/Editor/Domain/CliConstants.cs",
 	"Packages/src/Editor/Infrastructure/Api/**",
@@ -25,7 +25,7 @@ var ipcProtocolReminderPatterns = []string{
 }
 
 var ipcProtocolDeclarationPaths = []string{
-	"cli/contract.json",
+	"common/clicontract/contract.json",
 	"Packages/src/Editor/Domain/CliConstants.cs",
 }
 
@@ -141,7 +141,7 @@ func AppendIPCProtocolReminderSummary(summaryPath string, result IPCProtocolRemi
 		content.WriteString("\n")
 	}
 	if result.NeedsProtocolBumpReview {
-		content.WriteString("If this PR breaks interoperability with the previous protocol generation, bump both `cli/contract.json` `protocolVersion` and `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` in the same PR.\n\n")
+		content.WriteString("If this PR breaks interoperability with the previous protocol generation, bump both `common/clicontract/contract.json` `protocolVersion` and `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` in the same PR.\n\n")
 	}
 
 	file, err := os.OpenFile(summaryPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)

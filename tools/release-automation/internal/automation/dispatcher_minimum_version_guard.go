@@ -13,8 +13,10 @@ import (
 )
 
 const (
-	cliContractFile                     = "cli/contract.json"
-	dispatcherContractFile              = "cli/dispatcher-contract.json"
+	cliContractFile                     = "common/clicontract/contract.json"
+	legacyRunnerContractFile            = "cli/contract.json"
+	dispatcherContractFile              = "dispatcher/dispatcher-contract.json"
+	legacyDispatcherContractFile        = "cli/dispatcher-contract.json"
 	dispatcherReleaseTagPrefix          = "dispatcher-v"
 	unityPackageCliPinFile              = "Packages/src/project-runner-pin.json"
 	unityProjectCliPinFile              = ".uloop/project-runner-pin.json"
@@ -265,11 +267,26 @@ func verifyDispatcherMinimumVersionAtRef(
 	}
 
 	releaseTag := dispatcherReleaseTagPrefix + values.MinimumDispatcherVersion
-	contractContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, releaseTag, dispatcherContractFile)
+	contractContent, err := dispatcherContractFileAtRef(ctx, repoRoot, releaseTag)
 	if err != nil {
-		return fmt.Errorf("dispatcher release %s does not provide %s", releaseTag, dispatcherContractFile)
+		return fmt.Errorf("dispatcher release %s does not provide %s or %s", releaseTag, dispatcherContractFile, legacyDispatcherContractFile)
 	}
 	return verifyMinimumCliReleaseDispatcherContract(values, []byte(contractContent))
+}
+
+// dispatcherContractFileAtRef reads the dispatcher release contract at a git ref.
+// Dispatcher releases published before the cli/ directory split still provide the
+// contract at the pre-split path, so this falls back to it when the new path is
+// missing at the given ref.
+func dispatcherContractFileAtRef(ctx context.Context, repoRoot string, ref string) (string, error) {
+	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, dispatcherContractFile)
+	if err == nil {
+		return content, nil
+	}
+	if !isMissingFileAtRefError(err, dispatcherContractFile) {
+		return "", err
+	}
+	return protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, legacyDispatcherContractFile)
 }
 
 func verifyCurrentDispatcherMinimumVersion(values dispatcherMinimumVersionValues) error {

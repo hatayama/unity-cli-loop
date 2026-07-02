@@ -30,7 +30,7 @@ jobs:
         run: git fetch --no-tags origin "pull/${{ github.event.pull_request.number }}/merge:protocol-minimum-version-pr-merge"
 
       - name: Comment on protocol minimum version guard
-        working-directory: cli
+        working-directory: tools/release-automation
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

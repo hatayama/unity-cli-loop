@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/automation"
+	"github.com/hatayama/unity-cli-loop/tools/release-automation/internal/automation"
 )
 
 const dispatcherMinimumVersionCheckTimeout = 2 * time.Minute

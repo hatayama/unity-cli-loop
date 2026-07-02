@@ -24,7 +24,7 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseLacksDispatcherContr
 		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
 	}
 	assertDispatcherMinimumVersionLogContains(t, result.stderr, "does not define dispatcherContractVersion")
-	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:cli/dispatcher-contract.json")
+	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:dispatcher/dispatcher-contract.json")
 }
 
 // Verifies release PRs pass when the current dispatcher release itself is the minimum dispatcher version.
@@ -40,7 +40,26 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumIsCurrentRelease_Passes(t *
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
 	}
 	assertDispatcherMinimumVersionLogContains(t, result.stdout, "Dispatcher minimum version guard passed.")
-	assertDispatcherMinimumVersionLogDoesNotContain(t, result.gitLog, "dispatcher-v1.0.0:cli/dispatcher-contract.json")
+	assertDispatcherMinimumVersionLogDoesNotContain(t, result.gitLog, "dispatcher-v1.0.0:dispatcher/dispatcher-contract.json")
+}
+
+// Verifies dispatcher releases published before the cli/ directory split are still readable
+// through the legacy dispatcher-contract.json path when the new path is missing at the tag.
+func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleasePredatesDirectorySplit_FallsBackToLegacyPath(t *testing.T) {
+	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
+		currentProjectRunnerVersion:      "3.0.0-beta.40",
+		currentDispatcherVersion:         "1.0.1",
+		currentDispatcherContractVersion: 1,
+		minimumDispatcherVersion:         "1.0.0",
+		legacyReleaseContract:            `{"schemaVersion":1,"dispatcherVersion":"1.0.0","dispatcherContractVersion":1}`,
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertDispatcherMinimumVersionLogContains(t, result.stdout, "Dispatcher minimum version guard passed.")
+	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:dispatcher/dispatcher-contract.json")
+	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:cli/dispatcher-contract.json")
 }
 
 // Verifies committed pin files cannot drift from the C# minimum dispatcher version.
@@ -81,6 +100,7 @@ type dispatcherMinimumVersionCase struct {
 	minimumDispatcherVersion           string
 	projectPinMinimumDispatcherVersion string
 	releaseContract                    string
+	legacyReleaseContract              string
 }
 
 type dispatcherMinimumVersionRunResult struct {
@@ -111,6 +131,11 @@ func runDispatcherMinimumVersionCheckCase(t *testing.T, testCase dispatcherMinim
 		releaseContractPath := filepath.Join(workDir, "release-contract.json")
 		writeFile(t, releaseContractPath, testCase.releaseContract)
 		t.Setenv("GIT_RELEASE_CONTRACT", releaseContractPath)
+	}
+	if testCase.legacyReleaseContract != "" {
+		legacyReleaseContractPath := filepath.Join(workDir, "legacy-release-contract.json")
+		writeFile(t, legacyReleaseContractPath, testCase.legacyReleaseContract)
+		t.Setenv("GIT_LEGACY_RELEASE_CONTRACT", legacyReleaseContractPath)
 	}
 
 	stdout := bytes.Buffer{}
@@ -216,9 +241,17 @@ fi
 
 if [ "$1" = "show" ]; then
   case "$2" in
-    dispatcher-v*:cli/dispatcher-contract.json)
+    dispatcher-v*:dispatcher/dispatcher-contract.json)
       if [ -n "${GIT_RELEASE_CONTRACT:-}" ]; then
         cat "$GIT_RELEASE_CONTRACT"
+      else
+        echo "fatal: path 'dispatcher/dispatcher-contract.json' exists on disk, but not in '$2'" >&2
+        exit 1
+      fi
+      ;;
+    dispatcher-v*:cli/dispatcher-contract.json)
+      if [ -n "${GIT_LEGACY_RELEASE_CONTRACT:-}" ]; then
+        cat "$GIT_LEGACY_RELEASE_CONTRACT"
       else
         echo "release not found" >&2
         exit 1
