@@ -275,18 +275,8 @@ func verifyDispatcherMinimumVersionAtRef(
 }
 
 // dispatcherContractFileAtRef reads the dispatcher release contract at a git ref.
-// Dispatcher releases published before the cli/ directory split still provide the
-// contract at the pre-split path, so this falls back to it when the new path is
-// missing at the given ref.
 func dispatcherContractFileAtRef(ctx context.Context, repoRoot string, ref string) (string, error) {
-	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, dispatcherContractFile)
-	if err == nil {
-		return content, nil
-	}
-	if !isMissingFileAtRefError(err, dispatcherContractFile) {
-		return "", err
-	}
-	return protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, legacyDispatcherContractFile)
+	return contractFileAtRefWithLegacyFallback(ctx, repoRoot, ref, dispatcherContractFile, legacyDispatcherContractFile)
 }
 
 func verifyCurrentDispatcherMinimumVersion(values dispatcherMinimumVersionValues) error {

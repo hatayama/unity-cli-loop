@@ -266,18 +266,29 @@ func runnerContractMissingAtReleaseMessage(releaseTag string) string {
 }
 
 // runnerContractFileAtRef reads the CLI/runner IPC contract file at a git ref.
-// Release tags published before the cli/ directory split still provide the
-// contract at the pre-split path, so this falls back to it when the new path
-// is missing at the given ref.
 func runnerContractFileAtRef(ctx context.Context, repoRoot string, ref string) (string, error) {
-	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, cliContractFile)
+	return contractFileAtRefWithLegacyFallback(ctx, repoRoot, ref, cliContractFile, legacyRunnerContractFile)
+}
+
+// contractFileAtRefWithLegacyFallback reads a release contract at a git ref.
+// Release tags published before the cli/ directory split still provide their
+// contracts at the pre-split paths, so this falls back to the legacy path when
+// the primary path is missing at the given ref.
+func contractFileAtRefWithLegacyFallback(
+	ctx context.Context,
+	repoRoot string,
+	ref string,
+	primaryFile string,
+	legacyFile string,
+) (string, error) {
+	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, primaryFile)
 	if err == nil {
 		return content, nil
 	}
-	if !isMissingFileAtRefError(err, cliContractFile) {
+	if !isMissingFileAtRefError(err, primaryFile) {
 		return "", err
 	}
-	return protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, legacyRunnerContractFile)
+	return protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, legacyFile)
 }
 
 // isMissingFileAtRefError reports whether err came from `git show ref:file`
