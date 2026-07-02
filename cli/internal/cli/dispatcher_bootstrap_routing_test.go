@@ -39,22 +39,6 @@ func TestRunDispatcherVersionJSONReportsDispatcherIdentity(t *testing.T) {
 	}
 }
 
-// Verifies install help is handled in the dispatcher process before project pin resolution.
-func TestRunDispatcherInstallHelpDoesNotRequireProjectPin(t *testing.T) {
-	t.Chdir(t.TempDir())
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"install", "--help"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("dispatcher install help failed: code=%d stderr=%s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "uloop install") {
-		t.Fatalf("install help output mismatch: %s", stdout.String())
-	}
-}
-
 // Verifies update help is handled in the dispatcher process without running the installer.
 func TestRunDispatcherUpdateHelpDoesNotExecuteInstaller(t *testing.T) {
 	t.Chdir(t.TempDir())
@@ -115,22 +99,6 @@ func TestRunDispatcherUpdateRunsInDispatcherProcess(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "Updating global uloop launcher") {
 		t.Fatalf("update output mismatch: %s", stdout.String())
-	}
-}
-
-// Verifies uninstall help is handled in the dispatcher process before project pin resolution.
-func TestRunDispatcherUninstallHelpDoesNotRequireProjectPin(t *testing.T) {
-	t.Chdir(t.TempDir())
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"uninstall", "--help"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("dispatcher uninstall help failed: code=%d stderr=%s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "uloop uninstall") {
-		t.Fatalf("uninstall help output mismatch: %s", stdout.String())
 	}
 }
 

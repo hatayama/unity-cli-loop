@@ -7,13 +7,13 @@ import (
 	"testing"
 )
 
-func TestRunProjectLocalUninstallHelpDoesNotRequireUnityProject(t *testing.T) {
+func TestRunDispatcherUninstallHelpDoesNotRequireUnityProject(t *testing.T) {
 	// Verifies uninstall help is available before Unity project resolution.
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"uninstall", "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"uninstall", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("uninstall help failed: code=%d stderr=%s", code, stderr.String())

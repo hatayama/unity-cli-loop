@@ -7,13 +7,13 @@ import (
 	"testing"
 )
 
-func TestRunProjectLocalInstallHelpDoesNotRequireUnityProject(t *testing.T) {
+func TestRunDispatcherInstallHelpDoesNotRequireUnityProject(t *testing.T) {
 	// Verifies install help is available before Unity project resolution.
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"install", "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"install", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("install help failed: code=%d stderr=%s", code, stderr.String())

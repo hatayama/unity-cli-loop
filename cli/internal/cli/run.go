@@ -20,30 +20,34 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 1
 	}
 
-	if handled, code := tryHandleGlobalInfoRequest(remainingArgs, projectPath, stdout); handled {
+	if handled, code := tryHandleRunnerInfoRequest(remainingArgs, stdout); handled {
 		return code
 	}
 
 	command := remainingArgs[0]
 	commandArgs := remainingArgs[1:]
 
+	if isDispatcherOwnedCommand(command) || shouldHandleCompletionRequest(remainingArgs) {
+		writeErrorEnvelope(stderr, dispatcherOwnedCommandError(command))
+		return 1
+	}
+	if isUnknownLeadingOption(command) {
+		writeClassifiedError(stderr, &argumentError{
+			message:     "Unknown global option: " + command,
+			option:      command,
+			nextActions: []string{"Run `uloop --help` to inspect supported global options."},
+		}, errorContext{})
+		return 1
+	}
+	if containsHelpRequest(commandArgs) {
+		printRunnerUsage(stdout)
+		return 0
+	}
+
 	startPath, err := os.Getwd()
 	if err != nil {
 		writeClassifiedError(stderr, err, errorContext{command: command})
 		return 1
-	}
-
-	if handled, code := tryHandlePreConnectionRequest(
-		ctx,
-		remainingArgs,
-		command,
-		commandArgs,
-		startPath,
-		projectPath,
-		stdout,
-		stderr,
-	); handled {
-		return code
 	}
 
 	connection, err := project.ResolveConnection(startPath, projectPath)

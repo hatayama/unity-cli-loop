@@ -107,41 +107,8 @@ func TestPrintProjectLocalHelpListsNativeCommandsAndLiveToolGuidance(t *testing.
 	}
 }
 
-// Tests that help from a Unity project includes the cached project tool list.
-func TestRunProjectLocalHelpShowsCachedProjectTools(t *testing.T) {
-	projectRoot := createLaunchTestProject(t)
-	writeToolCache(t, projectRoot, `{
-  "tools": [
-    {
-      "name": "project-tool",
-      "description": "Project tool first line\nsecond line",
-      "inputSchema": {"type": "object", "properties": {}}
-    }
-  ]
-}`)
-	t.Chdir(projectRoot)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	code := RunProjectLocal(context.Background(), []string{"-h"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("help failed: code=%d stderr=%s", code, stderr.String())
-	}
-	output := stdout.String()
-	for _, expected := range []string{
-		"Unity tool commands from this project's cache:",
-		"project-tool",
-		"Project tool first line",
-	} {
-		if !strings.Contains(output, expected) {
-			t.Fatalf("help output missing %q:\n%s", expected, output)
-		}
-	}
-}
-
-// Tests that help with --project-path includes cached tools from that explicit project.
-func TestRunProjectLocalHelpWithProjectPathShowsCachedProjectTools(t *testing.T) {
+// Tests that dispatcher help with --project-path includes cached tools from that explicit project.
+func TestRunDispatcherHelpWithProjectPathShowsCachedProjectTools(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	writeToolCache(t, projectRoot, `{
   "tools": [
@@ -155,7 +122,7 @@ func TestRunProjectLocalHelpWithProjectPathShowsCachedProjectTools(t *testing.T)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"--project-path", projectRoot, "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"--project-path", projectRoot, "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("help failed: code=%d stderr=%s", code, stderr.String())
@@ -172,8 +139,8 @@ func TestRunProjectLocalHelpWithProjectPathShowsCachedProjectTools(t *testing.T)
 	}
 }
 
-// Tests that project help keeps cached tool descriptions concise.
-func TestRunProjectLocalHelpShowsConciseProjectToolDescriptions(t *testing.T) {
+// Tests that dispatcher project help keeps cached tool descriptions concise.
+func TestRunDispatcherHelpShowsConciseProjectToolDescriptions(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	writeToolCache(t, projectRoot, `{
   "tools": [
@@ -184,11 +151,10 @@ func TestRunProjectLocalHelpShowsConciseProjectToolDescriptions(t *testing.T) {
     }
   ]
 }`)
-	t.Chdir(projectRoot)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"--project-path", projectRoot, "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("help failed: code=%d stderr=%s", code, stderr.String())
@@ -203,12 +169,12 @@ func TestRunProjectLocalHelpShowsConciseProjectToolDescriptions(t *testing.T) {
 }
 
 // Tests that native project commands show the shared project path option.
-func TestRunProjectLocalListHelpShowsGlobalOptions(t *testing.T) {
+func TestRunDispatcherListHelpShowsGlobalOptions(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"list", "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"list", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("list help failed: code=%d stderr=%s", code, stderr.String())
@@ -227,12 +193,12 @@ func TestRunProjectLocalListHelpShowsGlobalOptions(t *testing.T) {
 }
 
 // Tests that launch help documents both positional and global project selection.
-func TestRunProjectLocalLaunchHelpShowsGlobalOptions(t *testing.T) {
+func TestRunDispatcherLaunchHelpShowsGlobalOptions(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"launch", "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"launch", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("launch help failed: code=%d stderr=%s", code, stderr.String())
@@ -258,12 +224,12 @@ func TestRunProjectLocalLaunchHelpShowsGlobalOptions(t *testing.T) {
 }
 
 // Tests that first-party tool help is available without Unity project resolution.
-func TestRunProjectLocalCompileHelpDoesNotRequireUnityProject(t *testing.T) {
+func TestRunDispatcherCompileHelpDoesNotRequireUnityProject(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"compile", "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"compile", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("compile help failed: code=%d stderr=%s", code, stderr.String())
@@ -288,12 +254,12 @@ func TestRunProjectLocalCompileHelpDoesNotRequireUnityProject(t *testing.T) {
 }
 
 // Tests that execute-dynamic-code help includes CLI-side code-file support without resolving a Unity project.
-func TestRunProjectLocalExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *testing.T) {
+func TestRunDispatcherExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{executeDynamicCodeCommandName, "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{executeDynamicCodeCommandName, "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("execute-dynamic-code help failed: code=%d stderr=%s", code, stderr.String())
@@ -317,12 +283,12 @@ func TestRunProjectLocalExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *test
 }
 
 // Tests that command help wins even after other tool options.
-func TestRunProjectLocalCompileHelpWinsAfterOtherOptions(t *testing.T) {
+func TestRunDispatcherCompileHelpWinsAfterOtherOptions(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"compile", "--force-recompile", "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"compile", "--force-recompile", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("compile help failed: code=%d stderr=%s", code, stderr.String())
@@ -356,12 +322,12 @@ func TestRunProjectLocalRejectsUnknownGlobalOption(t *testing.T) {
 }
 
 // Tests that first-party test help lists options without contacting Unity.
-func TestRunProjectLocalRunTestsHelpDoesNotRequireUnityProject(t *testing.T) {
+func TestRunDispatcherRunTestsHelpDoesNotRequireUnityProject(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"run-tests", "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"run-tests", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("run-tests help failed: code=%d stderr=%s", code, stderr.String())
@@ -383,13 +349,13 @@ func TestRunProjectLocalRunTestsHelpDoesNotRequireUnityProject(t *testing.T) {
 	}
 }
 
-// Tests that update help is available before installer execution.
-func TestRunProjectLocalUpdateHelpDoesNotExecuteInstaller(t *testing.T) {
+// Tests that update help documents the --to-version option.
+func TestRunDispatcherUpdateHelpListsToVersionOption(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"update", "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"update", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("update help failed: code=%d stderr=%s", code, stderr.String())
@@ -403,12 +369,12 @@ func TestRunProjectLocalUpdateHelpDoesNotExecuteInstaller(t *testing.T) {
 }
 
 // Tests that skills subcommand help is available before project resolution.
-func TestRunProjectLocalSkillsSubcommandHelpDoesNotRequireUnityProject(t *testing.T) {
+func TestRunDispatcherSkillsSubcommandHelpDoesNotRequireUnityProject(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"skills", "install", "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{"skills", "install", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("skills install help failed: code=%d stderr=%s", code, stderr.String())
