@@ -96,11 +96,6 @@ assert_package_path_exists() {
   package_path=$1
   path=$2
 
-  if [ "$package_path" = "." ]; then
-    assert_repository_path_exists "$path"
-    return
-  fi
-
   case "$path" in
     /*)
       assert_repository_path_exists "${path#/}"
@@ -173,7 +168,9 @@ assert_manifest_semver '.["Packages/src"]'
 assert_manifest_semver '.["cli"]'
 
 # The old repository-root package key must not linger after the boundary move.
-if jq -e '.["."]' "$MANIFEST" >/dev/null 2>&1; then
+# has(".") detects the key even when its value is null, which a plain
+# truthiness check under jq -e would miss.
+if jq -e 'has(".")' "$MANIFEST" >/dev/null 2>&1; then
   echo "Manifest must not contain the legacy '.' package key." >&2
   exit 1
 fi
