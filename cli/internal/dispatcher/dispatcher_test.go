@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 type dispatcherArchiveTestEntry struct {

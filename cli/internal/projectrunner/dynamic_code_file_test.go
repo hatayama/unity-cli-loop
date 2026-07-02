@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 // Verifies --code-file is extracted from execute-dynamic-code args in both flag forms.

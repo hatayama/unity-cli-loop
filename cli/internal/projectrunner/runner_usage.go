@@ -3,7 +3,7 @@ package projectrunner
 import (
 	"io"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 // tryHandleRunnerInfoRequest answers the project runner's own identity

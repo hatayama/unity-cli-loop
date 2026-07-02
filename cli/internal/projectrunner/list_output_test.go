@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 // Tests that list output exposes the actual CLI option names instead of schema property names.

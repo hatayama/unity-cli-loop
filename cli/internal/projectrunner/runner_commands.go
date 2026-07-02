@@ -4,9 +4,9 @@ import (
 	"context"
 	"io"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
-	"github.com/hatayama/unity-cli-loop/cli/internal/project"
-	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/project"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 func runResolvedProjectCommand(

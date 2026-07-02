@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
-	"github.com/hatayama/unity-cli-loop/cli/internal/project"
 	sharedupdate "github.com/hatayama/unity-cli-loop/cli/internal/update"
-	sharedversion "github.com/hatayama/unity-cli-loop/cli/internal/version"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/project"
+	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
 )
 
 const (

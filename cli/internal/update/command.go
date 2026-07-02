@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	sharedversion "github.com/hatayama/unity-cli-loop/cli/internal/version"
+	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
 )
 
 const (

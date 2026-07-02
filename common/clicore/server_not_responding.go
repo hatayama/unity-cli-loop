@@ -3,7 +3,7 @@ package clicore
 import (
 	"fmt"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/project"
+	"github.com/hatayama/unity-cli-loop/common/project"
 )
 
 // UnityServerNotRespondingError reports that a running Unity Editor accepted a

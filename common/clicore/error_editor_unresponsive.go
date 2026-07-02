@@ -1,6 +1,6 @@
 package clicore
 
-import "github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+import "github.com/hatayama/unity-cli-loop/common/unityipc"
 
 func connectionAttemptCause(err *unityipc.ConnectionAttemptError) string {
 	if err == nil {

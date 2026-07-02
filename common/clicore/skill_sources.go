@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/skills"
+	"github.com/hatayama/unity-cli-loop/common/skills"
 )
 
 const (

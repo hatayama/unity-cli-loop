@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 func applyLaunchOption(options *launchOptions, args []string, index int) (int, error) {

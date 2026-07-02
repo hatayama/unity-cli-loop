@@ -1,6 +1,6 @@
 package dispatcher
 
-import "github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+import "github.com/hatayama/unity-cli-loop/common/clicore"
 
 // unsupportedPlatformError builds a clicore.CLIError for bootstrap commands (install, update,
 // uninstall) that fail because the current OS is not supported, matching on the

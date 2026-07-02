@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	clicontract "github.com/hatayama/unity-cli-loop/cli"
+	clicontract "github.com/hatayama/unity-cli-loop/common/clicontract"
 )
 
 func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t *testing.T) {

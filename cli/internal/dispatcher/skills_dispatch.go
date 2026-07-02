@@ -3,7 +3,7 @@ package dispatcher
 import (
 	"io"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 func runV3MigrationSkillsSubcommand(

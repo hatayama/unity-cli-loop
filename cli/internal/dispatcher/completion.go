@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 const (

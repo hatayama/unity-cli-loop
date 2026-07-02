@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 func TestRunProjectLocalVersionJSONIncludesProtocolVersion(t *testing.T) {

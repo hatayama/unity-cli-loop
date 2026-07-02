@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 // Verifies the stderr envelope written for a caller-facing error is machine-readable JSON.

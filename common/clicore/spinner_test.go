@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 func TestSpinnerDoesNotWriteWhenDisabled(t *testing.T) {

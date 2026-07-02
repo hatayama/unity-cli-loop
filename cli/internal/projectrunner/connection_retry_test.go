@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
-	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 // Verifies transient IPC connection failures focus Unity once and restore focus before reporting server-not-responding.

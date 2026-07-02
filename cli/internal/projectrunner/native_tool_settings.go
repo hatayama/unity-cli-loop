@@ -1,6 +1,6 @@
 package projectrunner
 
-import "github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+import "github.com/hatayama/unity-cli-loop/common/clicore"
 
 func isSettingsManagedNativeToolCommand(command string) bool {
 	switch command {

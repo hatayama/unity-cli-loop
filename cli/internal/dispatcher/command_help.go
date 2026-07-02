@@ -4,8 +4,8 @@ import (
 	"io"
 	"sort"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
-	"github.com/hatayama/unity-cli-loop/cli/internal/project"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/project"
 )
 
 func tryHandleCommandHelp(command string, startPath string, projectPath string, stdout io.Writer, stderr io.Writer) (bool, int) {

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
-	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 func TestEnsureCompileRequestIDPreservesSafeValue(t *testing.T) {

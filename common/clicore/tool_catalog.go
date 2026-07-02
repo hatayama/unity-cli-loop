@@ -1,7 +1,7 @@
 package clicore
 
 import (
-	"github.com/hatayama/unity-cli-loop/cli/internal/tools"
+	"github.com/hatayama/unity-cli-loop/common/tools"
 )
 
 const (

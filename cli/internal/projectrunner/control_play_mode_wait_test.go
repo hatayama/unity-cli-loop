@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
-	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 // Verifies that control-play-mode polls a status-only request before returning stale PlayMode state.

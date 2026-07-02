@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 var dispatcherReadInstalledVersion = readInstalledDispatcherVersion

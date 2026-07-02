@@ -100,7 +100,7 @@ jobs:
       # separators, missing .exe suffixes, TCP-only fixtures) that predate this job.
       - name: Test native Go CLI transport on Windows
         shell: bash
-        run: cd cli && go test ./internal/unityipc/
+        run: cd common && go test ./unityipc/
 
       - name: Test install release filter in Git Bash
         shell: bash

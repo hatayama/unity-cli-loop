@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 // Verifies shared readiness waits keep the shorter non-launch timeout.

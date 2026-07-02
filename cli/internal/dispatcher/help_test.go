@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 // Tests that launcher help lists native commands and live-tool discovery guidance without baked-in tools.

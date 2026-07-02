@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 func ClassifyError(err error, context ErrorContext) CLIError {

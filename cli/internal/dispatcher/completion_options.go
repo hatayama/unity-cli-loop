@@ -1,6 +1,6 @@
 package dispatcher
 
-import "github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+import "github.com/hatayama/unity-cli-loop/common/clicore"
 
 var nativeCommandOptions = map[string][]string{
 	clicore.CompletionCommand: {installCompletionFlag, shellFlag},

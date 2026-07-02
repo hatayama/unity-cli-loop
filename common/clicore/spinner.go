@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 const (
