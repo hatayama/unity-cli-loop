@@ -67,7 +67,8 @@ Dispatcher release inputs include these non-exhaustive examples:
 
 - `cli/cmd/dispatcher/main.go`
 - `cli/dispatcher-contract.json`
-- `cli/internal/cli/dispatcher*.go`
+- `cli/internal/dispatcher/*.go`
+- `cli/internal/clicore/*.go`
 - `cli/internal/update/*.go`
 - `scripts/install.ps1`
 

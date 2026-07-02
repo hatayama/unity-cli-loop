@@ -23,6 +23,7 @@ uloop launch [project-path] [options]
 | `project-path` | string | Optional. Use only when the target Unity project is not in the current directory. |
 | `-r, --restart` | flag | Kill running Unity and restart |
 | `-q, --quit` | flag | Kill an existing Unity process for the project without launching |
+| `--editor-version <version>` | string | Use this Unity Editor version instead of ProjectVersion.txt |
 | `-p, --platform <P>` | string | Build target (e.g., StandaloneOSX, Android, iOS) |
 | `--max-depth <N>` | number | Search depth when project-path is omitted (default: 3, -1 for unlimited) |
 
@@ -40,6 +41,9 @@ uloop launch -r
 
 # Launch with build target
 uloop launch -p Android
+
+# Launch with a specific installed Editor version
+uloop launch --editor-version 6000.0.0f1
 
 # Quit running Unity without launching
 uloop launch --quit
@@ -68,4 +72,6 @@ The final JSON payload includes:
 
 - If Unity is already running, focuses the existing window and verifies tool readiness
 - If process scan is blocked (e.g. sandboxed `ps`), plain launch falls back to IPC probing; `--restart` and `--quit` still fail because they need the process id
+- New Unity processes ignore project compiler errors during Editor startup by default when run by dispatcher 3.0.1-beta.8 or newer; run `uloop update` first if an older dispatcher is installed
+- `--editor-version` only affects new Unity processes; use it with `--restart` to replace an already-running Editor
 - The command waits until Unity finishes startup and the CLI can connect before returning

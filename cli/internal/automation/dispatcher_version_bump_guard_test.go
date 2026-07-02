@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-// Verifies dispatcher-only changes do not require a dispatcher release bump.
+// Verifies project-runner-only changes do not require a dispatcher release bump.
 func TestDispatcherVersionBumpGuardPassesWhenDispatcherInputsAreUnchanged(t *testing.T) {
 	result := AnalyzeDispatcherVersionBumpGuard(
-		[]string{"cli/internal/cli/compile_wait.go"},
+		[]string{"cli/internal/projectrunner/compile_wait.go"},
 		DispatcherVersionBumpValues{
 			HasContract:               true,
 			DispatcherVersion:         "1.0.0",
@@ -49,7 +49,7 @@ func TestDispatcherVersionBumpGuardPassesWhenOnlyReleaseAutomationChanges(t *tes
 // Verifies dispatcher release inputs require a new dispatcherVersion.
 func TestDispatcherVersionBumpGuardRequiresDispatcherVersionIncrease(t *testing.T) {
 	result := AnalyzeDispatcherVersionBumpGuard(
-		[]string{"cli/internal/cli/dispatcher.go"},
+		[]string{"cli/internal/dispatcher/run_dispatcher.go"},
 		DispatcherVersionBumpValues{
 			HasContract:               true,
 			DispatcherVersion:         "1.0.0",
@@ -86,6 +86,26 @@ func TestDispatcherVersionBumpGuardCoversDispatcherInternalPackage(t *testing.T)
 
 	if !dispatcherVersionBumpGuardNeedsAction(result) {
 		t.Fatal("expected dispatcher entrypoint package changes without a version increase to fail")
+	}
+}
+
+// Verifies shared clicore code compiled into the dispatcher binary counts as a dispatcher release input.
+func TestDispatcherVersionBumpGuardCoversClicorePackage(t *testing.T) {
+	result := AnalyzeDispatcherVersionBumpGuard(
+		[]string{"cli/internal/clicore/output.go"},
+		DispatcherVersionBumpValues{
+			HasContract:               true,
+			DispatcherVersion:         "1.0.0",
+			DispatcherContractVersion: 1,
+		},
+		DispatcherVersionBumpValues{
+			HasContract:               true,
+			DispatcherVersion:         "1.0.0",
+			DispatcherContractVersion: 1,
+		})
+
+	if !dispatcherVersionBumpGuardNeedsAction(result) {
+		t.Fatal("expected clicore changes without a version increase to fail")
 	}
 }
 
@@ -130,7 +150,7 @@ func TestDispatcherVersionBumpGuardRejectsUnexpectedBaseContractReadError(t *tes
 // Verifies dispatcher contract generations cannot move backwards.
 func TestDispatcherVersionBumpGuardRejectsDispatcherContractVersionDecrease(t *testing.T) {
 	result := AnalyzeDispatcherVersionBumpGuard(
-		[]string{"cli/internal/cli/dispatcher.go"},
+		[]string{"cli/internal/dispatcher/run_dispatcher.go"},
 		DispatcherVersionBumpValues{
 			HasContract:               true,
 			DispatcherVersion:         "1.0.0",
