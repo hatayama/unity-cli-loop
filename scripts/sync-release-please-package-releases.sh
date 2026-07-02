@@ -38,11 +38,6 @@ resolve_package_path() {
       printf '%s\n' "${file_path#/}"
       ;;
     *)
-      if [ "$package_path" = "." ]; then
-        printf '%s\n' "$file_path"
-        return
-      fi
-
       printf '%s/%s\n' "$package_path" "$file_path"
       ;;
   esac

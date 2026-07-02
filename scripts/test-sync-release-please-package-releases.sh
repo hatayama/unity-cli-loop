@@ -165,17 +165,19 @@ MOCK_SLEEP
 
 write_release_files() {
   version=$1
+  unity_package_key=${2:-Packages/src}
+  unity_changelog_path=${3:-CHANGELOG.md}
 
   mkdir -p Packages/src cli scripts
-  cat > release-please-config.json <<'EOF_CONFIG'
+  cat > release-please-config.json <<EOF_CONFIG
 {
   "packages": {
-    ".": {
+    "$unity_package_key": {
       "component": "unity-package",
       "release-type": "go",
       "include-v-in-tag": true,
       "include-component-in-tag": false,
-      "changelog-path": "Packages/src/CHANGELOG.md"
+      "changelog-path": "$unity_changelog_path"
     },
     "cli": {
       "component": "uloop-project-runner",
@@ -190,7 +192,7 @@ EOF_CONFIG
 
   cat > .release-please-manifest.json <<EOF_MANIFEST
 {
-  ".": "$version",
+  "$unity_package_key": "$version",
   "cli": "$version"
 }
 EOF_MANIFEST
