@@ -12,6 +12,8 @@ INPUT_DRY_RUN=${INPUT_DRY_RUN:-false}
 RELEASE_DATA=""
 CLI_RELEASE_INPUT_PATHS="
 .go-version
+go.work
+go.work.sum
 layout-contract.json
 common
 project-runner/cmd
