@@ -64,11 +64,11 @@ cli
 
 ```bash
 scripts/check-go-cli.sh
-cli/dist/darwin-arm64/uloop compile --wait-for-domain-reload
+dist/darwin-arm64/uloop compile --wait-for-domain-reload
 ```
 
 skill discovery や CLI-only skill source path を動かした場合は、`ToolSkillSynchronizerTests` の targeted EditMode test も実行します。
 
 ```bash
-cli/dist/darwin-arm64/uloop run-tests --test-mode EditMode --filter-type regex --filter-value ToolSkillSynchronizerTests
+dist/darwin-arm64/uloop run-tests --test-mode EditMode --filter-type regex --filter-value ToolSkillSynchronizerTests
 ```

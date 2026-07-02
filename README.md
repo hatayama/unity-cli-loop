@@ -596,9 +596,9 @@ Run the native Go CLI checks before changing files under `cli`:
 scripts/check-go-cli.sh
 ```
 
-The check script verifies formatting with `goimports` and `gofumpt`, runs `go vet ./...`, runs `golangci-lint`, and then runs `go test ./...` for the Go CLI module. Install `golangci-lint` first if it is not available on your `PATH`.
+The check script verifies formatting with `goimports` and `gofumpt`, runs `go vet ./...`, runs `golangci-lint`, and then runs `go test ./...` for every Go module in the repository. Install `golangci-lint` first if it is not available on your `PATH`.
 
-Use the existing build script when you need to refresh local development binaries under `cli/dist`:
+Use the existing build script when you need to refresh local development binaries under `dist`:
 
 ```bash
 scripts/build-go-cli.sh

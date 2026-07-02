@@ -15,7 +15,7 @@ Every test method must have a short comment that states what behavior the test v
 Runtime compatibility between the Unity package and the native CLI is gated on an integer
 protocol version, not on release numbers. Two declarations must always stay equal:
 
-- Go side: `protocolVersion` in `cli/contract.json` (the generation the CLI advertises over IPC).
+- Go side: `protocolVersion` in `common/clicontract/contract.json` (the generation the CLI advertises over IPC).
 - C# side: `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` (the exact generation the package accepts).
 
 `TestProtocolVersionMatchesUnityPackage` fails the build if they diverge, so never bump one alone.
@@ -33,14 +33,14 @@ compatible must not bump it.
 
 Do not touch the protocol version to "keep up with releases":
 
-- `cli/contract.json` `cliVersion` and `cli/internal/tools/default-tools.json` `version` are
-  stamped by release-please only. Never edit them by hand in a feature PR.
-- `CliConstants.MINIMUM_REQUIRED_CLI_VERSION` is the release that setup installs. It must always
-  point at a published CLI release.
+- `common/clicontract/contract.json` `projectRunnerVersion` and `common/tools/default-tools.json`
+  `version` are stamped by release-please only. Never edit them by hand in a feature PR.
+- `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` is the release that setup installs. It
+  must always point at a published project runner release.
 - When a protocol bump changes `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`, prepare the matching
-  CLI release tag first, then update `CliConstants.MINIMUM_REQUIRED_CLI_VERSION` in the same PR.
-  PR CI fails, and the PR warning comment stays open, until the minimum CLI release advances to a
-  published CLI release that advertises the required protocol.
+  project runner release tag first, then update `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION`
+  in the same PR. PR CI fails, and the PR warning comment stays open, until the minimum project
+  runner release advances to a published release that advertises the required protocol.
 - Runtime protocol mismatch guidance must use the unpinned CLI update path for older clients and
   tell newer clients to align the package and CLI releases.
 
@@ -56,20 +56,20 @@ Shell scripts are acceptable only as thin wrappers or simple command sequences.
 
 ## Dispatcher Release Inputs
 
-The global dispatcher has its own release version in `cli/dispatcher-contract.json`.
+The global dispatcher has its own release version in `dispatcher/dispatcher-contract.json`.
 When changing dispatcher release inputs, update `dispatcherVersion` in the same PR.
 Pull request CI runs `check-dispatcher-version-bump` and fails if dispatcher inputs changed
 without a dispatcher version increase.
 
 The authoritative dispatcher release input list is `dispatcherReleaseInputPatterns` in
-`cli/internal/automation/dispatcher_version_bump_guard.go`.
+`tools/release-automation/internal/automation/dispatcher_version_bump_guard.go`.
 Dispatcher release inputs include these non-exhaustive examples:
 
-- `cli/cmd/dispatcher/main.go`
-- `cli/dispatcher-contract.json`
-- `cli/internal/dispatcher/*.go`
-- `cli/internal/clicore/*.go`
-- `cli/internal/update/*.go`
+- `dispatcher/cmd/dispatcher/main.go`
+- `dispatcher/dispatcher-contract.json`
+- `dispatcher/internal/dispatcher/*.go`
+- `common/clicore/*.go`
+- `dispatcher/internal/update/*.go`
 - `scripts/install.ps1`
 
 Do not bump `dispatcherContractVersion` unless the dispatcher contract itself changes.
@@ -87,7 +87,7 @@ Before changing scripts, skill files, generated-file synchronization, path handl
 - Normalize relative paths at API boundaries. Do not compare raw path strings that may contain `/` on one side and `\` on another. Convert separators before storing, comparing, deleting, or syncing generated files.
 - Prefer forward slashes in JSON `file:` paths and other cross-platform config values. Use escaped backslashes only when the target format explicitly requires them.
 - Validate Windows-facing PowerShell with both `pwsh` and Windows PowerShell when practical, especially for multiline arguments, here-strings, UTF-8 files, and native executable calls.
-- When validating this checkout on Windows, use the repo-local native binary (`cli/dist/windows-amd64/uloop.exe`) instead of a `PATH`-resolved `uloop`. If a bash validation command cannot see the expected Go toolchain on Windows, retry through a login shell such as `bash -lc`.
+- When validating this checkout on Windows, use the repo-local native binary (`dist/windows-amd64/uloop.exe`) instead of a `PATH`-resolved `uloop`. If a bash validation command cannot see the expected Go toolchain on Windows, retry through a login shell such as `bash -lc`.
 - Add or update a regression test whenever a fix depends on encoding, line endings, or separator normalization. A passing macOS test alone is not enough for these cases.
 
 ## Dead Code Scanner
@@ -117,19 +117,19 @@ Interpret scanner output conservatively:
 When running `uloop` commands for this project during CLI development, do not use the `uloop` command resolved from `PATH`. Run this checkout's built development binary directly so validation uses the code under review:
 
 ```bash
-cli/dist/darwin-arm64/uloop compile --project-path "$(git rev-parse --show-toplevel)"
+dist/darwin-arm64/uloop compile --project-path "$(git rev-parse --show-toplevel)"
 ```
 
 Before running a command with `--project-path`, confirm that the path is the intended Unity project for the current task. Do not copy a sibling checkout path from another repository or prior session. When intentionally validating a different Unity project, use an explicit placeholder in notes and replace it at execution time:
 
 ```bash
-cli/dist/darwin-arm64/uloop compile --project-path <UNITY_PROJECT_ROOT>
+dist/darwin-arm64/uloop compile --project-path <UNITY_PROJECT_ROOT>
 ```
 
 If CLI source changes affect the command behavior you are validating, rebuild the development binary before running it.
 
-When changing Go CLI source files under `cli`, run `scripts/check-go-cli.sh`.
-Use `scripts/build-go-cli.sh` when you need to refresh local development binaries under `cli/dist`; generated binaries are ignored and must not be committed.
+When changing Go source files under any of the Go modules (`common`, `dispatcher`, `project-runner`, `tools/release-automation`), run `scripts/check-go-cli.sh`.
+Use `scripts/build-go-cli.sh` when you need to refresh local development binaries under `dist`; generated binaries are ignored and must not be committed.
 This script is the local equivalent of the Go CLI CI validation: it runs formatting checks, vet, lint, tests, rebuilds the built native binaries, and verifies that required platform binaries exist.
 
 ## Unity Freeze Prevention
