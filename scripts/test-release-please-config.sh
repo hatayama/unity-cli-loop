@@ -143,10 +143,10 @@ assert_json_value '.packages["cli"].["include-component-in-tag"]' 'true'
 assert_json_value '.packages["cli"].["changelog-path"]' 'CHANGELOG.md'
 # Dispatcher-owned paths must stay out of uloop-project-runner releases so a
 # dispatcher-only change cannot regenerate a project-runner release PR.
-assert_json_value '.packages["cli"].["exclude-paths"] | sort | join(",")' 'cli/cmd/dispatch-release-please-pr-checks,cli/cmd/dispatcher,cli/dispatcher-contract.json,cli/internal/automation,cli/internal/dispatcher'
-assert_repository_path_exists 'cli/cmd/dispatcher'
-assert_repository_path_exists 'cli/internal/dispatcher'
-assert_repository_path_exists 'cli/dispatcher-contract.json'
+# cli/dispatcher-contract.json cannot be listed here: release-please matches
+# exclude-paths as directory prefixes only, so a plain-file entry is a silent
+# no-op (see the directory check below).
+assert_json_value '.packages["cli"].["exclude-paths"] | sort | join(",")' 'cli/cmd/dispatch-release-please-pr-checks,cli/cmd/dispatcher,cli/internal/automation,cli/internal/dispatcher'
 assert_json_value '.packages["cli"].["extra-files"] | length' '4'
 assert_json_value '.packages["cli"].["extra-files"][0].path' 'internal/tools/default-tools.json'
 assert_json_value '.packages["cli"].["extra-files"][1].path' 'contract.json'
@@ -188,4 +188,16 @@ jq -r '.packages | to_entries[] | .key as $package_path | .value["extra-files"][
 strip_carriage_returns |
 while IFS='	' read -r package_path extra_file_path; do
   assert_package_path_exists "$package_path" "$extra_file_path"
+done
+
+# release-please matches exclude-paths as directory prefixes only (a commit file
+# counts as excluded when it starts with "<entry>/"), so a plain-file entry can
+# never match anything and silently does nothing. Require existing directories.
+jq -r '.packages | to_entries[] | .value["exclude-paths"][]?' "$CONFIG" |
+strip_carriage_returns |
+while IFS= read -r exclude_path; do
+  if [ ! -d "$ROOT_DIR/$exclude_path" ]; then
+    echo "release-please exclude-paths entry must be an existing directory: $exclude_path" >&2
+    exit 1
+  fi
 done

@@ -39,7 +39,6 @@
       "exclude-paths": [
         "cli/cmd/dispatch-release-please-pr-checks",
         "cli/cmd/dispatcher",
-        "cli/dispatcher-contract.json",
         "cli/internal/automation",
         "cli/internal/dispatcher"
       ],
