@@ -27,7 +27,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version-file: cli/.go-version
+          go-version-file: .go-version
           cache: false
 
       - name: Test release automation shell helpers
@@ -91,7 +91,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version-file: cli/.go-version
+          go-version-file: .go-version
           cache: false
 
       # Windows-only code paths (named pipe transport, winio deadlines, typed error
@@ -133,10 +133,10 @@ jobs:
           test -d "Packages/src/Editor" || exit 1
           test ! -d "Packages/src/Cli~" || exit 1
           test -d "Packages/src/Editor/CliOnlyTools~" || exit 1
-          test -d "cli" || exit 1
-          test -f "cli/go.mod" || exit 1
-          test -d "cli/cmd" || exit 1
-          test -d "cli/internal" || exit 1
+          test -d "project-runner" || exit 1
+          test -f "project-runner/go.mod" || exit 1
+          test -d "project-runner/cmd" || exit 1
+          test -d "project-runner/internal" || exit 1
 
           echo "✅ Unity Package structure is valid"
 

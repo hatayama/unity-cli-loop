@@ -4,9 +4,12 @@ on:
   pull_request:
     branches: [ main, v3-beta ]
     paths:
-      - 'cli/**/*.go'
-      - 'cli/.go-version'
-      - 'cli/.golangci-complexity.yml'
+      - 'common/**/*.go'
+      - 'dispatcher/**/*.go'
+      - 'project-runner/**/*.go'
+      - 'tools/release-automation/**/*.go'
+      - '.go-version'
+      - '.golangci-complexity.yml'
       - 'Packages/src/**/*.cs'
       - 'tools/UnityCliLoop.CodeComplexity/**'
       - 'tests/UnityCliLoop.CodeComplexity.Tests/**'
@@ -29,7 +32,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version-file: cli/.go-version
+          go-version-file: .go-version
           cache: false
 
       - name: Setup .NET
@@ -54,7 +57,7 @@ jobs:
         if: always()
         run: |
           mkdir -p artifacts
-          (cd cli && golangci-lint run --config .golangci-complexity.yml --issues-exit-code=0 --show-stats=false --output.json.path ../artifacts/go-code-complexity.json ./...)
+          (cd project-runner && golangci-lint run --config ../.golangci-complexity.yml --issues-exit-code=0 --show-stats=false --output.json.path ../artifacts/go-code-complexity.json ./...)
           dotnet run --project tools/UnityCliLoop.CodeComplexity/UnityCliLoop.CodeComplexity.csproj -- \
             --root . \
             --max-complexity 15 \

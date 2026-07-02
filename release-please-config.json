@@ -28,7 +28,7 @@
         }
       ]
     },
-    "cli": {
+    "project-runner": {
       "component": "uloop-project-runner",
       "release-type": "go",
       "versioning": "prerelease",

@@ -7,7 +7,7 @@ ROOT_DIR=${ULOOP_REPO_ROOT:-$(CDPATH= cd "$(dirname "$0")/.." && pwd)}
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 CONFIG="$ROOT_DIR/release-please-config.json"
 MANIFEST="$ROOT_DIR/.release-please-manifest.json"
-CLI_PACKAGE_PATH="cli"
+CLI_PACKAGE_PATH="project-runner"
 UNITY_PACKAGE_CLI_PIN_FILE="Packages/src/project-runner-pin.json"
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 TMP_DIR=$(mktemp -d)

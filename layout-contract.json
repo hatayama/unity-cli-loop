@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "layout": {
+    "modules": {
+      "common": "common",
+      "dispatcher": "dispatcher",
+      "projectRunner": "project-runner",
+      "releaseAutomation": "tools/release-automation"
+    },
+    "distDir": "dist"
+  },
+  "binaries": {
+    "dispatcher": {
+      "unix": "uloop",
+      "windows": "uloop.exe"
+    },
+    "projectRunner": {
+      "unix": "uloop-project-runner",
+      "windows": "uloop-project-runner.exe"
+    }
+  }
+}

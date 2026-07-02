@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	cliModulePath          = "github.com/hatayama/unity-cli-loop/cli"
-	dispatcherModulePath   = "github.com/hatayama/unity-cli-loop/dispatcher"
-	maxProductionFileLines = 500
+	projectRunnerModulePath = "github.com/hatayama/unity-cli-loop/project-runner"
+	dispatcherModulePath    = "github.com/hatayama/unity-cli-loop/dispatcher"
+	maxProductionFileLines  = 500
 )
 
 type goPackage struct {
@@ -29,15 +29,23 @@ type layoutContract struct {
 }
 
 type layoutSection struct {
-	CliDir  string `json:"cliDir"`
-	DistDir string `json:"distDir"`
+	Modules layoutModules `json:"modules"`
+	DistDir string        `json:"distDir"`
+}
+
+type layoutModules struct {
+	Common            string `json:"common"`
+	Dispatcher        string `json:"dispatcher"`
+	ProjectRunner     string `json:"projectRunner"`
+	ReleaseAutomation string `json:"releaseAutomation"`
 }
 
 type binariesLayout struct {
-	Cli cliBinaryNames `json:"cli"`
+	Dispatcher    binaryNames `json:"dispatcher"`
+	ProjectRunner binaryNames `json:"projectRunner"`
 }
 
-type cliBinaryNames struct {
+type binaryNames struct {
 	Unix    string `json:"unix"`
 	Windows string `json:"windows"`
 }
@@ -50,13 +58,13 @@ func TestCliFeaturePackagesDoNotImportOrchestrationLayer(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
 	packages := listPackages(t, moduleRoot)
 	orchestrationPackagePrefixes := []string{
-		cliModulePath + "/internal/dispatcher",
-		cliModulePath + "/internal/projectrunner",
-		cliModulePath + "/internal/clicore",
+		projectRunnerModulePath + "/internal/dispatcher",
+		projectRunnerModulePath + "/internal/projectrunner",
+		projectRunnerModulePath + "/internal/clicore",
 	}
 	for _, goPackage := range packages {
 		if hasAnyPackagePrefix(goPackage.ImportPath, orchestrationPackagePrefixes) ||
-			strings.HasPrefix(goPackage.ImportPath, cliModulePath+"/cmd/") {
+			strings.HasPrefix(goPackage.ImportPath, projectRunnerModulePath+"/cmd/") {
 			continue
 		}
 		for _, importedPath := range goPackage.Imports {
@@ -78,23 +86,23 @@ func hasAnyPackagePrefix(importPath string, packagePrefixes []string) bool {
 	return false
 }
 
-// Tests that CLI internal packages stay inside explicit runtime boundaries.
+// Tests that project runner internal packages stay inside explicit runtime boundaries.
 func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
 	packages := listPackages(t, moduleRoot)
 	boundaryPrefixes := []string{}
 	for _, boundary := range []string{"automation", "clicore", "dispatcher", "install", "project", "projectrunner", "skills", "tools", "uninstall", "unityipc", "update", "version"} {
-		boundaryPrefixes = append(boundaryPrefixes, cliModulePath+"/internal/"+boundary)
+		boundaryPrefixes = append(boundaryPrefixes, projectRunnerModulePath+"/internal/"+boundary)
 	}
 	for _, goPackage := range packages {
-		if !strings.HasPrefix(goPackage.ImportPath, cliModulePath+"/internal/") {
+		if !strings.HasPrefix(goPackage.ImportPath, projectRunnerModulePath+"/internal/") {
 			continue
 		}
-		if goPackage.ImportPath == cliModulePath+"/internal/architecture" {
+		if goPackage.ImportPath == projectRunnerModulePath+"/internal/architecture" {
 			continue
 		}
 		if !hasAnyPackagePrefix(goPackage.ImportPath, boundaryPrefixes) {
-			t.Fatalf("CLI internal package must live under an explicit runtime boundary: %s", goPackage.ImportPath)
+			t.Fatalf("project runner internal package must live under an explicit runtime boundary: %s", goPackage.ImportPath)
 		}
 	}
 }
@@ -107,13 +115,13 @@ func TestDispatcherCommandOnlyDependsOnDispatcherEntrypoint(t *testing.T) {
 
 // Tests that the project runner command only enters the project runner package.
 func TestProjectRunnerCommandOnlyDependsOnProjectRunnerEntrypoint(t *testing.T) {
-	assertCommandOnlyDependsOnInternalEntrypoint(t, findModuleRoot(t), cliModulePath, "./cmd/project-runner", cliModulePath+"/internal/projectrunner")
+	assertCommandOnlyDependsOnInternalEntrypoint(t, findModuleRoot(t), projectRunnerModulePath, "./cmd/project-runner", projectRunnerModulePath+"/internal/projectrunner")
 }
 
-// Tests that the dispatcher binary, now in its own module, does not transitively pull in the CLI module's project runner package.
+// Tests that the dispatcher binary, now in its own module, does not transitively pull in the project runner module's project runner package.
 func TestDispatcherBinaryDoesNotTransitivelyDependOnProjectRunner(t *testing.T) {
 	dispatcherModuleDir := filepath.Join(findRepositoryRoot(t, findModuleRoot(t)), "dispatcher")
-	assertBinaryDoesNotTransitivelyDependOn(t, dispatcherModuleDir, "./cmd/dispatcher", cliModulePath+"/internal/projectrunner")
+	assertBinaryDoesNotTransitivelyDependOn(t, dispatcherModuleDir, "./cmd/dispatcher", projectRunnerModulePath+"/internal/projectrunner")
 }
 
 // Tests that the project runner binary does not transitively pull in the dispatcher module's dispatcher package.
@@ -164,23 +172,45 @@ func assertCommandOnlyDependsOnInternalEntrypoint(t *testing.T, moduleDir string
 	}
 }
 
-// Tests that the parent CLI layout manifest matches repository paths used by tooling.
+// Tests that the repository-root layout manifest matches repository paths used by tooling.
 func TestLayoutContractMatchesRepositoryPaths(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
 	repositoryRoot := findRepositoryRoot(t, moduleRoot)
-	contract := readLayoutContract(t, filepath.Join(moduleRoot, "layout-contract.json"))
+	contract := readLayoutContract(t, filepath.Join(repositoryRoot, "layout-contract.json"))
 
-	if contract.SchemaVersion != 1 {
+	if contract.SchemaVersion != 2 {
 		t.Fatalf("layout contract schema version mismatch: %d", contract.SchemaVersion)
 	}
-	assertDirectoryName(t, moduleRoot, contract.Layout.CliDir)
+	// Every module directory named in the contract must exist under the repo root.
+	moduleDirs := map[string]string{
+		"common":            contract.Layout.Modules.Common,
+		"dispatcher":        contract.Layout.Modules.Dispatcher,
+		"projectRunner":     contract.Layout.Modules.ProjectRunner,
+		"releaseAutomation": contract.Layout.Modules.ReleaseAutomation,
+	}
+	for name, moduleDir := range moduleDirs {
+		if moduleDir == "" {
+			t.Fatalf("layout contract module %s is empty", name)
+		}
+		assertPathExists(t, filepath.Join(repositoryRoot, moduleDir))
+	}
+	// The project runner module root must be named according to the contract.
+	assertDirectoryName(t, moduleRoot, contract.Layout.Modules.ProjectRunner)
 	assertPathExists(t, filepath.Join(moduleRoot, "cmd"))
 	assertPathExists(t, filepath.Join(moduleRoot, "internal"))
 	assertPathDoesNotExist(t, filepath.Join(moduleRoot, "Core~"))
 	assertPathDoesNotExist(t, filepath.Join(moduleRoot, "Dispatcher~"))
 	assertPathDoesNotExist(t, filepath.Join(moduleRoot, "Shared~"))
-	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "build-go-cli.sh"), packagePath(contract, ""))
-	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "verify-go-cli-dist.sh"), filepath.ToSlash(filepath.Join(packagePath(contract, contract.Layout.DistDir), "darwin-arm64", contract.Binaries.Cli.Unix)))
+	// build-go-cli.sh must reference the project runner module directory.
+	assertTextContains(t, filepath.Join(repositoryRoot, "scripts", "build-go-cli.sh"), contract.Layout.Modules.ProjectRunner)
+	// verify-go-cli-dist.sh must reference both binaries in the repo-root dist tree.
+	distDir := contract.Layout.DistDir
+	assertTextContains(t,
+		filepath.Join(repositoryRoot, "scripts", "verify-go-cli-dist.sh"),
+		filepath.ToSlash(filepath.Join(distDir, "darwin-arm64", contract.Binaries.Dispatcher.Unix)))
+	assertTextContains(t,
+		filepath.Join(repositoryRoot, "scripts", "verify-go-cli-dist.sh"),
+		filepath.ToSlash(filepath.Join(distDir, "darwin-arm64", contract.Binaries.ProjectRunner.Unix)))
 }
 
 // Tests that production files stay small enough to keep each file focused on one responsibility.
@@ -253,10 +283,6 @@ func readLayoutContract(t *testing.T, path string) layoutContract {
 		t.Fatalf("failed to parse layout contract: %v", err)
 	}
 	return contract
-}
-
-func packagePath(contract layoutContract, childDir string) string {
-	return filepath.ToSlash(filepath.Join(contract.Layout.CliDir, childDir))
 }
 
 func assertDirectoryName(t *testing.T, path string, expectedName string) {

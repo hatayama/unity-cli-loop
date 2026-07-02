@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/projectrunner"
+	"github.com/hatayama/unity-cli-loop/project-runner/internal/projectrunner"
 )
 
 func main() {

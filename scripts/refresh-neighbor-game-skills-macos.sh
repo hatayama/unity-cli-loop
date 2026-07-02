@@ -199,7 +199,7 @@ parse_args() {
 
 has_local_uloop() {
     candidate=$1
-    [ -x "$candidate/cli/dist/darwin-arm64/uloop" ]
+    [ -x "$candidate/dist/darwin-arm64/uloop" ]
 }
 
 resolve_uloop_root() {
@@ -404,7 +404,7 @@ resolve_uloop_root
 discover_projects
 assert_project_count
 
-uloop_bin="$uloop_root/cli/dist/darwin-arm64/uloop"
+uloop_bin="$uloop_root/dist/darwin-arm64/uloop"
 command -v launch-unity >/dev/null 2>&1 || fail "launch-unity is not available on PATH"
 
 log "Using uloop: $uloop_bin"

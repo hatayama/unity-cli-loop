@@ -11,15 +11,13 @@ INPUT_RELEASE_TAG=${INPUT_RELEASE_TAG:-}
 INPUT_DRY_RUN=${INPUT_DRY_RUN:-false}
 RELEASE_DATA=""
 CLI_RELEASE_INPUT_PATHS="
-cli/.go-version
-cli/layout-contract.json
-cli/contract.go
-cli/contract.json
-cli/contract_test.go
-cli/cmd
-cli/go.mod
-cli/go.sum
-cli/internal
+.go-version
+layout-contract.json
+common
+project-runner/cmd
+project-runner/go.mod
+project-runner/go.sum
+project-runner/internal
 scripts/build-go-cli.sh
 scripts/go-cli-toolchain.sh
 scripts/package-go-cli.sh
@@ -149,10 +147,10 @@ cli_release_inputs_changed() {
 release_commit_updates_cli_version() {
   commit_sha=$1
   version=$2
-  expected_manifest_entry="\"cli\": \"$version\""
+  expected_manifest_entry="\"project-runner\": \"$version\""
   expected_changelog_heading="## [$version]"
 
-  commit_diff=$(git show --format= "$commit_sha" -- .release-please-manifest.json cli/CHANGELOG.md 2>/dev/null || true)
+  commit_diff=$(git show --format= "$commit_sha" -- .release-please-manifest.json project-runner/CHANGELOG.md 2>/dev/null || true)
   printf '%s\n' "$commit_diff" \
     | awk -v manifest_entry="$expected_manifest_entry" -v changelog_heading="$expected_changelog_heading" '
       substr($0, 1, 1) == "+" && (index($0, manifest_entry) > 0 || index($0, changelog_heading) > 0) {
@@ -251,7 +249,7 @@ release_commit_sha_for_version() {
     done
 }
 
-VERSION=$(jq -r '.["cli"]' .release-please-manifest.json)
+VERSION=$(jq -r '.["project-runner"]' .release-please-manifest.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
   echo "Could not resolve project runner release version from .release-please-manifest.json." >&2
   exit 1

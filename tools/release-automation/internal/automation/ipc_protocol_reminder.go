@@ -13,7 +13,7 @@ import (
 var ipcProtocolReminderPatterns = []string{
 	"common/clicontract/contract.json",
 	"common/clicontract/contract.go",
-	"cli/layout-contract.json",
+	"layout-contract.json",
 	"common/unityipc/**",
 	"common/tools/**",
 	"Packages/src/Editor/CompositionRoot/UnityCliLoopFirstPartyServerLifecycleBinding.cs",

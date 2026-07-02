@@ -119,7 +119,7 @@ assert_json_value '.["pull-request-header"] | contains("Dispatcher releases")' '
 
 # Package roots are the release boundary: the repository root must not be a
 # package, otherwise unrelated root-level changes leak into unity-package releases.
-assert_json_value '.packages | keys | sort | join(",")' 'Packages/src,cli'
+assert_json_value '.packages | keys | sort | join(",")' 'Packages/src,project-runner'
 
 assert_json_value '.packages["Packages/src"].["changelog-path"]' 'CHANGELOG.md'
 assert_json_value '.packages["Packages/src"].component' 'unity-package'
@@ -133,20 +133,20 @@ assert_json_value '.packages["Packages/src"].["extra-files"][1].jsonpath' '$.pac
 assert_json_value '.packages["Packages/src"].["extra-files"][2].path' '/.uloop/project-runner-pin.json'
 assert_json_value '.packages["Packages/src"].["extra-files"][2].jsonpath' '$.packageVersion'
 
-assert_json_value '.packages["cli"].component' 'uloop-project-runner'
-assert_json_value '.packages["cli"].["include-component-in-tag"]' 'true'
-assert_json_value '.packages["cli"].["changelog-path"]' 'CHANGELOG.md'
+assert_json_value '.packages["project-runner"].component' 'uloop-project-runner'
+assert_json_value '.packages["project-runner"].["include-component-in-tag"]' 'true'
+assert_json_value '.packages["project-runner"].["changelog-path"]' 'CHANGELOG.md'
 # The release automation cmd and internal packages that used to live under cli
-# moved to tools/release-automation, so there is nothing left under cli to
-# exclude from uloop-project-runner releases.
-assert_json_value '.packages["cli"] | has("exclude-paths")' 'false'
-assert_json_value '.packages["cli"].["extra-files"] | length' '4'
-assert_json_value '.packages["cli"].["extra-files"][0].path' '/common/tools/default-tools.json'
-assert_json_value '.packages["cli"].["extra-files"][1].path' '/common/clicontract/contract.json'
-assert_json_value '.packages["cli"].["extra-files"][2].path' '/Packages/src/project-runner-pin.json'
-assert_json_value '.packages["cli"].["extra-files"][2].jsonpath' '$.projectRunnerVersion'
-assert_json_value '.packages["cli"].["extra-files"][3].path' '/.uloop/project-runner-pin.json'
-assert_json_value '.packages["cli"].["extra-files"][3].jsonpath' '$.projectRunnerVersion'
+# moved to tools/release-automation, so there is nothing left under project-runner
+# to exclude from uloop-project-runner releases.
+assert_json_value '.packages["project-runner"] | has("exclude-paths")' 'false'
+assert_json_value '.packages["project-runner"].["extra-files"] | length' '4'
+assert_json_value '.packages["project-runner"].["extra-files"][0].path' '/common/tools/default-tools.json'
+assert_json_value '.packages["project-runner"].["extra-files"][1].path' '/common/clicontract/contract.json'
+assert_json_value '.packages["project-runner"].["extra-files"][2].path' '/Packages/src/project-runner-pin.json'
+assert_json_value '.packages["project-runner"].["extra-files"][2].jsonpath' '$.projectRunnerVersion'
+assert_json_value '.packages["project-runner"].["extra-files"][3].path' '/.uloop/project-runner-pin.json'
+assert_json_value '.packages["project-runner"].["extra-files"][3].jsonpath' '$.projectRunnerVersion'
 
 assert_file_contains "$RELEASE_WORKFLOW" 'id: package_release_sync'
 assert_file_contains "$RELEASE_WORKFLOW" "steps.package_release_sync.outputs.ready != 'false'"
@@ -163,7 +163,7 @@ assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for package releas
 assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' '      - name: Dispatch release PR checks'
 
 assert_manifest_semver '.["Packages/src"]'
-assert_manifest_semver '.["cli"]'
+assert_manifest_semver '.["project-runner"]'
 
 # The old repository-root package key must not linger after the boundary move.
 # has(".") detects the key even when its value is null, which a plain

@@ -9,7 +9,7 @@ import (
 // Verifies project-runner-only changes do not require a dispatcher release bump.
 func TestDispatcherVersionBumpGuardPassesWhenDispatcherInputsAreUnchanged(t *testing.T) {
 	result := AnalyzeDispatcherVersionBumpGuard(
-		[]string{"cli/internal/projectrunner/compile_wait.go"},
+		[]string{"project-runner/internal/projectrunner/compile_wait.go"},
 		DispatcherVersionBumpValues{
 			HasContract:               true,
 			DispatcherVersion:         "1.0.0",

@@ -2,7 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-CLI_DIR="$ROOT_DIR/cli"
+RUNNER_DIR="$ROOT_DIR/project-runner"
 DISPATCHER_DIR="$ROOT_DIR/dispatcher"
 
 . "$ROOT_DIR/scripts/go-cli-toolchain.sh"
@@ -20,7 +20,7 @@ build_binary() {
     extension=".exe"
   fi
 
-  output_dir="$CLI_DIR/dist/$os-$arch"
+  output_dir="$ROOT_DIR/dist/$os-$arch"
   mkdir -p "$output_dir"
 
   (
@@ -30,8 +30,8 @@ build_binary() {
 }
 
 build_binary darwin arm64 uloop "$DISPATCHER_DIR" ./cmd/dispatcher
-build_binary darwin arm64 uloop-project-runner "$CLI_DIR" ./cmd/project-runner
+build_binary darwin arm64 uloop-project-runner "$RUNNER_DIR" ./cmd/project-runner
 build_binary darwin amd64 uloop "$DISPATCHER_DIR" ./cmd/dispatcher
-build_binary darwin amd64 uloop-project-runner "$CLI_DIR" ./cmd/project-runner
+build_binary darwin amd64 uloop-project-runner "$RUNNER_DIR" ./cmd/project-runner
 build_binary windows amd64 uloop "$DISPATCHER_DIR" ./cmd/dispatcher
-build_binary windows amd64 uloop-project-runner "$CLI_DIR" ./cmd/project-runner
+build_binary windows amd64 uloop-project-runner "$RUNNER_DIR" ./cmd/project-runner

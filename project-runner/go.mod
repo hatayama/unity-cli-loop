@@ -1,4 +1,4 @@
-module github.com/hatayama/unity-cli-loop/cli
+module github.com/hatayama/unity-cli-loop/project-runner
 
 go 1.26
 

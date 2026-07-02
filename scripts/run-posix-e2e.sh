@@ -93,13 +93,13 @@ default_uloop_path() {
         Darwin)
             machine=$(uname -m)
             if [ "$machine" = "arm64" ] || [ "$machine" = "aarch64" ]; then
-                printf '%s\n' "$ROOT_DIR/cli/dist/darwin-arm64/uloop"
+                printf '%s\n' "$ROOT_DIR/dist/darwin-arm64/uloop"
             else
-                printf '%s\n' "$ROOT_DIR/cli/dist/darwin-amd64/uloop"
+                printf '%s\n' "$ROOT_DIR/dist/darwin-amd64/uloop"
             fi
             ;;
         MINGW*|MSYS*|CYGWIN*)
-            printf '%s\n' "$ROOT_DIR/cli/dist/windows-amd64/uloop.exe"
+            printf '%s\n' "$ROOT_DIR/dist/windows-amd64/uloop.exe"
             ;;
         *)
             printf '%s\n' ""
