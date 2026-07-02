@@ -81,6 +81,10 @@ func hasAnyPackagePrefix(importPath string, packagePrefixes []string) bool {
 func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
 	packages := listPackages(t, moduleRoot)
+	boundaryPrefixes := []string{}
+	for _, boundary := range []string{"automation", "clicore", "dispatcher", "install", "project", "projectrunner", "skills", "tools", "uninstall", "unityipc", "update", "version"} {
+		boundaryPrefixes = append(boundaryPrefixes, cliModulePath+"/internal/"+boundary)
+	}
 	for _, goPackage := range packages {
 		if !strings.HasPrefix(goPackage.ImportPath, cliModulePath+"/internal/") {
 			continue
@@ -88,13 +92,9 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 		if goPackage.ImportPath == cliModulePath+"/internal/architecture" {
 			continue
 		}
-		for _, boundary := range []string{"/internal/automation", "/internal/clicore", "/internal/dispatcher", "/internal/install", "/internal/project", "/internal/projectrunner", "/internal/skills", "/internal/tools", "/internal/uninstall", "/internal/unityipc", "/internal/update", "/internal/version"} {
-			if strings.Contains(goPackage.ImportPath, boundary) {
-				goto nextPackage
-			}
+		if !hasAnyPackagePrefix(goPackage.ImportPath, boundaryPrefixes) {
+			t.Fatalf("CLI internal package must live under an explicit runtime boundary: %s", goPackage.ImportPath)
 		}
-		t.Fatalf("CLI internal package must live under an explicit runtime boundary: %s", goPackage.ImportPath)
-	nextPackage:
 	}
 }
 
