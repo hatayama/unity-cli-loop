@@ -135,6 +135,16 @@ func TestDispatcherVersionBumpGuardAcceptsMissingBaseContractReadError(t *testin
 	}
 }
 
+// Verifies a base ref missing the contract at both the split and the legacy path is treated as initial introduction.
+func TestDispatcherVersionBumpGuardAcceptsMissingLegacyBaseContractReadError(t *testing.T) {
+	_, err := parseDispatcherVersionBumpBaseValues(
+		"",
+		errors.New("git show failed: fatal: path 'cli/dispatcher-contract.json' exists on disk, but not in 'origin/v3-beta'"))
+	if err != nil {
+		t.Fatalf("expected missing legacy base contract to be accepted: %v", err)
+	}
+}
+
 // Verifies base contract read failures other than missing files do not get silently ignored.
 func TestDispatcherVersionBumpGuardRejectsUnexpectedBaseContractReadError(t *testing.T) {
 	_, err := parseDispatcherVersionBumpBaseValues("", errors.New("git show failed: gh auth failed"))

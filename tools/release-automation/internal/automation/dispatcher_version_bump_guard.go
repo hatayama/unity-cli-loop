@@ -96,7 +96,11 @@ func AnalyzeDispatcherVersionBumpGuardForRefs(
 		return DispatcherVersionBumpGuardResult{}, fmt.Errorf("failed to read head %s: %w", dispatcherContractFile, err)
 	}
 
-	baseContent, baseContentErr := protocolMinimumVersionFileAtRef(ctx, repoRoot, config.BaseRef, dispatcherContractFile)
+	// The base ref may predate the directory split, where the contract lived at
+	// the legacy cli/ path. Without the fallback every pre-split base would look
+	// like an initial contract introduction and the bump requirement would be
+	// silently skipped.
+	baseContent, baseContentErr := dispatcherContractFileAtRef(ctx, repoRoot, config.BaseRef)
 	baseValues, err := parseDispatcherVersionBumpBaseValues(baseContent, baseContentErr)
 	if err != nil {
 		return DispatcherVersionBumpGuardResult{}, err
@@ -124,7 +128,10 @@ func parseDispatcherVersionBumpBaseValues(
 }
 
 func isMissingDispatcherContractAtRefError(err error) bool {
-	return isMissingFileAtRefError(err, dispatcherContractFile)
+	// dispatcherContractFileAtRef falls back to the legacy path, so a base ref
+	// without any dispatcher contract surfaces as the legacy file missing.
+	return isMissingFileAtRefError(err, dispatcherContractFile) ||
+		isMissingFileAtRefError(err, legacyDispatcherContractFile)
 }
 
 func AnalyzeDispatcherVersionBumpGuard(
