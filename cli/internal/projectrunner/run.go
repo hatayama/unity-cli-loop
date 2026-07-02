@@ -28,7 +28,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	command := remainingArgs[0]
 	commandArgs := remainingArgs[1:]
 
-	if isDispatcherOwnedCommand(command) || clicore.ShouldHandleCompletionRequest(remainingArgs) {
+	if clicore.IsDispatcherOwnedCommandName(command) || clicore.ShouldHandleCompletionRequest(remainingArgs) {
 		clicore.WriteErrorEnvelope(stderr, dispatcherOwnedCommandError(command))
 		return 1
 	}

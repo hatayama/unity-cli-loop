@@ -38,6 +38,19 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: UninstallCommandName, Description: "Remove the global uloop launcher binary"},
 }
 
+// IsDispatcherOwnedCommandName reports whether a command belongs to the global
+// launcher's bootstrap surface. This is the single source of truth for the
+// dispatcher/runner command split: the dispatcher handles these in-process,
+// and the project runner must reject them instead of executing them.
+func IsDispatcherOwnedCommandName(command string) bool {
+	switch command {
+	case LaunchCommandName, InstallCommandName, UpdateCommandName, UninstallCommandName, SkillsCommandName:
+		return true
+	default:
+		return false
+	}
+}
+
 func NativeCommandNamesForCompletion() []string {
 	names := make([]string, 0, len(NativeCommands))
 	for _, command := range NativeCommands {

@@ -154,12 +154,7 @@ func shouldRunInDispatcherProcess(args []string) bool {
 		return true
 	}
 
-	switch args[0] {
-	case clicore.LaunchCommandName, clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.SkillsCommandName:
-		return true
-	default:
-		return false
-	}
+	return clicore.IsDispatcherOwnedCommandName(args[0])
 }
 
 func resolveDispatcherProjectRoot(startPath string, explicitProjectPath string, args []string) (string, error) {

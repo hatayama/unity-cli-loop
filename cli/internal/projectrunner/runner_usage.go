@@ -36,18 +36,6 @@ func printRunnerUsage(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Run `uloop --help` for the full command list and command help.")
 }
 
-// isDispatcherOwnedCommand reports whether a command belongs to the global
-// launcher's bootstrap surface. The project runner must reject these instead
-// of executing them so the two binaries keep disjoint responsibilities.
-func isDispatcherOwnedCommand(command string) bool {
-	switch command {
-	case clicore.LaunchCommandName, clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.SkillsCommandName:
-		return true
-	default:
-		return false
-	}
-}
-
 func dispatcherOwnedCommandError(command string) clicore.CLIError {
 	return clicore.CLIError{
 		ErrorCode:   clicore.ErrorCodeInvalidArgument,
