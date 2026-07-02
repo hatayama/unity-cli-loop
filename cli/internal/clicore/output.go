@@ -1,6 +1,7 @@
 package clicore
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,12 +18,13 @@ func WriteFormat(writer io.Writer, format string, values ...any) {
 }
 
 func WriteJSON(stdout io.Writer, result json.RawMessage) {
-	var pretty any
-	if json.Unmarshal(result, &pretty) != nil {
+	// Why json.Indent instead of unmarshal/re-encode: decoding into any turns
+	// integers above float64 precision into corrupted values, while Indent
+	// reformats the raw bytes without touching them.
+	var indented bytes.Buffer
+	if json.Indent(&indented, result, "", "  ") != nil {
 		WriteLine(stdout, string(result))
 		return
 	}
-	encoder := json.NewEncoder(stdout)
-	encoder.SetIndent("", "  ")
-	_ = encoder.Encode(pretty)
+	WriteLine(stdout, indented.String())
 }
