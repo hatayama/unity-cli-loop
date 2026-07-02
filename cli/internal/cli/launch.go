@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	launchCommandName        = "launch"
 	launchLockfilePoll       = 100 * time.Millisecond
 	launchLockfileTimeout    = 5 * time.Second
 	launchProcessExitPoll    = 100 * time.Millisecond

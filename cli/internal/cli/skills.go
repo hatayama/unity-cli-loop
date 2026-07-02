@@ -10,12 +10,9 @@ import (
 )
 
 const (
-	skillsCommandName    = "skills"
 	managedSkillsDir     = "unity-cli-loop"
 	skillFileName        = "SKILL.md"
 	v3MigrationSkillName = "v3-cli-invocation-migration"
-	uloopSettingsDir     = ".uloop"
-	toolSettingsFile     = "settings.tools.json"
 	manifestFileName     = "manifest.json"
 	packageName          = "io.github.hatayama.uloopmcp"
 	packageNameAlias     = "io.github.hatayama.uLoopMCP"
@@ -89,10 +86,6 @@ type skillSourceRoot struct {
 
 type manifestData struct {
 	Dependencies map[string]string `json:"dependencies"`
-}
-
-type toolSettingsData struct {
-	DisabledTools []string `json:"disabledTools"`
 }
 
 func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath string, stdout io.Writer, stderr io.Writer) (bool, int) {

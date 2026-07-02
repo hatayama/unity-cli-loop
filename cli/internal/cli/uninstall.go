@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	uninstallCommandName          = "uninstall"
 	uninstallInstallDirEnvName    = "ULOOP_INSTALL_DIR"
 	uninstallLocalAppDataEnvName  = "LOCALAPPDATA"
 	uninstallUnsupportedOSMessage = uninstall.UnsupportedOSMessage

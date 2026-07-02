@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	compileCommandName        = "compile"
 	compileStatusCommandName  = "get-compile-status"
 	compileRequestIDParam     = "RequestId"
 	compileWaitParam          = domainReloadWaitParam

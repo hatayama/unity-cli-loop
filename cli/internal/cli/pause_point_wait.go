@@ -12,8 +12,6 @@ import (
 )
 
 const (
-	pausePointWaitCommandName         = "wait-for-pause-point"
-	pausePointStatusUserCommandName   = "pause-point-status"
 	pausePointStatusCommandName       = "get-pause-point-status"
 	pausePointClearStatusCommandName  = "clear-pause-point-status"
 	pausePointIDFlagName              = "id"

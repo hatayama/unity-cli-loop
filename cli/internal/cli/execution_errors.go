@@ -22,18 +22,3 @@ func compileWaitTimeoutError(projectRoot string) cliError {
 		},
 	}
 }
-
-func internalCLIError(message string, context errorContext) cliError {
-	return cliError{
-		ErrorCode:   errorCodeInternalError,
-		Phase:       errorPhaseExecution,
-		Message:     message,
-		Retryable:   false,
-		SafeToRetry: false,
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
-		NextActions: []string{
-			"Read the message and fix the local environment or command input before retrying.",
-		},
-	}
-}

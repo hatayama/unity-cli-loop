@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	installCommandName          = "install"
 	installDirFlagName          = "dir"
 	installUnsupportedOSMessage = install.UnsupportedOSMessage
 )

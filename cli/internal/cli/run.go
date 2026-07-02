@@ -58,28 +58,6 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	return runResolvedProjectCommand(ctx, connection, command, commandArgs, startPath, stdout, stderr)
 }
 
-func writeVersionJSON(stdout io.Writer) {
-	content, err := json.Marshal(map[string]any{
-		"ProjectRunnerVersion": version,
-		"ProtocolVersion":      protocolVersion,
-	})
-	if err != nil {
-		panic(err)
-	}
-	writeLine(stdout, string(content))
-}
-
-func writeDispatcherVersionJSON(stdout io.Writer) {
-	content, err := json.Marshal(map[string]any{
-		"DispatcherVersion":         dispatcherVersion,
-		"DispatcherContractVersion": dispatcherContractVersion,
-	})
-	if err != nil {
-		panic(err)
-	}
-	writeLine(stdout, string(content))
-}
-
 func runTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stdout io.Writer, stderr io.Writer) int {
 	if shouldWaitForCompileDomainReload(command, params) {
 		return runCompileWithDomainReloadWait(ctx, connection, params, stdout, stderr)

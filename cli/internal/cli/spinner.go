@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	spinnerFrameInterval          = 80 * time.Millisecond
-	executeDynamicCodeCommandName = "execute-dynamic-code"
+	spinnerFrameInterval = 80 * time.Millisecond
 )
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}

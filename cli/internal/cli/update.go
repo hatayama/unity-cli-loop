@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	updateCommandName          = "update"
 	updateUnsupportedOSMessage = update.UnsupportedOSMessage
 	updateToVersionFlagName    = "to-version"
 )
