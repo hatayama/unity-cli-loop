@@ -121,23 +121,32 @@ assert_changelog_exists() {
 assert_json_value '.["pull-request-header"] | contains("unity-package")' 'true'
 assert_json_value '.["pull-request-header"] | contains("uloop-project-runner")' 'true'
 assert_json_value '.["pull-request-header"] | contains("Dispatcher releases")' 'true'
-assert_json_value '.packages["."].["changelog-path"]' 'Packages/src/CHANGELOG.md'
-assert_json_value '.packages["."].component' 'unity-package'
-assert_json_value '.packages["."].["include-component-in-tag"]' 'false'
-assert_json_value '.packages["."].["exclude-paths"][0]' 'cli'
-assert_json_value '.packages["."].["extra-files"] | length' '3'
-assert_json_value '.packages["."].["extra-files"][0].path' 'Packages/src/package.json'
-assert_json_value '.packages["."].["extra-files"][0].jsonpath' '$.version'
-assert_json_value '.packages["."].["extra-files"][1].path' 'Packages/src/project-runner-pin.json'
-assert_json_value '.packages["."].["extra-files"][1].jsonpath' '$.packageVersion'
-assert_json_value '.packages["."].["extra-files"][2].path' '.uloop/project-runner-pin.json'
-assert_json_value '.packages["."].["extra-files"][2].jsonpath' '$.packageVersion'
+
+# Package roots are the release boundary: the repository root must not be a
+# package, otherwise unrelated root-level changes leak into unity-package releases.
+assert_json_value '.packages | keys | sort | join(",")' 'Packages/src,cli'
+
+assert_json_value '.packages["Packages/src"].["changelog-path"]' 'CHANGELOG.md'
+assert_json_value '.packages["Packages/src"].component' 'unity-package'
+assert_json_value '.packages["Packages/src"].["include-component-in-tag"]' 'false'
+assert_json_value '.packages["Packages/src"] | has("exclude-paths")' 'false'
+assert_json_value '.packages["Packages/src"].["extra-files"] | length' '3'
+assert_json_value '.packages["Packages/src"].["extra-files"][0].path' 'package.json'
+assert_json_value '.packages["Packages/src"].["extra-files"][0].jsonpath' '$.version'
+assert_json_value '.packages["Packages/src"].["extra-files"][1].path' 'project-runner-pin.json'
+assert_json_value '.packages["Packages/src"].["extra-files"][1].jsonpath' '$.packageVersion'
+assert_json_value '.packages["Packages/src"].["extra-files"][2].path' '/.uloop/project-runner-pin.json'
+assert_json_value '.packages["Packages/src"].["extra-files"][2].jsonpath' '$.packageVersion'
 
 assert_json_value '.packages["cli"].component' 'uloop-project-runner'
 assert_json_value '.packages["cli"].["include-component-in-tag"]' 'true'
 assert_json_value '.packages["cli"].["changelog-path"]' 'CHANGELOG.md'
-assert_json_value '.packages["cli"].["exclude-paths"][0]' 'cli/cmd/dispatch-release-please-pr-checks'
-assert_json_value '.packages["cli"].["exclude-paths"][1]' 'cli/internal/automation'
+# Dispatcher-owned paths must stay out of uloop-project-runner releases so a
+# dispatcher-only change cannot regenerate a project-runner release PR.
+assert_json_value '.packages["cli"].["exclude-paths"] | sort | join(",")' 'cli/cmd/dispatch-release-please-pr-checks,cli/cmd/dispatcher,cli/dispatcher-contract.json,cli/internal/automation,cli/internal/dispatcher'
+assert_repository_path_exists 'cli/cmd/dispatcher'
+assert_repository_path_exists 'cli/internal/dispatcher'
+assert_repository_path_exists 'cli/dispatcher-contract.json'
 assert_json_value '.packages["cli"].["extra-files"] | length' '4'
 assert_json_value '.packages["cli"].["extra-files"][0].path' 'internal/tools/default-tools.json'
 assert_json_value '.packages["cli"].["extra-files"][1].path' 'contract.json'
@@ -160,8 +169,14 @@ assert_step_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR chec
 assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for package release sync' 'Sync release-please package releases'
 assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' '      - name: Dispatch release PR checks'
 
-assert_manifest_semver '.["."]'
+assert_manifest_semver '.["Packages/src"]'
 assert_manifest_semver '.["cli"]'
+
+# The old repository-root package key must not linger after the boundary move.
+if jq -e '.["."]' "$MANIFEST" >/dev/null 2>&1; then
+  echo "Manifest must not contain the legacy '.' package key." >&2
+  exit 1
+fi
 
 jq -r '.packages | to_entries[] | [.key, .value["changelog-path"]] | @tsv' "$CONFIG" |
 strip_carriage_returns |
