@@ -14,7 +14,7 @@ var githubActionCommitRefPattern = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
 // Tests that remote GitHub Actions are pinned to immutable commit SHAs.
 func TestWorkflowActionsUseCommitPins(t *testing.T) {
-	repositoryRoot := findRepositoryRoot(t, findModuleRoot(t))
+	repositoryRoot := findRepositoryRoot(t)
 	violations := []string{}
 	for _, workflowPath := range workflowFilePaths(t, repositoryRoot) {
 		lines := readWorkflowLines(t, workflowPath)
@@ -37,7 +37,7 @@ func TestWorkflowActionsUseCommitPins(t *testing.T) {
 
 // Tests that setup-go does not use cache in pull request workflows.
 func TestPullRequestWorkflowsDisableSetupGoCache(t *testing.T) {
-	repositoryRoot := findRepositoryRoot(t, findModuleRoot(t))
+	repositoryRoot := findRepositoryRoot(t)
 	violations := []string{}
 	for _, workflowPath := range workflowFilePaths(t, repositoryRoot) {
 		lines := readWorkflowLines(t, workflowPath)
@@ -63,7 +63,7 @@ func TestPullRequestWorkflowsDisableSetupGoCache(t *testing.T) {
 
 // Tests that pull request workflow cache actions are guarded behind trusted Unity secrets.
 func TestPullRequestWorkflowCacheActionsRequireTrustedUnitySecrets(t *testing.T) {
-	repositoryRoot := findRepositoryRoot(t, findModuleRoot(t))
+	repositoryRoot := findRepositoryRoot(t)
 	violations := []string{}
 	for _, workflowPath := range workflowFilePaths(t, repositoryRoot) {
 		lines := readWorkflowLines(t, workflowPath)
