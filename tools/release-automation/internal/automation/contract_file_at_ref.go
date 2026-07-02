@@ -42,10 +42,13 @@ func contractFileAtRefWithLegacyFallback(
 // isMissingFileAtRefError reports whether err came from `git show ref:file`
 // failing because file does not exist at ref, as opposed to any other git
 // failure (auth, network, etc.) that must not be silently swallowed.
+// Current git prints the lowercase "path ..." forms; the capitalized
+// "Path ... does not exist in" form is kept for older git versions.
 func isMissingFileAtRefError(err error, file string) bool {
 	message := err.Error()
 	quotedPath := "'" + file + "'"
 	return strings.Contains(message, "path "+quotedPath+" exists on disk, but not in") ||
+		strings.Contains(message, "path "+quotedPath+" does not exist in") ||
 		strings.Contains(message, "Path "+quotedPath+" does not exist in")
 }
 
