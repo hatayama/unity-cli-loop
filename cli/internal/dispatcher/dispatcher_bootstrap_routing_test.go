@@ -70,6 +70,7 @@ func TestRunDispatcherUpdateHelpDoesNotExecuteInstaller(t *testing.T) {
 
 // Verifies the update command executes the dispatcher updater without forwarding to a project runner.
 func TestRunDispatcherUpdateRunsInDispatcherProcess(t *testing.T) {
+	skipWhenNativeUpdateIsUnsupported(t)
 	t.Chdir(t.TempDir())
 
 	previousRun := updateRunCommand
