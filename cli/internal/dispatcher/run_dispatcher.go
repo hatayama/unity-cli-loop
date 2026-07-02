@@ -101,7 +101,7 @@ func runDispatcherProcessCommand(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
-	if handled, code := tryHandleGlobalInfoRequest(remainingArgs, projectPath, stdout); handled {
+	if handled, code := tryHandleProjectScopeHelpRequest(remainingArgs, projectPath, stdout); handled {
 		return code
 	}
 
@@ -137,8 +137,15 @@ func runDispatcherProcessCommand(
 }
 
 func shouldRunInDispatcherProcess(args []string) bool {
-	if len(args) == 0 || clicore.IsHelpRequest(args) || clicore.ContainsHelpRequest(args) || clicore.IsVersionRequest(args) || clicore.IsVersionJSONRequest(args) {
+	if len(args) == 0 || clicore.IsHelpRequest(args) || clicore.ContainsHelpRequest(args) {
 		return true
+	}
+	// Why version requests must be forwarded: bare --version is answered by
+	// tryHandleDispatcherInfoRequest before global-argument parsing, so a
+	// version request seen here is project-scoped and the pinned runner must
+	// report its own version, which can differ from the one embedded here.
+	if clicore.IsVersionRequest(args) || clicore.IsVersionJSONRequest(args) {
+		return false
 	}
 	if clicore.IsUnknownLeadingOption(args[0]) {
 		return true

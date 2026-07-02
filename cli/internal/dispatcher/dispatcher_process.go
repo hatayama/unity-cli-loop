@@ -7,17 +7,12 @@ import (
 	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
-func tryHandleGlobalInfoRequest(args []string, projectPath string, stdout io.Writer) (bool, int) {
+// tryHandleProjectScopeHelpRequest serves project-scoped help locally; help
+// never needs the pinned runner, while project-scoped version requests are
+// forwarded so the runner that actually executes commands reports its version.
+func tryHandleProjectScopeHelpRequest(args []string, projectPath string, stdout io.Writer) (bool, int) {
 	if len(args) == 0 || clicore.IsHelpRequest(args) {
 		printHelpForResolvedProject(stdout, projectPath)
-		return true, 0
-	}
-	if clicore.IsVersionJSONRequest(args) {
-		clicore.WriteVersionJSON(stdout)
-		return true, 0
-	}
-	if clicore.IsVersionRequest(args) {
-		clicore.WriteLine(stdout, clicore.Version)
 		return true, 0
 	}
 	return false, 0

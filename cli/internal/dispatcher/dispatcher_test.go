@@ -100,6 +100,72 @@ func TestRunDispatcherPreservesExplicitProjectPathForRealCLI(t *testing.T) {
 	assertStringSliceEqual(t, actualArgs, []string{"compile", "--project-path", projectRoot})
 }
 
+func TestRunDispatcherForwardsProjectScopedVersionToPinnedRunner(t *testing.T) {
+	// Verifies --project-path --version is forwarded so the pinned runner reports its own version.
+	projectRoot := createDispatcherUnityProject(t)
+	cacheRoot := t.TempDir()
+	writeDispatcherProjectPin(t, projectRoot, clicore.Version)
+	writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version)
+	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+	t.Chdir(t.TempDir())
+
+	previousRunner := dispatcherRunRealCLI
+	defer func() {
+		dispatcherRunRealCLI = previousRunner
+	}()
+	var actualArgs []string
+	dispatcherRunRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
+		actualArgs = append([]string{}, args...)
+		return 0
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(context.Background(), []string{"--project-path", projectRoot, "--version"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
+	}
+	assertStringSliceEqual(t, actualArgs, []string{"--project-path", projectRoot, "--version"})
+	if stdout.String() != "" {
+		t.Fatalf("dispatcher must not answer project-scoped version locally: %s", stdout.String())
+	}
+}
+
+func TestRunDispatcherForwardsProjectScopedVersionJSONToPinnedRunner(t *testing.T) {
+	// Verifies --project-path --version --json is forwarded so the pinned runner reports its own version payload.
+	projectRoot := createDispatcherUnityProject(t)
+	cacheRoot := t.TempDir()
+	writeDispatcherProjectPin(t, projectRoot, clicore.Version)
+	writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version)
+	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+	t.Chdir(t.TempDir())
+
+	previousRunner := dispatcherRunRealCLI
+	defer func() {
+		dispatcherRunRealCLI = previousRunner
+	}()
+	var actualArgs []string
+	dispatcherRunRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
+		actualArgs = append([]string{}, args...)
+		return 0
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(context.Background(), []string{"--project-path", projectRoot, "--version", "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
+	}
+	assertStringSliceEqual(t, actualArgs, []string{"--project-path", projectRoot, "--version", "--json"})
+	if stdout.String() != "" {
+		t.Fatalf("dispatcher must not answer project-scoped version locally: %s", stdout.String())
+	}
+}
+
 func TestRunDispatcherCommandHelpDoesNotRequireProjectPin(t *testing.T) {
 	// Verifies dispatcher handles command help before project and pin resolution.
 	t.Chdir(t.TempDir())
