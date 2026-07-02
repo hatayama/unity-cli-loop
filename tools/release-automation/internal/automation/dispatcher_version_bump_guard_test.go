@@ -109,6 +109,26 @@ func TestDispatcherVersionBumpGuardCoversClicorePackage(t *testing.T) {
 	}
 }
 
+// Verifies every common package the dispatcher binary depends on is covered, not just clicore.
+func TestDispatcherVersionBumpGuardCoversOtherCommonPackages(t *testing.T) {
+	result := AnalyzeDispatcherVersionBumpGuard(
+		[]string{"common/version/compare.go"},
+		DispatcherVersionBumpValues{
+			HasContract:               true,
+			DispatcherVersion:         "1.0.0",
+			DispatcherContractVersion: 1,
+		},
+		DispatcherVersionBumpValues{
+			HasContract:               true,
+			DispatcherVersion:         "1.0.0",
+			DispatcherContractVersion: 1,
+		})
+
+	if !dispatcherVersionBumpGuardNeedsAction(result) {
+		t.Fatal("expected common package changes without a version increase to fail")
+	}
+}
+
 // Verifies the first dispatcher contract can be introduced without comparing against a missing base.
 func TestDispatcherVersionBumpGuardAcceptsInitialDispatcherContract(t *testing.T) {
 	result := AnalyzeDispatcherVersionBumpGuard(

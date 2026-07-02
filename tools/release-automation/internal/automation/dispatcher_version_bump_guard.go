@@ -17,7 +17,9 @@ var dispatcherReleaseInputPatterns = []string{
 	"dispatcher/cmd/dispatcher/main.go",
 	"dispatcher/contract.go",
 	dispatcherContractFile,
-	"common/clicore/*.go",
+	// The dispatcher binary depends on every common package (clicontract, clicore,
+	// project, skills, tools, unityipc, version), so the whole module is a release input.
+	"common/*/*.go",
 	"dispatcher/internal/dispatcher/*.go",
 	"dispatcher/internal/install/*.go",
 	"dispatcher/internal/uninstall/*.go",
