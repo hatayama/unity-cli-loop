@@ -6,14 +6,7 @@ import (
 	"strings"
 )
 
-const (
-	dynamicCodeFileFlagName     = "code-file"
-	dynamicCodeFileOptionName   = "--" + dynamicCodeFileFlagName
-	dynamicCodeFileOptionUsage  = dynamicCodeFileOptionName + " <path>"
-	dynamicCodeCodePropertyName = "Code"
-)
-
-const dynamicCodeFileOptionDescription = "Read C# code from a file instead of --code when shell quoting would alter multiline code"
+const dynamicCodeCodePropertyName = "Code"
 
 // extractDynamicCodeFileFlag pulls --code-file out of execute-dynamic-code args before
 // generic tool parsing, because the flag is CLI-side sugar and not part of the Unity schema.
@@ -71,32 +64,4 @@ func applyDynamicCodeFileParam(params map[string]any, path string) error {
 
 	params[dynamicCodeCodePropertyName] = string(content)
 	return nil
-}
-
-func appendDynamicCodeFileOptionName(tool toolDefinition, options []string) []string {
-	if tool.Name != executeDynamicCodeCommandName {
-		return options
-	}
-	for _, option := range options {
-		if option == dynamicCodeFileOptionName {
-			return options
-		}
-	}
-	return append(options, dynamicCodeFileOptionName)
-}
-
-func appendDynamicCodeFileOptionHelpEntry(tool toolDefinition, entries []optionHelpEntry) []optionHelpEntry {
-	if tool.Name != executeDynamicCodeCommandName {
-		return entries
-	}
-	for _, entry := range entries {
-		if entry.name == dynamicCodeFileOptionName {
-			return entries
-		}
-	}
-	return append(entries, optionHelpEntry{
-		name:        dynamicCodeFileOptionName,
-		usage:       dynamicCodeFileOptionUsage,
-		description: dynamicCodeFileOptionDescription,
-	})
 }

@@ -8,6 +8,16 @@ import (
 	"strings"
 )
 
+const (
+	manifestFileName = "manifest.json"
+	packageName      = "io.github.hatayama.uloopmcp"
+	packageNameAlias = "io.github.hatayama.uLoopMCP"
+)
+
+type manifestData struct {
+	Dependencies map[string]string `json:"dependencies"`
+}
+
 func findEditorFolders(basePath string, maxDepth int) []string {
 	editorFolders := []string{}
 	var scan func(string, int)

@@ -112,16 +112,6 @@ func isNativeCommandName(name string) bool {
 	return false
 }
 
-func firstHelpLine(description string) string {
-	for _, line := range strings.Split(description, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
-}
-
 func commandListDescription(description string) string {
 	line := firstHelpLine(description)
 	for index, value := range line {

@@ -11,12 +11,7 @@ import (
 
 const (
 	managedSkillsDir     = "unity-cli-loop"
-	skillFileName        = "SKILL.md"
 	v3MigrationSkillName = "v3-cli-invocation-migration"
-	manifestFileName     = "manifest.json"
-	packageName          = "io.github.hatayama.uloopmcp"
-	packageNameAlias     = "io.github.hatayama.uLoopMCP"
-	skillSearchMaxDepth  = 3
 	groupSkillsByDefault = false
 
 	utf16LittleEndianBOMFirstByte  = 0xff
@@ -49,17 +44,6 @@ var deprecatedSkillNames = []string{
 	"uloop-execute-menu-item",
 }
 
-var excludedSkillSearchDirs = map[string]bool{
-	"node_modules": true,
-	".git":         true,
-	"Temp":         true,
-	"obj":          true,
-	"Build":        true,
-	"Builds":       true,
-	"Logs":         true,
-	"Skill":        true,
-}
-
 type skillTarget struct {
 	id          string
 	displayName string
@@ -77,15 +61,6 @@ type skillDefinition struct {
 	toolName        string
 	content         []byte
 	sourceDirectory string
-}
-
-type skillSourceRoot struct {
-	path    string
-	cliOnly bool
-}
-
-type manifestData struct {
-	Dependencies map[string]string `json:"dependencies"`
 }
 
 func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath string, stdout io.Writer, stderr io.Writer) (bool, int) {

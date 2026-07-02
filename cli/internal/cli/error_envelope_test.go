@@ -536,8 +536,10 @@ func TestClassifyProjectNotFound(t *testing.T) {
 
 func TestClassifyInstallUnsupportedOS(t *testing.T) {
 	// Verifies install platform guards are reported as invalid command input.
+	// The bootstrap command wraps the raw error with wrapUnsupportedPlatformError
+	// before classification, matching how install.go feeds errors to classifyError.
 	cliErr := classifyError(
-		errors.New(installUnsupportedOSMessage),
+		wrapUnsupportedPlatformError(errors.New(installUnsupportedOSMessage)),
 		errorContext{command: "install"},
 	)
 

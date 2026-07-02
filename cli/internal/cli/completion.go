@@ -13,9 +13,6 @@ import (
 )
 
 const (
-	completionCommand        = "completion"
-	listCommandsFlag         = "--list-commands"
-	listOptionsFlag          = "--list-options"
 	installCompletionFlag    = "--install"
 	shellFlag                = "--shell"
 	completionStartMarker    = "# >>> uloop completion >>>"
@@ -138,19 +135,6 @@ func writeCompletionInstallResult(stdout io.Writer, shellName string, configPath
 		return
 	}
 	writeFormat(stdout, "Run 'source %s' or restart your shell to enable completion.\n", configPath)
-}
-
-func shouldHandleCompletionRequest(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-
-	switch args[0] {
-	case listCommandsFlag, listOptionsFlag, completionCommand:
-		return true
-	default:
-		return false
-	}
 }
 
 type completionRequest struct {

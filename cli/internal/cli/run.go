@@ -276,17 +276,6 @@ func runSync(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 	return 0
 }
 
-func writeJSON(stdout io.Writer, result json.RawMessage) {
-	var pretty any
-	if json.Unmarshal(result, &pretty) != nil {
-		writeLine(stdout, string(result))
-		return
-	}
-	encoder := json.NewEncoder(stdout)
-	encoder.SetIndent("", "  ")
-	_ = encoder.Encode(pretty)
-}
-
 type compileResultStatus struct {
 	Success *bool `json:"Success"`
 }

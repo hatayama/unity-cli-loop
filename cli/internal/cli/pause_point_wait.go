@@ -14,8 +14,6 @@ import (
 const (
 	pausePointStatusCommandName       = "get-pause-point-status"
 	pausePointClearStatusCommandName  = "clear-pause-point-status"
-	pausePointIDFlagName              = "id"
-	pausePointTimeoutFlagName         = "timeout-seconds"
 	pausePointDefaultTimeoutSeconds   = 30
 	pausePointStatusProbeTimeout      = 5 * time.Second
 	pausePointStatusEnabled           = "Enabled"

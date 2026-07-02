@@ -16,6 +16,8 @@ const (
 	toolReadinessPoll         = 1 * time.Second
 	toolReadinessProbeTimeout = 5 * time.Second
 	toolReadinessProbeCount   = 3
+
+	domainReloadWaitParam = "WaitForDomainReload"
 )
 
 const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`

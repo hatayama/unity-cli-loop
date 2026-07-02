@@ -38,7 +38,7 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 
 	installDir, err := resolveUninstallInstallDir(runtime.GOOS)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: uninstallCommandName})
+		writeClassifiedError(stderr, wrapUnsupportedPlatformError(err), errorContext{command: uninstallCommandName})
 		return true, 1
 	}
 	uninstallCommand, err := uninstall.CommandForOS(runtime.GOOS, uninstall.Options{
@@ -46,7 +46,7 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 		CurrentPID: os.Getpid(),
 	})
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: uninstallCommandName})
+		writeClassifiedError(stderr, wrapUnsupportedPlatformError(err), errorContext{command: uninstallCommandName})
 		return true, 1
 	}
 

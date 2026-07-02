@@ -7,7 +7,6 @@ import (
 )
 
 const (
-	domainReloadWaitParam                          = "WaitForDomainReload"
 	dynamicCodeCompileOnlyParam                    = "CompileOnly"
 	dynamicCodeDomainReloadWaitRequiredField       = "DomainReloadWaitRequired"
 	legacyDynamicCodeDomainReloadWaitRequiredField = "domainReloadWaitRequired"

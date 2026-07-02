@@ -9,9 +9,8 @@ import (
 )
 
 const (
-	pausePointLogsMaxCountFlagName = "matching-logs-max-count"
-	pausePointDefaultLogsMaxCount  = 10
-	pausePointGetLogsCommandName   = "get-logs"
+	pausePointDefaultLogsMaxCount = 10
+	pausePointGetLogsCommandName  = "get-logs"
 )
 
 // Injectable so tests can simulate Unity log responses without an Editor.

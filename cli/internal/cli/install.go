@@ -37,14 +37,14 @@ func tryHandleInstallRequest(ctx context.Context, args []string, stdout io.Write
 
 	installDir, err := resolveNativeInstallDir(runtime.GOOS, options.installDir)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: installCommandName})
+		writeClassifiedError(stderr, wrapUnsupportedPlatformError(err), errorContext{command: installCommandName})
 		return true, 1
 	}
 	installCommand, err := install.CommandForOS(runtime.GOOS, install.Options{
 		InstallDir: installDir,
 	})
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: installCommandName})
+		writeClassifiedError(stderr, wrapUnsupportedPlatformError(err), errorContext{command: installCommandName})
 		return true, 1
 	}
 

@@ -39,7 +39,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		TargetVersion:  options.targetVersion,
 	})
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: updateCommandName})
+		writeClassifiedError(stderr, wrapUnsupportedPlatformError(err), errorContext{command: updateCommandName})
 		return true, 1
 	}
 

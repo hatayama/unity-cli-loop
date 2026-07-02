@@ -15,7 +15,7 @@ func (err launchProcessExitTimeoutError) Error() string {
 	return fmt.Sprintf("Unity process %d did not exit within %s", err.pid, err.timeout)
 }
 
-func unityProcessExitTimeoutCLIError(err launchProcessExitTimeoutError, context errorContext) cliError {
+func (err launchProcessExitTimeoutError) toCLIError(context errorContext) cliError {
 	projectRoot := firstNonEmpty(context.projectRoot, err.projectRoot)
 	return cliError{
 		ErrorCode:   errorCodeUnityProcessExitTimeout,

@@ -11,6 +11,12 @@ const (
 	pausePointWaitCommandName       = "wait-for-pause-point"
 	pausePointStatusUserCommandName = "pause-point-status"
 	runTestsCommandName             = "run-tests"
+	completionCommand               = "completion"
+	listCommandsFlag                = "--list-commands"
+	listOptionsFlag                 = "--list-options"
+	pausePointIDFlagName            = "id"
+	pausePointTimeoutFlagName       = "timeout-seconds"
+	pausePointLogsMaxCountFlagName  = "matching-logs-max-count"
 )
 
 type nativeCommandEntry struct {

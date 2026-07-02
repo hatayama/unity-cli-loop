@@ -20,20 +20,16 @@ func classifyError(err error, context errorContext) cliError {
 	return classifyMessageError(err.Error(), context)
 }
 
+// classifiableCLIError lets an error type self-classify into a cliError envelope,
+// so classifyTypedError does not need a dedicated branch per error type.
+type classifiableCLIError interface {
+	toCLIError(context errorContext) cliError
+}
+
 func classifyTypedError(err error, context errorContext) (cliError, bool) {
-	var argumentErr *argumentError
-	if errors.As(err, &argumentErr) {
-		return argumentErr.toCLIError(context), true
-	}
-
-	var startupTimeoutErr launchStartupTimeoutError
-	if errors.As(err, &startupTimeoutErr) {
-		return unityStartupTimeoutCLIError(startupTimeoutErr, context), true
-	}
-
-	var processExitTimeoutErr launchProcessExitTimeoutError
-	if errors.As(err, &processExitTimeoutErr) {
-		return unityProcessExitTimeoutCLIError(processExitTimeoutErr, context), true
+	var classifiable classifiableCLIError
+	if errors.As(err, &classifiable) {
+		return classifiable.toCLIError(context), true
 	}
 
 	if classifiedError, ok := classifyUnityConnectionError(err, context); ok {
@@ -173,10 +169,6 @@ func classifyMessageError(message string, context errorContext) cliError {
 		}
 	}
 
-	if unsupportedError, ok := unsupportedPlatformError(message, context); ok {
-		return unsupportedError
-	}
-
 	return internalCLIError(message, context)
 }
 
@@ -184,49 +176,6 @@ func isProjectNotFoundMessage(message string) bool {
 	return message == "unity project not found. Use --project-path option to specify the target" ||
 		strings.HasPrefix(message, "not a Unity project:") ||
 		strings.HasPrefix(message, "--project-path does not point to a Unity project:")
-}
-
-func unsupportedPlatformError(message string, context errorContext) (cliError, bool) {
-	switch message {
-	case updateUnsupportedOSMessage:
-		return invalidArgumentExecutionError(
-			message,
-			context,
-			[]string{
-				"Run `uloop update` on macOS or Windows.",
-				"Install the latest uloop launcher manually on this platform.",
-			}), true
-	case installUnsupportedOSMessage:
-		return invalidArgumentExecutionError(
-			message,
-			context,
-			[]string{
-				"Run `uloop install` on Windows.",
-				"Use the platform-specific installer for this system.",
-			}), true
-	case uninstallUnsupportedOSMessage:
-		return invalidArgumentExecutionError(
-			message,
-			context,
-			[]string{
-				"Run `uloop uninstall` on macOS or Windows.",
-				"Remove the uloop launcher binary manually on this platform.",
-			}), true
-	default:
-		return cliError{}, false
-	}
-}
-
-func invalidArgumentExecutionError(message string, context errorContext, nextActions []string) cliError {
-	return cliError{
-		ErrorCode:   errorCodeInvalidArgument,
-		Phase:       errorPhaseExecution,
-		Message:     message,
-		Retryable:   false,
-		SafeToRetry: false,
-		Command:     context.command,
-		NextActions: nextActions,
-	}
 }
 
 func rpcDataType(data map[string]any) string {

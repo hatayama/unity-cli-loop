@@ -83,3 +83,8 @@ func pascalToKebab(value string) string {
 	}
 	return strings.ToLower(builder.String())
 }
+
+func pascalToWords(value string) string {
+	kebabName := pascalToKebab(value)
+	return strings.ReplaceAll(kebabName, "-", " ")
+}

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/project"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -43,35 +42,11 @@ func unityAliveRetryWindow() time.Duration {
 	return serverConnectionRetryTimeout * serverConnectionRetryUnityAliveFactor
 }
 
-type unityServerNotRespondingError struct {
-	projectRoot string
-	endpoint    string
-	cause       error
-}
-
 type connectionRetryFocusController struct {
 	connection   unityipc.Connection
 	method       string
 	attempted    bool
 	restoreFocus restoreFocusFunc
-}
-
-func (err unityServerNotRespondingError) Error() string {
-	if err.cause != nil {
-		return fmt.Sprintf("Unity is running but the Unity CLI Loop server is not responding: %s", err.cause)
-	}
-	return "Unity is running but the Unity CLI Loop server is not responding"
-}
-
-func (err unityServerNotRespondingError) Unwrap() error {
-	return err.cause
-}
-
-func (err unityServerNotRespondingError) causeText() string {
-	if err.cause == nil {
-		return ""
-	}
-	return err.cause.Error()
 }
 
 func newConnectionRetryFocusController(connection unityipc.Connection, method string) *connectionRetryFocusController {
@@ -386,19 +361,4 @@ func logConnectionRetryFocusFailure(
 		},
 		CorrelationID: correlationID,
 	})
-}
-
-func errorMessage(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
-func resolveProjectEndpointAddress(projectRoot string) string {
-	connection, err := project.ResolveConnection(projectRoot, projectRoot)
-	if err != nil {
-		return ""
-	}
-	return connection.Endpoint.Address
 }

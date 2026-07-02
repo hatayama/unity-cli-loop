@@ -40,7 +40,7 @@ func waitForLaunchReadiness(ctx context.Context, projectRoot string) error {
 	}
 }
 
-func unityStartupTimeoutCLIError(err launchStartupTimeoutError, context errorContext) cliError {
+func (err launchStartupTimeoutError) toCLIError(context errorContext) cliError {
 	projectRoot := firstNonEmpty(context.projectRoot, err.projectRoot)
 	details := map[string]any{
 		"TimeoutSeconds": int(launchReadinessTimeout.Seconds()),
